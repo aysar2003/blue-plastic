@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import type { LucideIcon } from 'lucide-react'
 import {
+  ArrowLeftIcon,
   BanknoteIcon,
   BookOpenIcon,
   Building2Icon,
@@ -20,7 +21,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import type { LauncherApp, LauncherIcon } from './launcher-apps'
+import type { LauncherIcon } from './launcher-apps'
 
 const ICONS: Record<LauncherIcon, LucideIcon> = {
   receipt: ReceiptIcon,
@@ -39,43 +40,117 @@ const ICONS: Record<LauncherIcon, LucideIcon> = {
   help: CircleHelpIcon,
 }
 
+export type LauncherTile = {
+  key: string
+  label: string
+  href: string
+  icon: LauncherIcon
+  accent: string
+  wash: string
+  blurb?: string
+}
+
+export type LauncherInsight = {
+  label: string
+  value: string
+  hint?: string
+  href?: string
+}
+
 /**
- * Home screen as an app switcher: white tiles, coloured marks, labels underneath.
- * Clicking a tile leaves the launcher and enters the module shell.
+ * Shared home / module switcher: white tiles, coloured marks, labels underneath.
  */
 export function AppLauncher({
+  eyebrow,
+  title,
+  subtitle,
   apps,
-  orgName,
-  userName,
+  backHref,
+  backLabel,
+  insights,
 }: {
-  apps: LauncherApp[]
-  orgName: string
-  userName: string
+  eyebrow: string
+  title: string
+  subtitle: string
+  apps: LauncherTile[]
+  backHref?: string
+  backLabel?: string
+  insights?: LauncherInsight[]
 }) {
-  const first = userName.split(' ')[0] || userName
-
   return (
-    <div className="relative mx-auto w-full max-w-5xl px-4 pb-16 pt-10 sm:px-6 sm:pt-14 lg:pt-16">
-      <div className="mb-10 text-center sm:mb-12">
+    <div className="relative mx-auto w-full max-w-5xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:pt-14">
+      {backHref ? (
+        <div className="mb-6" style={{ animation: 'launcher-fade 400ms ease both' }}>
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-800"
+          >
+            <ArrowLeftIcon className="size-4" aria-hidden />
+            {backLabel ?? 'Back'}
+          </Link>
+        </div>
+      ) : null}
+
+      <div className="mb-8 text-center sm:mb-10">
         <p
           className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-slate-500"
           style={{ animation: 'launcher-fade 480ms ease both' }}
         >
-          {orgName}
+          {eyebrow}
         </p>
         <h1
           className="mt-2 text-2xl font-semibold tracking-tight text-slate-800 sm:text-3xl"
           style={{ animation: 'launcher-fade 560ms ease both' }}
         >
-          Welcome back, {first}
+          {title}
         </h1>
         <p
           className="mx-auto mt-2 max-w-md text-sm text-slate-500"
           style={{ animation: 'launcher-fade 640ms ease both' }}
         >
-          Choose an app to open the books.
+          {subtitle}
         </p>
       </div>
+
+      {insights && insights.length > 0 ? (
+        <ul
+          className="mb-10 grid gap-3 sm:grid-cols-3"
+          style={{ animation: 'launcher-fade 700ms ease both' }}
+        >
+          {insights.map((insight) => {
+            const body = (
+              <>
+                <span className="block text-[0.7rem] font-semibold uppercase tracking-wider text-slate-500">
+                  {insight.label}
+                </span>
+                <span className="mt-1 block truncate text-lg font-semibold tabular text-slate-800">
+                  {insight.value}
+                </span>
+                {insight.hint ? (
+                  <span className="mt-0.5 block truncate text-xs text-slate-500">{insight.hint}</span>
+                ) : null}
+              </>
+            )
+
+            return (
+              <li key={insight.label}>
+                {insight.href ? (
+                  <Link
+                    href={insight.href}
+                    className="block rounded-2xl bg-white/80 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_20px_-10px_rgba(15,23,42,0.12)] ring-1 ring-slate-900/5 transition hover:-translate-y-0.5 hover:bg-white"
+                  >
+                    {body}
+                  </Link>
+                ) : (
+                  <div className="rounded-2xl bg-white/80 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_20px_-10px_rgba(15,23,42,0.12)] ring-1 ring-slate-900/5">
+                    {body}
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
 
       <ul className="grid grid-cols-3 gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-x-6 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6">
         {apps.map((app, index) => (
@@ -94,7 +169,7 @@ export function AppLauncher({
   )
 }
 
-function AppTile({ app }: { app: LauncherApp }) {
+function AppTile({ app }: { app: LauncherTile }) {
   const Icon = ICONS[app.icon]
 
   return (
@@ -121,8 +196,15 @@ function AppTile({ app }: { app: LauncherApp }) {
           <Icon className="size-6 sm:size-7" strokeWidth={1.75} aria-hidden />
         </span>
       </span>
-      <span className="max-w-[6.5rem] text-center text-[0.8125rem] font-medium leading-snug text-slate-700 transition-colors group-hover:text-slate-950">
-        {app.label}
+      <span className="max-w-[7rem] text-center">
+        <span className="block text-[0.8125rem] font-medium leading-snug text-slate-700 transition-colors group-hover:text-slate-950">
+          {app.label}
+        </span>
+        {app.blurb ? (
+          <span className="mt-0.5 hidden text-[0.6875rem] leading-snug text-slate-400 sm:block">
+            {app.blurb}
+          </span>
+        ) : null}
       </span>
     </Link>
   )

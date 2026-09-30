@@ -39,7 +39,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
   {
     key: 'sales',
     label: 'Sales',
-    href: '/sales/invoices',
+    href: '/sales',
     icon: 'receipt',
     permission: 'invoice:read',
     accent: '#0F766E',

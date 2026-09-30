@@ -32,7 +32,7 @@ const COLUMNS: { heading: string; entries: Entry[] }[] = [
       { label: 'Invoice', href: '/sales/invoices/new', permission: 'invoice:create' },
       { label: 'Receive payment', href: '/payments/new', permission: 'payment:create' },
       { label: 'Sales receipt', href: '/sales/sales-receipts/new', permission: 'invoice:create' },
-      { label: 'Estimate', href: '/sales/estimates/new', permission: 'invoice:create' },
+      { label: 'Quotation', href: '/sales/estimates/new', permission: 'invoice:create' },
       { label: 'Credit memo', href: '/sales/credit-memos/new', permission: 'invoice:create' },
       { label: 'Refund receipt', href: '/sales/refunds/new', permission: 'invoice:create' },
       { label: 'Add customer', opens: 'customer', permission: 'customer:create' },

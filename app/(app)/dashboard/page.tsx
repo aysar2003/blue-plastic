@@ -13,12 +13,14 @@ export const metadata: Metadata = { title: 'Apps' }
 export default async function DashboardPage() {
   const ctx = await requireOrgContext()
   const apps = appsForPermissions(ctx.permissions)
+  const first = ctx.user.name.split(' ')[0] || ctx.user.name
 
   return (
     <AppLauncher
+      eyebrow={ctx.organization.name}
+      title={`Welcome back, ${first}`}
+      subtitle="Choose an app to open the books."
       apps={apps}
-      orgName={ctx.organization.name}
-      userName={ctx.user.name}
     />
   )
 }

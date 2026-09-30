@@ -58,17 +58,19 @@ export const MODULES: NavModule[] = [
   {
     key: 'sales',
     label: 'Sales',
-    href: '/sales/invoices',
+    href: '/sales',
     icon: ReceiptIcon,
     permission: 'invoice:read',
     owns: ['/sales', '/payments', '/customers'],
     tabs: [
+      { label: 'Home', href: '/sales' },
       { label: 'Invoices', href: '/sales/invoices', permission: 'invoice:read' },
-      { label: 'Estimates', href: '/sales/estimates', permission: 'invoice:read' },
+      { label: 'Quotations', href: '/sales/estimates', permission: 'invoice:read' },
       { label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read' },
       { label: 'Credit memos', href: '/sales/credit-memos', permission: 'invoice:read' },
       { label: 'Payments', href: '/payments', permission: 'payment:read' },
       { label: 'Customers', href: '/customers', permission: 'customer:read' },
+      { label: 'Reports', href: '/sales/reports', permission: 'report:read' },
     ],
   },
   {

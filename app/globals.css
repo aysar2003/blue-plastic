@@ -233,6 +233,77 @@
 }
 
 /*
+ * Apps home + Sales (hub and forms) share one light surface so moving from the
+ * Sales dashboard into a document form does not change colour or mood.
+ */
+.sales-surface {
+  color-scheme: light;
+  background-color: #f4f7fb;
+  color: #1e293b;
+
+  --background: #f4f7fb;
+  --foreground: #1e293b;
+  --card: #ffffff;
+  --card-foreground: #1e293b;
+  --popover: #ffffff;
+  --popover-foreground: #1e293b;
+  --primary: #0b4f6c;
+  --primary-foreground: #ffffff;
+  --secondary: #e8eef5;
+  --secondary-foreground: #334155;
+  --muted: #e8eef5;
+  --muted-foreground: #64748b;
+  --accent: #dbeafe;
+  --accent-foreground: #0b4f6c;
+  --destructive: #be123c;
+  --destructive-foreground: #ffffff;
+  --border: #d7e0ea;
+  --input: #c9d5e3;
+  --ring: #0b4f6c;
+  --success: #0f766e;
+  --success-foreground: #ffffff;
+  --warning: #b45309;
+  --warning-foreground: #ffffff;
+  --radius: 0.75rem;
+}
+
+.sales-surface [data-slot='card'] {
+  border-radius: 1rem;
+  border-color: rgb(15 23 42 / 0.06);
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 0.04),
+    0 10px 24px -12px rgb(15 23 42 / 0.12);
+}
+
+.sales-surface input,
+.sales-surface textarea,
+.sales-surface select,
+.sales-surface [data-slot='input'],
+.sales-surface [data-slot='native-select'] {
+  border-radius: 0.65rem;
+  background: #ffffff;
+  border-color: #c9d5e3;
+}
+
+.sales-surface button[data-slot='button'] {
+  border-radius: 0.65rem;
+}
+
+.sales-surface h1 {
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.sales-surface .border-b {
+  border-color: rgb(15 23 42 / 0.08);
+}
+
+.sales-surface .text-muted-foreground {
+  color: #64748b;
+}
+
+/*
  * Printing a document. The app shell disappears and the page becomes the paper —
  * which is also how a customer-facing PDF is produced, via the browser's own
  * "save as PDF", with no headless browser in the deployment.

@@ -66,6 +66,7 @@ export default async function EditSalesDocumentPage({
         terms={options.terms.map((term) => ({ id: term.id, label: `${term.name} — ${describeTerm(term)}` }))}
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}
+        organizationName={ctx.organization.name}
         document={{
           id: document.id,
           customerId: document.customer.id,

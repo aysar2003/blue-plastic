@@ -18,8 +18,11 @@ export default async function NewPaymentPage() {
 
   return (
     <>
-      <Link href="/payments" className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}>
-        <ArrowLeftIcon /> Payments
+      <Link
+        href="/sales"
+        className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}
+      >
+        <ArrowLeftIcon /> Sales
       </Link>
 
       <PageHeader

@@ -35,10 +35,10 @@ export default async function NewSalesDocumentPage({
   return (
     <>
       <Link
-        href={`/sales/${config.slug}`}
+        href="/sales"
         className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}
       >
-        <ArrowLeftIcon /> {config.plural}
+        <ArrowLeftIcon /> Sales
       </Link>
 
       <PageHeader title={`New ${config.singular.toLowerCase()}`} description={config.effect} />
@@ -52,6 +52,7 @@ export default async function NewSalesDocumentPage({
         terms={options.terms.map((term) => ({ id: term.id, label: `${term.name} — ${describeTerm(term)}` }))}
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}
+        organizationName={ctx.organization.name}
       />
     </>
   )

@@ -28,8 +28,8 @@ export const SALES_TYPES: SalesTypeConfig[] = [
   {
     type: 'ESTIMATE',
     slug: 'estimates',
-    singular: 'Estimate',
-    plural: 'Estimates',
+    singular: 'Quotation',
+    plural: 'Quotations',
     effect: 'A quotation. Nothing has happened yet, so nothing is posted to the ledger.',
     needsDeposit: false,
     posts: false,

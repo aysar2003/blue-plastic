@@ -24,8 +24,7 @@ type ShellChromeProps = {
 }
 
 /**
- * Switches chrome by route: `/dashboard` is a full-bleed app launcher; every
- * other page keeps the dense sidebar shell for day-to-day work.
+ * Home + Sales share one light surface. Other modules keep the dense sidebar.
  */
 export function ShellChrome({
   orgName,
@@ -38,32 +37,58 @@ export function ShellChrome({
   children,
 }: ShellChromeProps) {
   const pathname = usePathname()
-  const isLauncher = pathname === '/dashboard'
+  const isAppsHome = pathname === '/dashboard'
+  const isSalesHub = pathname === '/sales' || pathname === '/sales/reports'
+  const isSalesWorkspace = isSalesWorkspacePath(pathname)
 
-  if (isLauncher) {
+  if (isAppsHome || isSalesHub || isSalesWorkspace) {
+    const brandLabel = isAppsHome ? orgName : 'Sales'
+    const brandHref = isAppsHome ? '/dashboard' : '/sales'
+
     return (
-      <div className="relative flex min-h-svh flex-col overflow-hidden bg-[#F4F7FB] text-slate-800">
+      <div className="sales-surface relative flex min-h-svh flex-col overflow-x-hidden">
         <NavigationProgress />
-        <LauncherAtmosphere />
+        <SalesAtmosphere />
 
-        <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 px-4 sm:px-6">
-          <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5">
+        <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-slate-200/60 bg-white/70 px-4 backdrop-blur-md sm:px-6">
+          <Link href={brandHref} className="flex min-w-0 items-center gap-2.5">
             <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#0B4F6C] text-[0.7rem] font-bold tracking-wide text-white shadow-sm">
               BP
             </span>
             <span className="truncate text-sm font-semibold tracking-tight text-slate-800">
-              {orgName}
+              {brandLabel}
             </span>
           </Link>
 
+          {!isAppsHome ? (
+            <Link
+              href="/dashboard"
+              className="hidden text-xs font-medium text-slate-500 transition-colors hover:text-slate-800 sm:inline"
+            >
+              All apps
+            </Link>
+          ) : null}
+
           <div className="ml-auto flex items-center gap-1.5">
-            <QuickCreate permissions={permissions} currency={baseCurrency} />
-            <CommandPalette permissions={permissions} />
+            {isAppsHome || isSalesHub ? (
+              <>
+                <QuickCreate permissions={permissions} currency={baseCurrency} />
+                <CommandPalette permissions={permissions} />
+              </>
+            ) : null}
             <UserMenu user={user} roleLabel={roleLabel} />
           </div>
         </header>
 
-        <main className="relative z-10 min-w-0 flex-1">{children}</main>
+        <main
+          className={
+            isSalesWorkspace
+              ? 'relative z-10 mx-auto min-w-0 w-full max-w-6xl flex-1 px-3 py-5 sm:px-5 lg:px-6'
+              : 'relative z-10 min-w-0 flex-1'
+          }
+        >
+          {children}
+        </main>
       </div>
     )
   }
@@ -108,7 +133,18 @@ export function ShellChrome({
   )
 }
 
-function LauncherAtmosphere() {
+function isSalesWorkspacePath(pathname: string): boolean {
+  if (pathname === '/sales' || pathname === '/sales/reports') return false
+  return (
+    pathname.startsWith('/sales/') ||
+    pathname === '/payments' ||
+    pathname.startsWith('/payments/') ||
+    pathname === '/customers' ||
+    pathname.startsWith('/customers/')
+  )
+}
+
+function SalesAtmosphere() {
   return (
     <>
       <div

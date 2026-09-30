@@ -17,6 +17,8 @@ import * as paymentService from '@/server/services/payment.service'
 import * as salesService from '@/server/services/sales.service'
 
 function revalidateSales() {
+  revalidatePath('/sales')
+  revalidatePath('/sales/reports')
   revalidatePath('/sales/invoices')
   revalidatePath('/sales/estimates')
   revalidatePath('/sales/sales-receipts')
