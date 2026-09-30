@@ -21,7 +21,7 @@ export type Shortcut = {
 }
 
 export const SHORTCUTS: Shortcut[] = [
-  { keys: ['g', 'd'], label: 'Dashboard', href: '/dashboard', group: 'Go to' },
+  { keys: ['g', 'd'], label: 'Apps', href: '/dashboard', group: 'Go to' },
   { keys: ['g', 'i'], label: 'Invoices', href: '/sales/invoices', permission: 'invoice:read', group: 'Go to' },
   { keys: ['g', 'b'], label: 'Bills', href: '/purchases/bills', permission: 'bill:read', group: 'Go to' },
   { keys: ['g', 'c'], label: 'Customers', href: '/customers', permission: 'customer:read', group: 'Go to' },

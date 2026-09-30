@@ -210,6 +210,28 @@
   }
 }
 
+@keyframes launcher-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes launcher-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /*
  * Printing a document. The app shell disappears and the page becomes the paper —
  * which is also how a customer-facing PDF is produced, via the browser's own

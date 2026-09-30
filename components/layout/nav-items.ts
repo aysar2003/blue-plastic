@@ -3,7 +3,7 @@ import {
   BanknoteIcon,
   BookOpenIcon,
   CircleHelpIcon,
-  LayoutDashboardIcon,
+  LayoutGridIcon,
   PackageIcon,
   ReceiptIcon,
   SettingsIcon,
@@ -50,9 +50,9 @@ export type NavModule = {
 export const MODULES: NavModule[] = [
   {
     key: 'dashboard',
-    label: 'Dashboard',
+    label: 'Apps',
     href: '/dashboard',
-    icon: LayoutDashboardIcon,
+    icon: LayoutGridIcon,
     owns: ['/dashboard'],
   },
   {
