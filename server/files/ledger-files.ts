@@ -63,8 +63,8 @@ export async function storeLedgerFile(
   }
 
   const storageKey = `${ctx.orgId}/${randomBytes(16).toString('hex')}.${sniffed.extension}`
-  await mkdir(path.join(ROOT, ctx.orgId), { recursive: true })
-  await writeFile(path.join(ROOT, storageKey), bytes)
+  await mkdir(path.join(/*turbopackIgnore: true*/ ROOT, ctx.orgId), { recursive: true })
+  await writeFile(path.join(/*turbopackIgnore: true*/ ROOT, storageKey), bytes)
 
   return db.ledgerFile.create({
     data: {
@@ -87,7 +87,7 @@ export async function readLedgerFile(ctx: OrgContext, id: string) {
     where: { id, orgId: ctx.orgId },
   })
   if (!file) throw notFound('File')
-  const bytes = await readFile(path.join(ROOT, file.storageKey))
+  const bytes = await readFile(path.join(/*turbopackIgnore: true*/ ROOT, file.storageKey))
   return { file, bytes }
 }
 

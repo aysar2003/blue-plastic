@@ -151,7 +151,9 @@ async function writeOne(
   }
 
   const id = randomBytes(16).toString('hex')
-  const storageKey = path.join(ctx.orgId, customerId, `${id}.${sniffed.extension}`)
+  // Keep this a plain relative key — path.join with only dynamic segments makes
+  // Turbopack file-trace the whole repo and blows past Vercel function size limits.
+  const storageKey = `${ctx.orgId}/${customerId}/${id}.${sniffed.extension}`
   const destination = absolutePath(storageKey)
   await mkdir(path.dirname(destination), { recursive: true })
   await writeFile(destination, bytes)
@@ -165,7 +167,7 @@ async function writeOne(
         originalName: safeName(file.name),
         contentType: sniffed.contentType,
         byteSize: bytes.length,
-        storageKey: storageKey.split(path.sep).join('/'),
+        storageKey,
         createdById: ctx.userId,
       },
       select: { id: true },
@@ -205,8 +207,8 @@ function sniff(bytes: Buffer): Sniffed | null {
 }
 
 function absolutePath(storageKey: string) {
-  const full = path.resolve(ROOT, storageKey)
-  const relative = path.relative(ROOT, full)
+  const full = path.resolve(/*turbopackIgnore: true*/ ROOT, storageKey)
+  const relative = path.relative(/*turbopackIgnore: true*/ ROOT, full)
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw validation('That file could not be read.')
   }
