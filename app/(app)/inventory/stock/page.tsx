@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon, PackageIcon, ScaleIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
+import { MetricCard } from '@/components/data/metric-card'
 import { PageHeader } from '@/components/data/page-header'
 import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { Badge } from '@/components/ui/badge'
@@ -95,36 +96,22 @@ export default async function InventoryPage({
       ) : (
         <>
           <div className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Stock value</p>
-                <p className="tabular mt-0.5 text-lg font-semibold">
-                  {formatMoney(stock.totalValue, currency)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Tracked items</p>
-                <p className="tabular mt-0.5 text-lg font-semibold">{stock.items.length}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Out of stock</p>
-                <p className="tabular mt-0.5 text-lg font-semibold text-[#9f1239]">
-                  {outOfStock.length === 0 ? '—' : outOfStock.length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">At the reorder limit</p>
-                <p className="tabular mt-0.5 text-lg font-semibold text-[#C2410C]">
-                  {atLimit.length === 0 ? '—' : atLimit.length}
-                </p>
-              </CardContent>
-            </Card>
+            <MetricCard
+              label="Stock value"
+              tone="money"
+              value={formatMoney(stock.totalValue, currency)}
+            />
+            <MetricCard label="Tracked items" tone="stock" value={stock.items.length} />
+            <MetricCard
+              label="Out of stock"
+              tone="danger"
+              value={outOfStock.length === 0 ? '—' : outOfStock.length}
+            />
+            <MetricCard
+              label="At the reorder limit"
+              tone="warning"
+              value={atLimit.length === 0 ? '—' : atLimit.length}
+            />
           </div>
 
           {stock.items.every((item) => item.quantity.isZero()) ? (

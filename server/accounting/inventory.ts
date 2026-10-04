@@ -286,6 +286,16 @@ export async function recordMovement(
     select: { id: true },
   })
 
+  // Keep the item's catalog cost equal to what stock is actually sitting at.
+  // Receipts raise or lower the average; the Cost field on the item must follow
+  // so bills, lists, and the edit form all show the true on-hand unit cost.
+  await tx.item.update({
+    where: { id: request.itemId },
+    data: {
+      purchaseCost: position.quantity.isZero() ? null : position.averageCost.toFixed(4),
+    },
+  })
+
   return { id: movement.id, itemId: request.itemId, quantity, unitCost, value, position }
 }
 

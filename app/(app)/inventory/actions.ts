@@ -4,10 +4,12 @@ import { revalidatePath } from 'next/cache'
 
 import { z } from 'zod'
 
-import { toFormState, type FormState } from '@/components/forms/action-state'
+import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 import {
   inventoryAdjustmentSchema,
   negativeStockSchema,
+  storeTicketSchema,
+  storeTransferSchema,
 } from '@/lib/validation/inventory'
 import { deleteRecordSchema } from '@/lib/validation/common'
 import { action } from '@/server/action'
@@ -74,12 +76,35 @@ export const setNegativeStockPolicy = action
     return { allowNegativeStock: input.allowNegativeStock }
   })
 
+const storeDetailsSchema = z.object({
+  name: z.string().trim().min(1, 'Give the store a name.').max(120),
+  address: z.string().trim().max(240).optional().or(z.literal('')),
+  phone: z.string().trim().max(40).optional().or(z.literal('')),
+  keyHolderName: z.string().trim().max(120).optional().or(z.literal('')),
+  keyHolderPhone: z.string().trim().max(40).optional().or(z.literal('')),
+  notes: z.string().trim().max(500).optional().or(z.literal('')),
+})
+
 export const createStore = action
   .requires('account:create')
-  .input(z.object({ name: z.string().trim().min(1, 'Give the store a name.').max(120) }))
+  .input(storeDetailsSchema)
   .handler(async (ctx, input) => {
-    const store = await storeService.create(ctx, input.name)
+    const store = await storeService.create(ctx, input)
     revalidatePath('/stores')
+    revalidatePath('/inventory/stores')
+    revalidatePath('/accounts')
+    revalidatePath('/items')
+    return store
+  })
+
+export const updateStore = action
+  .requires('account:create')
+  .input(storeDetailsSchema.extend({ id: z.string().min(1) }))
+  .handler(async (ctx, input) => {
+    const { id, ...details } = input
+    const store = await storeService.update(ctx, id, details)
+    revalidatePath('/stores')
+    revalidatePath(`/stores/${id}`)
     revalidatePath('/inventory/stores')
     revalidatePath('/accounts')
     revalidatePath('/items')
@@ -98,5 +123,55 @@ export async function saveAdjustmentForm(_prev: FormState, formData: FormData): 
   return toFormState(
     result,
     result.ok && 'number' in result.data ? `${result.data.number} posted.` : 'Posted.',
+  )
+}
+
+export const createStoreTransfer = action
+  .requires('inventory:adjust')
+  .input(storeTransferSchema)
+  .handler(async (ctx, input) => {
+    const transfer = await inventoryService.createStoreTransfer(ctx, input)
+    revalidatePath('/stores')
+    revalidatePath(`/stores/${input.fromStoreId}`)
+    revalidatePath(`/stores/${input.toStoreId}`)
+    revalidatePath('/inventory/stock')
+    revalidatePath(`/inventory/${input.itemId}`)
+    revalidatePath(`/items/${input.itemId}/report`)
+    revalidatePath('/accounts')
+    return transfer
+  })
+
+export async function saveStoreTransferForm(_prev: FormState, formData: FormData): Promise<FormState> {
+  const result = await createStoreTransfer(formValues(formData))
+  return toFormState(
+    result,
+    result.ok && 'ticketNumber' in result.data
+      ? `${result.data.number} transferred · ticket ${result.data.ticketNumber}.`
+      : result.ok && 'number' in result.data
+        ? `${result.data.number} transferred.`
+        : 'Transferred.',
+  )
+}
+
+export const createStoreTicket = action
+  .requires('inventory:adjust')
+  .input(storeTicketSchema)
+  .handler(async (ctx, input) => {
+    const ticket = await inventoryService.createStoreTicket(ctx, input)
+    revalidatePath('/stores')
+    revalidatePath(`/stores/${input.storeId}`)
+    revalidatePath(`/stores/${input.toStoreId}`)
+    revalidatePath('/inventory/stock')
+    revalidatePath(`/inventory/${input.itemId}`)
+    revalidatePath(`/items/${input.itemId}/report`)
+    revalidatePath('/accounts')
+    return ticket
+  })
+
+export async function saveStoreTicketForm(_prev: FormState, formData: FormData): Promise<FormState> {
+  const result = await createStoreTicket(formValues(formData))
+  return toFormState(
+    result,
+    result.ok && 'number' in result.data ? `Ticket ${result.data.number} posted.` : 'Ticket posted.',
   )
 }

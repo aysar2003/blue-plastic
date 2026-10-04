@@ -252,7 +252,7 @@ export function Combobox({
     onCreate(label)
   }
 
-  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement | HTMLButtonElement>) {
     if (!open) {
       if (event.key === 'ArrowDown' || event.key === 'Enter') {
         event.preventDefault()

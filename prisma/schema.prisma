@@ -76,6 +76,10 @@ enum DocumentType {
   TRANSFER
   DEPOSIT
   INVENTORY_ADJUSTMENT
+  /// Stock moved from one store to another.
+  STORE_TRANSFER
+  /// Ticket for stock taken out of a store (manual or automatic).
+  STORE_TICKET
 }
 
 /// Statement classification. Determines which financial statement an account
@@ -252,6 +256,8 @@ enum InventoryMovementType {
   ADJUSTMENT
   /// Stock the business already had when the books started.
   OPENING
+  /// Moved from one store to another. Global quantity and value do not change.
+  TRANSFER
 }
 
 enum BankDocumentStatus {
@@ -389,6 +395,8 @@ model Organization {
   deposits           Deposit[]
   inventoryMovements InventoryTransaction[]
   inventoryAdjustments InventoryAdjustment[]
+  storeTransfers       StoreTransfer[]
+  storeTickets         StoreTicket[]
   importedTransactions ImportedTransaction[]
   reconciliations    BankReconciliation[]
   items          Item[]
@@ -759,6 +767,7 @@ model Journal {
   deposits          Deposit[]
   inventoryMovements InventoryTransaction[]
   inventoryAdjustments InventoryAdjustment[]
+  storeTransfers StoreTransfer[]
   files LedgerFile[]
 
   reversalOf Journal? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
@@ -1109,6 +1118,8 @@ model Item {
   purchaseLines    PurchaseDocumentLine[]
   movements        InventoryTransaction[]
   adjustmentLines  InventoryAdjustmentLine[]
+  storeTransfers   StoreTransfer[]
+  storeTickets     StoreTicket[]
 
   @@unique([orgId, name])
   @@unique([orgId, sku])
@@ -1131,6 +1142,16 @@ model Store {
   /// The office. Stock recorded before a store was chosen is counted here.
   isOffice           Boolean @default(false)
 
+  /// Where the store sits — street / area.
+  address String?
+  /// Store phone so staff can reach that location.
+  phone   String?
+  /// Person who holds the physical key to this store.
+  keyHolderName  String?
+  /// Phone for the key holder (may differ from the store phone).
+  keyHolderPhone String?
+  notes String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -1140,6 +1161,10 @@ model Store {
   movements    InventoryTransaction[]
   salesLines   SalesDocumentLine[]
   purchaseLines PurchaseDocumentLine[]
+  transfersOut StoreTransfer[] @relation("TransferFrom")
+  transfersIn  StoreTransfer[] @relation("TransferTo")
+  tickets      StoreTicket[]
+  ticketsIn    StoreTicket[]   @relation("TicketToStore")
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
@@ -2028,6 +2053,7 @@ model InventoryAdjustment {
   @@unique([id, orgId])
   @@index([orgId, date(sort: Desc)])
   @@index([orgId, deletedAt])
+
   @@map("inventory_adjustments")
 }
 
@@ -2058,6 +2084,93 @@ model InventoryAdjustmentLine {
   @@unique([adjustmentId, lineNumber])
   @@index([orgId, itemId])
   @@map("inventory_adjustment_lines")
+}
+
+/// Stock moved from one store to another. Quantity and value leave one store
+/// and arrive at the other; the item's global average cost does not change.
+model StoreTransfer {
+  id    String @id @default(cuid())
+  orgId String
+
+  number String
+  date   DateTime @db.Date
+
+  fromStoreId String
+  toStoreId   String
+  itemId      String
+
+  quantity Decimal @db.Decimal(19, 4)
+  unitCost Decimal @db.Decimal(19, 6)
+  value    Decimal @db.Decimal(19, 4)
+
+  memo String?
+
+  status    BankDocumentStatus @default(POSTED)
+  journalId String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  fromStore    Store        @relation("TransferFrom", fields: [fromStoreId], references: [id], onDelete: Restrict)
+  toStore      Store        @relation("TransferTo", fields: [toStoreId], references: [id], onDelete: Restrict)
+  item         Item         @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  journal      Journal?     @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  ticket       StoreTicket?
+
+  @@unique([orgId, number])
+  @@index([orgId, date(sort: Desc)])
+  @@index([orgId, fromStoreId])
+  @@index([orgId, toStoreId])
+  @@index([orgId, itemId])
+  @@map("store_transfers")
+}
+
+/// Ticket for stock taken from a store. Auto-made on transfer, or entered by hand.
+model StoreTicket {
+  id    String @id @default(cuid())
+  orgId String
+
+  number String
+  date   DateTime @db.Date
+
+  /// Store the goods left.
+  storeId String
+  /// Store that received them (when this ticket moved stock between stores).
+  toStoreId String?
+  itemId    String
+
+  quantity Decimal @db.Decimal(19, 4)
+  unitCost Decimal @db.Decimal(19, 6)
+  value    Decimal @db.Decimal(19, 4)
+
+  /// Who took the goods (name), when known.
+  takenBy String?
+  memo    String?
+
+  /// AUTO = system made it with a transfer. MANUAL = entered on the ticket form.
+  origin String @default("AUTO")
+
+  transferId String? @unique
+
+  status BankDocumentStatus @default(POSTED)
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store        Store          @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  toStore      Store?         @relation("TicketToStore", fields: [toStoreId], references: [id], onDelete: Restrict)
+  item         Item           @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  transfer     StoreTransfer? @relation(fields: [transferId], references: [id], onDelete: SetNull)
+
+  @@unique([orgId, number])
+  @@index([orgId, date(sort: Desc)])
+  @@index([orgId, storeId])
+  @@index([orgId, itemId])
+  @@map("store_tickets")
 }
 
 // ---------------------------------------------------------------------------

@@ -177,8 +177,8 @@ export function ItemTable({
                 {store.name}
               </TableHead>
             ))}
-            <TableHead className="numeric w-28">Stock value</TableHead>
             <SortableHeader column="price" label="Price" state={sort} basePath="/items" params={linkParams} className="w-28" numeric defaultDirection="desc" />
+            <TableHead className="numeric w-28">Stock value</TableHead>
             <SortableHeader column="cost" label="Cost" state={sort} basePath="/items" params={linkParams} className="w-28" numeric defaultDirection="desc" />
             <TableHead className="w-10" />
           </TableRow>
@@ -278,15 +278,15 @@ export function ItemTable({
                   />
                 </TableCell>
               ))}
+              <TableCell className="numeric tabular">
+                {row.salesPrice ? formatMoney(row.salesPrice, currency) : '—'}
+              </TableCell>
               <TableCell className="numeric tabular text-muted-foreground">
                 {row.type === 'INVENTORY' && row.stockValue
                   ? formatMoney(row.stockValue, currency)
                   : '—'}
               </TableCell>
-              <TableCell className="numeric tabular">
-                {row.salesPrice ? formatMoney(row.salesPrice, currency) : '—'}
-              </TableCell>
-              <TableCell className="numeric tabular">
+              <TableCell className="numeric tabular font-medium">
                 {row.type === 'INVENTORY'
                   ? row.averageCost && Number(row.averageCost) !== 0
                     ? formatMoney(row.averageCost, currency)

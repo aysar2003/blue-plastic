@@ -2,11 +2,20 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { MetricCard } from '@/components/data/metric-card'
 import { PageHeader } from '@/components/data/page-header'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { formatDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
@@ -22,6 +31,7 @@ const TYPE_LABELS: Record<string, string> = {
   PURCHASE_RETURN: 'Returned to vendor',
   ADJUSTMENT: 'Adjustment',
   OPENING: 'Opening stock',
+  TRANSFER: 'Store transfer',
 }
 
 /**
@@ -74,32 +84,25 @@ export default async function ItemMovementsPage({
       </div>
 
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">On hand</p>
-            <p className="tabular mt-0.5 text-lg font-semibold">
-              {latest ? latest.runningQuantity.toFixed(2) : '0.00'}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Average cost</p>
-            <p className="tabular mt-0.5 text-lg font-semibold">
-              {latest && !latest.runningQuantity.isZero()
-                ? formatMoney(latest.runningValue.dividedBy(latest.runningQuantity), currency)
-                : '—'}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Value</p>
-            <p className="tabular mt-0.5 text-lg font-semibold">
-              {formatMoney(latest?.runningValue ?? 0, currency)}
-            </p>
-          </CardContent>
-        </Card>
+        <MetricCard
+          label="On hand"
+          tone="stock"
+          value={latest ? latest.runningQuantity.toFixed(2) : '0.00'}
+        />
+        <MetricCard
+          label="Average cost"
+          tone="info"
+          value={
+            latest && !latest.runningQuantity.isZero()
+              ? formatMoney(latest.runningValue.dividedBy(latest.runningQuantity), currency)
+              : '—'
+          }
+        />
+        <MetricCard
+          label="Total cost"
+          tone="money"
+          value={formatMoney(latest?.runningValue ?? 0, currency)}
+        />
       </div>
 
       {movements.length === 0 ? (
@@ -164,6 +167,30 @@ export default async function ItemMovementsPage({
                 </TableRow>
               ))}
             </TableBody>
+            {latest ? (
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={6} className="font-semibold">
+                    On hand · average cost · total cost
+                  </TableCell>
+                  <TableCell className="numeric tabular font-semibold">
+                    {latest.runningQuantity.toFixed(2)}
+                  </TableCell>
+                  <TableCell className="numeric tabular font-semibold">
+                    {formatMoney(latest.runningValue, currency)}
+                    {!latest.runningQuantity.isZero() ? (
+                      <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                        avg{' '}
+                        {formatMoney(
+                          latest.runningValue.dividedBy(latest.runningQuantity),
+                          currency,
+                        )}
+                      </span>
+                    ) : null}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            ) : null}
           </Table>
         </Card>
       )}

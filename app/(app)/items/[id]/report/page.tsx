@@ -2,10 +2,10 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { MetricCard } from '@/components/data/metric-card'
 import { PageHeader } from '@/components/data/page-header'
 import { ReportTable } from '@/components/reports/report-table'
 import { buttonVariants } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
@@ -28,6 +28,7 @@ const KINDS: { value: ActivityKind; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'sales', label: 'Sales' },
   { value: 'purchases', label: 'Purchases' },
+  { value: 'tickets', label: 'Tickets' },
   { value: 'adjustments', label: 'Adjustments' },
 ]
 
@@ -38,7 +39,12 @@ const PRICES: { value: PriceView; label: string }[] = [
 ]
 
 function readKind(value: string | undefined): ActivityKind {
-  return value === 'sales' || value === 'purchases' || value === 'adjustments' ? value : 'all'
+  return value === 'sales' ||
+    value === 'purchases' ||
+    value === 'adjustments' ||
+    value === 'tickets'
+    ? value
+    : 'all'
 }
 
 function readPrice(value: string | undefined): PriceView {
@@ -80,8 +86,10 @@ export default async function ItemQuickReportPage({
     { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
     { key: 'type', label: 'Type', width: 'w-36' },
     { key: 'number', label: 'No.', width: 'w-28' },
-    { key: 'party', label: 'Customer or vendor' },
+    { key: 'ticketNumber', label: 'Ticket', width: 'w-28' },
+    { key: 'party', label: 'Customer, vendor, or store' },
     { key: 'quantity', label: 'Qty', format: 'number', width: 'w-24' },
+    { key: 'balance', label: 'Balance', format: 'number', width: 'w-28' },
   ]
   if (price !== 'sales') columns.push({ key: 'cost', label: 'Cost', format: 'money', width: 'w-28' })
   if (price !== 'cost') columns.push({ key: 'salesPrice', label: 'Sales price', format: 'money', width: 'w-32' })
@@ -95,8 +103,10 @@ export default async function ItemQuickReportPage({
         date: row.date,
         type: row.type,
         number: row.number || null,
+        ticketNumber: row.ticketNumber || null,
         party: row.party || null,
         quantity: row.quantity,
+        balance: row.balance,
         cost: row.cost,
         salesPrice: row.salesPrice,
         amount: row.amount,
@@ -105,10 +115,11 @@ export default async function ItemQuickReportPage({
     totals: {
       date: 'Total',
       quantity: totals.quantity.toFixed(2),
+      balance: totals.balance ?? null,
       amount: totals.amount.toFixed(2),
     },
     empty: 'Nothing posted for this item in this period.',
-    note: 'A sale reduces quantity. A purchase or a customer return increases it. Cost is what was paid, or the average cost issued. Sales price is what the customer was charged.',
+    note: 'Qty is the change on that line. Balance is how many are on hand after it. A sale reduces quantity; a purchase or customer return increases it. Store tickets move stock between stores without changing the global balance.',
   }
 
   const keep = settingsToQuery(settings, { kind, price })
@@ -143,36 +154,29 @@ export default async function ItemQuickReportPage({
       />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">On hand</p>
-            <p className="tabular mt-0.5 text-lg font-semibold">
-              {tracked ? (position ? position.quantity.toFixed(2) : '0.00') : 'Not tracked'}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Sales price</p>
-            <p className="tabular mt-0.5 text-lg font-semibold">
-              {item.salesPrice ? formatMoney(item.salesPrice.toString(), currency) : '—'}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">{tracked ? 'Average cost' : 'Cost'}</p>
-            <p className="tabular mt-0.5 text-lg font-semibold">
-              {tracked
-                ? position && !position.averageCost.isZero()
-                  ? formatMoney(position.averageCost, currency)
-                  : '—'
-                : item.purchaseCost
-                  ? formatMoney(item.purchaseCost.toString(), currency)
-                  : '—'}
-            </p>
-          </CardContent>
-        </Card>
+        <MetricCard
+          label="On hand"
+          tone="stock"
+          value={tracked ? (position ? position.quantity.toFixed(2) : '0.00') : 'Not tracked'}
+        />
+        <MetricCard
+          label="Sales price"
+          tone="sales"
+          value={item.salesPrice ? formatMoney(item.salesPrice.toString(), currency) : '—'}
+        />
+        <MetricCard
+          label={tracked ? 'Average cost' : 'Cost'}
+          tone="money"
+          value={
+            tracked
+              ? position && !position.averageCost.isZero()
+                ? formatMoney(position.averageCost, currency)
+                : '—'
+              : item.purchaseCost
+                ? formatMoney(item.purchaseCost.toString(), currency)
+                : '—'
+          }
+        />
       </div>
 
       <ReportControls

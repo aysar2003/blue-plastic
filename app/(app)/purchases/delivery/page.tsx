@@ -51,28 +51,32 @@ export default async function DeliveryHubPage() {
           value={String(summary.notDelivered)}
           hint="nothing received yet"
           href="/purchases/delivery/outstanding?bucket=not_delivered"
-          icon={<PackageXIcon className="size-4 text-slate-500" />}
+          tone="zero"
+          icon={<PackageXIcon className="size-4" />}
         />
         <Insight
           label="Part delivered"
           value={String(summary.partial)}
           hint="some lines still open"
           href="/purchases/delivery/outstanding?bucket=partial"
-          icon={<PackageOpenIcon className="size-4 text-amber-700" />}
+          tone="warning"
+          icon={<PackageOpenIcon className="size-4" />}
         />
         <Insight
           label="Delivered"
           value={String(summary.delivered)}
           hint="orders complete"
           href="/purchases/delivery/received"
-          icon={<PackageCheckIcon className="size-4 text-emerald-700" />}
+          tone="success"
+          icon={<PackageCheckIcon className="size-4" />}
         />
         <Insight
           label="Outstanding value"
           value={formatMoney(summary.outstandingValue, currency)}
           hint={`${summary.outstandingQty} units still due`}
           href="/purchases/delivery/outstanding"
-          icon={<PackageIcon className="size-4 text-sky-700" />}
+          tone="purchase"
+          icon={<PackageIcon className="size-4" />}
         />
       </div>
 
@@ -152,22 +156,24 @@ function Insight({
   hint,
   href,
   icon,
+  tone = 'neutral',
 }: {
   label: string
   value: string
   hint: string
   href: string
   icon: ReactNode
+  tone?: 'neutral' | 'zero' | 'warning' | 'success' | 'purchase'
 }) {
   return (
-    <Link href={href} className="block rounded-xl border bg-card transition-colors hover:bg-muted/40">
-      <Card className="border-0 shadow-none">
+    <Link href={href} className="block transition-opacity hover:opacity-90">
+      <Card tone={tone} className="h-full">
         <CardContent className="flex items-start gap-3 p-4">
-          <span className="mt-0.5 rounded-md bg-muted p-2">{icon}</span>
+          <span className="mt-0.5 rounded-md bg-black/5 p-2 dark:bg-white/10">{icon}</span>
           <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className="text-xs font-medium uppercase tracking-wider opacity-75">{label}</p>
             <p className="tabular mt-0.5 text-lg font-semibold">{value}</p>
-            <p className="text-xs text-muted-foreground">{hint}</p>
+            <p className="text-xs opacity-70">{hint}</p>
           </div>
         </CardContent>
       </Card>

@@ -2,7 +2,11 @@ import 'server-only'
 
 import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
-import type { InventoryAdjustmentInput } from '@/lib/validation/inventory'
+import type {
+  InventoryAdjustmentInput,
+  StoreTicketInput,
+  StoreTransferInput,
+} from '@/lib/validation/inventory'
 import {
   positionsOf,
   recordMovement,
@@ -12,6 +16,7 @@ import {
 } from '@/server/accounting/inventory'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
 import * as accountService from '@/server/services/account.service'
+import * as storeService from '@/server/services/store.service'
 import { softDeleteDocument } from '@/server/accounting/deletion'
 import { postJournal } from '@/server/accounting/posting'
 import type { DraftLine } from '@/server/accounting/posting'
@@ -383,6 +388,262 @@ export async function removeAdjustment(ctx: OrgContext, id: string, reason?: str
 export async function reorderReport(ctx: OrgContext) {
   const stock = await stockOnHand(ctx)
   return stock.items.filter((item) => item.belowReorder)
+}
+
+type TransferTicketOptions = {
+  /** AUTO on the transfer form; MANUAL on the ticket form. */
+  ticketOrigin?: 'AUTO' | 'MANUAL'
+  ticketNumber?: string | null
+  takenBy?: string | null
+}
+
+/**
+ * Move stock from one store to another.
+ *
+ * Global quantity and average cost stay the same. Value leaves the source
+ * store's inventory account and lands on the destination store's account.
+ * A store ticket (TKT-) is always written for the store goods left.
+ */
+export async function createStoreTransfer(
+  ctx: OrgContext,
+  input: StoreTransferInput,
+  options: TransferTicketOptions = {},
+) {
+  const meta = await requestMeta()
+  const ticketOrigin = options.ticketOrigin ?? 'AUTO'
+
+  return db.$transaction(async (tx) => {
+    if (input.fromStoreId === input.toStoreId) {
+      throw validation('Choose a different store to send the stock to.', {
+        toStoreId: ['Choose a different store to send the stock to.'],
+      })
+    }
+
+    const [fromStore, toStore, item, shelf] = await Promise.all([
+      tx.store.findFirst({
+        where: { id: input.fromStoreId, orgId: ctx.orgId, isActive: true },
+        select: { id: true, name: true, inventoryAccountId: true },
+      }),
+      tx.store.findFirst({
+        where: { id: input.toStoreId, orgId: ctx.orgId, isActive: true },
+        select: { id: true, name: true, inventoryAccountId: true },
+      }),
+      tx.item.findFirst({
+        where: { id: input.itemId, orgId: ctx.orgId, deletedAt: null },
+        select: { id: true, name: true, type: true },
+      }),
+      storeService.quantities(ctx),
+    ])
+
+    if (!fromStore) throw notFound('From store')
+    if (!toStore) throw notFound('To store')
+    if (!item) throw notFound('Item')
+    if (item.type !== 'INVENTORY') {
+      throw precondition(`"${item.name}" is not a tracked item, so it has no stock to move.`)
+    }
+
+    const available = new Decimal(shelf.byItem[item.id]?.[fromStore.id] ?? '0')
+    const quantity = new Decimal(input.quantity)
+    if (quantity.greaterThan(available)) {
+      throw precondition(
+        `${fromStore.name} holds ${available.toFixed(2)} of "${item.name}", and this needs ${quantity.toFixed(2)}.`,
+      )
+    }
+
+    const number = await assignDocumentNumber(tx, ctx.orgId, 'STORE_TRANSFER', input.number)
+    const clash = await tx.storeTransfer.findFirst({
+      where: { orgId: ctx.orgId, number },
+      select: { id: true },
+    })
+    if (clash) throw numberTaken()
+
+    const transfer = await tx.storeTransfer.create({
+      data: {
+        orgId: ctx.orgId,
+        number,
+        date: toDate(input.date),
+        fromStoreId: fromStore.id,
+        toStoreId: toStore.id,
+        itemId: item.id,
+        quantity: quantity.toFixed(4),
+        unitCost: '0',
+        value: '0',
+        memo: input.memo ?? null,
+        createdById: ctx.userId,
+      },
+      select: { id: true, number: true },
+    })
+
+    const out = await recordMovement(tx, ctx, {
+      itemId: item.id,
+      date: input.date,
+      type: 'TRANSFER',
+      sourceType: 'TRANSFER',
+      sourceId: transfer.id,
+      quantity: quantity.negated(),
+      storeId: fromStore.id,
+    })
+
+    await recordMovement(tx, ctx, {
+      itemId: item.id,
+      date: input.date,
+      type: 'TRANSFER',
+      sourceType: 'TRANSFER',
+      sourceId: transfer.id,
+      quantity,
+      unitCost: out.unitCost,
+      storeId: toStore.id,
+    })
+
+    const value = out.value.abs()
+    await tx.storeTransfer.update({
+      where: { id: transfer.id },
+      data: {
+        unitCost: out.unitCost.toFixed(6),
+        value: value.toFixed(4),
+      },
+    })
+
+    if (
+      !value.isZero() &&
+      fromStore.inventoryAccountId !== toStore.inventoryAccountId
+    ) {
+      const journal = await postJournal(tx, ctx, {
+        date: input.date,
+        memo: `Store transfer ${transfer.number}: ${item.name} · ${fromStore.name} → ${toStore.name}`,
+        sourceType: 'TRANSFER',
+        sourceId: transfer.id,
+        lines: [
+          {
+            accountId: toStore.inventoryAccountId,
+            debit: value,
+            description: `From ${fromStore.name}`,
+          },
+          {
+            accountId: fromStore.inventoryAccountId,
+            credit: value,
+            description: `To ${toStore.name}`,
+          },
+        ],
+      })
+
+      await tx.storeTransfer.update({
+        where: { id: transfer.id },
+        data: { journalId: journal.id },
+      })
+      await tx.inventoryTransaction.updateMany({
+        where: { orgId: ctx.orgId, sourceId: transfer.id, journalId: null },
+        data: { journalId: journal.id },
+      })
+    }
+
+    const ticketNumber = await assignDocumentNumber(
+      tx,
+      ctx.orgId,
+      'STORE_TICKET',
+      options.ticketNumber,
+    )
+    const ticketClash = await tx.storeTicket.findFirst({
+      where: { orgId: ctx.orgId, number: ticketNumber },
+      select: { id: true },
+    })
+    if (ticketClash) throw numberTaken()
+
+    const ticket = await tx.storeTicket.create({
+      data: {
+        orgId: ctx.orgId,
+        number: ticketNumber,
+        date: toDate(input.date),
+        storeId: fromStore.id,
+        toStoreId: toStore.id,
+        itemId: item.id,
+        quantity: quantity.toFixed(4),
+        unitCost: out.unitCost.toFixed(6),
+        value: value.toFixed(4),
+        takenBy: options.takenBy?.trim() || null,
+        memo: input.memo ?? null,
+        origin: ticketOrigin,
+        transferId: transfer.id,
+        createdById: ctx.userId,
+      },
+      select: { id: true, number: true },
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'StoreTransfer',
+        entityId: transfer.id,
+        action: 'CREATE',
+        after: {
+          number: transfer.number,
+          ticketNumber: ticket.number,
+          itemId: item.id,
+          fromStoreId: fromStore.id,
+          toStoreId: toStore.id,
+          quantity: quantity.toString(),
+          value: value.toString(),
+        },
+      },
+      meta,
+    )
+
+    return {
+      id: transfer.id,
+      number: transfer.number,
+      ticketId: ticket.id,
+      ticketNumber: ticket.number,
+    }
+  })
+}
+
+/** Manual store ticket — takes stock from one store to another and numbers the ticket. */
+export async function createStoreTicket(ctx: OrgContext, input: StoreTicketInput) {
+  return createStoreTransfer(
+    ctx,
+    {
+      number: '',
+      date: input.date,
+      fromStoreId: input.storeId,
+      toStoreId: input.toStoreId,
+      itemId: input.itemId,
+      quantity: input.quantity,
+      memo: input.memo,
+    },
+    {
+      ticketOrigin: 'MANUAL',
+      ticketNumber: input.number,
+      takenBy: input.takenBy,
+    },
+  ).then((result) => ({
+    id: result.ticketId,
+    number: result.ticketNumber,
+    transferId: result.id,
+    transferNumber: result.number,
+  }))
+}
+
+/** Recent tickets that left this store — for the store dashboard. */
+export async function ticketsForStore(ctx: OrgContext, storeId: string, limit = 20) {
+  return db.storeTicket.findMany({
+    where: { orgId: ctx.orgId, storeId, status: 'POSTED' },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      quantity: true,
+      unitCost: true,
+      value: true,
+      takenBy: true,
+      origin: true,
+      memo: true,
+      item: { select: { id: true, name: true, sku: true } },
+      toStore: { select: { id: true, name: true } },
+    },
+    orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+    take: limit,
+  })
 }
 
 export { toCalendarDate, type CalendarDate }

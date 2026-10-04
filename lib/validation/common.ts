@@ -105,9 +105,12 @@ export function parseListQuery(params: Record<string, string | string[] | undefi
   return result.success ? result.data : listQuerySchema.parse({})
 }
 
-/** Lists load every matching row; skip/take are left unset on purpose. */
-export function paginate(_query: ListQuery) {
-  return {}
+/** Page slice for callers that still page in memory (e.g. balance-sorted lists). */
+export function paginate(query: ListQuery) {
+  return {
+    skip: (query.page - 1) * query.pageSize,
+    take: query.pageSize,
+  }
 }
 
 export type Paged<T> = {

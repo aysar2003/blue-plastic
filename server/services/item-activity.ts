@@ -5,15 +5,19 @@ import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 
-export type ActivityKind = 'all' | 'sales' | 'purchases' | 'adjustments'
+export type ActivityKind = 'all' | 'sales' | 'purchases' | 'adjustments' | 'tickets'
 export type PriceView = 'both' | 'cost' | 'sales'
 
 export type ItemActivity = {
   date: CalendarDate
   type: string
   number: string
+  /** Store ticket (TKT-) when goods left a store. */
+  ticketNumber: string | null
   party: string
   quantity: string
+  /** On-hand after this line (tracked items only). */
+  balance: string | null
   cost: string | null
   salesPrice: string | null
   amount: string
@@ -34,6 +38,9 @@ const PURCHASE_LABEL: Record<string, string> = {
   EXPENSE: 'Expense',
   VENDOR_CREDIT: 'Vendor credit',
 }
+
+const SALES_TYPES = new Set(Object.values(SALES_LABEL))
+const PURCHASE_TYPES = new Set(Object.values(PURCHASE_LABEL))
 
 function salesPath(type: string) {
   if (type === 'SALES_RECEIPT') return 'sales-receipts'
@@ -57,11 +64,37 @@ function purchaseSign(type: string) {
   return type === 'VENDOR_CREDIT' ? -1 : 1
 }
 
+function affectsOnHand(type: string) {
+  return type !== 'Store ticket'
+}
+
+function matchesKind(type: string, kind: ActivityKind) {
+  if (kind === 'all') return true
+  if (kind === 'sales') return SALES_TYPES.has(type)
+  if (kind === 'purchases') return PURCHASE_TYPES.has(type)
+  if (kind === 'tickets') return type === 'Store ticket'
+  if (kind === 'adjustments') return type === 'Adjustment' || type === 'Opening stock'
+  return true
+}
+
+/** On-hand just before the report range, from the stock ledger. */
+async function priorOnHand(ctx: OrgContext, itemId: string, from: Date): Promise<Decimal> {
+  const prior = await db.inventoryTransaction.findFirst({
+    where: { orgId: ctx.orgId, itemId, date: { lt: from } },
+    orderBy: { sequence: 'desc' },
+    select: { runningQuantity: true },
+  })
+  return new Decimal(prior?.runningQuantity?.toString() ?? '0')
+}
+
+type DraftRow = Omit<ItemActivity, 'balance'> & { sort: string }
+
 /**
  * Every posted sale, purchase and count for one item.
  *
  * The sales price is what was charged. The cost is what the stock ledger issued,
  * or what the bill paid. A service has a sales price and no cost.
+ * Balance is on-hand after each line (from the opening quantity before the range).
  */
 export async function itemActivity(
   ctx: OrgContext,
@@ -73,185 +106,260 @@ export async function itemActivity(
   const to = toDate(range.to)
   const salesPosted = { notIn: ['DRAFT', 'VOID', 'DECLINED'] as const }
   const purchasePosted = { notIn: ['DRAFT', 'VOID'] as const }
-  const rows: (ItemActivity & { sort: string })[] = []
+  const rows: DraftRow[] = []
 
-  if (kind === 'all' || kind === 'sales') {
-    const lines = await db.salesDocumentLine.findMany({
-      where: {
+  const item = await db.item.findFirst({
+    where: { id: itemId, orgId: ctx.orgId },
+    select: { type: true },
+  })
+  const tracked = item?.type === 'INVENTORY'
+
+  // Load every kind so Balance can walk the full stock story, then filter.
+  const salesLines = await db.salesDocumentLine.findMany({
+    where: {
+      orgId: ctx.orgId,
+      itemId,
+      document: {
         orgId: ctx.orgId,
-        itemId,
-        document: {
-          orgId: ctx.orgId,
-          deletedAt: null,
-          status: salesPosted,
-          date: { gte: from, lte: to },
-          type: { in: ['INVOICE', 'SALES_RECEIPT', 'CREDIT_MEMO', 'REFUND_RECEIPT'] },
-        },
+        deletedAt: null,
+        status: { notIn: [...salesPosted.notIn] },
+        date: { gte: from, lte: to },
+        type: { in: ['INVOICE', 'SALES_RECEIPT', 'CREDIT_MEMO', 'REFUND_RECEIPT'] },
       },
-      select: {
-        id: true,
-        quantity: true,
-        unitPrice: true,
-        amount: true,
-        document: {
-          select: {
-            id: true,
-            type: true,
-            number: true,
-            date: true,
-            customer: { select: { displayName: true } },
-          },
-        },
-      },
-    })
-
-    const costs = await db.inventoryTransaction.findMany({
-      where: { orgId: ctx.orgId, itemId, sourceLineId: { in: lines.map((line) => line.id) } },
-      select: { sourceLineId: true, unitCost: true },
-    })
-    const costByLine = new Map(costs.map((row) => [row.sourceLineId, row.unitCost.toString()]))
-
-    for (const line of lines) {
-      const doc = line.document
-      const qty = new Decimal(line.quantity.toString()).times(salesSign(doc.type))
-      rows.push({
-        sort: `${toCalendarDate(doc.date)}-${doc.number}-${line.id}`,
-        date: toCalendarDate(doc.date),
-        type: SALES_LABEL[doc.type] ?? doc.type,
-        number: doc.number,
-        party: doc.customer.displayName,
-        quantity: qty.toFixed(2),
-        cost: costByLine.get(line.id) ? money(costByLine.get(line.id)!) : null,
-        salesPrice: money(line.unitPrice.toString()),
-        amount: money(line.amount.toString()),
-        href: `/sales/${salesPath(doc.type)}/${doc.id}`,
-      })
-    }
-  }
-
-  if (kind === 'all' || kind === 'purchases') {
-    const lines = await db.purchaseDocumentLine.findMany({
-      where: {
-        orgId: ctx.orgId,
-        itemId,
-        document: {
-          orgId: ctx.orgId,
-          deletedAt: null,
-          status: purchasePosted,
-          date: { gte: from, lte: to },
-          type: { in: ['BILL', 'EXPENSE', 'VENDOR_CREDIT'] },
-        },
-      },
-      select: {
-        id: true,
-        quantity: true,
-        unitPrice: true,
-        amount: true,
-        document: {
-          select: {
-            id: true,
-            type: true,
-            number: true,
-            date: true,
-            vendor: { select: { displayName: true } },
-          },
-        },
-      },
-    })
-
-    for (const line of lines) {
-      const doc = line.document
-      const qty = new Decimal(line.quantity.toString()).times(purchaseSign(doc.type))
-      rows.push({
-        sort: `${toCalendarDate(doc.date)}-${doc.number}-${line.id}`,
-        date: toCalendarDate(doc.date),
-        type: PURCHASE_LABEL[doc.type] ?? doc.type,
-        number: doc.number,
-        party: doc.vendor.displayName,
-        quantity: qty.toFixed(2),
-        cost: money(line.unitPrice.toString()),
-        salesPrice: null,
-        amount: money(line.amount.toString()),
-        href: `/purchases/${purchasePath(doc.type)}/${doc.id}`,
-      })
-    }
-  }
-
-  if (kind === 'all' || kind === 'adjustments') {
-    const [adjustments, openings] = await Promise.all([
-      db.inventoryAdjustmentLine.findMany({
-        where: {
-          orgId: ctx.orgId,
-          itemId,
-          adjustment: { orgId: ctx.orgId, deletedAt: null, date: { gte: from, lte: to }, status: { not: 'VOID' } },
-        },
+    },
+    select: {
+      id: true,
+      quantity: true,
+      unitPrice: true,
+      amount: true,
+      document: {
         select: {
           id: true,
-          quantityChange: true,
-          unitCost: true,
-          value: true,
-          adjustment: {
-            select: {
-              number: true,
-              date: true,
-              journalId: true,
-              reason: true,
-              account: { select: { name: true } },
-            },
-          },
-        },
-      }),
-      db.inventoryTransaction.findMany({
-        where: { orgId: ctx.orgId, itemId, type: 'OPENING', date: { gte: from, lte: to } },
-        select: {
-          id: true,
+          type: true,
+          number: true,
           date: true,
-          quantity: true,
-          unitCost: true,
-          value: true,
-          journalId: true,
+          customer: { select: { displayName: true } },
         },
-      }),
-    ])
+      },
+    },
+  })
 
-    for (const line of adjustments) {
-      rows.push({
-        sort: `${toCalendarDate(line.adjustment.date)}-${line.adjustment.number}-${line.id}`,
-        date: toCalendarDate(line.adjustment.date),
-        type: 'Adjustment',
-        number: line.adjustment.number,
-        party: [line.adjustment.account.name, line.adjustment.reason].filter(Boolean).join(' · '),
-        quantity: new Decimal(line.quantityChange.toString()).toFixed(2),
-        cost: money(line.unitCost.toString()),
-        salesPrice: null,
-        amount: money(line.value.toString()),
-        href: line.adjustment.journalId ? `/journals/${line.adjustment.journalId}` : `/inventory/${itemId}`,
-      })
-    }
+  const costs = await db.inventoryTransaction.findMany({
+    where: { orgId: ctx.orgId, itemId, sourceLineId: { in: salesLines.map((line) => line.id) } },
+    select: { sourceLineId: true, unitCost: true },
+  })
+  const costByLine = new Map(costs.map((row) => [row.sourceLineId, row.unitCost.toString()]))
 
-    for (const opening of openings) {
-      rows.push({
-        sort: `${toCalendarDate(opening.date)}-opening-${opening.id}`,
-        date: toCalendarDate(opening.date),
-        type: 'Opening stock',
-        number: '',
-        party: 'Opening balance',
-        quantity: new Decimal(opening.quantity.toString()).toFixed(2),
-        cost: money(opening.unitCost.toString()),
-        salesPrice: null,
-        amount: money(opening.value.toString()),
-        href: opening.journalId ? `/journals/${opening.journalId}` : `/inventory/${itemId}`,
-      })
-    }
+  for (const line of salesLines) {
+    const doc = line.document
+    const qty = new Decimal(line.quantity.toString()).times(salesSign(doc.type))
+    rows.push({
+      sort: `${toCalendarDate(doc.date)}-${doc.number}-${line.id}`,
+      date: toCalendarDate(doc.date),
+      type: SALES_LABEL[doc.type] ?? doc.type,
+      number: doc.number,
+      ticketNumber: null,
+      party: doc.customer.displayName,
+      quantity: qty.toFixed(2),
+      cost: costByLine.get(line.id) ? money(costByLine.get(line.id)!) : null,
+      salesPrice: money(line.unitPrice.toString()),
+      amount: money(line.amount.toString()),
+      href: `/sales/${salesPath(doc.type)}/${doc.id}`,
+    })
+  }
+
+  const purchaseLines = await db.purchaseDocumentLine.findMany({
+    where: {
+      orgId: ctx.orgId,
+      itemId,
+      document: {
+        orgId: ctx.orgId,
+        deletedAt: null,
+        status: { notIn: [...purchasePosted.notIn] },
+        date: { gte: from, lte: to },
+        type: { in: ['BILL', 'EXPENSE', 'VENDOR_CREDIT'] },
+      },
+    },
+    select: {
+      id: true,
+      quantity: true,
+      unitPrice: true,
+      amount: true,
+      document: {
+        select: {
+          id: true,
+          type: true,
+          number: true,
+          date: true,
+          vendor: { select: { displayName: true } },
+        },
+      },
+    },
+  })
+
+  for (const line of purchaseLines) {
+    const doc = line.document
+    const qty = new Decimal(line.quantity.toString()).times(purchaseSign(doc.type))
+    rows.push({
+      sort: `${toCalendarDate(doc.date)}-${doc.number}-${line.id}`,
+      date: toCalendarDate(doc.date),
+      type: PURCHASE_LABEL[doc.type] ?? doc.type,
+      number: doc.number,
+      ticketNumber: null,
+      party: doc.vendor.displayName,
+      quantity: qty.toFixed(2),
+      cost: money(line.unitPrice.toString()),
+      salesPrice: null,
+      amount: money(line.amount.toString()),
+      href: `/purchases/${purchasePath(doc.type)}/${doc.id}`,
+    })
+  }
+
+  const tickets = await db.storeTicket.findMany({
+    where: {
+      orgId: ctx.orgId,
+      itemId,
+      status: 'POSTED',
+      date: { gte: from, lte: to },
+    },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      storeId: true,
+      quantity: true,
+      unitCost: true,
+      value: true,
+      takenBy: true,
+      store: { select: { name: true } },
+      toStore: { select: { name: true } },
+      transfer: { select: { id: true, number: true } },
+    },
+    orderBy: { date: 'asc' },
+  })
+
+  for (const ticket of tickets) {
+    const party = [
+      ticket.store.name,
+      ticket.toStore ? `→ ${ticket.toStore.name}` : null,
+      ticket.takenBy ? `taken by ${ticket.takenBy}` : null,
+    ]
+      .filter(Boolean)
+      .join(' ')
+    rows.push({
+      sort: `${toCalendarDate(ticket.date)}-${ticket.number}-${ticket.id}`,
+      date: toCalendarDate(ticket.date),
+      type: 'Store ticket',
+      number: ticket.transfer?.number ?? '',
+      ticketNumber: ticket.number,
+      party,
+      quantity: new Decimal(ticket.quantity.toString()).toFixed(2),
+      cost: money(ticket.unitCost.toString()),
+      salesPrice: null,
+      amount: money(ticket.value.toString()),
+      href: `/stores/${ticket.storeId}`,
+    })
+  }
+
+  const [adjustments, openings] = await Promise.all([
+    db.inventoryAdjustmentLine.findMany({
+      where: {
+        orgId: ctx.orgId,
+        itemId,
+        adjustment: {
+          orgId: ctx.orgId,
+          deletedAt: null,
+          date: { gte: from, lte: to },
+          status: { not: 'VOID' },
+        },
+      },
+      select: {
+        id: true,
+        quantityChange: true,
+        unitCost: true,
+        value: true,
+        adjustment: {
+          select: {
+            number: true,
+            date: true,
+            journalId: true,
+            reason: true,
+            account: { select: { name: true } },
+          },
+        },
+      },
+    }),
+    db.inventoryTransaction.findMany({
+      where: { orgId: ctx.orgId, itemId, type: 'OPENING', date: { gte: from, lte: to } },
+      select: {
+        id: true,
+        date: true,
+        quantity: true,
+        unitCost: true,
+        value: true,
+        journalId: true,
+      },
+    }),
+  ])
+
+  for (const line of adjustments) {
+    rows.push({
+      sort: `${toCalendarDate(line.adjustment.date)}-${line.adjustment.number}-${line.id}`,
+      date: toCalendarDate(line.adjustment.date),
+      type: 'Adjustment',
+      number: line.adjustment.number,
+      ticketNumber: null,
+      party: [line.adjustment.account.name, line.adjustment.reason].filter(Boolean).join(' · '),
+      quantity: new Decimal(line.quantityChange.toString()).toFixed(2),
+      cost: money(line.unitCost.toString()),
+      salesPrice: null,
+      amount: money(line.value.toString()),
+      href: line.adjustment.journalId ? `/journals/${line.adjustment.journalId}` : `/inventory/${itemId}`,
+    })
+  }
+
+  for (const opening of openings) {
+    rows.push({
+      sort: `${toCalendarDate(opening.date)}-opening-${opening.id}`,
+      date: toCalendarDate(opening.date),
+      type: 'Opening stock',
+      number: '',
+      ticketNumber: null,
+      party: 'Opening balance',
+      quantity: new Decimal(opening.quantity.toString()).toFixed(2),
+      cost: money(opening.unitCost.toString()),
+      salesPrice: null,
+      amount: money(opening.value.toString()),
+      href: opening.journalId ? `/journals/${opening.journalId}` : `/inventory/${itemId}`,
+    })
   }
 
   rows.sort((a, b) => a.sort.localeCompare(b.sort))
-  return rows
+
+  let balance = tracked ? await priorOnHand(ctx, itemId, from) : ZERO
+  const withBalance: (ItemActivity & { sort: string })[] = rows.map((row) => {
+    if (tracked && affectsOnHand(row.type)) {
+      balance = balance.plus(row.quantity)
+    }
+    const { sort, ...rest } = row
+    return {
+      ...rest,
+      sort,
+      balance: tracked ? balance.toFixed(2) : null,
+    }
+  })
+
+  return withBalance
+    .filter((row) => matchesKind(row.type, kind))
+    .map(({ sort: _sort, ...row }) => row)
 }
 
 export function activityTotals(rows: ItemActivity[]) {
+  const counted = rows.filter((row) => row.type !== 'Store ticket')
+  const lastBalance = [...rows].reverse().find((row) => row.balance !== null)?.balance ?? null
   return {
-    quantity: rows.reduce((sum, row) => sum.plus(row.quantity), ZERO),
-    amount: rows.reduce((sum, row) => sum.plus(row.amount), ZERO),
+    quantity: counted.reduce((sum, row) => sum.plus(row.quantity), ZERO),
+    amount: counted.reduce((sum, row) => sum.plus(row.amount), ZERO),
+    balance: lastBalance,
   }
 }

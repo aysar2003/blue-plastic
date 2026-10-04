@@ -20,6 +20,8 @@ const DEFAULT_PREFIX: Record<DocumentType, string> = {
   TRANSFER: 'TRF-',
   DEPOSIT: 'DEP-',
   INVENTORY_ADJUSTMENT: 'ADJ-',
+  STORE_TRANSFER: 'STX-',
+  STORE_TICKET: 'TKT-',
 }
 
 /**

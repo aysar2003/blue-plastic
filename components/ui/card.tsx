@@ -1,18 +1,26 @@
 import * as React from 'react'
 
+import type { CardTone } from '@/lib/card-tones'
 import { cn } from '@/lib/utils'
 
 /**
- * A panel, not a card.
+ * A panel, not a floating tile.
  *
- * No shadow and a 4px corner: it is a region of the page with a boundary, and
- * a screen with six of them should not look like six floating objects. Odoo
- * calls these sheets and draws them exactly this flatly, for the same reason.
+ * Pass `tone` when the card is a figure or a kind of work (stock, money,
+ * danger…) so its colour says what it is. Leave tone off for forms and tables.
  */
-function Card({ className, ...props }: React.ComponentProps<'div'>) {
+function Card({
+  className,
+  tone,
+  ...props
+}: React.ComponentProps<'div'> & {
+  /** Semantic colour — see lib/card-tones. */
+  tone?: CardTone
+}) {
   return (
     <div
       data-slot="card"
+      data-tone={tone ?? 'neutral'}
       className={cn('rounded-md border bg-card text-card-foreground', className)}
       {...props}
     />
@@ -24,7 +32,13 @@ function CardHeader({ className, ...props }: React.ComponentProps<'div'>) {
 }
 
 function CardTitle({ className, ...props }: React.ComponentProps<'h3'>) {
-  return <h3 data-slot="card-title" className={cn('text-sm font-semibold leading-none tracking-tight', className)} {...props} />
+  return (
+    <h3
+      data-slot="card-title"
+      className={cn('text-sm font-semibold leading-none tracking-tight', className)}
+      {...props}
+    />
+  )
 }
 
 function CardDescription({ className, ...props }: React.ComponentProps<'p'>) {

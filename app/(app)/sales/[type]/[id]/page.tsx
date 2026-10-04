@@ -95,20 +95,35 @@ export default async function SalesDocumentPage({
       <RecordedBy trail={trail} timeZone={ctx.organization.timeZone} />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Detail label="Status">
+        <Detail
+          label="Status"
+          tone={
+            document.status === 'PAID' || document.status === 'ACCEPTED'
+              ? 'success'
+              : document.status === 'VOID' || document.status === 'DECLINED'
+                ? 'danger'
+                : document.status === 'PARTIAL'
+                  ? 'warning'
+                  : 'info'
+          }
+        >
           <Badge variant={STATUS_VARIANTS[document.status] ?? 'secondary'}>
             {STATUS_LABELS[document.status] ?? document.status}
           </Badge>
         </Detail>
-        <Detail label="Date">{formatDate(toCalendarDate(document.date))}</Detail>
+        <Detail label="Date" tone="zero">
+          {formatDate(toCalendarDate(document.date))}
+        </Detail>
         {document.dueDate ? (
-          <Detail label="Due">{formatDate(toCalendarDate(document.dueDate))}</Detail>
+          <Detail label="Due" tone="warning">
+            {formatDate(toCalendarDate(document.dueDate))}
+          </Detail>
         ) : null}
-        <Detail label="Total">
+        <Detail label="Total" tone="money">
           <span className="tabular font-semibold">{formatMoney(document.total, currency)}</span>
         </Detail>
         {config.type === 'INVOICE' ? (
-          <Detail label="Outstanding">
+          <Detail label="Outstanding" tone="sales">
             <span className="tabular font-semibold">{formatMoney(document.balance, currency)}</span>
           </Detail>
         ) : null}
@@ -218,11 +233,19 @@ export default async function SalesDocumentPage({
   )
 }
 
-function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+function Detail({
+  label,
+  children,
+  tone = 'neutral',
+}: {
+  label: string
+  children: React.ReactNode
+  tone?: 'neutral' | 'zero' | 'warning' | 'success' | 'danger' | 'money' | 'sales' | 'info'
+}) {
   return (
-    <Card>
+    <Card tone={tone}>
       <CardContent className="p-3">
-        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-xs font-medium uppercase tracking-wider opacity-75">{label}</p>
         <div className="mt-0.5 text-sm font-medium">{children}</div>
       </CardContent>
     </Card>

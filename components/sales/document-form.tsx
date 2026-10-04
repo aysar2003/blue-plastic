@@ -526,9 +526,6 @@ export function DocumentForm({
       ) : (
         <TemplatePicker value={template as SalesFormTemplateId} onChange={setTemplate} />
       )}
-      {template === 'sales' ? (
-        <SalesReceiptLayout {...shared} />
-      ) : null}
       {template === 'invoice' ? <InvoiceLayout {...shared} /> : null}
       {template === 'classic' ? <ClassicLayout {...shared} /> : null}
       {template === 'service' ? <ServiceLayout {...shared} /> : null}

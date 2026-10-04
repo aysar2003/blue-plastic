@@ -55,7 +55,8 @@ export default async function VendorsPage({
   const tab: CenterTab = isTab(tabValue) ? tabValue : 'transactions'
   const asOf = today(ctx.organization.timeZone)
   const tx = typeof params.tx === 'string' ? params.tx : ''
-  const txSort = isActivitySort(typeof params.txSort === 'string' ? params.txSort : undefined) ? params.txSort : ''
+  const txSortParam = typeof params.txSort === 'string' ? params.txSort : undefined
+  const txSort = isActivitySort(txSortParam) ? txSortParam : ''
   const txDir = params.txDir === 'desc' ? 'desc' : 'asc'
   const rowMode = readCenterRowMode(params.rows)
   const datePreset = readDatePreset(params.date)

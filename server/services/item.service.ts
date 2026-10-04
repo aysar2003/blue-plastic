@@ -178,7 +178,8 @@ export async function create(ctx: OrgContext, input: ItemInput) {
 }
 
 export async function update(ctx: OrgContext, input: ItemInput & { id: string }) {
-  input = { ...input, ...(await accountForStore(ctx, input, input.id)) }
+  const patched = await accountForStore(ctx, input, input.id)
+  input = { ...input, ...patched, id: input.id }
   const before = await db.item.findFirst({ where: { id: input.id, orgId: ctx.orgId }, select: ITEM_SELECT })
   if (!before) throw notFound('Item')
 

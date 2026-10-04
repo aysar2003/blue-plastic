@@ -47,6 +47,12 @@ suite('weighted-average costing', () => {
       expect(position.quantity.toString()).toBe('200')
       expect(position.value.toString()).toBe('3000')
       expect(position.averageCost.toString()).toBe('15')
+
+      const catalog = await tx.item.findUniqueOrThrow({
+        where: { id: item.id },
+        select: { purchaseCost: true },
+      })
+      expect(Number(catalog.purchaseCost)).toBe(15)
     })
   })
 

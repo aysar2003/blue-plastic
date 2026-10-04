@@ -318,7 +318,7 @@ export const INVENTORY_HUB_APPS: HubApp[] = [
     permission: 'inventory:read',
     accent: '#1E3A5F',
     wash: '#E2E8F0',
-    blurb: 'Where stock is kept',
+    blurb: 'Office home · all stores',
   },
   {
     key: 'adjust',

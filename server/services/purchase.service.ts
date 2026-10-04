@@ -10,7 +10,7 @@ import { systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { softDeleteDocument } from '@/server/accounting/deletion'
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
 import { priceDocument, type DraftSalesLine } from '@/server/accounting/sales-pricing'
-import { positionOf, recordMovement, reverseMovementsFor } from '@/server/accounting/inventory'
+import { recordMovement, reverseMovementsFor } from '@/server/accounting/inventory'
 import {
   buildBillJournal,
   buildExpenseJournal,
@@ -524,7 +524,6 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
   if (receivesStock || returnsStock) {
     const stock = new Map<string, Decimal>()
     let documentStockNet = new Decimal(0)
-    const touchedItems = new Set<string>()
     const storeAccounts = await storeService.accountsFor(
       tx,
       ctx.orgId,
@@ -566,7 +565,6 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         inventoryAccountId,
         (stock.get(inventoryAccountId) ?? new Decimal(0)).plus(movement.value.abs()),
       )
-      touchedItems.add(line.item.id)
     }
 
     input.stock = [...stock.entries()].map(([inventoryAccountId, amount]) => ({
@@ -584,19 +582,6 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       input.stockCostDifference = stockAtBookCost.minus(documentStockNet)
     }
 
-    // Cost on the item is the weighted average of what is on hand:
-    // (old value + new purchase) / total quantity.
-    for (const itemId of touchedItems) {
-      const position = await positionOf(tx, itemId)
-      await tx.item.update({
-        where: { id: itemId },
-        data: {
-          purchaseCost: position.quantity.isZero()
-            ? null
-            : position.averageCost.toFixed(4),
-        },
-      })
-    }
   }
 
   const draft =

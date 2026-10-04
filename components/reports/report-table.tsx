@@ -47,7 +47,7 @@ export function ReportTable({ table, currency }: { table: ReportTableData; curre
 
           <TableBody>
             {table.rows.map((row, index) => (
-              <ClickableRow key={index} href={row.href} className={row.emphasis ? 'bg-muted/40' : undefined}>
+              <ClickableRow key={index} href={row.href ?? undefined} className={row.emphasis ? 'bg-muted/40' : undefined}>
                 {table.columns.map((column, columnIndex) => {
                   const value = format(row.cells[column.key] ?? null, column, currency)
                   const linked = Boolean(row.href) && (columnIndex === 0 || column.format === 'money')

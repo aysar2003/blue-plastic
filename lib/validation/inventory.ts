@@ -37,6 +37,57 @@ export const inventoryAdjustmentSchema = z.object({
 
 export type InventoryAdjustmentInput = z.infer<typeof inventoryAdjustmentSchema>
 
+export const storeTransferSchema = z
+  .object({
+    number: chosenNumber,
+    date: calendarDate,
+    fromStoreId: cuid,
+    toStoreId: cuid,
+    itemId: cuid,
+    quantity: calculatedDecimal(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity').refine(
+      (v) => Number(v) > 0,
+      'Quantity must be more than zero',
+    ),
+    memo: optionalText(1000),
+  })
+  .superRefine((value, ctx) => {
+    if (value.fromStoreId === value.toStoreId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['toStoreId'],
+        message: 'Choose a different store to send the stock to.',
+      })
+    }
+  })
+
+export type StoreTransferInput = z.infer<typeof storeTransferSchema>
+
+export const storeTicketSchema = z
+  .object({
+    number: chosenNumber,
+    date: calendarDate,
+    storeId: cuid,
+    toStoreId: cuid,
+    itemId: cuid,
+    quantity: calculatedDecimal(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity').refine(
+      (v) => Number(v) > 0,
+      'Quantity must be more than zero',
+    ),
+    takenBy: optionalText(120),
+    memo: optionalText(1000),
+  })
+  .superRefine((value, ctx) => {
+    if (value.storeId === value.toStoreId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['toStoreId'],
+        message: 'Choose a different store to send the stock to.',
+      })
+    }
+  })
+
+export type StoreTicketInput = z.infer<typeof storeTicketSchema>
+
 export const negativeStockSchema = z.object({
   allowNegativeStock: z.coerce.boolean(),
 })

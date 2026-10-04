@@ -34,6 +34,8 @@ export type ItemValues = {
   salesTaxCodeId?: string | null
   purchaseDescription?: string | null
   purchaseCost?: string | null
+  /** Weighted-average cost from stock movements — display only, not editable. */
+  averageCost?: string | null
   expenseAccountId?: string | null
   inventoryAccountId?: string | null
   cogsAccountId?: string | null
@@ -338,14 +340,49 @@ export function ItemDialog({
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Buying</p>
 
             <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
-              <Field name="purchaseCost" label={`Cost (${currency})`} error={e?.purchaseCost}>
-                <Input
-                  {...fieldProps('purchaseCost', e?.purchaseCost)}
-                  inputMode="decimal"
-                  className="tabular"
-                  defaultValue={item?.purchaseCost ?? ''}
-                />
-              </Field>
+              <div className="space-y-4">
+                <Field
+                  name="purchaseCost"
+                  label={`Cost (${currency})`}
+                  hint={
+                    type === 'INVENTORY'
+                      ? 'Follows average cost whenever stock moves. Edit only as a starting figure before the first receipt.'
+                      : undefined
+                  }
+                  error={e?.purchaseCost}
+                >
+                  <Input
+                    {...fieldProps('purchaseCost', e?.purchaseCost)}
+                    inputMode="decimal"
+                    className="tabular"
+                    defaultValue={
+                      type === 'INVENTORY' && item?.averageCost && Number(item.averageCost) !== 0
+                        ? item.averageCost
+                        : (item?.purchaseCost ?? '')
+                    }
+                  />
+                </Field>
+
+                {type === 'INVENTORY' ? (
+                  <Field
+                    name="averageCost"
+                    label="Average cost"
+                    hint="What the stock is really sitting at — updates when you buy, sell, adjust, or transfer. Not editable."
+                  >
+                    <Input
+                      id="averageCost"
+                      readOnly
+                      tabIndex={-1}
+                      className="tabular text-muted-foreground"
+                      defaultValue={
+                        item?.averageCost && Number(item.averageCost) !== 0
+                          ? item.averageCost
+                          : '—'
+                      }
+                    />
+                  </Field>
+                ) : null}
+              </div>
 
               {type === 'INVENTORY' ? (
                 <Field
