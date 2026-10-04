@@ -34,6 +34,7 @@ const COLUMNS: { heading: string; entries: Entry[] }[] = [
       { label: 'Sales receipt', href: '/sales/sales-receipts/new', permission: 'invoice:create' },
       { label: 'Quotation', href: '/sales/estimates/new', permission: 'invoice:create' },
       { label: 'Credit memo', href: '/sales/credit-memos/new', permission: 'invoice:create' },
+      { label: 'Customer statement', href: '/reports/statements/customer', permission: 'report:read' },
       { label: 'Refund receipt', href: '/sales/refunds/new', permission: 'invoice:create' },
       { label: 'Add customer', opens: 'customer', permission: 'customer:create' },
     ],
@@ -45,6 +46,8 @@ const COLUMNS: { heading: string; entries: Entry[] }[] = [
       { label: 'Expense', href: '/purchases/expenses/new', permission: 'expense:create' },
       { label: 'Pay bills', href: '/bill-payments/new', permission: 'expense:create' },
       { label: 'Purchase order', href: '/purchases/purchase-orders/new', permission: 'bill:create' },
+      { label: 'Receive items', href: '/purchases/purchase-orders?status=open', permission: 'bill:create' },
+      { label: 'Delivery', href: '/purchases/delivery', permission: 'bill:read' },
       { label: 'Vendor credit', href: '/purchases/vendor-credits/new', permission: 'bill:create' },
       { label: 'Add vendor', opens: 'vendor', permission: 'vendor:create' },
     ],
@@ -92,7 +95,16 @@ type DialogData =
  * you can begin one. Records that are dialogs open as dialogs, so adding a
  * customer does not throw away the page you were on.
  */
-export function QuickCreate({ permissions, currency }: { permissions: string[]; currency: string }) {
+export function QuickCreate({
+  permissions,
+  currency,
+  trigger = 'header',
+}: {
+  permissions: string[]
+  currency: string
+  /** `pill` is the full-width New button on the accounting list. */
+  trigger?: 'header' | 'pill'
+}) {
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [dialog, setDialog] = React.useState<DialogData | null>(null)
@@ -125,12 +137,25 @@ export function QuickCreate({ permissions, currency }: { permissions: string[]; 
     setDialog({ kind: entry.opens, ...result.data })
   }
 
+  if (columns.length === 0) return null
+
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <PlusIcon />
-        <span className="hidden sm:inline">Create</span>
-      </Button>
+      {trigger === 'pill' ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+        >
+          <PlusIcon className="size-4" />
+          New
+        </button>
+      ) : (
+        <Button size="sm" onClick={() => setOpen(true)}>
+          <PlusIcon />
+          <span className="hidden sm:inline">Create</span>
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="xl">

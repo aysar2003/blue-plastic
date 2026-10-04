@@ -3,6 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { normaliseHeader, parseCsv, pick } from './csv'
 
 describe('parseCsv', () => {
+  it('skips the title rows a QuickBooks report puts above the columns', () => {
+    const { headers, rows } = parseCsv(
+      'Blue Plastic Center\nCustomer Contact List\n\nCustomer,Email,Open Balance\nHodan,hodan@test.com,"$1,200.00"',
+    )
+    expect(headers).toEqual(['customer', 'email', 'openbalance'])
+    expect(rows).toEqual([{ customer: 'Hodan', email: 'hodan@test.com', openbalance: '$1,200.00' }])
+  })
+
   it('reads a plain file', () => {
     const { headers, rows } = parseCsv('name,email\nAcme,acme@test.com\nBeta,beta@test.com')
     expect(headers).toEqual(['name', 'email'])
@@ -59,6 +67,7 @@ describe('header matching', () => {
     expect(normaliseHeader('Display Name')).toBe('displayname')
     expect(normaliseHeader('display_name')).toBe('displayname')
     expect(normaliseHeader('  DISPLAY-NAME  ')).toBe('displayname')
+    expect(normaliseHeader('Product/Service Name')).toBe('productservicename')
   })
 
   it('picks the first alias that is present and non-empty', () => {

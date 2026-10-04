@@ -49,6 +49,11 @@ export type ContactValues = {
   creditLimit?: string | null
   defaultExpenseAccountId?: string | null
   notes?: string | null
+  agreementDate?: string | null
+  balanceDate?: string | null
+  balanceTime?: string | null
+  reminderDays?: number | null
+  files?: { id: string; kind: 'PHOTO' | 'AGREEMENT'; originalName: string }[]
 }
 
 export type Option = { id: string; label: string }
@@ -59,13 +64,14 @@ export function NewContactButton(props: {
   expenseAccounts?: AccountPickerOption[]
   today: string
   currency: string
+  className?: string
 }) {
   const [open, setOpen] = useState(false)
   const label = props.side === 'customer' ? 'New customer' : 'New vendor'
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
+      <Button size="sm" className={props.className} onClick={() => setOpen(true)}>
         <PlusIcon /> {label}
       </Button>
       {open ? <ContactDialog {...props} mode="create" onClose={() => setOpen(false)} /> : null}
@@ -109,7 +115,8 @@ export function ContactDialog({
         : updateVendorForm
 
   const [state, submit] = useActionState(formAction, idleState)
-  const [openingBalanceDate, setOpeningBalanceDate] = useState(today)
+  const [openingBalanceDate, setOpeningBalanceDate] = useState(contact?.balanceDate ?? (mode === 'create' ? today : ''))
+  const [agreementDate, setAgreementDate] = useState(contact?.agreementDate ?? '')
   const [defaultExpenseAccountId, setDefaultExpenseAccountId] = useState(
     contact?.defaultExpenseAccountId ?? '',
   )
@@ -308,12 +315,22 @@ export function ContactDialog({
             <Input {...fieldProps('notes', e?.notes)} defaultValue={contact?.notes ?? ''} />
           </Field>
 
-          {mode === 'create' ? (
+          {side === 'customer' ? (
+            <CustomerRegistration
+              mode={mode}
+              currency={currency}
+              today={today}
+              contact={contact}
+              openingBalanceDate={openingBalanceDate}
+              onOpeningBalanceDate={setOpeningBalanceDate}
+              agreementDate={agreementDate}
+              onAgreementDate={setAgreementDate}
+              errors={e}
+            />
+          ) : mode === 'create' ? (
             <div className="rounded-md border bg-muted/40 p-3">
               <p className="mb-3 text-xs text-muted-foreground">
-                {side === 'customer'
-                  ? 'What this customer already owed when the books started. It posts to Accounts Receivable against Opening Balance Equity, so it appears on the aging report and in the control account — never as a number written onto the customer.'
-                  : 'What was already owed to this vendor when the books started. It posts to Accounts Payable against Opening Balance Equity.'}
+                What was already owed to this vendor when the books started. It posts to Accounts Payable against Opening Balance Equity.
               </p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field name="openingBalance" label={`Opening balance (${currency})`} error={e?.openingBalance}>
@@ -348,5 +365,146 @@ export function ContactDialog({
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function CustomerRegistration({
+  mode,
+  currency,
+  today,
+  contact,
+  openingBalanceDate,
+  onOpeningBalanceDate,
+  agreementDate,
+  onAgreementDate,
+  errors,
+}: {
+  mode: 'create' | 'edit'
+  currency: string
+  today: string
+  contact?: ContactValues
+  openingBalanceDate: string
+  onOpeningBalanceDate: (value: string) => void
+  agreementDate: string
+  onAgreementDate: (value: string) => void
+  errors?: Record<string, string[]>
+}) {
+  const photo = contact?.files?.find((file) => file.kind === 'PHOTO')
+  const papers = contact?.files?.filter((file) => file.kind === 'AGREEMENT') ?? []
+  const photoSrc = contact?.id && photo ? `/api/customers/${contact.id}/files/${photo.id}` : null
+
+  return (
+    <div className="space-y-4 rounded-md border bg-muted/40 p-3">
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Balance and agreement</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Payment terms are chosen above. Record the balance, the day and time it was taken, and the date of the debt
+          agreement. The amount posts to Accounts Receivable.
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {mode === 'create' ? (
+          <Field name="openingBalance" label={`Opening balance (${currency})`} error={errors?.openingBalance}>
+            <Input
+              {...fieldProps('openingBalance', errors?.openingBalance)}
+              inputMode="decimal"
+              placeholder="0.00"
+              className="tabular"
+            />
+          </Field>
+        ) : null}
+        <Field name="openingBalanceDate" label="Balance date" error={errors?.openingBalanceDate}>
+          <DateField
+            id="openingBalanceDate"
+            name="openingBalanceDate"
+            value={openingBalanceDate}
+            onChange={onOpeningBalanceDate}
+            today={today}
+          />
+        </Field>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field name="balanceTime" label="Balance time" hint="The clock time the balance was taken." error={errors?.balanceTime}>
+          <Input {...fieldProps('balanceTime', errors?.balanceTime, true)} type="time" defaultValue={contact?.balanceTime ?? ''} />
+        </Field>
+        <Field name="agreementDate" label="Agreement date" hint="The day the debt agreement was signed." error={errors?.agreementDate}>
+          <DateField
+            id="agreementDate"
+            name="agreementDate"
+            value={agreementDate}
+            onChange={onAgreementDate}
+            today={today}
+          />
+        </Field>
+      </div>
+
+      <Field
+        name="reminderDays"
+        label="Balance reminder"
+        hint="The warning drops down at the top this many days before the balance time."
+        error={errors?.reminderDays}
+      >
+        <NativeSelect
+          {...fieldProps('reminderDays', errors?.reminderDays, true)}
+          defaultValue={contact?.reminderDays ? String(contact.reminderDays) : ''}
+        >
+          <option value="">— none —</option>
+          <option value="3">3 days before</option>
+          <option value="5">5 days before</option>
+          <option value="7">7 days before</option>
+        </NativeSelect>
+      </Field>
+
+      <Field name="photo" label="Customer photo" hint="JPEG, PNG, or WebP, up to 3 MB." error={errors?.photo}>
+        <PhotoField existingSrc={photoSrc} />
+      </Field>
+
+      <Field
+        name="agreements"
+        label="Agreement papers"
+        hint="The debt agreement. PDF or a picture, up to 4 files, 4 MB each."
+        error={errors?.agreements}
+      >
+        {papers.length > 0 ? (
+          <ul className="mb-2 space-y-1 text-sm">
+            {papers.map((paper) => (
+              <li key={paper.id}>
+                <a
+                  href={contact?.id ? `/api/customers/${contact.id}/files/${paper.id}` : undefined}
+                  className="text-[#0b4f6c] underline-offset-4 hover:underline"
+                >
+                  {paper.originalName}
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <Input {...fieldProps('agreements', errors?.agreements, true)} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple />
+      </Field>
+    </div>
+  )
+}
+
+function PhotoField({ existingSrc }: { existingSrc: string | null }) {
+  const [preview, setPreview] = useState<string | null>(null)
+
+  return (
+    <div className="space-y-2">
+      {preview || existingSrc ? (
+        <img src={preview ?? existingSrc ?? ''} alt="" className="size-20 rounded-md object-cover" />
+      ) : null}
+      <Input
+        id="photo"
+        name="photo"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          setPreview(file ? URL.createObjectURL(file) : null)
+        }}
+      />
+    </div>
   )
 }

@@ -1,7 +1,7 @@
 import 'server-only'
 import type { Prisma } from '@prisma/client'
 
-import { toCalendarDate, toDate } from '@/lib/date'
+import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { PaymentInput } from '@/lib/validation/sales'
@@ -14,7 +14,7 @@ import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { notFound, precondition, validation } from '@/server/errors'
-import { nextDocumentNumber } from '@/server/sequences'
+import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import { outstandingBalances, refreshStatus } from '@/server/services/sales.service'
 
 const PAYMENT_SELECT = {
@@ -39,11 +39,25 @@ const PAYMENT_ORDER: Record<
 export async function list(
   ctx: OrgContext,
   query: ListQuery,
-  options: { customerId?: string; sort?: string; dir?: 'asc' | 'desc' } = {},
+  options: {
+    customerId?: string
+    sort?: string
+    dir?: 'asc' | 'desc'
+    from?: CalendarDate
+    to?: CalendarDate
+  } = {},
 ) {
   const where: Prisma.CustomerPaymentWhereInput = {
     orgId: ctx.orgId,
     ...(options.customerId ? { customerId: options.customerId } : {}),
+    ...(options.from || options.to
+      ? {
+          date: {
+            ...(options.from ? { gte: toDate(options.from) } : {}),
+            ...(options.to ? { lte: toDate(options.to) } : {}),
+          },
+        }
+      : {}),
     ...(query.q
       ? {
           OR: [
@@ -183,7 +197,12 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
       )
     }
 
-    const number = await nextDocumentNumber(tx, ctx.orgId, 'CUSTOMER_PAYMENT')
+    const number = await assignDocumentNumber(tx, ctx.orgId, 'CUSTOMER_PAYMENT', input.number)
+    const clash = await tx.customerPayment.findFirst({
+      where: { orgId: ctx.orgId, number },
+      select: { id: true },
+    })
+    if (clash) throw numberTaken()
 
     const payment = await tx.customerPayment.create({
       data: {

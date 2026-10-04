@@ -1,24 +1,35 @@
 import type { Metadata } from 'next'
 
+import Link from 'next/link'
+
 import { CloseChecklistCard } from '@/components/periods/close-checklist'
 import { PageHeader } from '@/components/data/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { PERIOD_STATUS_LABELS } from '@/lib/accounting-labels'
-import { MONTHS } from '@/lib/constants'
 import { formatDate, toCalendarDate, today } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
+import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
 import * as closeService from '@/server/services/close.service'
 import * as periodService from '@/server/services/period.service'
-import { PeriodToggle } from './period-actions'
+import { MonthPanel, monthLabel } from './month-panel'
+import { OpenMonthButton, PeriodToggle } from './period-actions'
 import { CloseYearButton, ReopenYearButton } from './year-end-actions'
 
 export const metadata: Metadata = { title: 'Accounting periods' }
 
-export default async function PeriodsPage() {
+export default async function PeriodsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const ctx = await requireOrgContext('period:read')
+  const params = await searchParams
+  const query = parseListQuery(params)
+  const openedId = typeof params.month === 'string' ? params.month : undefined
+  const source = typeof params.source === 'string' ? params.source : undefined
 
   // Periods are created on demand by posting; this makes sure the page has
   // something to show before anything has been posted.
@@ -48,6 +59,24 @@ export default async function PeriodsPage() {
         title="Accounting periods"
         description="Closing a period stops anything else being posted into it. Periods close in order and reopen in reverse, so a closed month cannot change through an open earlier one."
       />
+
+      <Card className="mb-6 p-4">
+        <p className="text-sm font-medium">Adjust inventory before the year is closed</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Count what is on the shelf, record damage or a higher cost, then read whether each item’s cost rose or fell.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-3 text-sm">
+          <Link href="/inventory/adjustments/new" className="text-primary underline-offset-4 hover:underline">
+            Year-end count
+          </Link>
+          <Link href="/inventory/adjustments/new?mode=damage" className="text-primary underline-offset-4 hover:underline">
+            Damage or loss
+          </Link>
+          <Link href="/reports/inventory-cost-change" className="text-primary underline-offset-4 hover:underline">
+            Cost up or down
+          </Link>
+        </div>
+      </Card>
 
       {checklist && next ? (
         <div className="mb-6">
@@ -92,31 +121,42 @@ export default async function PeriodsPage() {
                 </span>
               </h2>
               <Badge variant={year.status === 'OPEN' ? 'success' : 'secondary'}>
-                {PERIOD_STATUS_LABELS[year.status]}
+                {year.status === 'OPEN' ? 'Year open' : PERIOD_STATUS_LABELS[year.status]}
               </Badge>
             </div>
 
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="bg-[#d5dde6] hover:bg-[#d5dde6]">
                   <TableHead className="w-48">Period</TableHead>
                   <TableHead>Dates</TableHead>
                   <TableHead className="numeric w-24">Entries</TableHead>
                   <TableHead className="w-24">Status</TableHead>
-                  <TableHead className="w-28" />
+                  <TableHead className="w-24">Open</TableHead>
+                  <TableHead className="w-24" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {year.periods.map((period) => {
-                  const label =
-                    period.periodNumber === 0
-                      ? 'Opening balances'
-                      : `${MONTHS[(period.startDate.getUTCMonth() + 12) % 12]} ${period.startDate.getUTCFullYear()}`
+                {year.periods.map((period, index) => {
+                  const label = monthLabel(period.periodNumber, period.startDate)
+                  const openHref = `/periods?month=${period.id}#opened`
+                  const selected = period.id === openedId
 
                   return (
-                    <TableRow key={period.id}>
+                    <TableRow
+                      key={period.id}
+                      className={
+                        selected
+                          ? 'bg-[#d5dde6] hover:bg-[#d5dde6]'
+                          : index % 2 === 1
+                            ? 'bg-[#c5dff3] hover:bg-[#c5dff3]'
+                            : 'bg-white hover:bg-white'
+                      }
+                    >
                       <TableCell className="font-medium">
-                        {label}
+                        <Link href={openHref} className="underline-offset-4 hover:underline">
+                          {label}
+                        </Link>
                         {period.periodNumber === 0 ? (
                           <span className="ml-2 text-xs font-normal text-muted-foreground">
                             period 0
@@ -142,6 +182,15 @@ export default async function PeriodsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
+                        <OpenMonthButton
+                          href={openHref}
+                          periodId={period.id}
+                          status={period.status}
+                          label={label}
+                          canReopen={canReopen}
+                        />
+                      </TableCell>
+                      <TableCell>
                         <PeriodToggle
                           periodId={period.id}
                           status={period.status}
@@ -164,6 +213,22 @@ export default async function PeriodsPage() {
           </Card>
         ))}
       </div>
+
+      {openedId ? (
+        <div className="mt-8 border-t pt-6">
+          <MonthPanel
+            periodId={openedId}
+            query={query}
+            source={source}
+            basePath="/periods"
+            linkParams={{ month: openedId }}
+          />
+        </div>
+      ) : (
+        <p className="mt-6 text-sm text-muted-foreground">
+          Choose a month and press Open. Its entries and reports appear below this list.
+        </p>
+      )}
     </>
   )
 }

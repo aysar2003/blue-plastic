@@ -63,6 +63,21 @@ export type MovementRequest = {
   quantity: Decimal.Value
   /** Required on a receipt. Ignored on an issue, which always costs at average. */
   unitCost?: Decimal.Value | null
+  /**
+   * Signed value to post instead of quantity × cost.
+   * Zero on a quantity reduction leaves the value on the remaining units, so
+   * their cost rises. A positive value with no quantity adds cost to the item.
+   */
+  valueOverride?: Decimal.Value | null
+  /**
+   * The store this quantity belongs to. A store may go below zero so a later
+   * bill can fill it. Movements with no store keep the organisation rule.
+   */
+  storeId?: string | null
+}
+
+function mayGoNegative(ctx: OrgContext, request: MovementRequest): boolean {
+  return ctx.organization.allowNegativeStock || Boolean(request.storeId)
 }
 
 export type RecordedMovement = {
@@ -168,8 +183,25 @@ export async function recordMovement(
 
   let unitCost: Decimal
   let value: Decimal
+  const override =
+    request.valueOverride === undefined || request.valueOverride === null
+      ? null
+      : new Decimal(request.valueOverride)
 
-  if (quantity.isPositive()) {
+  if (override) {
+    const nextQuantity = before.quantity.plus(quantity)
+    if (nextQuantity.isNegative() && !mayGoNegative(ctx, request)) {
+      throw precondition(
+        `There ${before.quantity.equals(1) ? 'is' : 'are'} ${before.quantity.toFixed(2)} of "${item.name}" in stock ` +
+          `and this removes ${quantity.abs().toFixed(2)}.`,
+      )
+    }
+    if (nextQuantity.isZero() && override.isPositive()) {
+      throw precondition(`"${item.name}" has no stock left to carry an added cost.`)
+    }
+    value = roundToCurrency(override, currency)
+    unitCost = before.averageCost
+  } else if (quantity.isPositive()) {
     if (request.unitCost === undefined || request.unitCost === null) {
       // A purchase must say what was paid — there is no defensible guess.
       if (request.type === 'PURCHASE' || request.type === 'OPENING') {
@@ -194,7 +226,7 @@ export async function recordMovement(
     const issuing = quantity.abs()
 
     if (issuing.greaterThan(available)) {
-      if (!ctx.organization.allowNegativeStock) {
+      if (!mayGoNegative(ctx, request)) {
         throw precondition(
           `There ${available.equals(1) ? 'is' : 'are'} ${available.toFixed(2)} of "${item.name}" in stock ` +
             `and this needs ${issuing.toFixed(2)}. Receive the stock first, or allow negative stock in ` +
@@ -222,6 +254,8 @@ export async function recordMovement(
     ? ZERO
     : position.value.dividedBy(position.quantity).toDecimalPlaces(6, Decimal.ROUND_HALF_UP)
 
+  if (override) unitCost = position.averageCost
+
   // When stock returns to zero, any rounding residue would otherwise sit in the
   // Inventory Asset account for ever, attached to nothing. It is squeezed out
   // here so that "no stock" always means "no value".
@@ -246,6 +280,7 @@ export async function recordMovement(
       runningValue: position.value.toFixed(4),
       sequence: position.sequence,
       journalId: options.journalId ?? null,
+      storeId: request.storeId ?? null,
       createdById: ctx.userId,
     },
     select: { id: true },
@@ -347,7 +382,7 @@ export async function stockAgreesWithLedger(tx: Tx, orgId: string) {
       JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
       JOIN ledger_accounts a ON a.id = l."accountId"
      WHERE l."orgId" = ${orgId}
-       AND a."systemKey" = 'INVENTORY_ASSET'
+       AND a.subtype = 'INVENTORY'
   `
 
   const ledgerBalance = new Decimal(row?.balance ?? '0')

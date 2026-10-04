@@ -11,13 +11,15 @@ export function PageHeader({
   title,
   description,
   actions,
+  className,
 }: {
   title: string
   description?: string
   actions?: React.ReactNode
+  className?: string
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b pb-3">
+    <div className={`mb-4 flex flex-wrap items-start justify-between gap-3 border-b pb-3 ${className ?? ''}`}>
       <div className="min-w-0">
         <h1 className="text-base font-semibold tracking-tight">{title}</h1>
         {description ? (

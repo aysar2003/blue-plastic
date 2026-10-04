@@ -1,8 +1,8 @@
 import 'server-only'
 import type { DocumentType, Prisma, SalesDocumentType } from '@prisma/client'
 
-import { toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
-import { Decimal, toMoneyString, ZERO } from '@/lib/money'
+import { endOfMonth, isCalendarDate, startOfMonth, toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
+import { Decimal, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { SalesDocumentInput } from '@/lib/validation/sales'
@@ -24,8 +24,26 @@ import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
-import { nextDocumentNumber } from '@/server/sequences'
+import { assignDocumentNumber, numberTaken } from '@/server/sequences'
+import * as storeService from '@/server/services/store.service'
 import { loadCodeForCalculation } from '@/server/services/tax.service'
+
+function documentDiscount(input: SalesDocumentInput) {
+  if (!input.discountValue) return null
+  return { kind: input.discountKind, value: input.discountValue }
+}
+
+async function salesDiscountAccountId(tx: Tx, orgId: string) {
+  const account = await tx.ledgerAccount.findFirst({
+    where: { orgId, subtype: 'SALES_DISCOUNTS', isActive: true },
+    select: { id: true },
+    orderBy: { code: 'asc' },
+  })
+  if (!account) {
+    throw precondition('The Sales Discounts account is missing from the chart, so a discount cannot be posted.')
+  }
+  return account.id
+}
 
 const SEQUENCE_FOR: Record<SalesDocumentType, DocumentType> = {
   INVOICE: 'INVOICE',
@@ -63,7 +81,14 @@ export async function list(
   ctx: OrgContext,
   type: SalesDocumentType,
   query: ListQuery,
-  options: { status?: string; customerId?: string; sort?: string; dir?: 'asc' | 'desc' } = {},
+  options: {
+    status?: string
+    customerId?: string
+    sort?: string
+    dir?: 'asc' | 'desc'
+    from?: CalendarDate
+    to?: CalendarDate
+  } = {},
 ) {
   const where: Prisma.SalesDocumentWhereInput = {
     orgId: ctx.orgId,
@@ -74,6 +99,31 @@ export async function list(
       ? { status: { in: ['OPEN', 'PARTIAL'] }, dueDate: { lt: toDate(today(ctx.organization.timeZone)) } }
       : {}),
     ...(options.status === 'draft' ? { status: 'DRAFT' } : {}),
+    ...(options.status === 'notdue'
+      ? {
+          status: { in: ['OPEN', 'PARTIAL'] },
+          AND: [
+            {
+              OR: [
+                { dueDate: null },
+                { dueDate: { gte: toDate(today(ctx.organization.timeZone)) } },
+              ],
+            },
+          ],
+        }
+      : {}),
+    ...(options.status === 'paid' ? { status: 'PAID' } : {}),
+    ...(options.status === 'accepted' ? { status: 'ACCEPTED' } : {}),
+    ...(options.status === 'declined' ? { status: 'DECLINED' } : {}),
+    ...(options.status === 'invoiced' ? { status: 'CLOSED' } : {}),
+    ...(options.from || options.to
+      ? {
+          date: {
+            ...(options.from ? { gte: toDate(options.from) } : {}),
+            ...(options.to ? { lte: toDate(options.to) } : {}),
+          },
+        }
+      : {}),
     ...(query.q
       ? {
           OR: [
@@ -115,6 +165,254 @@ export async function list(
   )
 }
 
+/**
+ * Figures for the invoice home. Unpaid is what is still owed. Overdue and
+ * not-due split that same balance, so they add back to unpaid. Paid is money
+ * already settled. Drafts have not been sent.
+ */
+export async function invoiceHome(ctx: OrgContext) {
+  const now = today(ctx.organization.timeZone)
+  const rows = await db.salesDocument.findMany({
+    where: { orgId: ctx.orgId, type: 'INVOICE', deletedAt: null, status: { not: 'VOID' } },
+    select: { id: true, status: true, dueDate: true, total: true },
+  })
+  const openIds = rows.filter((row) => row.status === 'OPEN' || row.status === 'PARTIAL').map((row) => row.id)
+  const balances = await outstandingBalances(db, openIds)
+
+  let unpaid = ZERO
+  let overdue = ZERO
+  let notDue = ZERO
+  let paid = ZERO
+  let draftTotal = ZERO
+  let unpaidCount = 0
+  let overdueCount = 0
+  let notDueCount = 0
+  let paidCount = 0
+  let draftCount = 0
+
+  for (const row of rows) {
+    if (row.status === 'DRAFT') {
+      draftCount += 1
+      draftTotal = draftTotal.plus(row.total.toString())
+      continue
+    }
+    if (row.status === 'PAID') {
+      paidCount += 1
+      paid = paid.plus(row.total.toString())
+      continue
+    }
+    if (row.status !== 'OPEN' && row.status !== 'PARTIAL') continue
+    const owing = balances.get(row.id) ?? new Decimal(row.total.toString())
+    unpaid = unpaid.plus(owing)
+    unpaidCount += 1
+    const due = row.dueDate ? toCalendarDate(row.dueDate) : null
+    if (due && due < now) {
+      overdue = overdue.plus(owing)
+      overdueCount += 1
+    } else {
+      notDue = notDue.plus(owing)
+      notDueCount += 1
+    }
+  }
+
+  return {
+    unpaid: toMoneyString(unpaid, 2),
+    unpaidCount,
+    overdue: toMoneyString(overdue, 2),
+    overdueCount,
+    notDue: toMoneyString(notDue, 2),
+    notDueCount,
+    paid: toMoneyString(paid, 2),
+    paidCount,
+    draftTotal: toMoneyString(draftTotal, 2),
+    draftCount,
+  }
+}
+
+/**
+ * Figures for the quotation home. Open is still waiting; accepted and declined
+ * are the customer's answer; invoiced means the quote already became a sale.
+ */
+export async function estimateHome(ctx: OrgContext) {
+  const rows = await db.salesDocument.findMany({
+    where: { orgId: ctx.orgId, type: 'ESTIMATE', deletedAt: null, status: { not: 'VOID' } },
+    select: { id: true, status: true, total: true },
+  })
+
+  let open = ZERO
+  let accepted = ZERO
+  let declined = ZERO
+  let invoiced = ZERO
+  let draftTotal = ZERO
+  let openCount = 0
+  let acceptedCount = 0
+  let declinedCount = 0
+  let invoicedCount = 0
+  let draftCount = 0
+
+  for (const row of rows) {
+    const amount = new Decimal(row.total.toString())
+    if (row.status === 'DRAFT') {
+      draftCount += 1
+      draftTotal = draftTotal.plus(amount)
+      continue
+    }
+    if (row.status === 'ACCEPTED') {
+      acceptedCount += 1
+      accepted = accepted.plus(amount)
+      continue
+    }
+    if (row.status === 'DECLINED') {
+      declinedCount += 1
+      declined = declined.plus(amount)
+      continue
+    }
+    if (row.status === 'CLOSED') {
+      invoicedCount += 1
+      invoiced = invoiced.plus(amount)
+      continue
+    }
+    if (row.status === 'OPEN') {
+      openCount += 1
+      open = open.plus(amount)
+    }
+  }
+
+  return {
+    open: toMoneyString(open, 2),
+    openCount,
+    accepted: toMoneyString(accepted, 2),
+    acceptedCount,
+    declined: toMoneyString(declined, 2),
+    declinedCount,
+    invoiced: toMoneyString(invoiced, 2),
+    invoicedCount,
+    draftTotal: toMoneyString(draftTotal, 2),
+    draftCount,
+  }
+}
+
+/** Figures for the sales-receipt home. Each total includes the shorter periods inside it. */
+export async function receiptHome(ctx: OrgContext) {
+  const now = today(ctx.organization.timeZone)
+  const year = now.slice(0, 4)
+  const base = {
+    orgId: ctx.orgId,
+    type: 'SALES_RECEIPT' as const,
+    deletedAt: null,
+    status: { not: 'VOID' as const },
+  }
+  const between = (from: CalendarDate, to: CalendarDate) => ({
+    ...base,
+    date: { gte: toDate(from), lte: toDate(to) },
+  })
+  const tally = (where: Prisma.SalesDocumentWhereInput) =>
+    Promise.all([
+      db.salesDocument.aggregate({ where, _sum: { total: true } }),
+      db.salesDocument.count({ where }),
+    ])
+
+  const [todayRow, monthRow, yearRow, allRow] = await Promise.all([
+    tally(between(now, now)),
+    tally(between(startOfMonth(now), endOfMonth(now))),
+    tally(between(`${year}-01-01`, `${year}-12-31`)),
+    tally(base),
+  ])
+
+  const figure = (row: [(typeof todayRow)[0], number]) => ({
+    total: toMoneyString(row[0]._sum.total ?? 0, 2),
+    count: row[1],
+  })
+  const todayFigure = figure(todayRow)
+  const monthFigure = figure(monthRow)
+  const yearFigure = figure(yearRow)
+  const allFigure = figure(allRow)
+
+  return {
+    todayTotal: todayFigure.total,
+    todayCount: todayFigure.count,
+    monthTotal: monthFigure.total,
+    monthCount: monthFigure.count,
+    yearTotal: yearFigure.total,
+    yearCount: yearFigure.count,
+    allTotal: allFigure.total,
+    allCount: allFigure.count,
+  }
+}
+
+/** Names for the customer filter on a sales list. */
+export async function customerChoices(ctx: OrgContext) {
+  return db.customer.findMany({
+    where: { orgId: ctx.orgId, isActive: true },
+    select: { id: true, displayName: true },
+    orderBy: { displayName: 'asc' },
+  })
+}
+
+/** The receipt before and after this one, in date then number order. A new form sits after the last. */
+export async function neighbors(ctx: OrgContext, type: SalesDocumentType, currentId: string | null) {
+  const rows = await db.salesDocument.findMany({
+    where: { orgId: ctx.orgId, type, deletedAt: null },
+    select: { id: true, number: true },
+    orderBy: [{ date: 'asc' }, { number: 'asc' }],
+  })
+  const index = currentId == null ? rows.length : rows.findIndex((row) => row.id === currentId)
+  const place = index < 0 ? rows.length : index
+  return {
+    previous: place > 0 ? rows[place - 1]! : null,
+    next: place < rows.length - 1 ? rows[place + 1]! : null,
+  }
+}
+
+/** Receipts matching a number, a date, an amount, or the latest ones when nothing is typed. */
+export async function findReceipts(
+  ctx: OrgContext,
+  input: { number?: string; date?: string; amount?: string },
+) {
+  const number = input.number?.trim()
+  const date = input.date?.trim()
+  const amount = input.amount?.trim()
+  const money = amount ? parseMoneyInput(amount) : null
+  const where: Prisma.SalesDocumentWhereInput = {
+    orgId: ctx.orgId,
+    type: 'SALES_RECEIPT',
+    deletedAt: null,
+    ...(number ? { number: { contains: number, mode: 'insensitive' } } : {}),
+    ...(date && isCalendarDate(date) ? { date: toDate(date) } : {}),
+    ...(money
+      ? {
+          total: {
+            gte: money.toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
+            lt: money.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).plus('0.005'),
+          },
+        }
+      : {}),
+  }
+
+  const rows = await db.salesDocument.findMany({
+    where,
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      total: true,
+      currencyCode: true,
+      customer: { select: { displayName: true } },
+    },
+    orderBy: [{ date: 'desc' }, { number: 'desc' }],
+    take: 20,
+  })
+
+  return rows.map((row) => ({
+    id: row.id,
+    number: row.number,
+    date: toCalendarDate(row.date),
+    total: row.total.toString(),
+    currencyCode: row.currencyCode,
+    customerName: row.customer.displayName,
+  }))
+}
+
 export async function get(ctx: OrgContext, id: string) {
   const document = await db.salesDocument.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -124,7 +422,7 @@ export async function get(ctx: OrgContext, id: string) {
         orderBy: { lineNumber: 'asc' },
         select: {
           id: true, lineNumber: true, description: true, quantity: true, unitPrice: true,
-          discountPercent: true, amount: true, taxAmount: true, serviceDate: true,
+          discountPercent: true, amount: true, taxAmount: true, serviceDate: true, storeId: true,
           item: { select: { id: true, name: true, sku: true } },
           taxCode: { select: { id: true, name: true } },
           incomeAccount: { select: { id: true, code: true, name: true } },
@@ -209,7 +507,7 @@ export async function create(ctx: OrgContext, type: SalesDocumentType, input: Sa
     const customer = await requireCustomer(tx, ctx, input.customerId)
     const lines = await resolveLines(tx, ctx, input.lines)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
-    const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency)
+    const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency, documentDiscount(input))
 
     if (priced.total.isZero() && type !== 'ESTIMATE') {
       throw validation('A document with no value has nothing to record.')
@@ -222,7 +520,12 @@ export async function create(ctx: OrgContext, type: SalesDocumentType, input: Sa
         })
       : customer.paymentTerm
 
-    const number = await nextDocumentNumber(tx, ctx.orgId, SEQUENCE_FOR[type])
+    const number = await assignDocumentNumber(tx, ctx.orgId, SEQUENCE_FOR[type], input.number)
+    const clash = await tx.salesDocument.findFirst({
+      where: { orgId: ctx.orgId, type, number },
+      select: { id: true },
+    })
+    if (clash) throw numberTaken()
     const isDraft = input.saveAsDraft === true
 
     const document = await tx.salesDocument.create({
@@ -252,6 +555,7 @@ export async function create(ctx: OrgContext, type: SalesDocumentType, input: Sa
             orgId: ctx.orgId,
             lineNumber: line.lineNumber,
             itemId: line.source.itemId ?? null,
+            storeId: line.source.storeId ?? null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
             unitPrice: line.unitPrice.toFixed(4),
@@ -322,7 +626,7 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
     const customer = await requireCustomer(tx, ctx, input.customerId)
     const lines = await resolveLines(tx, ctx, input.lines)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
-    const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency)
+    const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency, documentDiscount(input))
 
     const term = input.paymentTermId
       ? await tx.paymentTerm.findFirst({
@@ -344,9 +648,22 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
 
     await tx.salesDocumentLine.deleteMany({ where: { documentId: id } })
 
+    const number = await assignDocumentNumber(
+      tx,
+      ctx.orgId,
+      SEQUENCE_FOR[existing.type],
+      input.number ?? existing.number,
+    )
+    const clash = await tx.salesDocument.findFirst({
+      where: { orgId: ctx.orgId, type: existing.type, number, id: { not: id } },
+      select: { id: true },
+    })
+    if (clash) throw numberTaken()
+
     await tx.salesDocument.update({
       where: { id },
       data: {
+        number,
         customerId: customer.id,
         date: toDate(input.date),
         dueDate: existing.type === 'INVOICE' ? toDate(dueDateFor(input.date, term ?? null)) : null,
@@ -368,6 +685,7 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
             orgId: ctx.orgId,
             lineNumber: line.lineNumber,
             itemId: line.source.itemId ?? null,
+            storeId: line.source.storeId ?? null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
             unitPrice: line.unitPrice.toFixed(4),
@@ -411,12 +729,12 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     where: { id, orgId: ctx.orgId },
     select: {
       id: true, type: true, number: true, date: true, memo: true, customerId: true,
-      depositAccountId: true, journalId: true,
+      depositAccountId: true, journalId: true, discountAmount: true,
       lines: {
         orderBy: { lineNumber: 'asc' },
         select: {
           id: true, amount: true, taxAmount: true, taxCodeId: true, incomeAccountId: true,
-          description: true, quantity: true, unitPrice: true, discountPercent: true, itemId: true,
+          description: true, quantity: true, unitPrice: true, discountPercent: true, itemId: true, storeId: true,
           item: {
             select: { id: true, name: true, type: true, inventoryAccountId: true, cogsAccountId: true },
           },
@@ -434,6 +752,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     document.lines.map((line): { taxCodeId: string | null } => ({ taxCodeId: line.taxCodeId })),
   )
 
+  const storedDiscount = new Decimal(document.discountAmount.toString())
   const priced = priceDocument(
     document.lines.map((line) => ({
       itemId: line.itemId,
@@ -446,6 +765,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     })),
     taxCodes,
     ctx.organization.baseCurrency,
+    storedDiscount.greaterThan(0) ? { kind: 'amount', value: storedDiscount.toString() } : null,
   )
 
   const input: SalesJournalInput = {
@@ -457,6 +777,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     receivableAccountId: await systemAccountId(tx, ctx.orgId, 'ACCOUNTS_RECEIVABLE'),
     depositAccountId: document.depositAccountId,
     fallbackIncomeAccountId: await systemAccountId(tx, ctx.orgId, 'UNCATEGORISED_INCOME'),
+    discountAccountId: priced.discountAmount.isZero() ? null : await salesDiscountAccountId(tx, ctx.orgId),
     memo: document.memo,
   }
 
@@ -468,6 +789,11 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
 
   if (movesStockOut || movesStockIn) {
     const cogs = new Map<string, { cogsAccountId: string; inventoryAccountId: string; amount: Decimal }>()
+    const storeAccounts = await storeService.accountsFor(
+      tx,
+      ctx.orgId,
+      document.lines.map((line) => line.storeId),
+    )
 
     for (const line of document.lines) {
       if (line.item?.type !== 'INVENTORY') continue
@@ -475,6 +801,8 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         throw precondition(`"${line.item.name}" has no inventory or cost of goods sold account.`)
       }
 
+      const inventoryAccountId =
+        (line.storeId && storeAccounts.get(line.storeId)) || line.item.inventoryAccountId
       const quantity = new Decimal(line.quantity.toString())
       const movement = await recordMovement(tx, ctx, {
         itemId: line.item.id,
@@ -484,16 +812,17 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         sourceId: document.id,
         sourceLineId: line.id,
         quantity: movesStockOut ? quantity.negated() : quantity,
+        storeId: line.storeId,
       })
 
-      const key = `${line.item.cogsAccountId}|${line.item.inventoryAccountId}`
+      const key = `${line.item.cogsAccountId}|${inventoryAccountId}`
       const existing = cogs.get(key)
       const amount = movement.value.abs()
       if (existing) existing.amount = existing.amount.plus(amount)
       else
         cogs.set(key, {
           cogsAccountId: line.item.cogsAccountId,
-          inventoryAccountId: line.item.inventoryAccountId,
+          inventoryAccountId,
           amount,
         })
     }
@@ -609,6 +938,42 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
 }
 
 /**
+ * Open quotations that can still become an invoice — not voided, declined, or
+ * already converted. Used on the new-invoice form so a customer's quote can be
+ * picked up without retyping lines and prices.
+ */
+export async function listConvertibleEstimates(ctx: OrgContext) {
+  const rows = await db.salesDocument.findMany({
+    where: {
+      orgId: ctx.orgId,
+      type: 'ESTIMATE',
+      status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
+      convertedTo: { is: null },
+    },
+    orderBy: [{ date: 'desc' }, { number: 'desc' }],
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      total: true,
+      customerId: true,
+      customer: { select: { displayName: true } },
+      _count: { select: { lines: true } },
+    },
+  })
+
+  return rows.map((row) => ({
+    id: row.id,
+    number: row.number,
+    date: toCalendarDate(row.date),
+    total: row.total.toString(),
+    customerId: row.customerId,
+    customerName: row.customer.displayName,
+    lineCount: row._count.lines,
+  }))
+}
+
+/**
  * Turn an accepted estimate into an invoice.
  *
  * The estimate is kept and closed rather than transformed, so the quotation that
@@ -627,7 +992,7 @@ export async function convertEstimate(ctx: OrgContext, estimateId: string, date:
           orderBy: { lineNumber: 'asc' },
           select: {
             itemId: true, description: true, quantity: true, unitPrice: true,
-            discountPercent: true, taxCodeId: true, incomeAccountId: true,
+            discountPercent: true, taxCodeId: true, incomeAccountId: true, storeId: true,
           },
         },
       },
@@ -649,6 +1014,7 @@ export async function convertEstimate(ctx: OrgContext, estimateId: string, date:
       paymentTermId: estimate.paymentTermId,
       lines: estimate.lines.map((line) => ({
         itemId: line.itemId,
+        storeId: line.storeId,
         description: line.description,
         quantity: line.quantity.toString(),
         unitPrice: line.unitPrice.toString(),
@@ -756,6 +1122,17 @@ async function resolveLines(
     : []
 
   const byId = new Map(items.map((item) => [item.id, item]))
+  const storeIds = [...new Set(lines.map((line) => line.storeId).filter((id): id is string => Boolean(id)))]
+  const knownStores = storeIds.length
+    ? new Set(
+        (
+          await tx.store.findMany({
+            where: { orgId: ctx.orgId, id: { in: storeIds } },
+            select: { id: true },
+          })
+        ).map((store) => store.id),
+      )
+    : new Set<string>()
 
   return lines.map((line): DraftSalesLine => {
     const item = line.itemId ? byId.get(line.itemId) : null
@@ -763,9 +1140,11 @@ async function resolveLines(
     if (item && !item.isActive) {
       throw precondition(`"${item.name}" is archived and cannot be sold.`)
     }
+    if (line.storeId && !knownStores.has(line.storeId)) throw notFound('Store')
 
     return {
       itemId: line.itemId ?? null,
+      storeId: line.storeId ?? null,
       description:
         line.description ?? item?.salesDescription ?? item?.description ?? item?.name ?? null,
       quantity: line.quantity,

@@ -31,6 +31,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatMoney } from '@/lib/money'
+import { ItemNameMenu } from '@/components/inventory/item-name-menu'
+import { QtyCell } from '@/components/inventory/line-store'
 import { setItemsActive } from './actions'
 
 export type ItemRow = ItemValues & {
@@ -39,14 +41,23 @@ export type ItemRow = ItemValues & {
   type: 'SERVICE' | 'NON_INVENTORY' | 'INVENTORY'
   isActive: boolean
   incomeAccount: { code: string; name: string } | null
+  expenseAccount: { code: string; name: string } | null
   inventoryAccount: { code: string; name: string } | null
   cogsAccount: { code: string; name: string } | null
+  store: { id: string; name: string } | null
   category: { name: string } | null
   /** Stock, for tracked items. Null for services and non-inventory goods. */
   onHand?: string | null
+  /** Quantity in each store. The columns add up to on hand. */
+  storeQty?: Record<string, string>
   stockValue?: string | null
   averageCost?: string | null
   belowReorder?: boolean
+  recorded?: string | null
+}
+
+function accountText(account: { code: string; name: string } | null) {
+  return account ? `${account.code} ${account.name}` : '—'
 }
 
 const TYPE_LABEL = {
@@ -60,26 +71,40 @@ export function ItemTable({
   accounts,
   taxCodes,
   categories,
+  stores = [],
+  storeColumns = [],
   currency,
   canEdit,
   canArchive,
+  canAdjust,
   sort,
   linkParams,
+  startEditingId,
+  extraEdit,
 }: {
   rows: ItemRow[]
   accounts: AccountOption[]
   taxCodes: SimpleOption[]
   categories: SimpleOption[]
+  stores?: SimpleOption[]
+  /** One calculated column per store. Existing columns stay as they are. */
+  storeColumns?: { id: string; name: string }[]
   currency: string
   canEdit: boolean
   canArchive: boolean
+  canAdjust: boolean
+  startEditingId?: string
+  /** Used when Edit is opened for an item that is not on this page of the list. */
+  extraEdit?: ItemRow | null
   /** Sorting is server-side, over every row — see SortableHeader. */
   sort: SortState
   linkParams: Record<string, string | undefined>
 }) {
   const router = useRouter()
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [editing, setEditing] = useState<ItemRow | null>(null)
+  const [editing, setEditing] = useState<ItemRow | null>(
+    () => rows.find((row) => row.id === startEditingId) ?? extraEdit ?? null,
+  )
   const [isPending, startTransition] = useTransition()
 
   const allSelected = rows.length > 0 && rows.every((row) => selected.has(row.id))
@@ -128,7 +153,7 @@ export function ItemTable({
 
       <Table>
         <TableHeader>
-          <TableRow>
+          <TableRow className="bg-[#d5dde6] hover:bg-[#d5dde6]">
             {canArchive ? (
               <TableHead className="w-10">
                 <input
@@ -142,8 +167,16 @@ export function ItemTable({
             ) : null}
             <SortableHeader column="name" label="Item" state={sort} basePath="/items" params={linkParams} />
             <SortableHeader column="type" label="Type" state={sort} basePath="/items" params={linkParams} className="w-32" />
-            <TableHead>Posts to</TableHead>
+            <TableHead>Income account</TableHead>
+            <TableHead>Inventory account</TableHead>
+            <TableHead>COGS or expense</TableHead>
+            <TableHead>Store</TableHead>
             <TableHead className="numeric w-28">On hand</TableHead>
+            {storeColumns.map((store) => (
+              <TableHead key={store.id} className="numeric w-28">
+                {store.name}
+              </TableHead>
+            ))}
             <TableHead className="numeric w-28">Stock value</TableHead>
             <SortableHeader column="price" label="Price" state={sort} basePath="/items" params={linkParams} className="w-28" numeric defaultDirection="desc" />
             <SortableHeader column="cost" label="Cost" state={sort} basePath="/items" params={linkParams} className="w-28" numeric defaultDirection="desc" />
@@ -151,8 +184,13 @@ export function ItemTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.id} className={row.isActive ? undefined : 'opacity-55'}>
+          {rows.map((row, index) => (
+            <TableRow
+              key={row.id}
+              className={`${index % 2 === 1 ? 'bg-[#c5dff3] hover:bg-[#c5dff3]' : 'bg-white hover:bg-white'} ${
+                row.isActive ? '' : 'opacity-55'
+              }`}
+            >
               {canArchive ? (
                 <TableCell>
                   <input
@@ -172,7 +210,14 @@ export function ItemTable({
                 </TableCell>
               ) : null}
               <TableCell>
-                <span className="block font-medium">{row.name}</span>
+                <ItemNameMenu
+                  id={row.id}
+                  name={row.name}
+                  tracked={row.type === 'INVENTORY'}
+                  canEdit={canEdit}
+                  canAdjust={canAdjust}
+                  onEdit={canEdit ? () => setEditing(row) : undefined}
+                />
                 <span className="block text-xs text-muted-foreground">
                   {row.sku ? `${row.sku} · ` : ''}
                   {row.category?.name ?? 'Uncategorised'}
@@ -188,23 +233,23 @@ export function ItemTable({
                   {TYPE_LABEL[row.type]}
                 </Badge>
               </TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                <span className="block">
-                  Income: {row.incomeAccount ? `${row.incomeAccount.code} ${row.incomeAccount.name}` : '—'}
-                </span>
-                {row.type === 'INVENTORY' ? (
-                  <>
-                    <span className="block">
-                      Stock:{' '}
-                      {row.inventoryAccount
-                        ? `${row.inventoryAccount.code} ${row.inventoryAccount.name}`
-                        : '—'}
-                    </span>
-                    <span className="block">
-                      COGS: {row.cogsAccount ? `${row.cogsAccount.code} ${row.cogsAccount.name}` : '—'}
-                    </span>
-                  </>
-                ) : null}
+              <TableCell className="text-xs">
+                {accountText(row.incomeAccount)}
+              </TableCell>
+              <TableCell className="text-xs">
+                {row.type === 'INVENTORY' ? accountText(row.inventoryAccount) : '—'}
+              </TableCell>
+              <TableCell className="text-xs">
+                {row.type === 'INVENTORY' ? accountText(row.cogsAccount) : accountText(row.expenseAccount)}
+              </TableCell>
+              <TableCell className="text-xs">
+                {row.store ? (
+                  <Link href={`/stores/${row.store.id}`} className="underline-offset-4 hover:underline">
+                    {row.store.name}
+                  </Link>
+                ) : (
+                  '—'
+                )}
               </TableCell>
               <TableCell className="numeric tabular">
                 {row.type === 'INVENTORY' ? (
@@ -225,6 +270,14 @@ export function ItemTable({
                   <span className="text-muted-foreground">—</span>
                 )}
               </TableCell>
+              {storeColumns.map((store) => (
+                <TableCell key={store.id} className="numeric">
+                  <QtyCell
+                    tracked={row.type === 'INVENTORY'}
+                    quantity={row.storeQty?.[store.id] ?? '0.00'}
+                  />
+                </TableCell>
+              ))}
               <TableCell className="numeric tabular text-muted-foreground">
                 {row.type === 'INVENTORY' && row.stockValue
                   ? formatMoney(row.stockValue, currency)
@@ -234,7 +287,15 @@ export function ItemTable({
                 {row.salesPrice ? formatMoney(row.salesPrice, currency) : '—'}
               </TableCell>
               <TableCell className="numeric tabular">
-                {row.purchaseCost ? formatMoney(row.purchaseCost, currency) : '—'}
+                {row.type === 'INVENTORY'
+                  ? row.averageCost && Number(row.averageCost) !== 0
+                    ? formatMoney(row.averageCost, currency)
+                    : row.purchaseCost
+                      ? formatMoney(row.purchaseCost, currency)
+                      : '—'
+                  : row.purchaseCost
+                    ? formatMoney(row.purchaseCost, currency)
+                    : '—'}
               </TableCell>
               <TableCell>
                 <div className="flex items-center justify-end gap-0.5">
@@ -256,6 +317,20 @@ export function ItemTable({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {canEdit ? (
+                          <DropdownMenuItem onSelect={() => setEditing(row)}>
+                            <PencilIcon className="size-4" /> Edit
+                          </DropdownMenuItem>
+                        ) : null}
+                        <DropdownMenuItem asChild>
+                          <Link href={`/items/${row.id}/report`}>Quick report</Link>
+                        </DropdownMenuItem>
+                        {row.type === 'INVENTORY' && canAdjust ? (
+                          <DropdownMenuItem asChild>
+                            <Link href={`/inventory/adjustments/new?item=${row.id}`}>Adjustment</Link>
+                          </DropdownMenuItem>
+                        ) : null}
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onSelect={(event) => {
                             event.preventDefault()
@@ -288,7 +363,9 @@ export function ItemTable({
           accounts={accounts}
           taxCodes={taxCodes}
           categories={categories}
+          stores={stores}
           currency={currency}
+          recorded={editing.recorded}
           onClose={() => setEditing(null)}
         />
       ) : null}

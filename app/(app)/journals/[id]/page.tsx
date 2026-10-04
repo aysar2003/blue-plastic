@@ -1,17 +1,17 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeftIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { RecordedBy } from '@/components/data/recorded-by'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { JOURNAL_SOURCE_LABELS, PERIOD_STATUS_LABELS } from '@/lib/accounting-labels'
 import { formatDate, formatDateTime, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
+import { trailFor } from '@/server/services/audit.service'
 import * as journalService from '@/server/services/journal.service'
 import { ReverseDialog } from './reverse-dialog'
 
@@ -23,15 +23,22 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
 
   const journal = await journalService.get(ctx, id).catch(() => null)
   if (!journal) notFound()
+  const trail = await trailFor(ctx, journal.id)
 
   const currency = ctx.organization.baseCurrency
   const canReverse = ctx.permissions.has('journal:reverse') && journal.status === 'POSTED'
+  const lineCustomer = journal.lines.find((line) => line.customer)?.customer
+  const lineVendor = journal.lines.find((line) => line.vendor)?.vendor
+  const party = journal.source.partyName
+    ? { name: journal.source.partyName, href: journal.source.partyHref ?? undefined }
+    : lineCustomer
+      ? { name: lineCustomer.displayName, href: `/customers?id=${lineCustomer.id}` }
+      : lineVendor
+        ? { name: lineVendor.displayName, href: `/vendors/${lineVendor.id}` }
+        : null
 
   return (
     <>
-      <Link href="/journals" className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}>
-        <ArrowLeftIcon /> Journal entries
-      </Link>
 
       <PageHeader
         title={journal.journalNumber}
@@ -51,6 +58,8 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
         }
       />
 
+      <RecordedBy trail={trail} timeZone={ctx.organization.timeZone} />
+
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Detail label="Date" value={formatDate(toCalendarDate(journal.date))} />
         <Detail
@@ -63,18 +72,14 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
           label="Period"
           value={`${formatDate(toCalendarDate(journal.period.startDate))} — ${PERIOD_STATUS_LABELS[journal.period.status]}`}
         />
-        {journal.source.partyName ? (
-          <Detail
-            label="Customer / vendor"
-            value={journal.source.partyName}
-            href={journal.source.partyHref ?? undefined}
-          />
+        {party ? (
+          <Detail label="Customer / vendor" value={party.name} href={party.href} />
         ) : (
           <Detail label="Posted" value={formatDateTime(journal.postedAt, ctx.organization.timeZone)} />
         )}
       </div>
 
-      {journal.source.partyName ? (
+      {party ? (
         <p className="mb-4 text-xs text-muted-foreground">
           Posted {formatDateTime(journal.postedAt, ctx.organization.timeZone)}
         </p>
@@ -116,18 +121,16 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">#</TableHead>
               <TableHead>Account</TableHead>
-              <TableHead className="w-48">Customer / vendor</TableHead>
-              <TableHead>Description</TableHead>
               <TableHead className="numeric w-36">Debit</TableHead>
               <TableHead className="numeric w-36">Credit</TableHead>
+              <TableHead>Memo</TableHead>
+              <TableHead className="w-48">Name</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {journal.lines.map((line) => (
               <TableRow key={line.id}>
-                <TableCell className="tabular text-muted-foreground">{line.lineNumber}</TableCell>
                 <TableCell>
                   <Link
                     href={`/accounts/${line.account.id}`}
@@ -137,10 +140,17 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
                     {line.account.name}
                   </Link>
                 </TableCell>
+                <TableCell className="numeric tabular">
+                  {line.debit === '0' ? '' : formatMoney(line.debit, currency)}
+                </TableCell>
+                <TableCell className="numeric tabular">
+                  {line.credit === '0' ? '' : formatMoney(line.credit, currency)}
+                </TableCell>
+                <TableCell className="text-muted-foreground">{line.description ?? '—'}</TableCell>
                 <TableCell>
                   {line.customer ? (
                     <Link
-                      href={`/customers/${line.customer.id}`}
+                      href={`/customers?id=${line.customer.id}`}
                       className="underline-offset-4 hover:underline"
                     >
                       {line.customer.displayName}
@@ -156,19 +166,12 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
                     <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
-                <TableCell className="text-muted-foreground">{line.description ?? '—'}</TableCell>
-                <TableCell className="numeric tabular">
-                  {line.debit === '0' ? '' : formatMoney(line.debit, currency)}
-                </TableCell>
-                <TableCell className="numeric tabular">
-                  {line.credit === '0' ? '' : formatMoney(line.credit, currency)}
-                </TableCell>
               </TableRow>
             ))}
           </TableBody>
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={4} className="font-medium">
+              <TableCell className="font-medium">
                 Totals
                 {journal.balanced ? null : (
                   <Badge variant="destructive" className="ml-2">
@@ -182,6 +185,7 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
               <TableCell className="numeric tabular font-semibold">
                 {formatMoney(journal.totalCredit, currency)}
               </TableCell>
+              <TableCell colSpan={2} />
             </TableRow>
           </TableFooter>
         </Table>

@@ -1,12 +1,10 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeftIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
 import { ReceiveForm } from '@/components/purchases/receive-form'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatDate, toCalendarDate, today } from '@/lib/date'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
@@ -30,13 +28,8 @@ export default async function ReceiveOrderPage({ params }: { params: Promise<{ i
   const order = await purchaseService.receivableOrder(ctx, id).catch(() => null)
   if (!order) notFound()
 
-  const backHref = `/purchases/purchase-orders/${order.id}`
-
   return (
     <>
-      <Link href={backHref} className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}>
-        <ArrowLeftIcon /> {order.number}
-      </Link>
 
       <PageHeader
         title={`Receive items · ${order.number}`}

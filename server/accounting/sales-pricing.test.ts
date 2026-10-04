@@ -91,6 +91,27 @@ describe('line arithmetic', () => {
     expect(doc.total.toString()).toBe('348')
   })
 
+  it('takes a percent or an amount off the whole document before tax', () => {
+    const percent = priceDocument(
+      [{ quantity: '1', unitPrice: '100', taxCodeId: 'vat' }],
+      codes,
+      'USD',
+      { kind: 'percent', value: '10' },
+    )
+    expect(percent.discountAmount.toString()).toBe('10')
+    expect(percent.taxTotal.toString()).toBe('14.4')
+    expect(percent.total.toString()).toBe('104.4')
+
+    const amount = priceDocument(
+      [{ quantity: '2', unitPrice: '40' }],
+      codes,
+      'USD',
+      { kind: 'amount', value: '15' },
+    )
+    expect(amount.discountAmount.toString()).toBe('15')
+    expect(amount.total.toString()).toBe('65')
+  })
+
   it('always has total equal to subtotal plus tax', () => {
     for (const price of ['0.01', '7.77', '99.99', '1234.56']) {
       for (const code of [undefined, 'vat', 'vat-inc']) {

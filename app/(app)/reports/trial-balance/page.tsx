@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { ClickableRow } from '@/components/reports/clickable-row'
 import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHeader, TableRow } from '@/components/ui/table'
@@ -13,7 +14,7 @@ import { trialBalance } from '@/server/accounting/balances'
 import { requireOrgContext } from '@/server/auth/context'
 import { DateRangeForm } from './date-range-form'
 
-export const metadata: Metadata = { title: 'Trial balance' }
+export const metadata: Metadata = { title: 'Trial Balance' }
 
 const SORTABLE = ['code', 'name', 'type', 'debit', 'credit'] as const
 
@@ -63,7 +64,7 @@ export default async function TrialBalancePage({
   return (
     <>
       <PageHeader
-        title="Trial balance"
+        title="Trial Balance"
         description={`Every account with a balance or movement between ${formatDate(from)} and ${formatDate(to)}.`}
       />
 
@@ -90,26 +91,34 @@ export default async function TrialBalancePage({
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((row) => (
-                <TableRow key={row.accountId}>
+              rows.map((row) => {
+                const href = `/reports/transaction-detail?account=${row.accountId}&period=custom&from=${from}&to=${to}&back=/reports/trial-balance`
+                return (
+                <ClickableRow key={row.accountId} href={href}>
                   <TableCell className="tabular text-muted-foreground">{row.code}</TableCell>
                   <TableCell>
-                    <Link
-                      href={`/reports/transaction-detail?account=${row.accountId}&period=custom&from=${from}&to=${to}&back=/reports/trial-balance`}
-                      className="font-medium underline-offset-4 hover:underline"
-                    >
+                    <Link href={href} className="font-medium underline-offset-4 hover:underline">
                       {row.name}
                     </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{ACCOUNT_TYPE_LABELS[row.type]}</TableCell>
                   <TableCell className="numeric tabular">
-                    {row.closingDebit.isZero() ? '' : formatMoney(row.closingDebit, currency)}
+                    {row.closingDebit.isZero() ? '' : (
+                      <Link href={href} className="underline-offset-4 hover:underline">
+                        {formatMoney(row.closingDebit, currency)}
+                      </Link>
+                    )}
                   </TableCell>
                   <TableCell className="numeric tabular">
-                    {row.closingCredit.isZero() ? '' : formatMoney(row.closingCredit, currency)}
+                    {row.closingCredit.isZero() ? '' : (
+                      <Link href={href} className="underline-offset-4 hover:underline">
+                        {formatMoney(row.closingCredit, currency)}
+                      </Link>
+                    )}
                   </TableCell>
-                </TableRow>
-              ))
+                </ClickableRow>
+                )
+              })
             )}
           </TableBody>
           <TableFooter>

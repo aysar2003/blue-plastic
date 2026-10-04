@@ -12,6 +12,8 @@ export type DraftSalesLine = {
   taxCodeId?: string | null
   incomeAccountId?: string | null
   serviceDate?: string | null
+  /** The store this line is received into or issued from. */
+  storeId?: string | null
   /**
    * Tracked stock. Its cost belongs to the inventory asset, so the journal
    * builder must not also post it to an expense account — doing both would debit
@@ -65,10 +67,17 @@ export type PricedDocument = {
  * `tax.ts` on why the document total is the sum of its lines rather than a
  * calculation on the whole.
  */
+export type DocumentDiscount = {
+  /** `percent` is a share of the subtotal. `amount` is money off, never more than the subtotal. */
+  kind: 'amount' | 'percent'
+  value: Decimal.Value
+}
+
 export function priceDocument(
   lines: DraftSalesLine[],
   taxCodes: Map<string, TaxCodeShape>,
   currency: string,
+  documentDiscount?: DocumentDiscount | null,
 ): PricedDocument {
   const priced: PricedLine[] = []
   let subtotal = ZERO
@@ -111,16 +120,47 @@ export function priceDocument(
   })
 
   const summary = summariseTax(priced.map((line) => line.tax))
+  const discountAmount = documentDiscountAmount(subtotal, documentDiscount, currency)
+
+  // A document discount comes off before tax, in the same way a line discount
+  // does. Tax already computed on the full subtotal is scaled by what remains.
+  const kept = subtotal.minus(discountAmount)
+  const ratio = subtotal.isZero() ? ZERO : kept.dividedBy(subtotal)
+  const taxByRate = new Map<
+    string,
+    { name: string; amount: Decimal; salesAccountId: string | null; purchaseAccountId: string | null }
+  >()
+  let taxTotal = ZERO
+  for (const [key, rate] of summary.byRate) {
+    const amount = discountAmount.isZero() ? rate.amount : roundToCurrency(rate.amount.times(ratio), currency)
+    taxByRate.set(key, { ...rate, amount })
+    taxTotal = taxTotal.plus(amount)
+  }
 
   return {
     lines: priced,
     subtotal,
-    // Line discounts are already inside each line's amount. Subtracting them
-    // again at document level would take them off twice.
-    discountAmount: ZERO,
+    // Line discounts are already inside each line's amount. This figure is only
+    // the extra discount taken off the whole document.
+    discountAmount,
     lineDiscountTotal,
-    taxTotal: summary.tax,
-    total: subtotal.plus(summary.tax),
-    taxByRate: summary.byRate,
+    taxTotal,
+    total: kept.plus(taxTotal),
+    taxByRate,
   }
+}
+
+function documentDiscountAmount(
+  subtotal: Decimal,
+  discount: DocumentDiscount | null | undefined,
+  currency: string,
+): Decimal {
+  if (!discount || subtotal.lessThanOrEqualTo(0)) return ZERO
+  const value = new Decimal(discount.value || 0)
+  if (value.lessThanOrEqualTo(0)) return ZERO
+  if (discount.kind === 'percent') {
+    const percent = Decimal.min(value, new Decimal(100))
+    return roundToCurrency(subtotal.times(percent).dividedBy(100), currency)
+  }
+  return roundToCurrency(Decimal.min(value, subtotal), currency)
 }

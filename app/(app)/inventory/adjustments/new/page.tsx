@@ -1,38 +1,43 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { ArrowLeftIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
 import { AdjustmentForm } from '@/components/inventory/adjustment-form'
-import { buttonVariants } from '@/components/ui/button'
 import { accountOptions } from '@/lib/account-options'
 import { today } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
+import { db } from '@/server/db'
+import { peekDocumentNumber } from '@/server/sequences'
 import * as accountService from '@/server/services/account.service'
 import * as inventoryService from '@/server/services/inventory.service'
 
 export const metadata: Metadata = { title: 'Adjust stock' }
 
-export default async function NewAdjustmentPage() {
+export default async function NewAdjustmentPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const ctx = await requireOrgContext('inventory:adjust')
+  const query = await searchParams
+  const itemId = typeof query.item === 'string' ? query.item : undefined
+  const mode = query.mode === 'damage' || query.mode === 'cost' ? query.mode : 'count'
 
-  const [stock, accounts] = await Promise.all([
+  const [stock, accounts, documentNumber] = await Promise.all([
     inventoryService.stockOnHand(ctx),
     accountService.selectableAccounts(ctx),
+    peekDocumentNumber(db, ctx.orgId, 'INVENTORY_ADJUSTMENT'),
   ])
 
   return (
     <>
-      <Link href="/inventory" className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}>
-        <ArrowLeftIcon /> Inventory
-      </Link>
 
       <PageHeader
         title="Adjust stock"
-        description="Enter what the count actually found. The difference in value goes to Inventory Shrinkage — stock that has gone missing is an expense, and burying it in cost of goods sold would flatter the margin on everything that did sell."
+        description="Count what is there, record what was damaged, or add cost onto an item. Damage leaves the cost on what remains, so the cost rises. Adding cost does the same with an amount you type. The lines stay open down the page."
       />
 
       <AdjustmentForm
+        initialMode={mode}
         items={stock.items.map((item) => ({
           id: item.itemId,
           label: item.sku ? `${item.sku} — ${item.name}` : item.name,
@@ -45,6 +50,8 @@ export default async function NewAdjustmentPage() {
         })}
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}
+        documentNumber={documentNumber}
+        initialItemId={itemId}
       />
     </>
   )

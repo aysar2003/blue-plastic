@@ -87,6 +87,8 @@ export async function resolveSources(
     adjustments,
     openingAccounts,
     openingItems,
+    openingCustomers,
+    openingVendors,
   ] = await Promise.all([
     salesIds.length
       ? db.salesDocument.findMany({
@@ -148,6 +150,18 @@ export async function resolveSources(
       ? db.item.findMany({
           where: { orgId, id: { in: openingIds } },
           select: { id: true, name: true, sku: true },
+        })
+      : [],
+    openingIds.length
+      ? db.customer.findMany({
+          where: { orgId, id: { in: openingIds } },
+          select: { id: true, displayName: true },
+        })
+      : [],
+    openingIds.length
+      ? db.vendor.findMany({
+          where: { orgId, id: { in: openingIds } },
+          select: { id: true, displayName: true },
         })
       : [],
   ])
@@ -220,20 +234,42 @@ export async function resolveSources(
     })
   }
 
-  for (const account of openingAccounts) {
-    resolved.set(key('OPENING_BALANCE', account.id), {
-      number: account.code,
-      href: `/accounts/${account.id}`,
-      partyName: account.name,
-      partyHref: null,
+  for (const customer of openingCustomers) {
+    resolved.set(key('OPENING_BALANCE', customer.id), {
+      number: null,
+      href: `/customers?id=${customer.id}`,
+      partyName: customer.displayName,
+      partyHref: `/customers?id=${customer.id}`,
+    })
+  }
+
+  for (const vendor of openingVendors) {
+    resolved.set(key('OPENING_BALANCE', vendor.id), {
+      number: null,
+      href: `/vendors?id=${vendor.id}`,
+      partyName: vendor.displayName,
+      partyHref: `/vendors?id=${vendor.id}`,
     })
   }
 
   for (const item of openingItems) {
-    resolved.set(key('OPENING_BALANCE', item.id), {
+    const id = key('OPENING_BALANCE', item.id)
+    if (resolved.has(id)) continue
+    resolved.set(id, {
       number: item.sku,
       href: `/inventory/${item.id}`,
       partyName: item.name,
+      partyHref: `/inventory/${item.id}`,
+    })
+  }
+
+  for (const account of openingAccounts) {
+    const id = key('OPENING_BALANCE', account.id)
+    if (resolved.has(id)) continue
+    resolved.set(id, {
+      number: account.code,
+      href: `/accounts/${account.id}`,
+      partyName: null,
       partyHref: null,
     })
   }

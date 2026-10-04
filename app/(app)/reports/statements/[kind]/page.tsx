@@ -3,8 +3,13 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
+import { ClickableRow } from '@/components/reports/clickable-row'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
+import { StatementFilters } from '@/components/reports/statement-filters'
+import { StatementSend } from '@/components/reports/statement-send'
 import { Card, CardContent } from '@/components/ui/card'
+import { readStatementFilter, statementFilterCaption, visibleEntries } from '@/lib/customer-statement'
+import { readVendorFilter, vendorFilterCaption, vendorTypeOptions, visibleVendorEntries } from '@/lib/vendor-statement'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { accountOptions } from '@/lib/account-options'
 import { formatDate, toCalendarDate } from '@/lib/date'
@@ -18,6 +23,7 @@ import * as receivables from '@/server/services/receivables.service'
 import * as accountService from '@/server/services/account.service'
 import { readSettings, type SearchParams } from '../../params'
 import { ReportControls } from '../../report-controls'
+import { CustomerStatement, statementEmailBody } from './customer-statement'
 import { StatementPicker } from './statement-picker'
 
 /**
@@ -83,14 +89,36 @@ export default async function StatementPage({
     kind === 'customer'
       ? db.customer.findMany({
           where: { orgId: ctx.orgId },
-          select: { id: true, displayName: true, email: true },
+          select: {
+            id: true,
+            displayName: true,
+            companyName: true,
+            email: true,
+            phone: true,
+            billingLine1: true,
+            billingLine2: true,
+            billingCity: true,
+            billingRegion: true,
+            billingPostalCode: true,
+          },
           orderBy: { displayName: 'asc' },
         })
       : [],
     kind === 'vendor'
       ? db.vendor.findMany({
           where: { orgId: ctx.orgId },
-          select: { id: true, displayName: true, email: true },
+          select: {
+            id: true,
+            displayName: true,
+            companyName: true,
+            email: true,
+            phone: true,
+            billingLine1: true,
+            billingLine2: true,
+            billingCity: true,
+            billingRegion: true,
+            billingPostalCode: true,
+          },
           orderBy: { displayName: 'asc' },
         })
       : [],
@@ -141,6 +169,9 @@ export default async function StatementPage({
       />
     )
 
+  const customerFilter = kind === 'customer' ? readStatementFilter(query) : null
+  const vendorFilter = kind === 'vendor' ? readVendorFilter(query) : null
+
   const controls = (
     <>
       <div className="mb-4 flex flex-wrap items-end gap-3 print:hidden">{picker}</div>
@@ -154,6 +185,24 @@ export default async function StatementPage({
           comparison={settings.comparison}
           controls={{ mode: 'range' }}
         />
+        {customerFilter ? (
+          <StatementFilters
+            view={customerFilter.view}
+            type={customerFilter.type}
+            status={customerFilter.status}
+            totals={customerFilter.totals}
+            defaultView="detail"
+          />
+        ) : null}
+        {vendorFilter ? (
+          <StatementFilters
+            view={vendorFilter.view}
+            type={vendorFilter.type}
+            status={vendorFilter.status}
+            totals={vendorFilter.totals}
+            typeOptions={vendorTypeOptions()}
+          />
+        ) : null}
       </div>
     </>
   )
@@ -199,42 +248,130 @@ export default async function StatementPage({
 
   if (kind === 'customer') {
     const customer = customers.find((row) => row.id === subjectId)
-    if (!customer) notFound()
-    subjectName = customer.displayName
+    if (!customer || !customerFilter) notFound()
     const statement = await receivables.statement(ctx, subjectId, settings.range)
-    opening = statement.opening
-    closing = statement.closing
-    lines = statement.entries.map((entry) => ({
-      id: entry.id,
-      date: entry.date,
-      number: entry.number,
-      description: entry.description,
-      dueDate: entry.dueDate,
-      charge: entry.charge,
-      credit: entry.credit,
-      balance: entry.balance,
-      href: entry.href,
-    }))
+    const entries = visibleEntries(statement.entries, customerFilter, settings.asOf)
+    const charges = statement.entries.reduce((sum, entry) => sum.plus(entry.charge), ZERO)
+    const credits = statement.entries.reduce((sum, entry) => sum.plus(entry.credit), ZERO)
+    const address = [
+      [customer.billingLine1, customer.billingLine2].filter(Boolean).join(', '),
+      [customer.billingCity, customer.billingRegion, customer.billingPostalCode].filter(Boolean).join(' '),
+    ].filter(Boolean)
+    const pdfParams = new URLSearchParams()
+    pdfParams.set('customerId', subjectId)
+    for (const key of ['period', 'from', 'to', 'asOf', 'view', 'type', 'status']) {
+      const value = one(query[key])
+      if (value) pdfParams.set(key, value)
+    }
+    const filename = `statement-${customer.displayName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40) || 'customer'}.pdf`
+    const emailBody = statementEmailBody({
+      orgName: ctx.organization.name,
+      organization: ctx.organization,
+      customerName: customer.displayName,
+      from: settings.range.from,
+      to: settings.range.to,
+      filter: customerFilter,
+      currency,
+      opening: statement.opening,
+      closing: statement.closing,
+      entries,
+    })
+
+    return (
+      <>
+        <PageHeader
+          className="print:hidden"
+          title="Customer statement"
+          description={`${customer.displayName} · ${
+            settings.period === 'all-dates'
+              ? 'All dates'
+              : `${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}`
+          }`}
+          actions={
+            <StatementSend
+              pdfHref={`/api/statements/customer?${pdfParams.toString()}`}
+              filename={filename}
+              defaultTo={customer.email ?? ''}
+              defaultSubject={`Statement from ${ctx.organization.name}`}
+              defaultBody={emailBody}
+            />
+          }
+        />
+        {controls}
+        <CustomerStatement
+          currency={currency}
+          customer={{
+            displayName: customer.displayName,
+            companyName: customer.companyName,
+            email: customer.email,
+            phone: customer.phone,
+            address,
+          }}
+          from={settings.range.from}
+          to={settings.range.to}
+          filter={customerFilter}
+          ledger={customerFilter.type === 'all' && customerFilter.status === 'all'}
+          caption={statementFilterCaption(customerFilter)}
+          opening={statement.opening}
+          closing={statement.closing}
+          charges={charges}
+          credits={credits}
+          entries={entries}
+        />
+      </>
+    )
   } else if (kind === 'vendor') {
     const vendor = vendors.find((row) => row.id === subjectId)
-    if (!vendor) notFound()
-    subjectName = vendor.displayName
+    if (!vendor || !vendorFilter) notFound()
     const statement = await payables.vendorStatement(ctx, subjectId, settings.range)
-    opening = statement.opening
-    closing = statement.closing
-    chargeLabel = 'Bills'
-    creditLabel = 'Paid'
-    lines = statement.entries.map((entry) => ({
-      id: entry.id,
-      date: entry.date,
-      number: entry.number,
-      description: entry.description,
-      dueDate: entry.dueDate,
-      charge: entry.charge,
-      credit: entry.credit,
-      balance: entry.balance,
-      href: entry.href,
-    }))
+    const entries = visibleVendorEntries(statement.entries, vendorFilter, settings.asOf)
+    const charges = statement.entries.reduce((sum, entry) => sum.plus(entry.charge), ZERO)
+    const credits = statement.entries.reduce((sum, entry) => sum.plus(entry.credit), ZERO)
+    const address = [
+      [vendor.billingLine1, vendor.billingLine2].filter(Boolean).join(', '),
+      [vendor.billingCity, vendor.billingRegion, vendor.billingPostalCode].filter(Boolean).join(' '),
+    ].filter(Boolean)
+    return (
+      <>
+        <PageHeader
+          className="print:hidden"
+          title="Vendor statement"
+          description={`${vendor.displayName} · ${
+            settings.period === 'all-dates'
+              ? 'All dates'
+              : `${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}`
+          }`}
+          actions={<PrintButton />}
+        />
+        {controls}
+        <CustomerStatement
+          currency={currency}
+          customer={{
+            displayName: vendor.displayName,
+            companyName: vendor.companyName,
+            email: vendor.email,
+            phone: vendor.phone,
+            address,
+          }}
+          from={settings.range.from}
+          to={settings.range.to}
+          filter={vendorFilter}
+          ledger={vendorFilter.type === 'all' && vendorFilter.status === 'all'}
+          caption={vendorFilterCaption(vendorFilter)}
+          opening={statement.opening}
+          closing={statement.closing}
+          charges={charges}
+          credits={credits}
+          entries={entries}
+          debitLabel="Bills"
+          creditLabel="Paid"
+        />
+      </>
+    )
   } else {
     const account = chart.find((row) => row.id === subjectId)
     if (!account) notFound()
@@ -274,7 +411,6 @@ export default async function StatementPage({
 
       {/* The printed header. On screen the page header above says the same. */}
       <div className="mb-6 hidden print:block">
-        <p className="text-lg font-semibold">{ctx.organization.name}</p>
         <p className="text-sm">{TITLES[kind as Kind]} — {subjectName}</p>
         <p className="text-sm">
           {formatDate(settings.range.from)} to {formatDate(settings.range.to)}
@@ -304,7 +440,7 @@ export default async function StatementPage({
           <TableBody>
             <TableRow className="bg-muted/40">
               <TableCell className="tabular whitespace-nowrap">
-                {formatDate(settings.range.from)}
+                {settings.period === 'all-dates' ? '—' : formatDate(settings.range.from)}
               </TableCell>
               <TableCell />
               <TableCell colSpan={kind !== 'account' ? 2 : 1} className="font-medium">
@@ -318,7 +454,7 @@ export default async function StatementPage({
             </TableRow>
 
             {lines.map((line) => (
-              <TableRow key={line.id}>
+              <ClickableRow key={line.id} href={line.href}>
                 <TableCell className="tabular whitespace-nowrap text-muted-foreground">
                   {formatDate(toCalendarDate(line.date))}
                 </TableCell>
@@ -334,15 +470,29 @@ export default async function StatementPage({
                   </TableCell>
                 ) : null}
                 <TableCell className="numeric tabular">
-                  {line.charge.isZero() ? '' : formatMoney(line.charge, currency)}
+                  {line.charge.isZero() ? (
+                    ''
+                  ) : (
+                    <Link href={line.href} className="underline-offset-4 hover:underline">
+                      {formatMoney(line.charge, currency)}
+                    </Link>
+                  )}
                 </TableCell>
                 <TableCell className="numeric tabular">
-                  {line.credit.isZero() ? '' : formatMoney(line.credit, currency)}
+                  {line.credit.isZero() ? (
+                    ''
+                  ) : (
+                    <Link href={line.href} className="underline-offset-4 hover:underline">
+                      {formatMoney(line.credit, currency)}
+                    </Link>
+                  )}
                 </TableCell>
                 <TableCell className="numeric tabular font-medium">
-                  {formatMoney(line.balance, currency)}
+                  <Link href={line.href} className="underline-offset-4 hover:underline">
+                    {formatMoney(line.balance, currency)}
+                  </Link>
                 </TableCell>
-              </TableRow>
+              </ClickableRow>
             ))}
           </TableBody>
           <TableFooter>

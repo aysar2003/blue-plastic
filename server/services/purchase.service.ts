@@ -10,7 +10,7 @@ import { systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { softDeleteDocument } from '@/server/accounting/deletion'
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
 import { priceDocument, type DraftSalesLine } from '@/server/accounting/sales-pricing'
-import { recordMovement, reverseMovementsFor } from '@/server/accounting/inventory'
+import { positionOf, recordMovement, reverseMovementsFor } from '@/server/accounting/inventory'
 import {
   buildBillJournal,
   buildExpenseJournal,
@@ -23,7 +23,8 @@ import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
-import { nextDocumentNumber } from '@/server/sequences'
+import { assignDocumentNumber, numberTaken } from '@/server/sequences'
+import * as storeService from '@/server/services/store.service'
 import { loadCodeForCalculation } from '@/server/services/tax.service'
 
 const SEQUENCE_FOR: Record<PurchaseDocumentType, DocumentType> = {
@@ -63,7 +64,14 @@ export async function list(
   ctx: OrgContext,
   type: PurchaseDocumentType,
   query: ListQuery,
-  options: { status?: string; vendorId?: string; sort?: string; dir?: 'asc' | 'desc' } = {},
+  options: {
+    status?: string
+    vendorId?: string
+    sort?: string
+    dir?: 'asc' | 'desc'
+    from?: CalendarDate
+    to?: CalendarDate
+  } = {},
 ) {
   const where: Prisma.PurchaseDocumentWhereInput = {
     orgId: ctx.orgId,
@@ -74,6 +82,15 @@ export async function list(
       ? { status: { in: ['OPEN', 'PARTIAL'] }, dueDate: { lt: toDate(today(ctx.organization.timeZone)) } }
       : {}),
     ...(options.status === 'draft' ? { status: 'DRAFT' } : {}),
+    ...(options.status === 'paid' ? { status: 'PAID' } : {}),
+    ...(options.from || options.to
+      ? {
+          date: {
+            ...(options.from ? { gte: toDate(options.from) } : {}),
+            ...(options.to ? { lte: toDate(options.to) } : {}),
+          },
+        }
+      : {}),
     ...(query.q
       ? {
           OR: [
@@ -133,7 +150,7 @@ export async function get(ctx: OrgContext, id: string) {
         orderBy: { lineNumber: 'asc' },
         select: {
           id: true, lineNumber: true, description: true, quantity: true, unitPrice: true,
-          quantityReceived: true,
+          quantityReceived: true, storeId: true,
           discountPercent: true, amount: true, taxAmount: true,
           item: { select: { id: true, name: true, sku: true } },
           taxCode: { select: { id: true, name: true } },
@@ -250,7 +267,12 @@ async function createWithin(
       await requirePaymentAccount(tx, ctx, input.paymentAccountId)
     }
 
-    const number = await nextDocumentNumber(tx, ctx.orgId, SEQUENCE_FOR[type])
+    const number = await assignDocumentNumber(tx, ctx.orgId, SEQUENCE_FOR[type], input.number)
+    const clash = await tx.purchaseDocument.findFirst({
+      where: { orgId: ctx.orgId, type, number },
+      select: { id: true },
+    })
+    if (clash) throw numberTaken()
 
     const document = await tx.purchaseDocument.create({
       data: {
@@ -277,6 +299,7 @@ async function createWithin(
             orgId: ctx.orgId,
             lineNumber: line.lineNumber,
             itemId: line.source.itemId ?? null,
+            storeId: line.source.storeId ?? null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
             unitPrice: line.unitPrice.toFixed(4),
@@ -362,9 +385,22 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
 
     await tx.purchaseDocumentLine.deleteMany({ where: { documentId: id } })
 
+    const number = await assignDocumentNumber(
+      tx,
+      ctx.orgId,
+      SEQUENCE_FOR[existing.type],
+      input.number ?? existing.number,
+    )
+    const numberClash = await tx.purchaseDocument.findFirst({
+      where: { orgId: ctx.orgId, type: existing.type, number, id: { not: id } },
+      select: { id: true },
+    })
+    if (numberClash) throw numberTaken()
+
     await tx.purchaseDocument.update({
       where: { id },
       data: {
+        number,
         vendorId: vendor.id,
         date: toDate(input.date),
         dueDate: existing.type === 'BILL' ? toDate(dueDateFor(input.date, term ?? null)) : null,
@@ -387,6 +423,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
             orgId: ctx.orgId,
             lineNumber: line.lineNumber,
             itemId: line.source.itemId ?? null,
+            storeId: line.source.storeId ?? null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
             unitPrice: line.unitPrice.toFixed(4),
@@ -433,7 +470,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         orderBy: { lineNumber: 'asc' },
         select: {
           id: true, amount: true, taxAmount: true, taxCodeId: true, expenseAccountId: true,
-          description: true, quantity: true, unitPrice: true, discountPercent: true, itemId: true,
+          description: true, quantity: true, unitPrice: true, discountPercent: true, itemId: true, storeId: true,
           item: { select: { id: true, name: true, type: true, inventoryAccountId: true } },
         },
       },
@@ -486,6 +523,13 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
 
   if (receivesStock || returnsStock) {
     const stock = new Map<string, Decimal>()
+    let documentStockNet = new Decimal(0)
+    const touchedItems = new Set<string>()
+    const storeAccounts = await storeService.accountsFor(
+      tx,
+      ctx.orgId,
+      document.lines.map((line) => line.storeId),
+    )
 
     for (const [index, line] of document.lines.entries()) {
       if (line.item?.type !== 'INVENTORY') continue
@@ -493,6 +537,8 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         throw precondition(`"${line.item.name}" has no inventory account.`)
       }
 
+      const inventoryAccountId =
+        (line.storeId && storeAccounts.get(line.storeId)) || line.item.inventoryAccountId
       const quantity = new Decimal(line.quantity.toString())
       // Matched by position, not by item. `priceDocument` returns its lines in
       // the order it was given them, and a document may legitimately carry the
@@ -502,6 +548,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       const priceForLine = priced.lines[index]
       const netAmount = priceForLine?.amount ?? new Decimal(line.amount.toString())
       const unitCost = quantity.isZero() ? new Decimal(0) : netAmount.dividedBy(quantity)
+      documentStockNet = documentStockNet.plus(netAmount)
 
       const movement = await recordMovement(tx, ctx, {
         itemId: line.item.id,
@@ -512,18 +559,44 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         sourceLineId: line.id,
         quantity: receivesStock ? quantity : quantity.negated(),
         unitCost: receivesStock ? unitCost : undefined,
+        storeId: line.storeId,
       })
 
       stock.set(
-        line.item.inventoryAccountId,
-        (stock.get(line.item.inventoryAccountId) ?? new Decimal(0)).plus(movement.value.abs()),
+        inventoryAccountId,
+        (stock.get(inventoryAccountId) ?? new Decimal(0)).plus(movement.value.abs()),
       )
+      touchedItems.add(line.item.id)
     }
 
     input.stock = [...stock.entries()].map(([inventoryAccountId, amount]) => ({
       inventoryAccountId,
       amount,
     }))
+
+    // Returns leave at average cost; the credit is at the document price. The
+    // gap has to be posted or payables and inventory will not balance.
+    if (returnsStock) {
+      const stockAtBookCost = [...stock.values()].reduce(
+        (sum, amount) => sum.plus(amount),
+        new Decimal(0),
+      )
+      input.stockCostDifference = stockAtBookCost.minus(documentStockNet)
+    }
+
+    // Cost on the item is the weighted average of what is on hand:
+    // (old value + new purchase) / total quantity.
+    for (const itemId of touchedItems) {
+      const position = await positionOf(tx, itemId)
+      await tx.item.update({
+        where: { id: itemId },
+        data: {
+          purchaseCost: position.quantity.isZero()
+            ? null
+            : position.averageCost.toFixed(4),
+        },
+      })
+    }
   }
 
   const draft =
@@ -819,7 +892,7 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
         lines: {
           orderBy: { lineNumber: 'asc' },
           select: {
-            id: true, lineNumber: true, itemId: true, description: true,
+            id: true, lineNumber: true, itemId: true, storeId: true, description: true,
             quantity: true, quantityReceived: true, unitPrice: true,
             discountPercent: true, taxCodeId: true, expenseAccountId: true,
           },
@@ -890,6 +963,7 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
           .filter((line) => receiving.has(line.id))
           .map((line) => ({
             itemId: line.itemId,
+            storeId: line.storeId,
             expenseAccountId: line.expenseAccountId,
             description: line.description,
             quantity: receiving.get(line.id)!.toString(),
@@ -1104,6 +1178,17 @@ async function resolveLines(
     : []
 
   const byId = new Map(items.map((item) => [item.id, item]))
+  const storeIds = [...new Set(lines.map((line) => line.storeId).filter((id): id is string => Boolean(id)))]
+  const knownStores = storeIds.length
+    ? new Set(
+        (
+          await tx.store.findMany({
+            where: { orgId: ctx.orgId, id: { in: storeIds } },
+            select: { id: true },
+          })
+        ).map((store) => store.id),
+      )
+    : new Set<string>()
 
   return lines.map((line): DraftSalesLine => {
     const item = line.itemId ? byId.get(line.itemId) : null
@@ -1111,9 +1196,11 @@ async function resolveLines(
     if (item && !item.isActive) {
       throw precondition(`"${item.name}" is archived and cannot be bought.`)
     }
+    if (line.storeId && !knownStores.has(line.storeId)) throw notFound('Store')
 
     return {
       itemId: line.itemId ?? null,
+      storeId: line.storeId ?? null,
       description:
         line.description ?? item?.purchaseDescription ?? item?.description ?? item?.name ?? null,
       quantity: line.quantity,

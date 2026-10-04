@@ -1,8 +1,9 @@
 import 'server-only'
 import type { Prisma } from '@prisma/client'
 
-import { Decimal, toMoneyString } from '@/lib/money'
-import { today } from '@/lib/date'
+import { balanceAlertKind, balanceMoment, type BalanceAlert } from '@/lib/balance-alert'
+import { Decimal, formatMoney, toMoneyString } from '@/lib/money'
+import { formatDate, toCalendarDate, toDate, today } from '@/lib/date'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { CustomerInput, VendorInput } from '@/lib/validation/master-data'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
@@ -34,8 +35,13 @@ const CUSTOMER_SELECT = {
   shippingLine1: true, shippingLine2: true, shippingCity: true, shippingRegion: true,
   shippingPostalCode: true, shippingCountry: true,
   paymentTermId: true, creditLimit: true, notes: true, isActive: true, createdAt: true,
+  agreementDate: true, balanceDate: true, balanceTime: true, reminderDays: true,
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
 } satisfies Prisma.CustomerSelect
+
+const CUSTOMER_FILE_SELECT = {
+  id: true, kind: true, originalName: true, contentType: true, byteSize: true, createdAt: true,
+} satisfies Prisma.CustomerFileSelect
 
 const VENDOR_SELECT = {
   id: true, displayName: true, companyName: true, firstName: true, lastName: true,
@@ -60,6 +66,8 @@ const CONTACT_ORDER = <T extends { displayName?: unknown }>(sort: string | undef
       return [{ phone: dir }, { displayName: 'asc' }] as T[]
     case 'company':
       return [{ companyName: dir }, { displayName: 'asc' }] as T[]
+    case 'balance':
+      return undefined
     default:
       return undefined
   }
@@ -68,22 +76,55 @@ const CONTACT_ORDER = <T extends { displayName?: unknown }>(sort: string | undef
 export async function listCustomers(
   ctx: OrgContext,
   query: ListQuery,
-  options: { includeInactive?: boolean; sort?: string; dir?: 'asc' | 'desc' } = {},
+  options: { includeInactive?: boolean; sort?: string; dir?: 'asc' | 'desc'; ids?: string[] } = {},
 ) {
   const where: Prisma.CustomerWhereInput = {
     orgId: ctx.orgId,
     ...(options.includeInactive ? {} : { isActive: true }),
+    ...(options.ids ? { id: { in: options.ids } } : {}),
     ...(query.q ? { OR: searchTerms(query.q) } : {}),
+  }
+
+  const order =
+    CONTACT_ORDER<Prisma.CustomerOrderByWithRelationInput>(options.sort, options.dir ?? 'asc') ?? [
+      { displayName: 'asc' },
+    ]
+
+  // Open balance lives on the ledger, not on the customer row, so a balance
+  // sort has to read every matching balance and only then take the page.
+  if (options.sort === 'balance') {
+    const people = await db.customer.findMany({ where, select: { id: true } })
+    const balances = await subledgerBalances(db, ctx, 'customer', people.map((person) => person.id))
+    const direction = options.dir === 'desc' ? -1 : 1
+    const ordered = people
+      .map((person) => ({ id: person.id, balance: balances.get(person.id) ?? new Decimal(0) }))
+      .sort((a, b) => a.balance.comparedTo(b.balance) * direction)
+    const { skip, take } = paginate(query)
+    const slice = ordered.slice(skip, skip + take)
+    const found = slice.length
+      ? await db.customer.findMany({
+          where: { id: { in: slice.map((person) => person.id) } },
+          select: CUSTOMER_SELECT,
+        })
+      : []
+    const byId = new Map(found.map((row) => [row.id, row]))
+    return paged(
+      slice.flatMap((person) => {
+        const row = byId.get(person.id)
+        return row
+          ? [{ ...presentCustomer(row), balance: toMoneyString(person.balance, 2) }]
+          : []
+      }),
+      people.length,
+      query,
+    )
   }
 
   const [rows, total] = await Promise.all([
     db.customer.findMany({
       where,
       select: CUSTOMER_SELECT,
-      orderBy:
-        CONTACT_ORDER<Prisma.CustomerOrderByWithRelationInput>(options.sort, options.dir ?? 'asc') ?? [
-          { displayName: 'asc' },
-        ],
+      orderBy: order,
       ...paginate(query),
     }),
     db.customer.count({ where }),
@@ -93,8 +134,7 @@ export async function listCustomers(
 
   return paged(
     rows.map((row) => ({
-      ...row,
-      creditLimit: row.creditLimit?.toString() ?? null,
+      ...presentCustomer(row),
       balance: toMoneyString(balances.get(row.id) ?? 0, 2),
     })),
     total,
@@ -102,14 +142,30 @@ export async function listCustomers(
   )
 }
 
+/** Vendors who still have an accounts-payable balance. Used before pagination so the filter is the whole list. */
+export async function vendorIdsWithBalance(ctx: OrgContext): Promise<string[]> {
+  const people = await db.vendor.findMany({
+    where: { orgId: ctx.orgId, isActive: true },
+    select: { id: true },
+  })
+  const balances = await subledgerBalances(
+    db,
+    ctx,
+    'vendor',
+    people.map((person) => person.id),
+  )
+  return [...balances.entries()].filter(([, amount]) => !amount.isZero()).map(([id]) => id)
+}
+
 export async function listVendors(
   ctx: OrgContext,
   query: ListQuery,
-  options: { includeInactive?: boolean; sort?: string; dir?: 'asc' | 'desc' } = {},
+  options: { includeInactive?: boolean; sort?: string; dir?: 'asc' | 'desc'; ids?: string[] } = {},
 ) {
   const where: Prisma.VendorWhereInput = {
     orgId: ctx.orgId,
     ...(options.includeInactive ? {} : { isActive: true }),
+    ...(options.ids ? { id: { in: options.ids } } : {}),
     ...(query.q ? { OR: searchTerms(query.q) } : {}),
   }
 
@@ -138,14 +194,16 @@ export async function listVendors(
 export async function getCustomer(ctx: OrgContext, id: string) {
   const customer = await db.customer.findFirst({
     where: { id, orgId: ctx.orgId },
-    select: CUSTOMER_SELECT,
+    select: {
+      ...CUSTOMER_SELECT,
+      files: { select: CUSTOMER_FILE_SELECT, orderBy: { createdAt: 'asc' as const } },
+    },
   })
   if (!customer) throw notFound('Customer')
 
   const balances = await subledgerBalances(db, ctx, 'customer', [id])
   return {
-    ...customer,
-    creditLimit: customer.creditLimit?.toString() ?? null,
+    ...presentCustomer(customer),
     balance: toMoneyString(balances.get(id) ?? 0, 2),
   }
 }
@@ -176,6 +234,9 @@ export async function subledgerBalances(
 ): Promise<Map<string, Decimal>> {
   if (ids.length === 0) return new Map()
 
+  // Only the control account moves what a contact owes. A name on the bank
+  // line is who the cash was with; counting it as well would cancel the
+  // receivable or payable and the balance would never change.
   const rows =
     side === 'customer'
       ? await client.$queryRaw<{ id: string; debit: string; credit: string }[]>`
@@ -184,8 +245,10 @@ export async function subledgerBalances(
                  COALESCE(SUM(l.credit), 0) AS credit
             FROM journal_lines l
             JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
+            JOIN ledger_accounts a ON a.id = l."accountId"
            WHERE l."orgId" = ${ctx.orgId}
              AND l."customerId" = ANY(${ids})
+             AND a.subtype::text = 'ACCOUNTS_RECEIVABLE'
            GROUP BY l."customerId"
         `
       : await client.$queryRaw<{ id: string; debit: string; credit: string }[]>`
@@ -194,8 +257,10 @@ export async function subledgerBalances(
                  COALESCE(SUM(l.credit), 0) AS credit
             FROM journal_lines l
             JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
+            JOIN ledger_accounts a ON a.id = l."accountId"
            WHERE l."orgId" = ${ctx.orgId}
              AND l."vendorId" = ANY(${ids})
+             AND a.subtype::text = 'ACCOUNTS_PAYABLE'
            GROUP BY l."vendorId"
         `
 
@@ -229,6 +294,10 @@ export async function createCustomer(ctx: OrgContext, input: CustomerInput) {
         shippingPostalCode: input.shippingPostalCode ?? null,
         shippingCountry: input.shippingCountry ?? null,
         creditLimit: input.creditLimit ?? null,
+        agreementDate: input.agreementDate ? toDate(input.agreementDate) : null,
+        balanceDate: input.openingBalanceDate ? toDate(input.openingBalanceDate) : null,
+        balanceTime: input.balanceTime ?? null,
+        reminderDays: input.reminderDays ?? null,
       },
       select: { id: true, displayName: true },
     })
@@ -296,6 +365,10 @@ export async function updateCustomer(ctx: OrgContext, input: CustomerInput & { i
         shippingPostalCode: input.shippingPostalCode ?? null,
         shippingCountry: input.shippingCountry ?? null,
         creditLimit: input.creditLimit ?? null,
+        agreementDate: input.agreementDate ? toDate(input.agreementDate) : null,
+        balanceDate: input.openingBalanceDate ? toDate(input.openingBalanceDate) : null,
+        balanceTime: input.balanceTime ?? null,
+        reminderDays: input.reminderDays ?? null,
       },
       select: { id: true, displayName: true },
     })
@@ -419,7 +492,7 @@ async function postOpeningBalance(
   side: Side,
   id: string,
   name: string,
-  input: { openingBalance?: string | null; openingBalanceDate?: string | null },
+  input: { openingBalance?: string | null; openingBalanceDate?: string | null; balanceTime?: string | null },
 ) {
   if (!input.openingBalance) return
   const amount = new Decimal(input.openingBalance)
@@ -442,7 +515,7 @@ async function postOpeningBalance(
 
   await postJournal(tx, ctx, {
     date,
-    memo: `Opening balance — ${name}`,
+    memo: input.balanceTime ? `Opening balance — ${name} (${input.balanceTime})` : `Opening balance — ${name}`,
     sourceType: 'OPENING_BALANCE',
     sourceId: id,
     lines:
@@ -459,6 +532,95 @@ async function postOpeningBalance(
 }
 
 /* --- Helpers -------------------------------------------------------------- */
+
+type PresentedFile = {
+  id: string
+  kind: 'PHOTO' | 'AGREEMENT'
+  originalName: string
+  contentType: string
+  byteSize: number
+  createdAt: Date
+}
+
+/** Customers whose 3, 5, or 7 day warning has started, and who still owe a balance. */
+export async function listBalanceAlerts(ctx: OrgContext): Promise<BalanceAlert[]> {
+  const people = await db.customer.findMany({
+    where: { orgId: ctx.orgId, isActive: true, reminderDays: { in: [3, 5, 7] } },
+    select: {
+      id: true,
+      displayName: true,
+      balanceDate: true,
+      agreementDate: true,
+      balanceTime: true,
+      reminderDays: true,
+    },
+  })
+
+  const now = Date.now()
+  const zone = ctx.organization.timeZone
+  const due = people.flatMap((person) => {
+    const date = person.balanceDate ?? person.agreementDate
+    if (!date || person.reminderDays == null) return []
+    const moment = balanceMoment(toCalendarDate(date), person.balanceTime, zone)
+    const kind = balanceAlertKind(now, moment.getTime(), person.reminderDays)
+    if (kind === 'waiting') return []
+    const when = person.balanceTime
+      ? `${formatDate(toCalendarDate(date))} ${person.balanceTime}`
+      : formatDate(toCalendarDate(date))
+    return [{ id: person.id, name: person.displayName, kind, when, reminderDays: person.reminderDays }]
+  })
+  if (due.length === 0) return []
+
+  const balances = await subledgerBalances(
+    db,
+    ctx,
+    'customer',
+    due.map((person) => person.id),
+  )
+
+  return due
+    .flatMap((person) => {
+      const amount = balances.get(person.id) ?? new Decimal(0)
+      if (!amount.greaterThan('0.005')) return []
+      return [
+        {
+          customerId: person.id,
+          name: person.name,
+          amount: formatMoney(amount, ctx.organization.baseCurrency),
+          kind: person.kind,
+          when: person.when,
+          reminderDays: person.reminderDays,
+        },
+      ]
+    })
+    .sort((a, b) => Number(b.kind === 'reached') - Number(a.kind === 'reached') || a.when.localeCompare(b.when))
+    .slice(0, 20)
+}
+
+function presentCustomer<
+  T extends {
+    creditLimit: { toString(): string } | null
+    agreementDate: Date | null
+    balanceDate: Date | null
+    files?: PresentedFile[]
+  },
+>(row: T) {
+  const { files, ...rest } = row
+  return {
+    ...rest,
+    creditLimit: row.creditLimit?.toString() ?? null,
+    agreementDate: row.agreementDate ? toCalendarDate(row.agreementDate) : null,
+    balanceDate: row.balanceDate ? toCalendarDate(row.balanceDate) : null,
+    files: (files ?? []).map((file) => ({
+      id: file.id,
+      kind: file.kind,
+      originalName: file.originalName,
+      contentType: file.contentType,
+      byteSize: file.byteSize,
+      createdAt: file.createdAt.toISOString(),
+    })),
+  }
+}
 
 function searchTerms(q: string) {
   return [

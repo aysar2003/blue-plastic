@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
-import { calendarDate, cuid, moneyString, optionalText } from './common'
+import { settleNumberInput } from '@/lib/money'
+import { calculatedDecimal, calendarDate, chosenNumber, cuid, moneyString, optionalText } from './common'
 
 const optionalId = z
   .union([cuid, z.literal('')])
@@ -19,25 +20,25 @@ export const purchaseLineSchema = z.object({
   /** Where the cost lands. Required unless an item supplies one. */
   expenseAccountId: optionalId,
   description: optionalText(1000),
-  quantity: z
-    .string()
-    .trim()
-    .regex(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity')
+  quantity: calculatedDecimal(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity')
     .refine((v) => Number(v) > 0, 'Quantity must be more than zero')
     .default('1'),
-  unitPrice: z.union([z.string().trim().regex(/^\d{1,15}(\.\d{1,4})?$/, 'Enter an amount'), z.literal('')]).default(''),
+  unitPrice: z.union([z.literal(''), calculatedDecimal(/^\d{1,15}(\.\d{1,4})?$/, 'Enter an amount')]).default(''),
   discountPercent: z
     .union([
-      z.string().trim().regex(/^\d{1,3}(\.\d{1,4})?$/).refine((v) => Number(v) <= 100, 'At most 100%'),
       z.literal(''),
+      calculatedDecimal(/^\d{1,3}(\.\d{1,4})?$/, 'Enter a percent').refine((v) => Number(v) <= 100, 'At most 100%'),
     ])
     .transform((v) => (v === '' ? null : v))
     .nullable()
     .optional(),
   taxCodeId: optionalId,
+  /** The store this line is received into. Blank means the office when one exists. */
+  storeId: optionalId,
 })
 
 export const purchaseDocumentSchema = z.object({
+  number: chosenNumber,
   vendorId: cuid,
   date: calendarDate,
   paymentTermId: optionalId,
@@ -54,6 +55,7 @@ export type PurchaseDocumentInput = z.infer<typeof purchaseDocumentSchema>
 export const convertOrderSchema = z.object({ id: cuid, date: calendarDate })
 
 export const billPaymentSchema = z.object({
+  number: chosenNumber,
   vendorId: cuid,
   date: calendarDate,
   amount: moneyString.refine((v) => Number(v) > 0, 'Enter an amount greater than zero'),
@@ -92,8 +94,14 @@ export const receiveOrderSchema = z.object({
         quantity: z
           .string()
           .trim()
-          .regex(/^\d{0,12}(\.\d{1,4})?$/, 'Enter a quantity')
-          .transform((value) => (value === '' || value === '.' ? '0' : value)),
+          .transform((value, ctx) => {
+            const next = settleNumberInput(value) ?? value
+            if (!/^\d{0,12}(\.\d{1,4})?$/.test(next)) {
+              ctx.addIssue({ code: 'custom', message: 'Enter a quantity' })
+              return z.NEVER
+            }
+            return next === '' || next === '.' ? '0' : next
+          }),
       }),
     )
     .min(1, 'Enter a quantity against at least one line')

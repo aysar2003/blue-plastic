@@ -1,13 +1,12 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { ArrowLeftIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { BankFeed } from '@/components/banking/bank-feed'
 import { StatementWorkbench } from '@/components/banking/statement-workbench'
-import { buttonVariants } from '@/components/ui/button'
 import { requireOrgContext } from '@/server/auth/context'
 import * as bankingService from '@/server/services/banking.service'
-import { listImported, STATEMENT_COLUMNS } from '@/server/services/statement-import.service'
+import * as feedService from '@/server/services/bank-feed.service'
+import { STATEMENT_COLUMNS } from '@/server/services/statement-import.service'
 
 export const metadata: Metadata = { title: 'Import statement' }
 
@@ -24,35 +23,36 @@ export default async function ImportPage({
   )
 
   const accountId = typeof params.account === 'string' ? params.account : accounts[0]?.id
-  const imported = accountId ? await listImported(ctx, accountId) : []
+  const feed = accountId ? await feedService.feedPage(ctx, accountId) : null
 
   return (
     <>
-      <Link href="/banking" className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}>
-        <ArrowLeftIcon /> Banking
-      </Link>
 
       <PageHeader
         title="Bank statement"
-        description="An imported line is a claim by the bank, not an entry in the books. Nothing here touches the ledger until you match it to something already posted."
+        description="An imported line stays off the ledger until you post it or match it. Reconciliation is unchanged: a cleared line stays cleared until that reconciliation is undone."
       />
 
       <StatementWorkbench
         accounts={accounts.map((a) => ({ id: a.id, label: `${a.code} ${a.name}` }))}
         accountId={accountId ?? ''}
         columns={STATEMENT_COLUMNS}
-        currency={ctx.organization.baseCurrency}
-        transactions={imported.map((row) => ({
-          id: row.id,
-          date: row.date.toISOString(),
-          description: row.description,
-          reference: row.reference,
-          amount: row.amount,
-          status: row.status,
-          matchedTo: row.matchedJournalLine?.journal.journalNumber ?? null,
-          matchedJournalId: row.matchedJournalLine?.journal.id ?? null,
-        }))}
       />
+
+      {feed && accountId ? (
+        <div className="mt-6">
+          <BankFeed
+            accountId={accountId}
+            currency={ctx.organization.baseCurrency}
+            lines={feed.lines}
+            categories={feed.categories}
+            vendors={feed.vendors}
+            customers={feed.customers}
+            invoices={feed.invoices}
+            bills={feed.bills}
+          />
+        </div>
+      ) : null}
     </>
   )
 }

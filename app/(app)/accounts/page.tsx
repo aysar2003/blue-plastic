@@ -5,6 +5,7 @@ import { BookOpenIcon } from 'lucide-react'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { Pagination } from '@/components/data/pagination'
+import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { SearchInput } from '@/components/data/search-input'
 import { TableToolbar } from '@/components/data/table-toolbar'
 import { SignedMoney } from '@/components/data/signed-money'
@@ -17,17 +18,18 @@ import {
   ACCOUNT_TYPE_LABELS,
   ACCOUNT_TYPE_ORDER,
 } from '@/lib/accounting-labels'
+import type { AccountType } from '@prisma/client'
 import { today } from '@/lib/date'
 import { Decimal } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import * as accountService from '@/server/services/account.service'
-import { AccountRowActions } from './account-row-actions'
+import { AccountTableRow } from './account-row-actions'
 import { NewAccountButton, type ParentOption } from './account-dialog'
+import { ImportChartButton } from './import-chart-button'
 import { InstallChartButton } from './install-chart-button'
 
 export const metadata: Metadata = { title: 'Chart of accounts' }
 
-const PAGE_SIZE = 25
 const SORTABLE = ['code', 'name', 'type', 'subtype', 'balance'] as const
 
 export default async function AccountsPage({
@@ -39,14 +41,20 @@ export default async function AccountsPage({
   const params = await searchParams
   const q = typeof params.q === 'string' ? params.q : undefined
   const showArchived = params.archived === '1'
+  const typeParam = typeof params.type === 'string' ? params.type : ''
+  const typeFilter = (ACCOUNT_TYPE_ORDER as readonly string[]).includes(typeParam)
+    ? (typeParam as AccountType)
+    : undefined
   const sort = readSort(params, SORTABLE, { sort: 'code', dir: 'asc' })
-  const page = Math.max(1, Number(params.page) || 1)
 
   const accounts = await accountService.list(ctx, { q, includeInactive: showArchived })
 
   const canCreate = ctx.permissions.has('account:create')
   const canEdit = ctx.permissions.has('account:update')
   const canArchive = ctx.permissions.has('account:archive')
+  const canReport = ctx.permissions.has('report:read')
+  const canReconcile = ctx.permissions.has('bank:reconcile')
+  const asOf = today(ctx.organization.timeZone)
   const currency = ctx.organization.baseCurrency
 
   const parents: ParentOption[] = accounts.map((account) => ({
@@ -78,8 +86,20 @@ export default async function AccountsPage({
   // account numbers only sort correctly *within* a type.
   const typeRank = new Map(ACCOUNT_TYPE_ORDER.map((type, index) => [type, index]))
   const direction = sort.dir === 'asc' ? 1 : -1
+  const statement =
+    params.statement === 'balance' || params.statement === 'profit' ? params.statement : ''
+  const chart = accounts.filter((account) => {
+    if (typeFilter && account.type !== typeFilter) return false
+    if (statement === 'balance') return account.type === 'ASSET' || account.type === 'LIABILITY' || account.type === 'EQUITY'
+    if (statement === 'profit') return account.type === 'REVENUE' || account.type === 'EXPENSE'
+    return true
+  })
+  const typeCounts = new Map<AccountType, number>()
+  for (const account of accounts) {
+    typeCounts.set(account.type, (typeCounts.get(account.type) ?? 0) + 1)
+  }
 
-  const sorted = [...accounts].sort((a, b) => {
+  const sorted = [...chart].sort((a, b) => {
     switch (sort.sort) {
       case 'name':
         return direction * a.name.localeCompare(b.name)
@@ -104,9 +124,7 @@ export default async function AccountsPage({
   })
 
   const total = sorted.length
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const current = Math.min(page, pageCount)
-  const rows = sorted.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE)
+  const rows = sorted
 
   // Indentation shows the parent/child structure, which only reads correctly in
   // the chart's own order. Sorted by balance, a child three rows from its parent
@@ -116,25 +134,69 @@ export default async function AccountsPage({
   const linkParams = {
     q,
     archived: showArchived ? '1' : undefined,
+    type: typeFilter,
     sort: sort.sort,
     dir: sort.dir,
+  }
+
+  const statementHref = (value: '' | 'balance' | 'profit') => {
+    const search = new URLSearchParams()
+    if (q) search.set('q', q)
+    if (showArchived) search.set('archived', '1')
+    if (typeFilter) search.set('type', typeFilter)
+    if (value) search.set('statement', value)
+    const query = search.toString()
+    return query ? `/accounts?${query}` : '/accounts'
+  }
+
+  const chipHref = (type?: AccountType) => {
+    const search = new URLSearchParams()
+    if (q) search.set('q', q)
+    if (showArchived) search.set('archived', '1')
+    if (type) search.set('type', type)
+    const query = search.toString()
+    return query ? `/accounts?${query}` : '/accounts'
   }
 
   return (
     <>
       <PageHeader
         title="Chart of accounts"
-        description={`Balances as at ${today(ctx.organization.timeZone)}, shown on each account's natural side.`}
+        description={`Balances as at ${asOf}, shown on each account's natural side. Right-click an account for its register, its report, and the actions the books allow.`}
         actions={
           canCreate ? (
-            <NewAccountButton
-              parents={parents}
-              today={today(ctx.organization.timeZone)}
-              currency={currency}
-            />
+            <div className="flex flex-wrap gap-2">
+              <ImportChartButton />
+              <NewAccountButton
+                parents={parents}
+                today={today(ctx.organization.timeZone)}
+                currency={currency}
+              />
+            </div>
           ) : undefined
         }
       />
+
+      <div className="mb-2 flex flex-wrap gap-1">
+        <TypeChip href={statementHref('')} active={!statement} label="Whole chart" />
+        <TypeChip href={statementHref('balance')} active={statement === 'balance'} label="Balance sheet" />
+        <TypeChip href={statementHref('profit')} active={statement === 'profit'} label="Profit and loss" />
+      </div>
+      <div className="mb-3 flex flex-wrap gap-1">
+        <TypeChip href={chipHref()} active={!typeFilter} label={`All · ${accounts.length}`} />
+        {ACCOUNT_TYPE_ORDER.map((type) => (
+          <TypeChip
+            key={type}
+            href={chipHref(type)}
+            active={typeFilter === type}
+            label={`${ACCOUNT_TYPE_LABELS[type]} · ${typeCounts.get(type) ?? 0}`}
+          />
+        ))}
+      </div>
+      <p className="mb-3 text-xs text-muted-foreground print:hidden">
+        Click a name to open its register. Right-click for the report, edit, and archive. Type a few
+        letters in the search and the list narrows.
+      </p>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <SearchInput placeholder="Search by number or name" />
@@ -158,10 +220,10 @@ export default async function AccountsPage({
       </div>
 
       {total === 0 ? (
-        <EmptyState icon={BookOpenIcon} title="No accounts match that search" />
+        <EmptyState icon={BookOpenIcon} title="No accounts in this view" />
       ) : (
         <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
+          <ScrollSheet>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -211,7 +273,28 @@ export default async function AccountsPage({
               </TableHeader>
               <TableBody>
                 {rows.map((account) => (
-                  <TableRow key={account.id} className={account.isActive ? undefined : 'opacity-55'}>
+                  <AccountTableRow
+                    key={account.id}
+                    className={account.isActive ? undefined : 'opacity-55'}
+                    account={{
+                      id: account.id,
+                      code: account.code,
+                      name: account.name,
+                      description: account.description,
+                      detailType: account.detailType,
+                      type: account.type,
+                      subtype: account.subtype,
+                      parentId: account.parentId,
+                      isSystem: account.isSystem,
+                      isActive: account.isActive,
+                    }}
+                    parents={parents}
+                    canEdit={canEdit}
+                    canArchive={canArchive}
+                    canReport={canReport}
+                    canReconcile={canReconcile}
+                    today={asOf}
+                  >
                     <TableCell className="tabular text-muted-foreground">{account.code}</TableCell>
                     <TableCell>
                       <span
@@ -250,41 +333,31 @@ export default async function AccountsPage({
                         <SignedMoney amount={account.balance} currency={currency} />
                       )}
                     </TableCell>
-                    <TableCell>
-                      {canEdit || canArchive ? (
-                        <AccountRowActions
-                          account={{
-                            id: account.id,
-                            code: account.code,
-                            name: account.name,
-                            description: account.description,
-                            type: account.type,
-                            parentId: account.parentId,
-                            isSystem: account.isSystem,
-                            isActive: account.isActive,
-                          }}
-                          parents={parents}
-                          canEdit={canEdit}
-                          canArchive={canArchive}
-                        />
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
+                  </AccountTableRow>
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </ScrollSheet>
 
-          <Pagination
-            page={current}
-            pageCount={pageCount}
-            total={total}
-            pageSize={PAGE_SIZE}
-            basePath="/accounts"
-            params={linkParams}
-          />
+          <Pagination total={total} />
         </Card>
       )}
     </>
+  )
+}
+
+function TypeChip({ href, active, label }: { href: string; active: boolean; label: string }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? 'page' : undefined}
+      className={
+        active
+          ? 'rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground'
+          : 'rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+      }
+    >
+      {label}
+    </Link>
   )
 }

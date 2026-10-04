@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeftIcon, PencilIcon, PrinterIcon } from 'lucide-react'
+import { PencilIcon, PrinterIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { RecordedBy } from '@/components/data/recorded-by'
 import { ConvertEstimateButton } from '@/components/sales/document-actions'
 import { DeleteButton } from '@/components/data/delete-record'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +15,7 @@ import { formatDate, toCalendarDate, today } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { bySlug, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
+import { trailFor } from '@/server/services/audit.service'
 import * as salesService from '@/server/services/sales.service'
 
 export const metadata: Metadata = { title: 'Document' }
@@ -30,6 +32,7 @@ export default async function SalesDocumentPage({
   const ctx = await requireOrgContext('invoice:read')
   const document = await salesService.get(ctx, id).catch(() => null)
   if (!document) notFound()
+  const trail = await trailFor(ctx, document.id)
 
   const currency = ctx.organization.baseCurrency
   // A draft can now be deleted, so the control shows for it too — what it does
@@ -45,16 +48,11 @@ export default async function SalesDocumentPage({
     config.type === 'ESTIMATE' &&
     ctx.permissions.has('invoice:create') &&
     !document.convertedTo &&
-    document.status !== 'VOID'
+    document.status !== 'VOID' &&
+    document.status !== 'DECLINED'
 
   return (
     <>
-      <Link
-        href={`/sales/${config.slug}`}
-        className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}
-      >
-        <ArrowLeftIcon /> {config.plural}
-      </Link>
 
       <PageHeader
         title={`${config.singular} ${document.number}`}
@@ -93,6 +91,8 @@ export default async function SalesDocumentPage({
           </>
         }
       />
+
+      <RecordedBy trail={trail} timeZone={ctx.organization.timeZone} />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Detail label="Status">

@@ -50,9 +50,7 @@ export default async function SalesHubPage() {
     <AppLauncher
       eyebrow={ctx.organization.name}
       title="Sales"
-      subtitle="Invoices, quotations, receipts, customers and the figures that follow them."
-      backHref="/dashboard"
-      backLabel="All apps"
+      subtitle="Invoices, quotations, receipts, customers and the figures that follow them."
       apps={apps}
       insights={[
         {

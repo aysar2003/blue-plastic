@@ -28,6 +28,7 @@ export type AccountFormValues = {
   code: string
   name: string
   description: string | null
+  detailType: string | null
   type: AccountType
   parentId: string | null
   isSystem: boolean
@@ -196,6 +197,15 @@ function AccountDialog({
                 </option>
               ))}
             </NativeSelect>
+          </Field>
+
+          <Field
+            name="detailType"
+            label="Further detail"
+            hint="A finer name under the detail type, such as Sales of product income. Reports fold accounts that share it."
+            error={e?.detailType}
+          >
+            <Input {...fieldProps('detailType', e?.detailType)} defaultValue={account?.detailType ?? ''} />
           </Field>
 
           <Field name="description" label="Description" error={e?.description}>

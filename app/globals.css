@@ -32,95 +32,271 @@
  * amounts stay tabular, and the palette keeps its own colour rather than copying
  * a brand that belongs to someone else.
  */
-:root {
-  /* 4px. Panels get it; controls get a touch less; pills get all the way. */
+:root,
+html.ocean {
   --radius: 0.25rem;
-
-  /* The ground the application sits on, and the panels that sit on it. */
-  --background: oklch(0.975 0.002 285);
-  --foreground: oklch(0.28 0.008 285);
-
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.28 0.008 285);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.28 0.008 285);
-
-  /* The one accent. Deep plum: present enough to find, quiet enough to live with. */
-  --primary: oklch(0.44 0.068 340);
-  --primary-foreground: oklch(0.99 0 0);
-
-  --secondary: oklch(0.965 0.003 285);
-  --secondary-foreground: oklch(0.33 0.01 285);
-
-  --muted: oklch(0.965 0.003 285);
-  --muted-foreground: oklch(0.55 0.012 285);
-
-  --accent: oklch(0.955 0.008 340);
-  --accent-foreground: oklch(0.34 0.045 340);
-
-  --destructive: oklch(0.55 0.19 27);
-  --destructive-foreground: oklch(0.99 0 0);
-
-  /* Money is right or wrong, so success and warning are readable rather than bright. */
-  --success: oklch(0.5 0.11 160);
-  --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.68 0.13 70);
-  --warning-foreground: oklch(0.26 0.03 70);
-
-  --border: oklch(0.905 0.004 285);
-  --input: oklch(0.885 0.005 285);
-  --ring: oklch(0.44 0.068 340);
-
-  /*
-   * The sidebar is a panel, not a wall. Odoo's own is white in the web client
-   * and dark only in the app switcher; a dark rail beside a white page is a
-   * strong statement about which half matters, and here the page matters.
-   */
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.34 0.008 285);
-  --sidebar-accent: oklch(0.955 0.01 340);
-  --sidebar-accent-foreground: oklch(0.38 0.06 340);
-  --sidebar-border: oklch(0.9 0.004 285);
+  --background: #e4f1f8;
+  --foreground: #14324a;
+  --card: #f4fafd;
+  --card-foreground: #14324a;
+  --popover: #f4fafd;
+  --popover-foreground: #14324a;
+  --primary: #0b4f6c;
+  --primary-foreground: #f4fafd;
+  --secondary: #d3e6f2;
+  --secondary-foreground: #1e3a4c;
+  --muted: #d3e6f2;
+  --muted-foreground: #3d5a6e;
+  --accent: #c5dff0;
+  --accent-foreground: #0b4f6c;
+  --destructive: #be123c;
+  --destructive-foreground: #fff7f8;
+  --success: #0f766e;
+  --success-foreground: #f0fdfa;
+  --warning: #b45309;
+  --warning-foreground: #fffbeb;
+  --border: #b7d0e0;
+  --input: #a9c6d8;
+  --ring: #0b4f6c;
+  --sidebar: #f4fafd;
+  --sidebar-foreground: #14324a;
+  --sidebar-accent: #d3e6f2;
+  --sidebar-accent-foreground: #0b4f6c;
+  --sidebar-border: #b7d0e0;
+  --glow: rgba(11, 79, 108, 0.28);
+  --stripe: #d7ebf6;
+  --band: #c5dff0;
 }
 
+html.lagoon {
+  --background: #dff6f2;
+  --foreground: #134e4a;
+  --card: #f3fbf9;
+  --card-foreground: #134e4a;
+  --popover: #f3fbf9;
+  --popover-foreground: #134e4a;
+  --primary: #0f766e;
+  --primary-foreground: #f0fdfa;
+  --secondary: #c7ebe4;
+  --secondary-foreground: #134e4a;
+  --muted: #c7ebe4;
+  --muted-foreground: #3f6f68;
+  --accent: #b7e4dc;
+  --accent-foreground: #0f766e;
+  --border: #a7d5cc;
+  --input: #93c7bd;
+  --ring: #0f766e;
+  --sidebar: #f3fbf9;
+  --sidebar-foreground: #134e4a;
+  --sidebar-accent: #c7ebe4;
+  --sidebar-accent-foreground: #0f766e;
+  --sidebar-border: #a7d5cc;
+  --glow: rgba(15, 118, 110, 0.28);
+  --stripe: #d5f3ee;
+  --band: #b7e4dc;
+}
+
+html.forest {
+  --background: #e5f6ea;
+  --foreground: #14532d;
+  --card: #f4fbf6;
+  --card-foreground: #14532d;
+  --popover: #f4fbf6;
+  --popover-foreground: #14532d;
+  --primary: #166534;
+  --primary-foreground: #f0fdf4;
+  --secondary: #cfeedd;
+  --secondary-foreground: #14532d;
+  --muted: #cfeedd;
+  --muted-foreground: #3f6b4e;
+  --accent: #b7e4c7;
+  --accent-foreground: #166534;
+  --border: #a3d4b5;
+  --input: #8bc4a1;
+  --ring: #166534;
+  --sidebar: #f4fbf6;
+  --sidebar-foreground: #14532d;
+  --sidebar-accent: #cfeedd;
+  --sidebar-accent-foreground: #166534;
+  --sidebar-border: #a3d4b5;
+  --glow: rgba(22, 101, 52, 0.26);
+  --stripe: #dcf5e4;
+  --band: #b7e4c7;
+}
+
+html.amber {
+  --background: #fbf3df;
+  --foreground: #78350f;
+  --card: #fffaf0;
+  --card-foreground: #78350f;
+  --popover: #fffaf0;
+  --popover-foreground: #78350f;
+  --primary: #b45309;
+  --primary-foreground: #fffbeb;
+  --secondary: #f6e4c4;
+  --secondary-foreground: #78350f;
+  --muted: #f6e4c4;
+  --muted-foreground: #8a5a2b;
+  --accent: #f0d4a4;
+  --accent-foreground: #b45309;
+  --border: #e4c48a;
+  --input: #d7b36e;
+  --ring: #b45309;
+  --sidebar: #fffaf0;
+  --sidebar-foreground: #78350f;
+  --sidebar-accent: #f6e4c4;
+  --sidebar-accent-foreground: #b45309;
+  --sidebar-border: #e4c48a;
+  --glow: rgba(180, 83, 9, 0.24);
+  --stripe: #fdecc8;
+  --band: #f0d4a4;
+}
+
+html.violet {
+  --background: #f1eafb;
+  --foreground: #4c1d95;
+  --card: #faf7ff;
+  --card-foreground: #4c1d95;
+  --popover: #faf7ff;
+  --popover-foreground: #4c1d95;
+  --primary: #6d28d9;
+  --primary-foreground: #f5f3ff;
+  --secondary: #e4d8f7;
+  --secondary-foreground: #4c1d95;
+  --muted: #e4d8f7;
+  --muted-foreground: #6b538c;
+  --accent: #ddd0f5;
+  --accent-foreground: #6d28d9;
+  --border: #cbb6ea;
+  --input: #b89adf;
+  --ring: #6d28d9;
+  --sidebar: #faf7ff;
+  --sidebar-foreground: #4c1d95;
+  --sidebar-accent: #e4d8f7;
+  --sidebar-accent-foreground: #6d28d9;
+  --sidebar-border: #cbb6ea;
+  --glow: rgba(109, 40, 217, 0.24);
+  --stripe: #ede4fb;
+  --band: #ddd0f5;
+}
+
+html.rose {
+  --background: #fde8ee;
+  --foreground: #881337;
+  --card: #fff5f7;
+  --card-foreground: #881337;
+  --popover: #fff5f7;
+  --popover-foreground: #881337;
+  --primary: #be123c;
+  --primary-foreground: #fff1f2;
+  --secondary: #f8d0da;
+  --secondary-foreground: #881337;
+  --muted: #f8d0da;
+  --muted-foreground: #8f4a5c;
+  --accent: #f4c2ce;
+  --accent-foreground: #be123c;
+  --border: #e7a8b8;
+  --input: #da90a4;
+  --ring: #be123c;
+  --sidebar: #fff5f7;
+  --sidebar-foreground: #881337;
+  --sidebar-accent: #f8d0da;
+  --sidebar-accent-foreground: #be123c;
+  --sidebar-border: #e7a8b8;
+  --glow: rgba(190, 18, 60, 0.22);
+  --stripe: #fde2e8;
+  --band: #f4c2ce;
+}
+
+html.indigo {
+  --background: #e7ebfb;
+  --foreground: #1e1b4b;
+  --card: #f6f7ff;
+  --card-foreground: #1e1b4b;
+  --popover: #f6f7ff;
+  --popover-foreground: #1e1b4b;
+  --primary: #3730a3;
+  --primary-foreground: #eef2ff;
+  --secondary: #d4daf6;
+  --secondary-foreground: #1e1b4b;
+  --muted: #d4daf6;
+  --muted-foreground: #4c4a7a;
+  --accent: #c7d0f4;
+  --accent-foreground: #3730a3;
+  --border: #b4bde6;
+  --input: #9aa6dc;
+  --ring: #3730a3;
+  --sidebar: #f6f7ff;
+  --sidebar-foreground: #1e1b4b;
+  --sidebar-accent: #d4daf6;
+  --sidebar-accent-foreground: #3730a3;
+  --sidebar-border: #b4bde6;
+  --glow: rgba(55, 48, 163, 0.24);
+  --stripe: #e0e7ff;
+  --band: #c7d0f4;
+}
+
+html.sand {
+  --background: #f6eadc;
+  --foreground: #7c2d12;
+  --card: #fdf8f3;
+  --card-foreground: #7c2d12;
+  --popover: #fdf8f3;
+  --popover-foreground: #7c2d12;
+  --primary: #9a3412;
+  --primary-foreground: #fff7ed;
+  --secondary: #edd9c4;
+  --secondary-foreground: #7c2d12;
+  --muted: #edd9c4;
+  --muted-foreground: #8a5a40;
+  --accent: #e6cbb0;
+  --accent-foreground: #9a3412;
+  --border: #d7b89a;
+  --input: #c9a484;
+  --ring: #9a3412;
+  --sidebar: #fdf8f3;
+  --sidebar-foreground: #7c2d12;
+  --sidebar-accent: #edd9c4;
+  --sidebar-accent-foreground: #9a3412;
+  --sidebar-border: #d7b89a;
+  --glow: rgba(154, 52, 18, 0.22);
+  --stripe: #f3e6d4;
+  --band: #e6cbb0;
+}
+
+html.dark,
 .dark {
-  --background: oklch(0.19 0.006 285);
-  --foreground: oklch(0.94 0.003 285);
-
-  --card: oklch(0.235 0.007 285);
-  --card-foreground: oklch(0.94 0.003 285);
-  --popover: oklch(0.235 0.007 285);
-  --popover-foreground: oklch(0.94 0.003 285);
-
-  --primary: oklch(0.68 0.1 340);
-  --primary-foreground: oklch(0.18 0.02 340);
-
-  --secondary: oklch(0.29 0.008 285);
-  --secondary-foreground: oklch(0.94 0.003 285);
-
-  --muted: oklch(0.29 0.008 285);
-  --muted-foreground: oklch(0.7 0.01 285);
-
-  --accent: oklch(0.32 0.03 340);
-  --accent-foreground: oklch(0.95 0.01 340);
-
-  --destructive: oklch(0.63 0.18 25);
-  --destructive-foreground: oklch(0.18 0.02 25);
-
-  --success: oklch(0.65 0.12 160);
-  --success-foreground: oklch(0.18 0.02 160);
-  --warning: oklch(0.76 0.13 70);
-  --warning-foreground: oklch(0.19 0.02 70);
-
-  --border: oklch(1 0 0 / 11%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.62 0.09 340);
-
-  --sidebar: oklch(0.215 0.007 285);
-  --sidebar-foreground: oklch(0.9 0.004 285);
-  --sidebar-accent: oklch(0.3 0.03 340);
-  --sidebar-accent-foreground: oklch(0.95 0.01 340);
-  --sidebar-border: oklch(1 0 0 / 9%);
+  --background: #12202b;
+  --foreground: #e8f1f8;
+  --card: #1b2c3a;
+  --card-foreground: #e8f1f8;
+  --popover: #1b2c3a;
+  --popover-foreground: #e8f1f8;
+  --primary: #7dd3fc;
+  --primary-foreground: #082f49;
+  --secondary: #24384a;
+  --secondary-foreground: #e8f1f8;
+  --muted: #24384a;
+  --muted-foreground: #b7c9d6;
+  --accent: #1e4d66;
+  --accent-foreground: #e0f2fe;
+  --destructive: #fb7185;
+  --destructive-foreground: #4c0519;
+  --success: #5eead4;
+  --success-foreground: #042f2e;
+  --warning: #fbbf24;
+  --warning-foreground: #451a03;
+  --border: rgb(232 241 248 / 14%);
+  --input: rgb(232 241 248 / 20%);
+  --ring: #7dd3fc;
+  --sidebar: #162632;
+  --sidebar-foreground: #e8f1f8;
+  --sidebar-accent: #1e4d66;
+  --sidebar-accent-foreground: #e0f2fe;
+  --sidebar-border: rgb(232 241 248 / 12%);
+  --glow: rgba(125, 211, 252, 0.18);
+  --stripe: #1a3344;
+  --band: #1e4d66;
 }
 
 @theme inline {
@@ -233,74 +409,111 @@
 }
 
 /*
- * Apps home + Sales (hub and forms) share one light surface so moving from the
- * Sales dashboard into a document form does not change colour or mood.
+ * The shell uses the theme on <html>. It does not invent a second palette,
+ * so Settings recolours the hubs, the lists and the forms together.
  */
+/*
+ * The books follow the screen they were opened on.
+ * rem is rooted on html, so a small window draws the whole system smaller
+ * and a large window draws it larger, up to a comfortable cap.
+ */
+html:has(.app-surface) {
+  font-size: clamp(12.5px, 0.35vw + 10.5px, 18px);
+}
+
+@media print {
+  html:has(.app-surface) {
+    font-size: 11pt;
+  }
+}
+
+.app-surface,
 .sales-surface {
   color-scheme: light;
-  background-color: #f4f7fb;
-  color: #1e293b;
-
-  --background: #f4f7fb;
-  --foreground: #1e293b;
-  --card: #ffffff;
-  --card-foreground: #1e293b;
-  --popover: #ffffff;
-  --popover-foreground: #1e293b;
-  --primary: #0b4f6c;
-  --primary-foreground: #ffffff;
-  --secondary: #e8eef5;
-  --secondary-foreground: #334155;
-  --muted: #e8eef5;
-  --muted-foreground: #64748b;
-  --accent: #dbeafe;
-  --accent-foreground: #0b4f6c;
-  --destructive: #be123c;
-  --destructive-foreground: #ffffff;
-  --border: #d7e0ea;
-  --input: #c9d5e3;
-  --ring: #0b4f6c;
-  --success: #0f766e;
-  --success-foreground: #ffffff;
-  --warning: #b45309;
-  --warning-foreground: #ffffff;
+  background-color: var(--background);
+  color: var(--foreground);
   --radius: 0.75rem;
 }
 
+html.dark .app-surface,
+html.dark .sales-surface,
+.dark .app-surface,
+.dark .sales-surface {
+  color-scheme: dark;
+}
+
+.app-surface [data-slot='card'],
 .sales-surface [data-slot='card'] {
   border-radius: 1rem;
-  border-color: rgb(15 23 42 / 0.06);
-  background: #ffffff;
+  border-color: var(--border);
+  background: var(--card);
+  color: var(--card-foreground);
   box-shadow:
     0 1px 2px rgb(15 23 42 / 0.04),
     0 10px 24px -12px rgb(15 23 42 / 0.12);
 }
 
+.app-surface input,
+.app-surface textarea,
+.app-surface select,
+.app-surface [data-slot='input'],
+.app-surface [data-slot='native-select'],
 .sales-surface input,
 .sales-surface textarea,
 .sales-surface select,
 .sales-surface [data-slot='input'],
 .sales-surface [data-slot='native-select'] {
   border-radius: 0.65rem;
-  background: #ffffff;
-  border-color: #c9d5e3;
+  background: var(--card);
+  color: var(--foreground);
+  border-color: var(--input);
 }
 
+.app-surface button[data-slot='button'],
 .sales-surface button[data-slot='button'] {
   border-radius: 0.65rem;
 }
 
+.app-surface h1,
 .sales-surface h1 {
-  color: #0f172a;
   letter-spacing: -0.02em;
 }
 
-.sales-surface .border-b {
-  border-color: rgb(15 23 42 / 0.08);
+/* Report templates. Standard is the striped sheet; compact is the same sheet, tighter. */
+[data-report-root][data-template='standard'] table > thead,
+[data-report-root][data-template='compact'] table > thead {
+  background: #d5dde6;
 }
 
-.sales-surface .text-muted-foreground {
-  color: #64748b;
+[data-report-root][data-template='standard'] table > tbody > tr:nth-child(even) {
+  background-color: #c5dff3;
+}
+
+[data-report-root][data-template='standard'] table > tbody > tr[class*='bg-[#d5dde6]'],
+[data-report-root][data-template='standard'] table > tbody > tr[class*='bg-muted'] {
+  background-color: #d5dde6;
+}
+
+[data-report-root][data-template='compact'] :is(th, td) {
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+}
+
+.band-head {
+  background: var(--band);
+  color: var(--primary);
+}
+
+.band-alt {
+  background: var(--stripe);
+}
+
+.app-atmosphere-wash {
+  background: radial-gradient(120% 80% at 50% -10%, var(--glow) 0%, transparent 62%);
+}
+
+.app-atmosphere-blob {
+  background: var(--glow);
 }
 
 /*
@@ -308,14 +521,37 @@
  * which is also how a customer-facing PDF is produced, via the browser's own
  * "save as PDF", with no headless browser in the deployment.
  */
+/* The customer-facing invoice uses a named page so its margins stay tight
+ * while lists keep the wider margin above. Colours have to print: the navy
+ * table head and the corner marks are the document, not decoration. */
+.invoice-sheet {
+  page: invoice;
+}
+
+@page invoice {
+  margin: 10mm;
+}
+
 @media print {
   @page {
     margin: 18mm;
   }
 
+  .invoice-sheet,
+  .invoice-sheet * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body:has(.invoice-sheet) .company-print-letterhead,
+  body:has([data-report-root]) .company-print-letterhead {
+    display: none !important;
+  }
+
   aside,
   header,
   nav,
+  .app-atmosphere,
   [data-slot='toaster'],
   .print\:hidden {
     display: none !important;
@@ -360,4 +596,11 @@
   a[href]::after {
     content: '';
   }
+}
+
+/* The row the keyboard is on. Arrow keys and J / K set this; Enter opens it. */
+[data-kb-current='true'] {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
 }

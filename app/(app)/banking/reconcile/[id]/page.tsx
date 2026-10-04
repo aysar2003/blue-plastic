@@ -1,11 +1,8 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeftIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
 import { ReconcileView } from '@/components/banking/reconcile-view'
-import { buttonVariants } from '@/components/ui/button'
 import { formatDate, toCalendarDate } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import { get } from '@/server/services/reconciliation.service'
@@ -23,9 +20,6 @@ export default async function ReconcilePage({ params }: { params: Promise<{ id: 
 
   return (
     <>
-      <Link href="/banking" className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}>
-        <ArrowLeftIcon /> Banking
-      </Link>
 
       <PageHeader
         title={`Reconcile ${reconciliation.account.name}`}

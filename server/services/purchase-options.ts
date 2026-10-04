@@ -8,12 +8,42 @@ import { db, type Tx } from '@/server/db'
 import { selectableAccounts } from '@/server/services/account.service'
 import { ITEM_GROUPS } from '@/server/services/sales-options'
 
+function mailingAddress(vendor: {
+  billingLine1: string | null
+  billingLine2: string | null
+  billingCity: string | null
+  billingRegion: string | null
+  billingPostalCode: string | null
+  billingCountry: string | null
+}) {
+  const place = [vendor.billingCity, vendor.billingRegion, vendor.billingPostalCode]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(', ')
+  return [vendor.billingLine1, vendor.billingLine2, place, vendor.billingCountry]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
 /** Everything the bill form needs, in one round trip. */
 export async function loadPurchaseOptions(ctx: OrgContext) {
   const [vendors, items, taxCodes, chart, terms] = await Promise.all([
     db.vendor.findMany({
       where: { orgId: ctx.orgId, isActive: true },
-      select: { id: true, displayName: true, defaultExpenseAccountId: true },
+      select: {
+        id: true,
+        displayName: true,
+        email: true,
+        paymentTermId: true,
+        defaultExpenseAccountId: true,
+        billingLine1: true,
+        billingLine2: true,
+        billingCity: true,
+        billingRegion: true,
+        billingPostalCode: true,
+        billingCountry: true,
+      },
       orderBy: { displayName: 'asc' },
     }),
     // Tracked stock is the main thing a purchase document buys, so it has to be
@@ -50,6 +80,9 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
     vendors: vendors.map((vendor) => ({
       id: vendor.id,
       label: vendor.displayName,
+      email: vendor.email,
+      paymentTermId: vendor.paymentTermId,
+      mailingAddress: mailingAddress(vendor),
       defaultExpenseAccountId: vendor.defaultExpenseAccountId,
     })),
     items: items.map((item) => ({

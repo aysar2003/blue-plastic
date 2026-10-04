@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { readSettings, type SearchParams } from '@/app/(app)/reports/params'
 import { formatDate } from '@/lib/date'
+import { letterheadLines } from '@/lib/letterhead'
 import { PERIOD_LABELS } from '@/lib/report-periods'
 import { requireOrgContext, type OrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
@@ -65,7 +66,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ repo
       })
 
       const rows: CsvCell[][] = [
-        [ctx.organization.name],
+        ...letterheadLines(ctx.organization).map((line) => [line]),
         [fromCatalogue.title],
         [
           fromCatalogue.mode === 'asOf'
@@ -89,7 +90,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ repo
     }
 
     const heading = (title: string): CsvCell[][] => [
-      [ctx.organization.name],
+      ...letterheadLines(ctx.organization).map((line) => [line]),
       [title],
       [
         report === 'balance-sheet'

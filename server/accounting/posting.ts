@@ -7,7 +7,7 @@ import { writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import type { Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
-import { nextDocumentNumber } from '@/server/sequences'
+import { assignDocumentNumber, nextDocumentNumber, numberTaken } from '@/server/sequences'
 import { resolvePeriod } from './period'
 
 export type DraftLine = {
@@ -34,6 +34,8 @@ export type DraftJournal = {
    */
   reversalOfId?: string | null
   reversalReason?: string | null
+  /** Set only when someone typed the entry number. Other postings take the next one. */
+  journalNumber?: string | null
   lines: DraftLine[]
 }
 
@@ -137,7 +139,16 @@ export async function postJournal(
   }
 
   // 7. Number, allocated under a row lock so two concurrent posts cannot collide.
-  const journalNumber = await nextDocumentNumber(tx, ctx.orgId, 'JOURNAL')
+  const journalNumber = draft.journalNumber
+    ? await assignDocumentNumber(tx, ctx.orgId, 'JOURNAL', draft.journalNumber)
+    : await nextDocumentNumber(tx, ctx.orgId, 'JOURNAL')
+  if (draft.journalNumber) {
+    const clash = await tx.journal.findFirst({
+      where: { orgId: ctx.orgId, journalNumber },
+      select: { id: true },
+    })
+    if (clash) throw numberTaken()
+  }
 
   // 8. Write. The deferred balance trigger re-checks all of this at COMMIT.
   const journal = await tx.journal.create({

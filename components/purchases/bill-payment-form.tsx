@@ -9,6 +9,7 @@ import { idleState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
+import { LockedNumber } from '@/components/forms/locked-number'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { Button } from '@/components/ui/button'
@@ -74,17 +75,23 @@ export function BillPaymentForm({
   today,
   currency,
   loadPayables,
+  documentNumber,
+  initialVendorId,
 }: {
   vendors: Option[]
   paymentAccounts: AccountPickerOption[]
   today: string
   currency: string
   loadPayables: (vendorId: string) => Promise<Payables>
+  documentNumber: string
+  /** Set when a vendor page opened this form, so the vendor and their open bills load at once. */
+  initialVendorId?: string
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveBillPaymentForm, idleState)
 
-  const [vendorId, setVendorId] = useState('')
+  const [number, setNumber] = useState(documentNumber)
+  const [vendorId, setVendorId] = useState(initialVendorId ?? '')
   const [date, setDate] = useState(today)
   const [method, setMethod] = useState('BANK_TRANSFER')
   const [paymentAccountId, setPaymentAccountId] = useState(paymentAccounts[0]?.id ?? '')
@@ -97,6 +104,8 @@ export function BillPaymentForm({
   const [isLoading, startLoading] = useTransition()
   const [isApplyingCredit, startCreditApply] = useTransition()
   const handled = useRef(false)
+
+  useEffect(() => setNumber(documentNumber), [documentNumber])
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
@@ -114,6 +123,13 @@ export function BillPaymentForm({
       setBills(payables.bills)
       setCredits(payables.credits)
     })
+
+  useEffect(() => {
+    if (!initialVendorId) return
+    refresh(initialVendorId)
+    // The vendor page already chose who is being paid. Load their open bills once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const chooseVendor = (id: string) => {
     setVendorId(id)
@@ -161,6 +177,7 @@ export function BillPaymentForm({
   const overApplied = bills.some((bill) => amountFor(bill.id).greaterThan(new Decimal(bill.balance)))
 
   const payload = JSON.stringify({
+    number,
     vendorId,
     date,
     // The payment is exactly what is being settled: batch payment is the point.
@@ -186,6 +203,13 @@ export function BillPaymentForm({
           <FormStatus state={state} />
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <LockedNumber
+              label="Payment number"
+              value={number}
+              onChange={setNumber}
+              error={state.fieldErrors?.number}
+            />
+
             <Field name="vendorId" label="Vendor" required error={state.fieldErrors?.vendorId}>
               <EntityPicker
                 id="vendorId"

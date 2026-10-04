@@ -1,5 +1,8 @@
+import { Fragment } from 'react'
 import Link from 'next/link'
 
+import { ClickableRow } from '@/components/reports/clickable-row'
+import { RowGroup } from '@/components/reports/row-group'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Decimal, formatMoney } from '@/lib/money'
 import type { StatementSection } from '@/server/reports/statements'
@@ -29,9 +32,9 @@ export function StatementTable({
   showPercent?: boolean
   comparisonLabel?: string
   /** Rendered after the section with the matching key. */
-  subtotals?: Record<string, { label: string; amount: Decimal; emphasis?: boolean }[]>
+  subtotals?: Record<string, { label: string; amount: Decimal; comparison?: Decimal; emphasis?: boolean }[]>
 }) {
-  const columns = 2 + (showPercent ? 1 : 0) + (comparisonLabel ? 1 : 0)
+  const columns = 2 + (showPercent ? 1 : 0) + (comparisonLabel ? 2 : 0)
 
   return (
     <Table>
@@ -40,6 +43,7 @@ export function StatementTable({
           <TableHead>Account</TableHead>
           <TableHead className="numeric w-40">Amount</TableHead>
           {comparisonLabel ? <TableHead className="numeric w-40">{comparisonLabel}</TableHead> : null}
+          {comparisonLabel ? <TableHead className="numeric w-36">Change</TableHead> : null}
           {showPercent ? <TableHead className="numeric w-24">% of income</TableHead> : null}
         </TableRow>
       </TableHeader>
@@ -61,6 +65,17 @@ export function StatementTable({
   )
 }
 
+function cluster(rows: StatementSection['rows']) {
+  const groups: { key: string; title: string | null; rows: StatementSection['rows'] }[] = []
+  for (const row of rows) {
+    const title = row.group || null
+    const last = groups[groups.length - 1]
+    if (title && last?.title === title) last.rows.push(row)
+    else groups.push({ key: title ?? row.accountId, title, rows: [row] })
+  }
+  return groups
+}
+
 function SectionRows({
   section,
   currency,
@@ -76,7 +91,7 @@ function SectionRows({
   showPercent?: boolean
   hasComparison: boolean
   columns: number
-  subtotals: { label: string; amount: Decimal; emphasis?: boolean }[]
+  subtotals: { label: string; amount: Decimal; comparison?: Decimal; emphasis?: boolean }[]
 }) {
   return (
     <>
@@ -93,8 +108,9 @@ function SectionRows({
           </TableCell>
         </TableRow>
       ) : (
-        section.rows.map((row) => (
-          <TableRow key={row.accountId}>
+        cluster(section.rows).map((group) => {
+          const lines = group.rows.map((row) => (
+          <ClickableRow key={row.accountId} href={drillTo?.(row.accountId)}>
             <TableCell className="pl-6">
               {drillTo ? (
                 <Link href={drillTo(row.accountId)} className="underline-offset-4 hover:underline">
@@ -106,10 +122,23 @@ function SectionRows({
                 </>
               )}
             </TableCell>
-            <TableCell className="numeric tabular">{formatMoney(row.amount, currency)}</TableCell>
+            <TableCell className="numeric tabular">
+              {drillTo ? (
+                <Link href={drillTo(row.accountId)} className="underline-offset-4 hover:underline">
+                  {formatMoney(row.amount, currency)}
+                </Link>
+              ) : (
+                formatMoney(row.amount, currency)
+              )}
+            </TableCell>
             {hasComparison ? (
               <TableCell className="numeric tabular text-muted-foreground">
                 {formatMoney(row.comparison ?? new Decimal(0), currency)}
+              </TableCell>
+            ) : null}
+            {hasComparison ? (
+              <TableCell className="numeric tabular">
+                {formatMoney(row.amount.minus(row.comparison ?? new Decimal(0)), currency)}
               </TableCell>
             ) : null}
             {showPercent ? (
@@ -117,8 +146,16 @@ function SectionRows({
                 {row.percentOfIncome ? `${row.percentOfIncome.toFixed(1)}%` : '—'}
               </TableCell>
             ) : null}
-          </TableRow>
-        ))
+          </ClickableRow>
+          ))
+          return group.title ? (
+            <RowGroup key={group.key} title={group.title} columns={columns}>
+              {lines}
+            </RowGroup>
+          ) : (
+            <Fragment key={group.key}>{lines}</Fragment>
+          )
+        })
       )}
 
       <TableRow className="border-t">
@@ -129,16 +166,30 @@ function SectionRows({
             {formatMoney(section.comparisonTotal ?? new Decimal(0), currency)}
           </TableCell>
         ) : null}
+        {hasComparison ? (
+          <TableCell className="numeric tabular font-medium">
+            {formatMoney(section.total.minus(section.comparisonTotal ?? new Decimal(0)), currency)}
+          </TableCell>
+        ) : null}
         {showPercent ? <TableCell /> : null}
       </TableRow>
 
       {subtotals.map((subtotal) => (
-        <TableRow key={subtotal.label} className={subtotal.emphasis ? 'bg-muted/60 hover:bg-muted/60' : ''}>
+        <TableRow key={subtotal.label} className={subtotal.emphasis ? 'bg-[#d5dde6] hover:bg-[#d5dde6]' : ''}>
           <TableCell className={subtotal.emphasis ? 'font-semibold' : 'font-medium'}>{subtotal.label}</TableCell>
           <TableCell className={`numeric tabular ${subtotal.emphasis ? 'font-semibold' : 'font-medium'}`}>
             {formatMoney(subtotal.amount, currency)}
           </TableCell>
-          {hasComparison ? <TableCell /> : null}
+          {hasComparison ? (
+            <TableCell className={`numeric tabular ${subtotal.emphasis ? 'font-semibold' : 'font-medium'}`}>
+              {formatMoney(subtotal.comparison ?? new Decimal(0), currency)}
+            </TableCell>
+          ) : null}
+          {hasComparison ? (
+            <TableCell className={`numeric tabular ${subtotal.emphasis ? 'font-semibold' : 'font-medium'}`}>
+              {formatMoney(subtotal.amount.minus(subtotal.comparison ?? new Decimal(0)), currency)}
+            </TableCell>
+          ) : null}
           {showPercent ? <TableCell /> : null}
         </TableRow>
       ))}

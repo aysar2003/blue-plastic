@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 
+import { z } from 'zod'
+
 import { toFormState, type FormState } from '@/components/forms/action-state'
 import {
   inventoryAdjustmentSchema,
@@ -12,13 +14,14 @@ import { action } from '@/server/action'
 import { requestMeta, writeAudit } from '@/server/audit'
 import { db } from '@/server/db'
 import * as inventoryService from '@/server/services/inventory.service'
+import * as storeService from '@/server/services/store.service'
 
 export const createAdjustment = action
   .requires('inventory:adjust')
   .input(inventoryAdjustmentSchema)
   .handler(async (ctx, input) => {
     const adjustment = await inventoryService.createAdjustment(ctx, input)
-    revalidatePath('/inventory')
+    revalidatePath('/inventory/stock')
     revalidatePath('/accounts')
     revalidatePath('/reports/trial-balance')
     return adjustment
@@ -35,7 +38,7 @@ export const deleteAdjustment = action
   .input(deleteRecordSchema)
   .handler(async (ctx, input) => {
     const result = await inventoryService.removeAdjustment(ctx, input.id, input.reason)
-    revalidatePath('/inventory')
+    revalidatePath('/inventory/stock')
     revalidatePath('/accounts')
     revalidatePath('/journals')
     revalidatePath('/reports/trial-balance')
@@ -66,9 +69,21 @@ export const setNegativeStockPolicy = action
       )
     })
 
-    revalidatePath('/inventory')
+    revalidatePath('/inventory/stock')
     revalidatePath('/settings/organization')
     return { allowNegativeStock: input.allowNegativeStock }
+  })
+
+export const createStore = action
+  .requires('account:create')
+  .input(z.object({ name: z.string().trim().min(1, 'Give the store a name.').max(120) }))
+  .handler(async (ctx, input) => {
+    const store = await storeService.create(ctx, input.name)
+    revalidatePath('/stores')
+    revalidatePath('/inventory/stores')
+    revalidatePath('/accounts')
+    revalidatePath('/items')
+    return store
   })
 
 export async function saveAdjustmentForm(_prev: FormState, formData: FormData): Promise<FormState> {

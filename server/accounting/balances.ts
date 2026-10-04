@@ -222,10 +222,22 @@ export type LedgerEntry = {
   balance: Decimal
   /** The other accounts in the same journal — what a register shows in its "account" column. */
   contraAccounts: string
+  /** Those same accounts, one by one, with the amount posted to each. */
+  splits: { code: string; name: string; amount: string }[]
   /** The customer or vendor the line was posted against, on a control account. */
   customerId: string | null
   vendorId: string | null
   partyName: string | null
+}
+
+function readSplits(value: unknown): { code: string; name: string; amount: string }[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const row = item as { code?: unknown; name?: unknown; amount?: unknown }
+    if (typeof row.code !== 'string' || typeof row.name !== 'string') return []
+    return [{ code: row.code, name: row.name, amount: String(row.amount ?? '0') }]
+  })
 }
 
 /**
@@ -272,6 +284,7 @@ export async function generalLedger(
       debit: string
       credit: string
       contraAccounts: string | null
+      splits: unknown
       customerId: string | null
       vendorId: string | null
       partyName: string | null
@@ -297,7 +310,23 @@ export async function generalLedger(
                JOIN ledger_accounts ca ON ca.id = cl."accountId"
               WHERE cl."journalId" = l."journalId"
                 AND cl."accountId" <> l."accountId"
-           ) AS "contraAccounts"
+           ) AS "contraAccounts",
+           COALESCE((
+             SELECT json_agg(
+                      json_build_object('code', s.code, 'name', s.name, 'amount', s.amount)
+                      ORDER BY s.code
+                    )
+               FROM (
+                 SELECT ca.code AS code,
+                        ca.name AS name,
+                        SUM(cl.debit - cl.credit) AS amount
+                   FROM journal_lines cl
+                   JOIN ledger_accounts ca ON ca.id = cl."accountId"
+                  WHERE cl."journalId" = l."journalId"
+                    AND cl."accountId" <> l."accountId"
+                  GROUP BY ca.code, ca.name
+               ) s
+           ), '[]'::json) AS splits
       FROM journal_lines l
       JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
       LEFT JOIN customers cu ON cu.id = l."customerId"
@@ -329,6 +358,7 @@ export async function generalLedger(
       credit,
       balance: running,
       contraAccounts: row.contraAccounts ?? '—',
+      splits: readSplits(row.splits),
       customerId: row.customerId,
       vendorId: row.vendorId,
       partyName: row.partyName,

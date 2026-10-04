@@ -12,7 +12,7 @@ import { readSettings, settingsToQueryObject, type SearchParams } from '../param
 
 const SORTABLE = ['name', 'count', 'quantity', 'amount'] as const
 
-export const metadata: Metadata = { title: 'Sales by customer' }
+export const metadata: Metadata = { title: 'Sales by Customer Summary' }
 
 export default async function SalesByCustomerPage({
   searchParams,
@@ -30,7 +30,7 @@ export default async function SalesByCustomerPage({
   return (
     <>
       <PageHeader
-        title="Sales by customer"
+        title="Sales by Customer Summary"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · net of tax`}
       />
 
@@ -55,7 +55,9 @@ export default async function SalesByCustomerPage({
             currency={ctx.organization.baseCurrency}
             nameHeader="Customer"
             countHeader="Documents"
-            linkTo={(id) => `/customers/${id}`}
+            linkTo={(id) =>
+              `/reports/statements/customer?customerId=${id}&view=detail&period=custom&from=${settings.range.from}&to=${settings.range.to}`
+            }
             empty="No sales were recorded in this period."
           />
         </div>

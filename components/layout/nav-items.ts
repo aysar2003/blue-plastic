@@ -76,11 +76,12 @@ export const MODULES: NavModule[] = [
   {
     key: 'purchases',
     label: 'Purchases',
-    href: '/purchases/bills',
+    href: '/purchases',
     icon: ShoppingCartIcon,
     permission: 'bill:read',
     owns: ['/purchases', '/bill-payments', '/vendors'],
     tabs: [
+      { label: 'Home', href: '/purchases' },
       { label: 'Bills', href: '/purchases/bills', permission: 'bill:read' },
       {
         label: 'Expenses & receipts',
@@ -90,6 +91,16 @@ export const MODULES: NavModule[] = [
       },
       { label: 'Vendor credits', href: '/purchases/vendor-credits', permission: 'bill:read' },
       { label: 'Purchase orders', href: '/purchases/purchase-orders', permission: 'bill:read' },
+      {
+        label: 'Delivery',
+        href: '/purchases/delivery',
+        permission: 'bill:read',
+        also: [
+          '/purchases/delivery/outstanding',
+          '/purchases/delivery/received',
+          '/purchases/delivery/report',
+        ],
+      },
       { label: 'Bill payments', href: '/bill-payments', permission: 'expense:read' },
       { label: 'Vendors', href: '/vendors', permission: 'vendor:read' },
     ],
@@ -105,7 +116,8 @@ export const MODULES: NavModule[] = [
       // Reconciling starts from an account rather than from a list, so there is
       // no /banking/reconcile index to link to — only a reconciliation in
       // progress has a page of its own.
-      { label: 'Accounts', href: '/banking', permission: 'bank:read' },
+      { label: 'Home', href: '/banking', permission: 'bank:read' },
+      { label: 'Accounts', href: '/banking/accounts', permission: 'bank:read' },
       { label: 'New transfer', href: '/banking/transfers/new', permission: 'bank:transact' },
       { label: 'New deposit', href: '/banking/deposits/new', permission: 'bank:transact' },
       { label: 'Import a statement', href: '/banking/import', permission: 'bank:import' },
@@ -114,29 +126,27 @@ export const MODULES: NavModule[] = [
   {
     key: 'inventory',
     label: 'Inventory',
-    // The products list is the front door. Stock is a *property of an item*, not
-    // a separate register kept beside it: an inventory product is created with
-    // its opening quantity, its accounts and its reorder point in one dialog,
-    // and the list shows what is on hand. "Stock on hand" is then the valuation
-    // view of the same records — not a different system with its own vocabulary.
-    href: '/items',
+    href: '/inventory',
     icon: PackageIcon,
     permission: 'item:read',
-    owns: ['/inventory', '/items'],
+    owns: ['/inventory', '/items', '/stores'],
     tabs: [
+      { label: 'Home', href: '/inventory' },
       { label: 'Products & services', href: '/items', permission: 'item:read' },
-      { label: 'Stock on hand', href: '/inventory', permission: 'inventory:read' },
+      { label: 'Stock on hand', href: '/inventory/stock', permission: 'inventory:read' },
+      { label: 'Stores', href: '/stores', permission: 'inventory:read' },
       { label: 'Adjust stock', href: '/inventory/adjustments/new', permission: 'inventory:adjust' },
     ],
   },
   {
     key: 'accounting',
     label: 'Accounting',
-    href: '/accounts',
+    href: '/accounting',
     icon: BookOpenIcon,
     permission: 'account:read',
-    owns: ['/accounts', '/journals', '/periods'],
+    owns: ['/accounting', '/accounts', '/journals', '/periods'],
     tabs: [
+      { label: 'Home', href: '/accounting' },
       { label: 'Chart of accounts', href: '/accounts', permission: 'account:read' },
       { label: 'Journal entries', href: '/journals', permission: 'journal:read' },
       { label: 'Periods & year-end', href: '/periods', permission: 'period:read' },
@@ -155,29 +165,32 @@ export const MODULES: NavModule[] = [
     // it answers, which is a better way to find one than a list of names.
     tabs: [
       { label: 'All reports', href: '/reports' },
-      { label: 'Profit & loss', href: '/reports/profit-loss' },
-      { label: 'Balance sheet', href: '/reports/balance-sheet' },
-      { label: 'Cash flow', href: '/reports/cash-flow' },
-      { label: 'Trial balance', href: '/reports/trial-balance' },
-      { label: 'Statements', href: '/reports/statements/customer', also: ['/reports/statements'] },
-      { label: 'General ledger', href: '/reports/general-ledger' },
-      { label: 'Transaction detail', href: '/reports/transaction-detail' },
+      { label: 'Profit and Loss', href: '/reports/profit-loss' },
+      { label: 'Balance Sheet', href: '/reports/balance-sheet' },
+      { label: 'Statement of Cash Flows', href: '/reports/cash-flow' },
+      { label: 'Trial Balance', href: '/reports/trial-balance' },
+      { label: 'Customer Balance Detail', href: '/reports/statements/customer', also: ['/reports/statements'] },
+      { label: 'General Ledger', href: '/reports/general-ledger' },
+      { label: 'Transaction Detail by Account', href: '/reports/transaction-detail' },
     ],
   },
   {
     key: 'settings',
     label: 'Settings',
-    href: '/settings/organization',
+    href: '/settings',
     icon: SettingsIcon,
     permission: 'org:read',
     owns: ['/settings'],
     tabs: [
+      { label: 'Home', href: '/settings' },
       { label: 'Organisation', href: '/settings/organization' },
       { label: 'Default accounts', href: '/settings/accounts', permission: 'account:read' },
       { label: 'Payment terms', href: '/settings/payment-terms' },
       { label: 'Tax', href: '/settings/tax', permission: 'tax:read' },
       { label: 'Users', href: '/settings/users', permission: 'user:read' },
+      { label: 'Appearance', href: '/settings/appearance' },
       { label: 'Your profile', href: '/settings/profile' },
+      { label: 'Backup', href: '/settings/backup', permission: 'org:update' },
       { label: 'Activity log', href: '/settings/activity', permission: 'audit:read' },
     ],
   },
@@ -188,7 +201,8 @@ export const MODULES: NavModule[] = [
     icon: CircleHelpIcon,
     owns: ['/help'],
     tabs: [
-      { label: 'Guide', href: '/help' },
+      { label: 'Home', href: '/help' },
+      { label: 'Guide', href: '/help/guide' },
       { label: 'Keyboard shortcuts', href: '/help/shortcuts' },
       { label: 'How the ledger works', href: '/help/ledger' },
     ],

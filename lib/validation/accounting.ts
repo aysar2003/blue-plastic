@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { calendarDate, cuid, moneyString, optionalText, requiredText } from './common'
+import { calendarDate, chosenNumber, cuid, moneyString, optionalText, requiredText } from './common'
 
 const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'] as const
 
@@ -33,6 +33,8 @@ export const accountCreateSchema = z.object({
   type: z.enum(ACCOUNT_TYPES),
   subtype: z.enum(ACCOUNT_SUBTYPES),
   parentId: optionalId,
+  /** A finer name under the detail type, such as "Sales of product income". */
+  detailType: optionalText(80),
 
   /**
    * Optional opening balance. Posts a journal against Opening Balance Equity
@@ -59,6 +61,7 @@ export const accountUpdateSchema = z.object({
   name: requiredText('Account name', 120),
   description: optionalText(500),
   parentId: optionalId,
+  detailType: optionalText(80),
 })
 
 export type AccountUpdateInput = z.infer<typeof accountUpdateSchema>
@@ -77,8 +80,9 @@ const journalLineSchema = z
     credit: z.string().trim().default(''),
     description: z.string().trim().max(300).default(''),
     /**
-     * The subledger dimension. Required on a receivables or payables line and
-     * refused on any other — see R7 and `partyRequiredBy`.
+     * Who the line is with. Required on a receivables or payables line.
+     * On any other account it is only a label: it does not change what the
+     * customer owes or what is owed to the vendor.
      */
     customerId: optionalId,
     vendorId: optionalId,
@@ -89,6 +93,7 @@ const journalLineSchema = z
   })
 
 export const manualJournalSchema = z.object({
+  number: chosenNumber,
   date: calendarDate,
   memo: requiredText('Description', 300),
   isAdjusting: z.coerce.boolean().default(false),

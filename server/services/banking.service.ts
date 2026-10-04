@@ -13,7 +13,7 @@ import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
-import { nextDocumentNumber } from '@/server/sequences'
+import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 
 /** Accounts a bank register can be opened on. */
 export async function bankAccounts(ctx: OrgContext) {
@@ -98,7 +98,12 @@ export async function createTransfer(ctx: OrgContext, input: TransferInput) {
       requireMoneyAccount(tx, ctx, input.toAccountId),
     ])
 
-    const number = await nextDocumentNumber(tx, ctx.orgId, 'TRANSFER')
+    const number = await assignDocumentNumber(tx, ctx.orgId, 'TRANSFER', input.number)
+    const transferClash = await tx.bankTransfer.findFirst({
+      where: { orgId: ctx.orgId, number },
+      select: { id: true },
+    })
+    if (transferClash) throw numberTaken()
     const amount = new Decimal(input.amount)
 
     const transfer = await tx.bankTransfer.create({
@@ -238,7 +243,12 @@ export async function createDeposit(ctx: OrgContext, input: DepositInput) {
       throw validation('A deposit with nothing on it has nothing to record.')
     }
 
-    const number = await nextDocumentNumber(tx, ctx.orgId, 'DEPOSIT')
+    const number = await assignDocumentNumber(tx, ctx.orgId, 'DEPOSIT', input.number)
+    const depositClash = await tx.deposit.findFirst({
+      where: { orgId: ctx.orgId, number },
+      select: { id: true },
+    })
+    if (depositClash) throw numberTaken()
     let lineNumber = 0
 
     const deposit = await tx.deposit.create({

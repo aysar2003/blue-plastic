@@ -14,7 +14,7 @@ import { readSettings, settingsToQueryObject, type SearchParams } from '../param
 
 const SORTABLE = ['rate', 'agency', 'salesNet', 'salesTax', 'purchaseNet', 'purchaseTax', 'net'] as const
 
-export const metadata: Metadata = { title: 'Tax summary' }
+export const metadata: Metadata = { title: 'Sales Tax Liability' }
 
 export default async function TaxSummaryPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const ctx = await requireOrgContext('report:read')
@@ -49,7 +49,7 @@ export default async function TaxSummaryPage({ searchParams }: { searchParams: P
   return (
     <>
       <PageHeader
-        title="Tax summary"
+        title="Sales Tax Liability"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · what is owed to each agency`}
       />
 

@@ -8,6 +8,7 @@ import { idleState } from '@/components/forms/action-state'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { Field, fieldProps } from '@/components/forms/field'
+import { LockedNumber } from '@/components/forms/locked-number'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { Button } from '@/components/ui/button'
@@ -38,17 +39,22 @@ export function PaymentForm({
   today,
   currency,
   loadOpenInvoices,
+  initialCustomerId,
+  documentNumber,
 }: {
   customers: Option[]
   depositAccounts: AccountPickerOption[]
   today: string
   currency: string
   loadOpenInvoices: (customerId: string) => Promise<OpenInvoice[]>
+  initialCustomerId?: string
+  documentNumber: string
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(savePaymentForm, idleState)
 
-  const [customerId, setCustomerId] = useState('')
+  const [number, setNumber] = useState(documentNumber)
+  const [customerId, setCustomerId] = useState(initialCustomerId ?? '')
   const [date, setDate] = useState(today)
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState('BANK_TRANSFER')
@@ -60,6 +66,8 @@ export function PaymentForm({
   const [applied, setApplied] = useState<Record<string, string>>({})
   const [isLoading, startLoading] = useTransition()
   const handled = useRef(false)
+
+  useEffect(() => setNumber(documentNumber), [documentNumber])
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
@@ -85,6 +93,13 @@ export function PaymentForm({
     startLoading(async () => setInvoices(await loadOpenInvoices(id)))
   }
 
+  useEffect(() => {
+    if (!initialCustomerId) return
+    chooseCustomer(initialCustomerId)
+    // The customer arrived on the URL. Load their open invoices once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCustomerId])
+
   const totals = useMemo(() => {
     const received = parseMoneyInput(amount) ?? ZERO
     const appliedTotal = Object.values(applied).reduce(
@@ -109,6 +124,7 @@ export function PaymentForm({
   }
 
   const payload = JSON.stringify({
+    number,
     customerId,
     date,
     amount,
@@ -133,6 +149,13 @@ export function PaymentForm({
           <FormStatus state={state} />
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <LockedNumber
+              label="Payment number"
+              value={number}
+              onChange={setNumber}
+              error={state.fieldErrors?.number}
+            />
+
             <Field name="customerId" label="Customer" required error={state.fieldErrors?.customerId}>
               <EntityPicker
                 id="customerId"

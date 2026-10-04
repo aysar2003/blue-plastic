@@ -188,16 +188,42 @@ function bucketFor(daysOverdue: number | null): AgingBucket {
   return 'd90_plus'
 }
 
+export type StatementKind =
+  | 'INVOICE'
+  | 'CREDIT_MEMO'
+  | 'PAYMENT'
+  | 'SALES_RECEIPT'
+  | 'REFUND_RECEIPT'
+  | 'JOURNAL'
+  | 'ESTIMATE'
+
+/** One written line of an invoice, credit, receipt or refund. */
+export type StatementItem = {
+  description: string
+  quantity: string
+  rate: string
+  amount: string
+}
+
 export type StatementEntry = {
   id: string
-  kind: 'INVOICE' | 'CREDIT_MEMO' | 'PAYMENT' | 'SALES_RECEIPT' | 'REFUND_RECEIPT'
+  kind: StatementKind
   number: string
   date: Date
   dueDate: Date | null
   description: string
   charge: Decimal
   credit: Decimal
+  /**
+   * What is still open on this document: unpaid invoice, unused credit, or
+   * unapplied payment. Zero when the row does not carry a balance of its own.
+   */
+  openAmount: Decimal
+  /** Document total, before anything was applied. */
+  original: Decimal
   balance: Decimal
+  status: string
+  lines: StatementItem[]
   /** Where the document lives, so a statement line is a way in to it. */
   href: string
 }
@@ -205,6 +231,10 @@ export type StatementEntry = {
 /**
  * A customer statement: everything that moved their balance, in date order,
  * with a running total. This is what gets sent when someone asks "what do I owe?"
+ *
+ * Journals that are not already an invoice or a payment are included, so an
+ * opening balance still appears as its own line. Estimates are included so a
+ * type filter can show them; they do not move the balance.
  */
 export async function statement(
   ctx: OrgContext,
@@ -213,29 +243,53 @@ export async function statement(
   options: { client?: Tx } = {},
 ): Promise<{ opening: Decimal; entries: StatementEntry[]; closing: Decimal }> {
   const client = options.client ?? db
+  const from = toDate(range.from)
+  const to = toDate(range.to)
 
   const [openingRow] = await client.$queryRaw<{ balance: string }[]>`
     SELECT COALESCE(SUM(l.debit - l.credit), 0) AS balance
       FROM journal_lines l
       JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
+      JOIN ledger_accounts a ON a.id = l."accountId"
      WHERE l."orgId" = ${ctx.orgId}
        AND l."customerId" = ${customerId}
-       AND l."journalDate" < ${toDate(range.from)}
+       AND a.subtype::text = 'ACCOUNTS_RECEIVABLE'
+       AND l."journalDate" < ${from}
   `
   const opening = new Decimal(openingRow?.balance ?? '0')
 
-  const [documents, payments] = await Promise.all([
+  const [documents, payments, journals] = await Promise.all([
     client.salesDocument.findMany({
       where: {
         orgId: ctx.orgId,
         customerId,
-        status: { notIn: ['DRAFT', 'VOID'] },
-        type: { in: ['INVOICE', 'CREDIT_MEMO', 'SALES_RECEIPT', 'REFUND_RECEIPT'] },
-        date: { gte: toDate(range.from), lte: toDate(range.to) },
+        status: { notIn: ['DRAFT', 'VOID', 'DECLINED'] },
+        date: { gte: from, lte: to },
       },
       select: {
-        id: true, type: true, number: true, date: true, dueDate: true, total: true, memo: true,
+        id: true,
+        type: true,
+        number: true,
+        date: true,
+        dueDate: true,
+        total: true,
+        taxTotal: true,
+        discountAmount: true,
+        memo: true,
         reference: true,
+        status: true,
+        applications: { select: { amount: true } },
+        creditsApplied: { select: { amount: true } },
+        lines: {
+          orderBy: { lineNumber: 'asc' },
+          select: {
+            description: true,
+            quantity: true,
+            unitPrice: true,
+            amount: true,
+            item: { select: { name: true } },
+          },
+        },
       },
     }),
     client.customerPayment.findMany({
@@ -243,43 +297,133 @@ export async function statement(
         orgId: ctx.orgId,
         customerId,
         status: { not: 'VOID' },
-        date: { gte: toDate(range.from), lte: toDate(range.to) },
+        date: { gte: from, lte: to },
       },
-      select: { id: true, number: true, date: true, amount: true, memo: true },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        amount: true,
+        memo: true,
+        status: true,
+        applications: { select: { amount: true } },
+      },
+    }),
+    client.journalLine.findMany({
+      where: {
+        orgId: ctx.orgId,
+        customerId,
+        journalDate: { gte: from, lte: to },
+        account: { subtype: 'ACCOUNTS_RECEIVABLE' },
+        journal: {
+          status: { notIn: ['DRAFT', 'DELETED'] },
+          salesDocuments: { none: {} },
+          customerPayments: { none: {} },
+        },
+      },
+      select: {
+        id: true,
+        debit: true,
+        credit: true,
+        description: true,
+        journalDate: true,
+        journal: { select: { id: true, journalNumber: true, memo: true } },
+      },
     }),
   ])
 
   const entries: Omit<StatementEntry, 'balance'>[] = [
     ...documents.map((document) => {
       const total = new Decimal(document.total.toString())
+      const applied = sumAmounts(document.applications)
+      const creditUsed = sumAmounts(document.creditsApplied)
       // An invoice increases what the customer owes; a credit memo reduces it.
-      // Receipts and refunds never touched receivables, so they are shown for
-      // completeness with no effect on the running balance.
+      // Receipts, refunds and estimates never touched receivables, so they are
+      // shown for completeness with no effect on the running balance.
       const isCharge = document.type === 'INVOICE'
       const isCredit = document.type === 'CREDIT_MEMO'
+      const openAmount = isCharge ? total.minus(applied) : isCredit ? total.minus(creditUsed) : ZERO
+      const items: StatementItem[] = document.lines.map((line) => {
+        const name = line.item?.name
+        const note = line.description
+        const description =
+          name && note && name !== note ? `${name} — ${note}` : name || note || 'Line'
+        return {
+          description,
+          quantity: line.quantity.toString(),
+          rate: line.unitPrice.toString(),
+          amount: line.amount.toString(),
+        }
+      })
+      if (!new Decimal(document.discountAmount.toString()).isZero()) {
+        items.push({
+          description: 'Discount',
+          quantity: '',
+          rate: '',
+          amount: new Decimal(document.discountAmount.toString()).negated().toString(),
+        })
+      }
+      if (!new Decimal(document.taxTotal.toString()).isZero()) {
+        items.push({
+          description: 'Tax',
+          quantity: '',
+          rate: '',
+          amount: document.taxTotal.toString(),
+        })
+      }
       return {
         id: document.id,
-        kind: document.type as StatementEntry['kind'],
+        kind: document.type as StatementKind,
         number: document.number,
         date: document.date,
         dueDate: document.dueDate,
         description: document.memo ?? document.reference ?? labelFor(document.type),
         charge: isCharge ? total : ZERO,
         credit: isCredit ? total : ZERO,
+        openAmount,
+        original: total,
+        status: document.status,
+        lines: items,
         href: `/sales/${SLUG[document.type] ?? 'invoices'}/${document.id}`,
       }
     }),
-    ...payments.map((payment) => ({
-      id: payment.id,
-      kind: 'PAYMENT' as const,
-      number: payment.number,
-      date: payment.date,
-      dueDate: null,
-      description: payment.memo ?? 'Payment received',
-      charge: ZERO,
-      credit: new Decimal(payment.amount.toString()),
-      href: '/payments',
-    })),
+    ...payments.map((payment) => {
+      const amount = new Decimal(payment.amount.toString())
+      return {
+        id: payment.id,
+        kind: 'PAYMENT' as const,
+        number: payment.number,
+        date: payment.date,
+        dueDate: null,
+        description: payment.memo ?? 'Payment received',
+        charge: ZERO,
+        credit: amount,
+        openAmount: amount.minus(sumAmounts(payment.applications)),
+        original: amount,
+        status: payment.status,
+        lines: [],
+        href: `/payments?q=${encodeURIComponent(payment.number)}`,
+      }
+    }),
+    ...journals.map((line) => {
+      const debit = new Decimal(line.debit.toString())
+      const credit = new Decimal(line.credit.toString())
+      return {
+        id: line.id,
+        kind: 'JOURNAL' as const,
+        number: line.journal.journalNumber,
+        date: line.journalDate,
+        dueDate: null,
+        description: line.description ?? line.journal.memo ?? 'Journal entry',
+        charge: debit,
+        credit,
+        openAmount: debit.minus(credit),
+        original: debit.minus(credit).abs(),
+        status: 'POSTED',
+        lines: [],
+        href: `/journals/${line.journal.id}`,
+      }
+    }),
   ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.number.localeCompare(b.number))
 
   let running = opening
@@ -291,8 +435,13 @@ export async function statement(
   return { opening, entries: withBalances, closing: running }
 }
 
+function sumAmounts(rows: { amount: { toString(): string } }[]): Decimal {
+  return rows.reduce((sum, row) => sum.plus(row.amount.toString()), ZERO)
+}
+
 const SLUG: Record<string, string> = {
   INVOICE: 'invoices',
+  ESTIMATE: 'estimates',
   CREDIT_MEMO: 'credit-memos',
   SALES_RECEIPT: 'sales-receipts',
   REFUND_RECEIPT: 'refunds',
@@ -302,6 +451,8 @@ function labelFor(type: string): string {
   switch (type) {
     case 'INVOICE':
       return 'Invoice'
+    case 'ESTIMATE':
+      return 'Estimate'
     case 'CREDIT_MEMO':
       return 'Credit memo'
     case 'SALES_RECEIPT':

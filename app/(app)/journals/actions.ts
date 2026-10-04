@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
 
 import { toFormState, type FormState } from '@/components/forms/action-state'
 import { manualJournalSchema, reverseJournalSchema } from '@/lib/validation/accounting'
@@ -22,6 +23,18 @@ export const postManualJournal = action
     revalidateLedger()
     return { id: journal.id, journalNumber: journal.journalNumber, total: journal.total }
   })
+
+const journalSearch = z.object({
+  number: z.string().trim().max(40).optional(),
+  date: z.string().trim().max(10).optional(),
+  amount: z.string().trim().max(20).optional(),
+})
+
+/** Find opens a posted journal. An empty search lists the latest ones. */
+export const findJournals = action
+  .requires('journal:read')
+  .input(journalSearch)
+  .handler((ctx, input) => journalService.find(ctx, input))
 
 export const reverseJournalAction = action
   .requires('journal:reverse')
@@ -47,8 +60,8 @@ export const deleteJournal = action
     revalidateLedger()
     revalidatePath('/sales')
     revalidatePath('/purchases')
-    revalidatePath('/banking')
-    revalidatePath('/inventory')
+    revalidatePath('/banking/accounts')
+    revalidatePath('/inventory/stock')
     return result
   })
 

@@ -58,19 +58,118 @@ export function toMoneyString(value: Decimal.Value, decimals = STORAGE_SCALE): s
 }
 
 /**
- * Parse user input. Accepts thousands separators and a leading currency symbol,
- * and rejects anything else rather than guessing — a silently-misparsed amount is
- * worse than a validation message.
+ * Parse user input. Accepts thousands separators, a leading currency symbol,
+ * and the four arithmetic signs: 120-10, 2*50, 100/4, 10+5.
+ * Anything else is rejected rather than guessed — a silently-misparsed amount
+ * is worse than a validation message.
  */
 export function parseMoneyInput(input: string): Money | null {
-  const cleaned = input.trim().replace(/[\s,]/g, '').replace(/^[^\d\-+.]+/, '')
-  if (cleaned === '' || !/^[-+]?\d*\.?\d*$/.test(cleaned)) return null
-  try {
-    const d = new Decimal(cleaned)
-    return d.isFinite() ? d : null
-  } catch {
-    return null
+  const cleaned = input.trim().replace(/[\s,]/g, '').replace(/^[^\d\-+.(]+/, '')
+  if (cleaned === '') return null
+  const value = evaluateArithmetic(cleaned)
+  return value && value.isFinite() ? value : null
+}
+
+/** True when the text is a sum, difference, product, or quotient rather than a plain number. */
+export function hasArithmetic(input: string): boolean {
+  const cleaned = input.trim().replace(/[\s,]/g, '').replace(/^[^\d\-+.(]+/, '')
+  return /[+\-*/()]/.test(cleaned.replace(/^[+-]/, ''))
+}
+
+/**
+ * The number an arithmetic entry settles to, written without trailing zeros.
+ * A plain number is left alone, so typing 10.50 is not rewritten on the way out.
+ */
+export function settleNumberInput(input: string): string | null {
+  if (!hasArithmetic(input)) return null
+  const value = parseMoneyInput(input)
+  if (!value) return null
+  return value
+    .toDecimalPlaces(STORAGE_SCALE, Decimal.ROUND_HALF_UP)
+    .toFixed(STORAGE_SCALE)
+    .replace(/(\.\d*?)0+$/, '$1')
+    .replace(/\.$/, '')
+}
+
+/**
+ * + and - bind looser than * and /. Parentheses and a leading minus are allowed.
+ * An unfinished sum such as "120-" is rejected so the field can keep being typed.
+ */
+function evaluateArithmetic(source: string): Decimal | null {
+  let index = 0
+
+  const peek = () => source[index]
+
+  function number(): Decimal | null {
+    const start = index
+    if (peek() === '.') {
+      index += 1
+      while (index < source.length && source[index]! >= '0' && source[index]! <= '9') index += 1
+    } else {
+      while (index < source.length && source[index]! >= '0' && source[index]! <= '9') index += 1
+      if (peek() === '.') {
+        index += 1
+        while (index < source.length && source[index]! >= '0' && source[index]! <= '9') index += 1
+      }
+    }
+    const raw = source.slice(start, index)
+    if (raw === '' || raw === '.') return null
+    try {
+      return new Decimal(raw)
+    } catch {
+      return null
+    }
   }
+
+  function unary(): Decimal | null {
+    if (peek() === '+') {
+      index += 1
+      return unary()
+    }
+    if (peek() === '-') {
+      index += 1
+      const value = unary()
+      return value ? value.negated() : null
+    }
+    if (peek() === '(') {
+      index += 1
+      const value = sum()
+      if (peek() !== ')' || !value) return null
+      index += 1
+      return value
+    }
+    return number()
+  }
+
+  function product(): Decimal | null {
+    let left = unary()
+    if (!left) return null
+    while (peek() === '*' || peek() === '/') {
+      const operator = peek()
+      index += 1
+      const right = unary()
+      if (!right || (operator === '/' && right.isZero())) return null
+      left = operator === '*' ? left.times(right) : left.dividedBy(right)
+    }
+    return left
+  }
+
+  function sum(): Decimal | null {
+    let left = product()
+    if (!left) return null
+    while (peek() === '+' || peek() === '-') {
+      const operator = peek()
+      index += 1
+      const right = product()
+      if (!right) return null
+      left = operator === '+' ? left.plus(right) : left.minus(right)
+    }
+    return left
+  }
+
+  const value = sum()
+  if (!value || index !== source.length) return null
+  return value
 }
 
 export function formatMoney(

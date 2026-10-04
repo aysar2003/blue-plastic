@@ -1,7 +1,8 @@
 import 'server-only'
 import type { JournalSourceType, Prisma } from '@prisma/client'
 
-import { Decimal, toMoneyString } from '@/lib/money'
+import { isCalendarDate, toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
+import { Decimal, parseMoneyInput, toMoneyString } from '@/lib/money'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { ManualJournalInput } from '@/lib/validation/accounting'
 import { partyRequiredBy } from '@/lib/account-options'
@@ -30,6 +31,8 @@ export type JournalRow = {
   lineCount: number
   /** The document that produced it, and who it was with. */
   source: JournalSource
+  /** Present on the full month list, so a row can open its lines on hover. */
+  lines?: { account: string; description: string | null; debit: string; credit: string }[]
 }
 
 /** Orderings the list screen offers. Sorting happens here, over every row. */
@@ -44,7 +47,15 @@ const JOURNAL_ORDER: Record<string, (dir: 'asc' | 'desc') => Prisma.JournalOrder
 export async function list(
   ctx: OrgContext,
   query: ListQuery,
-  options: { sort?: string; dir?: 'asc' | 'desc' } = {},
+  options: {
+    sort?: string
+    dir?: 'asc' | 'desc'
+    sourceType?: JournalSourceType
+    from?: CalendarDate
+    to?: CalendarDate
+    /** Every row in the range, so a month can be scrolled from A to Z. */
+    unpaged?: boolean
+  } = {},
 ) {
   const where: Prisma.JournalWhereInput = {
     orgId: ctx.orgId,
@@ -52,6 +63,15 @@ export async function list(
     // every balance. The row survives and its own page still reads, so a link in
     // an audit record still resolves.
     status: { not: 'DELETED' },
+    ...(options.sourceType ? { sourceType: options.sourceType } : {}),
+    ...(options.from || options.to
+      ? {
+          date: {
+            ...(options.from ? { gte: toDate(options.from) } : {}),
+            ...(options.to ? { lte: toDate(options.to) } : {}),
+          },
+        }
+      : {}),
     ...(query.q
       ? {
           OR: [
@@ -86,12 +106,23 @@ export async function list(
         sourceId: true,
         status: true,
         isAdjusting: true,
-        lines: { select: { debit: true } },
+        lines: {
+          select: {
+            lineNumber: true,
+            debit: true,
+            credit: true,
+            description: true,
+            account: { select: { code: true, name: true } },
+            customer: { select: { id: true, displayName: true } },
+            vendor: { select: { id: true, displayName: true } },
+          },
+          orderBy: { lineNumber: 'asc' },
+        },
       },
       orderBy:
         (options.sort ? JOURNAL_ORDER[options.sort]?.(options.dir ?? 'asc') : undefined) ??
         [{ date: 'desc' }, { journalNumber: 'desc' }],
-      ...paginate(query),
+      ...(options.unpaged ? {} : paginate(query)),
     }),
     db.journal.count({ where }),
   ])
@@ -103,25 +134,181 @@ export async function list(
     journals.map((journal) => ({ sourceType: journal.sourceType, sourceId: journal.sourceId })),
   )
 
-  const rows: JournalRow[] = journals.map((journal) => ({
-    id: journal.id,
-    journalNumber: journal.journalNumber,
-    date: journal.date,
-    memo: journal.memo,
-    sourceType: journal.sourceType,
-    status: journal.status,
-    isAdjusting: journal.isAdjusting,
-    // A journal's "amount" is one side of it — debits and credits are equal by
-    // construction, so summing both would double it.
-    total: toMoneyString(
-      journal.lines.reduce((sum, line) => sum.plus(new Decimal(line.debit.toString())), new Decimal(0)),
-      2,
-    ),
-    lineCount: journal.lines.length,
-    source: sourceFor(sources, { sourceType: journal.sourceType, sourceId: journal.sourceId }),
-  }))
+  const rows: JournalRow[] = journals.map((journal) => {
+    const source = sourceFor(sources, { sourceType: journal.sourceType, sourceId: journal.sourceId })
+    // A manual entry has no document, so the name is the one written on its lines.
+    const named = journal.lines.find((line) => line.customer || line.vendor)
+    const party = named?.customer
+      ? { partyName: named.customer.displayName, partyHref: `/customers?id=${named.customer.id}` }
+      : named?.vendor
+        ? { partyName: named.vendor.displayName, partyHref: `/vendors/${named.vendor.id}` }
+        : null
 
+    return {
+      id: journal.id,
+      journalNumber: journal.journalNumber,
+      date: journal.date,
+      memo: journal.memo,
+      sourceType: journal.sourceType,
+      status: journal.status,
+      isAdjusting: journal.isAdjusting,
+      // A journal's "amount" is one side of it — debits and credits are equal by
+      // construction, so summing both would double it.
+      total: toMoneyString(
+        journal.lines.reduce((sum, line) => sum.plus(new Decimal(line.debit.toString())), new Decimal(0)),
+        2,
+      ),
+      lineCount: journal.lines.length,
+      source: source.partyName || !party ? source : { ...source, ...party },
+      ...(options.unpaged
+        ? {
+            lines: journal.lines.map((line) => ({
+              account: `${line.account.code} ${line.account.name}`,
+              description: line.description,
+              debit: toMoneyString(line.debit.toString(), 2),
+              credit: toMoneyString(line.credit.toString(), 2),
+            })),
+          }
+        : {}),
+    }
+  })
+
+  if (options.unpaged) {
+    return { rows, total, page: 1, pageSize: Math.max(total, 1), pageCount: 1 }
+  }
   return paged(rows, total, query)
+}
+
+/** Recent lines for the journal form's lower list. One row is one posted line. */
+export async function registerLines(ctx: OrgContext) {
+  const lines = await db.journalLine.findMany({
+    where: { orgId: ctx.orgId, journal: { status: { not: 'DELETED' } } },
+    select: {
+      id: true,
+      debit: true,
+      credit: true,
+      description: true,
+      journalDate: true,
+      account: { select: { code: true, name: true } },
+      journal: {
+        select: {
+          id: true,
+          journalNumber: true,
+          memo: true,
+          isAdjusting: true,
+          sourceType: true,
+        },
+      },
+    },
+    orderBy: [{ journalDate: 'desc' }, { lineNumber: 'asc' }],
+    take: 40,
+  })
+
+  return lines.map((line) => {
+    const debit = new Decimal(line.debit.toString())
+    const credit = new Decimal(line.credit.toString())
+    return {
+      lineId: line.id,
+      journalId: line.journal.id,
+      date: toCalendarDate(line.journalDate),
+      number: line.journal.journalNumber,
+      adjusting: line.journal.isAdjusting,
+      manual: line.journal.sourceType === 'MANUAL',
+      account: `${line.account.code} — ${line.account.name}`,
+      memo: line.description ?? line.journal.memo,
+      amount: toMoneyString(debit.isZero() ? credit : debit, 2),
+    }
+  })
+}
+
+/**
+ * Find a posted journal by its number, its date, or an amount.
+ *
+ * An empty search returns the latest entries, so opening Find shows what is
+ * already in the books. An amount matches either the entry's debit total or
+ * any one line.
+ */
+export async function find(
+  ctx: OrgContext,
+  input: { number?: string; date?: string; amount?: string },
+) {
+  const number = input.number?.trim()
+  const date = input.date?.trim()
+  const amount = input.amount?.trim()
+  const money = amount ? parseMoneyInput(amount) : null
+  const rounded = money?.toDecimalPlaces(2, Decimal.ROUND_HALF_UP) ?? null
+
+  // The amount is the entry's debit total, or any one line. The total is a sum,
+  // so it cannot be a column filter — an opening balance of 10,200 is found
+  // here even when no single line is exactly that figure.
+  let amountIds: string[] | undefined
+  if (rounded) {
+    const low = rounded.toFixed(2)
+    const high = rounded.plus('0.005').toFixed(4)
+    const hits = await db.$queryRaw<{ id: string }[]>`
+      SELECT j.id
+      FROM journals j
+      JOIN journal_lines l ON l."journalId" = j.id
+      WHERE j."orgId" = ${ctx.orgId}
+        AND j.status::text <> 'DELETED'
+      GROUP BY j.id
+      HAVING
+        (SUM(l.debit) >= ${low}::numeric AND SUM(l.debit) < ${high}::numeric)
+        OR BOOL_OR(l.debit >= ${low}::numeric AND l.debit < ${high}::numeric)
+        OR BOOL_OR(l.credit >= ${low}::numeric AND l.credit < ${high}::numeric)
+      ORDER BY MAX(j.date) DESC, MAX(j."journalNumber") DESC
+      LIMIT 20
+    `
+    amountIds = hits.map((hit) => hit.id)
+    if (amountIds.length === 0) return []
+  }
+
+  const journals = await db.journal.findMany({
+    where: {
+      orgId: ctx.orgId,
+      status: { not: 'DELETED' },
+      ...(amountIds ? { id: { in: amountIds } } : {}),
+      ...(number ? { journalNumber: { contains: number, mode: 'insensitive' } } : {}),
+      ...(date && isCalendarDate(date) ? { date: toDate(date) } : {}),
+    },
+    select: {
+      id: true,
+      journalNumber: true,
+      date: true,
+      memo: true,
+      isAdjusting: true,
+      lines: {
+        select: {
+          debit: true,
+          credit: true,
+          customer: { select: { displayName: true } },
+          vendor: { select: { displayName: true } },
+        },
+      },
+    },
+    orderBy: [{ date: 'desc' }, { journalNumber: 'desc' }],
+    take: 20,
+  })
+
+  return journals.map((journal) => {
+    const total = journal.lines.reduce(
+      (sum, line) => sum.plus(new Decimal(line.debit.toString())),
+      new Decimal(0),
+    )
+    const party =
+      journal.lines.find((line) => line.customer)?.customer?.displayName ??
+      journal.lines.find((line) => line.vendor)?.vendor?.displayName ??
+      null
+    return {
+      id: journal.id,
+      number: journal.journalNumber,
+      date: toCalendarDate(journal.date),
+      memo: journal.memo,
+      adjusting: journal.isAdjusting,
+      party,
+      total: toMoneyString(total, 2),
+    }
+  })
 }
 
 export async function get(ctx: OrgContext, id: string) {
@@ -296,6 +483,7 @@ export async function createManual(ctx: OrgContext, input: ManualJournalInput) {
     postJournal(tx, ctx, {
       date: input.date,
       memo: input.memo,
+      journalNumber: input.number,
       sourceType: 'MANUAL',
       isAdjusting: input.isAdjusting,
       lines: lines.map((line) => ({

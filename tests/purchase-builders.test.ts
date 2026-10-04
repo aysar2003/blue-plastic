@@ -130,6 +130,42 @@ describe('vendor credit', () => {
 
     expect(credit.lines.find((l) => l.accountId === 'acct-ap')?.vendorId).toBe('vend-1')
   })
+
+  it('posts the gap when returned stock leaves at a higher book cost than the credit', () => {
+    const stockPriced = priceDocument(
+      [
+        {
+          quantity: '10',
+          unitPrice: '280',
+          taxCodeId: 'vat',
+          isStock: true,
+        },
+      ],
+      new Map([['vat', vatRecoverable]]),
+      'USD',
+    )
+    // Document net 2800 + tax 448 = 3248. Stock on the books costs 2868.60.
+    const credit = buildVendorCreditJournal({
+      ...base,
+      number: 'VC-00001',
+      priced: stockPriced,
+      stock: [{ inventoryAccountId: 'acct-inventory', amount: new Decimal('2868.60') }],
+      stockCostDifference: new Decimal('68.60'),
+    })
+
+    expect(credit.lines.find((l) => l.accountId === 'acct-ap')?.debit?.toString()).toBe(
+      stockPriced.total.toString(),
+    )
+    expect(credit.lines.find((l) => l.accountId === 'acct-inventory')?.credit?.toString()).toBe(
+      '2868.6',
+    )
+    expect(
+      credit.lines.find((l) => l.accountId === 'acct-uncategorised')?.debit?.toString(),
+    ).toBe('68.6')
+
+    const { debit, credit: creditTotal } = totals(credit.lines)
+    expect(debit.toString()).toBe(creditTotal.toString())
+  })
 })
 
 describe('bill payment', () => {

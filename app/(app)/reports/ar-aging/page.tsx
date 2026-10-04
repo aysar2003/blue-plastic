@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { ClickableRow } from '@/components/reports/clickable-row'
 import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHeader, TableRow } from '@/components/ui/table'
@@ -11,11 +12,21 @@ import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import { readSettings } from '../params'
 import { ReportControls } from '../report-controls'
-import { AGING_BUCKETS, BUCKET_LABELS, aging } from '@/server/services/receivables.service'
+import { ShareBar } from '@/components/reports/figure-chart'
+import { AGING_BUCKETS, BUCKET_LABELS, aging, type AgingBucket } from '@/server/services/receivables.service'
+
+const AGING_COLORS: Record<AgingBucket, string> = {
+  unapplied: '#64748B',
+  current: '#0F766E',
+  d1_30: '#0369A1',
+  d31_60: '#B45309',
+  d61_90: '#C2410C',
+  d90_plus: '#BE123C',
+}
 
 const SORTABLE = ['name', 'total', ...AGING_BUCKETS] as const
 
-export const metadata: Metadata = { title: 'Receivables aging' }
+export const metadata: Metadata = { title: 'A/R Aging Summary' }
 
 /**
  * Who owes what, and for how long.
@@ -54,7 +65,7 @@ export default async function AgingPage({
   return (
     <>
       <PageHeader
-        title="Receivables aging"
+        title="A/R Aging Summary"
         description={`Outstanding invoices as at ${formatDate(asOf)}, bucketed by how long they have been due.`}
       />
 
@@ -67,6 +78,20 @@ export default async function AgingPage({
         comparison={settings.comparison}
         controls={{ mode: 'asOf', exportAs: 'ar-aging' }}
       />
+
+      {report.grandTotal.isZero() ? null : (
+        <div className="mb-4">
+          <ShareBar
+            caption="How long the money owed to you has been waiting"
+            currency={currency}
+            segments={AGING_BUCKETS.map((bucket) => ({
+              label: BUCKET_LABELS[bucket],
+              value: report.totals[bucket],
+              color: AGING_COLORS[bucket],
+            }))}
+          />
+        </div>
+      )}
 
       <Card className="overflow-hidden p-0">
         <Table>
@@ -98,10 +123,10 @@ export default async function AgingPage({
               </TableRow>
             ) : (
               rows.map((row) => (
-                <TableRow key={row.customerId}>
+                <ClickableRow key={row.customerId} href={customerStatement(row.customerId)}>
                   <TableCell>
                     <Link
-                      href={`/customers/${row.customerId}`}
+                      href={customerStatement(row.customerId)}
                       className="font-medium underline-offset-4 hover:underline"
                     >
                       {row.customerName}
@@ -112,14 +137,21 @@ export default async function AgingPage({
                       {row.buckets[bucket].isZero() ? (
                         <span className="text-muted-foreground">—</span>
                       ) : (
-                        formatMoney(row.buckets[bucket], currency)
+                        <Link
+                          href={customerStatement(row.customerId, bucket === 'current' || bucket === 'unapplied' ? 'open' : 'overdue')}
+                          className="underline-offset-4 hover:underline"
+                        >
+                          {formatMoney(row.buckets[bucket], currency)}
+                        </Link>
                       )}
                     </TableCell>
                   ))}
                   <TableCell className="numeric tabular font-medium">
-                    {formatMoney(row.total, currency)}
+                    <Link href={customerStatement(row.customerId, 'open')} className="underline-offset-4 hover:underline">
+                      {formatMoney(row.total, currency)}
+                    </Link>
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))
             )}
           </TableBody>
@@ -168,4 +200,15 @@ export default async function AgingPage({
       </Card>
     </>
   )
+}
+
+/** Aging opens the statement of that customer, with each invoice written out. */
+function customerStatement(customerId: string, status: 'open' | 'overdue' = 'open') {
+  const params = new URLSearchParams({
+    customerId,
+    view: 'detail',
+    status,
+    period: 'all-dates',
+  })
+  return `/reports/statements/customer?${params.toString()}`
 }

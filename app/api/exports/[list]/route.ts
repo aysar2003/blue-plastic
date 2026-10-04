@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 
-import { toCalendarDate } from '@/lib/date'
+import type { JournalSourceType } from '@prisma/client'
+
+import { JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
+import { letterheadLines } from '@/lib/letterhead'
+import { toCalendarDate, today } from '@/lib/date'
+import { presetRange, readDatePreset } from '@/lib/list-filters'
 import { bySlug } from '@/lib/sales-types'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -37,6 +42,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
     const url = new URL(request.url)
     const q = url.searchParams.get('q') ?? undefined
     const status = url.searchParams.get('status') ?? undefined
+    const customerId = url.searchParams.get('customer') ?? undefined
     const type = url.searchParams.get('type') ?? undefined
     const archived = url.searchParams.get('archived') === '1'
     const sort = url.searchParams.get('sort') ?? undefined
@@ -44,8 +50,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
 
     const ctx = await requireOrgContext('report:read')
     const currency = ctx.organization.baseCurrency
+    const datePreset = readDatePreset(url.searchParams.get('date') ?? undefined)
+    const range = presetRange(datePreset, today(ctx.organization.timeZone))
+    const sourceRaw = url.searchParams.get('source') ?? undefined
+    const sourceType =
+      sourceRaw && sourceRaw in JOURNAL_SOURCE_LABELS ? (sourceRaw as JournalSourceType) : undefined
+    const span = { from: range?.from, to: range?.to }
     const heading = (title: string): CsvCell[][] => [
-      [ctx.organization.name],
+      ...letterheadLines(ctx.organization).map((line) => [line]),
       [title],
       [`Currency: ${currency}`],
       [],
@@ -54,10 +66,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
     // --- Sales and purchase documents, keyed by their URL slug ---------------
     const salesConfig = bySlug(list)
     if (salesConfig) {
-      const page = await salesService.list(ctx, salesConfig.type, { ...ALL, q }, { status, sort, dir })
+      const page = await salesService.list(ctx, salesConfig.type, { ...ALL, q }, { status, customerId, sort, dir, ...span })
       const rows: CsvCell[][] = heading(salesConfig.plural)
-      rows.push(['Number', 'Date', 'Due', 'Customer', 'Reference', 'Status', 'Total', 'Outstanding'])
+      rows.push(['Number', 'Date', 'Due', 'Customer', 'Reference', 'Status', 'Total', 'Outstanding', 'Deposit to'])
       for (const row of page.rows) {
+        const account = row.depositAccount
         rows.push([
           row.number,
           toCalendarDate(row.date),
@@ -67,6 +80,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
           row.status,
           row.total,
           row.balance,
+          account ? `${account.code} ${account.name}` : '',
         ])
       }
       return csvResponse(`${salesConfig.slug}.csv`, rows)
@@ -74,7 +88,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
 
     const purchaseConfig = purchaseBySlug(list)
     if (purchaseConfig) {
-      const page = await purchaseService.list(ctx, purchaseConfig.type, { ...ALL, q }, { status, sort, dir })
+      const page = await purchaseService.list(ctx, purchaseConfig.type, { ...ALL, q }, { status, sort, dir, ...span })
       const rows: CsvCell[][] = heading(purchaseConfig.plural)
       rows.push(['Number', 'Date', 'Due', 'Vendor', 'Their reference', 'Status', 'Total', 'Owing'])
       for (const row of page.rows) {
@@ -94,7 +108,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
 
     switch (list) {
       case 'journals': {
-        const page = await journalService.list(ctx, { ...ALL, q }, { sort, dir })
+        const page = await journalService.list(ctx, { ...ALL, q }, { sort, dir, sourceType, ...span })
         const rows: CsvCell[][] = heading('Journal entries')
         rows.push([
           'Entry',
@@ -122,7 +136,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
       }
 
       case 'payments': {
-        const page = await paymentService.list(ctx, { ...ALL, q }, { sort, dir })
+        const page = await paymentService.list(ctx, { ...ALL, q }, { sort, dir, ...span })
         const rows: CsvCell[][] = heading('Customer payments')
         rows.push(['Number', 'Date', 'Customer', 'Method', 'Status', 'Amount', 'Unapplied'])
         for (const row of page.rows) {
@@ -140,7 +154,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
       }
 
       case 'bill-payments': {
-        const page = await billPaymentService.list(ctx, { ...ALL, q }, { sort, dir })
+        const page = await billPaymentService.list(ctx, { ...ALL, q }, { sort, dir, ...span })
         const rows: CsvCell[][] = heading('Bill payments')
         rows.push(['Number', 'Date', 'Vendor', 'Method', 'Status', 'Amount'])
         for (const row of page.rows) {
@@ -158,41 +172,167 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
 
       case 'customers':
       case 'vendors': {
-        const page =
-          list === 'customers'
-            ? await contactService.listCustomers(ctx, { ...ALL, q }, { includeInactive: archived, sort, dir })
-            : await contactService.listVendors(ctx, { ...ALL, q }, { includeInactive: archived, sort, dir })
+        // The whole list, in the same columns an import reads back — including a
+        // file that started life as a QuickBooks export.
+        const everything = { ...ALL, pageSize: 20000, q }
+        const asOf = today(ctx.organization.timeZone)
+        if (list === 'customers') {
+          const page = await contactService.listCustomers(ctx, everything, { includeInactive: archived, sort, dir })
+          const rows: CsvCell[][] = [
+            [
+              'Display name',
+              'Company name',
+              'First name',
+              'Last name',
+              'Email',
+              'Phone',
+              'Mobile',
+              'Street',
+              'City',
+              'State',
+              'Postal code',
+              'Country',
+              'Payment terms',
+              'Tax registration number',
+              'Credit limit',
+              'Open balance',
+              'Opening balance date',
+              'Notes',
+              'Active',
+            ],
+          ]
+          for (const row of page.rows) {
+            const balance = Number(row.balance) === 0 ? '' : row.balance
+            rows.push([
+              row.displayName,
+              row.companyName ?? '',
+              row.firstName ?? '',
+              row.lastName ?? '',
+              row.email ?? '',
+              row.phone ?? '',
+              row.mobile ?? '',
+              row.billingLine1 ?? '',
+              row.billingCity ?? '',
+              row.billingRegion ?? '',
+              row.billingPostalCode ?? '',
+              row.billingCountry ?? '',
+              row.paymentTerm?.name ?? '',
+              row.taxRegistrationNumber ?? '',
+              row.creditLimit ?? '',
+              balance,
+              balance ? asOf : '',
+              row.notes ?? '',
+              row.isActive ? 'Yes' : 'No',
+            ])
+          }
+          return csvResponse('customers.csv', rows)
+        }
 
-        const rows: CsvCell[][] = heading(list === 'customers' ? 'Customers' : 'Vendors')
-        rows.push(['Name', 'Company', 'Email', 'Phone', 'Balance', 'Active'])
+        const owing =
+          url.searchParams.get('balance') === 'open' ? await contactService.vendorIdsWithBalance(ctx) : undefined
+        const page = await contactService.listVendors(ctx, everything, {
+          includeInactive: archived,
+          sort,
+          dir,
+          ids: owing,
+        })
+        const rows: CsvCell[][] = [
+          [
+            'Display name',
+            'Company name',
+            'First name',
+            'Last name',
+            'Email',
+            'Phone',
+            'Mobile',
+            'Street',
+            'City',
+            'State',
+            'Postal code',
+            'Country',
+            'Payment terms',
+            'Tax registration number',
+            'Open balance',
+            'Opening balance date',
+            'Notes',
+            'Active',
+          ],
+        ]
         for (const row of page.rows) {
+          const balance = Number(row.balance) === 0 ? '' : row.balance
           rows.push([
             row.displayName,
             row.companyName ?? '',
+            row.firstName ?? '',
+            row.lastName ?? '',
             row.email ?? '',
             row.phone ?? '',
-            row.balance,
-            row.isActive ? 'yes' : 'no',
+            row.mobile ?? '',
+            row.billingLine1 ?? '',
+            row.billingCity ?? '',
+            row.billingRegion ?? '',
+            row.billingPostalCode ?? '',
+            row.billingCountry ?? '',
+            row.paymentTerm?.name ?? '',
+            row.taxRegistrationNumber ?? '',
+            balance,
+            balance ? asOf : '',
+            row.notes ?? '',
+            row.isActive ? 'Yes' : 'No',
           ])
         }
-        return csvResponse(`${list}.csv`, rows)
+        return csvResponse('vendors.csv', rows)
       }
 
       case 'items': {
-        const page = await itemService.list(ctx, { ...ALL, q }, { includeInactive: archived, type, sort, dir })
-        const rows: CsvCell[][] = heading('Products and services')
-        rows.push(['Name', 'SKU', 'Type', 'Sales price', 'Purchase cost', 'Active'])
+        const page = await itemService.list(
+          ctx,
+          { ...ALL, pageSize: 20000, q },
+          { includeInactive: archived, type, sort, dir },
+        )
+        const asOf = today(ctx.organization.timeZone)
+        const typeLabel = (value: string) =>
+          value === 'SERVICE' ? 'Service' : value === 'INVENTORY' ? 'Inventory' : 'Non-inventory'
+        const rows: CsvCell[][] = [
+          [
+            'Product/Service Name',
+            'SKU',
+            'Type',
+            'Sales Description',
+            'Sales Price',
+            'Taxable',
+            'Income Account',
+            'Purchase Description',
+            'Purchase Cost',
+            'Expense Account',
+            'Quantity on hand',
+            'Reorder Point',
+            'Inventory Asset Account',
+            'Quantity as-of date',
+            'Active',
+          ],
+        ]
         for (const row of page.rows) {
+          const onHand = row.onHand && Number(row.onHand) !== 0 ? row.onHand : ''
           rows.push([
             row.name,
             row.sku ?? '',
-            row.type,
+            typeLabel(row.type),
+            row.salesDescription ?? row.description ?? '',
             row.salesPrice ?? '',
+            row.isTaxable ? 'Yes' : 'No',
+            row.incomeAccount?.name ?? '',
+            row.purchaseDescription ?? '',
             row.purchaseCost ?? '',
-            row.isActive ? 'yes' : 'no',
+            (row.type === 'INVENTORY' ? row.cogsAccount?.name : row.expenseAccount?.name) ?? '',
+            onHand,
+            row.reorderPoint ?? '',
+            row.inventoryAccount?.name ?? '',
+            onHand ? asOf : '',
+            row.isActive ? 'Yes' : 'No',
           ])
         }
-        return csvResponse('items.csv', rows)
+        return csvResponse('products-and-services.csv', rows)
       }
 
       case 'accounts': {

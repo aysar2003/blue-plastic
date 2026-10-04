@@ -1,17 +1,20 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { ClickableRow } from '@/components/reports/clickable-row'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate } from '@/lib/date'
 import { formatMoney, type Money } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
+import { FigureChart, INCOME_COLOR, NET_COLOR } from '@/components/reports/figure-chart'
 import { cashFlow, type CashFlowLine } from '@/server/reports/statements'
 import { ReportControls } from '../report-controls'
 import { readSettings, type SearchParams } from '../params'
 
-export const metadata: Metadata = { title: 'Cash flow' }
+export const metadata: Metadata = { title: 'Statement of Cash Flows' }
 
 export default async function CashFlowPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const ctx = await requireOrgContext('report:read')
@@ -20,11 +23,14 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
   const currency = ctx.organization.baseCurrency
 
   const report = await cashFlow(ctx.orgId, settings.range)
+  const detail = (accountId: string) =>
+    `/reports/transaction-detail?account=${accountId}&period=custom&from=${settings.range.from}&to=${settings.range.to}&back=/reports/cash-flow`
+  const profitAndLoss = `/reports/profit-loss?period=custom&from=${settings.range.from}&to=${settings.range.to}`
 
   return (
     <>
       <PageHeader
-        title="Statement of cash flows"
+        title="Statement of Cash Flows"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · indirect method`}
       />
 
@@ -38,6 +44,18 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
         controls={{ mode: 'range', exportAs: 'cash-flow' }}
       />
 
+      <div className="mb-4">
+        <FigureChart
+          caption="How the profit became cash"
+          currency={currency}
+          bars={[
+            { label: 'Net income', value: report.netIncome, color: NET_COLOR },
+            { label: 'Net change in cash', value: report.netChange, color: '#1E3A5F' },
+            { label: 'Cash at the end', value: report.closingCash, color: INCOME_COLOR },
+          ]}
+        />
+      </div>
+
       <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
           <Table>
@@ -48,15 +66,15 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
               </TableRow>
             </TableHeader>
             <TableBody>
-              <Section label="Operating activities" lines={report.operating.lines} currency={currency}>
-                <Row label="Net income" amount={report.netIncome} currency={currency} indent />
+              <Section label="Operating activities" lines={report.operating.lines} currency={currency} detail={detail}>
+                <Row label="Net income" amount={report.netIncome} currency={currency} indent href={profitAndLoss} />
               </Section>
               <Total label="Cash from operating activities" amount={report.operating.total} currency={currency} />
 
-              <Section label="Investing activities" lines={report.investing.lines} currency={currency} />
+              <Section label="Investing activities" lines={report.investing.lines} currency={currency} detail={detail} />
               <Total label="Cash from investing activities" amount={report.investing.total} currency={currency} />
 
-              <Section label="Financing activities" lines={report.financing.lines} currency={currency} />
+              <Section label="Financing activities" lines={report.financing.lines} currency={currency} detail={detail} />
               <Total label="Cash from financing activities" amount={report.financing.total} currency={currency} />
 
               <TableRow className="bg-muted/60 hover:bg-muted/60">
@@ -111,11 +129,13 @@ function Section({
   label,
   lines,
   currency,
+  detail,
   children,
 }: {
   label: string
   lines: CashFlowLine[]
   currency: string
+  detail: (accountId: string) => string
   children?: React.ReactNode
 }) {
   return (
@@ -133,7 +153,16 @@ function Section({
           </TableCell>
         </TableRow>
       ) : (
-        lines.map((line) => <Row key={line.label} label={line.label} amount={line.amount} currency={currency} indent />)
+        lines.map((line) => (
+          <Row
+            key={line.accountId}
+            label={line.label}
+            amount={line.amount}
+            currency={currency}
+            indent
+            href={detail(line.accountId)}
+          />
+        ))
       )}
     </>
   )
@@ -144,17 +173,24 @@ function Row({
   amount,
   currency,
   indent,
+  href,
 }: {
   label: string
   amount: Money
   currency: string
   indent?: boolean
+  href?: string
 }) {
+  const figure = formatMoney(amount, currency)
   return (
-    <TableRow>
-      <TableCell className={indent ? 'pl-6' : ''}>{label}</TableCell>
-      <TableCell className="numeric tabular">{formatMoney(amount, currency)}</TableCell>
-    </TableRow>
+    <ClickableRow href={href}>
+      <TableCell className={indent ? 'pl-6' : ''}>
+        {href ? <Link href={href} className="underline-offset-4 hover:underline">{label}</Link> : label}
+      </TableCell>
+      <TableCell className="numeric tabular">
+        {href ? <Link href={href} className="underline-offset-4 hover:underline">{figure}</Link> : figure}
+      </TableCell>
+    </ClickableRow>
   )
 }
 

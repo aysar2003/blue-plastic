@@ -15,28 +15,36 @@ export function StartReconciliationButton({
   accountId,
   accountName,
   today,
+  startOpen = false,
+  onClose,
 }: {
   accountId: string
   accountName: string
   today: string
+  /** Opens the statement dialog immediately, with no extra button. */
+  startOpen?: boolean
+  onClose?: () => void
 }) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(startOpen)
   const [statementDate, setStatementDate] = useState(today)
   const [balance, setBalance] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  if (!open) {
-    return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <ScaleIcon /> Reconcile
-      </Button>
-    )
+  const close = () => {
+    setOpen(false)
+    onClose?.()
   }
 
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) setOpen(false) }}>
+    <>
+      {startOpen ? null : (
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          <ScaleIcon /> Reconcile
+        </Button>
+      )}
+      <Dialog open={open} onOpenChange={(next) => { if (!next) close() }}>
       <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Reconcile {accountName}</DialogTitle>
@@ -69,7 +77,7 @@ export function StartReconciliationButton({
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
+          <Button variant="outline" onClick={close} disabled={isPending}>
             Cancel
           </Button>
           <Button
@@ -93,5 +101,6 @@ export function StartReconciliationButton({
         </div>
       </DialogContent>
     </Dialog>
+    </>
   )
 }

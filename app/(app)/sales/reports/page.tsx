@@ -17,10 +17,9 @@ export default async function SalesReportsHubPage() {
     <AppLauncher
       eyebrow="Sales"
       title="Sales reports"
-      subtitle="Who buys, what sells, and who still owes."
-      backHref="/sales"
-      backLabel="Sales"
+      subtitle="Who buys, what sells, and who still owes."
       apps={SALES_REPORT_APPS}
+      searchable
     />
   )
 }

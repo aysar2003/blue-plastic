@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { settleNumberInput } from '@/lib/money'
+
 import {
   calendarDate,
   countryCode,
@@ -34,15 +36,36 @@ const optionalDate = z
   .nullable()
   .optional()
 
+const optionalTime = z
+  .union([z.string().trim().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'Use a time like 14:30'), z.literal('')])
+  .transform((v) => (v === '' ? null : v.slice(0, 5)))
+  .nullable()
+  .optional()
+
+const reminderDays = z
+  .union([z.literal(''), z.literal('3'), z.literal('5'), z.literal('7')])
+  .transform((value) => (value === '' ? null : Number(value)))
+  .nullable()
+  .optional()
+
 /* --- Payment terms -------------------------------------------------------- */
 
 export const paymentTermSchema = z.object({
   id: optionalId,
   name: requiredText('Name', 60),
   type: z.enum(['DUE_ON_RECEIPT', 'NET_DAYS', 'DAY_OF_MONTH']),
-  dueDays: z.coerce.number().int().min(0).max(365),
+  dueDays: z.preprocess(
+    (value) => (typeof value === 'string' ? (settleNumberInput(value.trim()) ?? value.trim()) : value),
+    z.coerce.number().int().min(0).max(365),
+  ),
   discountDays: z
-    .union([z.coerce.number().int().min(0).max(365), z.literal('')])
+    .union([
+      z.literal(''),
+      z.preprocess(
+        (value) => (typeof value === 'string' ? (settleNumberInput(value.trim()) ?? value.trim()) : value),
+        z.coerce.number().int().min(0).max(365),
+      ),
+    ])
     .transform((v) => (v === '' ? null : v))
     .nullable()
     .optional(),
@@ -91,6 +114,12 @@ export const customerSchema = z.object({
    */
   openingBalance: optionalMoney,
   openingBalanceDate: optionalDate,
+  /** The day the debt agreement was signed. */
+  agreementDate: optionalDate,
+  /** Clock time of the opening balance. */
+  balanceTime: optionalTime,
+  /** Days before the balance time that the top warning should appear. */
+  reminderDays,
 })
 
 export type CustomerInput = z.infer<typeof customerSchema>
@@ -131,6 +160,7 @@ export const itemSchema = z
     inventoryAccountId: optionalId,
     cogsAccountId: optionalId,
     reorderPoint: optionalMoney,
+    storeId: optionalId,
 
     /**
      * Stock the business already has when the item is created.
@@ -214,9 +244,18 @@ export const taxAgencySchema = z.object({
 export const percentToFraction = z
   .string()
   .trim()
-  .regex(/^\d{1,3}(\.\d{1,7})?$/, 'Enter a percentage, for example 16 or 7.5')
-  .refine((v) => Number(v) <= 100, 'A tax rate cannot exceed 100%')
-  .transform((v) => (Number(v) / 100).toFixed(9))
+  .transform((value, ctx) => {
+    const next = settleNumberInput(value) ?? value
+    if (!/^\d{1,3}(\.\d{1,7})?$/.test(next)) {
+      ctx.addIssue({ code: 'custom', message: 'Enter a percentage, for example 16 or 7.5' })
+      return z.NEVER
+    }
+    if (Number(next) > 100) {
+      ctx.addIssue({ code: 'custom', message: 'A tax rate cannot exceed 100%' })
+      return z.NEVER
+    }
+    return (Number(next) / 100).toFixed(9)
+  })
 
 export const taxRateSchema = z.object({
   id: optionalId,
@@ -262,5 +301,7 @@ export const bulkSetActiveSchema = z.object({
 })
 
 export const csvImportSchema = z.object({
-  csv: z.string().min(1, 'Paste or upload a CSV first').max(2_000_000),
+  csv: z.string().max(8_000_000).optional(),
+  /** Base64 .xlsx, the file QuickBooks Online writes from Export. */
+  workbook: z.string().max(12_000_000).optional(),
 })

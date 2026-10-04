@@ -3,6 +3,7 @@ import Link from 'next/link'
 
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
+import { ClickableRow } from '@/components/reports/clickable-row'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -13,7 +14,7 @@ import { requireOrgContext } from '@/server/auth/context'
 import { ReportControls } from '../report-controls'
 import { readSettings, type SearchParams } from '../params'
 
-export const metadata: Metadata = { title: 'Adjusting entries' }
+export const metadata: Metadata = { title: 'Adjusting Journal Entries' }
 
 /**
  * Adjusting and closing entries, on their own.
@@ -38,7 +39,7 @@ export default async function AdjustingEntriesPage({
   return (
     <>
       <PageHeader
-        title="Adjusting entries"
+        title="Adjusting Journal Entries"
         description={`Adjusting and year-end entries between ${formatDate(settings.range.from)} and ${formatDate(settings.range.to)}.`}
       />
 
@@ -91,7 +92,10 @@ export default async function AdjustingEntriesPage({
                 </TableHeader>
                 <TableBody>
                   {journal.lines.map((line) => (
-                    <TableRow key={line.id}>
+                    <ClickableRow
+                      key={line.id}
+                      href={`/reports/transaction-detail?account=${line.account.id}&period=custom&from=${settings.range.from}&to=${settings.range.to}&back=/reports/adjusting-entries`}
+                    >
                       <TableCell className="tabular text-muted-foreground">{line.account.code}</TableCell>
                       <TableCell>
                         <Link
@@ -110,7 +114,7 @@ export default async function AdjustingEntriesPage({
                       <TableCell className="numeric tabular">
                         {line.credit.isZero() ? '' : formatMoney(line.credit, currency)}
                       </TableCell>
-                    </TableRow>
+                    </ClickableRow>
                   ))}
                 </TableBody>
               </Table>

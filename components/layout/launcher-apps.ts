@@ -22,6 +22,15 @@ export type LauncherIcon =
   | 'calendar'
   | 'settings'
   | 'help'
+  | 'scale'
+  | 'clock'
+  | 'percent'
+  | 'clipboard'
+  | 'sliders'
+  | 'scroll'
+  | 'palette'
+  | 'file'
+  | 'transfer'
 
 export type LauncherApp = {
   key: string
@@ -33,6 +42,8 @@ export type LauncherApp = {
   accent: string
   /** Soft wash behind the icon. */
   wash: string
+  /** One-line purpose shown under the tile label on wider screens. */
+  blurb?: string
 }
 
 export const LAUNCHER_APPS: LauncherApp[] = [
@@ -44,6 +55,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     permission: 'invoice:read',
     accent: '#0F766E',
     wash: '#CCFBF1',
+    blurb: 'Invoices and receipts',
   },
   {
     key: 'customers',
@@ -53,15 +65,17 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     permission: 'customer:read',
     accent: '#0369A1',
     wash: '#E0F2FE',
+    blurb: 'Who you sell to',
   },
   {
     key: 'purchases',
     label: 'Purchases',
-    href: '/purchases/bills',
+    href: '/purchases',
     icon: 'shopping-cart',
     permission: 'bill:read',
     accent: '#C2410C',
     wash: '#FFEDD5',
+    blurb: 'Bills and expenses',
   },
   {
     key: 'vendors',
@@ -71,6 +85,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     permission: 'vendor:read',
     accent: '#B45309',
     wash: '#FEF3C7',
+    blurb: 'Who you buy from',
   },
   {
     key: 'banking',
@@ -80,6 +95,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     permission: 'bank:read',
     accent: '#047857',
     wash: '#D1FAE5',
+    blurb: 'Cash and cards',
   },
   {
     key: 'payments',
@@ -89,24 +105,37 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     permission: 'payment:read',
     accent: '#0E7490',
     wash: '#CFFAFE',
+    blurb: 'Money received',
   },
   {
     key: 'inventory',
     label: 'Inventory',
-    href: '/items',
+    href: '/inventory',
     icon: 'package',
     permission: 'item:read',
     accent: '#1D4ED8',
     wash: '#DBEAFE',
+    blurb: 'Products and stock',
+  },
+  {
+    key: 'stores',
+    label: 'Store',
+    href: '/stores',
+    icon: 'building',
+    permission: 'inventory:read',
+    accent: '#0F766E',
+    wash: '#CCFBF1',
+    blurb: 'Quantity by warehouse',
   },
   {
     key: 'accounting',
     label: 'Accounting',
-    href: '/accounts',
+    href: '/accounting',
     icon: 'book',
     permission: 'account:read',
     accent: '#1E3A5F',
     wash: '#E2E8F0',
+    blurb: 'The ledger',
   },
   {
     key: 'journals',
@@ -116,6 +145,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     permission: 'journal:read',
     accent: '#334155',
     wash: '#F1F5F9',
+    blurb: 'Manual entries',
   },
   {
     key: 'reports',
@@ -125,6 +155,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     permission: 'report:read',
     accent: '#BE123C',
     wash: '#FFE4E6',
+    blurb: 'The figures',
   },
   {
     key: 'bill-payments',
@@ -134,6 +165,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     permission: 'expense:read',
     accent: '#A16207',
     wash: '#FEF9C3',
+    blurb: 'Money paid out',
   },
   {
     key: 'periods',
@@ -143,15 +175,17 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     permission: 'period:read',
     accent: '#475569',
     wash: '#E2E8F0',
+    blurb: 'Close the books',
   },
   {
     key: 'settings',
     label: 'Settings',
-    href: '/settings/organization',
+    href: '/settings',
     icon: 'settings',
     permission: 'org:read',
     accent: '#57534E',
     wash: '#F5F5F4',
+    blurb: 'How the books are set',
   },
   {
     key: 'help',
@@ -160,6 +194,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     icon: 'help',
     accent: '#0F766E',
     wash: '#F0FDFA',
+    blurb: 'How it works',
   },
 ]
 

@@ -3,6 +3,7 @@ import { UsersIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
 import { Pagination } from '@/components/data/pagination'
+import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { SearchInput } from '@/components/data/search-input'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -30,7 +31,7 @@ export default async function UsersPage({
   const query = parseListQuery(params)
   const sort = readSort(params, SORTABLE, { sort: 'name', dir: 'asc' })
   const linkParams = { q: query.q, sort: sort.sort, dir: sort.dir }
-  const { rows: members, total, page, pageCount, pageSize } = await membershipService.list(ctx, query)
+  const { rows: members, total } = await membershipService.list(ctx, query)
 
   // A membership list is short and its columns come from two tables, so it is
   // ordered here rather than in the query.
@@ -75,6 +76,7 @@ export default async function UsersPage({
         />
       ) : (
         <Card className="overflow-hidden p-0">
+          <ScrollSheet>
           <Table>
             <TableHeader>
               <TableRow>
@@ -136,14 +138,8 @@ export default async function UsersPage({
               })}
             </TableBody>
           </Table>
-          <Pagination
-            page={page}
-            pageCount={pageCount}
-            total={total}
-            pageSize={pageSize}
-            basePath="/settings/users"
-            params={linkParams}
-          />
+          </ScrollSheet>
+          <Pagination total={total} />
         </Card>
       )}
     </div>

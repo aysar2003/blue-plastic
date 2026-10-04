@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import { ClickableRow } from '@/components/reports/clickable-row'
 import { EmptyState } from '@/components/data/empty-state'
 import { SortableHeader, type SortState } from '@/components/data/sortable-header'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -72,7 +73,7 @@ export function RankedTable({
       </TableHeader>
       <TableBody>
         {ordered.map((row) => (
-          <TableRow key={row.id}>
+          <ClickableRow key={row.id} href={linkTo?.(row.id)}>
             <TableCell className="font-medium">
               {linkTo ? (
                 <Link href={linkTo(row.id)} className="underline-offset-4 hover:underline">
@@ -88,7 +89,15 @@ export function RankedTable({
                 {row.quantity?.toDecimalPlaces(2).toString() ?? '—'}
               </TableCell>
             ) : null}
-            <TableCell className="numeric tabular">{formatMoney(row.amount, currency)}</TableCell>
+            <TableCell className="numeric tabular">
+              {linkTo ? (
+                <Link href={linkTo(row.id)} className="underline-offset-4 hover:underline">
+                  {formatMoney(row.amount, currency)}
+                </Link>
+              ) : (
+                formatMoney(row.amount, currency)
+              )}
+            </TableCell>
             <TableCell>
               <div className="flex items-center gap-2">
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
@@ -106,7 +115,7 @@ export function RankedTable({
                 </span>
               </div>
             </TableCell>
-          </TableRow>
+          </ClickableRow>
         ))}
       </TableBody>
       <TableFooter>

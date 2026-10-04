@@ -1,7 +1,7 @@
 import 'server-only'
 import type { Prisma } from '@prisma/client'
 
-import { toDate, today } from '@/lib/date'
+import { toDate, today, type CalendarDate } from '@/lib/date'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { BillPaymentInput } from '@/lib/validation/purchases'
@@ -13,7 +13,7 @@ import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { notFound, precondition, validation } from '@/server/errors'
-import { nextDocumentNumber } from '@/server/sequences'
+import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import { outstandingBalances, refreshStatus } from '@/server/services/purchase.service'
 
 const PAYMENT_SELECT = {
@@ -38,11 +38,25 @@ const PAYMENT_ORDER: Record<
 export async function list(
   ctx: OrgContext,
   query: ListQuery,
-  options: { vendorId?: string; sort?: string; dir?: 'asc' | 'desc' } = {},
+  options: {
+    vendorId?: string
+    sort?: string
+    dir?: 'asc' | 'desc'
+    from?: CalendarDate
+    to?: CalendarDate
+  } = {},
 ) {
   const where: Prisma.BillPaymentWhereInput = {
     orgId: ctx.orgId,
     ...(options.vendorId ? { vendorId: options.vendorId } : {}),
+    ...(options.from || options.to
+      ? {
+          date: {
+            ...(options.from ? { gte: toDate(options.from) } : {}),
+            ...(options.to ? { lte: toDate(options.to) } : {}),
+          },
+        }
+      : {}),
     ...(query.q
       ? {
           OR: [
@@ -206,7 +220,12 @@ export async function create(ctx: OrgContext, input: BillPaymentInput) {
       )
     }
 
-    const number = await nextDocumentNumber(tx, ctx.orgId, 'BILL_PAYMENT')
+    const number = await assignDocumentNumber(tx, ctx.orgId, 'BILL_PAYMENT', input.number)
+    const clash = await tx.billPayment.findFirst({
+      where: { orgId: ctx.orgId, number },
+      select: { id: true },
+    })
+    if (clash) throw numberTaken()
 
     const payment = await tx.billPayment.create({
       data: {

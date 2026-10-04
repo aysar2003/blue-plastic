@@ -393,10 +393,16 @@ model Organization {
   reconciliations    BankReconciliation[]
   items          Item[]
   itemCategories ItemCategory[]
+  stores         Store[]
   paymentTerms   PaymentTerm[]
   taxAgencies    TaxAgency[]
   taxRates       TaxRate[]
   taxCodes       TaxCode[]
+  customerFiles  CustomerFile[]
+  bankRules      BankRule[]
+  bookmarks      WorkspaceBookmark[]
+  reportNotes    ReportNote[]
+  ledgerFiles    LedgerFile[]
 
   @@map("organizations")
 }
@@ -424,6 +430,7 @@ model User {
   accounts    Account[]
   sessions    Session[]
   auditLogs   AuditLog[]
+  bookmarks   WorkspaceBookmark[]
 
   @@map("users")
 }
@@ -587,6 +594,11 @@ model LedgerAccount {
   /// organisation's base. Unused until multi-currency lands (ADR-0006).
   currencyCode String? @db.Char(3)
 
+  /// A finer label under the subtype, such as "Sales of product income".
+  /// The subtype still decides how the books behave; this only names the account
+  /// more precisely on the chart and on reports.
+  detailType String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -611,12 +623,16 @@ model LedgerAccount {
   purchasePayments  PurchaseDocument[]     @relation("PurchasePaymentAccount")
   billPaymentSource BillPayment[]          @relation("BillPaymentAccount")
   adjustments       InventoryAdjustment[]  @relation("AdjustmentAccount")
+  stores            Store[]                @relation("StoreAccount")
   transfersFrom     BankTransfer[]         @relation("TransferFrom")
   transfersTo       BankTransfer[]         @relation("TransferTo")
   deposits          Deposit[]              @relation("DepositBankAccount")
   depositLines      DepositLine[]          @relation("DepositLineAccount")
   importedLines     ImportedTransaction[]
+  importCategories  ImportedTransaction[] @relation("ImportCategory")
   reconciliations   BankReconciliation[]
+  rulesForBank      BankRule[]            @relation("RuleBank")
+  rulesForCategory  BankRule[]            @relation("RuleCategory")
 
   @@unique([orgId, code])
   @@unique([orgId, systemKey])
@@ -743,6 +759,7 @@ model Journal {
   deposits          Deposit[]
   inventoryMovements InventoryTransaction[]
   inventoryAdjustments InventoryAdjustment[]
+  files LedgerFile[]
 
   reversalOf Journal? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedBy Journal? @relation("JournalReversal")
@@ -904,6 +921,15 @@ model Customer {
   notes    String?
   isActive Boolean @default(true)
 
+  /// The day the debt was agreed. The ledger still uses the balance date.
+  agreementDate DateTime? @db.Date
+  /// The day the balance falls due. Kept on the customer so a reminder can find it.
+  balanceDate   DateTime? @db.Date
+  /// Clock time of the balance, as entered on the registration form.
+  balanceTime   String?
+  /// How many days before the balance time the warning appears. 3, 5, or 7.
+  reminderDays  Int?      @db.SmallInt
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -912,12 +938,41 @@ model Customer {
   journalLines JournalLine[]
   documents    SalesDocument[]
   payments     CustomerPayment[]
+  files        CustomerFile[]
+  importedLines ImportedTransaction[]
+  bankRules     BankRule[]
 
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
   @@unique([id, orgId])
   @@index([orgId, isActive, displayName])
   @@map("customers")
+}
+
+/// A portrait or a debt-agreement paper kept with the customer who was registered.
+enum CustomerFileKind {
+  PHOTO
+  AGREEMENT
+}
+
+model CustomerFile {
+  id         String           @id @default(cuid())
+  orgId      String
+  customerId String
+  kind       CustomerFileKind
+  originalName String
+  contentType  String
+  byteSize     Int
+  /// Path under the uploads directory. Never a public URL.
+  storageKey   String
+  createdById  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, customerId, kind])
+  @@map("customer_files")
 }
 
 model Vendor {
@@ -960,6 +1015,8 @@ model Vendor {
   journalLines          JournalLine[]
   documents             PurchaseDocument[]
   payments              BillPayment[]
+  importedLines         ImportedTransaction[]
+  bankRules             BankRule[]
 
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
@@ -1025,6 +1082,9 @@ model Item {
   cogsAccountId      String?
   reorderPoint       Decimal? @db.Decimal(19, 4)
 
+  /// Which store holds this product. The store has its own inventory account.
+  storeId String?
+
   isActive Boolean @default(true)
 
   /// Soft deletion. The row stays and its journal stays; both are excluded from
@@ -1042,6 +1102,7 @@ model Item {
   expenseAccount   LedgerAccount? @relation("ItemExpense", fields: [expenseAccountId], references: [id], onDelete: Restrict)
   inventoryAccount LedgerAccount? @relation("ItemInventory", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
   cogsAccount      LedgerAccount? @relation("ItemCogs", fields: [cogsAccountId], references: [id], onDelete: Restrict)
+  store            Store?         @relation(fields: [storeId], references: [id], onDelete: SetNull)
   salesTaxCode     TaxCode?       @relation("ItemSalesTax", fields: [salesTaxCodeId], references: [id], onDelete: SetNull)
   purchaseTaxCode  TaxCode?       @relation("ItemPurchaseTax", fields: [purchaseTaxCodeId], references: [id], onDelete: SetNull)
   salesLines       SalesDocumentLine[]
@@ -1054,7 +1115,35 @@ model Item {
   @@index([orgId, isActive, name])
   @@index([orgId, type])
   @@index([orgId, deletedAt])
+  @@index([orgId, storeId])
   @@map("items")
+}
+
+/// A place the stock is kept. Each store has an inventory account of its own,
+/// named with the store, listed with Inventory Asset on the chart.
+model Store {
+  id    String @id @default(cuid())
+  orgId String
+
+  name               String
+  inventoryAccountId String
+  isActive           Boolean @default(true)
+  /// The office. Stock recorded before a store was chosen is counted here.
+  isOffice           Boolean @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  account      LedgerAccount          @relation("StoreAccount", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
+  items        Item[]
+  movements    InventoryTransaction[]
+  salesLines   SalesDocumentLine[]
+  purchaseLines PurchaseDocumentLine[]
+
+  @@unique([orgId, name])
+  @@index([orgId, isActive])
+  @@map("stores")
 }
 
 // ---------------------------------------------------------------------------
@@ -1285,12 +1374,16 @@ model SalesDocumentLine {
   /// has since been remapped.
   incomeAccountId String?
 
+  /// The store this line is issued from, or returned to.
+  storeId String?
+
   serviceDate DateTime? @db.Date
 
   document      SalesDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
   item          Item?          @relation(fields: [itemId], references: [id], onDelete: Restrict)
   taxCode       TaxCode?       @relation(fields: [taxCodeId], references: [id], onDelete: Restrict)
   incomeAccount LedgerAccount? @relation("SalesLineIncome", fields: [incomeAccountId], references: [id], onDelete: Restrict)
+  store         Store?         @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   @@unique([documentId, lineNumber])
   @@index([orgId, itemId])
@@ -1507,10 +1600,14 @@ model PurchaseDocumentLine {
   /// years later shows where the money actually went.
   expenseAccountId String?
 
+  /// The store this line is received into, or returned from.
+  storeId String?
+
   document        PurchaseDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   item            Item?            @relation(fields: [itemId], references: [id], onDelete: Restrict)
   taxCode         TaxCode?         @relation(fields: [taxCodeId], references: [id], onDelete: Restrict)
   expenseAccount  LedgerAccount?   @relation("PurchaseLineExpense", fields: [expenseAccountId], references: [id], onDelete: Restrict)
+  store           Store?           @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   @@unique([documentId, lineNumber])
   @@index([orgId, itemId])
@@ -1751,12 +1848,21 @@ model ImportedTransaction {
   matchedJournalLineId String?
   matchedAt            DateTime? @db.Timestamptz(6)
 
+  /// Chosen on the feed before the line is posted. Not a ledger entry.
+  categoryAccountId String?
+  vendorId          String?
+  customerId        String?
+
   importedAt   DateTime @default(now()) @db.Timestamptz(6)
   importedById String?
 
-  organization      Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  account           LedgerAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  matchedJournalLine JournalLine?  @relation(fields: [matchedJournalLineId], references: [id], onDelete: SetNull)
+  organization       Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  account            LedgerAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  categoryAccount    LedgerAccount?  @relation("ImportCategory", fields: [categoryAccountId], references: [id], onDelete: SetNull)
+  vendor             Vendor?         @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  customer           Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  matchedJournalLine JournalLine?    @relation(fields: [matchedJournalLineId], references: [id], onDelete: SetNull)
+  files              LedgerFile[]
 
   @@unique([orgId, accountId, externalId])
   @@index([orgId, accountId, status, date])
@@ -1864,12 +1970,16 @@ model InventoryTransaction {
 
   journalId String?
 
+  /// Which store this quantity belongs to. Null is counted at the office.
+  storeId String?
+
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   createdById String?
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   item         Item         @relation(fields: [itemId], references: [id], onDelete: Restrict)
   journal      Journal?     @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  store        Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   @@unique([itemId, sequence])
   @@index([orgId, itemId, sequence(sort: Desc)])
@@ -1948,4 +2058,102 @@ model InventoryAdjustmentLine {
   @@unique([adjustmentId, lineNumber])
   @@index([orgId, itemId])
   @@map("inventory_adjustment_lines")
+}
+
+// ---------------------------------------------------------------------------
+// Workspace, bank rules, report notes, and papers on a transaction
+// ---------------------------------------------------------------------------
+
+/// A saved link (shortcut) or a pinned app, for one person in one organisation.
+model WorkspaceBookmark {
+  id     String @id @default(cuid())
+  orgId  String
+  userId String
+
+  label String
+  href  String
+  /// `shortcut` is a page they bookmarked. `pin` is an app they want on Home.
+  kind  String
+  sort  Int    @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId, href, kind])
+  @@index([orgId, userId, kind, sort])
+  @@map("workspace_bookmarks")
+}
+
+/// When a bank description contains this text, suggest this payee and category.
+model BankRule {
+  id    String @id @default(cuid())
+  orgId String
+
+  name     String
+  /// Compared case-insensitively against the bank description.
+  contains String
+
+  /// Empty means the rule applies to every bank account.
+  accountId         String?
+  categoryAccountId String
+  vendorId          String?
+  customerId        String?
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization    Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  account         LedgerAccount? @relation("RuleBank", fields: [accountId], references: [id], onDelete: Cascade)
+  categoryAccount LedgerAccount  @relation("RuleCategory", fields: [categoryAccountId], references: [id], onDelete: Restrict)
+  vendor          Vendor?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  customer        Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, active])
+  @@map("bank_rules")
+}
+
+/// A note kept on a report, for the organisation, not for one date range.
+model ReportNote {
+  id        String @id @default(cuid())
+  orgId     String
+  reportKey String
+  body      String
+
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, reportKey])
+  @@map("report_notes")
+}
+
+/// A receipt or other paper kept against a bank line, a journal, or a purchase.
+model LedgerFile {
+  id    String @id @default(cuid())
+  orgId String
+
+  originalName String
+  contentType  String
+  byteSize     Int
+  storageKey   String
+
+  importedTransactionId String?
+  journalId             String?
+  purchaseDocumentId    String?
+
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  createdById String?
+
+  organization        Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  importedTransaction ImportedTransaction? @relation(fields: [importedTransactionId], references: [id], onDelete: Cascade)
+  journal             Journal?             @relation(fields: [journalId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, importedTransactionId])
+  @@index([orgId, journalId])
+  @@index([orgId, purchaseDocumentId])
+  @@map("ledger_files")
 }

@@ -20,10 +20,19 @@ export type OrgContext = {
   organization: {
     id: string
     name: string
+    legalName: string | null
     baseCurrency: string
     fiscalYearStartMonth: number
     timeZone: string
     allowNegativeStock: boolean
+    addressLine1: string | null
+    addressLine2: string | null
+    city: string | null
+    region: string | null
+    postalCode: string | null
+    country: string | null
+    phone: string | null
+    email: string | null
   }
   user: {
     id: string
@@ -55,10 +64,19 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
         select: {
           id: true,
           name: true,
+          legalName: true,
           baseCurrency: true,
           fiscalYearStartMonth: true,
           timeZone: true,
           allowNegativeStock: true,
+          addressLine1: true,
+          addressLine2: true,
+          city: true,
+          region: true,
+          postalCode: true,
+          country: true,
+          phone: true,
+          email: true,
         },
       },
       user: { select: { id: true, name: true, email: true, image: true } },

@@ -2,8 +2,9 @@ import type { Permission } from '@/server/auth/permissions'
 import type { LauncherIcon } from './launcher-apps'
 
 /**
- * Destinations inside the Sales hub. Document tiles open the create form so the
- * person can enter a sale immediately; lists stay reachable from those screens.
+ * Destinations inside the Sales hub. Invoices, sales receipts, and quotations
+ * open their home first; other document tiles open the create form so a sale
+ * can start at once.
  */
 export type SalesHubApp = {
   key: string
@@ -21,9 +22,9 @@ export const SALES_HUB_APPS: SalesHubApp[] = [
   {
     key: 'sales-receipts',
     label: 'Sales receipts',
-    href: '/sales/sales-receipts/new',
+    href: '/sales/sales-receipts',
     icon: 'receipt',
-    permission: 'invoice:create',
+    permission: 'invoice:read',
     accent: '#0F766E',
     wash: '#CCFBF1',
     blurb: 'Paid on the spot',
@@ -31,9 +32,9 @@ export const SALES_HUB_APPS: SalesHubApp[] = [
   {
     key: 'invoices',
     label: 'Invoices',
-    href: '/sales/invoices/new',
+    href: '/sales/invoices',
     icon: 'notebook',
-    permission: 'invoice:create',
+    permission: 'invoice:read',
     accent: '#1D4ED8',
     wash: '#DBEAFE',
     blurb: 'Customer owes you',
@@ -41,9 +42,9 @@ export const SALES_HUB_APPS: SalesHubApp[] = [
   {
     key: 'quotations',
     label: 'Quotations',
-    href: '/sales/estimates/new',
+    href: '/sales/estimates',
     icon: 'book',
-    permission: 'invoice:create',
+    permission: 'invoice:read',
     accent: '#0369A1',
     wash: '#E0F2FE',
     blurb: 'Not posted yet',
@@ -104,7 +105,7 @@ export type SalesReportApp = {
 export const SALES_REPORT_APPS: SalesReportApp[] = [
   {
     key: 'sales-by-customer',
-    label: 'By customer',
+    label: 'Sales by Customer Summary',
     href: '/reports/sales-by-customer',
     icon: 'users',
     accent: '#0369A1',
@@ -113,7 +114,7 @@ export const SALES_REPORT_APPS: SalesReportApp[] = [
   },
   {
     key: 'sales-by-item',
-    label: 'By item',
+    label: 'Sales by Product/Service Summary',
     href: '/reports/sales-by-item',
     icon: 'package',
     accent: '#1D4ED8',
@@ -122,7 +123,7 @@ export const SALES_REPORT_APPS: SalesReportApp[] = [
   },
   {
     key: 'ar-aging',
-    label: 'Receivables',
+    label: 'A/R Aging Summary',
     href: '/reports/ar-aging',
     icon: 'calendar',
     accent: '#BE123C',
@@ -140,7 +141,7 @@ export const SALES_REPORT_APPS: SalesReportApp[] = [
   },
   {
     key: 'payments-received',
-    label: 'Payments in',
+    label: 'Invoice Payment List',
     href: '/reports/payments-received',
     icon: 'hand-coins',
     accent: '#047857',
@@ -149,7 +150,7 @@ export const SALES_REPORT_APPS: SalesReportApp[] = [
   },
   {
     key: 'customer-balances',
-    label: 'Balances',
+    label: 'Customer Balance Summary',
     href: '/reports/customer-balances',
     icon: 'wallet',
     accent: '#B45309',
@@ -158,7 +159,7 @@ export const SALES_REPORT_APPS: SalesReportApp[] = [
   },
   {
     key: 'statements',
-    label: 'Statements',
+    label: 'Customer Balance Detail',
     href: '/reports/statements/customer',
     icon: 'book',
     accent: '#334155',
@@ -167,7 +168,7 @@ export const SALES_REPORT_APPS: SalesReportApp[] = [
   },
   {
     key: 'product-profitability',
-    label: 'Margin',
+    label: 'Product Profitability',
     href: '/reports/product-profitability',
     icon: 'trending',
     accent: '#7C2D12',

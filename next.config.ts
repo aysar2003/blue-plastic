@@ -1,7 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // exceljs is a Node reader (streams, unzip). Bundling it pulls the browser build.
+  serverExternalPackages: ['exceljs'],
+  experimental: {
+    serverActions: {
+      // A customer photo plus the debt-agreement papers.
+      bodySizeLimit: '20mb',
+    },
+  },
 };
 
 export default nextConfig;

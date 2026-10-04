@@ -66,7 +66,10 @@ export function ReportControls({
     const merged = { ...draft, ...next }
     setDraft(merged)
 
-    const params = new URLSearchParams()
+    // Keep the rest of the address — a statement's customer, a filter — and
+    // only replace the dates this bar owns.
+    const params = new URLSearchParams(searchParams.toString())
+    for (const key of ['period', 'from', 'to', 'asOf', 'basis', 'compare']) params.delete(key)
     params.set('period', merged.period)
     // A preset resolves its own dates on the server. Sending the old ones would
     // only survive to confuse a later switch to a custom range.

@@ -28,6 +28,8 @@ export type SalesJournalInput = {
   depositAccountId?: string | null
   /** Where a line lands when its item names no income account. */
   fallbackIncomeAccountId: string
+  /** Contra-revenue account. Required when the document carries a discount. */
+  discountAccountId?: string | null
   memo?: string | null
   /**
    * Cost of what was sold, when the document moved tracked stock.
@@ -59,6 +61,7 @@ export function buildInvoiceJournal(input: SalesJournalInput): DraftJournal {
         customerId: input.customerId,
         description: `Invoice ${input.number}`,
       },
+      ...discountLines(input, 'debit'),
       ...incomeLines(input, 'credit'),
       ...taxLines(input, 'credit'),
       ...cogsLines(input, 'out'),
@@ -89,6 +92,7 @@ export function buildSalesReceiptJournal(input: SalesJournalInput): DraftJournal
         debit: input.priced.total,
         description: `Sales receipt ${input.number}`,
       },
+      ...discountLines(input, 'debit'),
       ...incomeLines(input, 'credit'),
       ...taxLines(input, 'credit'),
       ...cogsLines(input, 'out'),
@@ -111,6 +115,7 @@ export function buildCreditMemoJournal(input: SalesJournalInput): DraftJournal {
     sourceType: 'CREDIT_MEMO',
     sourceId: input.documentId,
     lines: [
+      ...discountLines(input, 'credit'),
       ...incomeLines(input, 'debit'),
       ...taxLines(input, 'debit'),
       {
@@ -143,6 +148,7 @@ export function buildRefundReceiptJournal(input: SalesJournalInput): DraftJourna
     sourceType: 'REFUND_RECEIPT',
     sourceId: input.documentId,
     lines: [
+      ...discountLines(input, 'credit'),
       ...incomeLines(input, 'debit'),
       ...taxLines(input, 'debit'),
       {
@@ -218,6 +224,18 @@ function cogsLines(input: SalesJournalInput, direction: 'out' | 'in'): DraftLine
   }
 
   return lines
+}
+
+/** The document discount, posted to Sales Discounts so income stays at the list price. */
+function discountLines(input: SalesJournalInput, side: 'debit' | 'credit'): DraftLine[] {
+  if (input.priced.discountAmount.isZero()) return []
+  if (!input.discountAccountId) {
+    throw new Error('A discount needs the Sales Discounts account.')
+  }
+  const draft: DraftLine = { accountId: input.discountAccountId, description: 'Discount' }
+  if (side === 'debit') draft.debit = input.priced.discountAmount
+  else draft.credit = input.priced.discountAmount
+  return [draft]
 }
 
 /** One line per income account, so the profit and loss reads by category. */

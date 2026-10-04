@@ -12,7 +12,7 @@ import { readSettings, settingsToQueryObject, type SearchParams } from '../param
 
 const SORTABLE = ['name', 'count', 'quantity', 'amount'] as const
 
-export const metadata: Metadata = { title: 'Sales by item' }
+export const metadata: Metadata = { title: 'Sales by Product/Service Summary' }
 
 export default async function SalesByItemPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const ctx = await requireOrgContext('report:read')
@@ -26,7 +26,7 @@ export default async function SalesByItemPage({ searchParams }: { searchParams: 
   return (
     <>
       <PageHeader
-        title="Sales by product or service"
+        title="Sales by Product/Service Summary"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · net of tax`}
       />
 

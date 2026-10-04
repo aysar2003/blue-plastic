@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
+import { chartImportSchema } from '@/lib/validation/banking'
 import {
   accountArchiveSchema,
   accountCreateSchema,
@@ -17,6 +18,15 @@ function revalidateChart() {
   revalidatePath('/journals')
   revalidatePath('/reports/trial-balance')
 }
+
+export const importChartForm = action
+  .requires('account:create')
+  .input(chartImportSchema)
+  .handler(async (ctx, input) => {
+    const result = await accountService.importChart(ctx, input.csv)
+    revalidateChart()
+    return result
+  })
 
 export const createAccount = action
   .requires('account:create')

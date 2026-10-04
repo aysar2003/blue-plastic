@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { toDate, type CalendarDate } from '@/lib/date'
+import type { VendorStatementKind } from '@/lib/vendor-statement'
 import { Decimal, ZERO } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
@@ -10,6 +11,7 @@ import {
   emptyBuckets,
   OVERDUE_BUCKETS,
   type AgingBucket,
+  type StatementItem,
 } from '@/server/services/receivables.service'
 
 export { AGING_BUCKETS, BUCKET_LABELS, OVERDUE_BUCKETS }
@@ -174,7 +176,7 @@ export async function unpaidBills(ctx: OrgContext, asOf: CalendarDate) {
 
 export type VendorStatementEntry = {
   id: string
-  kind: 'BILL' | 'VENDOR_CREDIT' | 'PAYMENT' | 'EXPENSE'
+  kind: VendorStatementKind
   number: string
   date: Date
   dueDate: Date | null
@@ -183,7 +185,12 @@ export type VendorStatementEntry = {
   charge: Decimal
   /** What reduced it. */
   credit: Decimal
+  /** Still unpaid on this document. Zero when the row does not carry its own balance. */
+  openAmount: Decimal
+  /** Document total, before anything was applied. */
+  original: Decimal
   balance: Decimal
+  lines: StatementItem[]
   href: string
 }
 
@@ -209,31 +216,87 @@ export async function vendorStatement(
     SELECT COALESCE(SUM(l.credit - l.debit), 0) AS balance
       FROM journal_lines l
       JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
+      JOIN ledger_accounts a ON a.id = l."accountId"
      WHERE l."orgId" = ${ctx.orgId}
        AND l."vendorId" = ${vendorId}
+       AND a.subtype::text = 'ACCOUNTS_PAYABLE'
        AND l."journalDate" < ${toDate(range.from)}
   `
   const opening = new Decimal(openingRow?.balance ?? '0')
 
-  const [documents, payments] = await Promise.all([
+  const from = toDate(range.from)
+  const to = toDate(range.to)
+
+  const [documents, payments, journals] = await Promise.all([
     client.purchaseDocument.findMany({
       where: {
         orgId: ctx.orgId,
         vendorId,
         status: { notIn: ['DRAFT', 'VOID'] },
-        type: { in: ['BILL', 'VENDOR_CREDIT', 'EXPENSE'] },
-        date: { gte: toDate(range.from), lte: toDate(range.to) },
+        type: { in: ['BILL', 'VENDOR_CREDIT', 'EXPENSE', 'PURCHASE_ORDER'] },
+        date: { gte: from, lte: to },
       },
-      select: { id: true, type: true, number: true, date: true, dueDate: true, total: true, memo: true, reference: true },
+      select: {
+        id: true,
+        type: true,
+        number: true,
+        date: true,
+        dueDate: true,
+        total: true,
+        taxTotal: true,
+        memo: true,
+        reference: true,
+        applications: { select: { amount: true } },
+        creditsApplied: { select: { amount: true } },
+        lines: {
+          orderBy: { lineNumber: 'asc' },
+          select: {
+            description: true,
+            quantity: true,
+            unitPrice: true,
+            amount: true,
+            item: { select: { name: true } },
+          },
+        },
+      },
     }),
     client.billPayment.findMany({
       where: {
         orgId: ctx.orgId,
         vendorId,
         status: { not: 'VOID' },
-        date: { gte: toDate(range.from), lte: toDate(range.to) },
+        date: { gte: from, lte: to },
       },
-      select: { id: true, number: true, date: true, amount: true, memo: true, reference: true },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        amount: true,
+        memo: true,
+        reference: true,
+        applications: { select: { amount: true } },
+      },
+    }),
+    client.journalLine.findMany({
+      where: {
+        orgId: ctx.orgId,
+        vendorId,
+        journalDate: { gte: from, lte: to },
+        account: { subtype: 'ACCOUNTS_PAYABLE' },
+        journal: {
+          status: { notIn: ['DRAFT', 'DELETED'] },
+          purchaseDocuments: { none: {} },
+          billPayments: { none: {} },
+        },
+      },
+      select: {
+        id: true,
+        debit: true,
+        credit: true,
+        description: true,
+        journalDate: true,
+        journal: { select: { id: true, journalNumber: true, memo: true } },
+      },
     }),
   ])
 
@@ -241,34 +304,81 @@ export async function vendorStatement(
     BILL: 'bills',
     VENDOR_CREDIT: 'vendor-credits',
     EXPENSE: 'expenses',
+    PURCHASE_ORDER: 'purchase-orders',
   }
 
   const entries: Omit<VendorStatementEntry, 'balance'>[] = [
     ...documents.map((document) => {
       const total = new Decimal(document.total.toString())
+      const applied = sumAmounts(document.applications)
+      const creditUsed = sumAmounts(document.creditsApplied)
+      const isBill = document.type === 'BILL'
+      const isCredit = document.type === 'VENDOR_CREDIT'
+      const items: StatementItem[] = document.lines.map((line) => {
+        const name = line.item?.name
+        const note = line.description
+        const description = name && note && name !== note ? `${name} — ${note}` : name || note || 'Line'
+        return {
+          description,
+          quantity: line.quantity.toString(),
+          rate: line.unitPrice.toString(),
+          amount: line.amount.toString(),
+        }
+      })
+      const tax = new Decimal(document.taxTotal.toString())
+      if (!tax.isZero()) {
+        items.push({ description: 'Tax', quantity: '', rate: '', amount: tax.toString() })
+      }
       return {
         id: document.id,
-        kind: document.type as VendorStatementEntry['kind'],
+        kind: document.type as VendorStatementKind,
         number: document.number,
         date: document.date,
         dueDate: document.dueDate,
         description: document.memo ?? document.reference ?? labelFor(document.type),
-        charge: document.type === 'BILL' ? total : ZERO,
-        credit: document.type === 'VENDOR_CREDIT' ? total : ZERO,
+        charge: isBill ? total : ZERO,
+        credit: isCredit ? total : ZERO,
+        openAmount: isBill ? total.minus(applied) : isCredit ? total.minus(creditUsed) : ZERO,
+        original: total,
+        lines: items,
         href: `/purchases/${slug[document.type] ?? 'bills'}/${document.id}`,
       }
     }),
-    ...payments.map((payment) => ({
-      id: payment.id,
-      kind: 'PAYMENT' as const,
-      number: payment.number,
-      date: payment.date,
-      dueDate: null,
-      description: payment.memo ?? payment.reference ?? 'Payment made',
-      charge: ZERO,
-      credit: new Decimal(payment.amount.toString()),
-      href: '/bill-payments',
-    })),
+    ...payments.map((payment) => {
+      const amount = new Decimal(payment.amount.toString())
+      return {
+        id: payment.id,
+        kind: 'PAYMENT' as const,
+        number: payment.number,
+        date: payment.date,
+        dueDate: null,
+        description: payment.memo ?? payment.reference ?? 'Payment made',
+        charge: ZERO,
+        credit: amount,
+        openAmount: amount.minus(sumAmounts(payment.applications)),
+        original: amount,
+        lines: [],
+        href: `/bill-payments?q=${encodeURIComponent(payment.number)}`,
+      }
+    }),
+    ...journals.map((line) => {
+      const debit = new Decimal(line.debit.toString())
+      const credit = new Decimal(line.credit.toString())
+      return {
+        id: line.id,
+        kind: 'JOURNAL' as const,
+        number: line.journal.journalNumber,
+        date: line.journalDate,
+        dueDate: null,
+        description: line.description ?? line.journal.memo ?? 'Journal entry',
+        charge: credit,
+        credit: debit,
+        openAmount: credit.minus(debit),
+        original: credit.minus(debit).abs(),
+        lines: [],
+        href: `/journals/${line.journal.id}`,
+      }
+    }),
   ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.number.localeCompare(b.number))
 
   let running = opening
@@ -280,6 +390,10 @@ export async function vendorStatement(
   return { opening, entries: withBalances, closing: running }
 }
 
+function sumAmounts(rows: { amount: { toString(): string } }[]): Decimal {
+  return rows.reduce((sum, row) => sum.plus(row.amount.toString()), ZERO)
+}
+
 function labelFor(type: string): string {
   switch (type) {
     case 'BILL':
@@ -288,6 +402,8 @@ function labelFor(type: string): string {
       return 'Vendor credit'
     case 'EXPENSE':
       return 'Expense'
+    case 'PURCHASE_ORDER':
+      return 'Purchase order'
     default:
       return type
   }

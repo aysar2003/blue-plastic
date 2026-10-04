@@ -117,7 +117,7 @@ export async function closeChecklist(
       ? 'The stock on hand is worth what the balance sheet says it is.'
       : `The stock ledger and the Inventory Asset account differ by ${stock.difference.toFixed(2)} ${currency}.`,
     severity: stock.agrees ? 'ok' : 'blocked',
-    href: '/inventory',
+    href: '/inventory/stock',
     amount: stock.difference,
   })
 
@@ -188,7 +188,7 @@ export async function closeChecklist(
       : `${held.toFixed(2)} ${currency} has been received but not yet banked. ` +
         `If it really is in the bank, the deposit has not been recorded.`,
     severity: held.isZero() ? 'ok' : 'warning',
-    href: '/banking',
+    href: '/banking/deposits/new',
     amount: held,
   })
 
@@ -218,7 +218,7 @@ export async function closeChecklist(
           )
           .join('; '),
     severity: unreconciled.length === 0 ? 'ok' : 'warning',
-    href: '/banking',
+    href: '/banking/accounts',
     count: unreconciled.length,
   })
 
@@ -232,7 +232,7 @@ export async function closeChecklist(
       ? 'No imported statement lines are waiting.'
       : `${unmatched} imported statement line(s) have not been matched or entered.`,
     severity: unmatched === 0 ? 'ok' : 'warning',
-    href: '/banking',
+    href: '/banking/import',
     count: unmatched,
   })
 

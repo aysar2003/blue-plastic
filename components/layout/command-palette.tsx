@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CornerDownLeftIcon, SearchIcon } from 'lucide-react'
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { addLineFromKeyboard, focusNextInGrid, moveListRow, saveFromKeyboard } from '@/lib/keyboard'
 import { formatKeys, SHORTCUTS, type Shortcut } from '@/lib/shortcuts'
 import { cn } from '@/lib/utils'
 import { MODULES } from './nav-items'
@@ -35,8 +36,13 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
+  const [remote, setRemote] = React.useState<Command[]>([])
   const [active, setActive] = React.useState(0)
+  const [pending, setPending] = React.useState<string | null>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
+  const openRef = React.useRef(open)
+  const sequenceRef = React.useRef<string | null>(null)
+  openRef.current = open
 
   const allowed = React.useMemo(() => new Set(permissions), [permissions])
 
@@ -82,11 +88,36 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
     return [...creates, ...navigation]
   }, [allowed])
 
+  React.useEffect(() => {
+    const needle = query.trim()
+    if (needle.length < 2) {
+      setRemote([])
+      return
+    }
+    const handle = window.setTimeout(() => {
+      void fetch(`/api/search?q=${encodeURIComponent(needle)}`)
+        .then((response) => (response.ok ? response.json() : { hits: [] }))
+        .then((data: { hits?: { label: string; href: string; group: string }[] }) => {
+          setRemote(
+            (data.hits ?? []).map((hit) => ({
+              id: `hit:${hit.group}:${hit.href}:${hit.label}`,
+              label: hit.label,
+              group: hit.group,
+              href: hit.href,
+            })),
+          )
+        })
+        .catch(() => setRemote([]))
+    }, 180)
+    return () => window.clearTimeout(handle)
+  }, [query])
+
   const filtered = React.useMemo(() => {
     const needle = query.trim().toLowerCase()
-    if (!needle) return commands
-    return commands.filter((command) => command.label.toLowerCase().includes(needle))
-  }, [commands, query])
+    const local = !needle ? commands : commands.filter((command) => command.label.toLowerCase().includes(needle))
+    const seen = new Set(local.map((command) => command.href))
+    return [...local, ...remote.filter((command) => !seen.has(command.href))]
+  }, [commands, query, remote])
 
   const go = React.useCallback(
     (href: string) => {
@@ -110,10 +141,26 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
     listRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [active, open])
 
+  const waiting = React.useMemo(
+    () =>
+      pending
+        ? SHORTCUTS.filter(
+            (shortcut) =>
+              shortcut.keys[0] === pending && (!shortcut.permission || allowed.has(shortcut.permission)),
+          )
+        : [],
+    [allowed, pending],
+  )
+
   // --- The global key handler ----------------------------------------------
   React.useEffect(() => {
-    let pending: string | null = null
     let timer: ReturnType<typeof setTimeout> | undefined
+
+    const forget = () => {
+      sequenceRef.current = null
+      clearTimeout(timer)
+      setPending(null)
+    }
 
     const isTyping = () => {
       const element = document.activeElement as HTMLElement | null
@@ -126,18 +173,88 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
       )
     }
 
+    const dialogOpen = () => document.querySelector('[role="dialog"]') !== null
+
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      const key = event.key.toLowerCase()
+
+      if ((event.metaKey || event.ctrlKey) && key === 'k' && !event.altKey) {
         event.preventDefault()
+        forget()
         setOpen((wasOpen) => !wasOpen)
         return
       }
 
+      // Save and add-line work while a field is focused. The browser's own
+      // Ctrl+S would otherwise offer to save the page.
+      if ((event.metaKey || event.ctrlKey) && key === 's' && !event.altKey && !openRef.current) {
+        event.preventDefault()
+        saveFromKeyboard(event.shiftKey)
+        return
+      }
+
+      if ((event.metaKey || event.ctrlKey) && key === 'l' && !event.altKey && !event.shiftKey && !openRef.current) {
+        if (addLineFromKeyboard()) event.preventDefault()
+        return
+      }
+
+      if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        const element = document.activeElement
+        if (
+          !event.defaultPrevented &&
+          element instanceof HTMLElement &&
+          focusNextInGrid(element)
+        ) {
+          event.preventDefault()
+        }
+        return
+      }
+
       if (event.metaKey || event.ctrlKey || event.altKey) return
-      if (isTyping()) return
+
+      if (event.key === 'Escape') {
+        if (sequenceRef.current) {
+          event.preventDefault()
+          forget()
+          return
+        }
+        if (!dialogOpen() && isTyping()) {
+          event.preventDefault()
+          ;(document.activeElement as HTMLElement | null)?.blur()
+        }
+        return
+      }
+
+      if (isTyping() || dialogOpen() || openRef.current) return
+
+      if (sequenceRef.current) {
+        const match = SHORTCUTS.find(
+          (shortcut) =>
+            shortcut.keys.length === 2 &&
+            shortcut.keys[0] === sequenceRef.current &&
+            shortcut.keys[1] === key &&
+            (!shortcut.permission || allowed.has(shortcut.permission)),
+        )
+        forget()
+        if (match) {
+          event.preventDefault()
+          go(match.href)
+        }
+        return
+      }
+
+      if (event.key === 'ArrowDown' || key === 'j') {
+        if (moveListRow(1)) event.preventDefault()
+        return
+      }
+      if (event.key === 'ArrowUp' || key === 'k') {
+        if (moveListRow(-1)) event.preventDefault()
+        return
+      }
 
       if (event.key === '?') {
         event.preventDefault()
+        forget()
         go('/help/shortcuts')
         return
       }
@@ -152,33 +269,11 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
         return
       }
 
-      const key = event.key.toLowerCase()
-
-      if (pending) {
-        const sequence = [pending, key]
-        pending = null
-        clearTimeout(timer)
-
-        const match = SHORTCUTS.find(
-          (shortcut) =>
-            shortcut.keys.length === 2 &&
-            shortcut.keys[0] === sequence[0] &&
-            shortcut.keys[1] === sequence[1] &&
-            (!shortcut.permission || allowed.has(shortcut.permission)),
-        )
-        if (match) {
-          event.preventDefault()
-          go(match.href)
-        }
-        return
-      }
-
       if (SHORTCUTS.some((shortcut) => shortcut.keys[0] === key)) {
-        pending = key
+        sequenceRef.current = key
+        setPending(key)
         clearTimeout(timer)
-        timer = setTimeout(() => {
-          pending = null
-        }, SEQUENCE_TIMEOUT)
+        timer = setTimeout(forget, SEQUENCE_TIMEOUT)
       }
     }
 
@@ -232,7 +327,7 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
                   if (command) go(command.href)
                 }
               }}
-              placeholder="Go to a page, or start a document…"
+              placeholder="Search transactions, people, help, or a page…"
               className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
@@ -279,6 +374,34 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {waiting.length > 0 ? (
+        <div
+          role="status"
+          className="fixed inset-x-3 bottom-4 z-50 mx-auto flex max-w-3xl flex-wrap items-center gap-1.5 rounded-lg border border-primary/20 bg-white/95 p-2 shadow-lg backdrop-blur-md print:hidden"
+        >
+          <span className="px-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
+            {pending === 'c' ? 'Create' : 'Go to'}
+          </span>
+          {waiting.map((shortcut) => (
+            <button
+              key={shortcut.href}
+              type="button"
+              onClick={() => {
+                sequenceRef.current = null
+                setPending(null)
+                go(shortcut.href)
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-1 text-xs text-slate-700 hover:bg-primary/20"
+            >
+              <kbd className="rounded bg-primary px-1 py-0.5 text-[0.625rem] font-semibold text-primary-foreground">
+                {shortcut.keys[1]?.toUpperCase()}
+              </kbd>
+              {shortcut.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </>
   )
 }

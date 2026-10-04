@@ -1,26 +1,33 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { ArrowLeftIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
 import { BillPaymentForm } from '@/components/purchases/bill-payment-form'
-import { buttonVariants } from '@/components/ui/button'
 import { today } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
+import { db } from '@/server/db'
+import { peekDocumentNumber } from '@/server/sequences'
 import { loadPurchaseOptions } from '@/server/services/purchase-options'
 import { vendorPayables } from '@/app/(app)/purchases/actions'
 
 export const metadata: Metadata = { title: 'Pay bills' }
 
-export default async function NewBillPaymentPage() {
+export default async function NewBillPaymentPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const ctx = await requireOrgContext('expense:create')
-  const options = await loadPurchaseOptions(ctx)
+  const vendorParam = (await searchParams).vendor
+  const requestedVendor = typeof vendorParam === 'string' ? vendorParam : undefined
+  const [options, documentNumber] = await Promise.all([
+    loadPurchaseOptions(ctx),
+    peekDocumentNumber(db, ctx.orgId, 'BILL_PAYMENT'),
+  ])
+  const vendors = options.vendors.map((vendor) => ({ id: vendor.id, label: vendor.label }))
+  const initialVendorId = vendors.some((vendor) => vendor.id === requestedVendor) ? requestedVendor : undefined
 
   return (
     <>
-      <Link href="/bill-payments" className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}>
-        <ArrowLeftIcon /> Bill payments
-      </Link>
 
       <PageHeader
         title="Pay bills"
@@ -28,11 +35,13 @@ export default async function NewBillPaymentPage() {
       />
 
       <BillPaymentForm
-        vendors={options.vendors.map((v) => ({ id: v.id, label: v.label }))}
+        vendors={vendors}
         paymentAccounts={options.paymentAccounts}
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}
         loadPayables={vendorPayables}
+        initialVendorId={initialVendorId}
+        documentNumber={documentNumber}
       />
     </>
   )

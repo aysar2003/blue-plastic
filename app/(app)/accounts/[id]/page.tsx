@@ -1,12 +1,11 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeftIcon, ScrollTextIcon } from 'lucide-react'
+import { ScrollTextIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
@@ -16,11 +15,13 @@ import {
   JOURNAL_SOURCE_LABELS,
 } from '@/lib/accounting-labels'
 import { fiscalYearOf, fiscalYearRange, formatDate, toCalendarDate, today } from '@/lib/date'
+import { postedLineParts } from '@/lib/ledger-text'
 import { formatMoney } from '@/lib/money'
 import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { generalLedger } from '@/server/accounting/balances'
 import { requireOrgContext } from '@/server/auth/context'
 import * as accountService from '@/server/services/account.service'
+import { RegisterEntry } from '@/components/accounts/register-entry'
 import { resolveSources, sourceFor } from '@/server/services/journal-sources'
 import type { JournalSourceType } from '@prisma/client'
 
@@ -57,6 +58,14 @@ export default async function AccountRegisterPage({
   const to = typeof query.to === 'string' ? query.to : defaults.end
 
   const ledger = await generalLedger(ctx.orgId, id, { from, to })
+  const canType =
+    ctx.permissions.has('bank:transact') &&
+    ['BANK', 'CREDIT_CARD', 'OTHER_CURRENT_ASSET', 'UNDEPOSITED_FUNDS'].includes(account.subtype)
+  const categories = canType
+    ? (await accountService.list(ctx))
+        .filter((row) => row.type === 'EXPENSE' || row.type === 'REVENUE')
+        .map((row) => ({ id: row.id, label: `${row.code} ${row.name}`, type: row.type }))
+    : []
 
   // What produced each line, resolved in one batch per document family.
   //
@@ -97,12 +106,6 @@ export default async function AccountRegisterPage({
 
   return (
     <>
-      <Link
-        href="/accounts"
-        className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}
-      >
-        <ArrowLeftIcon /> Chart of accounts
-      </Link>
 
       <PageHeader
         title={`${account.code} · ${account.name}`}
@@ -124,6 +127,14 @@ export default async function AccountRegisterPage({
         <p className="mb-4 text-sm text-muted-foreground">{account.description}</p>
       ) : null}
 
+      {canType ? (
+        <RegisterEntry
+          accountId={account.id}
+          today={today(timeZone)}
+          categories={categories}
+        />
+      ) : null}
+
       {ledger.entries.length === 0 ? (
         <EmptyState
           icon={ScrollTextIcon}
@@ -137,6 +148,8 @@ export default async function AccountRegisterPage({
               <TableRow>
                 <SortableHeader column="date" label="Date" state={sort} basePath={basePath} params={linkParams} className="w-28" />
                 <SortableHeader column="entry" label="Entry" state={sort} basePath={basePath} params={linkParams} className="w-28" />
+                <TableHead className="w-40">Type</TableHead>
+                <TableHead className="w-44">Name</TableHead>
                 <SortableHeader column="description" label="Description" state={sort} basePath={basePath} params={linkParams} />
                 <TableHead className="w-40">Document</TableHead>
                 <TableHead>Contra account</TableHead>
@@ -148,7 +161,25 @@ export default async function AccountRegisterPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((entry) => (
+              {entries.map((entry) => {
+                const source = sourceFor(sources, {
+                  sourceType: entry.sourceType as JournalSourceType,
+                  sourceId: entry.sourceId,
+                })
+                const sourceLabel =
+                  JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ?? entry.sourceType
+                const parts = postedLineParts({
+                  sourceLabel,
+                  memo: entry.memo,
+                  description: entry.description,
+                  partyName: entry.partyName ?? source.partyName,
+                })
+                const nameHref = entry.customerId
+                  ? `/customers?id=${entry.customerId}`
+                  : entry.vendorId
+                    ? `/vendors?id=${entry.vendorId}`
+                    : source.partyHref
+                return (
                 <TableRow key={entry.lineId}>
                   <TableCell className="tabular whitespace-nowrap text-muted-foreground">
                     {formatDate(toCalendarDate(entry.date))}
@@ -166,22 +197,23 @@ export default async function AccountRegisterPage({
                       </Badge>
                     ) : null}
                   </TableCell>
-                  <TableCell>
-                    <span className="block">{entry.description ?? entry.memo ?? '—'}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ?? entry.sourceType}
-                    </span>
+                  <TableCell className="whitespace-nowrap">{sourceLabel}</TableCell>
+                  <TableCell className="truncate">
+                    {parts.name ? (
+                      nameHref ? (
+                        <Link href={nameHref} className="underline-offset-4 hover:underline">
+                          {parts.name}
+                        </Link>
+                      ) : (
+                        parts.name
+                      )
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
+                  <TableCell className="text-muted-foreground">{parts.note ?? '—'}</TableCell>
                   <TableCell>
-                    <SourceCell
-                      source={sourceFor(sources, {
-                        sourceType: entry.sourceType as JournalSourceType,
-                        sourceId: entry.sourceId,
-                      })}
-                      partyName={entry.partyName}
-                      customerId={entry.customerId}
-                      vendorId={entry.vendorId}
-                    />
+                    <SourceCell source={source} />
                   </TableCell>
                   <TableCell className="text-muted-foreground">{entry.contraAccounts}</TableCell>
                   <TableCell className="numeric tabular">
@@ -194,11 +226,12 @@ export default async function AccountRegisterPage({
                     {formatMoney(entry.balance, currency)}
                   </TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={7}>Closing balance</TableCell>
+                <TableCell colSpan={9}>Closing balance</TableCell>
                 <TableCell className="numeric tabular font-semibold">
                   {formatMoney(ledger.closing, currency)}
                 </TableCell>
@@ -219,50 +252,15 @@ export default async function AccountRegisterPage({
  */
 function SourceCell({
   source,
-  partyName,
-  customerId,
-  vendorId,
 }: {
-  source: { number: string | null; href: string | null; partyName: string | null; partyHref: string | null }
-  partyName: string | null
-  customerId: string | null
-  vendorId: string | null
+  source: { number: string | null; href: string | null }
 }) {
-  // A control-account line carries its own counterparty, which is more precise
-  // than the document's: a payment settling three invoices is one document with
-  // one customer, but the line says whose balance moved.
-  const name = partyName ?? source.partyName
-  const nameHref = customerId
-    ? `/customers/${customerId}`
-    : vendorId
-      ? `/vendors/${vendorId}`
-      : source.partyHref
-
-  if (!source.number && !name) {
-    return <span className="text-muted-foreground">—</span>
-  }
-
+  if (!source.number) return <span className="text-muted-foreground">—</span>
+  if (!source.href) return <span className="tabular font-medium">{source.number}</span>
   return (
-    <>
-      {source.number ? (
-        source.href ? (
-          <Link href={source.href} className="tabular block font-medium underline-offset-4 hover:underline">
-            {source.number}
-          </Link>
-        ) : (
-          <span className="tabular block font-medium">{source.number}</span>
-        )
-      ) : null}
-      {name ? (
-        nameHref ? (
-          <Link href={nameHref} className="block text-xs text-muted-foreground underline-offset-4 hover:underline">
-            {name}
-          </Link>
-        ) : (
-          <span className="block text-xs text-muted-foreground">{name}</span>
-        )
-      ) : null}
-    </>
+    <Link href={source.href} className="tabular font-medium underline-offset-4 hover:underline">
+      {source.number}
+    </Link>
   )
 }
 

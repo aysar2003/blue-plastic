@@ -3,9 +3,12 @@
 import { revalidatePath } from 'next/cache'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
+import { z } from 'zod'
+
 import { cuid, deleteRecordSchema } from '@/lib/validation/common'
-import { bulkSetActiveSchema, itemSchema } from '@/lib/validation/master-data'
+import { bulkSetActiveSchema, csvImportSchema, itemSchema } from '@/lib/validation/master-data'
 import { action } from '@/server/action'
+import { importItems } from '@/server/services/import.service'
 import * as itemService from '@/server/services/item.service'
 
 export const createItem = action
@@ -24,6 +27,32 @@ export const updateItem = action
     const item = await itemService.update(ctx, input)
     revalidatePath('/items')
     return { id: item.id }
+  })
+
+export const previewItemImport = action
+  .requires('item:create')
+  .input(csvImportSchema)
+  .handler((ctx, input) => importItems(ctx, input, { dryRun: true }))
+
+export const runItemImport = action
+  .requires('item:create')
+  .input(csvImportSchema)
+  .handler(async (ctx, input) => {
+    const result = await importItems(ctx, input)
+    revalidatePath('/items')
+    revalidatePath('/inventory')
+    return result
+  })
+
+export const setReorderLimit = action
+  .requires('item:update')
+  .input(z.object({ id: cuid, reorderPoint: z.string().trim().max(40) }))
+  .handler(async (ctx, input) => {
+    const result = await itemService.setReorderPoint(ctx, input.id, input.reorderPoint)
+    revalidatePath('/inventory/stock')
+    revalidatePath('/inventory')
+    revalidatePath('/items')
+    return result
   })
 
 export const setItemsActive = action
@@ -47,7 +76,7 @@ export const deleteItem = action
   .handler(async (ctx, input) => {
     const result = await itemService.remove(ctx, input.id, input.reason)
     revalidatePath('/items')
-    revalidatePath('/inventory')
+    revalidatePath('/inventory/stock')
     revalidatePath('/reports')
     return { id: result.id, number: result.name }
   })

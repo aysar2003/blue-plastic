@@ -2,7 +2,7 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 
 import { today } from '@/lib/date'
-import { Decimal } from '@/lib/money'
+import { Decimal, parseMoneyInput } from '@/lib/money'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { ItemInput } from '@/lib/validation/master-data'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
@@ -19,13 +19,14 @@ const ITEM_SELECT = {
   unitOfMeasure: true,
   salesDescription: true, salesPrice: true, incomeAccountId: true, isTaxable: true, salesTaxCodeId: true,
   purchaseDescription: true, purchaseCost: true, expenseAccountId: true, purchaseTaxCodeId: true,
-  inventoryAccountId: true, cogsAccountId: true, reorderPoint: true,
+  inventoryAccountId: true, cogsAccountId: true, reorderPoint: true, storeId: true,
   isActive: true,
   category: { select: { id: true, name: true } },
   incomeAccount: { select: { id: true, code: true, name: true } },
   expenseAccount: { select: { id: true, code: true, name: true } },
   inventoryAccount: { select: { id: true, code: true, name: true } },
   cogsAccount: { select: { id: true, code: true, name: true } },
+  store: { select: { id: true, name: true } },
   salesTaxCode: { select: { id: true, name: true } },
   purchaseTaxCode: { select: { id: true, name: true } },
 } satisfies Prisma.ItemSelect
@@ -113,6 +114,7 @@ export async function get(ctx: OrgContext, id: string) {
 }
 
 export async function create(ctx: OrgContext, input: ItemInput) {
+  input = await accountForStore(ctx, input)
   await assertNameAndSkuFree(ctx, input.name, input.sku ?? null)
   await assertAccountsSuitable(ctx, input)
   const meta = await requestMeta()
@@ -140,6 +142,7 @@ export async function create(ctx: OrgContext, input: ItemInput) {
         sourceId: item.id,
         quantity: openingQuantity,
         unitCost: input.openingUnitCost ?? '0',
+        storeId: input.storeId ?? null,
       })
 
       if (!movement.value.isZero()) {
@@ -175,6 +178,7 @@ export async function create(ctx: OrgContext, input: ItemInput) {
 }
 
 export async function update(ctx: OrgContext, input: ItemInput & { id: string }) {
+  input = { ...input, ...(await accountForStore(ctx, input, input.id)) }
   const before = await db.item.findFirst({ where: { id: input.id, orgId: ctx.orgId }, select: ITEM_SELECT })
   if (!before) throw notFound('Item')
 
@@ -207,6 +211,49 @@ export async function update(ctx: OrgContext, input: ItemInput & { id: string })
     )
     return after
   })
+}
+
+/**
+ * The quantity at which this product should be ordered again.
+ * Blank clears the limit. It does not move stock or post a journal.
+ */
+export async function setReorderPoint(ctx: OrgContext, id: string, raw: string) {
+  const before = await db.item.findFirst({
+    where: { id, orgId: ctx.orgId, deletedAt: null, type: 'INVENTORY' },
+    select: { id: true, name: true, reorderPoint: true },
+  })
+  if (!before) throw notFound('Item')
+
+  const trimmed = raw.trim()
+  let next: string | null = null
+  if (trimmed) {
+    const parsed = parseMoneyInput(trimmed)
+    if (!parsed || parsed.isNegative()) {
+      throw validation('The reorder limit has to be zero or more.', {
+        reorderPoint: ['Enter a number'],
+      })
+    }
+    next = parsed.toFixed(4)
+  }
+
+  const meta = await requestMeta()
+  await db.$transaction(async (tx) => {
+    await tx.item.update({ where: { id }, data: { reorderPoint: next } })
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Item',
+        entityId: id,
+        action: 'UPDATE',
+        before: { reorderPoint: before.reorderPoint?.toString() ?? null },
+        after: { reorderPoint: next },
+      },
+      meta,
+    )
+  })
+
+  return { id, name: before.name, reorderPoint: next }
 }
 
 export async function setActive(ctx: OrgContext, ids: string[], isActive: boolean) {
@@ -350,7 +397,27 @@ function toData(input: ItemInput) {
     inventoryAccountId: input.inventoryAccountId ?? null,
     cogsAccountId: input.cogsAccountId ?? null,
     reorderPoint: input.reorderPoint ?? null,
+    storeId: input.type === 'INVENTORY' ? (input.storeId ?? null) : null,
   }
+}
+
+/**
+ * A new item in a store posts to that store's inventory account.
+ * An item that already has stock keeps the account that holds its value,
+ * and the store is only where the report says it sits.
+ */
+async function accountForStore(ctx: OrgContext, input: ItemInput, itemId?: string): Promise<ItemInput> {
+  if (input.type !== 'INVENTORY' || !input.storeId) return input
+  const store = await db.store.findFirst({
+    where: { id: input.storeId, orgId: ctx.orgId, isActive: true },
+    select: { inventoryAccountId: true },
+  })
+  if (!store) throw notFound('Store')
+  if (itemId) {
+    const moved = await db.inventoryTransaction.count({ where: { orgId: ctx.orgId, itemId } })
+    if (moved > 0) return input
+  }
+  return { ...input, inventoryAccountId: store.inventoryAccountId }
 }
 
 async function assertNameAndSkuFree(ctx: OrgContext, name: string, sku: string | null, selfId?: string) {

@@ -1,14 +1,14 @@
 import { z } from 'zod'
 
-import { calendarDate, cuid, optionalText } from './common'
+import { calculatedDecimal, calendarDate, chosenNumber, cuid, optionalText } from './common'
 
-const quantity = z
-  .string()
-  .trim()
-  .regex(/^-?\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity')
+const quantity = calculatedDecimal(/^-?\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity')
 
 export const inventoryAdjustmentSchema = z.object({
+  number: chosenNumber,
   date: calendarDate,
+  /** count = what was found. damage = quantity lost, cost stays on the item. cost = add value. */
+  mode: z.enum(['count', 'damage', 'cost']).default('count'),
   /** Blank means Inventory Shrinkage, which is where a difference normally goes. */
   accountId: z
     .union([cuid, z.literal('')])

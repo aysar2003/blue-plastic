@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import { ClickableRow } from '@/components/reports/clickable-row'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate, isCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
@@ -46,10 +47,10 @@ export function ReportTable({ table, currency }: { table: ReportTableData; curre
 
           <TableBody>
             {table.rows.map((row, index) => (
-              <TableRow key={index} className={row.emphasis ? 'bg-muted/40' : undefined}>
+              <ClickableRow key={index} href={row.href} className={row.emphasis ? 'bg-muted/40' : undefined}>
                 {table.columns.map((column, columnIndex) => {
                   const value = format(row.cells[column.key] ?? null, column, currency)
-                  const linked = columnIndex === 0 && row.href
+                  const linked = Boolean(row.href) && (columnIndex === 0 || column.format === 'money')
 
                   return (
                     <TableCell
@@ -70,7 +71,7 @@ export function ReportTable({ table, currency }: { table: ReportTableData; curre
                     </TableCell>
                   )
                 })}
-              </TableRow>
+              </ClickableRow>
             ))}
           </TableBody>
 

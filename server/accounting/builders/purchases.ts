@@ -31,6 +31,12 @@ export type PurchaseJournalInput = {
    * expense arrives when the goods are sold, as cost of goods sold.
    */
   stock?: { inventoryAccountId: string; amount: Decimal }[]
+  /**
+   * On a vendor credit, stock leaves at average cost while the credit is at the
+   * price on the document. The difference must land somewhere or the journal
+   * will not balance. Positive means the books cost more than the credit.
+   */
+  stockCostDifference?: Decimal
 }
 
 /**
@@ -113,6 +119,7 @@ export function buildVendorCreditJournal(input: PurchaseJournalInput): DraftJour
       ...expenseLines(input, 'credit'),
       ...stockLines(input, 'credit'),
       ...taxLines(input, 'credit'),
+      ...stockCostDifferenceLines(input),
     ],
   }
 }
@@ -182,6 +189,21 @@ function stockLines(input: PurchaseJournalInput, side: 'debit' | 'credit'): Draf
     else draft.credit = amount
     return draft
   })
+}
+
+/** Plug the gap when returned stock leaves at average cost, not at the credit price. */
+function stockCostDifferenceLines(input: PurchaseJournalInput): DraftLine[] {
+  const difference = input.stockCostDifference
+  if (!difference || difference.isZero()) return []
+
+  const draft: DraftLine = {
+    accountId: input.fallbackExpenseAccountId,
+    description: 'Difference between credit price and stock cost',
+  }
+  // Books cost more than the credit → inventory was credited high → debit the gap.
+  if (difference.isPositive()) draft.debit = difference
+  else draft.credit = difference.abs()
+  return [draft]
 }
 
 /** One line per expense account, so the profit and loss reads by category. */

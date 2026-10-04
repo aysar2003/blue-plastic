@@ -1,29 +1,34 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { ArrowLeftIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
 import { PaymentForm } from '@/components/sales/payment-form'
-import { buttonVariants } from '@/components/ui/button'
 import { today } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
+import { db } from '@/server/db'
+import { peekDocumentNumber } from '@/server/sequences'
 import { loadFormOptions } from '@/server/services/sales-options'
 import { openInvoicesForCustomer } from '../actions'
 
 export const metadata: Metadata = { title: 'Receive payment' }
 
-export default async function NewPaymentPage() {
+export default async function NewPaymentPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const ctx = await requireOrgContext('payment:create')
-  const options = await loadFormOptions(ctx)
+  const [options, query, documentNumber] = await Promise.all([
+    loadFormOptions(ctx),
+    searchParams,
+    peekDocumentNumber(db, ctx.orgId, 'CUSTOMER_PAYMENT'),
+  ])
+  const requested = typeof query.customer === 'string' ? query.customer : undefined
+  const initialCustomerId = options.customers.some((customer) => customer.id === requested)
+    ? requested
+    : undefined
 
   return (
     <>
-      <Link
-        href="/sales"
-        className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}
-      >
-        <ArrowLeftIcon /> Sales
-      </Link>
 
       <PageHeader
         title="Receive payment"
@@ -36,6 +41,8 @@ export default async function NewPaymentPage() {
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}
         loadOpenInvoices={openInvoicesForCustomer}
+        initialCustomerId={initialCustomerId}
+        documentNumber={documentNumber}
       />
     </>
   )

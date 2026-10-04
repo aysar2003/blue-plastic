@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { settleNumberInput } from '@/lib/money'
+
 export const cuid = z.string().min(1, 'Required')
 
 export const trimmed = (max: number) => z.string().trim().max(max)
@@ -15,6 +17,14 @@ export const optionalText = (max = 255) =>
     .transform((v) => (v === '' ? null : v))
     .nullable()
     .optional()
+
+/** A number typed on a form. Blank means "use the next one in order". */
+export const chosenNumber = z
+  .string()
+  .trim()
+  .max(40, 'Use 40 characters or fewer')
+  .optional()
+  .transform((value) => (value ? value : undefined))
 
 export const email = z
   .string()
@@ -52,20 +62,35 @@ export const countryCode = z
   .nullable()
   .optional()
 
+/** Fold 120-10 into 110 before a decimal pattern is checked. A plain number is unchanged. */
+export function calculatedDecimal(pattern: RegExp, message: string) {
+  return z
+    .string()
+    .trim()
+    .transform((value, ctx) => {
+      const next = settleNumberInput(value) ?? value
+      if (!pattern.test(next)) {
+        ctx.addIssue({ code: 'custom', message })
+        return z.NEVER
+      }
+      return next
+    })
+}
+
 /** Money crosses the wire as a decimal string, never a float (ADR-0003). */
-export const moneyString = z
-  .string()
-  .trim()
-  .regex(/^-?\d{1,15}(\.\d{1,4})?$/, 'Enter a valid amount')
+export const moneyString = calculatedDecimal(/^-?\d{1,15}(\.\d{1,4})?$/, 'Enter a valid amount')
 
 export const calendarDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD')
 
-/** Shared list-query shape. Every paginated route parses through this. */
+/**
+ * Shared list-query shape. Lists open the whole result and scroll; pageSize is
+ * kept so older callers still parse, and is sized to hold a full working set.
+ */
 export const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  pageSize: z.coerce.number().int().min(1).max(50_000).default(50_000),
   q: z.string().trim().max(120).optional(),
   sort: z.string().trim().max(60).optional(),
   dir: z.enum(['asc', 'desc']).default('asc'),
@@ -80,8 +105,9 @@ export function parseListQuery(params: Record<string, string | string[] | undefi
   return result.success ? result.data : listQuerySchema.parse({})
 }
 
-export function paginate(query: ListQuery) {
-  return { skip: (query.page - 1) * query.pageSize, take: query.pageSize }
+/** Lists load every matching row; skip/take are left unset on purpose. */
+export function paginate(_query: ListQuery) {
+  return {}
 }
 
 export type Paged<T> = {

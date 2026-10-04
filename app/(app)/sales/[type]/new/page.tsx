@@ -1,16 +1,16 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeftIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
 import { DocumentForm } from '@/components/sales/document-form'
-import { buttonVariants } from '@/components/ui/button'
 import { today } from '@/lib/date'
-import { describeTerm } from '@/lib/payment-terms'
 import { bySlug } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
+import { db } from '@/server/db'
+import { peekDocumentNumber } from '@/server/sequences'
 import { loadFormOptions } from '@/server/services/sales-options'
+import * as salesService from '@/server/services/sales.service'
+import * as storeService from '@/server/services/store.service'
 
 export async function generateMetadata({
   params,
@@ -23,25 +23,39 @@ export async function generateMetadata({
 
 export default async function NewSalesDocumentPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ type: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const config = bySlug((await params).type)
   if (!config) notFound()
 
   const ctx = await requireOrgContext(config.createPermission)
-  const options = await loadFormOptions(ctx)
+  const [options, query, documentNumber, neighbors, shelf, openQuotations] = await Promise.all([
+    loadFormOptions(ctx),
+    searchParams,
+    peekDocumentNumber(db, ctx.orgId, config.type),
+    config.type === 'SALES_RECEIPT' ? salesService.neighbors(ctx, config.type, null) : Promise.resolve(undefined),
+    storeService.quantities(ctx),
+    config.type === 'INVOICE' ? salesService.listConvertibleEstimates(ctx) : Promise.resolve([]),
+  ])
+  const requested = typeof query.customer === 'string' ? query.customer : undefined
+  const initialCustomerId = options.customers.some((customer) => customer.id === requested)
+    ? requested
+    : undefined
 
   return (
     <>
-      <Link
-        href="/sales"
-        className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}
-      >
-        <ArrowLeftIcon /> Sales
-      </Link>
 
-      <PageHeader title={`New ${config.singular.toLowerCase()}`} description={config.effect} />
+      <PageHeader
+        title={`New ${config.singular.toLowerCase()}`}
+        description={
+          config.type === 'INVOICE'
+            ? 'Start a blank invoice, or pick an open quotation to reuse its items and prices.'
+            : config.effect
+        }
+      />
 
       <DocumentForm
         config={config}
@@ -49,10 +63,21 @@ export default async function NewSalesDocumentPage({
         items={options.items}
         taxCodes={options.taxCodes}
         depositAccounts={options.depositAccounts}
-        terms={options.terms.map((term) => ({ id: term.id, label: `${term.name} — ${describeTerm(term)}` }))}
+        terms={options.terms.map((term) => ({
+          id: term.id,
+          label: term.name,
+          type: term.type,
+          dueDays: term.dueDays,
+        }))}
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}
         organizationName={ctx.organization.name}
+        documentNumber={documentNumber}
+        initialCustomerId={initialCustomerId}
+        neighbors={neighbors}
+        stores={shelf.stores}
+        stock={shelf.byItem}
+        openQuotations={openQuotations}
       />
     </>
   )

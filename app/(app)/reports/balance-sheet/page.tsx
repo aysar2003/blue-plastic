@@ -11,7 +11,7 @@ import { balanceSheet } from '@/server/reports/statements'
 import { ReportControls } from '../report-controls'
 import { readSettings, type SearchParams } from '../params'
 
-export const metadata: Metadata = { title: 'Balance sheet' }
+export const metadata: Metadata = { title: 'Balance Sheet' }
 
 export default async function BalanceSheetPage({
   searchParams,
@@ -33,7 +33,7 @@ export default async function BalanceSheetPage({
 
   return (
     <>
-      <PageHeader title="Balance sheet" description={`As at ${formatDate(settings.asOf)}`} />
+      <PageHeader title="Balance Sheet" description={`As at ${formatDate(settings.asOf)}`} />
 
       <ReportControls
         period={settings.period}

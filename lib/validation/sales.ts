@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { calendarDate, cuid, moneyString, optionalText, requiredText } from './common'
+import { calculatedDecimal, calendarDate, chosenNumber, cuid, moneyString, optionalText, requiredText } from './common'
 
 const optionalId = z
   .union([cuid, z.literal('')])
@@ -14,16 +14,12 @@ const optionalDate = z
   .nullable()
   .optional()
 
-const quantity = z
-  .string()
-  .trim()
-  .regex(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity')
-  .refine((v) => Number(v) > 0, 'Quantity must be more than zero')
+const quantity = calculatedDecimal(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity').refine(
+  (v) => Number(v) > 0,
+  'Quantity must be more than zero',
+)
 
-const price = z
-  .string()
-  .trim()
-  .regex(/^\d{1,15}(\.\d{1,4})?$/, 'Enter a price')
+const price = calculatedDecimal(/^\d{1,15}(\.\d{1,4})?$/, 'Enter a price')
 
 export const salesLineSchema = z.object({
   itemId: optionalId,
@@ -33,17 +29,20 @@ export const salesLineSchema = z.object({
   unitPrice: z.union([price, z.literal('')]).default(''),
   discountPercent: z
     .union([
-      z.string().trim().regex(/^\d{1,3}(\.\d{1,4})?$/).refine((v) => Number(v) <= 100, 'At most 100%'),
       z.literal(''),
+      calculatedDecimal(/^\d{1,3}(\.\d{1,4})?$/, 'Enter a percent').refine((v) => Number(v) <= 100, 'At most 100%'),
     ])
     .transform((v) => (v === '' ? null : v))
     .nullable()
     .optional(),
   taxCodeId: optionalId,
   serviceDate: optionalDate,
+  /** The store this line is taken from. Blank means the office when one exists. */
+  storeId: optionalId,
 })
 
 export const salesDocumentSchema = z.object({
+  number: chosenNumber,
   customerId: cuid,
   date: calendarDate,
   paymentTermId: optionalId,
@@ -53,7 +52,25 @@ export const salesDocumentSchema = z.object({
   customerMessage: optionalText(1000),
   depositAccountId: optionalId,
   saveAsDraft: z.coerce.boolean().default(false),
+  /** Whole-document discount on an invoice or a sales receipt. Blank means none. */
+  discountKind: z.enum(['amount', 'percent']).default('percent'),
+  discountValue: z
+    .union([
+      z.string().trim().regex(/^\d{1,15}(\.\d{1,4})?$/, 'Enter a discount'),
+      z.literal(''),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
   lines: z.array(salesLineSchema).min(1, 'Add at least one line').max(200),
+}).superRefine((document, ctx) => {
+  if (document.discountKind === 'percent' && document.discountValue && Number(document.discountValue) > 100) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['discountValue'],
+      message: 'A percent discount cannot be more than 100.',
+    })
+  }
 })
 
 export type SalesDocumentInput = z.infer<typeof salesDocumentSchema>
@@ -66,6 +83,7 @@ export const convertEstimateSchema = z.object({
 /* --- Payments ------------------------------------------------------------- */
 
 export const paymentSchema = z.object({
+  number: chosenNumber,
   customerId: cuid,
   date: calendarDate,
   amount: moneyString.refine((v) => Number(v) > 0, 'Enter an amount greater than zero'),

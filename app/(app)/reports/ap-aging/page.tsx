@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { ClickableRow } from '@/components/reports/clickable-row'
 import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHeader, TableRow } from '@/components/ui/table'
@@ -15,7 +16,7 @@ import { AGING_BUCKETS, BUCKET_LABELS, aging } from '@/server/services/payables.
 
 const SORTABLE = ['name', 'total', ...AGING_BUCKETS] as const
 
-export const metadata: Metadata = { title: 'Payables aging' }
+export const metadata: Metadata = { title: 'A/P Aging Summary' }
 
 export default async function PayablesAgingPage({
   searchParams,
@@ -47,7 +48,7 @@ export default async function PayablesAgingPage({
   return (
     <>
       <PageHeader
-        title="Payables aging"
+        title="A/P Aging Summary"
         description={`Unpaid bills as at ${formatDate(asOf)}, bucketed by how long they have been due.`}
       />
 
@@ -91,10 +92,10 @@ export default async function PayablesAgingPage({
               </TableRow>
             ) : (
               rows.map((row) => (
-                <TableRow key={row.vendorId}>
+                <ClickableRow key={row.vendorId} href={vendorStatement(row.vendorId)}>
                   <TableCell>
                     <Link
-                      href={`/vendors/${row.vendorId}`}
+                      href={vendorStatement(row.vendorId)}
                       className="font-medium underline-offset-4 hover:underline"
                     >
                       {row.vendorName}
@@ -105,14 +106,18 @@ export default async function PayablesAgingPage({
                       {row.buckets[bucket].isZero() ? (
                         <span className="text-muted-foreground">—</span>
                       ) : (
-                        formatMoney(row.buckets[bucket], currency)
+                        <Link href={vendorStatement(row.vendorId)} className="underline-offset-4 hover:underline">
+                          {formatMoney(row.buckets[bucket], currency)}
+                        </Link>
                       )}
                     </TableCell>
                   ))}
                   <TableCell className="numeric tabular font-medium">
-                    {formatMoney(row.total, currency)}
+                    <Link href={vendorStatement(row.vendorId)} className="underline-offset-4 hover:underline">
+                      {formatMoney(row.total, currency)}
+                    </Link>
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))
             )}
           </TableBody>
@@ -160,4 +165,9 @@ export default async function PayablesAgingPage({
       </Card>
     </>
   )
+}
+
+/** Aging opens that vendor's statement, the next page of the same figure. */
+function vendorStatement(vendorId: string) {
+  return `/reports/statements/vendor?vendorId=${vendorId}&period=all-dates`
 }

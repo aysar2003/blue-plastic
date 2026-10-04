@@ -20,21 +20,24 @@ import { Button, buttonVariants } from '@/components/ui/button'
  * Print uses the browser. `print.css` hides the chrome — sidebar, toolbar, row
  * menus — so the page prints as the table it is.
  */
-export function TableToolbar({ exportHref }: { exportHref?: string }) {
+export function TableToolbar({ exportHref, iconsOnly = false }: { exportHref?: string; iconsOnly?: boolean }) {
   return (
     <div className="flex items-center gap-1 print:hidden">
       {exportHref ? (
         <a
           href={exportHref}
           download
-          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          className={buttonVariants({ variant: 'ghost', size: iconsOnly ? 'icon-sm' : 'sm' })}
           title="Every row matching the current filter, as a CSV that Excel opens directly"
+          aria-label="Export"
         >
-          <DownloadIcon /> Export
+          <DownloadIcon />
+          {iconsOnly ? null : 'Export'}
         </a>
       ) : null}
-      <Button variant="outline" size="sm" onClick={() => window.print()}>
-        <PrinterIcon /> Print
+      <Button variant="ghost" size={iconsOnly ? 'icon-sm' : 'sm'} onClick={() => window.print()} aria-label="Print">
+        <PrinterIcon />
+        {iconsOnly ? null : 'Print'}
       </Button>
     </div>
   )

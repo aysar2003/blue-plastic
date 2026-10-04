@@ -12,7 +12,7 @@ import { readSettings, settingsToQueryObject, type SearchParams } from '../param
 
 const SORTABLE = ['name', 'count', 'quantity', 'amount'] as const
 
-export const metadata: Metadata = { title: 'Expenses by category' }
+export const metadata: Metadata = { title: 'Expenses by Account' }
 
 export default async function ExpensesByCategoryPage({
   searchParams,
@@ -30,7 +30,7 @@ export default async function ExpensesByCategoryPage({
   return (
     <>
       <PageHeader
-        title="Expenses by category"
+        title="Expenses by Account"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · from the ledger, however it was entered`}
       />
 

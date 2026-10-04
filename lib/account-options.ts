@@ -59,6 +59,8 @@ export type AccountPickerOption = {
   subtype: AccountSubtype
   /** Set when choosing this account obliges the caller to name a customer or vendor. */
   requiresParty?: PartyRequirement
+  /** Natural balance, only for bank accounts, so the picker can show the money in the account. */
+  balance?: string | null
 }
 
 export const SUGGESTED_GROUP = 'Suggested'
@@ -131,6 +133,7 @@ export function accountOptions(
     type: account.type,
     subtype: account.subtype,
     requiresParty: partyRequiredBy(account.subtype),
+    balance: account.subtype === 'BANK' ? (account.balance ?? null) : null,
   })
 
   return [

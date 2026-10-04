@@ -1,9 +1,10 @@
 import { z } from 'zod'
 
-import { calendarDate, cuid, moneyString, optionalText, requiredText } from './common'
+import { calendarDate, chosenNumber, cuid, moneyString, optionalText, requiredText } from './common'
 
 export const transferSchema = z
   .object({
+    number: chosenNumber,
     date: calendarDate,
     fromAccountId: cuid,
     toAccountId: cuid,
@@ -19,6 +20,7 @@ export const transferSchema = z
 export type TransferInput = z.infer<typeof transferSchema>
 
 export const depositSchema = z.object({
+  number: chosenNumber,
   date: calendarDate,
   bankAccountId: cuid,
   reference: optionalText(60),
@@ -54,6 +56,71 @@ export const matchTransactionSchema = z.object({
 })
 
 export const excludeTransactionSchema = z.object({ importedId: cuid })
+
+const optionalId = z
+  .union([cuid, z.literal('')])
+  .transform((value) => (value === '' ? null : value))
+  .nullable()
+  .optional()
+
+export const saveFeedLineSchema = z.object({
+  id: cuid,
+  categoryAccountId: optionalId,
+  vendorId: optionalId,
+  customerId: optionalId,
+  payeeName: optionalText(120),
+})
+
+export const postFeedLinesSchema = z.object({
+  ids: z.array(cuid).min(1).max(100),
+})
+
+export const matchFeedInvoiceSchema = z.object({
+  importedId: cuid,
+  invoiceId: cuid,
+})
+
+export const matchFeedBillSchema = z.object({
+  importedId: cuid,
+  billId: cuid,
+})
+
+export const undoFeedLineSchema = z.object({ id: cuid })
+
+export const createBankRuleSchema = z.object({
+  name: requiredText('Rule name', 80),
+  contains: requiredText('Text to match', 80),
+  accountId: optionalId,
+  categoryAccountId: cuid,
+  vendorId: optionalId,
+  customerId: optionalId,
+})
+
+export const chartImportSchema = z.object({
+  csv: z.string().min(1, 'Choose a spreadsheet first').max(2_000_000),
+})
+
+export const reportNoteSchema = z.object({
+  reportKey: z.enum(['profit-loss', 'balance-sheet']),
+  body: z.string().trim().max(2000),
+})
+
+export const bookmarkSchema = z.object({
+  label: requiredText('Name', 80),
+  href: z.string().trim().min(1).max(200),
+  kind: z.enum(['shortcut', 'pin']),
+})
+
+export const registerEntrySchema = z.object({
+  accountId: cuid,
+  direction: z.enum(['in', 'out']),
+  date: calendarDate,
+  amount: moneyString.refine((value) => Number(value) > 0, 'Enter an amount greater than zero'),
+  categoryAccountId: cuid,
+  vendorId: optionalId,
+  payeeName: optionalText(120),
+  memo: optionalText(300),
+})
 
 /* --- Reconciliation ------------------------------------------------------- */
 

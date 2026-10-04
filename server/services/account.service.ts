@@ -21,6 +21,7 @@ const ACCOUNT_SELECT = {
   description: true,
   type: true,
   subtype: true,
+  detailType: true,
   parentId: true,
   systemKey: true,
   isSystem: true,
@@ -154,6 +155,7 @@ export async function create(ctx: OrgContext, input: AccountCreateInput) {
         description: input.description ?? null,
         type: input.type,
         subtype: input.subtype,
+        detailType: input.detailType ?? null,
         parentId: input.parentId ?? null,
       },
       select: ACCOUNT_SELECT,
@@ -232,6 +234,7 @@ export async function update(ctx: OrgContext, input: AccountUpdateInput) {
         code: input.code,
         name: input.name,
         description: input.description ?? null,
+        detailType: input.detailType ?? null,
         parentId: input.parentId ?? null,
       },
       select: ACCOUNT_SELECT,
@@ -397,4 +400,50 @@ export async function selectableAccounts(
     systemKey: account.systemKey,
     balance: balances ? toMoneyString(balances.get(account.id)?.natural ?? 0, 2) : null,
   }))
+}
+
+/**
+ * Bring a chart in from a spreadsheet.
+ *
+ * Columns: code, name, type, subtype, and optionally detail, description,
+ * openingBalance, openingBalanceDate. `type` is ASSET, LIABILITY, EQUITY,
+ * REVENUE or EXPENSE. `subtype` is the detail type the reports already group
+ * on, such as OPERATING_EXPENSE or INCOME. Each row is created through the
+ * same path as the New account dialog, including its opening balance journal.
+ */
+export async function importChart(ctx: OrgContext, csv: string) {
+  const { parseCsv, pick } = await import('@/lib/csv')
+  const { accountCreateSchema } = await import('@/lib/validation/accounting')
+  const { rows } = parseCsv(csv)
+  const issues: { row: number; message: string }[] = []
+  let created = 0
+
+  for (const [index, row] of rows.entries()) {
+    const subtype = (pick(row, 'subtype', 'detailType') || '').trim().toUpperCase().replace(/[\s-]+/g, '_')
+    const parsed = accountCreateSchema.safeParse({
+      code: pick(row, 'code', 'number', 'accountNumber'),
+      name: pick(row, 'name', 'account'),
+      type: (pick(row, 'type') || '').trim().toUpperCase(),
+      subtype,
+      detailType: pick(row, 'detail', 'furtherDetail'),
+      description: pick(row, 'description'),
+      openingBalance: pick(row, 'openingBalance', 'balance'),
+      openingBalanceDate: pick(row, 'openingBalanceDate', 'asAt', 'date'),
+    })
+    if (!parsed.success) {
+      issues.push({ row: index + 2, message: parsed.error.issues[0]?.message ?? 'Could not read this row' })
+      continue
+    }
+    try {
+      await create(ctx, parsed.data)
+      created += 1
+    } catch (error) {
+      issues.push({
+        row: index + 2,
+        message: error instanceof Error ? error.message : 'Could not create this account',
+      })
+    }
+  }
+
+  return { created, issues, total: rows.length }
 }

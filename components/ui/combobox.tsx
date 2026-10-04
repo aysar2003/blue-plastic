@@ -23,8 +23,8 @@ import { cn } from '@/lib/utils'
  * this application logic, not a generic widget. See ADR-0012.
  *
  * Keyboard behaviour is the point of it, so it is explicit: type to filter, ↑/↓
- * to move, Enter to choose, Escape to close and restore, Tab to leave,
- * Backspace on an empty box to clear the selection.
+ * to move, Enter to choose, Escape to close and restore, Tab to take the
+ * highlighted match and move on, Backspace on an empty box to clear the selection.
  */
 export type ComboboxOption = {
   value: string
@@ -60,6 +60,24 @@ export type ComboboxProps = {
 
 const normalise = (value: string) => value.toLowerCase().normalize('NFKD')
 
+/**
+ * A few letters should land on the name that starts with them. "ca" means Cash,
+ * not an account that merely contains those letters later on.
+ */
+function matchScore(option: ComboboxOption, needle: string): number {
+  const label = normalise(option.label)
+  const hint = option.hint ? normalise(option.hint) : ''
+  const parts = label.split(' — ')
+  const code = parts.length > 1 ? parts[0]! : ''
+  const name = parts.length > 1 ? parts.slice(1).join(' — ') : label
+  const words = name.split(/[\s/]+/)
+
+  if (label.startsWith(needle) || code.startsWith(needle) || name.startsWith(needle)) return 0
+  if (words.some((word) => word.startsWith(needle))) return 1
+  if (hint.startsWith(needle)) return 2
+  return 3
+}
+
 type Row = { kind: 'option'; option: ComboboxOption } | { kind: 'create' }
 
 export function Combobox({
@@ -92,11 +110,17 @@ export function Combobox({
   const filtered = React.useMemo(() => {
     const needle = normalise(query.trim())
     if (!needle) return options
-    return options.filter(
-      (option) =>
-        normalise(option.label).includes(needle) ||
-        (option.hint ? normalise(option.hint).includes(needle) : false),
-    )
+    return options
+      .map((option, index) => ({ option, index }))
+      .filter(
+        ({ option }) =>
+          normalise(option.label).includes(needle) ||
+          (option.hint ? normalise(option.hint).includes(needle) : false),
+      )
+      .sort(
+        (a, b) => matchScore(a.option, needle) - matchScore(b.option, needle) || a.index - b.index,
+      )
+      .map(({ option }) => option)
   }, [options, query])
 
   const canCreate =
@@ -132,10 +156,14 @@ export function Combobox({
 
     const below = window.innerHeight - rect.bottom
     const above = below < 280 && rect.top > below
+    // The box on the form is often a narrow column. The list has to be wide
+    // enough for a registered name to show in full, and still stay on screen.
+    const width = Math.min(Math.max(rect.width, 420), window.innerWidth - 16)
+    const left = Math.min(rect.left, Math.max(8, window.innerWidth - width - 8))
     const next = {
       top: above ? rect.top - 4 : rect.bottom + 4,
-      left: rect.left,
-      width: rect.width,
+      left,
+      width,
       above,
     }
 
@@ -175,6 +203,7 @@ export function Combobox({
     }
 
     place()
+    inputRef.current?.focus()
     document.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', place)
@@ -192,7 +221,9 @@ export function Combobox({
   const [lastListKey, setLastListKey] = React.useState(listKey)
   if (listKey !== lastListKey) {
     setLastListKey(listKey)
-    setActive(0)
+    // The match is the default, not "Add …", so Tab takes the name they started.
+    const preferred = rows.findIndex((row) => row.kind === 'option')
+    setActive(preferred < 0 ? 0 : preferred)
   }
 
   const keyboardNav = React.useRef(false)
@@ -226,6 +257,11 @@ export function Combobox({
       if (event.key === 'ArrowDown' || event.key === 'Enter') {
         event.preventDefault()
         openList()
+      } else if (event.key === 'Backspace' && value) {
+        onChange(null)
+      } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        setQuery(event.key)
+        setOpen(true)
       }
       return
     }
@@ -246,6 +282,17 @@ export function Combobox({
       event.preventDefault()
       close()
     } else if (event.key === 'Tab') {
+      // Two letters and Tab is enough: take the highlighted name, then move on.
+      const needle = query.trim()
+      const highlighted = rows[active]
+      const choice =
+        highlighted?.kind === 'option' ? highlighted : rows.find((row) => row.kind === 'option')
+      if (needle && choice?.kind === 'option') {
+        onChange(choice.option.value)
+        setOpen(false)
+        setQuery('')
+        return
+      }
       close(false)
     } else if (event.key === 'Backspace' && query === '' && value) {
       // Backspacing an empty box clears the selection, which is what every other
@@ -272,35 +319,51 @@ export function Combobox({
       <div
         data-invalid={aria['aria-invalid'] ? 'true' : undefined}
         className={cn(
-          'flex h-8 w-full items-center rounded-md border border-input bg-card transition-[color,box-shadow]',
+          'flex min-h-8 w-full items-stretch rounded-md border border-input bg-card transition-[color,box-shadow]',
           'focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25',
           'data-[invalid=true]:border-destructive data-[invalid=true]:ring-destructive/20',
           disabled && 'cursor-not-allowed opacity-50',
         )}
       >
-        <input
-          ref={inputRef}
-          id={id}
-          role="combobox"
-          aria-expanded={open}
-          aria-autocomplete="list"
-          aria-controls={`${id ?? name ?? 'combobox'}-list`}
-          aria-describedby={aria['aria-describedby']}
-          aria-required={required}
-          disabled={disabled}
-          autoComplete="off"
-          // Open: what is being typed. Closed: what is chosen.
-          value={open ? query : (selected?.label ?? '')}
-          placeholder={open && selected ? selected.label : placeholder}
-          onChange={(event) => {
-            if (!open) setOpen(true)
-            setQuery(event.target.value)
-          }}
-          onFocus={openList}
-          onClick={openList}
-          onKeyDown={onKeyDown}
-          className="h-full min-w-0 flex-1 bg-transparent px-2.5 text-[0.8125rem] outline-none placeholder:text-muted-foreground"
-        />
+        {open || !selected ? (
+          <input
+            ref={inputRef}
+            id={id}
+            role="combobox"
+            aria-expanded={open}
+            aria-autocomplete="list"
+            aria-controls={`${id ?? name ?? 'combobox'}-list`}
+            aria-describedby={aria['aria-describedby']}
+            aria-required={required}
+            disabled={disabled}
+            autoComplete="off"
+            value={open ? query : ''}
+            placeholder={open && selected ? selected.label : placeholder}
+            onChange={(event) => {
+              if (!open) setOpen(true)
+              setQuery(event.target.value)
+            }}
+            onFocus={openList}
+            onClick={openList}
+            onKeyDown={onKeyDown}
+            className="h-8 min-w-0 flex-1 bg-transparent px-2.5 text-[0.8125rem] outline-none placeholder:text-muted-foreground"
+          />
+        ) : (
+          <button
+            type="button"
+            id={id}
+            role="combobox"
+            aria-expanded={false}
+            aria-controls={`${id ?? name ?? 'combobox'}-list`}
+            disabled={disabled}
+            title={selected.label}
+            onClick={openList}
+            onKeyDown={onKeyDown}
+            className="h-8 min-w-0 flex-1 truncate whitespace-nowrap px-2.5 text-left text-[0.8125rem] leading-8"
+          >
+            {selected.label}
+          </button>
+        )}
 
         <button
           type="button"
@@ -323,7 +386,7 @@ export function Combobox({
                 top: anchor.above ? undefined : anchor.top,
                 bottom: anchor.above ? window.innerHeight - anchor.top : undefined,
                 left: anchor.left,
-                width: Math.max(anchor.width, 224),
+                width: anchor.width,
               }}
               className={cn(
                 'pointer-events-auto z-[60] overflow-hidden rounded-md border bg-popover shadow-lg',

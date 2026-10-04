@@ -9,6 +9,8 @@ import { idleState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
+import { PartyInfo } from '@/components/forms/party-info'
+import { LockedNumber } from '@/components/forms/locked-number'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { Button } from '@/components/ui/button'
@@ -17,11 +19,23 @@ import { DateField } from '@/components/ui/date-field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import type { AccountPickerOption } from '@/lib/account-options'
+import { formatDate, isCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
+import { dueDateFor, type PaymentTermShape } from '@/lib/payment-terms'
 import type { PurchaseTypeConfig } from '@/lib/purchase-types'
+import { cn } from '@/lib/utils'
+import { LineStore } from '@/components/inventory/line-store'
+import { officeStoreId, type StockByStore, type StoreChoice } from '@/lib/store-stock'
 import { savePurchaseForm } from '@/app/(app)/purchases/actions'
 
-export type VendorOption = { id: string; label: string; defaultExpenseAccountId: string | null }
+export type VendorOption = {
+  id: string
+  label: string
+  email: string | null
+  mailingAddress: string
+  paymentTermId: string | null
+  defaultExpenseAccountId: string | null
+}
 export type PurchaseItemOption = {
   id: string
   label: string
@@ -35,7 +49,7 @@ export type PurchaseItemOption = {
   /** Stock on hand, for tracked items. */
   onHand?: string | null
 }
-export type Option = { id: string; label: string }
+export type Option = { id: string; label: string } & Partial<PaymentTermShape>
 export type TaxOption = Option & { rate: number; isInclusive: boolean }
 
 /**
@@ -58,18 +72,32 @@ type Line = {
   quantity: string
   unitPrice: string
   taxCodeId: string
+  storeId: string
 }
 
-const empty = (key: number, account = '', kind: LineKind = 'category'): Line => ({
+const ITEM_ROWS = 10
+
+const empty = (key: number, account = '', kind: LineKind = 'category', storeId = ''): Line => ({
   key,
   kind,
   itemId: '',
   expenseAccountId: account,
   description: '',
-  quantity: '1',
+  quantity: kind === 'item' ? '' : '1',
   unitPrice: '',
   taxCodeId: '',
+  storeId,
 })
+
+function withItemRows(seeded: Line[], storeId = ''): Line[] {
+  const rows = [...seeded]
+  let key = rows.reduce((max, line) => Math.max(max, line.key), 0)
+  while (rows.filter((line) => line.kind === 'item').length < ITEM_ROWS) {
+    key += 1
+    rows.push(empty(key, '', 'item', storeId))
+  }
+  return rows
+}
 
 /**
  * One form for bills, expenses, vendor credits and purchase orders.
@@ -89,7 +117,11 @@ export function BillForm({
   terms,
   today,
   currency,
+  documentNumber,
   document,
+  initialVendorId,
+  stores = [],
+  stock = {},
 }: {
   config: PurchaseTypeConfig
   vendors: VendorOption[]
@@ -100,6 +132,10 @@ export function BillForm({
   terms: Option[]
   today: string
   currency: string
+  /** The number this document has, or the next one if it has not been saved. */
+  documentNumber: string
+  /** Set when a vendor page opened this form, so the vendor is already chosen. */
+  initialVendorId?: string
   /** Present when editing. Saving reverses the original journal and posts a new one. */
   document?: {
     id: string
@@ -116,13 +152,19 @@ export function BillForm({
       quantity: string
       unitPrice: string
       taxCodeId: string | null
+      storeId?: string | null
     }[]
   }
+  /** Stores a purchased item can be received into. The office is the default. */
+  stores?: StoreChoice[]
+  stock?: StockByStore
 }) {
+  const officeId = officeStoreId(stores)
   const router = useRouter()
   const [state, formAction] = useActionState(savePurchaseForm, idleState)
 
-  const [vendorId, setVendorId] = useState(document?.vendorId ?? '')
+  const [number, setNumber] = useState(documentNumber)
+  const [vendorId, setVendorId] = useState(document?.vendorId ?? initialVendorId ?? '')
   const [date, setDate] = useState(document?.date ?? today)
   const [reference, setReference] = useState(document?.reference ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
@@ -130,35 +172,77 @@ export function BillForm({
   const [paymentAccountId, setPaymentAccountId] = useState(
     document?.paymentAccountId ?? paymentAccounts[0]?.id ?? '',
   )
-  const [lines, setLines] = useState<Line[]>(
-    document?.lines.length
-      ? document.lines.map((line, index) => ({
-          key: index + 1,
-          // A stored line is an item line if it names an item; otherwise it is a
-          // category line, whatever it was typed into originally.
-          kind: line.itemId ? ('item' as const) : ('category' as const),
-          itemId: line.itemId ?? '',
-          expenseAccountId: line.expenseAccountId ?? '',
-          description: line.description ?? '',
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-          taxCodeId: line.taxCodeId ?? '',
-        }))
-      : [empty(1), empty(2)],
+  const [lines, setLines] = useState<Line[]>(() =>
+    withItemRows(
+      document?.lines.length
+        ? document.lines.map((line, index) => ({
+            key: index + 1,
+            // A stored line is an item line if it names an item; otherwise it is a
+            // category line, whatever it was typed into originally.
+            kind: line.itemId ? ('item' as const) : ('category' as const),
+            itemId: line.itemId ?? '',
+            expenseAccountId: line.expenseAccountId ?? '',
+            description: line.description ?? '',
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            taxCodeId: line.taxCodeId ?? '',
+            storeId: line.storeId ?? officeId,
+          }))
+        : [empty(1), empty(2)],
+      officeId,
+    ),
   )
   const [saveAsDraft, setSaveAsDraft] = useState(false)
-  const nextKey = useRef((document?.lines.length ?? 2) + 1)
+  const nextKey = useRef(lines.reduce((max, line) => Math.max(max, line.key), 0) + 1)
   const handled = useRef(false)
+  const afterSave = useRef<'close' | 'new'>('close')
+
+  useEffect(() => setNumber(documentNumber), [documentNumber])
+
+  useEffect(() => {
+    if (document || !initialVendorId) return
+    const chosen = vendors.find((vendor) => vendor.id === initialVendorId)
+    if (chosen?.paymentTermId) setPaymentTermId(chosen.paymentTermId)
+    const fallback = chosen?.defaultExpenseAccountId ?? ''
+    if (!fallback) return
+    setLines((current) =>
+      current.map((line) =>
+        line.expenseAccountId === '' && line.itemId === '' ? { ...line, expenseAccountId: fallback } : line,
+      ),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
       handled.current = true
       toast.success(state.message ?? 'Saved.')
-      router.push(document?.id ? `/purchases/${config.slug}/${document.id}` : `/purchases/${config.slug}`)
+      if (afterSave.current === 'new' && !document?.id) {
+        setVendorId('')
+        setDate(today)
+        setReference('')
+        setMemo('')
+        setPaymentTermId('')
+        setPaymentAccountId(paymentAccounts[0]?.id ?? '')
+        setLines(withItemRows([empty(1), empty(2)]))
+        nextKey.current = ITEM_ROWS + 3
+        router.refresh()
+        return
+      }
+      // A fresh purchase order's next job is receiving — send them there so the
+      // receive screen is not buried two clicks into a list menu.
+      const savedId = state.created?.id ?? document?.id
+      router.push(
+        afterSave.current === 'new'
+          ? `/purchases/${config.slug}/new`
+          : config.type === 'PURCHASE_ORDER' && savedId
+            ? `/purchases/purchase-orders/${savedId}/receive`
+            : `/purchases/${config.slug}`,
+      )
       router.refresh()
     }
     if (state.status !== 'success') handled.current = false
-  }, [state, router, config.slug, document?.id])
+  }, [state, router, config.slug, config.type, document?.id, today, paymentAccounts])
 
   const categoryLines = lines.filter((line) => line.kind === 'category')
   const itemLines = lines.filter((line) => line.kind === 'item')
@@ -168,7 +252,7 @@ export function BillForm({
   const addCategoryLine = () =>
     setLines((current) => [...current, empty(nextKey.current++, defaultAccount(), 'category')])
 
-  const addItemLine = () => setLines((current) => [...current, empty(nextKey.current++, '', 'item')])
+  const addItemLine = () => setLines((current) => [...current, empty(nextKey.current++, '', 'item', officeId)])
 
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
 
@@ -228,7 +312,9 @@ export function BillForm({
   /** Choosing a vendor pre-fills empty lines with their usual cost account. */
   const chooseVendor = (id: string) => {
     setVendorId(id)
-    const fallback = vendors.find((vendor) => vendor.id === id)?.defaultExpenseAccountId ?? ''
+    const chosen = vendors.find((vendor) => vendor.id === id)
+    if (chosen?.paymentTermId) setPaymentTermId(chosen.paymentTermId)
+    const fallback = chosen?.defaultExpenseAccountId ?? ''
     if (!fallback) return
     setLines((current) =>
       current.map((line) =>
@@ -244,12 +330,20 @@ export function BillForm({
     // No account is set here. An item line's cost account comes from the item —
     // and for a tracked item from its inventory account — resolved on the server,
     // which is the only place that knows whether the item is stocked.
-    update(key, {
-      itemId,
-      description: item?.description ?? '',
-      unitPrice: item?.price ?? '',
-      taxCodeId: item?.taxCodeId ?? '',
-    })
+    setLines((current) =>
+      current.map((line) =>
+        line.key === key
+          ? {
+              ...line,
+              itemId,
+              description: item?.description ?? '',
+              unitPrice: item?.price ?? '',
+              taxCodeId: item?.taxCodeId ?? '',
+              quantity: line.quantity.trim() === '' ? '1' : line.quantity,
+            }
+          : line,
+      ),
+    )
   }
 
   const filled = lines.filter((line) =>
@@ -260,6 +354,7 @@ export function BillForm({
 
   const payload = JSON.stringify({
     ...(document?.id ? { id: document.id } : { type: config.type }),
+    number,
     vendorId,
     date,
     reference,
@@ -276,34 +371,65 @@ export function BillForm({
       quantity: line.kind === 'category' ? '1' : line.quantity || '1',
       unitPrice: line.unitPrice,
       taxCodeId: line.taxCodeId,
+      storeId: line.kind === 'item' ? line.storeId : '',
     })),
   })
 
   const canSave = vendorId !== '' && filled.length > 0 && totals.total.greaterThan(0)
+  const vendor = vendors.find((row) => row.id === vendorId)
+  const term = terms.find((row) => row.id === paymentTermId)
+  const due =
+    isCalendarDate(date) && term?.type
+      ? dueDateFor(date, { type: term.type, dueDays: term.dueDays ?? 0 })
+      : isCalendarDate(date)
+        ? date
+        : ''
+  const owed = config.type === 'BILL' || config.type === 'VENDOR_CREDIT'
 
   return (
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="payload" value={payload} />
 
-      <Card>
-        <CardContent className="space-y-4 p-4">
+      <Card className="overflow-hidden bg-white p-0">
+        <CardContent className="space-y-5 p-4 sm:p-6">
           <FormStatus state={state} />
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field name="vendorId" label="Vendor" required error={state.fieldErrors?.vendorId}>
-              <EntityPicker
-                id="vendorId"
-                kind="vendor"
-                options={vendors}
-                value={vendorId || null}
-                onChange={(next) => chooseVendor(next ?? '')}
-                placeholder="Search or add a vendor"
-                required
-                error={state.fieldErrors?.vendorId}
-              />
-            </Field>
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <PartyInfo>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field name="vendorId" label="Vendor" required error={state.fieldErrors?.vendorId}>
+                  <EntityPicker
+                    id="vendorId"
+                    kind="vendor"
+                    options={vendors}
+                    value={vendorId || null}
+                    onChange={(next) => chooseVendor(next ?? '')}
+                    placeholder="Choose a vendor"
+                    required
+                    error={state.fieldErrors?.vendorId}
+                  />
+                </Field>
+                <Field name="vendorEmail" label="Email">
+                  <Input id="vendorEmail" value={vendor?.email ?? ''} readOnly placeholder="No email on this vendor" />
+                </Field>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">Mailing address</p>
+                <div className="min-h-24 whitespace-pre-line rounded-md border bg-white px-3 py-2 text-sm text-slate-700">
+                  {vendor?.mailingAddress || <span className="text-muted-foreground">No mailing address</span>}
+                </div>
+              </div>
+            </PartyInfo>
+            <div className="text-right">
+              <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                {config.needsPaymentAccount ? 'Amount paid' : 'Balance due'}
+              </p>
+              <p className="text-2xl font-semibold tabular text-primary">{formatMoney(totals.total, currency)}</p>
+            </div>
+          </div>
 
-            <Field name="date" label="Date" required error={state.fieldErrors?.date}>
+          <div className={`grid gap-3 sm:grid-cols-2 ${owed ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+            <Field name="date" label={config.needsPaymentAccount ? 'Payment date' : `${config.singular} date`} required error={state.fieldErrors?.date}>
               <DateField
                 id="date"
                 value={date}
@@ -313,28 +439,38 @@ export function BillForm({
                 aria-invalid={state.fieldErrors?.date ? true : undefined}
               />
             </Field>
-
-            {config.type === 'BILL' ? (
+            {owed ? (
               <Field name="paymentTermId" label="Terms" error={state.fieldErrors?.paymentTermId}>
                 <NativeSelect
                   {...fieldProps('paymentTermId', state.fieldErrors?.paymentTermId)}
                   value={paymentTermId}
                   onChange={(event) => setPaymentTermId(event.target.value)}
                 >
-                  <option value="">Vendor&rsquo;s default</option>
-                  {terms.map((term) => (
-                    <option key={term.id} value={term.id}>
-                      {term.label}
+                  <option value="">Due on receipt</option>
+                  {terms.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.label}
                     </option>
                   ))}
                 </NativeSelect>
               </Field>
             ) : null}
-
+            {owed ? (
+              <Field name="dueDate" label="Due date">
+                <Input id="dueDate" value={due ? formatDate(due) : ''} readOnly />
+              </Field>
+            ) : null}
+            <LockedNumber
+              label={`${config.singular} no.`}
+              value={number}
+              onChange={setNumber}
+              error={state.fieldErrors?.number}
+              recordId={document?.id}
+            />
             {config.needsPaymentAccount ? (
               <Field
                 name="paymentAccountId"
-                label="Paid from"
+                label="Payment account"
                 required
                 error={state.fieldErrors?.paymentAccountId}
               >
@@ -348,58 +484,20 @@ export function BillForm({
                 />
               </Field>
             ) : null}
-
-            <Field
-              name="reference"
-              label="Their document number"
-              hint="What to quote when querying it."
-              error={state.fieldErrors?.reference}
-            >
-              <Input
-                {...fieldProps('reference', state.fieldErrors?.reference, true)}
-                value={reference}
-                onChange={(event) => setReference(event.target.value)}
-              />
-            </Field>
           </div>
-        </CardContent>
-      </Card>
 
-      {/*
-        Two sections, and the distinction between them is the whole point.
-
-        A *category* line is an accounting entry: rent, fuel, a professional fee.
-        It names the account the cost lands in and an amount, and nothing is
-        counted. An *item* line is a thing that was bought: it names a product,
-        a quantity and a unit cost, and if that product is tracked the purchase
-        moves stock and its cost sits in inventory until it is sold.
-
-        One row asking for both — which is what this form used to do — makes the
-        two look interchangeable. They are not: put stock on a category line and
-        it never reaches the stock ledger; put rent on an item line and you have
-        invented a product called rent.
-      */}
-      <Card className="overflow-hidden p-0">
-        <div className="panel-head">
-          <h2 className="text-sm font-semibold">Category details</h2>
-          <span className="text-xs text-muted-foreground">
-            Costs posted straight to an account. No quantity, nothing counted.
-          </span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+      <div>
+        <h2 className="text-sm font-semibold">Category details</h2>
+        <p className="text-xs text-muted-foreground">A cost posted straight to an account. No quantity.</p>
+        <div className="mt-2 overflow-x-auto rounded-md border">
+          <table className="w-full border-separate border-spacing-0 text-sm">
             <thead>
-              <tr className="border-b">
-                <th className="w-64 px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                  Category
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Description</th>
-                {showTax ? (
-                  <th className="w-36 px-3 py-2 text-left text-xs font-medium text-muted-foreground">Tax</th>
-                ) : null}
-                <th className="w-32 px-3 py-2 text-right text-xs font-medium text-muted-foreground">Amount</th>
-                <th className="w-10" />
+              <tr className="bg-[#d5dde6] text-[12px] font-semibold uppercase tracking-wide text-slate-700">
+                <th className="w-64 px-2 py-2 text-left">Category</th>
+                <th className="px-2 py-2 text-left">Description</th>
+                {showTax ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
+                <th className="w-32 px-2 py-2 text-right">Amount</th>
+                <th className="w-8" />
               </tr>
             </thead>
             <tbody>
@@ -410,8 +508,8 @@ export function BillForm({
                   </td>
                 </tr>
               ) : null}
-              {categoryLines.map((line) => (
-                <tr key={line.key} className="border-b last:border-0">
+              {categoryLines.map((line, index) => (
+                <tr key={line.key} className={index % 2 === 0 ? 'bg-white' : 'bg-[#c5dff3]'}>
                   <td className="px-2 py-1.5">
                     <AccountPicker
                       options={expenseAccounts}
@@ -458,7 +556,7 @@ export function BillForm({
                       variant="ghost"
                       size="icon-sm"
                       aria-label="Remove line"
-                      onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
+                      onClick={() => setLines((current) => current.filter((row) => row.key !== line.key))}
                     >
                       <Trash2Icon />
                     </Button>
@@ -469,53 +567,39 @@ export function BillForm({
           </table>
         </div>
 
-        <div className="border-t p-3">
-          <Button type="button" variant="outline" size="sm" onClick={addCategoryLine}>
-            <PlusIcon /> Add a category
-          </Button>
-        </div>
-      </Card>
+        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addCategoryLine}>
+          <PlusIcon /> Add a category
+        </Button>
+      </div>
 
-      <Card className="overflow-hidden p-0">
-        <div className="panel-head">
-          <h2 className="text-sm font-semibold">Item details</h2>
-          <span className="text-xs text-muted-foreground">
-            Products bought. A tracked item moves stock and holds its cost until it is sold.
-          </span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+      <div>
+        <h2 className="text-sm font-semibold">Item details</h2>
+        <p className="text-xs text-muted-foreground">A product bought. A tracked item moves stock.</p>
+        <div className="mt-2 overflow-x-auto rounded-md border">
+          <table className="w-full border-separate border-spacing-0 text-sm">
             <thead>
-              <tr className="border-b">
-                <th className="w-56 px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                  Product or service
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Description</th>
-                <th className="w-20 px-3 py-2 text-right text-xs font-medium text-muted-foreground">Qty</th>
-                <th className="w-28 px-3 py-2 text-right text-xs font-medium text-muted-foreground">Cost</th>
-                {showTax ? (
-                  <th className="w-36 px-3 py-2 text-left text-xs font-medium text-muted-foreground">Tax</th>
-                ) : null}
-                <th className="w-28 px-3 py-2 text-right text-xs font-medium text-muted-foreground">Amount</th>
-                <th className="w-10" />
+              <tr className="bg-[#d5dde6] text-[12px] font-semibold uppercase tracking-wide text-slate-700">
+                <th className="w-44 px-2 py-2 text-left">Item</th>
+                <th className="px-2 py-2 text-left">Description</th>
+                <th className="w-16 px-2 py-2 text-center">Qty</th>
+                <th className="w-28 px-2 py-2 text-right">Rate</th>
+                {showTax ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
+                <th className="w-28 px-2 py-2 text-right">Amount</th>
+                {stores.length > 0 ? <th className="w-40 px-2 py-2 text-left">Store</th> : null}
+                <th className="w-8" />
               </tr>
             </thead>
             <tbody>
               {itemLines.length === 0 ? (
                 <tr>
-                  <td colSpan={showTax ? 7 : 6} className="px-3 py-4 text-sm text-muted-foreground">
+                  <td colSpan={(showTax ? 7 : 6) + (stores.length > 0 ? 1 : 0)} className="px-3 py-4 text-sm text-muted-foreground">
                     No products on this document.
                   </td>
                 </tr>
               ) : null}
-              {itemLines.map((line) => {
-                const amount = (parseMoneyInput(line.quantity) ?? ZERO)
-                  .times(parseMoneyInput(line.unitPrice) ?? ZERO)
-                  .toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
-
+              {itemLines.map((line, index) => {
                 return (
-                  <tr key={line.key} className="border-b last:border-0">
+                  <tr key={line.key} className={index % 2 === 0 ? 'bg-white' : 'bg-[#c5dff3]'}>
                     <td className="px-2 py-1.5">
                       <EntityPicker
                         kind="item"
@@ -567,14 +651,41 @@ export function BillForm({
                         </NativeSelect>
                       </td>
                     ) : null}
-                    <td className="tabular px-3 py-1.5 text-right">{formatMoney(amount, currency)}</td>
+                    <td className="px-1 py-1">
+                      <ItemAmount line={line} onCommit={(next) => update(line.key, next)} />
+                    </td>
+                    {stores.length > 0 ? (
+                      <td className="px-1 py-1 align-top">
+                        <LineStore
+                          stores={stores}
+                          stock={stock}
+                          tracked={items.some((item) => item.id === line.itemId && item.type === 'INVENTORY')}
+                          warn={false}
+                          itemId={line.itemId}
+                          storeId={line.storeId}
+                          quantity={line.quantity}
+                          onChange={(storeId) => update(line.key, { storeId })}
+                          label="Store"
+                        />
+                      </td>
+                    ) : null}
                     <td className="px-1 py-1.5">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        aria-label="Remove line"
-                        onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
+                        aria-label="Clear line"
+                        onClick={() =>
+                          setLines((current) => {
+                            const items = current.filter((row) => row.kind === 'item')
+                            if (items.length <= ITEM_ROWS) {
+                              return current.map((row) =>
+                                row.key === line.key ? empty(row.key, '', 'item', officeId) : row,
+                              )
+                            }
+                            return current.filter((row) => row.key !== line.key)
+                          })
+                        }
                       >
                         <Trash2Icon />
                       </Button>
@@ -586,57 +697,132 @@ export function BillForm({
           </table>
         </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-4 border-t p-3">
-          <Button type="button" variant="outline" size="sm" onClick={addItemLine}>
-            <PlusIcon /> Add a product
-          </Button>
+        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addItemLine}>
+          <PlusIcon /> Add line
+        </Button>
+      </div>
 
-          <dl className="min-w-52 space-y-1 text-sm">
-            <div className="flex justify-between gap-8">
-              <dt className="text-muted-foreground">Subtotal</dt>
-              <dd className="tabular">{formatMoney(totals.subtotal, currency)}</dd>
-            </div>
-            {showTax ? (
-              <div className="flex justify-between gap-8">
-                <dt className="text-muted-foreground">Tax</dt>
-                <dd className="tabular">{formatMoney(totals.tax, currency)}</dd>
-              </div>
-            ) : null}
-            <div className="flex justify-between gap-8 border-t pt-1 font-semibold">
-              <dt>Total</dt>
-              <dd className="tabular">{formatMoney(totals.total, currency)}</dd>
-            </div>
-          </dl>
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid gap-4">
+          {config.needsPaymentAccount ? null : (
+            <Field name="reference" label="Vendor bill no." error={state.fieldErrors?.reference}>
+              <Input
+                {...fieldProps('reference', state.fieldErrors?.reference, true)}
+                value={reference}
+                onChange={(event) => setReference(event.target.value)}
+                placeholder="The number on the vendor's bill"
+              />
+            </Field>
+          )}
+        <Field name="memo" label="Memo" error={state.fieldErrors?.memo}>
+          <textarea
+            id="memo"
+            name="memo"
+            rows={3}
+            value={memo}
+            onChange={(event) => setMemo(event.target.value)}
+            className="flex min-h-20 w-full rounded-md border border-input bg-card px-2.5 py-2 text-[0.8125rem] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
+          />
+        </Field>
         </div>
-      </Card>
-
-      <Card>
-        <CardContent className="p-4">
-          <Field name="memo" label="Note" error={state.fieldErrors?.memo}>
-            <Input
-              {...fieldProps('memo', state.fieldErrors?.memo)}
-              value={memo}
-              onChange={(event) => setMemo(event.target.value)}
-            />
-          </Field>
+        <dl className="space-y-2 text-sm">
+          <div className="flex justify-between gap-6">
+            <dt className="text-muted-foreground">Subtotal</dt>
+            <dd className="tabular">{formatMoney(totals.subtotal, currency)}</dd>
+          </div>
+          {showTax ? (
+            <div className="flex justify-between gap-6">
+              <dt className="text-muted-foreground">Tax</dt>
+              <dd className="tabular">{formatMoney(totals.tax, currency)}</dd>
+            </div>
+          ) : null}
+          <div className="flex justify-between gap-6 border-t pt-2 font-medium">
+            <dt>Total</dt>
+            <dd className="tabular">{formatMoney(totals.total, currency)}</dd>
+          </div>
+          <div className="flex justify-between gap-6 text-base font-semibold">
+            <dt>{config.needsPaymentAccount ? 'Amount paid' : 'Balance due'}</dt>
+            <dd className="tabular text-primary">{formatMoney(totals.total, currency)}</dd>
+          </div>
+        </dl>
+      </div>
         </CardContent>
       </Card>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => router.push(`/purchases/${config.slug}`)}>
-          Cancel
+          Close
         </Button>
-        {config.posts ? (
-          <SubmitButton variant="outline" disabled={!canSave} onClick={() => setSaveAsDraft(true)}>
-            Save as draft
-          </SubmitButton>
-        ) : null}
-        <SubmitButton disabled={!canSave} onClick={() => setSaveAsDraft(false)} pendingLabel="Saving…">
-          {config.posts ? 'Save and post' : `Save ${config.singular.toLowerCase()}`}
+        <SubmitButton
+          variant="outline"
+          disabled={!canSave}
+          pendingLabel="Saving…"
+          onClick={() => {
+            afterSave.current = 'close'
+            setSaveAsDraft(false)
+          }}
+        >
+          Save and close
+        </SubmitButton>
+        <SubmitButton
+          disabled={!canSave}
+          pendingLabel="Saving…"
+          onClick={() => {
+            afterSave.current = 'new'
+            setSaveAsDraft(false)
+          }}
+        >
+          Save and new
         </SubmitButton>
       </div>
 
       <p className="text-right text-xs text-muted-foreground">{config.effect}</p>
     </form>
+  )
+}
+
+const lineInput =
+  'h-7 border-transparent bg-transparent px-1.5 shadow-none focus-visible:border-[#3A7CA8] focus-visible:bg-white'
+
+function costFromTotal(quantity: string, totalText: string): { quantity: string; unitPrice: string } | null {
+  if (totalText.trim() === '') return { quantity, unitPrice: '' }
+  const total = parseMoneyInput(totalText)
+  if (total == null) return null
+  const qty = parseMoneyInput(quantity)
+  const count = qty && !qty.isZero() ? qty : new Decimal(1)
+  const unit = total.dividedBy(count).toDecimalPlaces(4, Decimal.ROUND_HALF_UP)
+  return {
+    quantity: qty && !qty.isZero() ? quantity : '1',
+    unitPrice: unit.toFixed(4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, ''),
+  }
+}
+
+function ItemAmount({
+  line,
+  onCommit,
+}: {
+  line: Line
+  onCommit: (next: { quantity: string; unitPrice: string }) => void
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const quantity = parseMoneyInput(line.quantity) ?? ZERO
+  const price = parseMoneyInput(line.unitPrice) ?? ZERO
+  const amount = quantity.isZero() && price.isZero() ? null : quantity.times(price)
+  const shown =
+    draft ?? (amount ? amount.toFixed(4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') : '')
+
+  return (
+    <Input
+      aria-label="Amount"
+      inputMode="decimal"
+      className={cn(lineInput, 'tabular text-right')}
+      value={shown}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={(event) => {
+        const next = costFromTotal(line.quantity, event.currentTarget.value)
+        if (next) onCommit(next)
+        setDraft(null)
+      }}
+    />
   )
 }

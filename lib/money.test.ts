@@ -7,6 +7,7 @@ import {
   formatSigned,
   minorUnits,
   parseMoneyInput,
+  settleNumberInput,
   round,
   roundToCurrency,
   sum,
@@ -65,6 +66,20 @@ describe('parseMoneyInput', () => {
     expect(parseMoneyInput('1.2.3')).toBeNull()
     expect(parseMoneyInput('')).toBeNull()
     expect(parseMoneyInput('1e5')).toBeNull()
+    expect(parseMoneyInput('120-')).toBeNull()
+    expect(parseMoneyInput('10/0')).toBeNull()
+  })
+
+  it('adds, subtracts, multiplies and divides', () => {
+    expect(parseMoneyInput('120-10')?.toString()).toBe('110')
+    expect(parseMoneyInput('10+5')?.toString()).toBe('15')
+    expect(parseMoneyInput('2*50')?.toString()).toBe('100')
+    expect(parseMoneyInput('100/4')?.toString()).toBe('25')
+    expect(parseMoneyInput('10+5*2')?.toString()).toBe('20')
+    expect(parseMoneyInput('(120-10)/2')?.toString()).toBe('55')
+    expect(parseMoneyInput('1,200 - 10')?.toString()).toBe('1190')
+    expect(settleNumberInput('120-10')).toBe('110')
+    expect(settleNumberInput('10.50')).toBeNull()
   })
 })
 

@@ -81,9 +81,7 @@ function PaymentTermDialog({ onClose }: { onClose: () => void }) {
             >
               <Input
                 {...fieldProps('dueDays', e?.dueDays, type === 'DAY_OF_MONTH')}
-                type="number"
-                min={type === 'DAY_OF_MONTH' ? 1 : 0}
-                max={type === 'DAY_OF_MONTH' ? 31 : 365}
+                inputMode="decimal"
                 defaultValue={type === 'NET_DAYS' ? 30 : 15}
                 className="tabular"
                 required
@@ -98,7 +96,7 @@ function PaymentTermDialog({ onClose }: { onClose: () => void }) {
               <Input {...fieldProps('discountPercent', e?.discountPercent)} inputMode="decimal" className="tabular" />
             </Field>
             <Field name="discountDays" label="If paid within (days)" error={e?.discountDays}>
-              <Input {...fieldProps('discountDays', e?.discountDays)} type="number" min={0} max={365} className="tabular" />
+              <Input {...fieldProps('discountDays', e?.discountDays)} inputMode="decimal" className="tabular" />
             </Field>
           </div>
 

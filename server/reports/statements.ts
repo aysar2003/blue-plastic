@@ -3,7 +3,7 @@ import type { AccountSubtype } from '@prisma/client'
 
 import type { CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
-import type { Tx } from '@/server/db'
+import { db, type Tx } from '@/server/db'
 import {
   accountFigures,
   CASH_SUBTYPES,
@@ -21,6 +21,8 @@ export type StatementRow = {
   /** Share of total income, for a profit and loss. */
   percentOfIncome?: Decimal
   comparison?: Decimal
+  /** A heading such as a parent account or a further detail, so the section can fold. */
+  group?: string | null
 }
 
 export type StatementSection = {
@@ -118,11 +120,20 @@ export async function profitAndLoss(
 
   // Every line as a share of income, which is how a profit and loss is read once
   // the absolute numbers stop being surprising.
+  const meta = await (options.client ?? db).ledgerAccount.findMany({
+    where: { orgId },
+    select: { id: true, name: true, detailType: true, parentId: true },
+  })
+  const byId = new Map(meta.map((account) => [account.id, account]))
+
   for (const section of sections) {
     for (const row of section.rows) {
       row.percentOfIncome = totalIncome.isZero()
         ? ZERO
         : row.amount.dividedBy(totalIncome).times(100).toDecimalPlaces(1)
+      const account = byId.get(row.accountId)
+      const parent = account?.parentId ? byId.get(account.parentId) : undefined
+      row.group = account?.detailType || parent?.name || null
     }
   }
 
@@ -308,7 +319,7 @@ const SECTION_FOR: Record<AccountSubtype, CashFlowSection> = {
   UNDEPOSITED_FUNDS: 'operating',
 }
 
-export type CashFlowLine = { label: string; amount: Decimal }
+export type CashFlowLine = { accountId: string; label: string; amount: Decimal }
 
 export type CashFlow = {
   range: ReportRange
@@ -376,7 +387,11 @@ export async function cashFlow(
     if (row.type === 'REVENUE' || row.type === 'EXPENSE') continue
     const contribution = row.movement.negated()
     if (contribution.isZero()) continue
-    buckets[SECTION_FOR[row.subtype]].push({ label: `${row.code} ${row.name}`, amount: contribution })
+    buckets[SECTION_FOR[row.subtype]].push({
+      accountId: row.accountId,
+      label: `${row.code} ${row.name}`,
+      amount: contribution,
+    })
   }
 
   const operatingTotal = netIncome.plus(sumBy(buckets.operating, (line) => line.amount))

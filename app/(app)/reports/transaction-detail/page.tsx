@@ -1,12 +1,12 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowLeftIcon, ScrollTextIcon } from 'lucide-react'
+import { ScrollTextIcon } from 'lucide-react'
 import type { JournalSourceType } from '@prisma/client'
 
 import { EmptyState } from '@/components/data/empty-state'
+import { ClickableRow } from '@/components/reports/clickable-row'
 import { PageHeader } from '@/components/data/page-header'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Table,
@@ -24,6 +24,7 @@ import {
   JOURNAL_SOURCE_LABELS,
 } from '@/lib/accounting-labels'
 import { formatDate, toCalendarDate } from '@/lib/date'
+import { postedLineParts } from '@/lib/ledger-text'
 import { formatMoney } from '@/lib/money'
 import { generalLedger } from '@/server/accounting/balances'
 import { requireOrgContext } from '@/server/auth/context'
@@ -33,7 +34,7 @@ import { ReportControls } from '../report-controls'
 import { readSettings, type SearchParams } from '../params'
 import { AccountSwitcher } from './account-switcher'
 
-export const metadata: Metadata = { title: 'Transaction detail by account' }
+export const metadata: Metadata = { title: 'Transaction Detail by Account' }
 
 /**
  * Transaction detail by account.
@@ -68,7 +69,7 @@ export default async function TransactionDetailPage({
     return (
       <>
         <PageHeader
-          title="Transaction detail by account"
+          title="Transaction Detail by Account"
           description="Every transaction that touched one account, with the document behind each."
         />
         <ReportControls
@@ -123,19 +124,17 @@ export default async function TransactionDetailPage({
 
   const debitNormal = isDebitNormalType(account.type)
   const movement = ledger.closing.minus(ledger.opening)
-
-  const backTo = typeof query.back === 'string' ? query.back : null
+  const splitColumns = [
+    ...new Map(
+      ledger.entries.flatMap((entry) => entry.splits.map((split) => [`${split.code} ${split.name}`, split.code] as const)),
+    ).keys(),
+  ].sort((a, b) => a.localeCompare(b))
 
   return (
     <>
-      {backTo ? (
-        <Link href={backTo} className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}>
-          <ArrowLeftIcon /> Back to the report
-        </Link>
-      ) : null}
 
       <PageHeader
-        title="Transaction detail by account"
+        title="Transaction Detail by Account"
         description={`${account.code} · ${account.name} — ${ACCOUNT_TYPE_LABELS[account.type]} · ${
           ACCOUNT_SUBTYPE_LABELS[account.subtype]
         } · ${debitNormal ? 'debit' : 'credit'} balance`}
@@ -173,6 +172,12 @@ export default async function TransactionDetailPage({
         />
       </div>
 
+      {splitColumns.length > 0 ? (
+        <p className="mb-3 text-sm text-muted-foreground">
+          Each other account on an entry is its own column. Turn the ones you want on under Columns.
+        </p>
+      ) : null}
+
       {ledger.entries.length === 0 ? (
         <EmptyState
           icon={ScrollTextIcon}
@@ -190,7 +195,11 @@ export default async function TransactionDetailPage({
                   <TableHead className="w-32">Number</TableHead>
                   <TableHead className="w-44">Name</TableHead>
                   <TableHead>Memo</TableHead>
-                  <TableHead className="w-40">Split</TableHead>
+                  {splitColumns.map((column) => (
+                    <TableHead key={column} data-split-account={column} hidden className="numeric w-36 whitespace-nowrap">
+                      {column}
+                    </TableHead>
+                  ))}
                   <TableHead className="numeric w-32">Debit</TableHead>
                   <TableHead className="numeric w-32">Credit</TableHead>
                   <TableHead className="numeric w-36">Balance</TableHead>
@@ -208,22 +217,26 @@ export default async function TransactionDetailPage({
                   const href = source.href ?? `/journals/${entry.journalId}`
                   const number = source.number ?? entry.journalNumber
 
-                  const name = entry.partyName ?? source.partyName
+                  const sourceLabel =
+                    JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ?? entry.sourceType
+                  const parts = postedLineParts({
+                    sourceLabel,
+                    memo: entry.memo,
+                    description: entry.description,
+                    partyName: entry.partyName ?? source.partyName,
+                  })
                   const nameHref = entry.customerId
-                    ? `/customers/${entry.customerId}`
+                    ? `/customers?id=${entry.customerId}`
                     : entry.vendorId
-                      ? `/vendors/${entry.vendorId}`
+                      ? `/vendors?id=${entry.vendorId}`
                       : source.partyHref
 
                   return (
-                    <TableRow key={entry.lineId}>
+                    <ClickableRow key={entry.lineId} href={href}>
                       <TableCell className="tabular whitespace-nowrap text-muted-foreground">
                         {formatDate(toCalendarDate(entry.date))}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ??
-                          entry.sourceType}
-                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{sourceLabel}</TableCell>
                       <TableCell>
                         <Link
                           href={href}
@@ -238,40 +251,70 @@ export default async function TransactionDetailPage({
                         ) : null}
                       </TableCell>
                       <TableCell className="truncate">
-                        {name ? (
+                        {parts.name ? (
                           nameHref ? (
                             <Link href={nameHref} className="underline-offset-4 hover:underline">
-                              {name}
+                              {parts.name}
                             </Link>
                           ) : (
-                            name
+                            parts.name
                           )
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell>{entry.description ?? entry.memo ?? '—'}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {entry.contraAccounts}
+                      <TableCell>{parts.note ?? '—'}</TableCell>
+                      {splitColumns.map((column) => {
+                        const split = entry.splits.find((item) => `${item.code} ${item.name}` === column)
+                        return (
+                          <TableCell key={column} hidden className="numeric tabular">
+                            {split ? (
+                              <Link href={href} className="underline-offset-4 hover:underline">
+                                {formatMoney(split.amount, currency)}
+                              </Link>
+                            ) : (
+                              ''
+                            )}
+                          </TableCell>
+                        )
+                      })}
+                      <TableCell className="numeric tabular">
+                        {entry.debit.isZero() ? (
+                          ''
+                        ) : (
+                          <Link href={href} className="underline-offset-4 hover:underline">
+                            {formatMoney(entry.debit, currency)}
+                          </Link>
+                        )}
                       </TableCell>
                       <TableCell className="numeric tabular">
-                        {entry.debit.isZero() ? '' : formatMoney(entry.debit, currency)}
-                      </TableCell>
-                      <TableCell className="numeric tabular">
-                        {entry.credit.isZero() ? '' : formatMoney(entry.credit, currency)}
+                        {entry.credit.isZero() ? (
+                          ''
+                        ) : (
+                          <Link href={href} className="underline-offset-4 hover:underline">
+                            {formatMoney(entry.credit, currency)}
+                          </Link>
+                        )}
                       </TableCell>
                       <TableCell className="numeric tabular font-medium">
-                        {formatMoney(entry.balance, currency)}
+                        <Link href={href} className="underline-offset-4 hover:underline">
+                          {formatMoney(entry.balance, currency)}
+                        </Link>
                       </TableCell>
-                    </TableRow>
+                    </ClickableRow>
                   )
                 })}
               </TableBody>
               <TableFooter>
                 <TableRow>
-                  <TableCell colSpan={6}>
-                    Total for {account.code} {account.name}
-                  </TableCell>
+                  <TableCell>Total for {account.code} {account.name}</TableCell>
+                  <TableCell />
+                  <TableCell />
+                  <TableCell />
+                  <TableCell />
+                  {splitColumns.map((column) => (
+                    <TableCell key={column} hidden />
+                  ))}
                   <TableCell className="numeric tabular font-semibold">
                     {formatMoney(
                       ledger.entries.reduce((sum, entry) => sum.plus(entry.debit), ledger.opening.minus(ledger.opening)),

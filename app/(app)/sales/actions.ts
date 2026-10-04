@@ -32,6 +32,17 @@ function revalidateSales() {
 
 const documentType = z.enum(['INVOICE', 'ESTIMATE', 'SALES_RECEIPT', 'CREDIT_MEMO', 'REFUND_RECEIPT'])
 
+const receiptSearch = z.object({
+  number: z.string().trim().max(40).optional(),
+  date: z.string().trim().max(10).optional(),
+  amount: z.string().trim().max(20).optional(),
+})
+
+export const findSalesReceipts = action
+  .requires('invoice:read')
+  .input(receiptSearch)
+  .handler((ctx, input) => salesService.findReceipts(ctx, input))
+
 export const createDocument = action
   .requires('invoice:create')
   .input(salesDocumentSchema.safeExtend({ type: documentType }))
@@ -110,7 +121,7 @@ export const deletePayment = action
   .handler(async (ctx, input) => {
     const payment = await paymentService.remove(ctx, input.id, input.reason)
     revalidateSales()
-    revalidatePath('/banking')
+    revalidatePath('/banking/accounts')
     return payment
   })
 

@@ -3,6 +3,8 @@
 import { ThemeProvider } from 'next-themes'
 import { Toaster } from 'sonner'
 
+import { THEME_IDS } from '@/lib/themes'
+
 /**
  * The only global client boundary in the application. Everything below it is a
  * Server Component unless it says otherwise.
@@ -13,7 +15,13 @@ import { Toaster } from 'sonner'
  */
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="ocean"
+      enableSystem={false}
+      themes={[...THEME_IDS]}
+      disableTransitionOnChange
+    >
       {children}
       <Toaster richColors closeButton position="bottom-right" />
     </ThemeProvider>

@@ -159,7 +159,7 @@ export function ReconcileView({
                     const result = await finishReconciliation({ reconciliationId: id, notes })
                     if (result.ok) {
                       toast.success(`${accountName} reconciled to ${statementDate}.`)
-                      router.push('/banking')
+                      router.push('/banking/accounts')
                       router.refresh()
                     } else {
                       toast.error(result.error.message)
@@ -246,7 +246,7 @@ export function ReconcileView({
                     const result = await undoReconciliation({ id, reason: undoReason })
                     if (result.ok) {
                       toast.success('Reconciliation undone.')
-                      router.push('/banking')
+                      router.push('/banking/accounts')
                       router.refresh()
                     } else {
                       setError(result.error.message)

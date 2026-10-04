@@ -58,7 +58,7 @@ export const deletePurchase = action
   .handler(async (ctx, input) => {
     const document = await purchaseService.remove(ctx, input.id, input.reason)
     revalidatePurchases()
-    revalidatePath('/inventory')
+    revalidatePath('/inventory/stock')
     revalidatePath('/reports')
     return document
   })
@@ -84,7 +84,7 @@ export const receiveOrder = action
   .handler(async (ctx, input) => {
     const bill = await purchaseService.receiveOrder(ctx, input)
     revalidatePurchases()
-    revalidatePath('/inventory')
+    revalidatePath('/inventory/stock')
     revalidatePath(`/purchases/purchase-orders/${input.orderId}`)
     return bill
   })

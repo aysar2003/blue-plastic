@@ -17,7 +17,24 @@ export async function loadFormOptions(ctx: OrgContext) {
   const [customers, items, taxCodes, chart, terms] = await Promise.all([
     db.customer.findMany({
       where: { orgId: ctx.orgId, isActive: true },
-      select: { id: true, displayName: true },
+      select: {
+        id: true,
+        displayName: true,
+        email: true,
+        paymentTermId: true,
+        billingLine1: true,
+        billingLine2: true,
+        billingCity: true,
+        billingRegion: true,
+        billingPostalCode: true,
+        billingCountry: true,
+        shippingLine1: true,
+        shippingLine2: true,
+        shippingCity: true,
+        shippingRegion: true,
+        shippingPostalCode: true,
+        shippingCountry: true,
+      },
       orderBy: { displayName: 'asc' },
     }),
     // Every item the business sells, tracked stock included. Leaving inventory
@@ -52,10 +69,32 @@ export async function loadFormOptions(ctx: OrgContext) {
   const positions = await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
 
   return {
-    customers: customers.map((customer) => ({ id: customer.id, label: customer.displayName })),
+    customers: customers.map((customer) => ({
+      id: customer.id,
+      label: customer.displayName,
+      email: customer.email,
+      paymentTermId: customer.paymentTermId,
+      billingAddress: postalAddress(
+        customer.billingLine1,
+        customer.billingLine2,
+        customer.billingCity,
+        customer.billingRegion,
+        customer.billingPostalCode,
+        customer.billingCountry,
+      ),
+      shippingAddress: postalAddress(
+        customer.shippingLine1,
+        customer.shippingLine2,
+        customer.shippingCity,
+        customer.shippingRegion,
+        customer.shippingPostalCode,
+        customer.shippingCountry,
+      ),
+    })),
     items: items.map((item) => ({
       id: item.id,
-      label: item.sku ? `${item.sku} — ${item.name}` : item.name,
+      label: item.name,
+      sku: item.sku,
       price: item.salesPrice?.toString() ?? null,
       description: item.salesDescription ?? item.description ?? item.name,
       taxCodeId: item.salesTaxCodeId,
@@ -82,6 +121,18 @@ export async function loadFormOptions(ctx: OrgContext) {
     }),
     terms,
   }
+}
+
+function postalAddress(
+  line1: string | null,
+  line2: string | null,
+  city: string | null,
+  region: string | null,
+  postalCode: string | null,
+  country: string | null,
+) {
+  const place = [city, region, postalCode].map((part) => part?.trim()).filter(Boolean).join(', ')
+  return [line1, line2, place, country].map((part) => part?.trim()).filter(Boolean).join('\n')
 }
 
 export const ITEM_GROUPS: Record<string, string> = {

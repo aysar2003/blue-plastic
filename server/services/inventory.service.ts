@@ -11,18 +11,37 @@ import {
   valuation,
 } from '@/server/accounting/inventory'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
+import * as accountService from '@/server/services/account.service'
 import { softDeleteDocument } from '@/server/accounting/deletion'
 import { postJournal } from '@/server/accounting/posting'
 import type { DraftLine } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
+import type { StockAlert } from '@/lib/stock-alert'
 import { notFound, precondition, validation } from '@/server/errors'
-import { nextDocumentNumber } from '@/server/sequences'
+import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 
 /** Stock on hand, valued, with reorder flags. */
 export async function stockOnHand(ctx: OrgContext) {
   return valuation(db as unknown as Tx, ctx.orgId)
+}
+
+/** Out of stock first, then products that have reached the limit set for ordering. */
+export async function listStockAlerts(ctx: OrgContext): Promise<StockAlert[]> {
+  const stock = await stockOnHand(ctx)
+  const alerts: StockAlert[] = []
+  for (const item of stock.items) {
+    const quantity = item.quantity.toFixed(2)
+    const reorderPoint = item.reorderPoint ? item.reorderPoint.toFixed(2) : null
+    if (item.quantity.lessThanOrEqualTo(0)) {
+      alerts.push({ itemId: item.itemId, name: item.name, quantity, reorderPoint, kind: 'out' })
+    } else if (item.belowReorder) {
+      alerts.push({ itemId: item.itemId, name: item.name, quantity, reorderPoint, kind: 'limit' })
+    }
+  }
+  alerts.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'out' ? -1 : 1))
+  return alerts
 }
 
 /** Does the stock ledger agree with the Inventory Asset account? */
@@ -117,13 +136,43 @@ export async function getAdjustment(ctx: OrgContext, id: string) {
  * is an expense, and burying it in cost of goods sold would flatter the margin on
  * everything that actually sold.
  */
+/** The expense account a damage adjustment uses when no other account is chosen. */
+export async function ensureDamageAccount(ctx: OrgContext): Promise<string> {
+  const existing = await db.ledgerAccount.findFirst({
+    where: { orgId: ctx.orgId, name: 'Inventory Damage and Loss', isActive: true },
+    select: { id: true },
+  })
+  if (existing) return existing.id
+
+  const codes = await db.ledgerAccount.findMany({
+    where: { orgId: ctx.orgId },
+    select: { code: true },
+  })
+  const used = new Set(codes.map((row) => row.code))
+  let number = 5300
+  while (used.has(String(number))) number += 1
+
+  const account = await accountService.create(ctx, {
+    code: String(number),
+    name: 'Inventory Damage and Loss',
+    description: 'Where the cost goes when damaged stock is written off. A partial loss can instead stay on the item, which raises its cost.',
+    type: 'EXPENSE',
+    subtype: 'COST_OF_GOODS_SOLD',
+    detailType: 'Inventory damage',
+  })
+  return account.id
+}
+
 export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustmentInput) {
   const meta = await requestMeta()
+  const mode = input.mode ?? 'count'
+  const accountId =
+    input.accountId ?? (mode === 'damage' ? await ensureDamageAccount(ctx) : null)
 
   return db.$transaction(async (tx) => {
-    const account = input.accountId
+    const account = accountId
       ? await tx.ledgerAccount.findFirst({
-          where: { id: input.accountId, orgId: ctx.orgId, isActive: true },
+          where: { id: accountId, orgId: ctx.orgId, isActive: true },
           select: { id: true, name: true, type: true },
         })
       : { id: await systemAccountId(tx, ctx.orgId, 'INVENTORY_SHRINKAGE'), name: '', type: 'EXPENSE' }
@@ -154,7 +203,12 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
     }
 
     const positions = await positionsOf(tx, ctx.orgId, input.lines.map((line) => line.itemId))
-    const number = await nextDocumentNumber(tx, ctx.orgId, 'INVENTORY_ADJUSTMENT')
+    const number = await assignDocumentNumber(tx, ctx.orgId, 'INVENTORY_ADJUSTMENT', input.number)
+    const clash = await tx.inventoryAdjustment.findFirst({
+      where: { orgId: ctx.orgId, number },
+      select: { id: true },
+    })
+    if (clash) throw numberTaken()
 
     const adjustment = await tx.inventoryAdjustment.create({
       data: {
@@ -176,10 +230,15 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
     for (const line of input.lines) {
       const item = byId.get(line.itemId)!
       const position = positions.get(line.itemId)!
-      const counted = new Decimal(line.countedQuantity)
+      const entered = new Decimal(line.countedQuantity)
+      const counted = mode === 'damage' ? position.quantity.minus(entered) : mode === 'cost' ? position.quantity : entered
       const change = counted.minus(position.quantity)
 
-      if (change.isZero()) continue
+      if (mode === 'damage' && !entered.isPositive()) {
+        throw validation(`Enter how many of "${item.name}" were damaged or lost.`)
+      }
+      if (mode === 'cost' && !entered.isPositive()) continue
+      if (mode !== 'cost' && change.isZero()) continue
 
       const movement = await recordMovement(tx, ctx, {
         itemId: line.itemId,
@@ -187,12 +246,15 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
         type: 'ADJUSTMENT',
         sourceType: 'INVENTORY_ADJUSTMENT',
         sourceId: adjustment.id,
-        quantity: change,
-        // Extra stock found is valued at what the books already think it costs,
-        // unless a cost is given. Stock lost leaves at the average, like a sale.
-        unitCost: change.isPositive()
-          ? (line.unitCost ?? (position.averageCost.isZero() ? '0' : position.averageCost))
-          : undefined,
+        quantity: mode === 'cost' ? 0 : change,
+        // A count values found stock at the current average. Damage leaves the
+        // value on whatever is still there, so that cost rises. Adding cost
+        // posts the amount onto the item without changing the quantity.
+        unitCost:
+          mode === 'count' && change.isPositive()
+            ? (line.unitCost ?? (position.averageCost.isZero() ? '0' : position.averageCost))
+            : undefined,
+        valueOverride: mode === 'damage' ? 0 : mode === 'cost' ? entered : undefined,
       })
 
       await tx.inventoryAdjustmentLine.create({

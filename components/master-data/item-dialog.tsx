@@ -39,6 +39,7 @@ export type ItemValues = {
   cogsAccountId?: string | null
   reorderPoint?: string | null
   categoryId?: string | null
+  storeId?: string | null
 }
 
 /** The raw chart. Every account selector orders it rather than filtering it. */
@@ -64,6 +65,7 @@ export function NewItemButton(props: {
   accounts: AccountOption[]
   taxCodes: SimpleOption[]
   categories: SimpleOption[]
+  stores?: (SimpleOption & { isOffice?: boolean })[]
   currency: string
   today?: string
 }) {
@@ -84,17 +86,20 @@ export function ItemDialog({
   accounts,
   taxCodes,
   categories,
+  stores = [],
   currency,
   today,
   onClose,
   defaultName,
   onCreated,
+  recorded,
 }: {
   mode: 'create' | 'edit'
   item?: ItemValues
   accounts: AccountOption[]
   taxCodes: SimpleOption[]
   categories: SimpleOption[]
+  stores?: (SimpleOption & { isOffice?: boolean })[]
   currency: string
   /** Default date for opening stock. */
   today?: string
@@ -103,6 +108,8 @@ export function ItemDialog({
   defaultName?: string
   /** Hands the new record back to whatever opened this. */
   onCreated?: (record: { id: string; label: string }) => void
+  /** Who entered this item, and who last changed it. */
+  recorded?: string | null
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(
@@ -151,7 +158,15 @@ export function ItemDialog({
   const [incomeAccountId, setIncomeAccountId] = useState(item?.incomeAccountId ?? '')
   const [expenseAccountId, setExpenseAccountId] = useState(item?.expenseAccountId ?? '')
   const [cogsAccountId, setCogsAccountId] = useState(item?.cogsAccountId ?? '')
-  const [inventoryAccountId, setInventoryAccountId] = useState(item?.inventoryAccountId ?? '')
+  const office = stores.find((store) => store.isOffice)
+  const [inventoryAccountId, setInventoryAccountId] = useState(() => {
+    if (item?.inventoryAccountId) return item.inventoryAccountId
+    if (mode === 'create' && office) {
+      const account = accounts.find((row) => row.name === office.label && row.subtype === 'INVENTORY')
+      return account?.id ?? ''
+    }
+    return ''
+  })
   const [openingQuantity, setOpeningQuantity] = useState('')
   const [openingUnitCost, setOpeningUnitCost] = useState(item?.purchaseCost ?? '')
   const [openingDate, setOpeningDate] = useState(today ?? '')
@@ -181,6 +196,7 @@ export function ItemDialog({
       <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'New item' : `Edit ${item?.name}`}</DialogTitle>
+          {recorded ? <p className="text-xs text-muted-foreground">{recorded}</p> : null}
         </DialogHeader>
 
         <form action={formAction} className="mt-4 space-y-5">
@@ -365,7 +381,7 @@ export function ItemDialog({
             </div>
 
             {type === 'INVENTORY' ? (
-              <div className="grid gap-4 sm:grid-cols-[1fr_10rem]">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Field
                   name="inventoryAccountId"
                   label="Inventory account"
@@ -382,6 +398,26 @@ export function ItemDialog({
                     required
                     error={e?.inventoryAccountId}
                   />
+                </Field>
+                <Field name="storeId" label="Store" hint="Where this item is kept. A new item posts to that store’s account." error={e?.storeId}>
+                  <NativeSelect
+                    {...fieldProps('storeId', e?.storeId)}
+                    defaultValue={item?.storeId ?? office?.id ?? ''}
+                    onChange={(event) => {
+                      const store = stores.find((row) => row.id === event.target.value)
+                      if (store && mode === 'create') {
+                        const account = accounts.find((row) => row.name === store.label && row.subtype === 'INVENTORY')
+                        if (account) setInventoryAccountId(account.id)
+                      }
+                    }}
+                  >
+                    <option value="">— no store —</option>
+                    {stores.map((store) => (
+                      <option key={store.id} value={store.id}>
+                        {store.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
                 </Field>
                 <Field name="reorderPoint" label="Reorder at" error={e?.reorderPoint}>
                   <Input

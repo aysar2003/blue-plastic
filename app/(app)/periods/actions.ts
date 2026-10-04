@@ -25,6 +25,7 @@ export const setPeriodStatus = action
 
     await periodService.setStatus(ctx, input.periodId, input.status)
     revalidatePath('/periods')
+    revalidatePath(`/periods/${input.periodId}`)
     revalidatePath('/journals')
     return { id: input.periodId, status: input.status }
   })

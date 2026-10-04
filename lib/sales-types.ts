@@ -67,6 +67,11 @@ export const SALES_TYPES: SalesTypeConfig[] = [
   },
 ]
 
+/** Blank item rows a new sales sheet shows. More can be added on the form. */
+export function defaultLineRows(_type?: SalesDocumentType): number {
+  return 10
+}
+
 export const bySlug = (slug: string): SalesTypeConfig | undefined =>
   SALES_TYPES.find((config) => config.slug === slug)
 

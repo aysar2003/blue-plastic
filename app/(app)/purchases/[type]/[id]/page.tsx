@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeftIcon, PackageIcon, PencilIcon } from 'lucide-react'
+import { PackageIcon, PencilIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { RecordedBy } from '@/components/data/recorded-by'
 import { DeleteButton } from '@/components/data/delete-record'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
@@ -13,7 +14,10 @@ import { formatDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
+import { attachLedgerFile } from '@/app/(app)/banking/actions'
 import { requireOrgContext } from '@/server/auth/context'
+import { listForPurchase } from '@/server/files/ledger-files'
+import { trailFor } from '@/server/services/audit.service'
 import * as purchaseService from '@/server/services/purchase.service'
 
 export const metadata: Metadata = { title: 'Document' }
@@ -30,6 +34,8 @@ export default async function PurchaseDocumentPage({
   const ctx = await requireOrgContext('bill:read')
   const document = await purchaseService.get(ctx, id).catch(() => null)
   if (!document) notFound()
+  const trail = await trailFor(ctx, document.id)
+  const papers = config.type === 'EXPENSE' ? await listForPurchase(ctx, document.id) : []
 
   const currency = ctx.organization.baseCurrency
   const isOrder = config.type === 'PURCHASE_ORDER'
@@ -52,12 +58,6 @@ export default async function PurchaseDocumentPage({
 
   return (
     <>
-      <Link
-        href={`/purchases/${config.slug}`}
-        className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}
-      >
-        <ArrowLeftIcon /> {config.plural}
-      </Link>
 
       <PageHeader
         title={`${config.singular} ${document.number}`}
@@ -91,6 +91,26 @@ export default async function PurchaseDocumentPage({
           </>
         }
       />
+
+      <RecordedBy trail={trail} timeZone={ctx.organization.timeZone} />
+
+      {config.type === 'EXPENSE' ? (
+        <form action={attachLedgerFile} className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-primary/15 bg-primary/5 p-3">
+          <input type="hidden" name="purchaseDocumentId" value={id} />
+          <label className="text-sm font-medium text-primary">
+            Receipt
+            <input type="file" name="file" accept="application/pdf,image/*" required className="mt-1 block text-xs" />
+          </label>
+          <button type="submit" className={buttonVariants({ size: 'sm' })}>
+            Attach
+          </button>
+          {papers.map((paper) => (
+            <a key={paper.id} href={`/api/files/ledger/${paper.id}`} className="text-sm text-primary underline-offset-4 hover:underline">
+              {paper.originalName}
+            </a>
+          ))}
+        </form>
+      ) : null}
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Detail label="Status">

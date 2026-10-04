@@ -54,11 +54,27 @@ export function parseCsv(input: string): { headers: string[]; rows: CsvRow[] } {
   }
 
   const nonEmpty = records.filter((r) => r.some((cell) => cell.trim() !== ''))
+  return parseTable(nonEmpty)
+}
+
+/**
+ * Turn a grid of cells into rows keyed by header.
+ *
+ * A report export (QuickBooks does this) puts the company name and the report
+ * title in the rows above the columns. Those rows are a single cell. The header
+ * is the first row with two or more filled cells. A file that is already a
+ * plain list starts on that row, so nothing about it changes.
+ */
+export function parseTable(records: string[][]): { headers: string[]; rows: CsvRow[] } {
+  const nonEmpty = records.filter((r) => r.some((cell) => cell.trim() !== ''))
   if (nonEmpty.length === 0) return { headers: [], rows: [] }
 
-  const headers = nonEmpty[0].map((h) => normaliseHeader(h))
+  const wide = nonEmpty.findIndex((record) => record.filter((cell) => cell.trim() !== '').length >= 2)
+  const headerAt = wide === -1 ? 0 : wide
 
-  const rows = nonEmpty.slice(1).map((cells) => {
+  const headers = nonEmpty[headerAt].map((h) => normaliseHeader(h))
+
+  const rows = nonEmpty.slice(headerAt + 1).map((cells) => {
     const row: CsvRow = {}
     headers.forEach((header, index) => {
       row[header] = (cells[index] ?? '').trim()
@@ -71,10 +87,10 @@ export function parseCsv(input: string): { headers: string[]; rows: CsvRow[] } {
 
 /**
  * Match headers the way a person would: case, spaces and punctuation are noise.
- * "Display Name", "display_name" and "DisplayName" are the same column.
+ * "Display Name", "display_name", "DisplayName" and "Product/Service Name" agree.
  */
 export function normaliseHeader(header: string): string {
-  return header.trim().toLowerCase().replace(/[\s_-]+/g, '')
+  return header.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
 export type ImportIssue = { row: number; field?: string; message: string }

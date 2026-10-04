@@ -96,6 +96,21 @@ export async function createFiscalYear(ctx: OrgContext, year: number) {
   })
 }
 
+/** One month, so its entries and reports can be opened underneath it. */
+export async function find(ctx: OrgContext, id: string) {
+  return db.accountingPeriod.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: {
+      id: true,
+      periodNumber: true,
+      startDate: true,
+      endDate: true,
+      status: true,
+      fiscalYear: { select: { year: true, status: true } },
+    },
+  })
+}
+
 /** Make sure the year containing today exists, so the periods page is never empty. */
 export async function ensureCurrentFiscalYear(ctx: OrgContext) {
   const year = fiscalYearOf(today(ctx.organization.timeZone), ctx.organization.fiscalYearStartMonth)

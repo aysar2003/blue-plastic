@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeftIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
 import { Badge } from '@/components/ui/badge'
@@ -44,17 +43,35 @@ export default async function ItemMovementsPage({
   })
   if (!item) notFound()
 
+  const canEdit = ctx.permissions.has('item:update')
+  const canAdjust = ctx.permissions.has('inventory:adjust')
   const movements = await inventoryService.movementsFor(ctx, itemId)
   const currency = ctx.organization.baseCurrency
   const latest = movements.at(-1)
 
   return (
     <>
-      <Link href="/inventory" className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} mb-3 -ml-2`}>
-        <ArrowLeftIcon /> Inventory
-      </Link>
 
       <PageHeader title={item.name} description={item.sku ?? undefined} />
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {canEdit ? (
+          <Link href={`/items?edit=${item.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Edit
+          </Link>
+        ) : null}
+        <Link href={`/items/${item.id}/report`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          Quick report
+        </Link>
+        {canAdjust ? (
+          <Link
+            href={`/inventory/adjustments/new?item=${item.id}`}
+            className={buttonVariants({ size: 'sm' })}
+          >
+            Adjustment
+          </Link>
+        ) : null}
+      </div>
 
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <Card>
