@@ -14,7 +14,9 @@
 // `pnpm db:verify` asserts they are still present in the connected database.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  /// Native for local/dev; Vercel serverless is Amazon Linux (OpenSSL 3).
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 // Prisma 7 moved connection URLs out of the schema: migrations read them from
