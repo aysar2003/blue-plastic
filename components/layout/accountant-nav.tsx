@@ -33,7 +33,6 @@ const ITEMS: Item[] = [
   { label: 'Inventory', href: '/inventory', permission: 'item:read' },
   { label: 'Purchase orders', href: '/purchases/purchase-orders', permission: 'bill:read' },
   { label: 'Delivery', href: '/purchases/delivery', permission: 'bill:read' },
-  { label: 'Delivery', href: '/purchases/delivery', permission: 'bill:read' },
   {
     label: 'Standard reports',
     href: '/reports',

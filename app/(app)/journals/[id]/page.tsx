@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
+import { DocumentActions } from '@/components/print/document-actions'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -41,6 +42,7 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
     <>
 
       <PageHeader
+        className="print:hidden"
         title={journal.journalNumber}
         description={
           journal.memo ??
@@ -48,13 +50,29 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
           undefined
         }
         actions={
-          canReverse ? (
-            <ReverseDialog
-              journalId={journal.id}
-              journalNumber={journal.journalNumber}
-              defaultDate={toCalendarDate(journal.date)}
+          <>
+            <DocumentActions
+              paper="journal entry"
+              defaultSubject={`${journal.journalNumber} — ${ctx.organization.name}`}
+              defaultBody={[
+                journal.journalNumber,
+                journal.memo ?? '',
+                `Date: ${formatDate(toCalendarDate(journal.date))}`,
+                party ? `Party: ${party.name}` : null,
+                '',
+                ctx.organization.name,
+              ]
+                .filter((line) => line !== null)
+                .join('\n')}
             />
-          ) : undefined
+            {canReverse ? (
+              <ReverseDialog
+                journalId={journal.id}
+                journalNumber={journal.journalNumber}
+                defaultDate={toCalendarDate(journal.date)}
+              />
+            ) : null}
+          </>
         }
       />
 

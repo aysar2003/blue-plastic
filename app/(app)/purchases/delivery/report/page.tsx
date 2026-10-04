@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/data/empty-state'
 import { FilterChips } from '@/components/data/filter-chips'
 import { PageHeader } from '@/components/data/page-header'
 import { ScrollSheet } from '@/components/data/scroll-sheet'
+import { DocumentActions } from '@/components/print/document-actions'
 import { DeliveryBucketBadge } from '@/components/purchases/delivery-order-table'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -54,15 +55,45 @@ export default async function DeliveryReportPage({
     { ordered: ZERO, received: ZERO, outstanding: ZERO },
   )
 
+  const filterLabel =
+    filter === 'outstanding'
+      ? 'Outstanding orders'
+      : filter === 'delivered'
+        ? 'Delivered orders'
+        : 'All purchase orders'
+  const pdfParams = new URLSearchParams()
+  if (filter !== 'all') pdfParams.set('filter', filter)
+  if (vendorId) pdfParams.set('vendorId', vendorId)
+  const pdfQuery = pdfParams.toString()
+  const shareBody = [
+    `Delivery report — ${filterLabel}`,
+    `${ctx.organization.name}`,
+    `${orders.length} purchase order${orders.length === 1 ? '' : 's'}`,
+    `Ordered ${formatMoney(totals.ordered, currency)}`,
+    `Received ${formatMoney(totals.received, currency)}`,
+    `Outstanding ${formatMoney(totals.outstanding, currency)}`,
+  ].join('\n')
+
   return (
     <>
       <PageHeader
+        className="print:hidden"
         title="Delivery report"
         description="Every purchase order with what was ordered, what arrived, and what is still outstanding — line by line."
         actions={
-          <Link href="/purchases/delivery" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Delivery home
-          </Link>
+          <>
+            <DocumentActions
+              paper="delivery report"
+              pdfHref={`/api/purchases/delivery/report${pdfQuery ? `?${pdfQuery}` : ''}`}
+              filename="delivery-report.pdf"
+              defaultSubject={`Delivery report — ${filterLabel}`}
+              defaultBody={shareBody}
+              whatsappText={shareBody}
+            />
+            <Link href="/purchases/delivery" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              Delivery home
+            </Link>
+          </>
         }
       />
 

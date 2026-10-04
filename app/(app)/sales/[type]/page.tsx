@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { FileTextIcon, PlusIcon } from 'lucide-react'
 
+import { ClickableRow } from '@/components/data/clickable-row'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { Pagination } from '@/components/data/pagination'
@@ -379,7 +380,11 @@ export default async function SalesListPage({
                   (row.status === 'OPEN' || row.status === 'PARTIAL')
 
                 return (
-                  <TableRow key={row.id}>
+                  <ClickableRow
+                    key={row.id}
+                    href={`/sales/${config.slug}/${row.id}`}
+                    title={`Open ${config.singular.toLowerCase()} ${row.number}`}
+                  >
                     <TableCell>
                       <Link
                         href={`/sales/${config.slug}/${row.id}`}
@@ -450,7 +455,7 @@ export default async function SalesListPage({
                         />
                       </div>
                     </TableCell>
-                  </TableRow>
+                  </ClickableRow>
                 )
               })}
             </TableBody>

@@ -10,6 +10,7 @@ import type { AccountSubtype } from '@prisma/client'
 import { StartReconciliationButton } from '@/components/banking/start-reconciliation'
 import { Button } from '@/components/ui/button'
 import { TableCell, TableRow } from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import { setAccountActive } from './actions'
 import { EditAccountDialog, type AccountFormValues, type ParentOption } from './account-dialog'
 
@@ -99,10 +100,17 @@ export function AccountTableRow({
 
   return (
     <TableRow
-      className={className}
+      title={`Open ${account.name}`}
+      className={cn('cursor-pointer hover:bg-muted/50', className)}
       onContextMenu={(event) => {
         event.preventDefault()
         openAt(event.clientX, event.clientY)
+      }}
+      onClick={(event) => {
+        const target = event.target
+        if (!(target instanceof Element)) return
+        if (target.closest('a, button, input, select, textarea, summary, details, label')) return
+        router.push(`/accounts/${account.id}`)
       }}
     >
       {children}

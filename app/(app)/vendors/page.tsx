@@ -1,6 +1,13 @@
 import type { Metadata } from 'next'
 
-import { ContactCenter, isActivitySort, readCenterRowMode, sortCenterRows, type CenterTab } from '@/components/contacts/contact-center'
+import {
+  ContactCenter,
+  isActivitySort,
+  isPeopleSort,
+  readCenterRowMode,
+  sortCenterRows,
+  type CenterTab,
+} from '@/components/contacts/contact-center'
 import { EditContact } from '@/components/contacts/edit-contact'
 import { FilterChips } from '@/components/data/filter-chips'
 import { ImportDialog } from '@/components/master-data/import-dialog'
@@ -22,7 +29,7 @@ import { VENDOR_COLUMNS } from '@/server/services/import.service'
 
 export const metadata: Metadata = { title: 'Vendors' }
 
-const SORTABLE = ['name', 'email', 'phone', 'company'] as const
+const SORTABLE = ['name', 'email', 'phone', 'company', 'balance'] as const
 const TABS = ['transactions', 'contacts', 'tasks', 'notes', 'mail'] as const
 
 function listed(parts: Array<string | null | undefined>) {
@@ -147,6 +154,8 @@ export default async function VendorsPage({
     txSort: txSort || undefined,
     txDir: txSort ? txDir : undefined,
     rows: rowMode === 'split' ? undefined : rowMode,
+    sort: sort.sort !== 'name' ? sort.sort : undefined,
+    dir: sort.dir !== 'asc' ? sort.dir : undefined,
   }
 
   const tabHref = (nextTab: CenterTab) => {
@@ -273,6 +282,9 @@ export default async function VendorsPage({
         filterPath="/vendors"
         filterParams={filterParams}
         activitySort={txSort ? { sort: txSort, dir: txDir } : undefined}
+        peopleSort={
+          isPeopleSort(sort.sort) ? { sort: sort.sort, dir: sort.dir } : undefined
+        }
         newContact={
           <>
             {canCreate ? <ImportDialog kind="vendor" columns={VENDOR_COLUMNS} /> : null}

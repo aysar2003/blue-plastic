@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { ClickableRow } from '@/components/reports/clickable-row'
 import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { Card } from '@/components/ui/card'
@@ -64,8 +65,16 @@ export default async function TrialBalancePage({
   return (
     <>
       <PageHeader
+        className="print:hidden"
         title="Trial Balance"
         description={`Every account with a balance or movement between ${formatDate(from)} and ${formatDate(to)}.`}
+        actions={
+          <PrintButton
+            paper="trial balance"
+            defaultSubject={`Trial Balance — ${ctx.organization.name}`}
+            defaultBody={`Trial Balance\n${ctx.organization.name}\n${formatDate(from)} to ${formatDate(to)}`}
+          />
+        }
       />
 
       <div className="mb-4">

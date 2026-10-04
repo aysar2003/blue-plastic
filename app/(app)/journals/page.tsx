@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { FileTextIcon, PlusIcon } from 'lucide-react'
 
+import { ClickableRow } from '@/components/data/clickable-row'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { Pagination } from '@/components/data/pagination'
@@ -135,7 +136,11 @@ export default async function JournalsPage({
             </TableHeader>
             <TableBody>
               {rows.map((journal) => (
-                <TableRow key={journal.id}>
+                <ClickableRow
+                  key={journal.id}
+                  href={`/journals/${journal.id}`}
+                  title={`Open journal ${journal.journalNumber}`}
+                >
                   <TableCell>
                     <Link
                       href={`/journals/${journal.id}`}
@@ -218,7 +223,7 @@ export default async function JournalsPage({
                       }
                     />
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

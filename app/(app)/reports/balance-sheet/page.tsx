@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { StatementTable } from '@/components/reports/statement-table'
 import { Card } from '@/components/ui/card'
 import { formatDate } from '@/lib/date'
@@ -33,7 +34,18 @@ export default async function BalanceSheetPage({
 
   return (
     <>
-      <PageHeader title="Balance Sheet" description={`As at ${formatDate(settings.asOf)}`} />
+      <PageHeader
+        className="print:hidden"
+        title="Balance Sheet"
+        description={`As at ${formatDate(settings.asOf)}`}
+        actions={
+          <PrintButton
+            paper="balance sheet"
+            defaultSubject={`Balance Sheet — ${ctx.organization.name}`}
+            defaultBody={`Balance Sheet\n${ctx.organization.name}\nAs at ${formatDate(settings.asOf)}`}
+          />
+        }
+      />
 
       <ReportControls
         period={settings.period}

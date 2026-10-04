@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { PackageIcon } from 'lucide-react'
 
+import { ClickableRow } from '@/components/data/clickable-row'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -47,7 +48,7 @@ export function DeliveryOrderTable({
       </TableHeader>
       <TableBody>
         {rows.map((row) => (
-          <TableRow key={row.id}>
+          <ClickableRow key={row.id} href={row.href} title={`Open order ${row.number}`}>
             <TableCell>
               <Link href={row.href} className="tabular font-medium underline-offset-4 hover:underline">
                 {row.number}
@@ -90,7 +91,7 @@ export function DeliveryOrderTable({
                 ) : null}
               </TableCell>
             ) : null}
-          </TableRow>
+          </ClickableRow>
         ))}
       </TableBody>
     </Table>

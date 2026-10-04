@@ -40,7 +40,7 @@ const DOCUMENT_SELECT = {
   subtotal: true, taxTotal: true, total: true,
   currencyCode: true, paymentAccountId: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
-  vendor: { select: { id: true, displayName: true, email: true } },
+  vendor: { select: { id: true, displayName: true, email: true, phone: true } },
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
   paymentAccount: { select: { id: true, code: true, name: true } },
   convertedTo: { select: { id: true, number: true, type: true } },

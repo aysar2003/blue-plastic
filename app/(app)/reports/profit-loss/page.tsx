@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 
 import { PageHeader } from '@/components/data/page-header'
+import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { StatementTable } from '@/components/reports/statement-table'
 import { Card } from '@/components/ui/card'
 import { formatDate } from '@/lib/date'
@@ -41,6 +42,14 @@ export default async function ProfitAndLossPage({
   const drill = (accountId: string) =>
     `/reports/transaction-detail?account=${accountId}&period=custom&from=${settings.range.from}&to=${settings.range.to}&back=/reports/profit-loss`
 
+  const detailQs = new URLSearchParams({
+    period: settings.period,
+    from: settings.range.from,
+    to: settings.range.to,
+    basis: settings.basis,
+  })
+  const detailHref = `/reports/profit-loss/detail?${detailQs}`
+
   const picture = statementPicture(report.sections, 'total')
   const compared = settings.comparison !== 'none'
   const previous = compared ? statementPicture(report.sections, 'comparisonTotal') : null
@@ -51,15 +60,25 @@ export default async function ProfitAndLossPage({
   const comparedOperating = comparedGross.minus(sectionAmount('expenses'))
   const comparedNet = comparedOperating.plus(sectionAmount('otherIncome')).minus(sectionAmount('otherExpense'))
   const line = (label: string, amount: Decimal, comparison: Decimal, emphasis = false) =>
-    compared ? { label, amount, comparison, emphasis } : { label, amount, emphasis }
+    compared
+      ? { label, amount, comparison, emphasis, href: detailHref }
+      : { label, amount, emphasis, href: detailHref }
 
   return (
     <>
       <PageHeader
+        className="print:hidden"
         title="Profit and Loss"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · ${
           settings.basis === 'cash' ? 'cash basis' : 'accrual basis'
         }`}
+        actions={
+          <PrintButton
+            paper="profit and loss"
+            defaultSubject={`Profit and Loss — ${ctx.organization.name}`}
+            defaultBody={`Profit and Loss\n${ctx.organization.name}\n${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}`}
+          />
+        }
       />
 
       <p className="mb-3 text-sm">
@@ -86,9 +105,27 @@ export default async function ProfitAndLossPage({
           currency={currency}
           comparisonLabel={comparisonLabel}
           bars={[
-            { label: 'Income', value: picture.income, comparison: previous?.income, color: INCOME_COLOR },
-            { label: 'Expenses', value: picture.expenses, comparison: previous?.expenses, color: EXPENSE_COLOR },
-            { label: 'Net income', value: picture.net, comparison: previous?.net, color: NET_COLOR },
+            {
+              label: 'Income',
+              value: picture.income,
+              comparison: previous?.income,
+              color: INCOME_COLOR,
+              href: detailHref,
+            },
+            {
+              label: 'Expenses',
+              value: picture.expenses,
+              comparison: previous?.expenses,
+              color: EXPENSE_COLOR,
+              href: detailHref,
+            },
+            {
+              label: 'Net income',
+              value: picture.net,
+              comparison: previous?.net,
+              color: NET_COLOR,
+              href: detailHref,
+            },
           ]}
         />
       </div>

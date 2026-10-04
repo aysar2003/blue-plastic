@@ -6,6 +6,7 @@ import { PackageIcon, PencilIcon } from 'lucide-react'
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { DeleteButton } from '@/components/data/delete-record'
+import { DocumentActions } from '@/components/print/document-actions'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -60,10 +61,25 @@ export default async function PurchaseDocumentPage({
     <>
 
       <PageHeader
+        className="print:hidden"
         title={`${config.singular} ${document.number}`}
         description={document.vendor.displayName}
         actions={
           <>
+            <DocumentActions
+              paper={config.singular.toLowerCase()}
+              defaultTo={document.vendor.email ?? ''}
+              defaultSubject={`${config.singular} ${document.number} — ${ctx.organization.name}`}
+              defaultBody={[
+                `${config.singular} ${document.number}`,
+                `Vendor: ${document.vendor.displayName}`,
+                `Date: ${formatDate(toCalendarDate(document.date))}`,
+                `Total: ${formatMoney(document.total, currency)}`,
+                '',
+                `From ${ctx.organization.name}`,
+              ].join('\n')}
+              whatsappPhone={document.vendor.phone}
+            />
             {canReceive ? (
               <Link
                 href={`/purchases/purchase-orders/${id}/receive`}

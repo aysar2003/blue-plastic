@@ -6,7 +6,15 @@
  * step. QuickBooks exports still match through the same loose names.
  */
 
-export type TemplateList = 'yesno' | 'itemType' | 'country' | 'terms' | 'income' | 'expense' | 'inventory'
+export type TemplateList =
+  | 'yesno'
+  | 'itemType'
+  | 'country'
+  | 'terms'
+  | 'income'
+  | 'expense'
+  | 'inventory'
+  | 'store'
 
 export type TemplateColumn = {
   /** Exact header written on the sheet. */
@@ -161,6 +169,13 @@ export const ITEM_TEMPLATE: TemplateColumn[] = [
     hint: 'Opening stock. It is posted only when Purchase Cost is filled in.',
     example: '40',
     entry: 'money',
+  },
+  {
+    header: 'Store',
+    required: false,
+    hint: 'Which store holds the quantity on hand. Must match a store name already set up. Blank uses the office store when stock is imported.',
+    example: 'Office',
+    entry: 'store',
   },
   { header: 'Reorder Point', required: false, hint: 'The quantity at which you want to reorder.', example: '10', entry: 'money' },
   {
@@ -332,6 +347,7 @@ const ITEM_SAMPLES: Record<string, string>[] = [
     'Purchase Description': '20L drum, purchased',
     'Purchase Cost': '12.50',
     'Quantity on hand': '40',
+    Store: 'Office',
     'Reorder Point': '10',
     'Quantity as-of date': '2026-10-01',
     Active: 'Yes',

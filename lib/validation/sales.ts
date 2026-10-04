@@ -100,6 +100,10 @@ export const paymentSchema = z.object({
 
 export type PaymentInput = z.infer<typeof paymentSchema>
 
+export const paymentUpdateSchema = paymentSchema.safeExtend({ id: cuid })
+
+export type PaymentUpdateInput = z.infer<typeof paymentUpdateSchema>
+
 export const applyCreditSchema = z.object({
   creditDocumentId: cuid,
   applications: z.array(z.object({ invoiceId: cuid, amount: moneyString })).min(1).max(200),

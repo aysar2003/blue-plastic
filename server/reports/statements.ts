@@ -1,5 +1,5 @@
 import 'server-only'
-import type { AccountSubtype } from '@prisma/client'
+import type { AccountSubtype, AccountType } from '@prisma/client'
 
 import type { CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
@@ -17,6 +17,10 @@ export type StatementRow = {
   accountId: string
   code: string
   name: string
+  /** Statement class — Assets, Liabilities, Income, … */
+  type: AccountType
+  /** Detail kind within that class — Bank, Operating expense, … */
+  subtype: AccountSubtype
   amount: Decimal
   /** Share of total income, for a profit and loss. */
   percentOfIncome?: Decimal
@@ -95,6 +99,8 @@ export async function profitAndLoss(
         accountId: row.accountId,
         code: row.code,
         name: row.name,
+        type: row.type,
+        subtype: row.subtype,
         amount: present(row.type, row.movement),
         comparison: comparisonById.get(row.accountId),
       }))
@@ -241,6 +247,8 @@ export async function balanceSheet(
         accountId: row.accountId,
         code: row.code,
         name: row.name,
+        type: row.type,
+        subtype: row.subtype,
         amount: present(row.type, row.closing),
       }))
       .filter((row) => !row.amount.isZero())

@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { DELIVERY_HUB_APPS, visibleHubApps } from '@/components/layout/module-hubs'
+import { DocumentActions } from '@/components/print/document-actions'
 import { DeliveryOrderTable } from '@/components/purchases/delivery-order-table'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -31,17 +32,32 @@ export default async function DeliveryHubPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        className="print:hidden"
         title="Delivery"
         description="What was ordered, what has arrived, and what is still outstanding — order by order."
         actions={
-          canReceive ? (
-            <Link
-              href="/purchases/purchase-orders?status=open"
-              className={buttonVariants({ size: 'sm' })}
-            >
-              <PackageIcon /> Receive items
-            </Link>
-          ) : undefined
+          <>
+            <DocumentActions
+              paper="delivery report"
+              pdfHref="/api/purchases/delivery/report?filter=outstanding"
+              filename="outstanding-delivery.pdf"
+              defaultSubject={`Outstanding delivery — ${ctx.organization.name}`}
+              defaultBody={[
+                'Outstanding delivery',
+                ctx.organization.name,
+                `${summary.outstandingOrders} order${summary.outstandingOrders === 1 ? '' : 's'} still due`,
+                `Outstanding value ${formatMoney(summary.outstandingValue, currency)}`,
+              ].join('\n')}
+            />
+            {canReceive ? (
+              <Link
+                href="/purchases/purchase-orders?status=open"
+                className={buttonVariants({ size: 'sm' })}
+              >
+                <PackageIcon /> Receive items
+              </Link>
+            ) : null}
+          </>
         }
       />
 

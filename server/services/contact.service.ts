@@ -169,14 +169,43 @@ export async function listVendors(
     ...(query.q ? { OR: searchTerms(query.q) } : {}),
   }
 
+  const order =
+    CONTACT_ORDER<Prisma.VendorOrderByWithRelationInput>(options.sort, options.dir ?? 'asc') ?? [
+      { displayName: 'asc' },
+    ]
+
+  // Payable balance is on the ledger, so sorting by it needs every match first.
+  if (options.sort === 'balance') {
+    const people = await db.vendor.findMany({ where, select: { id: true } })
+    const balances = await subledgerBalances(db, ctx, 'vendor', people.map((person) => person.id))
+    const direction = options.dir === 'desc' ? -1 : 1
+    const ordered = people
+      .map((person) => ({ id: person.id, balance: balances.get(person.id) ?? new Decimal(0) }))
+      .sort((a, b) => a.balance.comparedTo(b.balance) * direction)
+    const { skip, take } = paginate(query)
+    const slice = ordered.slice(skip, skip + take)
+    const found = slice.length
+      ? await db.vendor.findMany({
+          where: { id: { in: slice.map((person) => person.id) } },
+          select: VENDOR_SELECT,
+        })
+      : []
+    const byId = new Map(found.map((row) => [row.id, row]))
+    return paged(
+      slice.flatMap((person) => {
+        const row = byId.get(person.id)
+        return row ? [{ ...row, balance: toMoneyString(person.balance, 2) }] : []
+      }),
+      people.length,
+      query,
+    )
+  }
+
   const [rows, total] = await Promise.all([
     db.vendor.findMany({
       where,
       select: VENDOR_SELECT,
-      orderBy:
-        CONTACT_ORDER<Prisma.VendorOrderByWithRelationInput>(options.sort, options.dir ?? 'asc') ?? [
-          { displayName: 'asc' },
-        ],
+      orderBy: order,
       ...paginate(query),
     }),
     db.vendor.count({ where }),

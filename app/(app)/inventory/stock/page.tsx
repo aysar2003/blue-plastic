@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon, PackageIcon, ScaleIcon } from 'lucide-react'
 
+import { ClickableRow } from '@/components/data/clickable-row'
 import { EmptyState } from '@/components/data/empty-state'
 import { MetricCard } from '@/components/data/metric-card'
 import { PageHeader } from '@/components/data/page-header'
@@ -202,7 +203,11 @@ export default async function InventoryPage({
                   </TableRow>
                 ) : null}
                 {items.map((item) => (
-                  <TableRow key={item.itemId}>
+                  <ClickableRow
+                    key={item.itemId}
+                    href={`/items/${item.itemId}/report`}
+                    title={`Open report for ${item.name}`}
+                  >
                     <TableCell>
                       <ItemNameMenu
                         id={item.itemId}
@@ -255,7 +260,7 @@ export default async function InventoryPage({
                     <TableCell className="numeric tabular font-medium">
                       {formatMoney(item.value, currency)}
                     </TableCell>
-                  </TableRow>
+                  </ClickableRow>
                 ))}
               </TableBody>
               <TableFooter>

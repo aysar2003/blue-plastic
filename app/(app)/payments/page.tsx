@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { BanknoteIcon, PlusIcon } from 'lucide-react'
 
+import { ClickableRow } from '@/components/data/clickable-row'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { Pagination } from '@/components/data/pagination'
@@ -16,7 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { DeleteButton } from '@/components/data/delete-record'
+import { RowActions } from '@/components/data/row-actions'
 import { formatDate, toCalendarDate, today } from '@/lib/date'
 import { DATE_PRESETS, presetRange, readDatePreset } from '@/lib/list-filters'
 import { formatMoney } from '@/lib/money'
@@ -46,6 +47,8 @@ export default async function PaymentsPage({
   const trails = await trailsFor(ctx, page.rows.map((payment) => payment.id))
   const currency = ctx.organization.baseCurrency
   const canVoid = ctx.permissions.has('payment:void')
+  const canEdit = ctx.permissions.has('payment:update')
+  const canReport = ctx.permissions.has('report:read')
 
   const newButton = ctx.permissions.has('payment:create') ? (
     <Link href="/payments/new" className={buttonVariants({ size: 'sm' })}>
@@ -102,14 +105,30 @@ export default async function PaymentsPage({
             </TableHeader>
             <TableBody>
               {page.rows.map((payment) => (
-                <TableRow key={payment.id}>
+                <ClickableRow
+                  key={payment.id}
+                  href={`/payments/${payment.id}`}
+                  title={`Open payment ${payment.number}`}
+                >
                   <TableCell className="tabular font-medium">
-                    {payment.number}
+                    <Link
+                      href={`/payments/${payment.id}`}
+                      className="underline-offset-4 hover:underline"
+                    >
+                      {payment.number}
+                    </Link>
                   </TableCell>
                   <TableCell className="tabular whitespace-nowrap text-muted-foreground">
                     {formatDate(toCalendarDate(payment.date))}
                   </TableCell>
-                  <TableCell>{payment.customer.displayName}</TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/customers?id=${payment.customer.id}`}
+                      className="underline-offset-4 hover:underline"
+                    >
+                      {payment.customer.displayName}
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {PAYMENT_METHOD_LABELS[payment.method] ?? payment.method}
                   </TableCell>
@@ -131,16 +150,29 @@ export default async function PaymentsPage({
                   </TableCell>
                   <EnteredByCell trail={trails.get(payment.id)} />
                   <TableCell className="print:hidden">
-                    {canVoid ? (
-                      <DeleteButton
-                        kind="customer-payment"
-                        id={payment.id}
-                        number={payment.number}
-                        variant="ghost"
-                      />
-                    ) : null}
+                    <RowActions
+                      actions={[
+                        { label: 'Open', href: `/payments/${payment.id}`, icon: 'open' },
+                        ...(canEdit && payment.status !== 'VOID'
+                          ? [{ label: 'Edit', href: `/payments/${payment.id}/edit`, icon: 'edit' as const }]
+                          : []),
+                        ...(canReport
+                          ? [
+                              {
+                                label: 'QuickReport',
+                                href: `/reports/statements/customer?customerId=${payment.customer.id}&view=detail&period=all-dates`,
+                              },
+                            ]
+                          : []),
+                      ]}
+                      onDelete={
+                        canVoid && payment.status !== 'VOID'
+                          ? { kind: 'customer-payment', id: payment.id, number: payment.number }
+                          : undefined
+                      }
+                    />
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

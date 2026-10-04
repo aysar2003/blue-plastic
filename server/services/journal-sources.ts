@@ -189,12 +189,9 @@ export async function resolveSources(
   for (const payment of customerPayments) {
     resolved.set(key('CUSTOMER_PAYMENT', payment.id), {
       number: payment.number,
-      // The payments list, filtered to this one. There is no payment page of its
-      // own, and a link to an unfiltered list of two hundred rows is not a
-      // drill-down — it is a place to start looking again.
-      href: `/payments?q=${encodeURIComponent(payment.number)}`,
+      href: `/payments/${payment.id}`,
       partyName: payment.customer.displayName,
-      partyHref: `/customers/${payment.customer.id}`,
+      partyHref: `/customers?id=${payment.customer.id}`,
     })
   }
 

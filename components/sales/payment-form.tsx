@@ -25,8 +25,21 @@ import { savePaymentForm } from '@/app/(app)/sales/actions'
 type OpenInvoice = { id: string; number: string; date: string; dueDate: string | null; balance: string }
 type Option = { id: string; label: string }
 
+export type PaymentFormValues = {
+  id: string
+  customerId: string
+  date: string
+  amount: string
+  method: string
+  depositAccountId: string
+  reference: string | null
+  memo: string | null
+  applications: { invoiceId: string; amount: string }[]
+  invoices: OpenInvoice[]
+}
+
 /**
- * Recording money received.
+ * Recording money received — or editing a payment already on the books.
  *
  * The payment is entered first and applied second, in that order, because that is
  * what actually happened: the money arrived, and then someone decided what it was
@@ -41,6 +54,7 @@ export function PaymentForm({
   loadOpenInvoices,
   initialCustomerId,
   documentNumber,
+  payment,
 }: {
   customers: Option[]
   depositAccounts: AccountPickerOption[]
@@ -49,21 +63,28 @@ export function PaymentForm({
   loadOpenInvoices: (customerId: string) => Promise<OpenInvoice[]>
   initialCustomerId?: string
   documentNumber: string
+  payment?: PaymentFormValues
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(savePaymentForm, idleState)
+  const editing = Boolean(payment)
 
   const [number, setNumber] = useState(documentNumber)
-  const [customerId, setCustomerId] = useState(initialCustomerId ?? '')
-  const [date, setDate] = useState(today)
-  const [amount, setAmount] = useState('')
-  const [method, setMethod] = useState('BANK_TRANSFER')
-  const [depositAccountId, setDepositAccountId] = useState(depositAccounts[0]?.id ?? '')
-  const [reference, setReference] = useState('')
-  const [memo, setMemo] = useState('')
+  const [customerId, setCustomerId] = useState(payment?.customerId ?? initialCustomerId ?? '')
+  const [date, setDate] = useState(payment?.date ?? today)
+  const [amount, setAmount] = useState(payment?.amount ?? '')
+  const [method, setMethod] = useState(payment?.method ?? 'BANK_TRANSFER')
+  const [depositAccountId, setDepositAccountId] = useState(
+    payment?.depositAccountId ?? depositAccounts[0]?.id ?? '',
+  )
+  const [reference, setReference] = useState(payment?.reference ?? '')
+  const [memo, setMemo] = useState(payment?.memo ?? '')
 
-  const [invoices, setInvoices] = useState<OpenInvoice[]>([])
-  const [applied, setApplied] = useState<Record<string, string>>({})
+  const [invoices, setInvoices] = useState<OpenInvoice[]>(payment?.invoices ?? [])
+  const [applied, setApplied] = useState<Record<string, string>>(() => {
+    if (!payment) return {}
+    return Object.fromEntries(payment.applications.map((row) => [row.invoiceId, row.amount]))
+  })
   const [isLoading, startLoading] = useTransition()
   const handled = useRef(false)
 
@@ -72,12 +93,12 @@ export function PaymentForm({
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
       handled.current = true
-      toast.success(state.message ?? 'Recorded.')
-      router.push('/payments')
+      toast.success(state.message ?? (editing ? 'Saved.' : 'Recorded.'))
+      router.push(payment ? `/payments/${payment.id}` : '/payments')
       router.refresh()
     }
     if (state.status !== 'success') handled.current = false
-  }, [state, router])
+  }, [state, router, editing, payment])
 
   /**
    * Choosing a customer fetches what they still owe. Done in the handler rather
@@ -94,7 +115,7 @@ export function PaymentForm({
   }
 
   useEffect(() => {
-    if (!initialCustomerId) return
+    if (payment || !initialCustomerId) return
     chooseCustomer(initialCustomerId)
     // The customer arrived on the URL. Load their open invoices once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,6 +145,7 @@ export function PaymentForm({
   }
 
   const payload = JSON.stringify({
+    ...(payment ? { id: payment.id } : {}),
     number,
     customerId,
     date,
@@ -315,11 +337,15 @@ export function PaymentForm({
       ) : null}
 
       <div className="flex items-center justify-end gap-2">
-        <Button type="button" variant="outline" onClick={() => router.push('/payments')}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => router.push(payment ? `/payments/${payment.id}` : '/payments')}
+        >
           Cancel
         </Button>
-        <SubmitButton disabled={!canSave} pendingLabel="Recording…">
-          Record payment
+        <SubmitButton disabled={!canSave} pendingLabel={editing ? 'Saving…' : 'Recording…'}>
+          {editing ? 'Save payment' : 'Record payment'}
         </SubmitButton>
       </div>
     </form>

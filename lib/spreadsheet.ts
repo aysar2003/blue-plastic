@@ -316,6 +316,8 @@ export type ShapedItem = {
     openingQuantity: string
     openingUnitCost: string
     openingDate: string
+    /** Store name from the sheet — resolved to an id at import time. */
+    storeName: string
   }
 }
 
@@ -389,6 +391,7 @@ export function shapeItem(row: CsvRow, order: DateOrder): ShapedItem {
   }
 
   const inactive = !normaliseYes(pick(row, 'active'), true)
+  const storeName = pick(row, 'store', 'location', 'warehouse', 'site')
 
   return {
     warnings,
@@ -409,6 +412,7 @@ export function shapeItem(row: CsvRow, order: DateOrder): ShapedItem {
       openingQuantity,
       openingUnitCost,
       openingDate,
+      storeName,
     },
   }
 }
@@ -431,6 +435,22 @@ export function matchAccount(
   const leaf = label.split(':').pop() ?? label
   if (looseKey(leaf) !== key) {
     return accounts.find((account) => looseKey(account.name) === looseKey(leaf))?.id
+  }
+  return undefined
+}
+
+/** Match a store name from the import sheet to an active store. */
+export function matchStore(
+  label: string,
+  stores: { id: string; name: string; isOffice?: boolean }[],
+): string | undefined {
+  const key = looseKey(label)
+  if (!key) return undefined
+  const exact = stores.find((store) => looseKey(store.name) === key)
+  if (exact) return exact.id
+  // Common office aliases used on sheets.
+  if (key === 'office' || key === 'xafiiska' || key === 'main') {
+    return stores.find((store) => store.isOffice)?.id
   }
   return undefined
 }

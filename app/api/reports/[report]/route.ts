@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { readSettings, type SearchParams } from '@/app/(app)/reports/params'
+import { ACCOUNT_SUBTYPE_LABELS, ACCOUNT_TYPE_LABELS } from '@/lib/accounting-labels'
 import { formatDate } from '@/lib/date'
 import { letterheadLines } from '@/lib/letterhead'
 import { PERIOD_LABELS } from '@/lib/report-periods'
@@ -131,7 +132,15 @@ async function build(
       const rows: CsvCell[][] = heading(
         `Profit and loss (${settings.basis === 'cash' ? 'cash' : 'accrual'} basis)`,
       )
-      rows.push(['Section', 'Code', 'Account', 'Amount', ...(compare ? ['Comparison'] : []), '% of income'])
+      rows.push([
+        'Section',
+        'Code',
+        'Account',
+        'Type',
+        'Amount',
+        ...(compare ? ['Comparison'] : []),
+        '% of income',
+      ])
 
       for (const section of data.sections) {
         for (const row of section.rows) {
@@ -139,37 +148,46 @@ async function build(
             section.label,
             row.code,
             row.name,
+            `${ACCOUNT_TYPE_LABELS[row.type]} · ${ACCOUNT_SUBTYPE_LABELS[row.subtype]}`,
             row.amount,
             ...(compare ? [row.comparison ?? null] : []),
             row.percentOfIncome ?? null,
           ])
         }
-        rows.push([section.label, '', `Total ${section.label.toLowerCase()}`, section.total])
+        rows.push([section.label, '', `Total ${section.label.toLowerCase()}`, '', section.total])
       }
 
       rows.push([])
-      rows.push(['', '', 'Gross profit', data.grossProfit])
-      rows.push(['', '', 'Operating profit', data.operatingProfit])
-      rows.push(['', '', 'Net income', data.netIncome])
+      rows.push(['', '', 'Gross profit', '', data.grossProfit])
+      rows.push(['', '', 'Operating profit', '', data.operatingProfit])
+      rows.push(['', '', 'Net income', '', data.netIncome])
       return rows
     }
 
     case 'balance-sheet': {
       const data = await balanceSheet(orgId, settings.asOf, { basis: settings.basis })
       const rows: CsvCell[][] = heading('Balance sheet')
-      rows.push(['Section', 'Code', 'Account', 'Amount'])
+      rows.push(['Section', 'Code', 'Account', 'Type', 'Amount'])
 
       for (const section of data.sections) {
-        for (const row of section.rows) rows.push([section.label, row.code, row.name, row.amount])
-        rows.push([section.label, '', `Total ${section.label.toLowerCase()}`, section.total])
+        for (const row of section.rows) {
+          rows.push([
+            section.label,
+            row.code,
+            row.name,
+            `${ACCOUNT_TYPE_LABELS[row.type]} · ${ACCOUNT_SUBTYPE_LABELS[row.subtype]}`,
+            row.amount,
+          ])
+        }
+        rows.push([section.label, '', `Total ${section.label.toLowerCase()}`, '', section.total])
       }
 
       rows.push([])
-      rows.push(['', '', 'Total assets', data.totalAssets])
-      rows.push(['', '', 'Total liabilities', data.totalLiabilities])
-      rows.push(['', '', 'Profit not yet closed to retained earnings', data.accumulatedProfit])
-      rows.push(['', '', 'Total equity', data.totalEquity])
-      rows.push(['', '', 'Out of balance by', data.difference])
+      rows.push(['', '', 'Total assets', '', data.totalAssets])
+      rows.push(['', '', 'Total liabilities', '', data.totalLiabilities])
+      rows.push(['', '', 'Profit not yet closed to retained earnings', '', data.accumulatedProfit])
+      rows.push(['', '', 'Total equity', '', data.totalEquity])
+      rows.push(['', '', 'Out of balance by', '', data.difference])
       return rows
     }
 

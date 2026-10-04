@@ -5,6 +5,7 @@ import { PackageCheckIcon } from 'lucide-react'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { ScrollSheet } from '@/components/data/scroll-sheet'
+import { DocumentActions } from '@/components/print/document-actions'
 import { DeliveryOrderTable } from '@/components/purchases/delivery-order-table'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -23,16 +24,34 @@ export default async function DeliveredOrdersPage({
   const vendorId = typeof search.vendorId === 'string' ? search.vendorId : undefined
   const rows = await delivery.listOrders(ctx, 'delivered', { vendorId })
   const currency = ctx.organization.baseCurrency
+  const pdfParams = new URLSearchParams({ filter: 'delivered' })
+  if (vendorId) pdfParams.set('vendorId', vendorId)
+  const shareBody = [
+    'Delivered purchase orders',
+    ctx.organization.name,
+    `${rows.length} complete order${rows.length === 1 ? '' : 's'}`,
+  ].join('\n')
 
   return (
     <>
       <PageHeader
+        className="print:hidden"
         title="Delivered"
         description="Purchase orders where every line has been received. The bills raised for those deliveries are on each order."
         actions={
-          <Link href="/purchases/delivery" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Delivery home
-          </Link>
+          <>
+            <DocumentActions
+              paper="delivered orders"
+              pdfHref={`/api/purchases/delivery/report?${pdfParams.toString()}`}
+              filename="delivered-orders.pdf"
+              defaultSubject={`Delivered orders — ${ctx.organization.name}`}
+              defaultBody={shareBody}
+              whatsappText={shareBody}
+            />
+            <Link href="/purchases/delivery" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              Delivery home
+            </Link>
+          </>
         }
       />
 

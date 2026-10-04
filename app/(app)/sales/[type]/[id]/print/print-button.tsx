@@ -1,13 +1,43 @@
 'use client'
 
-import { PrinterIcon } from 'lucide-react'
+import { DocumentActions } from '@/components/print/document-actions'
 
-import { Button } from '@/components/ui/button'
-
-export function PrintButton() {
+/**
+ * Toolbar for any printed page — Print, PDF, Email, WhatsApp.
+ * Prefer passing pdfHref when a PDF route exists for the paper.
+ */
+export function PrintButton({
+  paper = 'document',
+  pdfHref,
+  filename,
+  printHref,
+  defaultTo = '',
+  defaultSubject,
+  defaultBody,
+  whatsappPhone,
+  whatsappText,
+}: {
+  paper?: string
+  pdfHref?: string
+  filename?: string
+  printHref?: string
+  defaultTo?: string
+  defaultSubject?: string
+  defaultBody?: string
+  whatsappPhone?: string | null
+  whatsappText?: string
+}) {
   return (
-    <Button size="sm" onClick={() => window.print()}>
-      <PrinterIcon /> Print or save as PDF
-    </Button>
+    <DocumentActions
+      paper={paper}
+      pdfHref={pdfHref}
+      filename={filename}
+      printHref={printHref}
+      defaultTo={defaultTo}
+      defaultSubject={defaultSubject}
+      defaultBody={defaultBody}
+      whatsappPhone={whatsappPhone}
+      whatsappText={whatsappText}
+    />
   )
 }

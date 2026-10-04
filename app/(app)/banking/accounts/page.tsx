@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowLeftRightIcon, BanknoteIcon, UploadIcon } from 'lucide-react'
 
+import { ClickableRow } from '@/components/data/clickable-row'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { StartReconciliationButton } from '@/components/banking/start-reconciliation'
@@ -101,7 +102,11 @@ export default async function BankingPage({
             </TableHeader>
             <TableBody>
               {accounts.map((account) => (
-                <TableRow key={account.id}>
+                <ClickableRow
+                  key={account.id}
+                  href={`/accounts/${account.id}`}
+                  title={`Open ${account.name}`}
+                >
                   <TableCell>
                     <Link
                       href={`/accounts/${account.id}`}
@@ -135,7 +140,7 @@ export default async function BankingPage({
                       />
                     ) : null}
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>
@@ -197,7 +202,11 @@ export default async function BankingPage({
               ]
                 .sort((a, b) => b.date.getTime() - a.date.getTime())
                 .map((row) => (
-                  <TableRow key={`${row.kind}-${row.id}`}>
+                  <ClickableRow
+                    key={`${row.kind}-${row.id}`}
+                    href={row.journalId ? `/journals/${row.journalId}` : undefined}
+                    title={row.journalId ? `Open ${row.number}` : undefined}
+                  >
                     <TableCell className="tabular font-medium">{row.number}</TableCell>
                     <TableCell className="tabular whitespace-nowrap text-muted-foreground">
                       {formatDate(toCalendarDate(row.date))}
@@ -222,7 +231,7 @@ export default async function BankingPage({
                         />
                       ) : null}
                     </TableCell>
-                  </TableRow>
+                  </ClickableRow>
                 ))}
             </TableBody>
           </Table>
@@ -253,7 +262,11 @@ export default async function BankingPage({
             </TableHeader>
             <TableBody>
               {reconciliations.map((row) => (
-                <TableRow key={row.id}>
+                <ClickableRow
+                  key={row.id}
+                  href={`/banking/reconcile/${row.id}`}
+                  title={`Open reconciliation for ${row.account.name}`}
+                >
                   <TableCell>
                     {row.account.code} {row.account.name}
                   </TableCell>
@@ -277,7 +290,7 @@ export default async function BankingPage({
                       {row.status === 'COMPLETED' ? 'View' : 'Continue'}
                     </Link>
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

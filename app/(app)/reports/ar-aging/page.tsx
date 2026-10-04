@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { ClickableRow } from '@/components/reports/clickable-row'
 import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { Card } from '@/components/ui/card'
@@ -65,8 +66,16 @@ export default async function AgingPage({
   return (
     <>
       <PageHeader
+        className="print:hidden"
         title="A/R Aging Summary"
         description={`Outstanding invoices as at ${formatDate(asOf)}, bucketed by how long they have been due.`}
+        actions={
+          <PrintButton
+            paper="A/R aging"
+            defaultSubject={`A/R Aging — ${ctx.organization.name}`}
+            defaultBody={`A/R Aging Summary\n${ctx.organization.name}\nAs at ${formatDate(asOf)}`}
+          />
+        }
       />
 
       <ReportControls

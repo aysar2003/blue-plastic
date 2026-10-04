@@ -10,6 +10,7 @@ import {
   applyCreditSchema,
   convertEstimateSchema,
   paymentSchema,
+  paymentUpdateSchema,
   salesDocumentSchema,
 } from '@/lib/validation/sales'
 import { action } from '@/server/action'
@@ -97,6 +98,17 @@ export const createPayment = action
     return payment
   })
 
+export const updatePayment = action
+  .requires('payment:update')
+  .input(paymentUpdateSchema)
+  .handler(async (ctx, input) => {
+    const { id, ...rest } = input
+    const payment = await paymentService.update(ctx, id, rest)
+    revalidateSales()
+    revalidatePath(`/payments/${id}`)
+    return payment
+  })
+
 export const applyCredit = action
   .requires('payment:create')
   .input(applyCreditSchema)
@@ -144,16 +156,20 @@ export async function saveDocumentForm(_prev: FormState, formData: FormData): Pr
 }
 
 export async function savePaymentForm(_prev: FormState, formData: FormData): Promise<FormState> {
-  let parsed: unknown
+  let parsed: Record<string, unknown>
   try {
     parsed = JSON.parse(String(formData.get('payload') ?? '{}'))
   } catch {
     return { status: 'error', message: 'The payment could not be read. Please try again.' }
   }
 
-  const result = await createPayment(parsed)
+  const result = parsed.id ? await updatePayment(parsed) : await createPayment(parsed)
   return toFormState(
     result,
-    result.ok && 'number' in result.data ? `Payment ${result.data.number} recorded.` : 'Recorded.',
+    result.ok && 'number' in result.data
+      ? `Payment ${result.data.number} ${parsed.id ? 'saved' : 'recorded'}.`
+      : parsed.id
+        ? 'Saved.'
+        : 'Recorded.',
   )
 }

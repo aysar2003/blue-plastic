@@ -18,10 +18,12 @@ import {
   type ItemValues,
   type SimpleOption,
 } from '@/components/master-data/item-dialog'
+import { ClickableRow } from '@/components/data/clickable-row'
 import { DeleteMenuItem } from '@/components/data/delete-record'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SortableHeader, type SortState } from '@/components/data/sortable-header'
+import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -185,11 +187,14 @@ export function ItemTable({
         </TableHeader>
         <TableBody>
           {rows.map((row, index) => (
-            <TableRow
+            <ClickableRow
               key={row.id}
-              className={`${index % 2 === 1 ? 'bg-[#c5dff3] hover:bg-[#c5dff3]' : 'bg-white hover:bg-white'} ${
-                row.isActive ? '' : 'opacity-55'
-              }`}
+              href={`/items/${row.id}/report`}
+              title={`Open report for ${row.name}`}
+              className={cn(
+                index % 2 === 1 ? 'bg-[#c5dff3] hover:bg-[#b3d0ec]' : 'bg-white hover:bg-sky-50',
+                !row.isActive && 'opacity-55',
+              )}
             >
               {canArchive ? (
                 <TableCell>
@@ -351,7 +356,7 @@ export function ItemTable({
                   ) : null}
                 </div>
               </TableCell>
-            </TableRow>
+            </ClickableRow>
           ))}
         </TableBody>
       </Table>

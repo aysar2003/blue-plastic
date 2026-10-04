@@ -6,6 +6,7 @@ import { isAppError } from '@/server/errors'
 import * as accountService from '@/server/services/account.service'
 import { csvResponse } from '@/server/reports/csv'
 import { buildImportTemplate } from '@/server/services/template-workbook'
+import * as storeService from '@/server/services/store.service'
 import * as taxService from '@/server/services/tax.service'
 
 export const dynamic = 'force-dynamic'
@@ -44,9 +45,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
       return csvResponse(`${spec.file}-${sample ? 'sample' : 'template'}.csv`, rows)
     }
 
-    const [terms, accounts] = await Promise.all([
+    const [terms, accounts, stores] = await Promise.all([
       taxService.listPaymentTerms(ctx),
       accountService.selectableAccounts(ctx),
+      key === 'item' ? storeService.list(ctx) : Promise.resolve([]),
     ])
 
     const bytes = await buildImportTemplate({
@@ -58,6 +60,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
         income: accounts.filter((account) => account.type === 'REVENUE').map((account) => account.name),
         expense: accounts.filter((account) => account.type === 'EXPENSE').map((account) => account.name),
         inventory: accounts.filter((account) => account.subtype === 'INVENTORY').map((account) => account.name),
+        store: stores.map((store) => store.name),
       },
     })
 

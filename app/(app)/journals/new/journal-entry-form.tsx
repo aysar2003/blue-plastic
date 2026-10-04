@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
+import { useActionState, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { PlusIcon, PrinterIcon, SaveIcon, SearchIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -241,7 +241,7 @@ export function JournalEntryForm({
   })
 
   const balanced = totals.difference.isZero() && !totals.debit.isZero()
-  const canPost = balanced && filled.length >= 2 && memo.trim() !== '' && !wrongParty
+  const canPost = balanced && filled.length >= 2 && !wrongParty
 
   const listed = register.filter((line) =>
     listFilter === 'manual' ? line.manual : listFilter === 'adjusting' ? line.adjusting : true,
@@ -250,6 +250,49 @@ export function JournalEntryForm({
   const update = (key: number, patch: Partial<Line>) =>
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)))
 
+  /**
+   * After an amount is left, put the remaining balance on the other side of the
+   * next empty line — so debiting Opening Balance Equity fills the credit on
+   * Share capital without typing the same figure twice.
+   */
+  const balanceAgainst = (editedKey: number) => {
+    setLines((current) => {
+      let debit = new Decimal(0)
+      let credit = new Decimal(0)
+      for (const line of current) {
+        debit = debit.plus(parseMoneyInput(line.debit) ?? 0)
+        credit = credit.plus(parseMoneyInput(line.credit) ?? 0)
+      }
+      const difference = debit.minus(credit)
+      if (difference.isZero()) return current
+
+      const editedIndex = current.findIndex((line) => line.key === editedKey)
+      if (editedIndex < 0) return current
+      const amount = difference.abs().toFixed(2)
+      const fill = (line: Line): Line =>
+        difference.isPositive()
+          ? { ...line, credit: amount, debit: '' }
+          : { ...line, debit: amount, credit: '' }
+
+      const tryIndex = (index: number) => {
+        const line = current[index]
+        if (!line || line.key === editedKey) return null
+        if (line.debit !== '' || line.credit !== '') return null
+        return current.map((row, i) => (i === index ? fill(row) : row))
+      }
+
+      for (let index = editedIndex + 1; index < current.length; index += 1) {
+        const next = tryIndex(index)
+        if (next) return next
+      }
+      for (let index = 0; index < editedIndex; index += 1) {
+        const next = tryIndex(index)
+        if (next) return next
+      }
+      return current
+    })
+  }
+
   /** Changing the account drops a name of the wrong kind for the new account. */
   const chooseAccount = (line: Line, accountId: string | null) => {
     const requires = requirementOf(accountsById.get(accountId ?? ''))
@@ -257,6 +300,38 @@ export function JournalEntryForm({
       accountId: accountId ?? '',
       party: requires && line.party?.kind !== requires ? null : line.party,
     })
+  }
+
+  const focusAmount = (rowIndex: number, side: 'debit' | 'credit') => {
+    const el = document.querySelector<HTMLInputElement>(
+      `[data-journal-amount="${rowIndex}-${side}"]`,
+    )
+    el?.focus()
+    el?.select()
+  }
+
+  const onAmountKeyDown = (
+    event: KeyboardEvent<HTMLInputElement>,
+    rowIndex: number,
+    side: 'debit' | 'credit',
+    lineKey: number,
+  ) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      balanceAgainst(lineKey)
+      const nextRow = event.shiftKey ? rowIndex - 1 : rowIndex + 1
+      if (nextRow >= 0 && nextRow < lines.length) focusAmount(nextRow, side)
+      return
+    }
+    if (event.key === 'ArrowRight' && side === 'debit' && event.currentTarget.selectionStart === event.currentTarget.value.length) {
+      event.preventDefault()
+      focusAmount(rowIndex, 'credit')
+      return
+    }
+    if (event.key === 'ArrowLeft' && side === 'credit' && (event.currentTarget.selectionStart ?? 0) === 0) {
+      event.preventDefault()
+      focusAmount(rowIndex, 'debit')
+    }
   }
 
   const revert = () => {
@@ -294,7 +369,18 @@ export function JournalEntryForm({
   const currencyName = CURRENCY_LABEL[currency] ?? currency
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form
+      action={formAction}
+      className="space-y-3"
+      onKeyDown={(event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+          if (!canPost) return
+          event.preventDefault()
+          markSave('close')
+          event.currentTarget.requestSubmit()
+        }
+      }}
+    >
       <input type="hidden" name="payload" value={payload} />
 
       <div className="flex flex-wrap items-center gap-1.5 print:hidden">
@@ -374,18 +460,23 @@ export function JournalEntryForm({
           <Field
             name="memo"
             label="Memo"
-            required
             error={state.fieldErrors?.memo}
-            hint="What this entry records. It appears on the register and on reports."
+            hint="Optional. Useful on the register — leave blank when clearing Opening Balance Equity into capital."
           >
             <Input
-              {...fieldProps('memo', state.fieldErrors?.memo, true)}
+              {...fieldProps('memo', state.fieldErrors?.memo)}
               value={memo}
               onChange={(event) => setMemo(event.target.value)}
-              placeholder="What this entry is for"
-              required
+              placeholder="Optional — what this entry is for"
             />
           </Field>
+
+          <p className="rounded-md bg-[#eef6f4] px-3 py-2 text-xs text-slate-600">
+            To move money from <strong>Opening Balance Equity</strong> into{' '}
+            <strong>Share Al Furaat</strong> (or any equity): debit Opening Balance Equity and credit
+            the share account here. Bank Transfer only moves between bank and liability accounts —
+            equity needs a journal.
+          </p>
         </CardContent>
       </Card>
 
@@ -442,22 +533,32 @@ export function JournalEntryForm({
                       <Input
                         aria-label="Debit"
                         inputMode="decimal"
+                        data-journal-amount={`${index}-debit`}
                         className={cn(lineInput, 'tabular text-right')}
                         value={line.debit}
                         onChange={(event) =>
                           update(line.key, { debit: event.target.value, credit: '' })
                         }
+                        onBlur={() => {
+                          if (line.debit.trim() !== '') balanceAgainst(line.key)
+                        }}
+                        onKeyDown={(event) => onAmountKeyDown(event, index, 'debit', line.key)}
                       />
                     </td>
                     <td className="px-1 py-0.5">
                       <Input
                         aria-label="Credit"
                         inputMode="decimal"
+                        data-journal-amount={`${index}-credit`}
                         className={cn(lineInput, 'tabular text-right')}
                         value={line.credit}
                         onChange={(event) =>
                           update(line.key, { credit: event.target.value, debit: '' })
                         }
+                        onBlur={() => {
+                          if (line.credit.trim() !== '') balanceAgainst(line.key)
+                        }}
+                        onKeyDown={(event) => onAmountKeyDown(event, index, 'credit', line.key)}
                       />
                     </td>
                     <td className="px-1 py-0.5">

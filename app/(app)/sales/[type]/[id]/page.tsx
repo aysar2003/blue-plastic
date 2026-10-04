@@ -1,12 +1,13 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { PencilIcon, PrinterIcon } from 'lucide-react'
+import { PencilIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { ConvertEstimateButton } from '@/components/sales/document-actions'
 import { DeleteButton } from '@/components/data/delete-record'
+import { DocumentActions } from '@/components/print/document-actions'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -51,6 +52,20 @@ export default async function SalesDocumentPage({
     document.status !== 'VOID' &&
     document.status !== 'DECLINED'
 
+  const shareBody = [
+    `${config.singular} ${document.number}`,
+    `To: ${document.customer.displayName}`,
+    `Date: ${formatDate(toCalendarDate(document.date))}`,
+    `Total: ${formatMoney(document.total, currency)}`,
+    Number(document.balance) > 0
+      ? `Amount due: ${formatMoney(document.balance, currency)}`
+      : null,
+    '',
+    `From ${ctx.organization.name}`,
+  ]
+    .filter((line) => line !== null)
+    .join('\n')
+
   return (
     <>
 
@@ -59,12 +74,19 @@ export default async function SalesDocumentPage({
         description={document.customer.displayName}
         actions={
           <>
-            <Link
-              href={`/sales/${config.slug}/${id}/print`}
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            >
-              <PrinterIcon /> Print
-            </Link>
+            <DocumentActions
+              paper={config.singular.toLowerCase()}
+              printHref={`/sales/${config.slug}/${id}/print`}
+              pdfHref={`/api/sales/${id}/pdf`}
+              filename={`${config.slug.replace(/s$/, '')}-${document.number
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')}.pdf`}
+              defaultTo={document.customer.email ?? ''}
+              defaultSubject={`${config.singular} ${document.number} from ${ctx.organization.name}`}
+              defaultBody={shareBody}
+              whatsappPhone={document.customer.phone}
+              whatsappText={shareBody}
+            />
             {canConvert ? (
               <ConvertEstimateButton
                 id={id}

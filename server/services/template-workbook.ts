@@ -45,6 +45,7 @@ export async function buildImportTemplate(input: {
     income: [],
     expense: [],
     inventory: [],
+    store: [],
     ...input.lists,
   }
 
@@ -70,6 +71,7 @@ const LIST_COLUMN: Record<TemplateList, number> = {
   income: 5,
   expense: 6,
   inventory: 7,
+  store: 8,
 }
 
 function writeLists(sheet: ExcelWorkbook['worksheets'][number], lists: Record<TemplateList, string[]>) {

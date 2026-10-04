@@ -298,6 +298,7 @@ export default async function StatementPage({
               defaultTo={customer.email ?? ''}
               defaultSubject={`Statement from ${ctx.organization.name}`}
               defaultBody={emailBody}
+              whatsappPhone={customer.phone}
             />
           }
         />
@@ -335,6 +336,14 @@ export default async function StatementPage({
       [vendor.billingLine1, vendor.billingLine2].filter(Boolean).join(', '),
       [vendor.billingCity, vendor.billingRegion, vendor.billingPostalCode].filter(Boolean).join(' '),
     ].filter(Boolean)
+    const vendorBody = [
+      `Vendor statement — ${vendor.displayName}`,
+      ctx.organization.name,
+      settings.period === 'all-dates'
+        ? 'All dates'
+        : `${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}`,
+      `Closing ${formatMoney(statement.closing, currency)}`,
+    ].join('\n')
     return (
       <>
         <PageHeader
@@ -345,7 +354,16 @@ export default async function StatementPage({
               ? 'All dates'
               : `${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}`
           }`}
-          actions={<PrintButton />}
+          actions={
+            <PrintButton
+              paper="vendor statement"
+              defaultTo={vendor.email ?? ''}
+              defaultSubject={`Vendor statement from ${ctx.organization.name}`}
+              defaultBody={vendorBody}
+              whatsappPhone={vendor.phone}
+              whatsappText={vendorBody}
+            />
+          }
         />
         {controls}
         <CustomerStatement
@@ -400,11 +418,23 @@ export default async function StatementPage({
   return (
     <>
       <PageHeader
+        className="print:hidden"
         title={TITLES[kind as Kind]}
         description={`${subjectName} · ${formatDate(settings.range.from)} to ${formatDate(
           settings.range.to,
         )}${settings.period === 'custom' ? '' : ` — ${PERIOD_LABELS[settings.period]}`}`}
-        actions={<PrintButton />}
+        actions={
+          <PrintButton
+            paper="account statement"
+            defaultSubject={`${TITLES[kind as Kind]} — ${subjectName}`}
+            defaultBody={[
+              TITLES[kind as Kind],
+              subjectName,
+              `${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}`,
+              `Closing ${formatMoney(closing, currency)}`,
+            ].join('\n')}
+          />
+        }
       />
 
       {controls}

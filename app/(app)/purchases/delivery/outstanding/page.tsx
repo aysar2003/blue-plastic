@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/data/empty-state'
 import { FilterChips } from '@/components/data/filter-chips'
 import { PageHeader } from '@/components/data/page-header'
 import { ScrollSheet } from '@/components/data/scroll-sheet'
+import { DocumentActions } from '@/components/print/document-actions'
 import { DeliveryOrderTable } from '@/components/purchases/delivery-order-table'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -38,16 +39,34 @@ export default async function OutstandingDeliveryPage({
     { vendorId },
   )
   const currency = ctx.organization.baseCurrency
+  const pdfParams = new URLSearchParams({ filter: 'outstanding' })
+  if (vendorId) pdfParams.set('vendorId', vendorId)
+  const shareBody = [
+    'Outstanding delivery',
+    ctx.organization.name,
+    `${rows.length} purchase order${rows.length === 1 ? '' : 's'} still to receive`,
+  ].join('\n')
 
   return (
     <>
       <PageHeader
+        className="print:hidden"
         title="Outstanding delivery"
         description="Purchase orders that still have quantity to receive — nothing yet, or only part of the order."
         actions={
-          <Link href="/purchases/delivery" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Delivery home
-          </Link>
+          <>
+            <DocumentActions
+              paper="outstanding delivery"
+              pdfHref={`/api/purchases/delivery/report?${pdfParams.toString()}`}
+              filename="outstanding-delivery.pdf"
+              defaultSubject={`Outstanding delivery — ${ctx.organization.name}`}
+              defaultBody={shareBody}
+              whatsappText={shareBody}
+            />
+            <Link href="/purchases/delivery" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              Delivery home
+            </Link>
+          </>
         }
       />
 

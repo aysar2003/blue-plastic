@@ -41,9 +41,24 @@ export default async function ReportsIndexPage() {
             caption={`This month · ${formatDate(month.from)} to ${formatDate(month.to)}`}
             currency={ctx.organization.baseCurrency}
             bars={[
-              { label: 'Income', value: picture.income, color: INCOME_COLOR },
-              { label: 'Expenses', value: picture.expenses, color: EXPENSE_COLOR },
-              { label: 'Net income', value: picture.net, color: NET_COLOR },
+              {
+                label: 'Income',
+                value: picture.income,
+                color: INCOME_COLOR,
+                href: '/reports/profit-loss?period=this-month',
+              },
+              {
+                label: 'Expenses',
+                value: picture.expenses,
+                color: EXPENSE_COLOR,
+                href: '/reports/profit-loss?period=this-month',
+              },
+              {
+                label: 'Net income',
+                value: picture.net,
+                color: NET_COLOR,
+                href: '/reports/profit-loss/detail?period=this-month',
+              },
             ]}
           />
           <p className="mt-3 text-center text-sm">

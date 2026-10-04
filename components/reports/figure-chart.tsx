@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import type { StatementSection } from '@/server/reports/statements'
 
@@ -11,6 +13,8 @@ export type ChartBar = {
   value: Decimal
   comparison?: Decimal
   color: string
+  /** Opens a report when the summary figure is clicked. */
+  href?: string
 }
 
 /**
@@ -101,22 +105,38 @@ export function FigureChart({
         </p>
       ) : null}
       <ul className={`grid gap-3 ${bars.length > 3 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
-        {bars.map((bar) => (
-          <li key={bar.label} className="min-w-0">
-            <p className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-              <span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: bar.color }} />
-              {bar.label}
-            </p>
-            <p className="mt-0.5 text-sm font-semibold tabular text-slate-900">
-              {formatMoney(bar.value, currency)}
-            </p>
-            {comparisonLabel && bar.comparison ? (
-              <p className="text-xs tabular text-slate-500">
-                {comparisonLabel}: {formatMoney(bar.comparison, currency)}
+        {bars.map((bar) => {
+          const body = (
+            <>
+              <p className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                <span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: bar.color }} />
+                {bar.label}
               </p>
-            ) : null}
-          </li>
-        ))}
+              <p className="mt-0.5 text-sm font-semibold tabular text-slate-900">
+                {formatMoney(bar.value, currency)}
+              </p>
+              {comparisonLabel && bar.comparison ? (
+                <p className="text-xs tabular text-slate-500">
+                  {comparisonLabel}: {formatMoney(bar.comparison, currency)}
+                </p>
+              ) : null}
+            </>
+          )
+          return (
+            <li key={bar.label} className="min-w-0">
+              {bar.href ? (
+                <Link
+                  href={bar.href}
+                  className="block rounded-lg px-1 py-0.5 transition-colors hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  {body}
+                </Link>
+              ) : (
+                body
+              )}
+            </li>
+          )
+        })}
       </ul>
     </figure>
   )

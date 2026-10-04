@@ -95,7 +95,8 @@ const journalLineSchema = z
 export const manualJournalSchema = z.object({
   number: chosenNumber,
   date: calendarDate,
-  memo: requiredText('Description', 300),
+  /** Optional — clearing Opening Balance Equity into capital often has no memo. */
+  memo: optionalText(300),
   isAdjusting: z.coerce.boolean().default(false),
   lines: z
     .array(journalLineSchema)

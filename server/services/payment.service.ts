@@ -9,7 +9,7 @@ import { systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { buildCustomerPaymentJournal } from '@/server/accounting/builders/sales'
 import { softDeleteDocument } from '@/server/accounting/deletion'
 import { removeDepositWithin } from '@/server/services/banking.service'
-import { postJournal } from '@/server/accounting/posting'
+import { postJournal, reverseJournal } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
@@ -20,7 +20,7 @@ import { outstandingBalances, refreshStatus } from '@/server/services/sales.serv
 const PAYMENT_SELECT = {
   id: true, number: true, date: true, amount: true, method: true, reference: true,
   memo: true, status: true, journalId: true, voidedAt: true, voidReason: true,
-  customer: { select: { id: true, displayName: true } },
+  customer: { select: { id: true, displayName: true, email: true, phone: true } },
   depositAccount: { select: { id: true, code: true, name: true } },
 } satisfies Prisma.CustomerPaymentSelect
 
@@ -155,6 +155,52 @@ export async function openInvoicesFor(ctx: OrgContext, customerId: string) {
 }
 
 /**
+ * Outstanding invoices for editing a payment: current open balances, plus what
+ * this payment already applied (so those invoices stay on the form to re-apply).
+ */
+export async function invoicesForEdit(ctx: OrgContext, paymentId: string) {
+  const payment = await get(ctx, paymentId)
+  const open = await openInvoicesFor(ctx, payment.customer.id)
+  const byId = new Map(
+    open.map((invoice) => [
+      invoice.id,
+      {
+        id: invoice.id,
+        number: invoice.number,
+        date: invoice.date,
+        dueDate: invoice.dueDate,
+        total: invoice.total,
+        balance: invoice.balance,
+      },
+    ]),
+  )
+
+  for (const application of payment.applications) {
+    const applied = new Decimal(application.amount)
+    const existing = byId.get(application.invoice.id)
+    if (existing) {
+      byId.set(application.invoice.id, {
+        ...existing,
+        balance: toMoneyString(new Decimal(existing.balance).plus(applied), 2),
+      })
+      continue
+    }
+    byId.set(application.invoice.id, {
+      id: application.invoice.id,
+      number: application.invoice.number,
+      date: application.invoice.date,
+      dueDate: application.invoice.dueDate,
+      total: application.invoice.total,
+      balance: toMoneyString(applied, 2),
+    })
+  }
+
+  return [...byId.values()].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  )
+}
+
+/**
  * Record money received.
  *
  * A payment is its own document, not a flag on an invoice. It may settle several
@@ -269,6 +315,175 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
     )
 
     return { id: payment.id, number: payment.number }
+  })
+}
+
+/**
+ * Edit a recorded payment.
+ *
+ * Applications are replaced wholesale. If the amount or deposit account changes,
+ * the journal is reversed and a new one posted (ADR-0002). A payment already on a
+ * bank deposit cannot change those ledger fields until it is taken off the deposit.
+ */
+export async function update(ctx: OrgContext, id: string, input: PaymentInput) {
+  const meta = await requestMeta()
+
+  return db.$transaction(async (tx) => {
+    const existing = await tx.customerPayment.findFirst({
+      where: { id, orgId: ctx.orgId },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        journalId: true,
+        amount: true,
+        date: true,
+        depositAccountId: true,
+        customerId: true,
+        deletedAt: true,
+        applications: { select: { id: true, invoiceId: true } },
+      },
+    })
+    if (!existing || existing.deletedAt) throw notFound('Payment')
+    if (existing.status === 'VOID') {
+      throw precondition('A voided payment cannot be edited. Record a new one.')
+    }
+
+    const customer = await tx.customer.findFirst({
+      where: { id: input.customerId, orgId: ctx.orgId },
+      select: { id: true, displayName: true, isActive: true },
+    })
+    if (!customer) throw notFound('Customer')
+
+    const deposit = await tx.ledgerAccount.findFirst({
+      where: { id: input.depositAccountId, orgId: ctx.orgId, isActive: true },
+      select: { id: true, name: true, subtype: true },
+    })
+    if (!deposit) throw notFound('Deposit account')
+    if (deposit.subtype !== 'BANK' && deposit.subtype !== 'UNDEPOSITED_FUNDS') {
+      throw validation(
+        `"${deposit.name}" is not a bank or undeposited funds account, so money cannot be received into it.`,
+        { depositAccountId: ['Choose a bank or undeposited funds account'] },
+      )
+    }
+
+    const amount = new Decimal(input.amount)
+    const applications = input.applications
+      .map((application) => ({ ...application, amount: new Decimal(application.amount) }))
+      .filter((application) => application.amount.greaterThan(0))
+
+    const appliedTotal = applications.reduce((sum, a) => sum.plus(a.amount), ZERO)
+    if (appliedTotal.greaterThan(amount)) {
+      throw validation(
+        `You are applying ${toMoneyString(appliedTotal, 2)} of a ${toMoneyString(amount, 2)} payment. ` +
+          `Reduce the applied amounts, or increase the payment.`,
+      )
+    }
+
+    const amountChanged = !amount.equals(existing.amount.toString())
+    const depositChanged = deposit.id !== existing.depositAccountId
+    const customerChanged = customer.id !== existing.customerId
+    const dateChanged = toCalendarDate(existing.date) !== input.date
+    const ledgerChanged = amountChanged || depositChanged || customerChanged || dateChanged
+
+    if (ledgerChanged) {
+      const bankedOn = await tx.depositLine.findFirst({
+        where: { customerPaymentId: id },
+        select: { depositId: true },
+      })
+      if (bankedOn) {
+        throw precondition(
+          `${existing.number} is already on a bank deposit. Remove it from the deposit before changing the amount, customer, date, or deposit account.`,
+        )
+      }
+    }
+
+    const previousInvoiceIds = existing.applications.map((application) => application.invoiceId)
+    await tx.salesApplication.deleteMany({ where: { paymentId: id } })
+
+    if (ledgerChanged && existing.journalId) {
+      await reverseJournal(tx, ctx, existing.journalId, {
+        reason: `${existing.number} edited`,
+      })
+    }
+
+    const number = await assignDocumentNumber(tx, ctx.orgId, 'CUSTOMER_PAYMENT', input.number)
+    const clash = await tx.customerPayment.findFirst({
+      where: { orgId: ctx.orgId, number, id: { not: id } },
+      select: { id: true },
+    })
+    if (clash) throw numberTaken()
+
+    let journalId = existing.journalId
+    if (ledgerChanged) {
+      const journal = await postJournal(
+        tx,
+        ctx,
+        buildCustomerPaymentJournal({
+          date: input.date,
+          number,
+          paymentId: id,
+          customerId: customer.id,
+          amount,
+          depositAccountId: deposit.id,
+          receivableAccountId: await systemAccountId(tx, ctx.orgId, 'ACCOUNTS_RECEIVABLE'),
+          memo: input.memo,
+        }),
+      )
+      journalId = journal.id
+    }
+
+    await tx.customerPayment.update({
+      where: { id },
+      data: {
+        number,
+        customerId: customer.id,
+        date: toDate(input.date),
+        amount: amount.toFixed(4),
+        method: input.method,
+        reference: input.reference ?? null,
+        memo: input.memo ?? null,
+        depositAccountId: deposit.id,
+        journalId,
+        status: 'OPEN',
+      },
+    })
+
+    for (const application of applications) {
+      await assertInvoiceBelongsToCustomer(tx, ctx, application.invoiceId, customer.id)
+      await tx.salesApplication.create({
+        data: {
+          orgId: ctx.orgId,
+          paymentId: id,
+          invoiceId: application.invoiceId,
+          amount: application.amount.toFixed(4),
+        },
+      })
+      await refreshStatus(tx, application.invoiceId)
+    }
+
+    for (const invoiceId of new Set([...previousInvoiceIds, ...applications.map((a) => a.invoiceId)])) {
+      await refreshStatus(tx, invoiceId)
+    }
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'CustomerPayment',
+        entityId: id,
+        action: 'UPDATE',
+        after: {
+          number,
+          amount: amount.toString(),
+          applied: appliedTotal.toString(),
+          invoices: applications.length,
+        },
+      },
+      meta,
+    )
+
+    return { id, number }
   })
 }
 

@@ -2,7 +2,14 @@ import type { Metadata } from 'next'
 
 import { CustomerActions } from '@/components/customers/customer-actions'
 import { CustomerPapers } from '@/components/customers/customer-papers'
-import { ContactCenter, isActivitySort, readCenterRowMode, sortCenterRows, type CenterTab } from '@/components/contacts/contact-center'
+import {
+  ContactCenter,
+  isActivitySort,
+  isPeopleSort,
+  readCenterRowMode,
+  sortCenterRows,
+  type CenterTab,
+} from '@/components/contacts/contact-center'
 import { ImportDialog } from '@/components/master-data/import-dialog'
 import { NewContactButton } from '@/components/master-data/contact-dialog'
 import { readSort } from '@/components/data/sortable-header'
@@ -141,6 +148,8 @@ export default async function CustomersPage({
     txSort: txSort || undefined,
     txDir: txSort ? txDir : undefined,
     rows: rowMode === 'split' ? undefined : rowMode,
+    sort: sort.sort !== 'name' ? sort.sort : undefined,
+    dir: sort.dir !== 'asc' ? sort.dir : undefined,
   }
 
   const tabHref = (nextTab: CenterTab) => {
@@ -254,6 +263,9 @@ export default async function CustomersPage({
         filterPath="/customers"
       filterParams={filterParams}
       activitySort={txSort ? { sort: txSort, dir: txDir } : undefined}
+      peopleSort={
+        isPeopleSort(sort.sort) ? { sort: sort.sort, dir: sort.dir } : undefined
+      }
       newContact={
         <>
           {canCreate ? <ImportDialog kind="customer" columns={IMPORT_COLUMNS} /> : null}

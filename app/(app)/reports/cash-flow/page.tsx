@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { ClickableRow } from '@/components/reports/clickable-row'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -30,8 +31,16 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader
+        className="print:hidden"
         title="Statement of Cash Flows"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · indirect method`}
+        actions={
+          <PrintButton
+            paper="cash flow"
+            defaultSubject={`Cash Flows — ${ctx.organization.name}`}
+            defaultBody={`Statement of Cash Flows\n${ctx.organization.name}\n${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}`}
+          />
+        }
       />
 
       <ReportControls

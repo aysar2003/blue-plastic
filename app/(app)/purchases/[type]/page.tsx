@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { PackageIcon, PlusIcon, ReceiptIcon } from 'lucide-react'
 
+import { ClickableRow } from '@/components/data/clickable-row'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { Pagination } from '@/components/data/pagination'
@@ -159,7 +160,11 @@ export default async function PurchaseListPage({
                   (row.status === 'OPEN' || row.status === 'PARTIAL')
 
                 return (
-                  <TableRow key={row.id}>
+                  <ClickableRow
+                    key={row.id}
+                    href={`/purchases/${config.slug}/${row.id}`}
+                    title={`Open ${config.singular.toLowerCase()} ${row.number}`}
+                  >
                     <TableCell>
                       <Link
                         href={`/purchases/${config.slug}/${row.id}`}
@@ -243,7 +248,7 @@ export default async function PurchaseListPage({
                         />
                       </div>
                     </TableCell>
-                  </TableRow>
+                  </ClickableRow>
                 )
               })}
             </TableBody>

@@ -59,7 +59,16 @@ const DOCUMENT_SELECT = {
   subtotal: true, discountAmount: true, taxTotal: true, total: true,
   currencyCode: true, depositAccountId: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
-  customer: { select: { id: true, displayName: true, email: true, billingLine1: true, billingCity: true } },
+  customer: {
+    select: {
+      id: true,
+      displayName: true,
+      email: true,
+      phone: true,
+      billingLine1: true,
+      billingCity: true,
+    },
+  },
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
   depositAccount: { select: { id: true, code: true, name: true } },
   convertedTo: { select: { id: true, number: true, type: true } },

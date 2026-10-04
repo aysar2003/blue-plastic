@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon } from 'lucide-react'
 
+import { ContactSplit } from '@/components/contacts/contact-split'
 import { WordFile } from '@/components/contacts/word-file'
 import { FilterChips } from '@/components/data/filter-chips'
 import { SearchInput } from '@/components/data/search-input'
@@ -57,8 +58,14 @@ const ACTIVITY_COLUMNS = [
 
 export type ActivitySortKey = (typeof ACTIVITY_COLUMNS)[number]['key']
 
+export type PeopleSortKey = 'name' | 'balance'
+
 export function isActivitySort(value: string | undefined): value is ActivitySortKey {
   return ACTIVITY_COLUMNS.some((column) => column.key === value)
+}
+
+export function isPeopleSort(value: string | undefined): value is PeopleSortKey {
+  return value === 'name' || value === 'balance'
 }
 
 /** Orders the rows on screen. Amounts compare as money, so 10 comes after 4. */
@@ -127,6 +134,7 @@ export function ContactCenter({
   filterPath,
   filterParams,
   activitySort,
+  peopleSort,
   newContact,
   headerExtra,
   archivedHref,
@@ -155,6 +163,8 @@ export function ContactCenter({
   filterPath: string
   filterParams: Record<string, string | undefined>
   activitySort?: { sort: ActivitySortKey; dir: 'asc' | 'desc' }
+  /** Left-list Name / Balance ordering from `sort` + `dir` query params. */
+  peopleSort?: { sort: PeopleSortKey; dir: 'asc' | 'desc' }
   newContact: ReactNode
   headerExtra?: ReactNode
   archivedHref?: string
@@ -179,7 +189,18 @@ export function ContactCenter({
     return `${filterPath}?${next.toString()}`
   }
 
+  const peopleColumnHref = (column: PeopleSortKey) => {
+    const next = new URLSearchParams()
+    for (const [key, value] of Object.entries(filterParams)) {
+      if (value && key !== 'sort' && key !== 'dir') next.set(key, value)
+    }
+    next.set('sort', column)
+    next.set('dir', peopleSort?.sort === column && peopleSort.dir === 'asc' ? 'desc' : 'asc')
+    return `${filterPath}?${next.toString()}`
+  }
+
   const groups = groupTransactions(ordered)
+  const splitKey = filterPath.includes('vendor') ? 'contact-split:vendors' : 'contact-split:customers'
 
   return (
     <section className="flex h-[calc(100dvh-7.25rem)] flex-col overflow-hidden rounded-xl border bg-card">
@@ -216,47 +237,83 @@ export function ContactCenter({
         </DropdownMenu>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(11rem,16rem)_minmax(0,1fr)]">
-        <aside className="flex min-h-0 flex-col border-r">
-          <div className="flex items-center gap-2 border-b px-2 py-1.5">
-            <div className="min-w-0 flex-1">
-              <SearchInput placeholder="Find a name" />
+      <ContactSplit
+        storageKey={splitKey}
+        left={
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex items-center gap-2 border-b px-2 py-1.5">
+              <div className="min-w-0 flex-1">
+                <SearchInput placeholder="Find a name" />
+              </div>
+              {archivedHref ? (
+                <Link
+                  href={archivedHref}
+                  className="shrink-0 text-xs text-muted-foreground underline-offset-4 hover:underline"
+                >
+                  {archivedLabel}
+                </Link>
+              ) : null}
             </div>
-            {archivedHref ? (
-              <Link href={archivedHref} className="shrink-0 text-xs text-muted-foreground underline-offset-4 hover:underline">
-                {archivedLabel}
-              </Link>
-            ) : null}
-          </div>
-          <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] border-b px-2 py-1 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
-            <span>Name</span>
-            <span className="text-right">Balance</span>
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto">
-            <div className={SHEET}>
-              {people.map((person) => {
-                const on = person.id === selectedId
+            <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] border-b px-2 py-1 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
+              {(
+                [
+                  { key: 'name' as const, label: 'Name', align: 'start' as const },
+                  { key: 'balance' as const, label: 'Balance', align: 'end' as const },
+                ] as const
+              ).map((column) => {
+                const active = peopleSort?.sort === column.key
+                const Icon = active
+                  ? peopleSort.dir === 'asc'
+                    ? ArrowUpIcon
+                    : ArrowDownIcon
+                  : ChevronsUpDownIcon
                 return (
                   <Link
-                    key={person.id}
-                    href={personHref(person.id)}
-                    aria-current={on ? 'true' : undefined}
+                    key={column.key}
+                    href={peopleColumnHref(column.key)}
+                    scroll={false}
+                    aria-sort={
+                      active ? (peopleSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
+                    }
                     className={cn(
-                      'grid h-[2.2rem] grid-cols-[minmax(0,1fr)_5.5rem] items-center px-2 text-sm',
-                      on ? 'bg-[#b7e1a1] font-medium' : 'hover:bg-accent',
-                      !person.active && 'opacity-55',
+                      'inline-flex items-center gap-0.5 hover:text-foreground',
+                      column.align === 'end' && 'justify-end',
                     )}
                   >
-                    <span className="truncate uppercase">{person.name}</span>
-                    <span className="tabular text-right text-xs">{formatMoney(person.balance, currency)}</span>
+                    {column.label}
+                    <Icon className={cn('size-3 shrink-0', active ? 'opacity-80' : 'opacity-35')} />
                   </Link>
                 )
               })}
             </div>
+            <div className="min-h-0 flex-1 overflow-auto">
+              <div className={SHEET}>
+                {people.map((person) => {
+                  const on = person.id === selectedId
+                  return (
+                    <Link
+                      key={person.id}
+                      href={personHref(person.id)}
+                      aria-current={on ? 'true' : undefined}
+                      className={cn(
+                        'grid h-[2.2rem] grid-cols-[minmax(0,1fr)_5.5rem] items-center px-2 text-sm',
+                        on ? 'bg-[#b7e1a1] font-medium' : 'hover:bg-accent',
+                        !person.active && 'opacity-55',
+                      )}
+                    >
+                      <span className="truncate uppercase">{person.name}</span>
+                      <span className="tabular text-right text-xs">
+                        {formatMoney(person.balance, currency)}
+                      </span>
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
           </div>
-        </aside>
-
-        <div className="flex min-h-0 min-w-0 flex-col">
+        }
+        right={
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex items-start justify-between gap-4 border-b px-4 py-3">
             <div className="min-w-0">
               <div className="flex items-start justify-between gap-3">
@@ -464,7 +521,8 @@ export function ContactCenter({
             ) : null}
           </div>
         </div>
-      </div>
+        }
+      />
     </section>
   )
 }

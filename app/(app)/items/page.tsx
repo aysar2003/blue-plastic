@@ -98,7 +98,7 @@ export default async function ItemsPage({
     <>
       <PageHeader
         title="Products and services"
-        description="Everything the business sells, with what is on hand beside it. Click a name to open the item. An item carries the accounts it posts to and — when it is tracked — its stock."
+        description="Everything the business sells, with what is on hand beside it. Click a row to open its report. An item carries the accounts it posts to and — when it is tracked — its stock."
         actions={
           <>
             {canCreate ? <ImportDialog kind="item" columns={ITEM_COLUMNS} /> : null}

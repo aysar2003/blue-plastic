@@ -182,7 +182,7 @@ export async function customerActivity(ctx: OrgContext, customerId: string): Pro
     }),
     ...payments.map((payment) => ({
       id: payment.id,
-      href: `/payments?q=${encodeURIComponent(payment.number)}`,
+      href: `/payments/${payment.id}`,
       kind: 'Payment',
       number: payment.number,
       date: toCalendarDate(payment.date),

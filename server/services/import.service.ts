@@ -8,6 +8,7 @@ import {
   ITEM_IMPORT_COLUMNS,
   looseKey,
   matchAccount,
+  matchStore,
   shapeContact,
   shapeItem,
 } from '@/lib/spreadsheet'
@@ -175,18 +176,25 @@ export async function importItems(
   const issues: ImportIssue[] = []
   const order = dateOrderFor(ctx.organization.timeZone)
 
-  const [accounts, existingItems, incomeFallback, expenseFallback, inventoryFallback, cogsFallback] =
+  const [accounts, existingItems, stores, incomeFallback, expenseFallback, inventoryFallback, cogsFallback] =
     await Promise.all([
       db.ledgerAccount.findMany({
         where: { orgId: ctx.orgId, isActive: true },
         select: { id: true, name: true, code: true },
       }),
       db.item.findMany({ where: { orgId: ctx.orgId }, select: { name: true, sku: true } }),
+      db.store.findMany({
+        where: { orgId: ctx.orgId, isActive: true },
+        select: { id: true, name: true, isOffice: true },
+        orderBy: [{ isOffice: 'desc' }, { name: 'asc' }],
+      }),
       systemId(ctx.orgId, 'UNCATEGORISED_INCOME'),
       systemId(ctx.orgId, 'UNCATEGORISED_EXPENSE'),
       systemId(ctx.orgId, 'INVENTORY_ASSET'),
       systemId(ctx.orgId, 'COGS'),
     ])
+
+  const officeStoreId = stores.find((store) => store.isOffice)?.id ?? stores[0]?.id ?? null
 
   if (!incomeFallback) {
     return emptyFile(rows.length, 'Install the chart of accounts before importing products.')
@@ -252,6 +260,25 @@ export async function importItems(
       return
     }
 
+    let storeId = ''
+    if (draft.type === 'INVENTORY') {
+      if (draft.storeName) {
+        const matched = matchStore(draft.storeName, stores)
+        if (matched) {
+          storeId = matched
+        } else {
+          issues.push({
+            row: lineNumber,
+            field: 'Store',
+            message: `Store "${draft.storeName}" is not set up — opening stock will use the office store if one exists`,
+          })
+          storeId = officeStoreId ?? ''
+        }
+      } else if (draft.openingQuantity && officeStoreId) {
+        storeId = officeStoreId
+      }
+    }
+
     const parsed = itemSchema.safeParse({
       name: draft.name,
       sku: draft.sku,
@@ -267,6 +294,7 @@ export async function importItems(
       inventoryAccountId: inventoryAccountId ?? '',
       cogsAccountId: draft.type === 'INVENTORY' ? (expenseNamed ?? cogsFallback ?? '') : '',
       reorderPoint: draft.reorderPoint,
+      storeId,
       openingQuantity: draft.openingQuantity,
       openingUnitCost: draft.openingUnitCost,
       openingDate: draft.openingDate,

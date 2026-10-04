@@ -47,10 +47,35 @@ export default async function PrintDocumentPage({
     organization.country,
   ].filter(Boolean)
 
+  const shareBody = [
+    `${config.singular} ${document.number}`,
+    `To: ${customer.displayName}`,
+    `Date: ${longDate(toCalendarDate(document.date))}`,
+    `Total: ${money(document.total)}`,
+    document.balance && Number(document.balance) > 0 ? `Amount due: ${money(document.balance)}` : null,
+    '',
+    `From ${organization.legalName ?? organization.name}`,
+  ]
+    .filter((line) => line !== null)
+    .join('\n')
+
+  const filename = `${config.slug.replace(/s$/, '')}-${document.number
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')}.pdf`
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-4 flex justify-end print:hidden">
-        <PrintButton />
+        <PrintButton
+          paper={config.singular.toLowerCase()}
+          pdfHref={`/api/sales/${id}/pdf`}
+          filename={filename}
+          defaultTo={customer.email ?? ''}
+          defaultSubject={`${config.singular} ${document.number} from ${organization.name}`}
+          defaultBody={shareBody}
+          whatsappPhone={customer.phone}
+          whatsappText={shareBody}
+        />
       </div>
 
       <article className="invoice-sheet relative min-h-[920px] overflow-hidden bg-white text-[#1B3A4B] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:min-h-0 print:shadow-none">
