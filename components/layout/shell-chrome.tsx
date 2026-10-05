@@ -12,12 +12,8 @@ import { NavigationProgress } from './navigation-progress'
 import { QuickCreate } from './quick-create'
 import { ShellMenus } from './shell-menus'
 import { UserMenu } from './user-menu'
-import { BalanceAlerts } from './balance-alerts'
-import { StockAlerts } from './stock-alerts'
 import { CompanyLetterhead } from '@/components/print/company-letterhead'
 import type { LetterheadSource } from '@/lib/letterhead'
-import type { BalanceAlert } from '@/lib/balance-alert'
-import type { StockAlert } from '@/lib/stock-alert'
 
 type ShellChromeProps = {
   orgName: string
@@ -28,8 +24,10 @@ type ShellChromeProps = {
   user: { id: string; name: string; email: string; image: string | null }
   moduleKeys: string[]
   permissions: string[]
-  alerts: BalanceAlert[]
-  stockAlerts: StockAlert[]
+  /** Streamed server slot; null when the user lacks inventory:read. */
+  stockAlertsSlot: React.ReactNode
+  /** Streamed server slot; null when the user lacks customer:read. */
+  balanceAlertsSlot: React.ReactNode
   children: React.ReactNode
 }
 
@@ -66,8 +64,8 @@ export function ShellChrome({
   roleLabel,
   user,
   permissions,
-  alerts,
-  stockAlerts,
+  stockAlertsSlot,
+  balanceAlertsSlot,
   children,
 }: ShellChromeProps) {
   const pathname = usePathname()
@@ -105,8 +103,8 @@ export function ShellChrome({
             {working ? <QuickCreate permissions={permissions} currency={baseCurrency} /> : null}
             {working ? <CommandPalette permissions={permissions} /> : null}
             {working ? <ShellMenus /> : null}
-            {permissions.includes('inventory:read') ? <StockAlerts alerts={stockAlerts} /> : null}
-            {permissions.includes('customer:read') ? <BalanceAlerts alerts={alerts} /> : null}
+            {stockAlertsSlot}
+            {balanceAlertsSlot}
             <UserMenu user={user} roleLabel={roleLabel} />
           </div>
         </header>
