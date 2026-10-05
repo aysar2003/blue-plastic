@@ -1,6 +1,7 @@
 import 'server-only'
 import type { DocumentType, Prisma, PurchaseDocumentType } from '@prisma/client'
 
+import { lineLabel } from '@/lib/purchase-board'
 import { toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
@@ -139,6 +140,70 @@ export async function list(
     total,
     query,
   )
+}
+
+/**
+ * Purchase orders for the register: the list, plus the category, the store, and
+ * how many papers are attached. Class and last-email are not stored, so the
+ * screen leaves those cells blank rather than inventing them.
+ */
+export async function listOrderBoard(
+  ctx: OrgContext,
+  query: ListQuery,
+  options: {
+    status?: string
+    vendorId?: string
+    sort?: string
+    dir?: 'asc' | 'desc'
+    from?: CalendarDate
+    to?: CalendarDate
+  } = {},
+) {
+  const page = await list(ctx, 'PURCHASE_ORDER', query, options)
+  const ids = page.rows.map((row) => row.id)
+  if (ids.length === 0) {
+    return { ...page, rows: page.rows.map((row) => ({ ...row, category: '—', location: '—', attachments: 0 })) }
+  }
+
+  const [lines, files] = await Promise.all([
+    db.purchaseDocumentLine.findMany({
+      where: { documentId: { in: ids } },
+      select: {
+        documentId: true,
+        expenseAccount: { select: { name: true } },
+        store: { select: { name: true } },
+      },
+    }),
+    db.ledgerFile.groupBy({
+      by: ['purchaseDocumentId'],
+      where: { orgId: ctx.orgId, purchaseDocumentId: { in: ids } },
+      _count: { _all: true },
+    }),
+  ])
+
+  const categories = new Map<string, string[]>()
+  const locations = new Map<string, string[]>()
+  for (const line of lines) {
+    const cats = categories.get(line.documentId) ?? []
+    if (line.expenseAccount?.name) cats.push(line.expenseAccount.name)
+    categories.set(line.documentId, cats)
+    const stores = locations.get(line.documentId) ?? []
+    if (line.store?.name) stores.push(line.store.name)
+    locations.set(line.documentId, stores)
+  }
+  const attachments = new Map(
+    files.map((file) => [file.purchaseDocumentId, file._count._all]),
+  )
+
+  return {
+    ...page,
+    rows: page.rows.map((row) => ({
+      ...row,
+      category: lineLabel(categories.get(row.id) ?? []),
+      location: lineLabel(locations.get(row.id) ?? []),
+      attachments: attachments.get(row.id) ?? 0,
+    })),
+  }
 }
 
 export async function get(ctx: OrgContext, id: string) {

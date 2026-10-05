@@ -11,6 +11,15 @@ export const REPORT_SECTIONS: LauncherSection[] = [
     blurb: 'The statements an accountant reads first.',
     apps: [
       {
+        key: 'business-overview',
+        label: 'Business overview',
+        href: '/reports/business-overview',
+        icon: 'trending',
+        accent: '#0F766E',
+        wash: '#CCFBF1',
+        blurb: 'Cash, profit, and what is unpaid',
+      },
+      {
         key: 'profit-loss',
         label: 'Profit and Loss',
         href: '/reports/profit-loss',

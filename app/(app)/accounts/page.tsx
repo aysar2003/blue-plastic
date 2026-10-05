@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { BookOpenIcon } from 'lucide-react'
 
+import { BooksTabs } from '@/components/accounts/books-tabs'
+import { QuerySelect } from '@/components/data/query-select'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { Pagination } from '@/components/data/pagination'
@@ -19,6 +21,7 @@ import {
   ACCOUNT_TYPE_ORDER,
 } from '@/lib/accounting-labels'
 import type { AccountType } from '@prisma/client'
+import { ACCOUNT_VIEWS, accountMatchesView, parseAccountView } from '@/lib/account-views'
 import { today } from '@/lib/date'
 import { Decimal } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
@@ -67,6 +70,7 @@ export default async function AccountsPage({
   if (accounts.length === 0 && !q && !showArchived) {
     return (
       <>
+        <BooksTabs active="chart" />
         <PageHeader
           title="Chart of accounts"
           description="Every account the business posts to, and the balance sitting in each."
@@ -88,7 +92,9 @@ export default async function AccountsPage({
   const direction = sort.dir === 'asc' ? 1 : -1
   const statement =
     params.statement === 'balance' || params.statement === 'profit' ? params.statement : ''
+  const view = parseAccountView(typeof params.view === 'string' ? params.view : '')
   const chart = accounts.filter((account) => {
+    if (!accountMatchesView(account, view)) return false
     if (typeFilter && account.type !== typeFilter) return false
     if (statement === 'balance') return account.type === 'ASSET' || account.type === 'LIABILITY' || account.type === 'EQUITY'
     if (statement === 'profit') return account.type === 'REVENUE' || account.type === 'EXPENSE'
@@ -135,6 +141,8 @@ export default async function AccountsPage({
     q,
     archived: showArchived ? '1' : undefined,
     type: typeFilter,
+    statement: statement || undefined,
+    view: view || undefined,
     sort: sort.sort,
     dir: sort.dir,
   }
@@ -144,6 +152,7 @@ export default async function AccountsPage({
     if (q) search.set('q', q)
     if (showArchived) search.set('archived', '1')
     if (typeFilter) search.set('type', typeFilter)
+    if (view) search.set('view', view)
     if (value) search.set('statement', value)
     const query = search.toString()
     return query ? `/accounts?${query}` : '/accounts'
@@ -153,6 +162,8 @@ export default async function AccountsPage({
     const search = new URLSearchParams()
     if (q) search.set('q', q)
     if (showArchived) search.set('archived', '1')
+    if (view) search.set('view', view)
+    if (statement) search.set('statement', statement)
     if (type) search.set('type', type)
     const query = search.toString()
     return query ? `/accounts?${query}` : '/accounts'
@@ -160,6 +171,7 @@ export default async function AccountsPage({
 
   return (
     <>
+      <BooksTabs active="chart" />
       <PageHeader
         title="Chart of accounts"
         description={`Balances as at ${asOf}, shown on each account's natural side. Right-click an account for its register, its report, and the actions the books allow.`}
@@ -199,7 +211,23 @@ export default async function AccountsPage({
       </p>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <SearchInput placeholder="Search by number or name" />
+        <QuerySelect
+          label=""
+          param="view"
+          path="/accounts"
+          value={view}
+          hidden={{
+            q,
+            archived: showArchived ? '1' : undefined,
+            type: typeFilter,
+            statement: statement || undefined,
+            sort: sort.sort,
+            dir: sort.dir,
+          }}
+          options={ACCOUNT_VIEWS.map((item) => ({ value: item.value, label: item.label }))}
+          className="min-w-56"
+        />
+        <SearchInput placeholder="Filter by name or number" />
         <Link
           href={showArchived ? '/accounts' : '/accounts?archived=1'}
           className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"

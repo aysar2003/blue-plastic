@@ -2,11 +2,12 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Loader2Icon, SearchIcon, SettingsIcon, Trash2Icon } from 'lucide-react'
+import { Loader2Icon, LockIcon, SearchIcon, SettingsIcon, Trash2Icon } from 'lucide-react'
 
 import { posCheckout } from '@/app/(app)/pos/actions'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
+import { RegisterLock, useClientReady, useRegisterLocked, writeRegisterLocked } from '@/components/pos/register-lock'
 
 type Product = {
   id: string
@@ -32,6 +33,7 @@ export function PosTerminal(props: {
   register: { id: string; name: string; paymentMethods: PaymentMethod[] }
   products: Product[]
   currency: string
+  orgName: string
 }) {
   const [query, setQuery] = useState('')
   const [cart, setCart] = useState<CartLine[]>([])
@@ -40,6 +42,16 @@ export function PosTerminal(props: {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const ready = useClientReady()
+  const locked = useRegisterLocked(props.register.id)
+
+  function lockRegister() {
+    writeRegisterLocked(props.register.id, true)
+  }
+
+  function unlockRegister() {
+    writeRegisterLocked(props.register.id, false)
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -138,6 +150,8 @@ export function PosTerminal(props: {
     })
   }
 
+  if (!ready) return null
+
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-[#f5f5f5]">
       <header className="flex items-center justify-between gap-4 bg-[#714B67] px-4 py-3 text-white shadow-md">
@@ -146,6 +160,14 @@ export function PosTerminal(props: {
           <h1 className="text-lg font-semibold">{props.register.name}</h1>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={lockRegister}
+            className="inline-flex items-center gap-1 rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20"
+          >
+            <LockIcon className="size-4" />
+            Lock
+          </button>
           <Link
             href="/pos/settings"
             className="inline-flex items-center gap-1 rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20"
@@ -319,6 +341,7 @@ export function PosTerminal(props: {
           </div>
         </div>
       ) : null}
+      {locked ? <RegisterLock orgName={props.orgName} onUnlock={unlockRegister} /> : null}
     </div>
   )
 }

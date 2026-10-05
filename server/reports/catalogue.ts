@@ -1584,6 +1584,177 @@ const salesByDeposit: TableReport = {
   },
 }
 
+/* --- Favourites that were still missing ---------------------------------- */
+
+const salesByCustomerDetail: TableReport = {
+  key: 'sales-by-customer-detail',
+  title: 'Sales by Customer Detail',
+  description: 'Each invoice, sales receipt, and credit memo in the period, net of tax.',
+  group: 'Sales and customers',
+  mode: 'range',
+  async build(input) {
+    const { ctx, range } = input
+    const documents = await books(input).salesDocument.findMany({
+      where: {
+        orgId: ctx.orgId,
+        type: { in: ['INVOICE', 'SALES_RECEIPT', 'CREDIT_MEMO', 'REFUND_RECEIPT'] },
+        status: { notIn: ['DRAFT', 'VOID'] },
+        date: { gte: toDate(range.from), lte: toDate(range.to) },
+      },
+      select: {
+        id: true,
+        type: true,
+        number: true,
+        date: true,
+        subtotal: true,
+        customer: { select: { displayName: true } },
+      },
+      orderBy: [{ customer: { displayName: 'asc' } }, { date: 'asc' }, { number: 'asc' }],
+    })
+
+    let total = ZERO
+    const rows = documents.map((document) => {
+      const credit = document.type === 'CREDIT_MEMO' || document.type === 'REFUND_RECEIPT'
+      const amount = new Decimal(document.subtotal.toString())
+      const signed = credit ? amount.negated() : amount
+      total = total.plus(signed)
+      return {
+        href: `/sales/${SALES_SLUG[document.type] ?? 'invoices'}/${document.id}`,
+        cells: {
+          customer: document.customer.displayName,
+          date: date(document.date),
+          type: document.type === 'SALES_RECEIPT' ? 'Sales receipt' : document.type === 'CREDIT_MEMO' ? 'Credit memo' : document.type === 'REFUND_RECEIPT' ? 'Refund' : 'Invoice',
+          number: document.number,
+          amount: money(signed),
+        },
+      }
+    })
+
+    return {
+      columns: [
+        { key: 'customer', label: 'Customer' },
+        { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+        { key: 'type', label: 'Type', width: 'w-36' },
+        { key: 'number', label: 'No.', width: 'w-28' },
+        { key: 'amount', label: 'Amount', format: 'money', width: 'w-32' },
+      ],
+      rows,
+      totals: { customer: 'Total', amount: money(total) },
+      empty: 'No sales in this period.',
+    }
+  },
+}
+
+const billsAndPayments: TableReport = {
+  key: 'bills-and-payments',
+  title: 'Bills and Applied Payments',
+  description: 'Bills in the period and the payments or credits applied to them.',
+  group: 'What you owe',
+  mode: 'range',
+  async build(input) {
+    const { ctx, range } = input
+    const bills = await books(input).purchaseDocument.findMany({
+      where: {
+        orgId: ctx.orgId,
+        type: 'BILL',
+        status: { notIn: ['DRAFT', 'VOID'] },
+        date: { gte: toDate(range.from), lte: toDate(range.to) },
+      },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        total: true,
+        vendor: { select: { displayName: true } },
+        applications: {
+          select: {
+            amount: true,
+            payment: { select: { number: true } },
+            creditDocument: { select: { number: true } },
+          },
+        },
+      },
+      orderBy: [{ date: 'asc' }, { number: 'asc' }],
+    })
+
+    let appliedTotal = ZERO
+    const rows = bills.map((bill) => {
+      const applied = bill.applications.reduce((sum, row) => sum.plus(row.amount.toString()), ZERO)
+      appliedTotal = appliedTotal.plus(applied)
+      const sources = bill.applications
+        .map((row) => row.payment?.number ?? row.creditDocument?.number)
+        .filter((value): value is string => Boolean(value))
+      return {
+        href: `/purchases/bills/${bill.id}`,
+        cells: {
+          date: date(bill.date),
+          number: bill.number,
+          vendor: bill.vendor.displayName,
+          total: money(bill.total.toString()),
+          applied: money(applied),
+          sources: sources.length ? sources.join(', ') : null,
+        },
+      }
+    })
+
+    return {
+      columns: [
+        { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+        { key: 'number', label: 'Bill', width: 'w-28' },
+        { key: 'vendor', label: 'Vendor' },
+        { key: 'total', label: 'Bill total', format: 'money', width: 'w-32' },
+        { key: 'applied', label: 'Applied', format: 'money', width: 'w-32' },
+        { key: 'sources', label: 'Payment / credit' },
+      ],
+      rows,
+      totals: { date: 'Total', applied: money(appliedTotal) },
+      empty: 'No bills in this period.',
+    }
+  },
+}
+
+const ITEM_KIND: Record<string, string> = {
+  SERVICE: 'Service',
+  NON_INVENTORY: 'Non-inventory',
+  INVENTORY: 'Inventory',
+}
+
+const productServiceList: TableReport = {
+  key: 'product-service-list',
+  title: 'Product/Service List',
+  description: 'Active products and services, with the price and cost on the item.',
+  group: 'Sales and customers',
+  mode: 'asOf',
+  async build(input) {
+    const items = await books(input).item.findMany({
+      where: { orgId: input.ctx.orgId, isActive: true },
+      select: { id: true, name: true, sku: true, type: true, salesPrice: true, purchaseCost: true },
+      orderBy: { name: 'asc' },
+    })
+
+    return {
+      columns: [
+        { key: 'name', label: 'Name' },
+        { key: 'sku', label: 'SKU', width: 'w-32' },
+        { key: 'type', label: 'Type', width: 'w-36' },
+        { key: 'price', label: 'Sales price', format: 'money', width: 'w-32' },
+        { key: 'cost', label: 'Purchase cost', format: 'money', width: 'w-32' },
+      ],
+      rows: items.map((item) => ({
+        href: `/items/${item.id}/report`,
+        cells: {
+          name: item.name,
+          sku: item.sku,
+          type: ITEM_KIND[item.type] ?? item.type,
+          price: item.salesPrice ? money(item.salesPrice.toString()) : null,
+          cost: item.purchaseCost ? money(item.purchaseCost.toString()) : null,
+        },
+      })),
+      empty: 'No active products or services.',
+    }
+  },
+}
+
 /* --- The catalogue -------------------------------------------------------- */
 
 export const TABLE_REPORTS: TableReport[] = [
@@ -1609,6 +1780,9 @@ export const TABLE_REPORTS: TableReport[] = [
   userActivity,
   activityByUser,
   salesByDeposit,
+  salesByCustomerDetail,
+  billsAndPayments,
+  productServiceList,
 ]
 
 export const tableReport = (key: string): TableReport | undefined =>
