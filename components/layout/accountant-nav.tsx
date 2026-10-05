@@ -26,6 +26,7 @@ const ITEMS: Item[] = [
   { label: 'Invoices', href: '/sales/invoices', permission: 'invoice:read' },
   { label: 'Quotations', href: '/sales/estimates', permission: 'invoice:read' },
   { label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read' },
+  { label: 'Sales delivery', href: '/sales/delivery', permission: 'invoice:read' },
   { label: 'Credit memos', href: '/sales/credit-memos', permission: 'invoice:read' },
   { label: 'Payments', href: '/payments', permission: 'payment:read' },
   { label: 'Customers', href: '/customers', permission: 'customer:read' },
@@ -92,7 +93,7 @@ export function AccountantNav({
             aria-current={selected ? 'page' : undefined}
             className={cn(
               'shrink-0 rounded-full px-2.5 py-1 text-xs transition-colors',
-              selected ? 'bg-primary font-medium text-primary-foreground' : 'text-slate-600 hover:bg-primary/10 hover:text-primary',
+              selected ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-primary/10 hover:text-primary',
             )}
           >
             {item.label}

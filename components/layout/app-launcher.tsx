@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeftRightIcon,
+  ChevronDownIcon,
   LayoutGridIcon,
+  MonitorIcon,
   BanknoteIcon,
   BookOpenIcon,
   Building2Icon,
@@ -60,6 +62,7 @@ const ICONS: Record<LauncherIcon, LucideIcon> = {
   palette: PaletteIcon,
   file: FileTextIcon,
   transfer: ArrowLeftRightIcon,
+  monitor: MonitorIcon,
 }
 
 export type LauncherTile = {
@@ -101,12 +104,14 @@ function appIsCurrent(pathname: string, href: string, also: string[] = []) {
  *
  * Hovering a chip opens the destinations inside that app — Sales shows invoices
  * and receipts, Purchases shows Delivery — without first opening the hub.
+ * Clicking Apps opens the full app list (works on touch where hover does not).
  */
 export function HeaderApps({ permissions }: { permissions: string[] }) {
   const pathname = usePathname()
   const apps = appsForPermissions(permissions)
   const home = pathname === '/dashboard'
   const [openKey, setOpenKey] = useState<string | null>(null)
+  const navRef = useRef<HTMLElement>(null)
 
   // Choosing a destination navigates in place; close the flyout so it does not
   // stay open over the new screen while the pointer is still on the chip.
@@ -114,19 +119,99 @@ export function HeaderApps({ permissions }: { permissions: string[] }) {
     setOpenKey(null)
   }, [pathname])
 
+  useEffect(() => {
+    if (!openKey) return
+    function onPointerDown(event: MouseEvent) {
+      if (!(event.target instanceof Node)) return
+      if (navRef.current?.contains(event.target)) return
+      setOpenKey(null)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpenKey(null)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [openKey])
+
+  const appsMenuOpen = openKey === '__apps__'
+
   return (
-    <nav aria-label="Apps" className="flex flex-wrap items-center gap-1">
-      <Link
-        href="/dashboard"
-        aria-current={home ? 'page' : undefined}
-        className={cn(
-          'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-slate-600 hover:bg-white hover:text-slate-900',
-          home && 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200',
-        )}
-      >
-        <LayoutGridIcon className="size-3.5 text-primary" aria-hidden />
-        Apps
-      </Link>
+    <nav ref={navRef} aria-label="Apps" className="flex flex-wrap items-center gap-1">
+      <div className="relative">
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={appsMenuOpen}
+          aria-current={home ? 'page' : undefined}
+          onClick={() => setOpenKey((key) => (key === '__apps__' ? null : '__apps__'))}
+          className={cn(
+            'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-muted-foreground hover:bg-card hover:text-foreground',
+            (home || appsMenuOpen) && 'bg-card text-foreground shadow-sm ring-1 ring-border',
+          )}
+        >
+          <LayoutGridIcon className="size-3.5 text-primary" aria-hidden />
+          Apps
+          <ChevronDownIcon
+            className={cn('size-3 opacity-60 transition-transform', appsMenuOpen && 'rotate-180')}
+            aria-hidden
+          />
+        </button>
+        <div
+          role="menu"
+          aria-label="All apps"
+          hidden={!appsMenuOpen}
+          className={cn(
+            'absolute left-0 top-full z-50 min-w-[14rem] pt-1.5',
+            !appsMenuOpen && 'pointer-events-none',
+          )}
+        >
+          <ul className="max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-[0_8px_28px_-8px_rgba(15,23,42,0.28)] ring-1 ring-slate-900/5">
+            <li>
+              <Link
+                href="/dashboard"
+                role="menuitem"
+                onClick={() => setOpenKey(null)}
+                className="block px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                Apps home
+              </Link>
+            </li>
+            <li className="my-1 border-t border-slate-100" aria-hidden />
+            {apps.map((app) => {
+              const Icon = ICONS[app.icon]
+              return (
+                <li key={app.key}>
+                  <Link
+                    href={app.href}
+                    role="menuitem"
+                    onClick={() => setOpenKey(null)}
+                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50"
+                  >
+                    <span
+                      className="grid size-5 shrink-0 place-items-center rounded"
+                      style={{ backgroundColor: app.wash, color: app.accent }}
+                    >
+                      <Icon className="size-3" strokeWidth={2} aria-hidden />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-slate-800">{app.label}</span>
+                      {app.blurb ? (
+                        <span className="block text-[0.65rem] leading-snug text-slate-500">
+                          {app.blurb}
+                        </span>
+                      ) : null}
+                    </span>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      </div>
       {apps.map((app) => {
         const Icon = ICONS[app.icon]
         const current = appIsCurrent(pathname, app.href, APP_ALSO[app.key])
@@ -148,8 +233,8 @@ export function HeaderApps({ permissions }: { permissions: string[] }) {
               aria-expanded={children.length > 0 ? open : undefined}
               onClick={() => setOpenKey(null)}
               className={cn(
-                'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-slate-600 hover:bg-white hover:text-slate-900',
-                current && 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200',
+                'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-muted-foreground hover:bg-card hover:text-foreground',
+                current && 'bg-card text-foreground shadow-sm ring-1 ring-border',
               )}
             >
               <span

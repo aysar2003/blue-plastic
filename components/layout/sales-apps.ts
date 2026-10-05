@@ -20,6 +20,16 @@ export type SalesHubApp = {
 
 export const SALES_HUB_APPS: SalesHubApp[] = [
   {
+    key: 'delivery',
+    label: 'Delivery',
+    href: '/sales/delivery',
+    icon: 'package',
+    permission: 'invoice:read',
+    accent: '#0369A1',
+    wash: '#E0F2FE',
+    blurb: 'Dispatch notes & tickets',
+  },
+  {
     key: 'sales-receipts',
     label: 'Sales receipts',
     href: '/sales/sales-receipts',

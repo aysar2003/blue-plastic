@@ -2,24 +2,37 @@ import 'server-only'
 import type { Prisma, Role } from '@prisma/client'
 
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
-import type { InviteUserInput } from '@/lib/validation/user'
+import type { InviteUserInput, UpdateMemberRoleInput } from '@/lib/validation/user'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { hashPassword } from '@/server/auth/password'
+import { sanitizePermissions } from '@/server/auth/permissions'
 import { db } from '@/server/db'
-import { conflict, forbidden, notFound, precondition } from '@/server/errors'
+import { conflict, forbidden, notFound, precondition, validation } from '@/server/errors'
 
 const MEMBER_SELECT = {
   id: true,
   role: true,
   status: true,
   version: true,
+  permissionsOverride: true,
   createdAt: true,
   acceptedAt: true,
   user: { select: { id: true, name: true, email: true, image: true, lastLoginAt: true } },
 } satisfies Prisma.MembershipSelect
 
 export type MemberRow = Prisma.MembershipGetPayload<{ select: typeof MEMBER_SELECT }>
+
+function resolveAccess(role: string, permissionsOverride: readonly string[] | undefined) {
+  const cleaned = sanitizePermissions(permissionsOverride)
+  if (role === 'CUSTOM') {
+    if (cleaned.length === 0) {
+      throw validation('Choose at least one permission for custom access.')
+    }
+    return { role: 'CUSTOM' as Role, permissionsOverride: cleaned }
+  }
+  return { role: role as Role, permissionsOverride: [] as string[] }
+}
 
 export async function list(ctx: OrgContext, query: ListQuery) {
   const where: Prisma.MembershipWhereInput = {
@@ -52,6 +65,7 @@ export async function list(ctx: OrgContext, query: ListQuery) {
 export async function invite(ctx: OrgContext, input: InviteUserInput) {
   const meta = await requestMeta()
   const passwordHash = await hashPassword(input.temporaryPassword)
+  const access = resolveAccess(input.role, input.permissionsOverride)
 
   return db.$transaction(async (tx) => {
     const existingUser = await tx.user.findUnique({
@@ -80,7 +94,8 @@ export async function invite(ctx: OrgContext, input: InviteUserInput) {
       data: {
         orgId: ctx.orgId,
         userId: user.id,
-        role: input.role as Role,
+        role: access.role,
+        permissionsOverride: access.permissionsOverride,
         // No email delivery yet, so the invitee can sign in immediately with the
         // password the inviter set. See the note on `inviteUserSchema`.
         status: 'ACTIVE',
@@ -98,7 +113,11 @@ export async function invite(ctx: OrgContext, input: InviteUserInput) {
         entity: 'Membership',
         entityId: membership.id,
         action: 'CREATE',
-        after: { email: input.email, role: input.role },
+        after: {
+          email: input.email,
+          role: access.role,
+          permissionsOverride: access.permissionsOverride,
+        },
       },
       meta,
     )
@@ -107,23 +126,28 @@ export async function invite(ctx: OrgContext, input: InviteUserInput) {
   })
 }
 
-export async function updateRole(ctx: OrgContext, membershipId: string, role: Role) {
+export async function updateAccess(ctx: OrgContext, input: UpdateMemberRoleInput) {
   const meta = await requestMeta()
+  const access = resolveAccess(input.role, input.permissionsOverride)
 
   return db.$transaction(async (tx) => {
     const before = await tx.membership.findFirst({
-      where: { id: membershipId, orgId: ctx.orgId },
+      where: { id: input.membershipId, orgId: ctx.orgId },
       select: MEMBER_SELECT,
     })
     if (!before) throw notFound('Member')
 
-    assertNotLastOwnerChange(ctx, before, role)
+    assertNotLastOwnerChange(ctx, before, access.role)
 
     const after = await tx.membership.update({
-      where: { id: membershipId },
+      where: { id: input.membershipId },
       // Bumping `version` invalidates any JWT already issued to this user, so a
       // demotion takes effect on their next request rather than at token expiry.
-      data: { role, version: { increment: 1 } },
+      data: {
+        role: access.role,
+        permissionsOverride: access.permissionsOverride,
+        version: { increment: 1 },
+      },
       select: MEMBER_SELECT,
     })
 
@@ -132,15 +156,33 @@ export async function updateRole(ctx: OrgContext, membershipId: string, role: Ro
       ctx,
       {
         entity: 'Membership',
-        entityId: membershipId,
+        entityId: input.membershipId,
         action: 'UPDATE',
-        before: { role: before.role },
-        after: { role: after.role },
+        before: {
+          role: before.role,
+          permissionsOverride: before.permissionsOverride,
+        },
+        after: {
+          role: after.role,
+          permissionsOverride: after.permissionsOverride,
+        },
       },
       meta,
     )
 
     return after
+  })
+}
+
+/** @deprecated Prefer updateAccess — kept for role-only callers. */
+export async function updateRole(ctx: OrgContext, membershipId: string, role: Role) {
+  if (role === 'OWNER') {
+    throw forbidden('The owner role cannot be assigned here. Transfer ownership instead.')
+  }
+  return updateAccess(ctx, {
+    membershipId,
+    role,
+    permissionsOverride: [],
   })
 }
 

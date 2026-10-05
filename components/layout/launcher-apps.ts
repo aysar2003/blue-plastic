@@ -31,6 +31,7 @@ export type LauncherIcon =
   | 'palette'
   | 'file'
   | 'transfer'
+  | 'monitor'
 
 export type LauncherApp = {
   key: string
@@ -47,6 +48,16 @@ export type LauncherApp = {
 }
 
 export const LAUNCHER_APPS: LauncherApp[] = [
+  {
+    key: 'pos',
+    label: 'Point of Sale',
+    href: '/pos',
+    icon: 'monitor',
+    permission: 'pos:read',
+    accent: '#714B67',
+    wash: '#F3E8F0',
+    blurb: 'Sell at the till',
+  },
   {
     key: 'sales',
     label: 'Sales',

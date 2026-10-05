@@ -37,6 +37,7 @@ export function DepositForm({
   today,
   currency,
   documentNumber,
+  defaultBankAccountId,
 }: {
   bankAccounts: AccountPickerOption[]
   otherAccounts: AccountPickerOption[]
@@ -44,12 +45,17 @@ export function DepositForm({
   today: string
   currency: string
   documentNumber: string
+  defaultBankAccountId?: string
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveDepositForm, idleState)
 
   const [number, setNumber] = useState(documentNumber)
-  const [bankAccountId, setBankAccountId] = useState(bankAccounts[0]?.id ?? '')
+  const [bankAccountId, setBankAccountId] = useState(
+    defaultBankAccountId && bankAccounts.some((a) => a.id === defaultBankAccountId)
+      ? defaultBankAccountId
+      : (bankAccounts[0]?.id ?? ''),
+  )
   const [date, setDate] = useState(today)
   const [reference, setReference] = useState('')
   const [memo, setMemo] = useState('')

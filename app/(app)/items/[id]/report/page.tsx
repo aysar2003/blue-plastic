@@ -87,8 +87,9 @@ export default async function ItemQuickReportPage({
     { key: 'type', label: 'Type', width: 'w-36' },
     { key: 'number', label: 'No.', width: 'w-28' },
     { key: 'ticketNumber', label: 'Ticket', width: 'w-28' },
-    { key: 'party', label: 'Customer, vendor, or store' },
-    { key: 'quantity', label: 'Qty', format: 'number', width: 'w-24' },
+    { key: 'storeName', label: 'Store', width: 'w-40' },
+    { key: 'party', label: 'Customer or vendor' },
+    { key: 'quantity', label: 'Qty', format: 'signed', width: 'w-24' },
     { key: 'balance', label: 'Balance', format: 'number', width: 'w-28' },
   ]
   if (price !== 'sales') columns.push({ key: 'cost', label: 'Cost', format: 'money', width: 'w-28' })
@@ -97,21 +98,28 @@ export default async function ItemQuickReportPage({
 
   const table: ReportTableData = {
     columns,
-    rows: rows.map((row) => ({
-      href: row.href,
-      cells: {
-        date: row.date,
-        type: row.type,
-        number: row.number || null,
-        ticketNumber: row.ticketNumber || null,
-        party: row.party || null,
-        quantity: row.quantity,
-        balance: row.balance,
-        cost: row.cost,
-        salesPrice: row.salesPrice,
-        amount: row.amount,
-      },
-    })),
+    rows: rows.map((row) => {
+      const cellHrefs: Record<string, string> = {}
+      if (row.ticketHref && row.ticketNumber) cellHrefs.ticketNumber = row.ticketHref
+      if (row.storeHref && row.storeName) cellHrefs.storeName = row.storeHref
+      return {
+        href: row.href,
+        cellHrefs: Object.keys(cellHrefs).length > 0 ? cellHrefs : undefined,
+        cells: {
+          date: row.date,
+          type: row.type,
+          number: row.number || null,
+          ticketNumber: row.ticketNumber || null,
+          storeName: row.storeName || null,
+          party: row.party || null,
+          quantity: row.quantity,
+          balance: row.balance,
+          cost: row.cost,
+          salesPrice: row.salesPrice,
+          amount: row.amount,
+        },
+      }
+    }),
     totals: {
       date: 'Total',
       quantity: totals.quantity.toFixed(2),
@@ -119,7 +127,7 @@ export default async function ItemQuickReportPage({
       amount: totals.amount.toFixed(2),
     },
     empty: 'Nothing posted for this item in this period.',
-    note: 'Qty is the change on that line. Balance is how many are on hand after it. A sale reduces quantity; a purchase or customer return increases it. Store tickets move stock between stores without changing the global balance.',
+    note: 'Store is the shelf goods left or entered. Ticket on a sale opens the pick ticket. Qty is the change (+ in, − out); Balance is on-hand after the line.',
   }
 
   const keep = settingsToQuery(settings, { kind, price })

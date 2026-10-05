@@ -43,6 +43,13 @@ export default async function NewStoreTransferPage({
       <PageHeader
         title="Transfer to store"
         description="Move stock from one store to another. Quantity and cost leave with the item — the books stay in balance."
+        actions={
+          initialFromStoreId ? (
+            <Link href={`/stores/${initialFromStoreId}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              Back to store
+            </Link>
+          ) : null
+        }
       />
       {stores.length < 2 ? (
         <Card tone="warning">

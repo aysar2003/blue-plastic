@@ -77,8 +77,10 @@ export function ShellChrome({
   // The left list belongs to the Accounting app only. Sales, reports, and the
   // other apps keep the header they had before.
   const showNav = current?.key === 'accounting' && !pathname.endsWith('/print')
-  const working = !pathname.endsWith('/print')
-  const showBack = pathname !== '/dashboard' && working
+  const isPrint = pathname.endsWith('/print')
+  const working = !isPrint
+  // Print pages still need a way back to the document.
+  const showBack = pathname !== '/dashboard'
 
   const brandLabel = isHome ? orgName : current.label
   const brandHref = isHome ? '/dashboard' : current.href
@@ -89,12 +91,12 @@ export function ShellChrome({
       <AppAtmosphere />
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-slate-200/60 bg-white/70 px-4 backdrop-blur-md sm:px-6">
+        <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card/80 px-4 backdrop-blur-md sm:px-6">
           <Link href={brandHref} className="flex min-w-0 items-center gap-2.5">
             <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-[0.7rem] font-bold tracking-wide text-primary-foreground shadow-sm">
               BP
             </span>
-            <span className="truncate text-sm font-semibold tracking-tight text-slate-800">
+            <span className="truncate text-sm font-semibold tracking-tight text-foreground">
               {brandLabel}
             </span>
           </Link>
@@ -110,13 +112,13 @@ export function ShellChrome({
         </header>
 
         {working ? (
-          <div className="relative z-20 border-b border-slate-200/70 bg-white/80 px-4 py-1.5 print:hidden sm:px-6">
+          <div className="relative z-20 border-b border-border/70 bg-card/85 px-4 py-1.5 print:hidden sm:px-6">
             <HeaderApps permissions={permissions} />
           </div>
         ) : null}
 
         {showNav ? (
-          <div className="relative z-20 border-b border-primary/15 bg-white/75 print:hidden">
+          <div className="relative z-20 border-b border-primary/15 bg-card/80 print:hidden">
             <AccountantNav permissions={permissions} currency={baseCurrency} />
           </div>
         ) : null}

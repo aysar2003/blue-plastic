@@ -13,11 +13,16 @@ import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
 import { ASSIGNABLE_ROLES, ROLE_LABELS } from '@/lib/roles'
+import { permissionsFor } from '@/server/auth/permissions'
 import * as membershipService from '@/server/services/membership.service'
 import { InviteUserDialog } from './invite-user-dialog'
 import { MemberActions } from './member-actions'
 
 const SORTABLE = ['name', 'role', 'status', 'lastSeen'] as const
+
+const ROLE_TEMPLATES = Object.fromEntries(
+  ASSIGNABLE_ROLES.map((role) => [role, [...permissionsFor(role)]]),
+) as Record<string, string[]>
 
 export const metadata: Metadata = { title: 'Users' }
 
@@ -60,7 +65,9 @@ export default async function UsersPage({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SearchInput placeholder="Search by name or email" />
-        {canInvite ? <InviteUserDialog roles={[...ASSIGNABLE_ROLES]} /> : null}
+        {canInvite ? (
+          <InviteUserDialog roles={[...ASSIGNABLE_ROLES]} roleTemplates={ROLE_TEMPLATES} />
+        ) : null}
       </div>
 
       {total === 0 ? (
@@ -72,7 +79,11 @@ export default async function UsersPage({
               ? 'Try a different name or email address.'
               : 'Add the people who need access to the books.'
           }
-          action={canInvite && !query.q ? <InviteUserDialog roles={[...ASSIGNABLE_ROLES]} /> : undefined}
+          action={
+            canInvite && !query.q ? (
+              <InviteUserDialog roles={[...ASSIGNABLE_ROLES]} roleTemplates={ROLE_TEMPLATES} />
+            ) : undefined
+          }
         />
       ) : (
         <Card className="overflow-hidden p-0">
@@ -101,7 +112,15 @@ export default async function UsersPage({
                       </span>
                       <span className="block text-xs text-muted-foreground">{member.user.email}</span>
                     </TableCell>
-                    <TableCell>{ROLE_LABELS[member.role]}</TableCell>
+                    <TableCell>
+                      <span className="block">{ROLE_LABELS[member.role]}</span>
+                      {member.permissionsOverride.length > 0 || member.role === 'CUSTOM' ? (
+                        <span className="block text-xs text-muted-foreground">
+                          {member.permissionsOverride.length} custom permission
+                          {member.permissionsOverride.length === 1 ? '' : 's'}
+                        </span>
+                      ) : null}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant={
@@ -127,7 +146,9 @@ export default async function UsersPage({
                           role={member.role}
                           status={member.status}
                           name={member.user.name}
+                          permissionsOverride={member.permissionsOverride}
                           roles={[...ASSIGNABLE_ROLES]}
+                          roleTemplates={ROLE_TEMPLATES}
                           canUpdate={canUpdate}
                           canRemove={canRemove}
                         />

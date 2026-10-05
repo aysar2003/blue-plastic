@@ -214,7 +214,7 @@ function SectionRows({
           <ClickableRow
             key={subtotal.label}
             href={subtotal.href}
-            className={subtotal.emphasis ? 'bg-[#d5dde6] hover:bg-[#c8d3df]' : 'hover:bg-muted/30'}
+            className={subtotal.emphasis ? 'ledger-head hover:bg-[var(--band)]' : 'hover:bg-muted/30'}
           >
             <TableCell>{cell(subtotal.label, weight)}</TableCell>
             <TableCell />

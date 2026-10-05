@@ -108,9 +108,10 @@ export const customerSchema = z.object({
   creditLimit: optionalMoney,
 
   /**
-   * What the customer owed when the books started. Posts to Accounts Receivable
-   * against Opening Balance Equity — never written onto the customer as a number,
-   * because a receivable that is not in the ledger is not a receivable.
+   * Balance when the books started. Positive = they owe you; negative = a credit
+   * already on their account. Posts to Accounts Receivable against Opening Balance
+   * Equity — never written onto the customer as a number, because a receivable
+   * that is not in the ledger is not a receivable.
    */
   openingBalance: optionalMoney,
   openingBalanceDate: optionalDate,
@@ -161,6 +162,16 @@ export const itemSchema = z
     cogsAccountId: optionalId,
     reorderPoint: optionalMoney,
     storeId: optionalId,
+
+    /** Shown on the point-of-sale product grid. On by default for every item. */
+    availableInPos: z
+      .union([z.boolean(), z.enum(['true', 'false', 'on', 'off', ''])])
+      .optional()
+      .transform((value) => {
+        if (value === undefined || value === '') return true
+        if (value === true || value === 'true' || value === 'on') return true
+        return false
+      }),
 
     /**
      * Stock the business already has when the item is created.

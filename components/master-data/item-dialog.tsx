@@ -17,7 +17,7 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { DateField } from '@/components/ui/date-field'
 import { Separator } from '@/components/ui/separator'
 import { accountOptions, type AccountChoice } from '@/lib/account-options'
-import { createItemForm, updateItemForm } from '@/app/(app)/items/actions'
+import { createCategory, createItemForm, updateItemForm } from '@/app/(app)/items/actions'
 import type { ItemType } from '@prisma/client'
 
 export type ItemValues = {
@@ -42,6 +42,7 @@ export type ItemValues = {
   reorderPoint?: string | null
   categoryId?: string | null
   storeId?: string | null
+  availableInPos?: boolean
 }
 
 /** The raw chart. Every account selector orders it rather than filtering it. */
@@ -119,7 +120,42 @@ export function ItemDialog({
     idleState,
   )
   const [type, setType] = useState<ItemType>(item?.type ?? 'NON_INVENTORY')
+  const [categoryOptions, setCategoryOptions] = useState(categories)
+  const [categoryId, setCategoryId] = useState(item?.categoryId ?? '')
+  const [addingCategory, setAddingCategory] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [savingCategory, setSavingCategory] = useState(false)
   const handled = useRef(false)
+
+  useEffect(() => {
+    setCategoryOptions(categories)
+  }, [categories])
+
+  async function saveNewCategory() {
+    const name = newCategoryName.trim()
+    if (!name || savingCategory) return
+    setSavingCategory(true)
+    try {
+      const result = await createCategory({ name })
+      if (!result.ok) {
+        toast.error(result.error.message)
+        return
+      }
+      const next = { id: result.data.id, label: result.data.name }
+      setCategoryOptions((current) =>
+        current.some((row) => row.id === next.id)
+          ? current
+          : [...current, next].sort((a, b) => a.label.localeCompare(b.label)),
+      )
+      setCategoryId(next.id)
+      setAddingCategory(false)
+      setNewCategoryName('')
+      toast.success(`Category “${next.label}” added.`)
+      router.refresh()
+    } finally {
+      setSavingCategory(false)
+    }
+  }
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
@@ -265,17 +301,69 @@ export function ItemDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field name="categoryId" label="Category" error={e?.categoryId}>
-              <NativeSelect
-                {...fieldProps('categoryId', e?.categoryId)}
-                defaultValue={item?.categoryId ?? ''}
-              >
-                <option value="">— none —</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.label}
-                  </option>
-                ))}
-              </NativeSelect>
+              <div className="space-y-2">
+                <NativeSelect
+                  {...fieldProps('categoryId', e?.categoryId)}
+                  value={categoryId}
+                  onChange={(event) => setCategoryId(event.target.value)}
+                >
+                  <option value="">— none —</option>
+                  {categoryOptions.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.label}
+                    </option>
+                  ))}
+                </NativeSelect>
+                {addingCategory ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      value={newCategoryName}
+                      onChange={(event) => setNewCategoryName(event.target.value)}
+                      placeholder="New category name"
+                      autoFocus
+                      className="min-w-0 flex-1"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          void saveNewCategory()
+                        }
+                        if (event.key === 'Escape') {
+                          setAddingCategory(false)
+                          setNewCategoryName('')
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={savingCategory || !newCategoryName.trim()}
+                      onClick={() => void saveNewCategory()}
+                    >
+                      {savingCategory ? 'Saving…' : 'Add'}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={savingCategory}
+                      onClick={() => {
+                        setAddingCategory(false)
+                        setNewCategoryName('')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+                    onClick={() => setAddingCategory(true)}
+                  >
+                    + Add category
+                  </button>
+                )}
+              </div>
             </Field>
             <Field name="unitOfMeasure" label="Unit" error={e?.unitOfMeasure}>
               <Input
@@ -318,6 +406,18 @@ export function ItemDialog({
                 />
               </Field>
             </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input type="hidden" name="availableInPos" value="false" />
+              <input
+                type="checkbox"
+                name="availableInPos"
+                value="true"
+                defaultChecked={item?.availableInPos !== false}
+                className="size-4 rounded border"
+              />
+              Available in Point of Sale
+            </label>
 
             <Field name="salesTaxCodeId" label="Default sales tax" error={e?.salesTaxCodeId}>
               <NativeSelect

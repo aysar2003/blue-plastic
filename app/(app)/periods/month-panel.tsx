@@ -213,14 +213,14 @@ async function monthBody(
         <div className="max-h-[70vh] overflow-y-auto rounded-xl ring-1 ring-slate-300/70">
           <table className="w-full caption-bottom text-sm">
             <TableHeader className="sticky top-0 z-10">
-              <TableRow className="bg-[#d5dde6] hover:bg-[#d5dde6]">
-                <TableHead className="bg-[#d5dde6]">Entry</TableHead>
-                <TableHead className="bg-[#d5dde6]">Date</TableHead>
-                <TableHead className="bg-[#d5dde6]">Description</TableHead>
-                <TableHead className="bg-[#d5dde6]">Source</TableHead>
-                <TableHead className="bg-[#d5dde6]">Document</TableHead>
-                <TableHead className="bg-[#d5dde6]">Customer / vendor</TableHead>
-                <TableHead className="numeric bg-[#d5dde6]">Amount</TableHead>
+              <TableRow className="ledger-head hover:bg-[var(--band)]">
+                <TableHead className="bg-[var(--band)]">Entry</TableHead>
+                <TableHead className="bg-[var(--band)]">Date</TableHead>
+                <TableHead className="bg-[var(--band)]">Description</TableHead>
+                <TableHead className="bg-[var(--band)]">Source</TableHead>
+                <TableHead className="bg-[var(--band)]">Document</TableHead>
+                <TableHead className="bg-[var(--band)]">Customer / vendor</TableHead>
+                <TableHead className="numeric bg-[var(--band)]">Amount</TableHead>
               </TableRow>
             </TableHeader>
             {rows.map((journal, index) => {

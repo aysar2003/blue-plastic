@@ -34,6 +34,12 @@ function fromHub(apps: HubApp[] | SalesHubApp[]): HeaderMenuItem[] {
 }
 
 const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
+  pos: [
+    { label: 'Open till', href: '/pos', permission: 'pos:read' },
+    { label: 'POS settings', href: '/pos/settings', permission: 'pos:manage' },
+    { label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read' },
+    { label: 'Transfer to bank', href: '/banking/transfers/new', permission: 'bank:transact' },
+  ],
   sales: fromHub(SALES_HUB_APPS),
   purchases: fromHub(PURCHASE_HUB_APPS),
   banking: fromHub(BANKING_HUB_APPS),

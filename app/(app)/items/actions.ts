@@ -64,6 +64,15 @@ export const setItemsActive = action
     return result
   })
 
+export const createCategory = action
+  .requires('item:update')
+  .input(z.object({ name: z.string().trim().min(1).max(120) }))
+  .handler(async (ctx, input) => {
+    const category = await itemService.createCategory(ctx, input.name)
+    revalidatePath('/items')
+    return { id: category.id, name: category.name }
+  })
+
 /**
  * Delete an item.
  *

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import { ASSIGNABLE_ROLES } from '@/lib/roles'
-import { PERMISSIONS, ROLE_PERMISSIONS, can, permissionsFor } from './permissions'
+import { PERMISSIONS } from '@/lib/permissions-catalog'
+import {
+  ROLE_PERMISSIONS,
+  can,
+  effectivePermissions,
+  permissionsFor,
+  sanitizePermissions,
+} from './permissions'
 
 describe('permission matrix', () => {
   it('gives the owner everything', () => {
@@ -42,6 +49,14 @@ describe('permission matrix', () => {
     expect(can('SALES', 'user:invite')).toBe(false)
   })
 
+  it('gives store keepers stock work without the ledger', () => {
+    expect(can('STORE_KEEPER', 'inventory:adjust')).toBe(true)
+    expect(can('STORE_KEEPER', 'bill:create')).toBe(true)
+    expect(can('STORE_KEEPER', 'journal:post')).toBe(false)
+    expect(can('STORE_KEEPER', 'user:invite')).toBe(false)
+    expect(can('STORE_KEEPER', 'payment:create')).toBe(false)
+  })
+
   it('keeps user management to admins and the owner', () => {
     expect(can('ADMIN', 'user:remove')).toBe(true)
     expect(can('ACCOUNTANT', 'user:remove')).toBe(false)
@@ -62,9 +77,11 @@ describe('permission matrix', () => {
     }
   })
 
-  it('never offers OWNER as an assignable role', () => {
-    // Ownership moves by explicit transfer, so an admin cannot mint a second owner.
+  it('never offers OWNER or CUSTOM as a ready-made assignable role', () => {
+    // Ownership moves by explicit transfer; CUSTOM is chosen via the matrix.
     expect(ASSIGNABLE_ROLES).not.toContain('OWNER')
+    expect(ASSIGNABLE_ROLES).not.toContain('CUSTOM')
+    expect(ASSIGNABLE_ROLES).toContain('STORE_KEEPER')
   })
 
   it('falls back to viewer for an unknown role', () => {
@@ -73,5 +90,25 @@ describe('permission matrix', () => {
 
   it('declares no duplicate permissions', () => {
     expect(new Set(PERMISSIONS).size).toBe(PERMISSIONS.length)
+  })
+
+  it('uses an explicit override list when present', () => {
+    const set = effectivePermissions('VIEWER', ['invoice:create', 'invoice:read', 'not:a:perm'])
+    expect(set.has('invoice:create')).toBe(true)
+    expect(set.has('invoice:read')).toBe(true)
+    expect(set.has('org:read')).toBe(false)
+    expect(set.size).toBe(2)
+  })
+
+  it('gives CUSTOM no access without an override', () => {
+    expect(effectivePermissions('CUSTOM', []).size).toBe(0)
+    expect(effectivePermissions('CUSTOM', ['report:read']).has('report:read')).toBe(true)
+  })
+
+  it('sanitizes and orders permission keys', () => {
+    expect(sanitizePermissions(['invoice:create', 'bogus', 'invoice:create', 'org:read'])).toEqual([
+      'org:read',
+      'invoice:create',
+    ])
   })
 })

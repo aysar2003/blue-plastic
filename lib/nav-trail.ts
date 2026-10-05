@@ -38,7 +38,10 @@ export function parentOf(pathname: string): string {
   const last = parts[parts.length - 1]
   if (last === 'new') {
     parts.pop()
-  } else if (last === 'edit' || last === 'print') {
+  } else if (last === 'print') {
+    // Print sits on top of a document — Back returns to that document.
+    parts.pop()
+  } else if (last === 'edit') {
     parts.pop()
     if (parts.length > 1) parts.pop()
   } else {

@@ -22,6 +22,7 @@ const DEFAULT_PREFIX: Record<DocumentType, string> = {
   INVENTORY_ADJUSTMENT: 'ADJ-',
   STORE_TRANSFER: 'STX-',
   STORE_TICKET: 'TKT-',
+  DELIVERY_NOTE: 'DN-',
 }
 
 /**

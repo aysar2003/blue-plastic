@@ -173,6 +173,7 @@ export function DocumentForm({
   document,
   documentNumber,
   initialCustomerId,
+  initialStoreId,
   neighbors,
   stores = [],
   stock = {},
@@ -192,6 +193,8 @@ export function DocumentForm({
   document?: DocumentSeed
   /** Set when the form was opened from a customer, so the sale starts on them. */
   initialCustomerId?: string
+  /** Set when the form was opened from a store, so lines issue from that shelf. */
+  initialStoreId?: string
   /** Sales receipts only: the saved receipt before this one, and the one after. */
   neighbors?: {
     previous: { id: string; number: string } | null
@@ -205,6 +208,8 @@ export function DocumentForm({
   openQuotations?: OpenQuotationOption[]
 }) {
   const officeId = officeStoreId(stores)
+  const defaultStoreId =
+    initialStoreId && stores.some((store) => store.id === initialStoreId) ? initialStoreId : officeId
   const router = useRouter()
   const [state, formAction] = useActionState(saveDocumentForm, idleState)
   // Quotation uses the same sheet and template choice as invoice — one form,
@@ -246,11 +251,11 @@ export function DocumentForm({
             unitPrice: line.unitPrice,
             discountPercent: liftedPercent ? '' : (line.discountPercent ?? ''),
             taxCodeId: line.taxCodeId ?? '',
-            storeId: line.storeId ?? officeId,
+            storeId: line.storeId ?? defaultStoreId,
           }))
         : [],
       minimumLines,
-      officeId,
+      defaultStoreId,
     ),
   )
   const nextKey = useRef(Math.max(document?.lines.length ?? 0, minimumLines) + 1)
@@ -296,7 +301,7 @@ export function DocumentForm({
         setDepositAccountId(depositAccounts[0]?.id ?? '')
         setDiscountKind('percent')
         setDiscountValue('')
-        setLines(Array.from({ length: minimumLines }, (_, index) => empty(index + 1, officeId)))
+        setLines(Array.from({ length: minimumLines }, (_, index) => empty(index + 1, defaultStoreId)))
         nextKey.current = minimumLines + 1
         router.refresh()
         return
@@ -307,7 +312,7 @@ export function DocumentForm({
       router.refresh()
     }
     if (state.status !== 'success') handled.current = false
-  }, [state, router, config.slug, document?.id, initialCustomerId, today, depositAccounts, minimumLines, officeId])
+  }, [state, router, config.slug, document?.id, initialCustomerId, today, depositAccounts, minimumLines, defaultStoreId])
 
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
   const trackedIds = useMemo(
@@ -402,17 +407,17 @@ export function DocumentForm({
   const addLines = (count = 1) =>
     setLines((current) => [
       ...current,
-      ...Array.from({ length: count }, () => empty(nextKey.current++, officeId)),
+      ...Array.from({ length: count }, () => empty(nextKey.current++, defaultStoreId)),
     ])
   const addLine = () => addLines(1)
   const clearLines = () => {
-    setLines(Array.from({ length: minimumLines }, (_, index) => empty(index + 1, officeId)))
+    setLines(Array.from({ length: minimumLines }, (_, index) => empty(index + 1, defaultStoreId)))
     nextKey.current = minimumLines + 1
   }
   const removeLine = (key: number) =>
     setLines((current) => {
       if (current.length <= minimumLines) {
-        return current.map((line) => (line.key === key ? empty(line.key, officeId) : line))
+        return current.map((line) => (line.key === key ? empty(line.key, defaultStoreId) : line))
       }
       return current.filter((line) => line.key !== key)
     })
@@ -1142,7 +1147,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full border-separate border-spacing-0 text-sm">
           <thead>
-            <tr className="bg-[#d5dde6] text-[12px] font-semibold uppercase tracking-wide text-slate-700">
+            <tr className="ledger-head text-[12px] font-semibold uppercase tracking-wide">
               <th className="w-44 px-2 py-2 text-left">Item</th>
               <th className="px-2 py-2 text-left">Description</th>
               <th className="w-16 px-2 py-2 text-center">Qty</th>
@@ -1154,7 +1159,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
           </thead>
           <tbody>
             {props.lines.map((line, index) => (
-              <tr key={line.key} className={index % 2 === 0 ? 'bg-white' : 'bg-[#c5dff3]'}>
+              <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
                 <td className="px-1 py-1">
                   <EntityPicker
                     kind="item"
@@ -1723,7 +1728,7 @@ function SalesLines({ props }: { props: LayoutProps }) {
             const price = parseMoneyInput(line.unitPrice) ?? ZERO
             const lineTotal = quantity.isZero() && price.isZero() ? null : quantity.times(price).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
             return (
-              <tr key={line.key} className={index % 2 === 0 ? 'bg-white' : 'bg-[#c5dff3]'}>
+              <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
                 <td className="px-1 py-1 align-top">
                   <EntityPicker
                     id={`item-${line.key}`}
@@ -1954,7 +1959,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
           </thead>
           <tbody>
             {props.lines.map((line, index) => (
-              <tr key={line.key} className={index % 2 === 0 ? 'bg-white' : 'bg-[#c5dff3]'}>
+              <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
                 <td className="px-1 py-1">
                   <Input
                     aria-label={`Quantity, line ${index + 1}`}

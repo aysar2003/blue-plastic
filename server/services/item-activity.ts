@@ -12,8 +12,12 @@ export type ItemActivity = {
   date: CalendarDate
   type: string
   number: string
-  /** Store ticket (TKT-) when goods left a store. */
+  /** Store issue ticket (TKT-) — shown on the sale line, not as a duplicate row. */
   ticketNumber: string | null
+  ticketHref: string | null
+  /** Shelf the goods left or entered — office or named store. */
+  storeName: string | null
+  storeHref: string | null
   party: string
   quantity: string
   /** On-hand after this line (tracked items only). */
@@ -92,9 +96,9 @@ type DraftRow = Omit<ItemActivity, 'balance'> & { sort: string }
 /**
  * Every posted sale, purchase and count for one item.
  *
- * The sales price is what was charged. The cost is what the stock ledger issued,
- * or what the bill paid. A service has a sales price and no cost.
- * Balance is on-hand after each line (from the opening quantity before the range).
+ * Sale-linked store tickets appear in the Ticket column on the invoice/receipt
+ * row (international pick-list pattern). Transfers and manual tickets stay as
+ * their own lines under the Tickets filter.
  */
 export async function itemActivity(
   ctx: OrgContext,
@@ -114,7 +118,38 @@ export async function itemActivity(
   })
   const tracked = item?.type === 'INVENTORY'
 
-  // Load every kind so Balance can walk the full stock story, then filter.
+  const tickets = await db.storeTicket.findMany({
+    where: {
+      orgId: ctx.orgId,
+      itemId,
+      date: { gte: from, lte: to },
+      status: { in: ['POSTED', 'VOID'] },
+    },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      storeId: true,
+      quantity: true,
+      unitCost: true,
+      value: true,
+      takenBy: true,
+      origin: true,
+      status: true,
+      salesDocumentLineId: true,
+      store: { select: { name: true } },
+      toStore: { select: { name: true } },
+      transfer: { select: { id: true, number: true } },
+    },
+    orderBy: { date: 'asc' },
+  })
+
+  const ticketBySalesLine = new Map(
+    tickets
+      .filter((t) => t.origin === 'SALE' && t.salesDocumentLineId && t.status === 'POSTED')
+      .map((t) => [t.salesDocumentLineId!, t] as const),
+  )
+
   const salesLines = await db.salesDocumentLine.findMany({
     where: {
       orgId: ctx.orgId,
@@ -132,6 +167,8 @@ export async function itemActivity(
       quantity: true,
       unitPrice: true,
       amount: true,
+      storeId: true,
+      store: { select: { id: true, name: true } },
       document: {
         select: {
           id: true,
@@ -153,12 +190,18 @@ export async function itemActivity(
   for (const line of salesLines) {
     const doc = line.document
     const qty = new Decimal(line.quantity.toString()).times(salesSign(doc.type))
+    const ticket = ticketBySalesLine.get(line.id)
+    const storeId = line.store?.id ?? ticket?.storeId ?? null
+    const storeName = line.store?.name ?? ticket?.store.name ?? null
     rows.push({
       sort: `${toCalendarDate(doc.date)}-${doc.number}-${line.id}`,
       date: toCalendarDate(doc.date),
       type: SALES_LABEL[doc.type] ?? doc.type,
       number: doc.number,
-      ticketNumber: null,
+      ticketNumber: ticket?.number ?? null,
+      ticketHref: ticket ? `/stores/tickets/${ticket.id}/print` : null,
+      storeName,
+      storeHref: storeId ? `/stores/${storeId}` : null,
       party: doc.customer.displayName,
       quantity: qty.toFixed(2),
       cost: costByLine.get(line.id) ? money(costByLine.get(line.id)!) : null,
@@ -185,6 +228,8 @@ export async function itemActivity(
       quantity: true,
       unitPrice: true,
       amount: true,
+      storeId: true,
+      store: { select: { id: true, name: true } },
       document: {
         select: {
           id: true,
@@ -206,6 +251,9 @@ export async function itemActivity(
       type: PURCHASE_LABEL[doc.type] ?? doc.type,
       number: doc.number,
       ticketNumber: null,
+      ticketHref: null,
+      storeName: line.store?.name ?? null,
+      storeHref: line.storeId ? `/stores/${line.storeId}` : null,
       party: doc.vendor.displayName,
       quantity: qty.toFixed(2),
       cost: money(line.unitPrice.toString()),
@@ -215,45 +263,25 @@ export async function itemActivity(
     })
   }
 
-  const tickets = await db.storeTicket.findMany({
-    where: {
-      orgId: ctx.orgId,
-      itemId,
-      status: 'POSTED',
-      date: { gte: from, lte: to },
-    },
-    select: {
-      id: true,
-      number: true,
-      date: true,
-      storeId: true,
-      quantity: true,
-      unitCost: true,
-      value: true,
-      takenBy: true,
-      store: { select: { name: true } },
-      toStore: { select: { name: true } },
-      transfer: { select: { id: true, number: true } },
-    },
-    orderBy: { date: 'asc' },
-  })
-
   for (const ticket of tickets) {
-    const party = [
-      ticket.store.name,
-      ticket.toStore ? `→ ${ticket.toStore.name}` : null,
-      ticket.takenBy ? `taken by ${ticket.takenBy}` : null,
-    ]
-      .filter(Boolean)
-      .join(' ')
+    // Sale pick tickets are on the invoice/receipt line — not a second row here.
+    if (ticket.origin === 'SALE' && ticket.salesDocumentLineId) continue
+
+    const storeLabel = ticket.toStore
+      ? `${ticket.store.name} → ${ticket.toStore.name}`
+      : ticket.store.name
+    const party = ticket.takenBy ? `taken by ${ticket.takenBy}` : ticket.transfer?.number ?? 'Transfer / issue'
     rows.push({
       sort: `${toCalendarDate(ticket.date)}-${ticket.number}-${ticket.id}`,
       date: toCalendarDate(ticket.date),
-      type: 'Store ticket',
+      type: ticket.status === 'VOID' ? 'Store ticket (void)' : 'Store ticket',
       number: ticket.transfer?.number ?? '',
       ticketNumber: ticket.number,
+      ticketHref: `/stores/tickets/${ticket.id}/print`,
+      storeName: storeLabel,
+      storeHref: `/stores/${ticket.storeId}`,
       party,
-      quantity: new Decimal(ticket.quantity.toString()).toFixed(2),
+      quantity: new Decimal(ticket.quantity.toString()).negated().toFixed(2),
       cost: money(ticket.unitCost.toString()),
       salesPrice: null,
       amount: money(ticket.value.toString()),
@@ -280,6 +308,7 @@ export async function itemActivity(
         value: true,
         adjustment: {
           select: {
+            id: true,
             number: true,
             date: true,
             journalId: true,
@@ -298,17 +327,51 @@ export async function itemActivity(
         unitCost: true,
         value: true,
         journalId: true,
+        storeId: true,
+        store: { select: { id: true, name: true } },
       },
     }),
   ])
 
+  const adjustmentIds = adjustments.map((line) => line.adjustment.id)
+  const adjustmentStores =
+    adjustmentIds.length > 0
+      ? await db.inventoryTransaction.findMany({
+          where: {
+            orgId: ctx.orgId,
+            itemId,
+            sourceType: 'INVENTORY_ADJUSTMENT',
+            sourceId: { in: adjustmentIds },
+          },
+          select: {
+            sourceId: true,
+            sourceLineId: true,
+            storeId: true,
+            store: { select: { id: true, name: true } },
+          },
+        })
+      : []
+  const storeByAdjustmentLine = new Map(
+    adjustmentStores
+      .filter((row) => row.sourceLineId)
+      .map((row) => [row.sourceLineId!, row] as const),
+  )
+  const storeByAdjustment = new Map(
+    adjustmentStores.map((row) => [row.sourceId, row] as const),
+  )
+
   for (const line of adjustments) {
+    const shelf =
+      storeByAdjustmentLine.get(line.id) ?? storeByAdjustment.get(line.adjustment.id) ?? null
     rows.push({
       sort: `${toCalendarDate(line.adjustment.date)}-${line.adjustment.number}-${line.id}`,
       date: toCalendarDate(line.adjustment.date),
       type: 'Adjustment',
       number: line.adjustment.number,
       ticketNumber: null,
+      ticketHref: null,
+      storeName: shelf?.store?.name ?? null,
+      storeHref: shelf?.storeId ? `/stores/${shelf.storeId}` : null,
       party: [line.adjustment.account.name, line.adjustment.reason].filter(Boolean).join(' · '),
       quantity: new Decimal(line.quantityChange.toString()).toFixed(2),
       cost: money(line.unitCost.toString()),
@@ -325,6 +388,9 @@ export async function itemActivity(
       type: 'Opening stock',
       number: '',
       ticketNumber: null,
+      ticketHref: null,
+      storeName: opening.store?.name ?? null,
+      storeHref: opening.storeId ? `/stores/${opening.storeId}` : null,
       party: 'Opening balance',
       quantity: new Decimal(opening.quantity.toString()).toFixed(2),
       cost: money(opening.unitCost.toString()),
@@ -350,12 +416,12 @@ export async function itemActivity(
   })
 
   return withBalance
-    .filter((row) => matchesKind(row.type, kind))
+    .filter((row) => matchesKind(row.type.replace(' (void)', ''), kind))
     .map(({ sort: _sort, ...row }) => row)
 }
 
 export function activityTotals(rows: ItemActivity[]) {
-  const counted = rows.filter((row) => row.type !== 'Store ticket')
+  const counted = rows.filter((row) => !row.type.startsWith('Store ticket'))
   const lastBalance = [...rows].reverse().find((row) => row.balance !== null)?.balance ?? null
   return {
     quantity: counted.reduce((sum, row) => sum.plus(row.quantity), ZERO),

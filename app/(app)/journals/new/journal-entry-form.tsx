@@ -513,7 +513,7 @@ export function JournalEntryForm({
                 return (
                   <tr
                     key={line.key}
-                    className={cn('align-middle', index % 2 === 1 ? 'bg-[#e7f3fb]' : 'bg-white')}
+                    className={cn('align-middle', index % 2 === 1 ? 'ledger-row-alt' : 'ledger-row')}
                   >
                     <td className="px-1 py-0.5">
                       <AccountPicker

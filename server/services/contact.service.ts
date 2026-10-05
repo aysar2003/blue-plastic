@@ -508,8 +508,13 @@ export async function setActive(ctx: OrgContext, side: Side, ids: string[], isAc
 /**
  * An opening balance is a journal, never a column.
  *
- * Customer: debit Accounts Receivable, credit Opening Balance Equity.
- * Vendor:   debit Opening Balance Equity, credit Accounts Payable.
+ * Positive — what is owed the natural way:
+ *   Customer: debit Accounts Receivable, credit Opening Balance Equity.
+ *   Vendor:   debit Opening Balance Equity, credit Accounts Payable.
+ *
+ * Negative — a credit already on the books (they overpaid, or we overpaid):
+ *   Customer: credit Accounts Receivable, debit Opening Balance Equity.
+ *   Vendor:   debit Accounts Payable, credit Opening Balance Equity.
  *
  * The AR/AP line carries its counterparty, which is what R7 demands and what
  * makes the balance show up on the aging report as well as in the control
@@ -524,15 +529,11 @@ async function postOpeningBalance(
   input: { openingBalance?: string | null; openingBalanceDate?: string | null; balanceTime?: string | null },
 ) {
   if (!input.openingBalance) return
-  const amount = new Decimal(input.openingBalance)
-  if (amount.isZero()) return
+  const signed = new Decimal(input.openingBalance)
+  if (signed.isZero()) return
 
-  if (amount.isNegative()) {
-    throw validation(
-      'An opening balance cannot be negative. Enter what is owed; a credit is recorded later as a credit memo.',
-      { openingBalance: ['Enter a positive amount'] },
-    )
-  }
+  const amount = signed.abs()
+  const isCredit = signed.isNegative()
 
   const control = await systemAccountId(
     tx,
@@ -541,22 +542,36 @@ async function postOpeningBalance(
   )
   const equity = await systemAccountId(tx, ctx.orgId, 'OPENING_BALANCE_EQUITY')
   const date = input.openingBalanceDate ?? today(ctx.organization.timeZone)
+  const kind = isCredit ? 'Opening credit' : 'Opening balance'
+  const memo = input.balanceTime ? `${kind} — ${name} (${input.balanceTime})` : `${kind} — ${name}`
 
-  await postJournal(tx, ctx, {
-    date,
-    memo: input.balanceTime ? `Opening balance — ${name} (${input.balanceTime})` : `Opening balance — ${name}`,
-    sourceType: 'OPENING_BALANCE',
-    sourceId: id,
-    lines:
-      side === 'customer'
+  const lines =
+    side === 'customer'
+      ? isCredit
         ? [
+            { accountId: equity, debit: amount },
+            { accountId: control, credit: amount, customerId: id },
+          ]
+        : [
             { accountId: control, debit: amount, customerId: id },
+            { accountId: equity, credit: amount },
+          ]
+      : isCredit
+        ? [
+            { accountId: control, debit: amount, vendorId: id },
             { accountId: equity, credit: amount },
           ]
         : [
             { accountId: equity, debit: amount },
             { accountId: control, credit: amount, vendorId: id },
-          ],
+          ]
+
+  await postJournal(tx, ctx, {
+    date,
+    memo,
+    sourceType: 'OPENING_BALANCE',
+    sourceId: id,
+    lines,
   })
 }
 

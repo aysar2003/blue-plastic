@@ -198,6 +198,17 @@ export function formatSigned(value: Decimal.Value, currency = 'USD'): string {
 }
 
 /**
+ * Quantity change on a stock/activity line: + for stock in, − for stock out,
+ * plain 0.00 when nothing moved.
+ */
+export function formatSignedQuantity(value: Decimal.Value, decimals = 2): string {
+  const d = new Decimal(value)
+  const abs = d.abs().toFixed(decimals)
+  if (d.isZero()) return abs
+  return d.isNegative() ? `-${abs}` : `+${abs}`
+}
+
+/**
  * Split an amount into `parts` pieces that sum exactly to the original.
  * Used wherever a total must be allocated across lines (tax, discounts,
  * payment application) without losing or inventing a cent.

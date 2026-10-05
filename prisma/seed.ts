@@ -38,6 +38,7 @@ const DEFAULT_PREFIX: Record<DocumentType, string> = {
   INVENTORY_ADJUSTMENT: 'ADJ-',
   STORE_TRANSFER: 'STX-',
   STORE_TICKET: 'TKT-',
+  DELIVERY_NOTE: 'DN-',
 }
 
 const connectionString = process.env.DIRECT_URL || process.env.DATABASE_URL

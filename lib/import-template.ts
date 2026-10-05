@@ -87,8 +87,8 @@ const contactColumns = (side: 'customer' | 'vendor'): TemplateColumn[] => [
     required: false,
     hint:
       side === 'customer'
-        ? 'What they owe you. A positive number is posted to the ledger. Do not use a minus for a credit.'
-        : 'What you owe them. A positive number is posted to the ledger. Do not use a minus for a credit.',
+        ? 'What they owe you (positive), or a credit they already hold with you (negative, e.g. -1200). Both post to the ledger.'
+        : 'What you owe them (positive), or a credit you already hold with them (negative, e.g. -1200). Both post to the ledger.',
     example: '4500',
     entry: 'money',
   },

@@ -19,8 +19,10 @@ import { Input } from '@/components/ui/input'
 import type { AccountPickerOption } from '@/lib/account-options'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
 import { saveAdjustmentForm } from '@/app/(app)/inventory/actions'
+import { StockCountExcelTools } from '@/components/inventory/stock-count-excel'
+import type { StockCountImportLine } from '@/lib/stock-count-sheet'
 
-type ItemOption = { id: string; label: string; onHand: string; averageCost: string }
+type ItemOption = { id: string; label: string; onHand: string; averageCost: string; sku?: string | null }
 type Line = { key: number; itemId: string; counted: string; description: string }
 type AdjustMode = 'count' | 'damage' | 'cost'
 
@@ -119,6 +121,21 @@ export function AdjustmentForm({
 
   const filled = lines.filter((line) => line.itemId && line.counted !== '')
 
+  function applyImport(imported: StockCountImportLine[]) {
+    setMode('count')
+    const next = imported.map((row, index) => ({
+      key: index + 1,
+      itemId: row.itemId,
+      counted: row.counted,
+      description: row.description,
+    }))
+    while (next.length < ITEM_ROWS) {
+      next.push(blankLine(next.length + 1))
+    }
+    nextKey.current = next.length + 1
+    setLines(next)
+  }
+
   const payload = JSON.stringify({
     number,
     date,
@@ -210,11 +227,28 @@ export function AdjustmentForm({
         ))}
       </div>
 
+      {mode === 'count' ? (
+        <Card>
+          <CardContent className="space-y-2 p-4">
+            <p className="text-sm font-medium">Count from Excel</p>
+            <StockCountExcelTools
+              catalog={items.map((item) => ({
+                id: item.id,
+                label: item.label,
+                sku: item.sku ?? null,
+                onHand: item.onHand,
+              }))}
+              onImport={applyImport}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="min-h-[70vh] overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-[#d5dde6]">
+              <tr className="border-b ledger-head">
                 <th className="w-72 px-3 py-3 text-left text-xs font-medium">Item</th>
                 <th className="w-28 px-3 py-3 text-right text-xs font-medium">Books say</th>
                 <th className="w-36 px-3 py-3 text-right text-xs font-medium">
@@ -253,7 +287,7 @@ export function AdjustmentForm({
                 return (
                   <tr
                     key={line.key}
-                    className={`border-b last:border-0 ${index % 2 === 1 ? 'bg-[#c5dff3]' : 'bg-white'}`}
+                    className={`border-b last:border-0 ${index % 2 === 1 ? 'ledger-row-alt' : 'ledger-row'}`}
                   >
                     <td className="px-2 py-2">
                       <EntityPicker

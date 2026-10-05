@@ -41,6 +41,7 @@ export default async function NewAdjustmentPage({
         items={stock.items.map((item) => ({
           id: item.itemId,
           label: item.sku ? `${item.sku} — ${item.name}` : item.name,
+          sku: item.sku,
           onHand: item.quantity.toFixed(2),
           averageCost: item.averageCost.toFixed(6),
         }))}

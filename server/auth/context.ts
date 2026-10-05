@@ -5,7 +5,7 @@ import type { Role } from '@prisma/client'
 import { auth } from '@/auth'
 import { db } from '@/server/db'
 import { forbidden, unauthenticated } from '@/server/errors'
-import { type Permission, permissionsFor } from './permissions'
+import { type Permission, effectivePermissions } from './permissions'
 
 /**
  * The first argument to every service function. `orgId` originates from the
@@ -60,6 +60,7 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
       role: true,
       status: true,
       version: true,
+      permissionsOverride: true,
       organization: {
         select: {
           id: true,
@@ -92,7 +93,7 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
     orgId: membership.organization.id,
     userId: membership.user.id,
     role: membership.role,
-    permissions: permissionsFor(membership.role),
+    permissions: effectivePermissions(membership.role, membership.permissionsOverride),
     organization: membership.organization,
     user: membership.user,
   }

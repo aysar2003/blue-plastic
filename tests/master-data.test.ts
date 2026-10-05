@@ -87,6 +87,80 @@ suite('customer and vendor opening balances', () => {
     })
   })
 
+  it('posts a negative customer balance as a credit on receivables', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const { ctx, accounts } = await makeOrg(tx)
+
+      const customer = await tx.customer.create({
+        data: { orgId: ctx.orgId, displayName: 'Credit Holder' },
+        select: { id: true },
+      })
+
+      // Same shape postOpeningBalance uses for a signed -1200.
+      await postJournal(tx, ctx, {
+        date: '2026-01-01',
+        memo: 'Opening credit — Credit Holder',
+        sourceType: 'OPENING_BALANCE',
+        sourceId: customer.id,
+        lines: [
+          { accountId: accounts[CODE.openingBalanceEquity], debit: '1200' },
+          { accountId: accounts[CODE.receivable], credit: '1200', customerId: customer.id },
+        ],
+      })
+
+      const report = await trialBalance(
+        ctx.orgId,
+        { from: '2026-01-01', to: '2026-12-31' },
+        { client: tx },
+      )
+      expect(report.balanced).toBe(true)
+
+      const line = await tx.journalLine.findFirst({
+        where: { orgId: ctx.orgId, customerId: customer.id },
+        select: { debit: true, credit: true, accountId: true },
+      })
+      expect(line?.accountId).toBe(accounts[CODE.receivable])
+      expect(new Decimal(line!.credit.toString()).toString()).toBe('1200')
+      expect(new Decimal(line!.debit.toString()).toString()).toBe('0')
+    })
+  })
+
+  it('posts a negative vendor balance as a debit on payables', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const { ctx, accounts } = await makeOrg(tx)
+
+      const vendor = await tx.vendor.create({
+        data: { orgId: ctx.orgId, displayName: 'Overpaid Supplier' },
+        select: { id: true },
+      })
+
+      await postJournal(tx, ctx, {
+        date: '2026-01-01',
+        memo: 'Opening credit — Overpaid Supplier',
+        sourceType: 'OPENING_BALANCE',
+        sourceId: vendor.id,
+        lines: [
+          { accountId: accounts[CODE.payable], debit: '500', vendorId: vendor.id },
+          { accountId: accounts[CODE.openingBalanceEquity], credit: '500' },
+        ],
+      })
+
+      const report = await trialBalance(
+        ctx.orgId,
+        { from: '2026-01-01', to: '2026-12-31' },
+        { client: tx },
+      )
+      expect(report.balanced).toBe(true)
+
+      const line = await tx.journalLine.findFirst({
+        where: { orgId: ctx.orgId, vendorId: vendor.id },
+        select: { debit: true, credit: true, accountId: true },
+      })
+      expect(line?.accountId).toBe(accounts[CODE.payable])
+      expect(new Decimal(line!.debit.toString()).toString()).toBe('500')
+    })
+  })
+
   it('still refuses a receivables line with no customer (R7)', async () => {
     await inRolledBackTransaction(async (tx) => {
       const { ctx, accounts } = await makeOrg(tx)

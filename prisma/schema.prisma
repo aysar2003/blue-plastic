@@ -35,7 +35,10 @@ enum Role {
   ACCOUNTANT
   BOOKKEEPER
   SALES
+  STORE_KEEPER
   VIEWER
+  /// Access comes from Membership.permissionsOverride, not a role template.
+  CUSTOM
 }
 
 enum MembershipStatus {
@@ -82,6 +85,8 @@ enum DocumentType {
   STORE_TRANSFER
   /// Ticket for stock taken out of a store (manual or automatic).
   STORE_TICKET
+  /// Customer delivery / packing note for goods leaving on a sale.
+  DELIVERY_NOTE
 }
 
 /// Statement classification. Determines which financial statement an account
@@ -399,6 +404,7 @@ model Organization {
   inventoryAdjustments InventoryAdjustment[]
   storeTransfers       StoreTransfer[]
   storeTickets         StoreTicket[]
+  deliveryNotes        DeliveryNote[]
   importedTransactions ImportedTransaction[]
   reconciliations    BankReconciliation[]
   items          Item[]
@@ -413,6 +419,9 @@ model Organization {
   bookmarks      WorkspaceBookmark[]
   reportNotes    ReportNote[]
   ledgerFiles    LedgerFile[]
+  posPaymentMethods PosPaymentMethod[]
+  posRegisters      PosRegister[]
+  posOrders         PosOrder[]
 
   @@map("organizations")
 }
@@ -452,6 +461,11 @@ model Membership {
 
   role   Role             @default(VIEWER)
   status MembershipStatus @default(INVITED)
+
+  /// When non-empty, this list is the member’s exact capability set (role is then
+  /// a label / starting template). Empty means use ROLE_PERMISSIONS[role].
+  /// Required in practice when role is CUSTOM.
+  permissionsOverride String[] @default([])
 
   /// Incremented on every role or status change. The JWT carries the value it was
   /// issued with; a mismatch invalidates the session on the next request, which
@@ -643,6 +657,7 @@ model LedgerAccount {
   reconciliations   BankReconciliation[]
   rulesForBank      BankRule[]            @relation("RuleBank")
   rulesForCategory  BankRule[]            @relation("RuleCategory")
+  posPaymentMethods PosPaymentMethod[]    @relation("PosPaymentAccount")
 
   @@unique([orgId, code])
   @@unique([orgId, systemKey])
@@ -949,9 +964,11 @@ model Customer {
   journalLines JournalLine[]
   documents    SalesDocument[]
   payments     CustomerPayment[]
+  deliveryNotes DeliveryNote[]
   files        CustomerFile[]
   importedLines ImportedTransaction[]
   bankRules     BankRule[]
+  posRegisters  PosRegister[]
 
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
@@ -1098,6 +1115,9 @@ model Item {
 
   isActive Boolean @default(true)
 
+  /// When true, the item appears on the point-of-sale product grid.
+  availableInPos Boolean @default(true)
+
   /// Soft deletion. The row stays and its journal stays; both are excluded from
   /// every list, report, selector and balance. See `server/accounting/deletion.ts`.
   deletedAt    DateTime? @db.Timestamptz(6)
@@ -1122,6 +1142,7 @@ model Item {
   adjustmentLines  InventoryAdjustmentLine[]
   storeTransfers   StoreTransfer[]
   storeTickets     StoreTicket[]
+  deliveryNoteLines DeliveryNoteLine[]
 
   @@unique([orgId, name])
   @@unique([orgId, sku])
@@ -1167,10 +1188,107 @@ model Store {
   transfersIn  StoreTransfer[] @relation("TransferTo")
   tickets      StoreTicket[]
   ticketsIn    StoreTicket[]   @relation("TicketToStore")
+  deliveryNotes DeliveryNote[]
+  posRegisters  PosRegister[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
   @@map("stores")
+}
+
+// ---------------------------------------------------------------------------
+// Point of sale
+// ---------------------------------------------------------------------------
+
+/// A way to take money at the till — mobile wallet, cash drawer, etc. Each method
+/// posts to its own ledger account so balances can be swept to the bank later.
+model PosPaymentMethod {
+  id              String @id @default(cuid())
+  orgId           String
+
+  name            String
+  ledgerAccountId String
+  isActive        Boolean @default(true)
+  sortOrder       Int     @default(0) @db.SmallInt
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  account      LedgerAccount @relation("PosPaymentAccount", fields: [ledgerAccountId], references: [id], onDelete: Restrict)
+  registers    PosRegisterMethod[]
+  payments     PosOrderPayment[]
+
+  @@unique([orgId, name])
+  @@index([orgId, isActive, sortOrder])
+  @@map("pos_payment_methods")
+}
+
+/// A physical or logical till. Links a default walk-in customer and store.
+model PosRegister {
+  id                String @id @default(cuid())
+  orgId             String
+
+  name              String
+  storeId           String?
+  defaultCustomerId String
+  isActive          Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store           Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  defaultCustomer Customer     @relation(fields: [defaultCustomerId], references: [id], onDelete: Restrict)
+  methods         PosRegisterMethod[]
+  orders          PosOrder[]
+
+  @@unique([orgId, name])
+  @@index([orgId, isActive])
+  @@map("pos_registers")
+}
+
+model PosRegisterMethod {
+  registerId      String
+  paymentMethodId String
+
+  register      PosRegister      @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  paymentMethod PosPaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
+
+  @@id([registerId, paymentMethodId])
+  @@map("pos_register_methods")
+}
+
+/// Links a posted sales receipt back to the till that raised it.
+model PosOrder {
+  id              String @id @default(cuid())
+  orgId           String
+  registerId      String
+  salesDocumentId String @unique
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization  Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  register      PosRegister       @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  salesDocument SalesDocument     @relation(fields: [salesDocumentId], references: [id], onDelete: Cascade)
+  payments      PosOrderPayment[]
+
+  @@index([orgId, registerId, createdAt(sort: Desc)])
+  @@map("pos_orders")
+}
+
+model PosOrderPayment {
+  id              String @id @default(cuid())
+  orderId         String
+  paymentMethodId String
+  ledgerAccountId String
+  amount          Decimal @db.Decimal(19, 4)
+
+  order         PosOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentMethod PosPaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@map("pos_order_payments")
 }
 
 // ---------------------------------------------------------------------------
@@ -1364,6 +1482,10 @@ model SalesDocument {
   applications    SalesApplication[] @relation("AppliedToInvoice")
   /// Applications *from* this document, when it is a credit memo.
   creditsApplied  SalesApplication[] @relation("AppliedFromCredit")
+
+  deliveryNotes DeliveryNote[]
+  storeTickets  StoreTicket[]
+  posOrder      PosOrder?
 
   @@unique([orgId, type, number])
   @@unique([id, orgId])
@@ -2129,7 +2251,7 @@ model StoreTransfer {
   @@map("store_transfers")
 }
 
-/// Ticket for stock taken from a store. Auto-made on transfer, or entered by hand.
+/// Ticket for stock taken from a store. Auto-made on transfer or sale, or entered by hand.
 model StoreTicket {
   id    String @id @default(cuid())
   orgId String
@@ -2151,12 +2273,22 @@ model StoreTicket {
   takenBy String?
   memo    String?
 
-  /// AUTO = system made it with a transfer. MANUAL = entered on the ticket form.
+  /// AUTO = transfer. MANUAL = ticket form. SALE = issued with an invoice/receipt.
   origin String @default("AUTO")
 
   transferId String? @unique
 
+  /// Sale that caused this ticket (invoice or sales receipt).
+  salesDocumentId     String?
+  salesDocumentLineId String?
+  /// Delivery note that lists this ticket's item for the customer/carrier.
+  deliveryNoteId      String?
+
   status BankDocumentStatus @default(POSTED)
+
+  /// When the store keeper marked goods prepared / handed to the customer.
+  preparedAt   DateTime? @db.Timestamptz(6)
+  preparedById String?
 
   createdById String?
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
@@ -2167,12 +2299,90 @@ model StoreTicket {
   toStore      Store?         @relation("TicketToStore", fields: [toStoreId], references: [id], onDelete: Restrict)
   item         Item           @relation(fields: [itemId], references: [id], onDelete: Restrict)
   transfer     StoreTransfer? @relation(fields: [transferId], references: [id], onDelete: SetNull)
+  salesDocument SalesDocument? @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
+  deliveryNote  DeliveryNote?  @relation(fields: [deliveryNoteId], references: [id], onDelete: SetNull)
 
   @@unique([orgId, number])
   @@index([orgId, date(sort: Desc)])
   @@index([orgId, storeId])
+  @@index([orgId, storeId, preparedAt])
   @@index([orgId, itemId])
+  @@index([orgId, salesDocumentId])
+  @@index([orgId, deliveryNoteId])
   @@map("store_tickets")
+}
+
+/// Customer delivery note (packing / dispatch advice) for goods leaving on a sale.
+///
+/// Created automatically when an invoice or sales receipt posts stock out. One
+/// note per sale document; the carrier and the customer can print it. It is not
+/// a ledger document — the invoice/receipt already posted the books.
+model DeliveryNote {
+  id    String @id @default(cuid())
+  orgId String
+
+  number String
+  /// Business date of the sale (same calendar day as the invoice/receipt).
+  date   DateTime @db.Date
+  /// Clock time the note was issued (dispatch / loading time).
+  issuedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  customerId      String
+  salesDocumentId String
+
+  /// Primary store the goods left from, when every line shares one.
+  storeId String?
+
+  /// Free text for the carrier, vehicle, or loading bay.
+  carrier String?
+  /// Instructions or remarks printed on the note.
+  notes   String?
+
+  status BankDocumentStatus @default(POSTED)
+
+  voidedAt   DateTime? @db.Timestamptz(6)
+  voidReason String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization  Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer      Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salesDocument SalesDocument      @relation(fields: [salesDocumentId], references: [id], onDelete: Restrict)
+  store         Store?             @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  lines         DeliveryNoteLine[]
+  tickets       StoreTicket[]
+
+  @@unique([orgId, number])
+  @@unique([orgId, salesDocumentId])
+  @@index([orgId, date(sort: Desc)])
+  @@index([orgId, customerId, date(sort: Desc)])
+  @@index([orgId, status])
+  @@map("delivery_notes")
+}
+
+model DeliveryNoteLine {
+  id             String @id @default(cuid())
+  deliveryNoteId String
+  orgId          String
+
+  lineNumber Int @db.SmallInt
+
+  itemId      String?
+  description String?
+  quantity    Decimal @db.Decimal(19, 4)
+  storeId     String?
+
+  /// Line on the invoice/receipt this packing line came from.
+  salesDocumentLineId String?
+
+  deliveryNote DeliveryNote @relation(fields: [deliveryNoteId], references: [id], onDelete: Cascade)
+  item         Item?        @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([deliveryNoteId, lineNumber])
+  @@index([orgId, deliveryNoteId])
+  @@map("delivery_note_lines")
 }
 
 // ---------------------------------------------------------------------------

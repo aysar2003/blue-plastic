@@ -20,7 +20,7 @@ const ITEM_SELECT = {
   salesDescription: true, salesPrice: true, incomeAccountId: true, isTaxable: true, salesTaxCodeId: true,
   purchaseDescription: true, purchaseCost: true, expenseAccountId: true, purchaseTaxCodeId: true,
   inventoryAccountId: true, cogsAccountId: true, reorderPoint: true, storeId: true,
-  isActive: true,
+  isActive: true, availableInPos: true,
   category: { select: { id: true, name: true } },
   incomeAccount: { select: { id: true, code: true, name: true } },
   expenseAccount: { select: { id: true, code: true, name: true } },
@@ -378,6 +378,33 @@ export async function listCategories(ctx: OrgContext) {
   })
 }
 
+/** Create a product category from the item form when one is missing. */
+export async function createCategory(ctx: OrgContext, name: string) {
+  const trimmed = name.trim()
+  if (!trimmed) throw validation('Category name is required.', { name: ['Required'] })
+
+  const existing = await db.itemCategory.findFirst({
+    where: { orgId: ctx.orgId, name: { equals: trimmed, mode: 'insensitive' } },
+    select: { id: true, name: true, isActive: true },
+  })
+  if (existing) {
+    if (!existing.isActive) {
+      const restored = await db.itemCategory.update({
+        where: { id: existing.id },
+        data: { isActive: true, name: trimmed },
+        select: { id: true, name: true },
+      })
+      return restored
+    }
+    throw conflict(`A category called "${existing.name}" already exists.`)
+  }
+
+  return db.itemCategory.create({
+    data: { orgId: ctx.orgId, name: trimmed },
+    select: { id: true, name: true },
+  })
+}
+
 function toData(input: ItemInput) {
   return {
     sku: input.sku ?? null,
@@ -399,6 +426,7 @@ function toData(input: ItemInput) {
     cogsAccountId: input.cogsAccountId ?? null,
     reorderPoint: input.reorderPoint ?? null,
     storeId: input.type === 'INVENTORY' ? (input.storeId ?? null) : null,
+    availableInPos: input.availableInPos,
   }
 }
 

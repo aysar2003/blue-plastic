@@ -19,7 +19,7 @@ export function HistoryBack() {
     writeTrail(rememberScreen(readTrail(), pathname))
   }, [pathname])
 
-  if (pathname === '/dashboard' || pathname.endsWith('/print')) return null
+  if (pathname === '/dashboard') return null
 
   return (
     <button
@@ -31,7 +31,7 @@ export function HistoryBack() {
         startNavigationProgress()
         router.push(href)
       }}
-      className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900"
+      className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground"
     >
       <ArrowLeftIcon className="size-3.5" aria-hidden />
       Back

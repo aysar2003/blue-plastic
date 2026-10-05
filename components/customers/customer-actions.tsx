@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ChevronDownIcon } from 'lucide-react'
+import { ChevronDownIcon, MoreHorizontalIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { setCustomersActive } from '@/app/(app)/customers/actions'
@@ -16,35 +16,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { customerContactMenu, customerQuickReportHref } from '@/lib/contact-menus'
 import { cn } from '@/lib/utils'
 
 const TEAL = 'bg-[#2ca01c] text-white hover:bg-[#248a18]'
 
-type Action = { label: string; href: string }
-
-function salesActions(customerId: string, canInvoice: boolean, canPay: boolean, canReport: boolean): Action[] {
-  const id = encodeURIComponent(customerId)
-  const actions: Action[] = []
-  if (canInvoice) {
-    actions.push(
-      { label: 'Create invoice', href: `/sales/invoices/new?customer=${id}` },
-      { label: 'Create quotation', href: `/sales/estimates/new?customer=${id}` },
-      { label: 'Create sales receipt', href: `/sales/sales-receipts/new?customer=${id}` },
-      { label: 'Create credit memo', href: `/sales/credit-memos/new?customer=${id}` },
-      { label: 'Create refund', href: `/sales/refunds/new?customer=${id}` },
-    )
-  }
-  if (canPay) actions.push({ label: 'Receive payment', href: `/payments/new?customer=${id}` })
-  if (canReport) {
-    actions.push({ label: 'Statement', href: `/reports/statements/customer?customerId=${id}` })
-  }
-  return actions
-}
-
 /**
- * The right-hand action on a customer: create the sale from here, with this
- * customer already chosen. The list uses the split button from the QuickBooks
- * customers page. The customer page uses the same links as a panel.
+ * Create sales from here with this customer chosen — plus QuickReport, edit,
+ * and make active / inactive.
  */
 export function CustomerActions({
   customerId,
@@ -76,9 +55,12 @@ export function CustomerActions({
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [isPending, startTransition] = useTransition()
-  const actions = salesActions(customerId, canInvoice, canPay, canReport)
-  const primary = actions.find((action) => action.label === 'Create invoice') ?? actions[0]
-  const rest = actions.filter((action) => action !== primary)
+  const links = useMemo(
+    () => customerContactMenu(customerId, { canInvoice, canPay, canReport }),
+    [customerId, canInvoice, canPay, canReport],
+  )
+  const primary = links.find((action) => action.label === 'Create invoice') ?? links[0]
+  const rest = links.filter((action) => action !== primary)
 
   const archive = () => {
     startTransition(async () => {
@@ -92,17 +74,16 @@ export function CustomerActions({
     })
   }
 
-  const editAndArchive = (
+  const editArchiveItems = (
     <>
+      {(canEdit || canArchive) && rest.length > 0 ? <DropdownMenuSeparator /> : null}
       {canEdit && contact ? (
-        <button type="button" className={panelItem} onClick={() => setEditing(true)}>
-          Edit
-        </button>
+        <DropdownMenuItem onSelect={() => setEditing(true)}>Edit</DropdownMenuItem>
       ) : null}
       {canArchive ? (
-        <button type="button" className={cn(panelItem, isActive && 'text-destructive')} onClick={archive} disabled={isPending}>
+        <DropdownMenuItem variant={isActive ? 'destructive' : 'default'} onSelect={archive}>
           {isActive ? 'Make inactive' : 'Make active'}
-        </button>
+        </DropdownMenuItem>
       ) : null}
     </>
   )
@@ -117,7 +98,11 @@ export function CustomerActions({
             </Link>
           ) : null}
           {rest.map((action) => (
-            <Link key={action.href} href={action.href} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full')}>
+            <Link
+              key={action.href}
+              href={action.href}
+              className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full')}
+            >
               {action.label}
             </Link>
           ))}
@@ -138,62 +123,80 @@ export function CustomerActions({
           <Link href={primary.href} className="text-sm font-medium text-[#2ca01c] hover:underline">
             {primary.label}
           </Link>
-          {rest.length > 0 || canEdit || canArchive ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger className="text-[#2ca01c]" aria-label="More actions for this customer">
-                <ChevronDownIcon className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                {rest.map((action) => (
-                  <DropdownMenuItem key={action.href} asChild>
-                    <Link href={action.href}>{action.label}</Link>
-                  </DropdownMenuItem>
-                ))}
-                {(canEdit || canArchive) && rest.length > 0 ? <DropdownMenuSeparator /> : null}
-                {canEdit && contact ? (
-                  <DropdownMenuItem onSelect={() => setEditing(true)}>Edit</DropdownMenuItem>
-                ) : null}
-                {canArchive ? (
-                  <DropdownMenuItem variant={isActive ? 'destructive' : 'default'} onSelect={archive}>
-                    {isActive ? 'Make inactive' : 'Make active'}
-                  </DropdownMenuItem>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
-        </div>
-      ) : primary ? (
-        <div className="inline-flex">
-          <Link href={primary.href} className={cn(buttonVariants({ size: 'sm' }), TEAL, 'rounded-r-none')}>
-            {primary.label}
-          </Link>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" className={cn(TEAL, 'rounded-l-none border-l border-white/25 px-1.5')} aria-label={`More actions for this customer`}>
-                <ChevronDownIcon />
-              </Button>
+            <DropdownMenuTrigger className="text-[#2ca01c]" aria-label="More actions for this customer">
+              <ChevronDownIcon className="size-4" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuContent align="end" className="w-56">
               {rest.map((action) => (
                 <DropdownMenuItem key={action.href} asChild>
                   <Link href={action.href}>{action.label}</Link>
                 </DropdownMenuItem>
               ))}
-              {(canEdit || canArchive) && rest.length > 0 ? <DropdownMenuSeparator /> : null}
-              {canEdit && contact ? (
-                <DropdownMenuItem onSelect={() => setEditing(true)}>Edit</DropdownMenuItem>
-              ) : null}
-              {canArchive ? (
-                <DropdownMenuItem variant={isActive ? 'destructive' : 'default'} onSelect={archive}>
-                  {isActive ? 'Make inactive' : 'Make active'}
-                </DropdownMenuItem>
-              ) : null}
+              {editArchiveItems}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      ) : (
-        <div className="flex flex-col items-end gap-1">{editAndArchive}</div>
-      )}
+      ) : primary || canEdit || canArchive ? (
+        <div className="inline-flex flex-wrap items-center gap-1.5">
+          {canReport ? (
+            <Link
+              href={customerQuickReportHref(customerId)}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
+              QuickReport
+            </Link>
+          ) : null}
+          {primary ? (
+            <div className="inline-flex">
+              <Link href={primary.href} className={cn(buttonVariants({ size: 'sm' }), TEAL, 'rounded-r-none')}>
+                {primary.label}
+              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    className={cn(TEAL, 'rounded-l-none border-l border-white/25 px-1.5')}
+                    aria-label="More actions for this customer"
+                  >
+                    <ChevronDownIcon />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  {rest.map((action) => (
+                    <DropdownMenuItem key={action.href} asChild>
+                      <Link href={action.href}>{action.label}</Link>
+                    </DropdownMenuItem>
+                  ))}
+                  {editArchiveItems}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" aria-label="More actions for this customer">
+                  <MoreHorizontalIcon />
+                  More
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {links.map((action) => (
+                  <DropdownMenuItem key={action.href} asChild>
+                    <Link href={action.href}>{action.label}</Link>
+                  </DropdownMenuItem>
+                ))}
+                {editArchiveItems}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          {canEdit && contact ? (
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {editing && contact ? (
         <ContactDialog
@@ -209,6 +212,3 @@ export function CustomerActions({
     </>
   )
 }
-
-const panelItem =
-  'rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50'

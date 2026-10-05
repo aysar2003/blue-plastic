@@ -212,14 +212,8 @@ export function shapeContact(
   if (balanceRaw && !money.ok) {
     return { skip: `Open balance "${balanceRaw}" is not a number`, warnings, inactive: false }
   }
-  if (money.value.startsWith('-')) {
-    warnings.push({
-      field: 'openingBalance',
-      message: 'Open balance is negative, so it was not posted. A credit is entered later, not as an opening balance.',
-    })
-  } else {
-    openingBalance = money.value === '0' ? '' : money.value
-  }
+  // Signed: positive = owed the natural way; negative = credit already on the books.
+  openingBalance = !money.value || money.value === '0' || money.value === '-0' ? '' : money.value
 
   const dateRaw = pick(row, 'openingBalanceDate', 'opening balance date', 'balance date', 'as of', 'as of date', 'date')
   const openingBalanceDate = normaliseDate(dateRaw, options.order)

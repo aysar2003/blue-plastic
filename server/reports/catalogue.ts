@@ -26,7 +26,7 @@ import type { Tx } from '@/server/db'
  * Every figure is read from the ledger or from the documents that produced it —
  * never from a stored total.
  */
-export type ColumnFormat = 'text' | 'money' | 'number' | 'date' | 'badge'
+export type ColumnFormat = 'text' | 'money' | 'number' | 'signed' | 'date' | 'badge'
 
 export type ReportColumn = {
   key: string
@@ -42,6 +42,8 @@ export type ReportRow = {
   cells: Record<string, ReportCell>
   /** Drill-down: where this row came from. */
   href?: string | null
+  /** Per-column links (e.g. ticket number → print view). */
+  cellHrefs?: Record<string, string>
   /** A subtotal or grouping row, rendered heavier. */
   emphasis?: boolean
 }
@@ -826,7 +828,7 @@ const stockMovements: TableReport = {
         { key: 'item', label: 'Item' },
         { key: 'type', label: 'Movement', width: 'w-32' },
         { key: 'entry', label: 'Entry', width: 'w-28' },
-        { key: 'quantity', label: 'Quantity', format: 'number', width: 'w-28' },
+        { key: 'quantity', label: 'Quantity', format: 'signed', width: 'w-28' },
         { key: 'cost', label: 'Unit cost', format: 'money', width: 'w-28' },
         { key: 'value', label: 'Value', format: 'money', width: 'w-32' },
         { key: 'onHand', label: 'On hand after', format: 'number', width: 'w-32' },

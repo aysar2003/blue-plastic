@@ -65,9 +65,10 @@ export default async function PrintDocumentPage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-4 flex justify-end print:hidden">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <PrintButton
           paper={config.singular.toLowerCase()}
+          backHref={`/sales/${config.slug}/${id}`}
           pdfHref={`/api/sales/${id}/pdf`}
           filename={filename}
           defaultTo={customer.email ?? ''}

@@ -22,18 +22,27 @@ export function TransferForm({
   today,
   currency,
   documentNumber,
+  defaultFromAccountId,
 }: {
   accounts: AccountPickerOption[]
   today: string
   currency: string
   documentNumber: string
+  /** Pre-select the account money leaves (e.g. from the account ⋯ menu). */
+  defaultFromAccountId?: string
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveTransferForm, idleState)
   const [number, setNumber] = useState(documentNumber)
   const [date, setDate] = useState(today)
-  const [fromAccountId, setFrom] = useState(accounts[0]?.id ?? '')
-  const [toAccountId, setTo] = useState(accounts[1]?.id ?? '')
+  const initialFrom =
+    (defaultFromAccountId && accounts.some((a) => a.id === defaultFromAccountId)
+      ? defaultFromAccountId
+      : accounts[0]?.id) ?? ''
+  const [fromAccountId, setFrom] = useState(initialFrom)
+  const [toAccountId, setTo] = useState(
+    () => accounts.find((a) => a.id !== initialFrom)?.id ?? accounts[1]?.id ?? '',
+  )
   const handled = useRef(false)
 
   useEffect(() => setNumber(documentNumber), [documentNumber])
