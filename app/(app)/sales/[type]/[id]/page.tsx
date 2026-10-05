@@ -16,6 +16,7 @@ import { formatDate, toCalendarDate, today } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { bySlug, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
+import { db } from '@/server/db'
 import { trailFor } from '@/server/services/audit.service'
 import * as salesService from '@/server/services/sales.service'
 
@@ -33,7 +34,15 @@ export default async function SalesDocumentPage({
   const ctx = await requireOrgContext('invoice:read')
   const document = await salesService.get(ctx, id).catch(() => null)
   if (!document) notFound()
-  const trail = await trailFor(ctx, document.id)
+  const [trail, deliveryNote] = await Promise.all([
+    trailFor(ctx, document.id),
+    config.type === 'INVOICE' || config.type === 'SALES_RECEIPT'
+      ? db.deliveryNote.findFirst({
+          where: { orgId: ctx.orgId, salesDocumentId: id, status: 'POSTED' },
+          select: { id: true, number: true },
+        })
+      : Promise.resolve(null),
+  ])
 
   const currency = ctx.organization.baseCurrency
   // A draft can now be deleted, so the control shows for it too — what it does
@@ -87,6 +96,14 @@ export default async function SalesDocumentPage({
               whatsappPhone={document.customer.phone}
               whatsappText={shareBody}
             />
+            {deliveryNote ? (
+              <Link
+                href={`/sales/delivery/${deliveryNote.id}`}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              >
+                Delivery {deliveryNote.number}
+              </Link>
+            ) : null}
             {canConvert ? (
               <ConvertEstimateButton
                 id={id}

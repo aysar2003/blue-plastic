@@ -1,5 +1,7 @@
 import 'server-only'
 
+import type { Prisma } from '@prisma/client'
+
 import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
 import type {
@@ -410,239 +412,518 @@ export async function createStoreTransfer(
   options: TransferTicketOptions = {},
 ) {
   const meta = await requestMeta()
+  return db.$transaction(async (tx) =>
+    postStoreTransferInTx(tx, ctx, input, options, meta),
+  )
+}
+
+type AuditMeta = Awaited<ReturnType<typeof requestMeta>>
+
+async function postStoreTransferInTx(
+  tx: Tx,
+  ctx: OrgContext,
+  input: StoreTransferInput,
+  options: TransferTicketOptions,
+  meta: AuditMeta,
+  /** Quantity already reserved from this store in the same batch (itemId → qty). */
+  reserved: Map<string, Decimal> = new Map(),
+) {
   const ticketOrigin = options.ticketOrigin ?? 'AUTO'
 
-  return db.$transaction(async (tx) => {
-    if (input.fromStoreId === input.toStoreId) {
-      throw validation('Choose a different store to send the stock to.', {
-        toStoreId: ['Choose a different store to send the stock to.'],
-      })
-    }
-
-    const [fromStore, toStore, item, shelf] = await Promise.all([
-      tx.store.findFirst({
-        where: { id: input.fromStoreId, orgId: ctx.orgId, isActive: true },
-        select: { id: true, name: true, inventoryAccountId: true },
-      }),
-      tx.store.findFirst({
-        where: { id: input.toStoreId, orgId: ctx.orgId, isActive: true },
-        select: { id: true, name: true, inventoryAccountId: true },
-      }),
-      tx.item.findFirst({
-        where: { id: input.itemId, orgId: ctx.orgId, deletedAt: null },
-        select: { id: true, name: true, type: true },
-      }),
-      storeService.quantities(ctx),
-    ])
-
-    if (!fromStore) throw notFound('From store')
-    if (!toStore) throw notFound('To store')
-    if (!item) throw notFound('Item')
-    if (item.type !== 'INVENTORY') {
-      throw precondition(`"${item.name}" is not a tracked item, so it has no stock to move.`)
-    }
-
-    const available = new Decimal(shelf.byItem[item.id]?.[fromStore.id] ?? '0')
-    const quantity = new Decimal(input.quantity)
-    if (quantity.greaterThan(available)) {
-      throw precondition(
-        `${fromStore.name} holds ${available.toFixed(2)} of "${item.name}", and this needs ${quantity.toFixed(2)}.`,
-      )
-    }
-
-    const number = await assignDocumentNumber(tx, ctx.orgId, 'STORE_TRANSFER', input.number)
-    const clash = await tx.storeTransfer.findFirst({
-      where: { orgId: ctx.orgId, number },
-      select: { id: true },
+  if (input.fromStoreId === input.toStoreId) {
+    throw validation('Choose a different store to send the stock to.', {
+      toStoreId: ['Choose a different store to send the stock to.'],
     })
-    if (clash) throw numberTaken()
+  }
 
-    const transfer = await tx.storeTransfer.create({
-      data: {
-        orgId: ctx.orgId,
-        number,
-        date: toDate(input.date),
-        fromStoreId: fromStore.id,
-        toStoreId: toStore.id,
-        itemId: item.id,
-        quantity: quantity.toFixed(4),
-        unitCost: '0',
-        value: '0',
-        memo: input.memo ?? null,
-        createdById: ctx.userId,
-      },
-      select: { id: true, number: true },
-    })
+  const [fromStore, toStore, item, shelf] = await Promise.all([
+    tx.store.findFirst({
+      where: { id: input.fromStoreId, orgId: ctx.orgId, isActive: true },
+      select: { id: true, name: true, inventoryAccountId: true },
+    }),
+    tx.store.findFirst({
+      where: { id: input.toStoreId, orgId: ctx.orgId, isActive: true },
+      select: { id: true, name: true, inventoryAccountId: true },
+    }),
+    tx.item.findFirst({
+      where: { id: input.itemId, orgId: ctx.orgId, deletedAt: null },
+      select: { id: true, name: true, type: true },
+    }),
+    storeService.quantities(ctx),
+  ])
 
-    const out = await recordMovement(tx, ctx, {
+  if (!fromStore) throw notFound('From store')
+  if (!toStore) throw notFound('To store')
+  if (!item) throw notFound('Item')
+  if (item.type !== 'INVENTORY') {
+    throw precondition(`"${item.name}" is not a tracked item, so it has no stock to move.`)
+  }
+
+  const onShelf = new Decimal(shelf.byItem[item.id]?.[fromStore.id] ?? '0')
+  const already = reserved.get(item.id) ?? ZERO
+  const available = onShelf.minus(already)
+  const quantity = new Decimal(input.quantity)
+  if (quantity.greaterThan(available)) {
+    throw precondition(
+      `${fromStore.name} holds ${available.toFixed(2)} of "${item.name}", and this needs ${quantity.toFixed(2)}.`,
+    )
+  }
+
+  const number = await assignDocumentNumber(tx, ctx.orgId, 'STORE_TRANSFER', input.number)
+  const clash = await tx.storeTransfer.findFirst({
+    where: { orgId: ctx.orgId, number },
+    select: { id: true },
+  })
+  if (clash) throw numberTaken()
+
+  const transfer = await tx.storeTransfer.create({
+    data: {
+      orgId: ctx.orgId,
+      number,
+      date: toDate(input.date),
+      fromStoreId: fromStore.id,
+      toStoreId: toStore.id,
       itemId: item.id,
+      quantity: quantity.toFixed(4),
+      unitCost: '0',
+      value: '0',
+      memo: input.memo ?? null,
+      createdById: ctx.userId,
+    },
+    select: { id: true, number: true },
+  })
+
+  const out = await recordMovement(tx, ctx, {
+    itemId: item.id,
+    date: input.date,
+    type: 'TRANSFER',
+    sourceType: 'TRANSFER',
+    sourceId: transfer.id,
+    quantity: quantity.negated(),
+    storeId: fromStore.id,
+  })
+
+  await recordMovement(tx, ctx, {
+    itemId: item.id,
+    date: input.date,
+    type: 'TRANSFER',
+    sourceType: 'TRANSFER',
+    sourceId: transfer.id,
+    quantity,
+    unitCost: out.unitCost,
+    storeId: toStore.id,
+  })
+
+  const value = out.value.abs()
+  await tx.storeTransfer.update({
+    where: { id: transfer.id },
+    data: {
+      unitCost: out.unitCost.toFixed(6),
+      value: value.toFixed(4),
+    },
+  })
+
+  if (!value.isZero() && fromStore.inventoryAccountId !== toStore.inventoryAccountId) {
+    const journal = await postJournal(tx, ctx, {
       date: input.date,
-      type: 'TRANSFER',
+      memo: `Store transfer ${transfer.number}: ${item.name} · ${fromStore.name} → ${toStore.name}`,
       sourceType: 'TRANSFER',
       sourceId: transfer.id,
-      quantity: quantity.negated(),
-      storeId: fromStore.id,
+      lines: [
+        {
+          accountId: toStore.inventoryAccountId,
+          debit: value,
+          description: `From ${fromStore.name}`,
+        },
+        {
+          accountId: fromStore.inventoryAccountId,
+          credit: value,
+          description: `To ${toStore.name}`,
+        },
+      ],
     })
 
-    await recordMovement(tx, ctx, {
-      itemId: item.id,
-      date: input.date,
-      type: 'TRANSFER',
-      sourceType: 'TRANSFER',
-      sourceId: transfer.id,
-      quantity,
-      unitCost: out.unitCost,
-      storeId: toStore.id,
-    })
-
-    const value = out.value.abs()
     await tx.storeTransfer.update({
       where: { id: transfer.id },
-      data: {
-        unitCost: out.unitCost.toFixed(6),
-        value: value.toFixed(4),
-      },
+      data: { journalId: journal.id },
     })
+    await tx.inventoryTransaction.updateMany({
+      where: { orgId: ctx.orgId, sourceId: transfer.id, journalId: null },
+      data: { journalId: journal.id },
+    })
+  }
 
-    if (
-      !value.isZero() &&
-      fromStore.inventoryAccountId !== toStore.inventoryAccountId
-    ) {
-      const journal = await postJournal(tx, ctx, {
-        date: input.date,
-        memo: `Store transfer ${transfer.number}: ${item.name} · ${fromStore.name} → ${toStore.name}`,
-        sourceType: 'TRANSFER',
-        sourceId: transfer.id,
-        lines: [
-          {
-            accountId: toStore.inventoryAccountId,
-            debit: value,
-            description: `From ${fromStore.name}`,
-          },
-          {
-            accountId: fromStore.inventoryAccountId,
-            credit: value,
-            description: `To ${toStore.name}`,
-          },
-        ],
-      })
+  const ticketNumber = await assignDocumentNumber(
+    tx,
+    ctx.orgId,
+    'STORE_TICKET',
+    options.ticketNumber,
+  )
+  const ticketClash = await tx.storeTicket.findFirst({
+    where: { orgId: ctx.orgId, number: ticketNumber },
+    select: { id: true },
+  })
+  if (ticketClash) throw numberTaken()
 
-      await tx.storeTransfer.update({
-        where: { id: transfer.id },
-        data: { journalId: journal.id },
-      })
-      await tx.inventoryTransaction.updateMany({
-        where: { orgId: ctx.orgId, sourceId: transfer.id, journalId: null },
-        data: { journalId: journal.id },
-      })
+  const ticket = await tx.storeTicket.create({
+    data: {
+      orgId: ctx.orgId,
+      number: ticketNumber,
+      date: toDate(input.date),
+      storeId: fromStore.id,
+      toStoreId: toStore.id,
+      itemId: item.id,
+      quantity: quantity.toFixed(4),
+      unitCost: out.unitCost.toFixed(6),
+      value: value.toFixed(4),
+      takenBy: options.takenBy?.trim() || null,
+      memo: input.memo ?? null,
+      origin: ticketOrigin,
+      transferId: transfer.id,
+      createdById: ctx.userId,
+    },
+    select: { id: true, number: true },
+  })
+
+  await writeAudit(
+    tx,
+    ctx,
+    {
+      entity: 'StoreTransfer',
+      entityId: transfer.id,
+      action: 'CREATE',
+      after: {
+        number: transfer.number,
+        ticketNumber: ticket.number,
+        itemId: item.id,
+        fromStoreId: fromStore.id,
+        toStoreId: toStore.id,
+        quantity: quantity.toString(),
+        value: value.toString(),
+      },
+    },
+    meta,
+  )
+
+  reserved.set(item.id, already.plus(quantity))
+
+  return {
+    id: transfer.id,
+    number: transfer.number,
+    ticketId: ticket.id,
+    ticketNumber: ticket.number,
+  }
+}
+
+/**
+ * Manual store ticket — one or more items leaving a store for another.
+ * Every line gets its own TKT- number; all post in one transaction.
+ */
+export async function createStoreTicket(ctx: OrgContext, input: StoreTicketInput) {
+  const meta = await requestMeta()
+  const reserved = new Map<string, Decimal>()
+
+  return db.$transaction(async (tx) => {
+    const tickets: { id: string; number: string }[] = []
+
+    for (const [index, line] of input.lines.entries()) {
+      const result = await postStoreTransferInTx(
+        tx,
+        ctx,
+        {
+          number: '',
+          date: input.date,
+          fromStoreId: input.storeId,
+          toStoreId: input.toStoreId,
+          itemId: line.itemId,
+          quantity: line.quantity,
+          memo: input.memo,
+        },
+        {
+          ticketOrigin: 'MANUAL',
+          // First line keeps the number shown on the form; the rest take the next.
+          ticketNumber: index === 0 ? input.number : '',
+          takenBy: input.takenBy,
+        },
+        meta,
+        reserved,
+      )
+      tickets.push({ id: result.ticketId, number: result.ticketNumber })
     }
 
-    const ticketNumber = await assignDocumentNumber(
-      tx,
-      ctx.orgId,
-      'STORE_TICKET',
-      options.ticketNumber,
-    )
-    const ticketClash = await tx.storeTicket.findFirst({
-      where: { orgId: ctx.orgId, number: ticketNumber },
-      select: { id: true },
-    })
-    if (ticketClash) throw numberTaken()
-
-    const ticket = await tx.storeTicket.create({
-      data: {
-        orgId: ctx.orgId,
-        number: ticketNumber,
-        date: toDate(input.date),
-        storeId: fromStore.id,
-        toStoreId: toStore.id,
-        itemId: item.id,
-        quantity: quantity.toFixed(4),
-        unitCost: out.unitCost.toFixed(6),
-        value: value.toFixed(4),
-        takenBy: options.takenBy?.trim() || null,
-        memo: input.memo ?? null,
-        origin: ticketOrigin,
-        transferId: transfer.id,
-        createdById: ctx.userId,
-      },
-      select: { id: true, number: true },
-    })
-
-    await writeAudit(
-      tx,
-      ctx,
-      {
-        entity: 'StoreTransfer',
-        entityId: transfer.id,
-        action: 'CREATE',
-        after: {
-          number: transfer.number,
-          ticketNumber: ticket.number,
-          itemId: item.id,
-          fromStoreId: fromStore.id,
-          toStoreId: toStore.id,
-          quantity: quantity.toString(),
-          value: value.toString(),
-        },
-      },
-      meta,
-    )
-
     return {
-      id: transfer.id,
-      number: transfer.number,
-      ticketId: ticket.id,
-      ticketNumber: ticket.number,
+      id: tickets[0]!.id,
+      number: tickets[0]!.number,
+      count: tickets.length,
+      tickets,
     }
   })
 }
 
-/** Manual store ticket — takes stock from one store to another and numbers the ticket. */
-export async function createStoreTicket(ctx: OrgContext, input: StoreTicketInput) {
-  return createStoreTransfer(
-    ctx,
-    {
-      number: '',
-      date: input.date,
-      fromStoreId: input.storeId,
-      toStoreId: input.toStoreId,
-      itemId: input.itemId,
-      quantity: input.quantity,
-      memo: input.memo,
-    },
-    {
-      ticketOrigin: 'MANUAL',
-      ticketNumber: input.number,
-      takenBy: input.takenBy,
-    },
-  ).then((result) => ({
-    id: result.ticketId,
-    number: result.ticketNumber,
-    transferId: result.id,
-    transferNumber: result.number,
-  }))
-}
-
 /** Recent tickets that left this store — for the store dashboard. */
 export async function ticketsForStore(ctx: OrgContext, storeId: string, limit = 20) {
-  return db.storeTicket.findMany({
+  const rows = await db.storeTicket.findMany({
     where: { orgId: ctx.orgId, storeId, status: 'POSTED' },
     select: {
       id: true,
       number: true,
       date: true,
+      createdAt: true,
       quantity: true,
       unitCost: true,
       value: true,
       takenBy: true,
       origin: true,
       memo: true,
+      preparedAt: true,
+      createdById: true,
       item: { select: { id: true, name: true, sku: true } },
       toStore: { select: { id: true, name: true } },
+      salesDocument: { select: { id: true, number: true, type: true } },
+      deliveryNote: { select: { id: true, number: true } },
     },
     orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     take: limit,
+  })
+
+  const sellerIds = [...new Set(rows.map((row) => row.createdById).filter(Boolean))] as string[]
+  const sellers =
+    sellerIds.length > 0
+      ? await db.user.findMany({
+          where: { id: { in: sellerIds } },
+          select: { id: true, name: true },
+        })
+      : []
+  const sellerName = new Map(sellers.map((user) => [user.id, user.name]))
+
+  return rows.map((row) => ({
+    ...row,
+    sellerName: row.createdById ? sellerName.get(row.createdById) ?? null : null,
+  }))
+}
+
+export type KeeperPickJob = {
+  key: string
+  deliveryNoteId: string | null
+  deliveryNoteNumber: string | null
+  salesDocumentId: string
+  salesNumber: string
+  salesType: string
+  salesHref: string
+  customerName: string
+  sellerName: string | null
+  date: CalendarDate
+  issuedAt: string
+  memo: string | null
+  notes: string | null
+  itemCount: number
+  totalQty: string
+  ticketIds: string[]
+  lines: {
+    ticketId: string
+    ticketNumber: string
+    itemName: string
+    sku: string | null
+    quantity: string
+    printHref: string
+  }[]
+}
+
+/**
+ * Open sale picks for a store keeper — goods sold (often from the office) that
+ * still need preparing / handing to the customer from this shelf.
+ */
+export async function pendingSalePicks(ctx: OrgContext, storeId: string): Promise<KeeperPickJob[]> {
+  const rows = await db.storeTicket.findMany({
+    where: {
+      orgId: ctx.orgId,
+      storeId,
+      status: 'POSTED',
+      origin: 'SALE',
+      preparedAt: null,
+      salesDocumentId: { not: null },
+    },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      createdAt: true,
+      quantity: true,
+      takenBy: true,
+      memo: true,
+      createdById: true,
+      salesDocumentId: true,
+      deliveryNoteId: true,
+      item: { select: { name: true, sku: true } },
+      salesDocument: {
+        select: {
+          id: true,
+          number: true,
+          type: true,
+          customer: { select: { displayName: true } },
+        },
+      },
+      deliveryNote: {
+        select: { id: true, number: true, notes: true, carrier: true },
+      },
+    },
+    orderBy: [{ createdAt: 'desc' }],
+    take: 100,
+  })
+
+  const sellerIds = [...new Set(rows.map((row) => row.createdById).filter(Boolean))] as string[]
+  const sellers =
+    sellerIds.length > 0
+      ? await db.user.findMany({
+          where: { id: { in: sellerIds } },
+          select: { id: true, name: true },
+        })
+      : []
+  const sellerName = new Map(sellers.map((user) => [user.id, user.name]))
+
+  const groups = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const key = row.deliveryNoteId ?? row.salesDocumentId ?? row.id
+    const list = groups.get(key) ?? []
+    list.push(row)
+    groups.set(key, list)
+  }
+
+  const jobs: KeeperPickJob[] = []
+  for (const [key, list] of groups) {
+    const head = list[0]!
+    const sale = head.salesDocument
+    if (!sale) continue
+    const salesHref =
+      sale.type === 'SALES_RECEIPT' ? `/sales/sales-receipts/${sale.id}` : `/sales/invoices/${sale.id}`
+    const totalQty = list.reduce((sum, row) => sum.plus(row.quantity.toString()), ZERO)
+
+    jobs.push({
+      key,
+      deliveryNoteId: head.deliveryNote?.id ?? null,
+      deliveryNoteNumber: head.deliveryNote?.number ?? null,
+      salesDocumentId: sale.id,
+      salesNumber: sale.number,
+      salesType: sale.type,
+      salesHref,
+      customerName: head.takenBy ?? sale.customer.displayName,
+      sellerName: head.createdById ? sellerName.get(head.createdById) ?? null : null,
+      date: toCalendarDate(head.date),
+      issuedAt: head.createdAt.toISOString(),
+      memo: head.memo,
+      notes: head.deliveryNote?.notes ?? head.deliveryNote?.carrier ?? null,
+      itemCount: list.length,
+      totalQty: totalQty.toFixed(2),
+      ticketIds: list.map((row) => row.id),
+      lines: list.map((row) => ({
+        ticketId: row.id,
+        ticketNumber: row.number,
+        itemName: row.item.name,
+        sku: row.item.sku,
+        quantity: new Decimal(row.quantity.toString()).toFixed(2),
+        printHref: `/stores/tickets/${row.id}/print`,
+      })),
+    })
+  }
+
+  return jobs
+}
+
+/** Store keeper marks sale tickets prepared for the customer. */
+export async function markTicketsPrepared(ctx: OrgContext, ticketIds: string[]) {
+  const ids = [...new Set(ticketIds)].filter(Boolean)
+  if (ids.length === 0) return { count: 0, storeIds: [] as string[] }
+
+  const existing = await db.storeTicket.findMany({
+    where: {
+      orgId: ctx.orgId,
+      id: { in: ids },
+      status: 'POSTED',
+      origin: 'SALE',
+      preparedAt: null,
+    },
+    select: { id: true, storeId: true },
+  })
+  if (existing.length === 0) return { count: 0, storeIds: [] as string[] }
+
+  const result = await db.storeTicket.updateMany({
+    where: { id: { in: existing.map((row) => row.id) } },
+    data: {
+      preparedAt: new Date(),
+      preparedById: ctx.userId,
+    },
+  })
+
+  return {
+    count: result.count,
+    storeIds: [...new Set(existing.map((row) => row.storeId))],
+  }
+}
+
+export type StoreTicketFilter = 'all' | 'pending' | 'prepared' | 'void'
+
+export async function storeTicketSummary(ctx: OrgContext, storeId?: string) {
+  const base = { orgId: ctx.orgId, ...(storeId ? { storeId } : {}) }
+  const [active, pending, prepared, voided] = await Promise.all([
+    db.storeTicket.count({ where: { ...base, status: 'POSTED' } }),
+    db.storeTicket.count({
+      where: { ...base, status: 'POSTED', origin: 'SALE', preparedAt: null },
+    }),
+    db.storeTicket.count({
+      where: { ...base, status: 'POSTED', preparedAt: { not: null } },
+    }),
+    db.storeTicket.count({ where: { ...base, status: 'VOID' } }),
+  ])
+  return { active, pending, prepared, voided }
+}
+
+/** Organisation-wide store ticket register — issue, prepare, void. */
+export async function storeTicketList(
+  ctx: OrgContext,
+  options: {
+    storeId?: string
+    filter?: StoreTicketFilter
+    limit?: number
+  } = {},
+) {
+  const filter = options.filter ?? 'all'
+  const where: Prisma.StoreTicketWhereInput = {
+    orgId: ctx.orgId,
+    ...(options.storeId ? { storeId: options.storeId } : {}),
+  }
+
+  if (filter === 'void') {
+    where.status = 'VOID'
+  } else if (filter === 'pending') {
+    where.status = 'POSTED'
+    where.origin = 'SALE'
+    where.preparedAt = null
+  } else if (filter === 'prepared') {
+    where.status = 'POSTED'
+    where.preparedAt = { not: null }
+  } else {
+    where.status = 'POSTED'
+  }
+
+  return db.storeTicket.findMany({
+    where,
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      createdAt: true,
+      quantity: true,
+      origin: true,
+      status: true,
+      preparedAt: true,
+      takenBy: true,
+      item: { select: { id: true, name: true, sku: true } },
+      store: { select: { id: true, name: true } },
+      salesDocument: { select: { id: true, number: true, type: true } },
+      deliveryNote: { select: { id: true, number: true } },
+    },
+    orderBy: [{ createdAt: 'desc' }],
+    take: options.limit ?? 100,
   })
 }
 

@@ -46,7 +46,7 @@ html.ocean {
   --secondary: #d3e6f2;
   --secondary-foreground: #1e3a4c;
   --muted: #d3e6f2;
-  --muted-foreground: #3d5a6e;
+  --muted-foreground: #1e3a4c;
   --accent: #c5dff0;
   --accent-foreground: #0b4f6c;
   --destructive: #be123c;
@@ -80,7 +80,7 @@ html.lagoon {
   --secondary: #c7ebe4;
   --secondary-foreground: #134e4a;
   --muted: #c7ebe4;
-  --muted-foreground: #3f6f68;
+  --muted-foreground: #1f4a45;
   --accent: #b7e4dc;
   --accent-foreground: #0f766e;
   --border: #a7d5cc;
@@ -108,7 +108,7 @@ html.forest {
   --secondary: #cfeedd;
   --secondary-foreground: #14532d;
   --muted: #cfeedd;
-  --muted-foreground: #3f6b4e;
+  --muted-foreground: #1f4230;
   --accent: #b7e4c7;
   --accent-foreground: #166534;
   --border: #a3d4b5;
@@ -136,7 +136,7 @@ html.amber {
   --secondary: #f6e4c4;
   --secondary-foreground: #78350f;
   --muted: #f6e4c4;
-  --muted-foreground: #8a5a2b;
+  --muted-foreground: #5c3a18;
   --accent: #f0d4a4;
   --accent-foreground: #b45309;
   --border: #e4c48a;
@@ -164,7 +164,7 @@ html.violet {
   --secondary: #e4d8f7;
   --secondary-foreground: #4c1d95;
   --muted: #e4d8f7;
-  --muted-foreground: #6b538c;
+  --muted-foreground: #3d2f55;
   --accent: #ddd0f5;
   --accent-foreground: #6d28d9;
   --border: #cbb6ea;
@@ -192,7 +192,7 @@ html.rose {
   --secondary: #f8d0da;
   --secondary-foreground: #881337;
   --muted: #f8d0da;
-  --muted-foreground: #8f4a5c;
+  --muted-foreground: #5c2f3c;
   --accent: #f4c2ce;
   --accent-foreground: #be123c;
   --border: #e7a8b8;
@@ -220,7 +220,7 @@ html.indigo {
   --secondary: #d4daf6;
   --secondary-foreground: #1e1b4b;
   --muted: #d4daf6;
-  --muted-foreground: #4c4a7a;
+  --muted-foreground: #2e2c52;
   --accent: #c7d0f4;
   --accent-foreground: #3730a3;
   --border: #b4bde6;
@@ -248,7 +248,7 @@ html.sand {
   --secondary: #edd9c4;
   --secondary-foreground: #7c2d12;
   --muted: #edd9c4;
-  --muted-foreground: #8a5a40;
+  --muted-foreground: #5c3a28;
   --accent: #e6cbb0;
   --accent-foreground: #9a3412;
   --border: #d7b89a;
@@ -625,16 +625,24 @@ html.dark .sales-surface [data-slot='card'][data-tone='purchase'],
 /* Report templates. Standard is the striped sheet; compact is the same sheet, tighter. */
 [data-report-root][data-template='standard'] table > thead,
 [data-report-root][data-template='compact'] table > thead {
-  background: #d5dde6;
+  background: var(--band);
+  color: var(--foreground);
 }
 
 [data-report-root][data-template='standard'] table > tbody > tr:nth-child(even) {
-  background-color: #c5dff3;
+  background-color: var(--stripe);
+  color: var(--foreground);
+}
+
+[data-report-root][data-template='standard'] table > tbody > tr:nth-child(odd) {
+  background-color: var(--card);
+  color: var(--foreground);
 }
 
 [data-report-root][data-template='standard'] table > tbody > tr[class*='bg-[#d5dde6]'],
 [data-report-root][data-template='standard'] table > tbody > tr[class*='bg-muted'] {
-  background-color: #d5dde6;
+  background-color: var(--band);
+  color: var(--foreground);
 }
 
 [data-report-root][data-template='compact'] :is(th, td) {
@@ -644,11 +652,96 @@ html.dark .sales-surface [data-slot='card'][data-tone='purchase'],
 
 .band-head {
   background: var(--band);
-  color: var(--primary);
+  color: var(--foreground);
 }
 
 .band-alt {
   background: var(--stripe);
+  color: var(--foreground);
+}
+
+/* Theme-aware ledger stripes — prefer these over hard-coded QuickBooks blues. */
+.ledger-head {
+  background: var(--band) !important;
+  color: var(--foreground);
+}
+
+.ledger-row {
+  background: var(--card) !important;
+  color: var(--foreground);
+}
+
+.ledger-row-alt {
+  background: var(--stripe) !important;
+  color: var(--foreground);
+}
+
+.ledger-row:hover,
+.ledger-row-alt:hover {
+  background: var(--band) !important;
+}
+
+/*
+ * Legacy hard-coded light stripes break under Dark: theme ink is light, so
+ * numbers vanish on white / #c5dff3 rows. Remap those classes to tokens.
+ */
+html.dark .app-surface [class*='c5dff3'],
+html.dark .sales-surface [class*='c5dff3'],
+html.dark .app-surface [class*='b3d0ec'],
+html.dark .sales-surface [class*='b3d0ec'],
+html.dark .app-surface [class*='e7f3fb'],
+html.dark .sales-surface [class*='e7f3fb'],
+.dark .app-surface [class*='c5dff3'],
+.dark .sales-surface [class*='c5dff3'],
+.dark .app-surface [class*='b3d0ec'],
+.dark .sales-surface [class*='b3d0ec'],
+.dark .app-surface [class*='e7f3fb'],
+.dark .sales-surface [class*='e7f3fb'] {
+  background-color: var(--stripe) !important;
+  color: var(--foreground) !important;
+}
+
+html.dark .app-surface [class*='d5dde6'],
+html.dark .sales-surface [class*='d5dde6'],
+html.dark .app-surface [class*='c8d3df'],
+html.dark .sales-surface [class*='c8d3df'],
+.dark .app-surface [class*='d5dde6'],
+.dark .sales-surface [class*='d5dde6'] {
+  background-color: var(--band) !important;
+  color: var(--foreground) !important;
+}
+
+html.dark .app-surface [class*='b7e1a1'],
+html.dark .sales-surface [class*='b7e1a1'],
+.dark .app-surface [class*='b7e1a1'],
+.dark .sales-surface [class*='b7e1a1'] {
+  background-color: color-mix(in srgb, var(--primary) 28%, var(--card)) !important;
+  color: var(--foreground) !important;
+}
+
+html.dark .app-surface [class*='bg-white'],
+html.dark .sales-surface [class*='bg-white'],
+html.dark .app-surface [class*='bg-sky-50'],
+html.dark .sales-surface [class*='bg-sky-50'],
+.dark .app-surface [class*='bg-white'],
+.dark .sales-surface [class*='bg-white'],
+.dark .app-surface [class*='bg-sky-50'],
+.dark .sales-surface [class*='bg-sky-50'] {
+  background-color: var(--card) !important;
+  color: var(--foreground) !important;
+}
+
+html.dark .app-surface .text-slate-700,
+html.dark .sales-surface .text-slate-700,
+html.dark .app-surface .text-slate-800,
+html.dark .sales-surface .text-slate-800,
+html.dark .app-surface .text-slate-600,
+html.dark .sales-surface .text-slate-600,
+.dark .app-surface .text-slate-700,
+.dark .sales-surface .text-slate-700,
+.dark .app-surface .text-slate-800,
+.dark .sales-surface .text-slate-800 {
+  color: var(--foreground) !important;
 }
 
 .app-atmosphere-wash {

@@ -127,7 +127,7 @@ export default async function PeriodsPage({
 
             <Table>
               <TableHeader>
-                <TableRow className="bg-[#d5dde6] hover:bg-[#d5dde6]">
+                <TableRow className="ledger-head hover:bg-[var(--band)]">
                   <TableHead className="w-48">Period</TableHead>
                   <TableHead>Dates</TableHead>
                   <TableHead className="numeric w-24">Entries</TableHead>
@@ -147,10 +147,10 @@ export default async function PeriodsPage({
                       key={period.id}
                       className={
                         selected
-                          ? 'bg-[#d5dde6] hover:bg-[#d5dde6]'
+                          ? 'ledger-head'
                           : index % 2 === 1
-                            ? 'bg-[#c5dff3] hover:bg-[#c5dff3]'
-                            : 'bg-white hover:bg-white'
+                            ? 'ledger-row-alt'
+                            : 'ledger-row'
                       }
                     >
                       <TableCell className="font-medium">

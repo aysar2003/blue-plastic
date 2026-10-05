@@ -105,9 +105,9 @@ export type CustomerActivityRow = {
   status: string
 }
 
-/** Every sale, payment, and opening journal for one customer, newest first. */
+/** Every sale, payment, delivery note, and opening journal for one customer, newest first. */
 export async function customerActivity(ctx: OrgContext, customerId: string): Promise<CustomerActivityRow[]> {
-  const [documents, payments, journals] = await Promise.all([
+  const [documents, payments, journals, deliveries] = await Promise.all([
     db.salesDocument.findMany({
       where: { orgId: ctx.orgId, customerId },
       select: {
@@ -162,6 +162,19 @@ export async function customerActivity(ctx: OrgContext, customerId: string): Pro
       orderBy: [{ journalDate: 'desc' }, { journal: { journalNumber: 'desc' } }],
       take: 80,
     }),
+    db.deliveryNote.findMany({
+      where: { orgId: ctx.orgId, customerId },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        status: true,
+        salesDocument: { select: { number: true } },
+        lines: { select: { quantity: true } },
+      },
+      orderBy: [{ date: 'desc' }, { number: 'desc' }],
+      take: 80,
+    }),
   ])
 
   const rows: (CustomerActivityRow & { sort: string })[] = [
@@ -204,6 +217,21 @@ export async function customerActivity(ctx: OrgContext, customerId: string): Pro
       status: 'POSTED',
       sort: `${toCalendarDate(line.journalDate)}-${line.journal.journalNumber}`,
     })),
+    ...deliveries.map((note) => {
+      const qty = note.lines.reduce((sum, line) => sum.plus(line.quantity.toString()), new Decimal(0))
+      return {
+        id: note.id,
+        href: `/sales/delivery/${note.id}`,
+        kind: 'Delivery',
+        number: note.number,
+        date: toCalendarDate(note.date),
+        due: null,
+        account: note.salesDocument.number,
+        amount: qty.toFixed(2),
+        status: note.status,
+        sort: `${toCalendarDate(note.date)}-${note.number}`,
+      }
+    }),
   ]
 
   return rows.sort((a, b) => b.sort.localeCompare(a.sort)).map(({ sort: _sort, ...row }) => row)

@@ -59,11 +59,11 @@ export function SortableHeader({
         className={cn(
           'inline-flex items-center gap-1 rounded-sm transition-colors hover:text-foreground',
           numeric && 'flex-row-reverse',
-          active ? 'text-foreground' : 'text-muted-foreground',
+          active ? 'text-foreground' : 'text-foreground/80',
         )}
       >
         {label}
-        <Icon className={cn('size-3.5 shrink-0', !active && 'opacity-40')} />
+        <Icon className={cn('size-3.5 shrink-0', !active && 'opacity-55')} />
       </Link>
     </TableHead>
   )

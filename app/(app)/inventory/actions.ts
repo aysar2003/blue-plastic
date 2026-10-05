@@ -11,11 +11,13 @@ import {
   storeTicketSchema,
   storeTransferSchema,
 } from '@/lib/validation/inventory'
+import { parseStockCountRows } from '@/lib/stock-count-sheet'
 import { deleteRecordSchema } from '@/lib/validation/common'
 import { action } from '@/server/action'
 import { requestMeta, writeAudit } from '@/server/audit'
 import { db } from '@/server/db'
 import * as inventoryService from '@/server/services/inventory.service'
+import { readStockCountFile } from '@/server/services/stock-count-sheet'
 import * as storeService from '@/server/services/store.service'
 
 export const createAdjustment = action
@@ -126,6 +128,40 @@ export async function saveAdjustmentForm(_prev: FormState, formData: FormData): 
   )
 }
 
+/**
+ * Read a stock-count Excel/CSV and return the lines that differ from books.
+ * The adjustment form loads them so the user can review before posting.
+ */
+export const parseStockCountImport = action
+  .requires('inventory:adjust')
+  .input(
+    z.object({
+      csv: z.string().optional(),
+      workbook: z.string().optional(),
+      catalog: z.array(
+        z.object({
+          id: z.string().min(1),
+          label: z.string(),
+          sku: z.string().nullable().optional(),
+          onHand: z.string(),
+        }),
+      ),
+    }),
+  )
+  .handler(async (_ctx, input) => {
+    const rows = await readStockCountFile({ csv: input.csv, workbook: input.workbook })
+    if (rows.length === 0) {
+      return { lines: [], issues: [{ row: 0, message: 'The file has no data rows.' }], skipped: 0, total: 0 }
+    }
+    const parsed = parseStockCountRows(rows, input.catalog)
+    return {
+      lines: parsed.lines,
+      issues: parsed.issues,
+      skipped: parsed.skipped,
+      total: rows.length,
+    }
+  })
+
 export const createStoreTransfer = action
   .requires('inventory:adjust')
   .input(storeTransferSchema)
@@ -162,16 +198,41 @@ export const createStoreTicket = action
     revalidatePath(`/stores/${input.storeId}`)
     revalidatePath(`/stores/${input.toStoreId}`)
     revalidatePath('/inventory/stock')
-    revalidatePath(`/inventory/${input.itemId}`)
-    revalidatePath(`/items/${input.itemId}/report`)
     revalidatePath('/accounts')
+    for (const line of input.lines) {
+      revalidatePath(`/inventory/${line.itemId}`)
+      revalidatePath(`/items/${line.itemId}/report`)
+    }
     return ticket
   })
 
 export async function saveStoreTicketForm(_prev: FormState, formData: FormData): Promise<FormState> {
-  const result = await createStoreTicket(formValues(formData))
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(String(formData.get('payload') ?? '{}'))
+  } catch {
+    return { status: 'error', message: 'The ticket could not be read. Please try again.' }
+  }
+
+  const result = await createStoreTicket(parsed)
   return toFormState(
     result,
-    result.ok && 'number' in result.data ? `Ticket ${result.data.number} posted.` : 'Ticket posted.',
+    result.ok && 'number' in result.data
+      ? result.data.count > 1
+        ? `Tickets ${result.data.tickets.map((t: { number: string }) => t.number).join(', ')} posted.`
+        : `Ticket ${result.data.number} posted.`
+      : 'Ticket posted.',
   )
 }
+
+export const markSaleTicketsPrepared = action
+  .requires('inventory:adjust')
+  .input(z.object({ ticketIds: z.array(z.string().min(1)).min(1).max(200) }))
+  .handler(async (ctx, input) => {
+    const result = await inventoryService.markTicketsPrepared(ctx, input.ticketIds)
+    revalidatePath('/stores')
+    for (const storeId of result.storeIds) {
+      revalidatePath(`/stores/${storeId}`)
+    }
+    return result
+  })

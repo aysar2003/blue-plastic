@@ -12,8 +12,15 @@ import * as bankingService from '@/server/services/banking.service'
 
 export const metadata: Metadata = { title: 'Make a deposit' }
 
-export default async function NewDepositPage() {
+export default async function NewDepositPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const ctx = await requireOrgContext('bank:transact')
+  const params = await searchParams
+  const bank =
+    typeof params.bank === 'string' && params.bank.length > 0 ? params.bank : undefined
 
   const [payments, chart, documentNumber] = await Promise.all([
     bankingService.undepositedPayments(ctx),
@@ -54,6 +61,7 @@ export default async function NewDepositPage() {
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}
         documentNumber={documentNumber}
+        defaultBankAccountId={bank}
       />
     </>
   )

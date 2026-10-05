@@ -330,7 +330,7 @@ export function ContactDialog({
           ) : mode === 'create' ? (
             <div className="rounded-md border bg-muted/40 p-3">
               <p className="mb-3 text-xs text-muted-foreground">
-                What was already owed to this vendor when the books started. It posts to Accounts Payable against Opening Balance Equity.
+                What was already owed to this vendor when the books started (positive), or a credit you already hold with them (negative). It posts to Accounts Payable against Opening Balance Equity.
               </p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field name="openingBalance" label={`Opening balance (${currency})`} error={e?.openingBalance}>
@@ -398,8 +398,8 @@ function CustomerRegistration({
       <div>
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Balance and agreement</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Payment terms are chosen above. Record the balance, the day and time it was taken, and the date of the debt
-          agreement. The amount posts to Accounts Receivable.
+          Payment terms are chosen above. Record the balance (positive if they owe you, negative if they hold a credit),
+          the day and time it was taken, and the date of the debt agreement. The amount posts to Accounts Receivable.
         </p>
       </div>
 

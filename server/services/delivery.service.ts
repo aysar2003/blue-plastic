@@ -161,6 +161,7 @@ const ORDER_SELECT = {
       quantity: true,
       quantityReceived: true,
       unitPrice: true,
+      storeId: true,
       item: { select: { name: true } },
     },
   },
@@ -214,11 +215,35 @@ export async function overview(ctx: OrgContext) {
   }
 }
 
+function lineStoreId(lineStoreId: string | null, officeStoreId: string) {
+  return lineStoreId ?? officeStoreId
+}
+
+/** True when this order still has quantity to receive for the given store. */
+function orderHasOutstandingForStore(
+  order: {
+    lines: {
+      storeId: string | null
+      quantity: { toString(): string }
+      quantityReceived: { toString(): string }
+    }[]
+  },
+  storeId: string,
+  officeStoreId: string,
+) {
+  return order.lines.some((line) => {
+    if (lineStoreId(line.storeId, officeStoreId) !== storeId) return false
+    const ordered = qty(line.quantity)
+    const received = qty(line.quantityReceived)
+    return ordered.minus(received).gt(0)
+  })
+}
+
 /** Orders in one delivery bucket, newest first. */
 export async function listOrders(
   ctx: OrgContext,
   filter: 'outstanding' | 'not_delivered' | 'partial' | 'delivered' | 'all' = 'all',
-  options: { vendorId?: string } = {},
+  options: { vendorId?: string; storeId?: string; officeStoreId?: string } = {},
 ): Promise<DeliveryOrderDetail[]> {
   const orders = await db.purchaseDocument.findMany({
     where: {
@@ -232,7 +257,14 @@ export async function listOrders(
     orderBy: [{ date: 'desc' }, { number: 'desc' }],
   })
 
-  const rows = orders.map(summariseOrder)
+  let filtered = orders
+  if (options.storeId && options.officeStoreId) {
+    filtered = orders.filter((order) =>
+      orderHasOutstandingForStore(order, options.storeId!, options.officeStoreId!),
+    )
+  }
+
+  const rows = filtered.map(summariseOrder)
 
   if (filter === 'all') return rows
   if (filter === 'outstanding') {

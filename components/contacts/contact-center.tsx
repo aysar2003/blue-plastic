@@ -2,10 +2,18 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon } from 'lucide-react'
 
+import { CollapsibleProfile, ProfileFieldGrid } from '@/components/contacts/collapsible-profile'
+import { ContactPeopleList } from '@/components/contacts/contact-people-list'
 import { ContactSplit } from '@/components/contacts/contact-split'
 import { WordFile } from '@/components/contacts/word-file'
 import { FilterChips } from '@/components/data/filter-chips'
 import { SearchInput } from '@/components/data/search-input'
+import {
+  customerContactMenu,
+  customerQuickReportHref,
+  vendorContactMenu,
+  vendorQuickReportHref,
+} from '@/lib/contact-menus'
 import { DATE_PRESETS } from '@/lib/list-filters'
 import { formatDate } from '@/lib/date'
 import { Decimal, formatMoney } from '@/lib/money'
@@ -146,6 +154,12 @@ export function ContactCenter({
   wordRows,
   chooseLabel,
   profileExtra,
+  moneyBar,
+  contactSide = 'customer',
+  canCreateDocs = false,
+  canPay = false,
+  canReport = false,
+  canArchive = false,
 }: {
   title: string
   people: CenterPerson[]
@@ -176,6 +190,14 @@ export function ContactCenter({
   wordRows: string[][]
   chooseLabel: string
   profileExtra?: ReactNode
+  /** QuickBooks-style money strip above the split (estimates / overdue / …). */
+  moneyBar?: ReactNode
+  /** Drives the left-list … menu and double-click QuickReport. */
+  contactSide?: 'customer' | 'vendor'
+  canCreateDocs?: boolean
+  canPay?: boolean
+  canReport?: boolean
+  canArchive?: boolean
 }) {
   const ordered = activitySort ? sortCenterRows(rows, activitySort.sort, activitySort.dir) : rows
 
@@ -201,6 +223,37 @@ export function ContactCenter({
 
   const groups = groupTransactions(ordered)
   const splitKey = filterPath.includes('vendor') ? 'contact-split:vendors' : 'contact-split:customers'
+
+  const peopleRows = people.map((person) => {
+    const href = personHref(person.id)
+    const menuLinks =
+      contactSide === 'customer'
+        ? customerContactMenu(person.id, {
+            canInvoice: canCreateDocs,
+            canPay,
+            canReport,
+            selectHref: href,
+          })
+        : vendorContactMenu(person.id, {
+            canBill: canCreateDocs,
+            canPay,
+            canReport,
+            selectHref: href,
+          })
+    return {
+      id: person.id,
+      name: person.name,
+      balance: person.balance,
+      active: person.active,
+      href,
+      doubleClickHref: canReport
+        ? contactSide === 'customer'
+          ? customerQuickReportHref(person.id)
+          : vendorQuickReportHref(person.id)
+        : undefined,
+      menuLinks: menuLinks.map((link) => ({ label: link.label, href: link.href })),
+    }
+  })
 
   return (
     <section className="flex h-[calc(100dvh-7.25rem)] flex-col overflow-hidden rounded-xl border bg-card">
@@ -237,6 +290,8 @@ export function ContactCenter({
         </DropdownMenu>
       </div>
 
+      {moneyBar}
+
       <ContactSplit
         storageKey={splitKey}
         left={
@@ -254,7 +309,7 @@ export function ContactCenter({
                 </Link>
               ) : null}
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] border-b px-2 py-1 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_1.75rem] border-b px-2 py-1 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
               {(
                 [
                   { key: 'name' as const, label: 'Name', align: 'start' as const },
@@ -285,86 +340,94 @@ export function ContactCenter({
                   </Link>
                 )
               })}
+              <span className="sr-only">Actions</span>
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
-              <div className={SHEET}>
-                {people.map((person) => {
-                  const on = person.id === selectedId
-                  return (
-                    <Link
-                      key={person.id}
-                      href={personHref(person.id)}
-                      aria-current={on ? 'true' : undefined}
-                      className={cn(
-                        'grid h-[2.2rem] grid-cols-[minmax(0,1fr)_5.5rem] items-center px-2 text-sm',
-                        on ? 'bg-[#b7e1a1] font-medium' : 'hover:bg-accent',
-                        !person.active && 'opacity-55',
-                      )}
-                    >
-                      <span className="truncate uppercase">{person.name}</span>
-                      <span className="tabular text-right text-xs">
-                        {formatMoney(person.balance, currency)}
-                      </span>
-                    </Link>
-                  )
-                })}
-              </div>
+              <ContactPeopleList
+                side={contactSide}
+                people={peopleRows}
+                selectedId={selectedId}
+                currency={currency}
+                canArchive={canArchive}
+              />
             </div>
           </div>
         }
         right={
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex items-start justify-between gap-4 border-b px-4 py-3">
-            <div className="min-w-0">
-              <div className="flex items-start justify-between gap-3">
-                <h1 className="text-lg font-semibold">{title}</h1>
-                {headerExtra ? <div className="flex shrink-0 items-center [&>div]:flex-row [&>div]:gap-1">{headerExtra}</div> : null}
-              </div>
-              {profile ? (
-                <>
-                <dl className="mt-3 grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Company name</dt>
-                    <dd>{profile.company}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Main phone</dt>
-                    <dd>{profile.phone ?? '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Full name</dt>
-                    <dd className="uppercase">{profile.fullName}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Work phone</dt>
-                    <dd>{profile.workPhone ?? '—'}</dd>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <dt className="text-xs text-muted-foreground">Bill to</dt>
-                    <dd>{profile.billTo.length > 0 ? profile.billTo.join(', ') : '—'}</dd>
-                  </div>
-                </dl>
-                {profileExtra}
-                </>
+          <CollapsibleProfile
+            title={title}
+            headerExtra={headerExtra}
+            storageKey={
+              contactSide === 'customer' ? 'bp-customer-info-open' : 'bp-vendor-info-open'
+            }
+            empty={
+              profile ? (
+                <p className="truncate text-sm text-muted-foreground">{profile.company}</p>
               ) : (
-                <p className="mt-2 text-sm text-muted-foreground">{chooseLabel}</p>
-              )}
-            </div>
-            {profile && reports.length > 0 ? (
-              <div className="hidden w-40 shrink-0 sm:block">
-                <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">Reports</p>
-                <ul className="mt-1 space-y-1">
-                  {reports.map((report) => (
-                    <li key={report.label}>
-                      <Link href={report.href} className="text-sm text-[#0b4f6c] underline-offset-4 hover:underline">
-                        {report.label}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
+                <p className="text-sm text-muted-foreground">{chooseLabel}</p>
+              )
+            }
+          >
+            {profile ? (
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <ProfileFieldGrid
+                    company={profile.company}
+                    fullName={profile.fullName}
+                    billTo={profile.billTo}
+                    phone={profile.phone}
+                    workPhone={profile.workPhone}
+                  />
+                  {profileExtra}
+                </div>
+                {reports.length > 0 || transactions.length > 0 ? (
+                  <div className="hidden w-44 shrink-0 space-y-4 sm:block">
+                    {transactions.length > 0 ? (
+                      <div>
+                        <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                          New
+                        </p>
+                        <ul className="mt-1 space-y-1">
+                          {transactions.map((item) => (
+                            <li key={item.label}>
+                              <Link
+                                href={item.href}
+                                className="text-sm text-[#0b4f6c] underline-offset-4 hover:underline"
+                              >
+                                {item.label}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {reports.length > 0 ? (
+                      <div>
+                        <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Reports
+                        </p>
+                        <ul className="mt-1 space-y-1">
+                          {reports.map((report) => (
+                            <li key={report.label}>
+                              <Link
+                                href={report.href}
+                                className="text-sm text-[#0b4f6c] underline-offset-4 hover:underline"
+                              >
+                                {report.label}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{chooseLabel}</p>
+            )}
+          </CollapsibleProfile>
 
           <div className="flex gap-1 overflow-x-auto border-b px-2 py-1">
             {TABS.map((item) => (

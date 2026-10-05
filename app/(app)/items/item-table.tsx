@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -20,6 +20,8 @@ import {
 } from '@/components/master-data/item-dialog'
 import { ClickableRow } from '@/components/data/clickable-row'
 import { DeleteMenuItem } from '@/components/data/delete-record'
+import { ScrollSheet } from '@/components/data/scroll-sheet'
+import { TableColumnCustomize } from '@/components/data/table-column-customize'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SortableHeader, type SortState } from '@/components/data/sortable-header'
@@ -35,6 +37,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatMoney } from '@/lib/money'
 import { ItemNameMenu } from '@/components/inventory/item-name-menu'
 import { QtyCell } from '@/components/inventory/line-store'
+import {
+  buildItemTableColumns,
+  ITEM_DEFAULT_HIDDEN,
+  ITEM_TABLE_STORAGE_KEY,
+  isStoreColumnId,
+  type ItemColumnDef,
+} from '@/lib/item-table-columns'
+import { useTableColumnPrefs } from '@/lib/use-table-column-prefs'
 import { setItemsActive } from './actions'
 
 export type ItemRow = ItemValues & {
@@ -109,6 +119,14 @@ export function ItemTable({
   )
   const [isPending, startTransition] = useTransition()
 
+  const catalog = useMemo(() => buildItemTableColumns(storeColumns), [storeColumns])
+  const { prefs, visible, toggle, reorder } = useTableColumnPrefs(
+    ITEM_TABLE_STORAGE_KEY,
+    catalog,
+    ITEM_DEFAULT_HIDDEN,
+  )
+  const visibleIds = useMemo(() => new Set(visible.map((c) => c.id)), [visible])
+
   const allSelected = rows.length > 0 && rows.every((row) => selected.has(row.id))
 
   const single = (id: string, isActive: boolean) =>
@@ -134,6 +152,245 @@ export function ItemTable({
       }
     })
 
+  function renderHeader(col: ItemColumnDef) {
+    switch (col.id) {
+      case 'name':
+        return (
+          <SortableHeader
+            key={col.id}
+            column="name"
+            label={col.label}
+            state={sort}
+            basePath="/items"
+            params={linkParams}
+          />
+        )
+      case 'type':
+        return (
+          <SortableHeader
+            key={col.id}
+            column="type"
+            label={col.label}
+            state={sort}
+            basePath="/items"
+            params={linkParams}
+            className="w-32"
+          />
+        )
+      case 'price':
+        return (
+          <SortableHeader
+            key={col.id}
+            column="price"
+            label={col.label}
+            state={sort}
+            basePath="/items"
+            params={linkParams}
+            className="w-28"
+            numeric
+            defaultDirection="desc"
+          />
+        )
+      case 'cost':
+        return (
+          <SortableHeader
+            key={col.id}
+            column="cost"
+            label={col.label}
+            state={sort}
+            basePath="/items"
+            params={linkParams}
+            className="w-28"
+            numeric
+            defaultDirection="desc"
+          />
+        )
+      case 'onHand':
+      case 'stockValue':
+        return (
+          <TableHead key={col.id} className="numeric w-28 bg-[var(--band)]">
+            {col.label}
+          </TableHead>
+        )
+      default:
+        return (
+          <TableHead
+            key={col.id}
+            className={cn(
+              'bg-[var(--band)]',
+              isStoreColumnId(col.id) && 'numeric w-28',
+              (col.id === 'sku' || col.id === 'category') && 'w-32',
+            )}
+          >
+            {col.label}
+          </TableHead>
+        )
+    }
+  }
+
+  function renderCell(row: ItemRow, col: ItemColumnDef) {
+    switch (col.id) {
+      case 'name':
+        return (
+          <TableCell key={col.id}>
+            <ItemNameMenu
+              id={row.id}
+              name={row.name}
+              tracked={row.type === 'INVENTORY'}
+              canEdit={canEdit}
+              canAdjust={canAdjust}
+              onEdit={canEdit ? () => setEditing(row) : undefined}
+            />
+            {!visibleIds.has('sku') || !visibleIds.has('category') ? (
+              <span className="block text-xs text-muted-foreground">
+                {!visibleIds.has('sku') && row.sku ? `${row.sku} · ` : ''}
+                {!visibleIds.has('category') ? (row.category?.name ?? 'Uncategorised') : ''}
+              </span>
+            ) : null}
+            {!row.isActive ? (
+              <Badge variant="outline" className="mt-1">
+                archived
+              </Badge>
+            ) : null}
+          </TableCell>
+        )
+      case 'sku':
+        return (
+          <TableCell key={col.id} className="text-sm tabular">
+            {row.sku ?? '—'}
+          </TableCell>
+        )
+      case 'category':
+        return (
+          <TableCell key={col.id} className="text-sm">
+            {row.category?.name ?? 'Uncategorised'}
+          </TableCell>
+        )
+      case 'salesDescription':
+        return (
+          <TableCell key={col.id} className="max-w-xs truncate text-sm text-muted-foreground">
+            {row.salesDescription ?? '—'}
+          </TableCell>
+        )
+      case 'purchaseDescription':
+        return (
+          <TableCell key={col.id} className="max-w-xs truncate text-sm text-muted-foreground">
+            {row.purchaseDescription ?? '—'}
+          </TableCell>
+        )
+      case 'type':
+        return (
+          <TableCell key={col.id}>
+            <Badge variant={row.type === 'INVENTORY' ? 'default' : 'secondary'}>
+              {TYPE_LABEL[row.type]}
+            </Badge>
+          </TableCell>
+        )
+      case 'incomeAccount':
+        return (
+          <TableCell key={col.id} className="text-xs">
+            {accountText(row.incomeAccount)}
+          </TableCell>
+        )
+      case 'inventoryAccount':
+        return (
+          <TableCell key={col.id} className="text-xs">
+            {row.type === 'INVENTORY' ? accountText(row.inventoryAccount) : '—'}
+          </TableCell>
+        )
+      case 'cogsExpense':
+        return (
+          <TableCell key={col.id} className="text-xs">
+            {row.type === 'INVENTORY' ? accountText(row.cogsAccount) : accountText(row.expenseAccount)}
+          </TableCell>
+        )
+      case 'store':
+        return (
+          <TableCell key={col.id} className="text-xs">
+            {row.store ? (
+              <Link href={`/stores/${row.store.id}`} className="underline-offset-4 hover:underline">
+                {row.store.name}
+              </Link>
+            ) : (
+              '—'
+            )}
+          </TableCell>
+        )
+      case 'onHand':
+        return (
+          <TableCell key={col.id} className="numeric tabular">
+            {row.type === 'INVENTORY' ? (
+              <>
+                <Link
+                  href={`/inventory/${row.id}`}
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  {row.onHand ?? '0.00'}
+                </Link>
+                {row.belowReorder ? (
+                  <Badge variant="warning" className="ml-1.5">
+                    reorder
+                  </Badge>
+                ) : null}
+              </>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </TableCell>
+        )
+      case 'price':
+        return (
+          <TableCell key={col.id} className="numeric tabular">
+            {row.salesPrice ? formatMoney(row.salesPrice, currency) : '—'}
+          </TableCell>
+        )
+      case 'stockValue':
+        return (
+          <TableCell key={col.id} className="numeric tabular text-muted-foreground">
+            {row.type === 'INVENTORY' && row.stockValue ? formatMoney(row.stockValue, currency) : '—'}
+          </TableCell>
+        )
+      case 'cost':
+        return (
+          <TableCell key={col.id} className="numeric tabular font-medium">
+            {row.type === 'INVENTORY'
+              ? row.averageCost && Number(row.averageCost) !== 0
+                ? formatMoney(row.averageCost, currency)
+                : row.purchaseCost
+                  ? formatMoney(row.purchaseCost, currency)
+                  : '—'
+              : row.purchaseCost
+                ? formatMoney(row.purchaseCost, currency)
+                : '—'}
+          </TableCell>
+        )
+      case 'reorderPoint':
+        return (
+          <TableCell key={col.id} className="numeric tabular text-sm">
+            {row.type === 'INVENTORY' && row.reorderPoint ? row.reorderPoint : '—'}
+          </TableCell>
+        )
+      case 'unitOfMeasure':
+        return (
+          <TableCell key={col.id} className="text-sm">
+            {row.unitOfMeasure ?? '—'}
+          </TableCell>
+        )
+      default: {
+        if (!isStoreColumnId(col.id)) return null
+        const storeId = col.id.slice('store:'.length)
+        return (
+          <TableCell key={col.id} className="numeric">
+            <QtyCell
+              tracked={row.type === 'INVENTORY'}
+              quantity={row.storeQty?.[storeId] ?? '0.00'}
+            />
+          </TableCell>
+        )
+      }
+    }
+  }
+
   return (
     <>
       {selected.size > 0 && canArchive ? (
@@ -153,213 +410,118 @@ export function ItemTable({
         </div>
       ) : null}
 
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-[#d5dde6] hover:bg-[#d5dde6]">
-            {canArchive ? (
-              <TableHead className="w-10">
-                <input
-                  type="checkbox"
-                  aria-label="Select all"
-                  checked={allSelected}
-                  onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
-                  className="size-4 rounded border-input"
-                />
-              </TableHead>
-            ) : null}
-            <SortableHeader column="name" label="Item" state={sort} basePath="/items" params={linkParams} />
-            <SortableHeader column="type" label="Type" state={sort} basePath="/items" params={linkParams} className="w-32" />
-            <TableHead>Income account</TableHead>
-            <TableHead>Inventory account</TableHead>
-            <TableHead>COGS or expense</TableHead>
-            <TableHead>Store</TableHead>
-            <TableHead className="numeric w-28">On hand</TableHead>
-            {storeColumns.map((store) => (
-              <TableHead key={store.id} className="numeric w-28">
-                {store.name}
-              </TableHead>
-            ))}
-            <SortableHeader column="price" label="Price" state={sort} basePath="/items" params={linkParams} className="w-28" numeric defaultDirection="desc" />
-            <TableHead className="numeric w-28">Stock value</TableHead>
-            <SortableHeader column="cost" label="Cost" state={sort} basePath="/items" params={linkParams} className="w-28" numeric defaultDirection="desc" />
-            <TableHead className="w-10" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row, index) => (
-            <ClickableRow
-              key={row.id}
-              href={`/items/${row.id}/report`}
-              title={`Open report for ${row.name}`}
-              className={cn(
-                index % 2 === 1 ? 'bg-[#c5dff3] hover:bg-[#b3d0ec]' : 'bg-white hover:bg-sky-50',
-                !row.isActive && 'opacity-55',
-              )}
-            >
+      <div className="flex justify-end border-b px-3 py-2 print:hidden">
+        <TableColumnCustomize columns={catalog} prefs={prefs} onToggle={toggle} onReorder={reorder} />
+      </div>
+
+      <ScrollSheet>
+        <Table>
+          <TableHeader>
+            <TableRow className="ledger-head hover:bg-[var(--band)]">
               {canArchive ? (
-                <TableCell>
+                <TableHead className="w-10 bg-[var(--band)]">
                   <input
                     type="checkbox"
-                    aria-label={`Select ${row.name}`}
-                    checked={selected.has(row.id)}
-                    onChange={() =>
-                      setSelected((current) => {
-                        const next = new Set(current)
-                        if (next.has(row.id)) next.delete(row.id)
-                        else next.add(row.id)
-                        return next
-                      })
-                    }
+                    aria-label="Select all"
+                    checked={allSelected}
+                    onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
                     className="size-4 rounded border-input"
                   />
-                </TableCell>
+                </TableHead>
               ) : null}
-              <TableCell>
-                <ItemNameMenu
-                  id={row.id}
-                  name={row.name}
-                  tracked={row.type === 'INVENTORY'}
-                  canEdit={canEdit}
-                  canAdjust={canAdjust}
-                  onEdit={canEdit ? () => setEditing(row) : undefined}
-                />
-                <span className="block text-xs text-muted-foreground">
-                  {row.sku ? `${row.sku} · ` : ''}
-                  {row.category?.name ?? 'Uncategorised'}
-                </span>
-                {!row.isActive ? (
-                  <Badge variant="outline" className="mt-1">
-                    archived
-                  </Badge>
+              {visible.map((col) => renderHeader(col))}
+              <TableHead className="w-10 bg-[var(--band)]" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row, index) => (
+              <ClickableRow
+                key={row.id}
+                href={`/items/${row.id}/report`}
+                title={`Open report for ${row.name}`}
+                className={cn(
+                  index % 2 === 1 ? 'ledger-row-alt' : 'ledger-row',
+                  !row.isActive && 'opacity-55',
+                )}
+              >
+                {canArchive ? (
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${row.name}`}
+                      checked={selected.has(row.id)}
+                      onChange={() =>
+                        setSelected((current) => {
+                          const next = new Set(current)
+                          if (next.has(row.id)) next.delete(row.id)
+                          else next.add(row.id)
+                          return next
+                        })
+                      }
+                      className="size-4 rounded border-input"
+                    />
+                  </TableCell>
                 ) : null}
-              </TableCell>
-              <TableCell>
-                <Badge variant={row.type === 'INVENTORY' ? 'default' : 'secondary'}>
-                  {TYPE_LABEL[row.type]}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-xs">
-                {accountText(row.incomeAccount)}
-              </TableCell>
-              <TableCell className="text-xs">
-                {row.type === 'INVENTORY' ? accountText(row.inventoryAccount) : '—'}
-              </TableCell>
-              <TableCell className="text-xs">
-                {row.type === 'INVENTORY' ? accountText(row.cogsAccount) : accountText(row.expenseAccount)}
-              </TableCell>
-              <TableCell className="text-xs">
-                {row.store ? (
-                  <Link href={`/stores/${row.store.id}`} className="underline-offset-4 hover:underline">
-                    {row.store.name}
-                  </Link>
-                ) : (
-                  '—'
-                )}
-              </TableCell>
-              <TableCell className="numeric tabular">
-                {row.type === 'INVENTORY' ? (
-                  <>
-                    <Link
-                      href={`/inventory/${row.id}`}
-                      className="font-medium underline-offset-4 hover:underline"
-                    >
-                      {row.onHand ?? '0.00'}
-                    </Link>
-                    {row.belowReorder ? (
-                      <Badge variant="warning" className="ml-1.5">
-                        reorder
-                      </Badge>
+                {visible.map((col) => renderCell(row, col))}
+                <TableCell>
+                  <div className="flex items-center justify-end gap-0.5">
+                    {canEdit ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Edit ${row.name}`}
+                        onClick={() => setEditing(row)}
+                      >
+                        <PencilIcon />
+                      </Button>
                     ) : null}
-                  </>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </TableCell>
-              {storeColumns.map((store) => (
-                <TableCell key={store.id} className="numeric">
-                  <QtyCell
-                    tracked={row.type === 'INVENTORY'}
-                    quantity={row.storeQty?.[store.id] ?? '0.00'}
-                  />
-                </TableCell>
-              ))}
-              <TableCell className="numeric tabular">
-                {row.salesPrice ? formatMoney(row.salesPrice, currency) : '—'}
-              </TableCell>
-              <TableCell className="numeric tabular text-muted-foreground">
-                {row.type === 'INVENTORY' && row.stockValue
-                  ? formatMoney(row.stockValue, currency)
-                  : '—'}
-              </TableCell>
-              <TableCell className="numeric tabular font-medium">
-                {row.type === 'INVENTORY'
-                  ? row.averageCost && Number(row.averageCost) !== 0
-                    ? formatMoney(row.averageCost, currency)
-                    : row.purchaseCost
-                      ? formatMoney(row.purchaseCost, currency)
-                      : '—'
-                  : row.purchaseCost
-                    ? formatMoney(row.purchaseCost, currency)
-                    : '—'}
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center justify-end gap-0.5">
-                  {canEdit ? (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Edit ${row.name}`}
-                      onClick={() => setEditing(row)}
-                    >
-                      <PencilIcon />
-                    </Button>
-                  ) : null}
-                  {canArchive ? (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${row.name}`}>
-                          <MoreHorizontalIcon />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {canEdit ? (
-                          <DropdownMenuItem onSelect={() => setEditing(row)}>
-                            <PencilIcon className="size-4" /> Edit
-                          </DropdownMenuItem>
-                        ) : null}
-                        <DropdownMenuItem asChild>
-                          <Link href={`/items/${row.id}/report`}>Quick report</Link>
-                        </DropdownMenuItem>
-                        {row.type === 'INVENTORY' && canAdjust ? (
+                    {canArchive ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${row.name}`}>
+                            <MoreHorizontalIcon />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {canEdit ? (
+                            <DropdownMenuItem onSelect={() => setEditing(row)}>
+                              <PencilIcon className="size-4" /> Edit
+                            </DropdownMenuItem>
+                          ) : null}
                           <DropdownMenuItem asChild>
-                            <Link href={`/inventory/adjustments/new?item=${row.id}`}>Adjustment</Link>
+                            <Link href={`/items/${row.id}/report`}>Quick report</Link>
                           </DropdownMenuItem>
-                        ) : null}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onSelect={(event) => {
-                            event.preventDefault()
-                            single(row.id, !row.isActive)
-                          }}
-                        >
-                          {row.isActive ? (
-                            <ArchiveIcon className="size-4" />
-                          ) : (
-                            <ArchiveRestoreIcon className="size-4" />
-                          )}
-                          {row.isActive ? 'Archive' : 'Restore'}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DeleteMenuItem kind="item" id={row.id} number={row.name} />
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  ) : null}
-                </div>
-              </TableCell>
-            </ClickableRow>
-          ))}
-        </TableBody>
-      </Table>
+                          {row.type === 'INVENTORY' && canAdjust ? (
+                            <DropdownMenuItem asChild>
+                              <Link href={`/inventory/adjustments/new?item=${row.id}`}>Adjustment</Link>
+                            </DropdownMenuItem>
+                          ) : null}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onSelect={(event) => {
+                              event.preventDefault()
+                              single(row.id, !row.isActive)
+                            }}
+                          >
+                            {row.isActive ? (
+                              <ArchiveIcon className="size-4" />
+                            ) : (
+                              <ArchiveRestoreIcon className="size-4" />
+                            )}
+                            {row.isActive ? 'Archive' : 'Restore'}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DeleteMenuItem kind="item" id={row.id} number={row.name} />
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
+                  </div>
+                </TableCell>
+              </ClickableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ScrollSheet>
 
       {editing ? (
         <ItemDialog
@@ -377,3 +539,4 @@ export function ItemTable({
     </>
   )
 }
+

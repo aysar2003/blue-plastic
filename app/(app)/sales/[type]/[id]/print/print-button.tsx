@@ -11,6 +11,7 @@ export function PrintButton({
   pdfHref,
   filename,
   printHref,
+  backHref,
   defaultTo = '',
   defaultSubject,
   defaultBody,
@@ -21,6 +22,7 @@ export function PrintButton({
   pdfHref?: string
   filename?: string
   printHref?: string
+  backHref?: string
   defaultTo?: string
   defaultSubject?: string
   defaultBody?: string
@@ -33,6 +35,7 @@ export function PrintButton({
       pdfHref={pdfHref}
       filename={filename}
       printHref={printHref}
+      backHref={backHref}
       defaultTo={defaultTo}
       defaultSubject={defaultSubject}
       defaultBody={defaultBody}

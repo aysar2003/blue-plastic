@@ -11,19 +11,21 @@ import { StartReconciliationButton } from '@/components/banking/start-reconcilia
 import { Button } from '@/components/ui/button'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import { setAccountActive } from './actions'
-import { EditAccountDialog, type AccountFormValues, type ParentOption } from './account-dialog'
+import { setAccountActive } from '@/app/(app)/accounts/actions'
+import {
+  EditAccountDialog,
+  type AccountFormValues,
+  type ParentOption,
+} from '@/app/(app)/accounts/account-dialog'
 
 type AccountRow = AccountFormValues & { isActive: boolean; subtype: AccountSubtype }
 
 const RECONCILABLE = new Set<AccountSubtype>(['BANK', 'CREDIT_CARD'])
+const MONEY = new Set<AccountSubtype>(['BANK', 'CREDIT_CARD', 'UNDEPOSITED_FUNDS'])
 
 /**
- * Right-click (and the row button) for one account.
- *
- * What is offered follows the books: a system account cannot be made inactive,
- * because the engine posts to it by name; an account is never deleted, because
- * a posted line has to keep its name; reconcile is only for a bank or a card.
+ * Account row: click opens the register; ⋯ opens actions (transfer, edit,
+ * quick report, active/inactive) — same pattern as QuickBooks.
  */
 export function AccountTableRow({
   account,
@@ -32,6 +34,7 @@ export function AccountTableRow({
   canArchive,
   canReport,
   canReconcile,
+  canTransact,
   today,
   className,
   children,
@@ -42,6 +45,7 @@ export function AccountTableRow({
   canArchive: boolean
   canReport: boolean
   canReconcile: boolean
+  canTransact?: boolean
   today: string
   className?: string
   children: ReactNode
@@ -69,8 +73,8 @@ export function AccountTableRow({
   }, [point])
 
   const openAt = (x: number, y: number) => {
-    const width = 240
-    const height = 280
+    const width = 260
+    const height = 360
     setPoint({
       x: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
       y: Math.max(8, Math.min(y, window.innerHeight - height - 8)),
@@ -95,8 +99,14 @@ export function AccountTableRow({
     })
   }
 
+  const isMoney = MONEY.has(account.subtype)
   const showReconcile = canReconcile && RECONCILABLE.has(account.subtype) && account.isActive
   const showInactive = canArchive && !account.isSystem
+  const showTransfer = Boolean(canTransact) && isMoney && account.isActive
+  const showDeposit =
+    Boolean(canTransact) &&
+    account.isActive &&
+    (account.subtype === 'BANK' || account.subtype === 'CREDIT_CARD')
 
   return (
     <TableRow
@@ -114,7 +124,7 @@ export function AccountTableRow({
       }}
     >
       {children}
-      <TableCell>
+      <TableCell className="print:hidden">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -134,18 +144,31 @@ export function AccountTableRow({
         ? createPortal(
             <div
               role="menu"
-              className="fixed z-50 min-w-56 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg"
+              className="fixed z-50 min-w-60 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg"
               style={{ left: point.x, top: point.y }}
               onMouseDown={(event) => event.stopPropagation()}
             >
-              <MenuItem onSelect={() => go(`/accounts/${account.id}`)}>View register</MenuItem>
+              <MenuItem onSelect={() => go(`/accounts/${account.id}`)}>
+                View all transactions
+              </MenuItem>
               {canReport ? (
                 <MenuItem
-                  onSelect={() =>
-                    go(`/reports/transaction-detail?account=${account.id}`)
-                  }
+                  onSelect={() => go(`/reports/transaction-detail?account=${account.id}`)}
                 >
-                  Run report
+                  Quick report
+                </MenuItem>
+              ) : null}
+              {showTransfer || showDeposit || showReconcile ? (
+                <div className="my-1 h-px bg-border" />
+              ) : null}
+              {showTransfer ? (
+                <MenuItem onSelect={() => go(`/banking/transfers/new?from=${account.id}`)}>
+                  Transfer
+                </MenuItem>
+              ) : null}
+              {showDeposit ? (
+                <MenuItem onSelect={() => go(`/banking/deposits/new?bank=${account.id}`)}>
+                  Make a deposit
                 </MenuItem>
               ) : null}
               {showReconcile ? (
@@ -159,7 +182,16 @@ export function AccountTableRow({
                 </MenuItem>
               ) : null}
               {canEdit || showInactive ? <div className="my-1 h-px bg-border" /> : null}
-              {canEdit ? <MenuItem onSelect={() => { setPoint(null); setEditing(true) }}>Edit</MenuItem> : null}
+              {canEdit ? (
+                <MenuItem
+                  onSelect={() => {
+                    setPoint(null)
+                    setEditing(true)
+                  }}
+                >
+                  Edit account
+                </MenuItem>
+              ) : null}
               {showInactive ? (
                 <MenuItem tone={account.isActive ? 'danger' : 'default'} onSelect={toggle}>
                   {account.isActive ? 'Make inactive' : 'Make active'}

@@ -266,7 +266,7 @@ function StatementRows({
           <TableCell colSpan={7} className="bg-slate-50/80 px-3 py-2">
             <table className="w-full border-separate border-spacing-0 overflow-hidden rounded-md text-xs">
               <thead>
-                <tr className="bg-[#d5dde6] text-left text-[0.65rem] font-semibold uppercase tracking-wide text-slate-700">
+                <tr className="ledger-head text-left text-[0.65rem] font-semibold uppercase tracking-wide">
                   <th className="px-2 py-1.5 font-semibold">Item</th>
                   <th className="w-20 px-2 py-1.5 text-right font-semibold">Qty</th>
                   <th className="w-28 px-2 py-1.5 text-right font-semibold">Price</th>
@@ -275,7 +275,7 @@ function StatementRows({
               </thead>
               <tbody>
                 {entry.lines.map((item, index) => (
-                  <tr key={`${entry.id}-${index}`} className={index % 2 === 0 ? 'bg-white' : 'bg-[#c5dff3]'}>
+                  <tr key={`${entry.id}-${index}`} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
                     <td className="px-2 py-1 text-slate-800">{item.description}</td>
                     <td className="numeric tabular px-2 py-1 text-right">{item.quantity ? plainQty(item.quantity) : ''}</td>
                     <td className="numeric tabular px-2 py-1 text-right">{item.rate ? money(item.rate) : ''}</td>

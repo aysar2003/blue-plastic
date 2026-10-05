@@ -24,13 +24,13 @@ export function HoverEntry({
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const row = stripe ? 'bg-[#c5dff3]' : 'bg-white'
+  const row = stripe ? 'ledger-row-alt' : 'ledger-row'
 
   return (
     <tbody onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <tr className={`${row} border-b ${open ? 'bg-[#d5dde6]' : ''}`}>{children}</tr>
+      <tr className={`${row} border-b ${open ? 'ledger-head' : ''}`}>{children}</tr>
       {open ? (
-        <tr className="border-b bg-[#e4ebf2]">
+        <tr className="border-b bg-muted/60">
           <td colSpan={7} className="px-3 py-2">
             <table className="w-full text-sm">
               <thead>
@@ -43,7 +43,7 @@ export function HoverEntry({
               </thead>
               <tbody>
                 {lines.map((line, index) => (
-                  <tr key={`${line.account}-${index}`} className={index % 2 === 1 ? 'bg-[#c5dff3]' : 'bg-white'}>
+                  <tr key={`${line.account}-${index}`} className={index % 2 === 1 ? 'ledger-row-alt' : 'ledger-row'}>
                     <td className="py-1 pr-3">{line.account}</td>
                     <td className="py-1 pr-3 text-muted-foreground">{line.description ?? '—'}</td>
                     <td className="numeric py-1 pr-3 tabular">{line.debit === '0.00' ? '—' : formatMoney(line.debit, currency)}</td>

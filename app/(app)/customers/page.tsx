@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 
 import { CustomerActions } from '@/components/customers/customer-actions'
 import { CustomerPapers } from '@/components/customers/customer-papers'
+import { ContactMoneyBar } from '@/components/contacts/contact-money-bar'
 import {
   ContactCenter,
   isActivitySort,
@@ -15,6 +16,7 @@ import { NewContactButton } from '@/components/master-data/contact-dialog'
 import { readSort } from '@/components/data/sortable-header'
 import { describeTerm } from '@/lib/payment-terms'
 import { today } from '@/lib/date'
+import { bandDetail } from '@/lib/customer-bands'
 import { presetRange, readDatePreset } from '@/lib/list-filters'
 import { letterheadLines } from '@/lib/letterhead'
 import { formatMoney } from '@/lib/money'
@@ -63,8 +65,8 @@ export default async function CustomersPage({
   const datePreset = readDatePreset(params.date)
   const range = presetRange(datePreset, asOf)
 
-  const bar = band ? await customerMoneyBar(ctx, asOf) : null
-  const bandIds = bar && band ? bar[band].customerIds : undefined
+  const bar = await customerMoneyBar(ctx, asOf)
+  const bandIds = band ? bar[band].customerIds : undefined
 
   const [page, terms] = await Promise.all([
     bandIds && bandIds.length === 0
@@ -190,6 +192,8 @@ export default async function CustomersPage({
             ]
           : []),
         ...(canPay ? [{ label: 'Receive payment', href: `/payments/new?customer=${id}` }] : []),
+        { label: 'Delivery notes', href: `/sales/delivery?customerId=${id}` },
+        { label: 'Item list', href: '/items' },
       ]
     : []
 
@@ -198,7 +202,9 @@ export default async function CustomersPage({
         { label: 'QuickReport', href: `/reports/statements/customer?customerId=${id}&view=detail&period=all-dates` },
         { label: 'Open balance', href: `/reports/statements/customer?customerId=${id}&status=open&period=all-dates` },
         { label: 'Show estimates', href: withTx(customerHref(customer.id), 'Quotation') },
+        { label: 'Show deliveries', href: withTx(customerHref(customer.id), 'Delivery') },
         { label: 'Customer snapshot', href: `/reports/statements/customer?customerId=${id}&period=all-dates` },
+        { label: 'Sales by item', href: `/reports/sales-by-item` },
       ]
     : []
 
@@ -230,6 +236,57 @@ export default async function CustomersPage({
   return (
     <ContactCenter
       title="Customer information"
+      moneyBar={
+        <ContactMoneyBar
+          storageKey="bp-customer-money-bar"
+          currency={currency}
+          active={band}
+          bands={[
+            {
+              key: 'estimates',
+              amount: bar.estimates.amount,
+              detail: bandDetail(bar.estimates),
+              bar: 'bg-[#5ec8e5]',
+            },
+            {
+              key: 'overdue',
+              amount: bar.overdue.amount,
+              detail: bandDetail(bar.overdue),
+              bar: 'bg-[#d4652f]',
+              accent: 'text-[#d4652f]',
+            },
+            {
+              key: 'open',
+              amount: bar.open.amount,
+              detail: bandDetail(bar.open),
+              bar: 'bg-[#c5c9ce]',
+            },
+            {
+              key: 'paid',
+              amount: bar.paid.amount,
+              detail: bandDetail(bar.paid),
+              bar: 'bg-[#2ca01c]',
+            },
+          ]}
+          hrefFor={(key) => {
+            const next = new URLSearchParams()
+            if (query.q) next.set('q', query.q)
+            if (includeInactive) next.set('archived', '1')
+            if (sort.sort !== 'name') next.set('sort', sort.sort)
+            if (sort.dir !== 'asc') next.set('dir', sort.dir)
+            if (datePreset) next.set('date', datePreset)
+            if (tx) next.set('tx', tx)
+            if (txSort) next.set('txSort', txSort)
+            if (txSort) next.set('txDir', txDir)
+            if (rowMode !== 'split') next.set('rows', rowMode)
+            if (tab !== 'transactions') next.set('tab', tab)
+            if (customer?.id) next.set('id', customer.id)
+            if (band !== key) next.set('band', key)
+            const text = next.toString()
+            return text ? `/customers?${text}` : '/customers'
+          }}
+        />
+      }
       people={page.rows.map((row) => ({
         id: row.id,
         name: row.displayName,
@@ -288,9 +345,9 @@ export default async function CustomersPage({
             terms={termOptions}
             today={asOf}
             currency={currency}
-            canInvoice={false}
-            canPay={false}
-            canReport={false}
+            canInvoice={canInvoice}
+            canPay={canPay}
+            canReport={canReport}
             canEdit={canEdit}
             canArchive={canArchive}
             isActive={customer.isActive}
@@ -304,7 +361,12 @@ export default async function CustomersPage({
       excelHref={exportHref}
       wordTitle={customer ? customer.displayName : 'Customers'}
       wordRows={wordRows}
-      chooseLabel="Choose a customer on the left. Their details and transactions show here."
+      chooseLabel="Choose a customer on the left. Double-click for QuickReport, or use … for invoices, payments, and more."
+      contactSide="customer"
+      canCreateDocs={canInvoice}
+      canPay={canPay}
+      canReport={canReport}
+      canArchive={canArchive}
       profileExtra={
         customer ? (
           <CustomerPapers

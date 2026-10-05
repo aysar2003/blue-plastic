@@ -293,6 +293,7 @@ export default async function AccountsPage({
                     canArchive={canArchive}
                     canReport={canReport}
                     canReconcile={canReconcile}
+                    canTransact={ctx.permissions.has('bank:transact')}
                     today={asOf}
                   >
                     <TableCell className="tabular text-muted-foreground">{account.code}</TableCell>

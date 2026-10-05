@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import type { Role } from '@prisma/client'
 import { z } from 'zod'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
@@ -19,14 +18,17 @@ export const inviteUser = action
     return { id: member.id }
   })
 
-export const updateMemberRole = action
+export const updateMemberAccess = action
   .requires('user:update')
   .input(updateMemberRoleSchema)
   .handler(async (ctx, input) => {
-    await membershipService.updateRole(ctx, input.membershipId, input.role as Role)
+    await membershipService.updateAccess(ctx, input)
     revalidatePath('/settings/users')
     return { id: input.membershipId }
   })
+
+/** @deprecated Prefer updateMemberAccess */
+export const updateMemberRole = updateMemberAccess
 
 export const setMemberStatus = action
   .requires('user:update')
@@ -48,7 +50,29 @@ export const removeMember = action
 
 /* --- form adapters ------------------------------------------------------- */
 
+function parseInviteForm(raw: Record<string, FormDataEntryValue | undefined>) {
+  let permissionsOverride: string[] = []
+  const rawPerms = raw.permissionsOverride
+  if (typeof rawPerms === 'string' && rawPerms.trim()) {
+    try {
+      const parsed = JSON.parse(rawPerms) as unknown
+      if (Array.isArray(parsed)) {
+        permissionsOverride = parsed.filter((p): p is string => typeof p === 'string')
+      }
+    } catch {
+      permissionsOverride = []
+    }
+  }
+  return {
+    name: raw.name,
+    email: raw.email,
+    role: raw.role,
+    temporaryPassword: raw.temporaryPassword,
+    permissionsOverride,
+  }
+}
+
 export async function inviteUserForm(_prev: FormState, formData: FormData): Promise<FormState> {
-  const result = await inviteUser(formValues(formData))
+  const result = await inviteUser(parseInviteForm(formValues(formData)))
   return toFormState(result, 'Member added.')
 }

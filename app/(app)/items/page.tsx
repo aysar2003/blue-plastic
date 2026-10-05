@@ -5,7 +5,6 @@ import { PackageIcon } from 'lucide-react'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { Pagination } from '@/components/data/pagination'
-import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { SearchInput } from '@/components/data/search-input'
 import { TableToolbar } from '@/components/data/table-toolbar'
 import { ImportDialog } from '@/components/master-data/import-dialog'
@@ -153,7 +152,6 @@ export default async function ItemsPage({
         />
       ) : (
         <Card className="overflow-hidden p-0">
-          <ScrollSheet>
             <ItemTable
               sort={sort}
               linkParams={linkParams}
@@ -178,7 +176,6 @@ export default async function ItemsPage({
                   : null
               }
             />
-          </ScrollSheet>
           <Pagination total={page.total} />
         </Card>
       )}

@@ -492,7 +492,7 @@ export function BillForm({
         <div className="mt-2 overflow-x-auto rounded-md border">
           <table className="w-full border-separate border-spacing-0 text-sm">
             <thead>
-              <tr className="bg-[#d5dde6] text-[12px] font-semibold uppercase tracking-wide text-slate-700">
+              <tr className="ledger-head text-[12px] font-semibold uppercase tracking-wide">
                 <th className="w-64 px-2 py-2 text-left">Category</th>
                 <th className="px-2 py-2 text-left">Description</th>
                 {showTax ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
@@ -509,7 +509,7 @@ export function BillForm({
                 </tr>
               ) : null}
               {categoryLines.map((line, index) => (
-                <tr key={line.key} className={index % 2 === 0 ? 'bg-white' : 'bg-[#c5dff3]'}>
+                <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
                   <td className="px-2 py-1.5">
                     <AccountPicker
                       options={expenseAccounts}
@@ -578,7 +578,7 @@ export function BillForm({
         <div className="mt-2 overflow-x-auto rounded-md border">
           <table className="w-full border-separate border-spacing-0 text-sm">
             <thead>
-              <tr className="bg-[#d5dde6] text-[12px] font-semibold uppercase tracking-wide text-slate-700">
+              <tr className="ledger-head text-[12px] font-semibold uppercase tracking-wide">
                 <th className="w-44 px-2 py-2 text-left">Item</th>
                 <th className="px-2 py-2 text-left">Description</th>
                 <th className="w-16 px-2 py-2 text-center">Qty</th>
@@ -599,7 +599,7 @@ export function BillForm({
               ) : null}
               {itemLines.map((line, index) => {
                 return (
-                  <tr key={line.key} className={index % 2 === 0 ? 'bg-white' : 'bg-[#c5dff3]'}>
+                  <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
                     <td className="px-2 py-1.5">
                       <EntityPicker
                         kind="item"

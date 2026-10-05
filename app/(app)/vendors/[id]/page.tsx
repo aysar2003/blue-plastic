@@ -6,9 +6,9 @@ import { PageHeader } from '@/components/data/page-header'
 import { FilterChips } from '@/components/data/filter-chips'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ContactDetail } from '@/components/master-data/contact-detail'
+import { VendorActions } from '@/components/vendors/vendor-actions'
 import { formatDate, today } from '@/lib/date'
 import { DATE_PRESETS, presetRange, readDatePreset } from '@/lib/list-filters'
 import { describeTerm } from '@/lib/payment-terms'
@@ -58,7 +58,24 @@ export default async function VendorPage({
       <PageHeader
         title={vendor.displayName}
         description={vendor.companyName ?? undefined}
-        actions={!vendor.isActive ? <Badge variant="outline">archived</Badge> : undefined}
+        actions={
+          <>
+            {!vendor.isActive ? <Badge variant="outline">archived</Badge> : null}
+            <VendorActions
+              vendorId={vendor.id}
+              contact={vendor}
+              terms={[]}
+              today={today(ctx.organization.timeZone)}
+              currency={currency}
+              canBill={canBill}
+              canPay={canPay}
+              canReport={canReport}
+              canEdit={ctx.permissions.has('vendor:update')}
+              canArchive={ctx.permissions.has('vendor:archive')}
+              isActive={vendor.isActive}
+            />
+          </>
+        }
       />
 
       <RecordedBy trail={trail} timeZone={ctx.organization.timeZone} />
@@ -91,41 +108,6 @@ export default async function VendorPage({
       </div>
 
       <ContactDetail contact={vendor} side="vendor" />
-
-      <div className="mt-4 flex flex-wrap gap-2 print:hidden">
-        {canBill ? (
-          <Link
-            href={`/purchases/bills/new?vendor=${vendor.id}`}
-            className={buttonVariants({ size: 'sm' })}
-          >
-            New bill
-          </Link>
-        ) : null}
-        {canBill ? (
-          <Link
-            href={`/purchases/expenses/new?vendor=${vendor.id}`}
-            className={buttonVariants({ size: 'sm', variant: 'outline' })}
-          >
-            New expense
-          </Link>
-        ) : null}
-        {canPay ? (
-          <Link
-            href={`/bill-payments/new?vendor=${vendor.id}`}
-            className={buttonVariants({ size: 'sm', variant: 'outline' })}
-          >
-            Pay bills
-          </Link>
-        ) : null}
-        {canReport ? (
-          <Link
-            href={`/reports/statements/vendor?vendorId=${vendor.id}`}
-            className={buttonVariants({ size: 'sm', variant: 'outline' })}
-          >
-            Statement
-          </Link>
-        ) : null}
-      </div>
 
       <div className="mt-4 overflow-hidden rounded-xl border bg-card">
         <div className="flex flex-col gap-2 border-b px-4 py-3">

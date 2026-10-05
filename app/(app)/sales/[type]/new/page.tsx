@@ -44,6 +44,10 @@ export default async function NewSalesDocumentPage({
   const initialCustomerId = options.customers.some((customer) => customer.id === requested)
     ? requested
     : undefined
+  const requestedStore = typeof query.store === 'string' ? query.store : undefined
+  const initialStoreId = shelf.stores.some((store) => store.id === requestedStore)
+    ? requestedStore
+    : undefined
 
   return (
     <>
@@ -74,6 +78,7 @@ export default async function NewSalesDocumentPage({
         organizationName={ctx.organization.name}
         documentNumber={documentNumber}
         initialCustomerId={initialCustomerId}
+        initialStoreId={initialStoreId}
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}

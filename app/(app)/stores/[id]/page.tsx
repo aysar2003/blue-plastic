@@ -9,6 +9,8 @@ import { SearchInput } from '@/components/data/search-input'
 import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { QtyCell } from '@/components/inventory/line-store'
 import { StoreItemMenu } from '@/components/inventory/store-item-menu'
+import { StoreKeeperPicks } from '@/components/inventory/store-keeper-picks'
+import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -20,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatDate, formatDateTime, toCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import { requireOrgContext } from '@/server/auth/context'
@@ -89,9 +91,10 @@ export default async function StoreDashboardPage({
   const sort = readSort(search, SORTABLE, { sort: 'name', dir: 'asc' })
   const q = typeof search.q === 'string' ? search.q.trim() : ''
 
-  const [board, tickets] = await Promise.all([
+  const [board, tickets, picks] = await Promise.all([
     storeService.dashboard(ctx, id, view).catch(() => null),
     inventoryService.ticketsForStore(ctx, id, 25),
+    inventoryService.pendingSalePicks(ctx, id),
   ])
   if (!board) notFound()
 
@@ -104,6 +107,9 @@ export default async function StoreDashboardPage({
   const canEdit = ctx.permissions.has('item:update')
   const canAdjust = ctx.permissions.has('inventory:adjust')
   const canCreate = ctx.permissions.has('account:create')
+  const canReceive = ctx.permissions.has('bill:read')
+  const canRecordReceipt = ctx.permissions.has('bill:create')
+  const canSell = ctx.permissions.has('invoice:create')
   const otherStores = network.stores.filter((store) => store.id !== id)
   const showNetwork = scope === 'network'
 
@@ -152,8 +158,8 @@ export default async function StoreDashboardPage({
         title={isOffice ? 'Office · Store home' : board.store.name}
         description={
           isOffice
-            ? 'Main store door. Pick All stores for every shelf side by side, or This store for only what sits in the office.'
-            : `Account ${board.store.account.code} ${board.store.account.name}. Use All stores to compare every shelf in columns.`
+            ? 'Main store door. Pick All stores for every shelf side by side, or This store for only what sits in the office. Sale tickets for other stores appear on each store’s Ready to issue list.'
+            : `Store keeper board for ${board.store.name}. Sale tickets from the office land under Ready to issue — prepare goods for the customer, then mark prepared.`
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -167,6 +173,12 @@ export default async function StoreDashboardPage({
                 Edit store
               </Link>
             ) : null}
+            <Link
+              href={`/stores/tickets?store=${id}`}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
+              All tickets
+            </Link>
             {canAdjust ? (
               <>
                 <Link
@@ -183,17 +195,29 @@ export default async function StoreDashboardPage({
                 </Link>
               </>
             ) : null}
-            <Link href="/purchases/bill/new" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-              Receive
-            </Link>
+            {canReceive ? (
+              <Link
+                href={`/stores/${id}/receive`}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                title={
+                  canRecordReceipt
+                    ? 'Receive purchase orders for this store'
+                    : 'See orders still to receive for this store'
+                }
+              >
+                Receive
+              </Link>
+            ) : null}
             {canCreate ? (
               <Link href="/stores/new" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                 <PlusIcon /> New store
               </Link>
             ) : null}
-            <Link href="/sales/invoice/new" className={buttonVariants({ size: 'sm' })}>
-              Sell
-            </Link>
+            {canSell ? (
+              <Link href={`/sales/invoice/new?store=${id}`} className={buttonVariants({ size: 'sm' })}>
+                Sell
+              </Link>
+            ) : null}
           </div>
         }
       />
@@ -280,12 +304,20 @@ export default async function StoreDashboardPage({
         </section>
       ) : null}
 
+      <div className="mb-6" id="ready-to-issue">
+        <StoreKeeperPicks
+          picks={picks}
+          timeZone={ctx.organization.timeZone}
+          canPrepare={canAdjust}
+        />
+      </div>
+
       <section className="mb-6 space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="text-base font-semibold">Store tickets</h2>
             <p className="text-sm text-muted-foreground">
-              Goods taken from this store — ticket number shows on the item quick report.
+              Every ticket from this shelf — sales picks, transfers, and manual issues.
             </p>
           </div>
           {canAdjust ? (
@@ -297,20 +329,21 @@ export default async function StoreDashboardPage({
         <Card className="overflow-hidden p-0">
           <Table>
             <TableHeader>
-              <TableRow className="bg-[#d5dde6] hover:bg-[#d5dde6]">
+              <TableRow className="ledger-head hover:bg-[var(--band)]">
                 <TableHead className="w-28">Ticket</TableHead>
-                <TableHead className="w-28">Date</TableHead>
+                <TableHead className="w-36">Issued</TableHead>
                 <TableHead>Item</TableHead>
-                <TableHead>To store</TableHead>
-                <TableHead className="w-28">Taken by</TableHead>
+                <TableHead>Customer / to</TableHead>
+                <TableHead className="w-28">Sale</TableHead>
+                <TableHead className="w-28">Seller</TableHead>
                 <TableHead className="numeric w-24">Qty</TableHead>
-                <TableHead className="w-24">Origin</TableHead>
+                <TableHead className="w-28">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tickets.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
                     No tickets from this store yet.
                   </TableCell>
                 </TableRow>
@@ -318,10 +351,22 @@ export default async function StoreDashboardPage({
                 tickets.map((ticket, index) => (
                   <TableRow
                     key={ticket.id}
-                    className={index % 2 === 1 ? 'bg-[#c5dff3] hover:bg-[#c5dff3]' : 'bg-white hover:bg-white'}
+                    className={index % 2 === 1 ? 'ledger-row-alt' : 'ledger-row'}
                   >
-                    <TableCell className="font-medium tabular">{ticket.number}</TableCell>
-                    <TableCell>{formatDate(toCalendarDate(ticket.date))}</TableCell>
+                    <TableCell className="font-medium tabular">
+                      <Link
+                        href={`/stores/tickets/${ticket.id}/print`}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {ticket.number}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="tabular text-muted-foreground">
+                      <div>{formatDate(toCalendarDate(ticket.date))}</div>
+                      <div className="text-xs">
+                        {formatDateTime(ticket.createdAt, ctx.organization.timeZone)}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <Link
                         href={`/items/${ticket.item.id}/report`}
@@ -334,21 +379,42 @@ export default async function StoreDashboardPage({
                       ) : null}
                     </TableCell>
                     <TableCell>
-                      {ticket.toStore ? (
+                      {ticket.origin === 'SALE'
+                        ? ticket.takenBy ?? '—'
+                        : ticket.toStore?.name ?? ticket.takenBy ?? '—'}
+                    </TableCell>
+                    <TableCell className="tabular">
+                      {ticket.salesDocument ? (
                         <Link
-                          href={`/stores/${ticket.toStore.id}`}
+                          href={
+                            ticket.salesDocument.type === 'SALES_RECEIPT'
+                              ? `/sales/sales-receipts/${ticket.salesDocument.id}`
+                              : `/sales/invoices/${ticket.salesDocument.id}`
+                          }
                           className="underline-offset-4 hover:underline"
                         >
-                          {ticket.toStore.name}
+                          {ticket.salesDocument.number}
                         </Link>
                       ) : (
-                        '—'
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell>{ticket.takenBy || '—'}</TableCell>
-                    <TableCell className="numeric tabular">{new Decimal(ticket.quantity.toString()).toFixed(2)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {ticket.origin === 'MANUAL' ? 'Manual' : 'Automatic'}
+                    <TableCell>{ticket.sellerName ?? '—'}</TableCell>
+                    <TableCell className="numeric tabular">
+                      {new Decimal(ticket.quantity.toString()).toFixed(2)}
+                    </TableCell>
+                    <TableCell>
+                      {ticket.origin === 'SALE' ? (
+                        ticket.preparedAt ? (
+                          <Badge variant="success">Prepared</Badge>
+                        ) : (
+                          <Badge variant="warning">To prepare</Badge>
+                        )
+                      ) : (
+                        <Badge variant="secondary">
+                          {ticket.origin === 'MANUAL' ? 'Manual' : 'Transfer'}
+                        </Badge>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
@@ -406,7 +472,7 @@ export default async function StoreDashboardPage({
         </p>
       </div>
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-6">
         <MetricCard label="In stock" value={counts.inStock} tone="stock" />
         <MetricCard label="Zero" value={counts.zero} tone="zero" />
         <MetricCard label="Below zero" value={counts.negative} tone="danger" />
@@ -415,6 +481,12 @@ export default async function StoreDashboardPage({
           label={showNetwork ? 'Stores' : 'Store account'}
           value={showNetwork ? network.storeCount : formatMoney(board.accountBalance, currency)}
           tone={showNetwork ? 'info' : 'ledger'}
+        />
+        <MetricCard
+          label="To prepare"
+          value={picks.length}
+          tone={picks.length > 0 ? 'warning' : 'info'}
+          href="#ready-to-issue"
         />
       </div>
 
@@ -472,7 +544,7 @@ export default async function StoreDashboardPage({
         <div className="max-h-[70vh] overflow-x-auto overflow-y-auto">
           <Table>
             <TableHeader>
-              <TableRow className="bg-[#d5dde6] hover:bg-[#d5dde6]">
+              <TableRow className="ledger-head hover:bg-[var(--band)]">
                 <SortableHeader
                   column="name"
                   label="Item"
@@ -544,7 +616,7 @@ export default async function StoreDashboardPage({
                 items.map((item, index) => (
                   <TableRow
                     key={item.itemId}
-                    className={index % 2 === 1 ? 'bg-[#c5dff3] hover:bg-[#c5dff3]' : 'bg-white hover:bg-white'}
+                    className={index % 2 === 1 ? 'ledger-row-alt' : 'ledger-row'}
                   >
                     <TableCell>
                       <Link

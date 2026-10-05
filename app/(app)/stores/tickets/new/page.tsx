@@ -24,9 +24,10 @@ export default async function NewStoreTicketPage({
   const fromParam = typeof query.from === 'string' ? query.from : undefined
   const itemParam = typeof query.item === 'string' ? query.item : undefined
 
-  const [stores, stock, documentNumber] = await Promise.all([
+  const [stores, stock, shelf, documentNumber] = await Promise.all([
     storeService.columns(ctx),
     inventoryService.stockOnHand(ctx),
+    storeService.quantities(ctx),
     peekDocumentNumber(db, ctx.orgId, 'STORE_TICKET'),
   ])
 
@@ -42,7 +43,7 @@ export default async function NewStoreTicketPage({
     <>
       <PageHeader
         title="New store ticket"
-        description="Record goods taken from a store. A ticket number is issued and stock moves to the destination store."
+        description="Record goods taken from a store. Add several items on one ticket — each line is numbered and stock moves to the destination store."
         actions={
           initialStoreId ? (
             <Link href={`/stores/${initialStoreId}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
@@ -64,6 +65,7 @@ export default async function NewStoreTicketPage({
         <StoreTicketForm
           stores={stores}
           items={items}
+          stock={shelf.byItem}
           today={today(ctx.organization.timeZone)}
           documentNumber={documentNumber}
           initialStoreId={initialStoreId}

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import {
+  ArrowLeftIcon,
   FileDownIcon,
   Loader2Icon,
   MailIcon,
@@ -34,6 +35,7 @@ export function DocumentActions({
   pdfHref,
   filename,
   printHref,
+  backHref,
   defaultTo = '',
   defaultSubject,
   defaultBody,
@@ -46,6 +48,8 @@ export function DocumentActions({
   filename?: string
   /** Dedicated print page. When omitted, Print uses the current page. */
   printHref?: string
+  /** Leave the print / share screen and return to the document. */
+  backHref?: string
   defaultTo?: string
   defaultSubject?: string
   defaultBody?: string
@@ -131,6 +135,12 @@ export function DocumentActions({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 print:hidden">
+      {backHref ? (
+        <Link href={backHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          <ArrowLeftIcon /> Back
+        </Link>
+      ) : null}
+
       {printHref ? (
         <Link href={printHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
           <PrinterIcon /> Print

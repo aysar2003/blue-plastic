@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { PageHeader } from '@/components/data/page-header'
 import { ReceiveForm } from '@/components/purchases/receive-form'
 import { Badge } from '@/components/ui/badge'
+import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatDate, toCalendarDate, today } from '@/lib/date'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
@@ -21,9 +22,17 @@ export const metadata: Metadata = { title: 'Receive items' }
  * turned up, checked line by line against what was ordered. The order screen is
  * for reading the order.
  */
-export default async function ReceiveOrderPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ReceiveOrderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const ctx = await requireOrgContext('bill:create')
   const { id } = await params
+  const query = await searchParams
+  const returnTo = typeof query.return === 'string' && query.return.startsWith('/') ? query.return : null
 
   const order = await purchaseService.receivableOrder(ctx, id).catch(() => null)
   if (!order) notFound()
@@ -35,9 +44,16 @@ export default async function ReceiveOrderPage({ params }: { params: Promise<{ i
         title={`Receive items · ${order.number}`}
         description={`Ordered from ${order.vendor.displayName} on ${formatDate(toCalendarDate(order.date))}. Enter what arrived; a bill is raised for exactly that, and the order keeps count of the rest.`}
         actions={
-          <Badge variant={STATUS_VARIANTS[order.status] ?? 'secondary'}>
-            {STATUS_LABELS[order.status] ?? order.status}
-          </Badge>
+          <>
+            {returnTo ? (
+              <Link href={returnTo} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                Back
+              </Link>
+            ) : null}
+            <Badge variant={STATUS_VARIANTS[order.status] ?? 'secondary'}>
+              {STATUS_LABELS[order.status] ?? order.status}
+            </Badge>
+          </>
         }
       />
 

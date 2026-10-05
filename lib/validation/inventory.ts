@@ -68,13 +68,20 @@ export const storeTicketSchema = z
     date: calendarDate,
     storeId: cuid,
     toStoreId: cuid,
-    itemId: cuid,
-    quantity: calculatedDecimal(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity').refine(
-      (v) => Number(v) > 0,
-      'Quantity must be more than zero',
-    ),
     takenBy: optionalText(120),
     memo: optionalText(1000),
+    lines: z
+      .array(
+        z.object({
+          itemId: cuid,
+          quantity: calculatedDecimal(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity').refine(
+            (v) => Number(v) > 0,
+            'Quantity must be more than zero',
+          ),
+        }),
+      )
+      .min(1, 'Add at least one item')
+      .max(200),
   })
   .superRefine((value, ctx) => {
     if (value.storeId === value.toStoreId) {
@@ -83,6 +90,17 @@ export const storeTicketSchema = z
         path: ['toStoreId'],
         message: 'Choose a different store to send the stock to.',
       })
+    }
+    const seen = new Set<string>()
+    for (const [index, line] of value.lines.entries()) {
+      if (seen.has(line.itemId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['lines', index, 'itemId'],
+          message: 'This item is already on the ticket. Combine the quantities on one line.',
+        })
+      }
+      seen.add(line.itemId)
     }
   })
 

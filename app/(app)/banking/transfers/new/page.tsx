@@ -11,8 +11,15 @@ import * as accountService from '@/server/services/account.service'
 
 export const metadata: Metadata = { title: 'Transfer' }
 
-export default async function NewTransferPage() {
+export default async function NewTransferPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const ctx = await requireOrgContext('bank:transact')
+  const params = await searchParams
+  const from =
+    typeof params.from === 'string' && params.from.length > 0 ? params.from : undefined
   // Every balance-sheet account, money accounts first. A transfer is a movement
   // between the business's own accounts, and which of them count as "money" is
   // the business's decision, not a fixed list of three subtypes.
@@ -38,6 +45,7 @@ export default async function NewTransferPage() {
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}
         documentNumber={documentNumber}
+        defaultFromAccountId={from}
       />
     </>
   )

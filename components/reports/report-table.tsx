@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { ClickableRow } from '@/components/reports/clickable-row'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate, isCalendarDate } from '@/lib/date'
-import { formatMoney } from '@/lib/money'
+import { formatMoney, formatSignedQuantity } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import type { ReportColumn, ReportTable as ReportTableData } from '@/server/reports/catalogue'
 
@@ -50,7 +50,10 @@ export function ReportTable({ table, currency }: { table: ReportTableData; curre
               <ClickableRow key={index} href={row.href ?? undefined} className={row.emphasis ? 'bg-muted/40' : undefined}>
                 {table.columns.map((column, columnIndex) => {
                   const value = format(row.cells[column.key] ?? null, column, currency)
-                  const linked = Boolean(row.href) && (columnIndex === 0 || column.format === 'money')
+                  const cellHref = row.cellHrefs?.[column.key]
+                  const linked =
+                    Boolean(cellHref) ||
+                    (Boolean(row.href) && (columnIndex === 0 || column.format === 'money'))
 
                   return (
                     <TableCell
@@ -62,7 +65,10 @@ export function ReportTable({ table, currency }: { table: ReportTableData; curre
                       )}
                     >
                       {linked ? (
-                        <Link href={row.href!} className="underline-offset-4 hover:underline">
+                        <Link
+                          href={cellHref ?? row.href!}
+                          className="underline-offset-4 hover:underline"
+                        >
                           {value}
                         </Link>
                       ) : (
@@ -98,7 +104,7 @@ export function ReportTable({ table, currency }: { table: ReportTableData; curre
 }
 
 const isNumeric = (column: ReportColumn) =>
-  column.format === 'money' || column.format === 'number'
+  column.format === 'money' || column.format === 'number' || column.format === 'signed'
 
 function format(value: string | null, column: ReportColumn, currency: string): React.ReactNode {
   if (value === null || value === '') return <span className="text-muted-foreground">—</span>
@@ -107,6 +113,9 @@ function format(value: string | null, column: ReportColumn, currency: string): R
   // something that parses as one is formatted as one.
   if (column.format === 'money' && /^-?\d+(\.\d+)?$/.test(value)) {
     return formatMoney(value, currency)
+  }
+  if (column.format === 'signed' && /^-?\d+(\.\d+)?$/.test(value)) {
+    return formatSignedQuantity(value)
   }
   if (column.format === 'date' && isCalendarDate(value)) {
     return formatDate(value)

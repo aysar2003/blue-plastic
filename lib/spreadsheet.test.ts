@@ -20,6 +20,25 @@ describe('QuickBooks values', () => {
     expect(normaliseDate('02/03/2026', 'MDY')).toBe('2026-02-03')
   })
 
+  it('keeps a negative open balance so a credit posts on import', () => {
+    const { rows } = parseCsv(
+      [
+        'Customer,Open Balance',
+        'Credit Holder,-1200',
+        'Also Parentheses,"(1,200.00)"',
+      ].join('\n'),
+    )
+
+    expect(shapeContact(rows[0], { paymentTermId: '', order: 'DMY' }).data).toMatchObject({
+      displayName: 'Credit Holder',
+      openingBalance: '-1200',
+    })
+    expect(shapeContact(rows[1], { paymentTermId: '', order: 'DMY' }).data).toMatchObject({
+      displayName: 'Also Parentheses',
+      openingBalance: '-1200',
+    })
+  })
+
   it('maps a QuickBooks customer row, including the open balance and the country', () => {
     const { rows } = parseCsv(
       [

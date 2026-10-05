@@ -2,23 +2,34 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-function Table({ className, ...props }: React.ComponentProps<'table'>) {
+function Table({
+  className,
+  containerClassName,
+  ...props
+}: React.ComponentProps<'table'> & { containerClassName?: string }) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+    <div
+      data-slot="table-container"
+      className={cn('relative w-full', containerClassName)}
+    >
       <table data-slot="table" className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </div>
   )
 }
 
 /**
- * The header is a tinted strip with small grey capitals, which is how a dense
- * table tells you where it starts without a heavy rule doing it.
+ * Sticky column labels. While the sheet scrolls, the header stays put so you
+ * can still read which figure (qty, price, account) each column is.
  */
 function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
   return (
     <thead
       data-slot="table-header"
-      className={cn('bg-muted/50 [&_tr]:border-b', className)}
+      className={cn(
+        'sticky top-0 z-20 bg-[var(--band)] shadow-[inset_0_-1px_0_0_var(--border)]',
+        '[&_tr]:border-b [&_th]:bg-[var(--band)]',
+        className,
+      )}
       {...props}
     />
   )
@@ -56,7 +67,7 @@ function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
     <th
       data-slot="table-head"
       className={cn(
-        'h-8 px-3 text-left align-middle text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap',
+        'h-8 px-3 text-left align-middle text-[0.6875rem] font-semibold uppercase tracking-wider text-foreground whitespace-nowrap',
         '[&:has([role=checkbox])]:pr-0 [&.numeric]:text-right',
         className,
       )}
@@ -69,7 +80,7 @@ function TableCell({ className, ...props }: React.ComponentProps<'td'>) {
   return (
     <td
       data-slot="table-cell"
-      className={cn('px-3 py-1.5 align-middle [&:has([role=checkbox])]:pr-0 [&.numeric]:text-right', className)}
+      className={cn('px-3 py-1.5 align-middle text-foreground [&:has([role=checkbox])]:pr-0 [&.numeric]:text-right', className)}
       {...props}
     />
   )

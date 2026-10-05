@@ -26,11 +26,18 @@ import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import * as storeService from '@/server/services/store.service'
+import * as salesDelivery from '@/server/services/sales-delivery.service'
 import { loadCodeForCalculation } from '@/server/services/tax.service'
 
 function documentDiscount(input: SalesDocumentInput) {
   if (!input.discountValue) return null
   return { kind: input.discountKind, value: input.discountValue }
+}
+
+/** Till metadata written before a POS sales receipt is posted. */
+export type PosCheckoutMeta = {
+  registerId: string
+  payments: { paymentMethodId: string; ledgerAccountId: string; amount: string }[]
 }
 
 async function salesDiscountAccountId(tx: Tx, orgId: string) {
@@ -501,6 +508,15 @@ export async function outstandingBalances(
   return new Map(rows.map((row) => [row.id, new Decimal(row.total).minus(row.applied)]))
 }
 
+/** Price lines without writing — used by the till before payment. */
+export async function quoteLines(ctx: OrgContext, lines: SalesDocumentInput['lines']) {
+  return db.$transaction(async (tx) => {
+    const resolved = await resolveLines(tx, ctx, lines)
+    const taxCodes = await loadTaxCodes(tx, ctx, resolved)
+    return priceDocument(resolved, taxCodes, ctx.organization.baseCurrency, null)
+  })
+}
+
 /* --- Writing -------------------------------------------------------------- */
 
 /**
@@ -509,7 +525,12 @@ export async function outstandingBalances(
  * Posting and creating happen in one transaction so a document without its
  * journal, or a journal without its document, is unreachable.
  */
-export async function create(ctx: OrgContext, type: SalesDocumentType, input: SalesDocumentInput) {
+export async function create(
+  ctx: OrgContext,
+  type: SalesDocumentType,
+  input: SalesDocumentInput,
+  options?: { pos?: PosCheckoutMeta },
+) {
   const meta = await requestMeta()
 
   return db.$transaction(async (tx) => {
@@ -581,6 +602,23 @@ export async function create(ctx: OrgContext, type: SalesDocumentType, input: Sa
       },
       select: { id: true, number: true, type: true, total: true, status: true },
     })
+
+    if (options?.pos) {
+      await tx.posOrder.create({
+        data: {
+          orgId: ctx.orgId,
+          registerId: options.pos.registerId,
+          salesDocumentId: document.id,
+          payments: {
+            create: options.pos.payments.map((payment) => ({
+              paymentMethodId: payment.paymentMethodId,
+              ledgerAccountId: payment.ledgerAccountId,
+              amount: payment.amount,
+            })),
+          },
+        },
+      })
+    }
 
     if (!isDraft && POSTS_A_JOURNAL[type]) {
       await postDocument(tx, ctx, document.id)
@@ -790,6 +828,26 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     memo: document.memo,
   }
 
+  const posOrder = await tx.posOrder.findUnique({
+    where: { salesDocumentId: id },
+    select: {
+      payments: {
+        select: {
+          ledgerAccountId: true,
+          amount: true,
+          paymentMethod: { select: { name: true } },
+        },
+      },
+    },
+  })
+  if (posOrder?.payments.length) {
+    input.paymentSplits = posOrder.payments.map((payment) => ({
+      accountId: payment.ledgerAccountId,
+      amount: new Decimal(payment.amount.toString()),
+      description: payment.paymentMethod.name,
+    }))
+  }
+
   // Tracked stock moves as part of posting, and its cost joins the same journal.
   // A sale and its cost are one event; two entries would let a report run between
   // them and show a margin that was never real.
@@ -803,6 +861,14 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       ctx.orgId,
       document.lines.map((line) => line.storeId),
     )
+    const saleMovements: {
+      lineId: string
+      itemId: string
+      storeId: string | null
+      quantity: Decimal
+      unitCost: Decimal
+      value: Decimal
+    }[] = []
 
     for (const line of document.lines) {
       if (line.item?.type !== 'INVENTORY') continue
@@ -824,6 +890,17 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         storeId: line.storeId,
       })
 
+      if (movesStockOut) {
+        saleMovements.push({
+          lineId: line.id,
+          itemId: line.item.id,
+          storeId: line.storeId,
+          quantity,
+          unitCost: movement.unitCost,
+          value: movement.value,
+        })
+      }
+
       const key = `${line.item.cogsAccountId}|${inventoryAccountId}`
       const existing = cogs.get(key)
       const amount = movement.value.abs()
@@ -837,6 +914,10 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     }
 
     input.cogs = [...cogs.values()]
+
+    if (movesStockOut) {
+      await salesDelivery.syncFromSale(tx, ctx, document.id, saleMovements)
+    }
   }
 
   const draft =
@@ -921,6 +1002,13 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
     // and both sides fall by the same amount, because withdrawing the journal
     // takes the inventory value out of the general ledger at the same time.
     await reverseMovementsFor(tx, ctx, { sourceId: id })
+
+    await salesDelivery.voidForSale(
+      tx,
+      ctx,
+      id,
+      reason?.trim() || `${document.number} deleted`,
+    )
 
     await softDeleteDocument(tx, ctx, {
       mark: (stamp) => tx.salesDocument.update({ where: { id }, data: stamp }),

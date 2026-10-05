@@ -113,6 +113,21 @@ describe('sales receipt', () => {
   it('refuses to build without somewhere for the money to go', () => {
     expect(() => buildSalesReceiptJournal(base)).toThrow(/which account the money went to/i)
   })
+
+  it('splits the debit across several till accounts', () => {
+    const journal = buildSalesReceiptJournal({
+      ...base,
+      depositAccountId: 'acct-bank',
+      paymentSplits: [
+        { accountId: 'acct-evc', amount: new Decimal('150'), description: 'EVC' },
+        { accountId: 'acct-edahab', amount: new Decimal('140'), description: 'Edahab' },
+      ],
+    })
+    expect(journal.lines.find((l) => l.accountId === 'acct-evc')?.debit?.toString()).toBe('150')
+    expect(journal.lines.find((l) => l.accountId === 'acct-edahab')?.debit?.toString()).toBe('140')
+    const { debit, credit } = totals(journal.lines)
+    expect(debit.toString()).toBe(credit.toString())
+  })
 })
 
 describe('credit memo', () => {

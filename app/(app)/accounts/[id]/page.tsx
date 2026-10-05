@@ -1,13 +1,11 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ScrollTextIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { RegisterTable } from '@/components/accounts/register-table'
 import {
   ACCOUNT_SUBTYPE_LABELS,
   ACCOUNT_TYPE_LABELS,
@@ -17,7 +15,7 @@ import {
 import { fiscalYearOf, fiscalYearRange, formatDate, toCalendarDate, today } from '@/lib/date'
 import { postedLineParts } from '@/lib/ledger-text'
 import { formatMoney } from '@/lib/money'
-import { readSort, SortableHeader } from '@/components/data/sortable-header'
+import { readSort } from '@/components/data/sortable-header'
 import { generalLedger } from '@/server/accounting/balances'
 import { requireOrgContext } from '@/server/auth/context'
 import * as accountService from '@/server/services/account.service'
@@ -103,6 +101,44 @@ export default async function AccountRegisterPage({
     }
   })
   const debitNormal = isDebitNormalType(account.type)
+  const balanceHeader =
+    sort.sort === 'date' && sort.dir === 'asc' ? 'Balance' : 'Balance (in date order)'
+  const registerRows = entries.map((entry) => {
+    const source = sourceFor(sources, {
+      sourceType: entry.sourceType as JournalSourceType,
+      sourceId: entry.sourceId,
+    })
+    const sourceLabel = JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ?? entry.sourceType
+    const parts = postedLineParts({
+      sourceLabel,
+      memo: entry.memo,
+      description: entry.description,
+      partyName: entry.partyName ?? source.partyName,
+    })
+    const nameHref = entry.customerId
+      ? `/customers?id=${entry.customerId}`
+      : entry.vendorId
+        ? `/vendors?id=${entry.vendorId}`
+        : source.partyHref
+    return {
+      lineId: entry.lineId,
+      journalId: entry.journalId,
+      journalNumber: entry.journalNumber,
+      dateLabel: formatDate(toCalendarDate(entry.date)),
+      status: entry.status,
+      sourceLabel,
+      name: parts.name,
+      nameHref: nameHref ?? null,
+      note: parts.note ?? null,
+      docNumber: source.number,
+      docHref: source.href,
+      contraAccounts: entry.contraAccounts,
+      splits: entry.splits.map((s) => ({ code: s.code, name: s.name, amount: s.amount })),
+      debit: entry.debit.isZero() ? '' : entry.debit.toString(),
+      credit: entry.credit.isZero() ? '' : entry.credit.toString(),
+      balance: entry.balance.toString(),
+    }
+  })
 
   return (
     <>
@@ -142,125 +178,18 @@ export default async function AccountRegisterPage({
           description={`Showing ${formatDate(from)} to ${formatDate(to)}.`}
         />
       ) : (
-        <Card className="overflow-hidden p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableHeader column="date" label="Date" state={sort} basePath={basePath} params={linkParams} className="w-28" />
-                <SortableHeader column="entry" label="Entry" state={sort} basePath={basePath} params={linkParams} className="w-28" />
-                <TableHead className="w-40">Type</TableHead>
-                <TableHead className="w-44">Name</TableHead>
-                <SortableHeader column="description" label="Description" state={sort} basePath={basePath} params={linkParams} />
-                <TableHead className="w-40">Document</TableHead>
-                <TableHead>Contra account</TableHead>
-                <SortableHeader column="debit" label="Debit" state={sort} basePath={basePath} params={linkParams} className="w-32" numeric defaultDirection="desc" />
-                <SortableHeader column="credit" label="Credit" state={sort} basePath={basePath} params={linkParams} className="w-32" numeric defaultDirection="desc" />
-                <TableHead className="numeric w-36">
-                  {sort.sort === 'date' && sort.dir === 'asc' ? 'Balance' : 'Balance (in date order)'}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {entries.map((entry) => {
-                const source = sourceFor(sources, {
-                  sourceType: entry.sourceType as JournalSourceType,
-                  sourceId: entry.sourceId,
-                })
-                const sourceLabel =
-                  JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ?? entry.sourceType
-                const parts = postedLineParts({
-                  sourceLabel,
-                  memo: entry.memo,
-                  description: entry.description,
-                  partyName: entry.partyName ?? source.partyName,
-                })
-                const nameHref = entry.customerId
-                  ? `/customers?id=${entry.customerId}`
-                  : entry.vendorId
-                    ? `/vendors?id=${entry.vendorId}`
-                    : source.partyHref
-                return (
-                <TableRow key={entry.lineId}>
-                  <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                    {formatDate(toCalendarDate(entry.date))}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/journals/${entry.journalId}`}
-                      className="tabular font-medium underline-offset-4 hover:underline"
-                    >
-                      {entry.journalNumber}
-                    </Link>
-                    {entry.status === 'REVERSED' ? (
-                      <Badge variant="outline" className="ml-1.5">
-                        reversed
-                      </Badge>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">{sourceLabel}</TableCell>
-                  <TableCell className="truncate">
-                    {parts.name ? (
-                      nameHref ? (
-                        <Link href={nameHref} className="underline-offset-4 hover:underline">
-                          {parts.name}
-                        </Link>
-                      ) : (
-                        parts.name
-                      )
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{parts.note ?? '—'}</TableCell>
-                  <TableCell>
-                    <SourceCell source={source} />
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{entry.contraAccounts}</TableCell>
-                  <TableCell className="numeric tabular">
-                    {entry.debit.isZero() ? '' : formatMoney(entry.debit, currency)}
-                  </TableCell>
-                  <TableCell className="numeric tabular">
-                    {entry.credit.isZero() ? '' : formatMoney(entry.credit, currency)}
-                  </TableCell>
-                  <TableCell className="numeric tabular font-medium">
-                    {formatMoney(entry.balance, currency)}
-                  </TableCell>
-                </TableRow>
-                )
-              })}
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableCell colSpan={9}>Closing balance</TableCell>
-                <TableCell className="numeric tabular font-semibold">
-                  {formatMoney(ledger.closing, currency)}
-                </TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
-        </Card>
+        <RegisterTable
+          accountId={account.id}
+          currency={currency}
+          rows={registerRows}
+          closingBalance={ledger.closing.toString()}
+          sort={sort}
+          basePath={basePath}
+          linkParams={linkParams}
+          balanceHeader={balanceHeader}
+        />
       )}
     </>
-  )
-}
-
-/**
- * The document behind a register line, and who it was with.
- *
- * A manual entry has neither, and says so rather than showing an empty cell that
- * could equally mean "not loaded".
- */
-function SourceCell({
-  source,
-}: {
-  source: { number: string | null; href: string | null }
-}) {
-  if (!source.number) return <span className="text-muted-foreground">—</span>
-  if (!source.href) return <span className="tabular font-medium">{source.number}</span>
-  return (
-    <Link href={source.href} className="tabular font-medium underline-offset-4 hover:underline">
-      {source.number}
-    </Link>
   )
 }
 

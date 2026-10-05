@@ -26,6 +26,8 @@ export type SalesJournalInput = {
   receivableAccountId: string
   /** Bank or Undeposited Funds, for documents that move cash immediately. */
   depositAccountId?: string | null
+  /** When the till splits one sale across several wallets or drawers. */
+  paymentSplits?: { accountId: string; amount: Decimal; description?: string | null }[]
   /** Where a line lands when its item names no income account. */
   fallbackIncomeAccountId: string
   /** Contra-revenue account. Required when the document carries a discount. */
@@ -77,9 +79,7 @@ export function buildInvoiceJournal(input: SalesJournalInput): DraftJournal {
  *     Cr Sales Tax Payable          tax
  */
 export function buildSalesReceiptJournal(input: SalesJournalInput): DraftJournal {
-  if (!input.depositAccountId) {
-    throw new Error('A sales receipt must say which account the money went to.')
-  }
+  const depositLines = receiptDepositLines(input)
 
   return {
     date: input.date,
@@ -87,17 +87,40 @@ export function buildSalesReceiptJournal(input: SalesJournalInput): DraftJournal
     sourceType: 'SALES_RECEIPT',
     sourceId: input.documentId,
     lines: [
-      {
-        accountId: input.depositAccountId,
-        debit: input.priced.total,
-        description: `Sales receipt ${input.number}`,
-      },
+      ...depositLines,
       ...discountLines(input, 'debit'),
       ...incomeLines(input, 'credit'),
       ...taxLines(input, 'credit'),
       ...cogsLines(input, 'out'),
     ],
   }
+}
+
+function receiptDepositLines(input: SalesJournalInput): DraftLine[] {
+  const splits = input.paymentSplits?.filter((split) => !new Decimal(split.amount).isZero()) ?? []
+  if (splits.length > 0) {
+    const total = splits.reduce((sum, split) => sum.plus(split.amount), new Decimal(0))
+    if (!total.equals(input.priced.total)) {
+      throw new Error('Split payments must add up to the receipt total.')
+    }
+    return splits.map((split) => ({
+      accountId: split.accountId,
+      debit: split.amount,
+      description: split.description ?? `Sales receipt ${input.number}`,
+    }))
+  }
+
+  if (!input.depositAccountId) {
+    throw new Error('A sales receipt must say which account the money went to.')
+  }
+
+  return [
+    {
+      accountId: input.depositAccountId,
+      debit: input.priced.total,
+      description: `Sales receipt ${input.number}`,
+    },
+  ]
 }
 
 /**
