@@ -1,4 +1,6 @@
 import 'server-only'
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
 import type { Prisma } from '@prisma/client'
 
 import { balanceAlertKind, balanceMoment, type BalanceAlert } from '@/lib/balance-alert'
@@ -586,10 +588,29 @@ type PresentedFile = {
   createdAt: Date
 }
 
-/** Customers whose 3, 5, or 7 day warning has started, and who still owe a balance. */
-export async function listBalanceAlerts(ctx: OrgContext): Promise<BalanceAlert[]> {
+/**
+ * Customers whose 3, 5, or 7 day warning has started, and who still owe a balance.
+ * Cached ~60s per organisation so AppShell does not recompute on every page.
+ */
+export function listBalanceAlerts(ctx: OrgContext): Promise<BalanceAlert[]> {
+  return cachedBalanceAlerts(ctx.orgId, ctx.organization.timeZone, ctx.organization.baseCurrency)
+}
+
+const cachedBalanceAlerts = cache((orgId: string, timeZone: string, baseCurrency: string) =>
+  unstable_cache(
+    () => queryBalanceAlerts(orgId, timeZone, baseCurrency),
+    ['balance-alerts', orgId, timeZone, baseCurrency],
+    { revalidate: 60 },
+  )(),
+)
+
+async function queryBalanceAlerts(
+  orgId: string,
+  timeZone: string,
+  baseCurrency: string,
+): Promise<BalanceAlert[]> {
   const people = await db.customer.findMany({
-    where: { orgId: ctx.orgId, isActive: true, reminderDays: { in: [3, 5, 7] } },
+    where: { orgId, isActive: true, reminderDays: { in: [3, 5, 7] } },
     select: {
       id: true,
       displayName: true,
@@ -601,11 +622,10 @@ export async function listBalanceAlerts(ctx: OrgContext): Promise<BalanceAlert[]
   })
 
   const now = Date.now()
-  const zone = ctx.organization.timeZone
   const due = people.flatMap((person) => {
     const date = person.balanceDate ?? person.agreementDate
     if (!date || person.reminderDays == null) return []
-    const moment = balanceMoment(toCalendarDate(date), person.balanceTime, zone)
+    const moment = balanceMoment(toCalendarDate(date), person.balanceTime, timeZone)
     const kind = balanceAlertKind(now, moment.getTime(), person.reminderDays)
     if (kind === 'waiting') return []
     const when = person.balanceTime
@@ -617,7 +637,7 @@ export async function listBalanceAlerts(ctx: OrgContext): Promise<BalanceAlert[]
 
   const balances = await subledgerBalances(
     db,
-    ctx,
+    { orgId } as OrgContext,
     'customer',
     due.map((person) => person.id),
   )
@@ -630,7 +650,7 @@ export async function listBalanceAlerts(ctx: OrgContext): Promise<BalanceAlert[]
         {
           customerId: person.id,
           name: person.name,
-          amount: formatMoney(amount, ctx.organization.baseCurrency),
+          amount: formatMoney(amount, baseCurrency),
           kind: person.kind,
           when: person.when,
           reminderDays: person.reminderDays,

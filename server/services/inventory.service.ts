@@ -1,5 +1,8 @@
 import 'server-only'
 
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
+
 import type { Prisma } from '@prisma/client'
 
 import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
@@ -34,21 +37,69 @@ export async function stockOnHand(ctx: OrgContext) {
   return valuation(db as unknown as Tx, ctx.orgId)
 }
 
-/** Out of stock first, then products that have reached the limit set for ordering. */
-export async function listStockAlerts(ctx: OrgContext): Promise<StockAlert[]> {
-  const stock = await stockOnHand(ctx)
-  const alerts: StockAlert[] = []
-  for (const item of stock.items) {
-    const quantity = item.quantity.toFixed(2)
-    const reorderPoint = item.reorderPoint ? item.reorderPoint.toFixed(2) : null
-    if (item.quantity.lessThanOrEqualTo(0)) {
-      alerts.push({ itemId: item.itemId, name: item.name, quantity, reorderPoint, kind: 'out' })
-    } else if (item.belowReorder) {
-      alerts.push({ itemId: item.itemId, name: item.name, quantity, reorderPoint, kind: 'limit' })
-    }
-  }
-  alerts.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'out' ? -1 : 1))
-  return alerts
+/**
+ * Out of stock first, then products that have reached the limit set for ordering.
+ *
+ * Uses a filtered query (only alert rows, needed columns) instead of full inventory
+ * valuation. Results are React-cached per request and Next-cached ~60s per org so
+ * the AppShell bell does not re-run the scan on every signed-in navigation.
+ */
+export function listStockAlerts(ctx: OrgContext): Promise<StockAlert[]> {
+  return cachedStockAlerts(ctx.orgId)
+}
+
+const cachedStockAlerts = cache((orgId: string) =>
+  unstable_cache(() => queryStockAlerts(orgId), ['stock-alerts', orgId], { revalidate: 60 })(),
+)
+
+async function queryStockAlerts(orgId: string): Promise<StockAlert[]> {
+  const rows = await db.$queryRaw<
+    {
+      itemId: string
+      name: string
+      quantity: string
+      reorderPoint: string | null
+      kind: 'out' | 'limit'
+    }[]
+  >`
+    SELECT i.id AS "itemId",
+           i.name AS "name",
+           COALESCE(t."runningQuantity", 0)::text AS "quantity",
+           i."reorderPoint"::text AS "reorderPoint",
+           CASE
+             WHEN COALESCE(t."runningQuantity", 0) <= 0 THEN 'out'
+             ELSE 'limit'
+           END AS "kind"
+      FROM items i
+      LEFT JOIN LATERAL (
+        SELECT "runningQuantity"
+          FROM inventory_transactions
+         WHERE "itemId" = i.id
+         ORDER BY sequence DESC
+         LIMIT 1
+      ) t ON true
+     WHERE i."orgId" = ${orgId}
+       AND i."deletedAt" IS NULL
+       AND i.type = 'INVENTORY'
+       AND (
+         COALESCE(t."runningQuantity", 0) <= 0
+         OR (
+           i."reorderPoint" IS NOT NULL
+           AND COALESCE(t."runningQuantity", 0) <= i."reorderPoint"
+         )
+       )
+     ORDER BY CASE WHEN COALESCE(t."runningQuantity", 0) <= 0 THEN 0 ELSE 1 END,
+              i.name
+     LIMIT 200
+  `
+
+  return rows.map((row) => ({
+    itemId: row.itemId,
+    name: row.name,
+    quantity: new Decimal(row.quantity).toFixed(2),
+    reorderPoint: row.reorderPoint ? new Decimal(row.reorderPoint).toFixed(2) : null,
+    kind: row.kind,
+  }))
 }
 
 /** Does the stock ledger agree with the Inventory Asset account? */
