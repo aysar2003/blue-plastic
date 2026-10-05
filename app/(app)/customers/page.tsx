@@ -65,15 +65,34 @@ export default async function CustomersPage({
   const datePreset = readDatePreset(params.date)
   const range = presetRange(datePreset, asOf)
 
-  const bar = await customerMoneyBar(ctx, asOf)
-  const bandIds = band ? bar[band].customerIds : undefined
+    // Money bar + payment terms are independent. Without a band filter the
+  // customer list can share that same round-trip.
+  const termsPromise = taxService.listPaymentTerms(ctx)
+  const barPromise = customerMoneyBar(ctx, asOf)
 
-  const [page, terms] = await Promise.all([
-    bandIds && bandIds.length === 0
-      ? Promise.resolve({ rows: [], total: 0, page: 1, pageCount: 1, pageSize: query.pageSize })
-      : contactService.listCustomers(ctx, query, { includeInactive, sort: sort.sort, dir: sort.dir, ids: bandIds }),
-    taxService.listPaymentTerms(ctx),
-  ])
+  let bar: Awaited<ReturnType<typeof customerMoneyBar>>
+  let page: Awaited<ReturnType<typeof contactService.listCustomers>>
+  let terms: Awaited<ReturnType<typeof taxService.listPaymentTerms>>
+
+  if (!band) {
+    ;[bar, page, terms] = await Promise.all([
+      barPromise,
+      contactService.listCustomers(ctx, query, { includeInactive, sort: sort.sort, dir: sort.dir }),
+      termsPromise,
+    ])
+  } else {
+    ;[bar, terms] = await Promise.all([barPromise, termsPromise])
+    const bandIds = bar[band].customerIds
+    page =
+      bandIds.length === 0
+        ? { rows: [], total: 0, page: 1, pageCount: 1, pageSize: query.pageSize }
+        : await contactService.listCustomers(ctx, query, {
+            includeInactive,
+            sort: sort.sort,
+            dir: sort.dir,
+            ids: bandIds,
+          })
+  }
 
   const [customer, activity] = requestedId
     ? await Promise.all([

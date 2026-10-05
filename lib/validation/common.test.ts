@@ -20,8 +20,8 @@ describe('list query', () => {
     expect(parseListQuery({ q: ['acme', 'other'] }).q).toBe('acme')
   })
 
-  it('leaves skip and take unset so every matching row comes back', () => {
-    expect(paginate({ page: 3, pageSize: 25, dir: 'asc' })).toEqual({})
+  it('computes skip and take for callers that still page in memory', () => {
+    expect(paginate({ page: 3, pageSize: 25, dir: 'asc' })).toEqual({ skip: 50, take: 25 })
   })
 
   it('reports at least one page even when empty', () => {
