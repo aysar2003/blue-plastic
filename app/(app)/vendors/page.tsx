@@ -72,16 +72,32 @@ export default async function VendorsPage({
   const datePreset = readDatePreset(params.date)
   const range = presetRange(datePreset, asOf)
 
-  const bar = await vendorMoneyBar(ctx, asOf)
-  const bandIds = band ? bar[band].vendorIds : undefined
+    // Vendor money bar, payment terms, and expense accounts are independent.
+  // Without a band filter the vendor list joins that same round-trip.
+  const termsPromise = taxService.listPaymentTerms(ctx)
+  const accountsPromise = accountService.selectableAccounts(ctx)
+  const barPromise = vendorMoneyBar(ctx, asOf)
 
-  const [page, terms, accounts] = await Promise.all([
-    bandIds && bandIds.length === 0
-      ? Promise.resolve({ rows: [], total: 0, page: 1, pageCount: 1, pageSize: query.pageSize })
-      : contactService.listVendors(ctx, query, { includeInactive, ...sort, ids: bandIds }),
-    taxService.listPaymentTerms(ctx),
-    accountService.selectableAccounts(ctx),
-  ])
+  let bar: Awaited<ReturnType<typeof vendorMoneyBar>>
+  let page: Awaited<ReturnType<typeof contactService.listVendors>>
+  let terms: Awaited<ReturnType<typeof taxService.listPaymentTerms>>
+  let accounts: Awaited<ReturnType<typeof accountService.selectableAccounts>>
+
+  if (!band) {
+    ;[bar, page, terms, accounts] = await Promise.all([
+      barPromise,
+      contactService.listVendors(ctx, query, { includeInactive, ...sort }),
+      termsPromise,
+      accountsPromise,
+    ])
+  } else {
+    ;[bar, terms, accounts] = await Promise.all([barPromise, termsPromise, accountsPromise])
+    const bandIds = bar[band].vendorIds
+    page =
+      bandIds.length === 0
+        ? { rows: [], total: 0, page: 1, pageCount: 1, pageSize: query.pageSize }
+        : await contactService.listVendors(ctx, query, { includeInactive, ...sort, ids: bandIds })
+  }
 
   const [vendor, activity] = requestedId
     ? await Promise.all([

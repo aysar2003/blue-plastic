@@ -61,8 +61,9 @@ function withoutDeleted(args: QueryArgs): QueryArgs {
 function createClient() {
   const adapter = new PrismaPg({
     connectionString: env.DATABASE_URL,
-    // Serverless-friendly ceiling. Raise it for a long-lived Node server.
-    max: 10,
+    // One connection per serverless instance. Pair with DATABASE_URL
+    // pgbouncer=true and connection_limit=1 on the Supabase transaction pooler (:6543).
+    max: env.NODE_ENV === 'production' ? 1 : 5,
     // Fail the page quickly when the pooler is paused or the host is wrong,
     // instead of hanging until the platform kills the function.
     connectionTimeoutMillis: 8_000,
