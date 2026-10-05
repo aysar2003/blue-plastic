@@ -244,6 +244,24 @@ export default async function VendorsPage({
       ]
     : [...companyLines, [], ['Name', 'Balance'], ...page.rows.map((row) => [row.displayName, formatMoney(row.balance, currency)])]
 
+  const bandHref = (key: string) => {
+    const next = new URLSearchParams()
+    if (query.q) next.set('q', query.q)
+    if (includeInactive) next.set('archived', '1')
+    if (sort.sort !== 'name') next.set('sort', sort.sort)
+    if (sort.dir !== 'asc') next.set('dir', sort.dir)
+    if (datePreset) next.set('date', datePreset)
+    if (tx) next.set('tx', tx)
+    if (txSort) next.set('txSort', txSort)
+    if (txSort) next.set('txDir', txDir)
+    if (rowMode !== 'split') next.set('rows', rowMode)
+    if (tab !== 'transactions') next.set('tab', tab)
+    if (vendor?.id) next.set('id', vendor.id)
+    if (band !== key) next.set('band', key)
+    const text = next.toString()
+    return text ? `/vendors?${text}` : '/vendors'
+  }
+
   return (
     <ContactCenter
       title="Vendor information"
@@ -255,12 +273,14 @@ export default async function VendorsPage({
           bands={[
             {
               key: 'orders',
+              href: bandHref('orders'),
               amount: bar.orders.amount,
               detail: vendorBandDetail(bar.orders),
               bar: 'bg-[#5ec8e5]',
             },
             {
               key: 'overdue',
+              href: bandHref('overdue'),
               amount: bar.overdue.amount,
               detail: vendorBandDetail(bar.overdue),
               bar: 'bg-[#d4652f]',
@@ -268,34 +288,19 @@ export default async function VendorsPage({
             },
             {
               key: 'open',
+              href: bandHref('open'),
               amount: bar.open.amount,
               detail: vendorBandDetail(bar.open),
               bar: 'bg-[#c5c9ce]',
             },
             {
               key: 'paid',
+              href: bandHref('paid'),
               amount: bar.paid.amount,
               detail: vendorBandDetail(bar.paid),
               bar: 'bg-[#2ca01c]',
             },
           ]}
-          hrefFor={(key) => {
-            const next = new URLSearchParams()
-            if (query.q) next.set('q', query.q)
-            if (includeInactive) next.set('archived', '1')
-            if (sort.sort !== 'name') next.set('sort', sort.sort)
-            if (sort.dir !== 'asc') next.set('dir', sort.dir)
-            if (datePreset) next.set('date', datePreset)
-            if (tx) next.set('tx', tx)
-            if (txSort) next.set('txSort', txSort)
-            if (txSort) next.set('txDir', txDir)
-            if (rowMode !== 'split') next.set('rows', rowMode)
-            if (tab !== 'transactions') next.set('tab', tab)
-            if (vendor?.id) next.set('id', vendor.id)
-            if (band !== key) next.set('band', key)
-            const text = next.toString()
-            return text ? `/vendors?${text}` : '/vendors'
-          }}
         />
       }
       people={page.rows.map((row) => ({

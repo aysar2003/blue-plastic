@@ -11,6 +11,8 @@ export type MoneyBarBand = {
   key: string
   amount: string
   detail: string
+  /** Precomputed filter href - must be a string (not a function) for the client boundary. */
+  href: string
   /** Tailwind classes for the coloured segment and accent. */
   bar: string
   /** Optional text colour for the amount when selected / emphasised. */
@@ -25,13 +27,11 @@ export function ContactMoneyBar({
   bands,
   currency,
   active,
-  hrefFor,
   storageKey,
 }: {
   bands: MoneyBarBand[]
   currency: string
   active?: string
-  hrefFor: (key: string) => string
   storageKey: string
 }) {
   const [open, setOpen] = useState(true)
@@ -85,7 +85,7 @@ export function ContactMoneyBar({
           return (
             <Link
               key={band.key}
-              href={hrefFor(band.key)}
+              href={band.href}
               className={cn('rounded-md px-1 py-1 transition-colors', selected && 'bg-white shadow-sm ring-1 ring-border')}
               aria-current={selected ? 'true' : undefined}
             >

@@ -233,6 +233,24 @@ export default async function CustomersPage({
       ]
     : [...companyLines, [], ['Name', 'Balance'], ...page.rows.map((row) => [row.displayName, formatMoney(row.balance, currency)])]
 
+  const bandHref = (key: string) => {
+    const next = new URLSearchParams()
+    if (query.q) next.set('q', query.q)
+    if (includeInactive) next.set('archived', '1')
+    if (sort.sort !== 'name') next.set('sort', sort.sort)
+    if (sort.dir !== 'asc') next.set('dir', sort.dir)
+    if (datePreset) next.set('date', datePreset)
+    if (tx) next.set('tx', tx)
+    if (txSort) next.set('txSort', txSort)
+    if (txSort) next.set('txDir', txDir)
+    if (rowMode !== 'split') next.set('rows', rowMode)
+    if (tab !== 'transactions') next.set('tab', tab)
+    if (customer?.id) next.set('id', customer.id)
+    if (band !== key) next.set('band', key)
+    const text = next.toString()
+    return text ? `/customers?${text}` : '/customers'
+  }
+
   return (
     <ContactCenter
       title="Customer information"
@@ -244,12 +262,14 @@ export default async function CustomersPage({
           bands={[
             {
               key: 'estimates',
+              href: bandHref('estimates'),
               amount: bar.estimates.amount,
               detail: bandDetail(bar.estimates),
               bar: 'bg-[#5ec8e5]',
             },
             {
               key: 'overdue',
+              href: bandHref('overdue'),
               amount: bar.overdue.amount,
               detail: bandDetail(bar.overdue),
               bar: 'bg-[#d4652f]',
@@ -257,34 +277,19 @@ export default async function CustomersPage({
             },
             {
               key: 'open',
+              href: bandHref('open'),
               amount: bar.open.amount,
               detail: bandDetail(bar.open),
               bar: 'bg-[#c5c9ce]',
             },
             {
               key: 'paid',
+              href: bandHref('paid'),
               amount: bar.paid.amount,
               detail: bandDetail(bar.paid),
               bar: 'bg-[#2ca01c]',
             },
           ]}
-          hrefFor={(key) => {
-            const next = new URLSearchParams()
-            if (query.q) next.set('q', query.q)
-            if (includeInactive) next.set('archived', '1')
-            if (sort.sort !== 'name') next.set('sort', sort.sort)
-            if (sort.dir !== 'asc') next.set('dir', sort.dir)
-            if (datePreset) next.set('date', datePreset)
-            if (tx) next.set('tx', tx)
-            if (txSort) next.set('txSort', txSort)
-            if (txSort) next.set('txDir', txDir)
-            if (rowMode !== 'split') next.set('rows', rowMode)
-            if (tab !== 'transactions') next.set('tab', tab)
-            if (customer?.id) next.set('id', customer.id)
-            if (band !== key) next.set('band', key)
-            const text = next.toString()
-            return text ? `/customers?${text}` : '/customers'
-          }}
         />
       }
       people={page.rows.map((row) => ({
