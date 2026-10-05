@@ -8,6 +8,7 @@ export const DATE_PRESETS = [
   { value: 'last', label: 'Last month' },
   { value: 'last3', label: 'Last 3 months' },
   { value: 'year', label: 'This year' },
+  { value: 'last12', label: 'Last 12 months' },
 ] as const
 
 export type DatePreset = (typeof DATE_PRESETS)[number]['value']
@@ -38,6 +39,7 @@ export function presetRange(
     const year = asOf.slice(0, 4)
     return { from: `${year}-01-01`, to: `${year}-12-31` }
   }
+  if (preset === 'last12') return { from: addMonths(asOf, -12), to: asOf }
   return undefined
 }
 

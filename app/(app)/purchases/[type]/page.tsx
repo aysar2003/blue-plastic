@@ -29,6 +29,8 @@ import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
 import { trailsFor } from '@/server/services/audit.service'
 import * as purchaseService from '@/server/services/purchase.service'
+import { ExpenseScreen } from '../expense-screen'
+import { PurchaseOrderScreen } from '../purchase-order-screen'
 
 export async function generateMetadata({
   params,
@@ -46,12 +48,6 @@ const BILL_FILTERS = [
   { value: 'draft', label: 'Drafts' },
 ]
 
-const ORDER_FILTERS = [
-  { value: '', label: 'All' },
-  { value: 'open', label: 'To receive' },
-  { value: 'draft', label: 'Drafts' },
-]
-
 const SORTABLE = ['number', 'date', 'vendor', 'reference', 'dueDate', 'total', 'status'] as const
 
 export default async function PurchaseListPage({
@@ -64,11 +60,13 @@ export default async function PurchaseListPage({
   const config = purchaseBySlug((await params).type)
   if (!config) notFound()
 
-  const ctx = await requireOrgContext('bill:read')
   const search = await searchParams
+  if (config.type === 'PURCHASE_ORDER') return <PurchaseOrderScreen search={search} />
+  if (config.type === 'EXPENSE') return <ExpenseScreen search={search} />
+
+  const ctx = await requireOrgContext('bill:read')
   const query = parseListQuery(search)
-  const statusOptions =
-    config.type === 'BILL' ? BILL_FILTERS : config.type === 'PURCHASE_ORDER' ? ORDER_FILTERS : null
+  const statusOptions = config.type === 'BILL' ? BILL_FILTERS : null
   const statusRaw = typeof search.status === 'string' ? search.status : ''
   const status = statusOptions?.some((option) => option.value === statusRaw) ? statusRaw : undefined
   const vendorId = typeof search.vendorId === 'string' ? search.vendorId : undefined

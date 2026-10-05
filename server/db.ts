@@ -63,6 +63,9 @@ function createClient() {
     connectionString: env.DATABASE_URL,
     // Serverless-friendly ceiling. Raise it for a long-lived Node server.
     max: 10,
+    // Fail the page quickly when the pooler is paused or the host is wrong,
+    // instead of hanging until the platform kills the function.
+    connectionTimeoutMillis: 8_000,
   })
 
   const client = new PrismaClient({

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 
+import { BooksTabs } from '@/components/accounts/books-tabs'
 import { PageHeader } from '@/components/data/page-header'
 import { BankFeed } from '@/components/banking/bank-feed'
 import { StatementWorkbench } from '@/components/banking/statement-workbench'
@@ -27,7 +28,7 @@ export default async function ImportPage({
 
   return (
     <>
-
+      <BooksTabs active="app" />
       <PageHeader
         title="Bank statement"
         description="An imported line stays off the ledger until you post it or match it. Reconciliation is unchanged: a cleared line stays cleared until that reconciliation is undone."

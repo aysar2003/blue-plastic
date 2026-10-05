@@ -55,6 +55,20 @@ the build deliberately requires none of them ([ADR-0009](./docs/decisions/0009-b
 leave the deployment with an ungenerated Prisma client. Migrations are applied
 separately with `pnpm db:deploy` — the build never mutates the database.
 
+Auth.js is configured with `trustHost: true`, so `AUTH_URL` is optional. Set it
+only when sign-in must use one canonical address. `AUTH_TRUST_HOST` is not
+required.
+
+This project's production aliases are `https://blue-plastic-orpin.vercel.app` and
+`https://blue-plastic-aysaryare-7697.vercel.app`. `https://blue-plastic.vercel.app`
+is not an alias of this project; a request there can return a server error
+(digest `1226442282`) from a different deployment.
+
+`GET /api/health` answers `{ ok, database }` and, when Postgres is down, a
+`problem` name. It never includes a connection string. Supabase URLs need
+`sslmode=require`. Use the pooler host on `DATABASE_URL` and the direct host on
+`DIRECT_URL`.
+
 ## Layout
 
 No `src/`. `app/` (routes), `components/`, `lib/` (isomorphic), `server/` (all

@@ -26,6 +26,7 @@ export default async function PosRegisterPage({ params }: Props) {
       }}
       products={products}
       currency={ctx.organization.baseCurrency}
+      orgName={ctx.organization.name}
     />
   )
 }

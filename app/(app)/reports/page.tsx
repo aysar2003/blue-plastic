@@ -1,8 +1,13 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
+import { GiveFeedback } from '@/components/data/give-feedback'
 import { AppLauncher } from '@/components/layout/app-launcher'
 import { REPORT_SECTIONS } from '@/components/layout/report-apps'
+import { CreateReportMenu } from '@/components/reports/create-report-menu'
+import { FavouriteReports } from '@/components/reports/favourite-reports'
+import { ReportCentreTabs } from '@/components/reports/report-centre-tabs'
+import { STANDARD_FAVOURITES } from '@/lib/standard-reports'
 import {
   EXPENSE_COLOR,
   FigureChart,
@@ -29,6 +34,13 @@ export default async function ReportsIndexPage() {
   const picture = statementPicture(report.sections, 'total')
 
   return (
+    <>
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-4 print:hidden">
+        <GiveFeedback />
+        <CreateReportMenu />
+      </div>
+      <ReportCentreTabs active="standard" />
+      <FavouriteReports reports={STANDARD_FAVOURITES} />
     <AppLauncher
       eyebrow={ctx.organization.name}
       title="Reports"
@@ -63,6 +75,13 @@ export default async function ReportsIndexPage() {
           />
           <p className="mt-3 text-center text-sm">
             <Link
+              href="/reports/business-overview"
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Business overview
+            </Link>
+            <span className="text-muted-foreground"> · </span>
+            <Link
               href="/reports/profit-loss?period=this-month&compare=prior-period"
               className="font-medium text-primary underline-offset-4 hover:underline"
             >
@@ -72,5 +91,6 @@ export default async function ReportsIndexPage() {
         </div>
       }
     />
+    </>
   )
 }

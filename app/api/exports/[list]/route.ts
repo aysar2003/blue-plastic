@@ -88,7 +88,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
 
     const purchaseConfig = purchaseBySlug(list)
     if (purchaseConfig) {
-      const page = await purchaseService.list(ctx, purchaseConfig.type, { ...ALL, q }, { status, sort, dir, ...span })
+      const vendorId = url.searchParams.get('vendorId') ?? undefined
+      const page = await purchaseService.list(ctx, purchaseConfig.type, { ...ALL, q }, {
+        status,
+        vendorId,
+        sort,
+        dir,
+        ...span,
+      })
       const rows: CsvCell[][] = heading(purchaseConfig.plural)
       rows.push(['Number', 'Date', 'Due', 'Vendor', 'Their reference', 'Status', 'Total', 'Owing'])
       for (const row of page.rows) {

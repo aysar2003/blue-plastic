@@ -165,6 +165,7 @@ export const MODULES: NavModule[] = [
     // it answers, which is a better way to find one than a list of names.
     tabs: [
       { label: 'All reports', href: '/reports' },
+      { label: 'Business overview', href: '/reports/business-overview' },
       { label: 'Profit and Loss', href: '/reports/profit-loss' },
       { label: 'Balance Sheet', href: '/reports/balance-sheet' },
       { label: 'Statement of Cash Flows', href: '/reports/cash-flow' },

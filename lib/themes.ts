@@ -12,6 +12,7 @@ export type ThemeId =
   | 'indigo'
   | 'sand'
   | 'dark'
+  | 'ink'
 
 export type ThemeOption = {
   id: ThemeId
@@ -31,6 +32,12 @@ export const THEMES: ThemeOption[] = [
   { id: 'indigo', label: 'Indigo', blurb: 'Periwinkle ground, ink accent', swatches: ['#e0e7ff', '#3730A3', '#1e1b4b'] },
   { id: 'sand', label: 'Sand', blurb: 'Warm stone ground, copper accent', swatches: ['#f3e6d4', '#9A3412', '#7c2d12'] },
   { id: 'dark', label: 'Dark', blurb: 'Night ground, light text', swatches: ['#12202b', '#7dd3fc', '#e8f1f8'] },
+  {
+    id: 'ink',
+    label: 'Ink',
+    blurb: 'Black ground, white type, gray panels',
+    swatches: ['#000000', '#ededed', '#2e2e2e'],
+  },
 ]
 
 export const THEME_IDS = THEMES.map((theme) => theme.id)

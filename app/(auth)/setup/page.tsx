@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { withDatabasePage } from '@/lib/page-guard'
 import { needsSetup } from '@/server/services/setup.service'
 import { SetupForm } from './setup-form'
 
@@ -19,9 +20,10 @@ export const metadata: Metadata = { title: 'Set up' }
  * an organisation exists — otherwise it would be an open registration endpoint.
  */
 export default async function SetupPage() {
-  if (!(await needsSetup())) redirect('/sign-in')
+  return withDatabasePage(async () => {
+    if (!(await needsSetup())) redirect('/sign-in')
 
-  return (
+    return (
     <Card className="w-full max-w-lg">
       <CardHeader>
         <CardTitle>Set up your books</CardTitle>
@@ -33,5 +35,6 @@ export default async function SetupPage() {
         <SetupForm />
       </CardContent>
     </Card>
-  )
+    )
+  })
 }

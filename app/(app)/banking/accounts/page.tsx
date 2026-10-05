@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowLeftRightIcon, BanknoteIcon, UploadIcon } from 'lucide-react'
 
+import { BooksTabs } from '@/components/accounts/books-tabs'
 import { ClickableRow } from '@/components/data/clickable-row'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
@@ -137,6 +138,7 @@ export default async function BankingPage({
 
   return (
     <>
+      <BooksTabs active="bank" />
       <PageHeader
         title="Accounts"
         description="Full chart in QuickBooks order — Bank and cash (money in hand), then receivables, inventory, liabilities, equity, income and expenses. Balance as of today."
