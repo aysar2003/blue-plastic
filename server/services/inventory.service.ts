@@ -28,7 +28,7 @@ import type { DraftLine } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
-import type { StockAlert } from '@/lib/stock-alert'
+import type { StockAlert, StockAlertSummary } from '@/lib/stock-alert'
 import { notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 
@@ -44,15 +44,19 @@ export async function stockOnHand(ctx: OrgContext) {
  * valuation. Results are React-cached per request and Next-cached ~60s per org so
  * the AppShell bell does not re-run the scan on every signed-in navigation.
  */
-export function listStockAlerts(ctx: OrgContext): Promise<StockAlert[]> {
+export function listStockAlerts(ctx: OrgContext): Promise<StockAlertSummary> {
   return cachedStockAlerts(ctx.orgId)
 }
 
+/** At most this many rows are listed; `total` still counts every product. */
+const STOCK_ALERT_LIST_LIMIT = 200
+
+// The key carries a version: entries cached under the old key held a bare array.
 const cachedStockAlerts = cache((orgId: string) =>
-  unstable_cache(() => queryStockAlerts(orgId), ['stock-alerts', orgId], { revalidate: 60 })(),
+  unstable_cache(() => queryStockAlerts(orgId), ['stock-alerts-v2', orgId], { revalidate: 60 })(),
 )
 
-async function queryStockAlerts(orgId: string): Promise<StockAlert[]> {
+async function queryStockAlerts(orgId: string): Promise<StockAlertSummary> {
   const rows = await db.$queryRaw<
     {
       itemId: string
@@ -60,6 +64,7 @@ async function queryStockAlerts(orgId: string): Promise<StockAlert[]> {
       quantity: string
       reorderPoint: string | null
       kind: 'out' | 'limit'
+      total: number
     }[]
   >`
     SELECT i.id AS "itemId",
@@ -69,7 +74,9 @@ async function queryStockAlerts(orgId: string): Promise<StockAlert[]> {
            CASE
              WHEN COALESCE(t."runningQuantity", 0) <= 0 THEN 'out'
              ELSE 'limit'
-           END AS "kind"
+           END AS "kind",
+           -- Window counts run before LIMIT: the full number of matching products.
+           (COUNT(*) OVER ())::int AS "total"
       FROM items i
       LEFT JOIN LATERAL (
         SELECT "runningQuantity"
@@ -90,16 +97,19 @@ async function queryStockAlerts(orgId: string): Promise<StockAlert[]> {
        )
      ORDER BY CASE WHEN COALESCE(t."runningQuantity", 0) <= 0 THEN 0 ELSE 1 END,
               i.name
-     LIMIT 200
+     LIMIT ${STOCK_ALERT_LIST_LIMIT}
   `
 
-  return rows.map((row) => ({
-    itemId: row.itemId,
-    name: row.name,
-    quantity: new Decimal(row.quantity).toFixed(2),
-    reorderPoint: row.reorderPoint ? new Decimal(row.reorderPoint).toFixed(2) : null,
-    kind: row.kind,
-  }))
+  return {
+    total: rows.length > 0 ? Number(rows[0]!.total) : 0,
+    alerts: rows.map((row) => ({
+      itemId: row.itemId,
+      name: row.name,
+      quantity: new Decimal(row.quantity).toFixed(2),
+      reorderPoint: row.reorderPoint ? new Decimal(row.reorderPoint).toFixed(2) : null,
+      kind: row.kind,
+    })),
+  }
 }
 
 /** Does the stock ledger agree with the Inventory Asset account? */

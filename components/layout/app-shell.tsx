@@ -34,7 +34,7 @@ export async function AppShell({ ctx, children }: { ctx: OrgContext; children: R
       permissions={permissions}
       stockAlertsSlot={
         ctx.permissions.has('inventory:read') ? (
-          <Suspense fallback={<StockAlerts alerts={[]} />}>
+          <Suspense fallback={<StockAlerts alerts={[]} total={0} />}>
             <StockAlertsLoader ctx={ctx} />
           </Suspense>
         ) : null
@@ -53,8 +53,8 @@ export async function AppShell({ ctx, children }: { ctx: OrgContext; children: R
 }
 
 async function StockAlertsLoader({ ctx }: { ctx: OrgContext }) {
-  const alerts = await inventoryService.listStockAlerts(ctx)
-  return <StockAlerts alerts={alerts} />
+  const { alerts, total } = await inventoryService.listStockAlerts(ctx)
+  return <StockAlerts alerts={alerts} total={total} />
 }
 
 async function BalanceAlertsLoader({ ctx }: { ctx: OrgContext }) {
