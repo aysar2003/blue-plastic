@@ -12,20 +12,22 @@ import {
 import type { StockAlert } from '@/lib/stock-alert'
 
 /** Out of stock, and products that have reached the reorder limit. */
-export function StockAlerts({ alerts }: { alerts: StockAlert[] }) {
+export function StockAlerts({ alerts, total }: { alerts: StockAlert[]; total: number }) {
+  // `alerts` may be a capped list; `total` is the true number of products.
+  const count = Math.max(total, alerts.length)
   const shown = alerts.slice(0, 12)
-  const rest = alerts.length - shown.length
+  const rest = count - shown.length
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         className="relative grid size-8 place-items-center rounded-md text-slate-600 hover:bg-slate-100"
-        aria-label={alerts.length > 0 ? `Stock warnings, ${alerts.length}` : 'Stock warnings'}
+        aria-label={count > 0 ? `Stock warnings, ${count}` : 'Stock warnings'}
       >
         <PackageIcon className="size-4" />
-        {alerts.length > 0 ? (
+        {count > 0 ? (
           <span className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-[#9f1239] px-1 text-[0.65rem] font-semibold text-white">
-            {alerts.length > 99 ? '99+' : alerts.length}
+            {count > 99 ? '99+' : count}
           </span>
         ) : null}
       </DropdownMenuTrigger>
@@ -33,7 +35,7 @@ export function StockAlerts({ alerts }: { alerts: StockAlert[] }) {
         <p className="border-b px-3 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Stock warnings
         </p>
-        {alerts.length === 0 ? (
+        {count === 0 ? (
           <p className="px-3 py-4 text-sm text-muted-foreground">Nothing is out of stock or at its reorder limit.</p>
         ) : (
           <ul className="max-h-80 overflow-auto py-1">

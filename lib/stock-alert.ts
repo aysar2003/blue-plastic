@@ -6,3 +6,12 @@ export type StockAlert = {
   reorderPoint: string | null
   kind: 'out' | 'limit'
 }
+
+/**
+ * What the bell receives: at most a few hundred rows to list, plus the true number
+ * of products that need attention, so the count and "N more" stay honest.
+ */
+export type StockAlertSummary = {
+  alerts: StockAlert[]
+  total: number
+}
