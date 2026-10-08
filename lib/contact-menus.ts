@@ -21,7 +21,7 @@ export function customerContactMenu(
     links.push({
       type: 'link',
       label: 'QuickReport',
-      href: `/reports/statements/customer?customerId=${id}&view=detail&period=all-dates`,
+      href: `/reports/statements/customer?customerId=${id}&view=detail`,
     })
   }
   if (options.canInvoice) {
@@ -50,7 +50,7 @@ export function customerContactMenu(
 }
 
 export function customerQuickReportHref(customerId: string) {
-  return `/reports/statements/customer?customerId=${encodeURIComponent(customerId)}&view=detail&period=all-dates`
+  return `/reports/statements/customer?customerId=${encodeURIComponent(customerId)}&view=detail`
 }
 
 /**
@@ -75,7 +75,7 @@ export function vendorContactMenu(
     links.push({
       type: 'link',
       label: 'QuickReport',
-      href: `/reports/statements/vendor?vendorId=${id}&period=all-dates`,
+      href: `/reports/statements/vendor?vendorId=${id}`,
     })
   }
   if (options.canBill) {
@@ -112,5 +112,5 @@ export function vendorContactMenu(
 }
 
 export function vendorQuickReportHref(vendorId: string) {
-  return `/reports/statements/vendor?vendorId=${encodeURIComponent(vendorId)}&period=all-dates`
+  return `/reports/statements/vendor?vendorId=${encodeURIComponent(vendorId)}`
 }

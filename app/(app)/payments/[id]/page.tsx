@@ -34,7 +34,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
   const canEditInvoice = ctx.permissions.has('invoice:update')
   const canReport = ctx.permissions.has('report:read')
 
-  const quickReport = `/reports/statements/customer?customerId=${payment.customer.id}&view=detail&period=all-dates`
+  const quickReport = `/reports/statements/customer?customerId=${payment.customer.id}&view=detail`
   const paymentListReport = `/reports/payments-received?period=all-dates`
 
   return (

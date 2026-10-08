@@ -1121,23 +1121,36 @@ html.odoo-dark .app-glyph-tile,
     display: none !important;
   }
 
+  /* Invoice sheets carry their own letterhead; a report that prints them
+   * (a customer's invoices, invoice by invoice) drops the report's one. */
+  [data-report-root]:has(.invoice-sheet) .report-letterhead {
+    display: none !important;
+  }
+
   aside,
   header,
   nav,
   .app-atmosphere,
   [data-slot='toaster'],
+  /* The toast region: empty, but after a named-page invoice it forced a blank
+   * last page onto every printed invoice. */
+  section[aria-label^='Notifications'],
   .print\:hidden {
     display: none !important;
   }
 
   /*
    * A table that scrolls on screen has to print whole: an `overflow` container
-   * prints only what was visible, silently truncating the page.
+   * prints only what was visible, silently truncating the page. That includes
+   * the app surface itself (`overflow-x-hidden`), which otherwise cut a long
+   * print off after a few dozen pages.
    */
   .overflow-x-auto,
   .overflow-y-auto,
   .overflow-auto,
-  .overflow-hidden {
+  .overflow-hidden,
+  .overflow-x-hidden,
+  .overflow-y-hidden {
     overflow: visible !important;
     max-height: none !important;
   }

@@ -233,10 +233,10 @@ export default async function VendorsPage({
 
   const reports = vendor && canReport
     ? [
-        { label: 'QuickReport', href: `/reports/statements/vendor?vendorId=${id}&period=all-dates` },
+        { label: 'QuickReport', href: `/reports/statements/vendor?vendorId=${id}` },
         { label: 'Open balance', href: `/reports/statements/vendor?vendorId=${id}&period=all-dates` },
         { label: 'Show purchase orders', href: withTx(vendorHref(vendor.id), 'Purchase order') },
-        { label: 'Vendor snapshot', href: `/reports/statements/vendor?vendorId=${id}&period=all-dates` },
+        { label: 'Vendor snapshot', href: `/reports/statements/vendor?vendorId=${id}` },
         { label: 'Purchases by item', href: `/reports/purchases-by-item` },
       ]
     : []

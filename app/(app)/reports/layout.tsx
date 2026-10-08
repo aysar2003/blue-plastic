@@ -8,7 +8,7 @@ export default async function ReportsLayout({ children }: { children: React.Reac
   // across them. See components/layout/module-tabs.tsx.
   return (
     <div data-report-root data-template="standard">
-      <CompanyLetterhead organization={ctx.organization} className="mb-4" />
+      <CompanyLetterhead organization={ctx.organization} className="report-letterhead mb-4" />
       <ReportTools />
       {children}
     </div>

@@ -52,8 +52,12 @@ export async function GET(request: Request) {
       )
     }
 
-    const settings = readSettings(query, ctx.organization, 'this-fiscal-year')
-    const filter = readStatementFilter(query)
+    const settings = readSettings(query, ctx.organization, 'year-to-date')
+    const asked = readStatementFilter(query)
+    // "Invoice by invoice" is a browser-printed paper; as a generated PDF it is
+    // the itemised statement of the same invoices.
+    const filter =
+      asked.view === 'invoices' ? { ...asked, view: 'detail' as const, type: 'invoice' as const } : asked
     const [statement, org] = await Promise.all([
       receivables.statement(ctx, customerId, settings.range),
       organizationService.get(ctx),
