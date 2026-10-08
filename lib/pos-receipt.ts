@@ -1,0 +1,51 @@
+/** Thermal roll widths the receipt can print on. 80mm is the usual counter printer. */
+export const RECEIPT_PAPERS = {
+  '80': { widthMm: 80, padMm: 4, fontPx: 12 },
+  '58': { widthMm: 58, padMm: 2.5, fontPx: 10.5 },
+} as const
+
+export type ReceiptPaper = keyof typeof RECEIPT_PAPERS
+
+export const RECEIPT_PAPER_KEY = 'pos.receipt.paper'
+export const DEFAULT_RECEIPT_PAPER: ReceiptPaper = '80'
+
+export function parseReceiptPaper(value: unknown): ReceiptPaper {
+  return value === '58' || value === '80' ? value : DEFAULT_RECEIPT_PAPER
+}
+
+/** Change handed back, as passed by the till right after the sale. Anything odd reads as none. */
+export function parseChange(value: unknown): number {
+  const raw = Array.isArray(value) ? value[0] : value
+  const n = typeof raw === 'string' ? Number(raw) : NaN
+  return Number.isFinite(n) && n > 0.004 ? Math.round(n * 100) / 100 : 0
+}
+
+export type ReceiptPayment = { method: string; amount: string; isCash: boolean }
+
+/**
+ * The payment block under the total. The ledger records what the sale took from
+ * each method; cash handed over beyond that came back as change, so the cash line
+ * shows what the customer actually handed over.
+ */
+export function paymentRows(payments: ReceiptPayment[], total: string, change: number) {
+  const cashIndex = change > 0 ? payments.findIndex((payment) => payment.isCash) : -1
+  const effectiveChange = cashIndex >= 0 ? change : 0
+  const rows = payments.map((payment, index) => ({
+    label: payment.method,
+    amount: Number(payment.amount) + (index === cashIndex ? effectiveChange : 0),
+  }))
+  const recorded = payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
+  const paid = (payments.length > 0 ? recorded : Number(total)) + effectiveChange
+  return { rows, paid, change: effectiveChange }
+}
+
+/** 2.0000 → "2", 1.5000 → "1.5". */
+export function trimQty(value: string): string {
+  const n = Number(value)
+  return Number.isFinite(n) ? String(n) : value
+}
+
+/** px → mm at the CSS 96dpi the print engine uses. */
+export function pxToMm(px: number): number {
+  return (px * 25.4) / 96
+}
