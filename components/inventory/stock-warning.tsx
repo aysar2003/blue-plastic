@@ -1,47 +1,32 @@
-import { AlertTriangleIcon } from 'lucide-react'
-
-import { stockWarningText, type StockWarning } from '@/lib/store-stock'
+import { formatStockQty, stockWarningTitle, type StockWarning } from '@/lib/store-stock'
 import { cn } from '@/lib/utils'
 
 /**
- * Amber note on a sale line when stock is at/below zero or this sale takes it
- * below zero. Information only — the sale still goes through, and a later bill
- * brings the store back up.
+ * The stock left after this sale, as a bare red number, only when it is below
+ * zero. Nothing when on hand covers the sale. Information only: the sale still
+ * goes through and a later bill brings the store back up.
  */
 export function StockWarningNote({
   warning,
-  text: override,
   className,
   tone,
 }: {
   warning: StockWarning | null | undefined
-  /** Shorter wording where space is tight (POS product tiles). */
-  text?: string
   className?: string
-  /** POS has its own light/dark switch; elsewhere the theme token is used. */
+  /** POS has its own light/dark switch; elsewhere the theme's destructive token is used. */
   tone?: 'light' | 'dark'
 }) {
-  if (!warning) return null
-  const text = override ?? stockWarningText(warning)
-  const style =
-    tone === 'dark'
-      ? { color: '#fbbf24', background: 'rgba(251, 191, 36, 0.12)', borderColor: 'rgba(251, 191, 36, 0.35)' }
-      : tone === 'light'
-        ? { color: '#b45309', background: '#fffbeb', borderColor: '#fde68a' }
-        : undefined
+  if (!warning || warning.after >= 0) return null
+  const title = stockWarningTitle(warning)
   return (
     <p
       role="status"
-      title={`${text} The sale is not blocked; a later purchase bill corrects the stock.`}
-      className={cn(
-        'mt-1 flex items-start gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium leading-snug',
-        !tone && 'border-warning/40 bg-warning/10 text-warning',
-        className,
-      )}
-      style={style}
+      title={title}
+      aria-label={title}
+      className={cn('mt-0.5 text-xs font-semibold tabular-nums leading-tight', !tone && 'text-destructive', className)}
+      style={tone ? { color: tone === 'dark' ? '#f87171' : '#d23f3f' } : undefined}
     >
-      <AlertTriangleIcon className="mt-px size-3 shrink-0" aria-hidden />
-      <span>{text}</span>
+      {formatStockQty(warning.after)}
     </p>
   )
 }

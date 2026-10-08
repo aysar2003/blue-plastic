@@ -31,7 +31,7 @@ import { closePosSession, posCheckout, posRefund, recordPosCashMove } from '@/ap
 import { RegisterLock, useClientReady, useRegisterLocked, writeRegisterLocked } from '@/components/pos/register-lock'
 import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { ODOO } from '@/lib/odoo-brand'
-import { formatStockQty, negativeStockWarning } from '@/lib/store-stock'
+import { negativeStockWarning } from '@/lib/store-stock'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
@@ -713,12 +713,14 @@ export function PosTerminal(props: {
                   ) : null}
                   {(() => {
                     if (product.onHand == null) return null
-                    const left = Number(product.onHand) - (inCart.get(product.id) ?? 0)
-                    if (!Number.isFinite(left) || left > 0) return null
+                    // What is left once the cart is sold; shown only when below zero.
                     return (
                       <StockWarningNote
-                        warning={{ storeName: stockStore, onHand: left, after: left }}
-                        text={`Stock: ${formatStockQty(left)} left \u2014 will go negative`}
+                        warning={negativeStockWarning(
+                          Number(product.onHand),
+                          inCart.get(product.id) ?? 0,
+                          stockStore,
+                        )}
                         tone={dark ? 'dark' : 'light'}
                       />
                     )

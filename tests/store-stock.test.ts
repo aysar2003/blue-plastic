@@ -4,7 +4,8 @@ import {
   foldStoreQuantities,
   negativeStockWarning,
   shortStockNote,
-  stockWarningText,
+  formatStockQty,
+  stockWarningTitle,
   type StoreChoice,
 } from '@/lib/store-stock'
 
@@ -54,25 +55,24 @@ describe('shortStockNote', () => {
 })
 
 describe('negativeStockWarning', () => {
-  it('stays quiet while the store still covers the sale', () => {
+  it('stays quiet while on hand covers the sale', () => {
     expect(negativeStockWarning(5, 5, 'Xafiiska')).toBeNull()
     expect(negativeStockWarning(5, 2, 'Xafiiska')).toBeNull()
+    expect(negativeStockWarning(0, Number(''), 'Xafiiska')).toBeNull()
   })
 
-  it('warns at zero even before a quantity is typed', () => {
-    const warning = negativeStockWarning(0, Number(''), 'Xafiiska')
-    expect(warning).toEqual({ storeName: 'Xafiiska', onHand: 0, after: 0 })
-    expect(stockWarningText(warning!)).toBe('Stock: 0 at Xafiiska. Will go negative.')
+  it('gives the quantity left after the sale when it is below zero', () => {
+    expect(negativeStockWarning(-7, 2, 'Xafiiska')).toEqual({ storeName: 'Xafiiska', onHand: -7, after: -9 })
+    expect(negativeStockWarning(100, 150, 'Xafiiska')?.after).toBe(-50)
+    expect(negativeStockWarning(0, 1, 'Xafiiska')?.after).toBe(-1)
   })
 
-  it('shows store quantity and the quantity after the sale', () => {
-    const warning = negativeStockWarning(3, 5, 'Store 2')
-    expect(stockWarningText(warning!)).toBe('Stock: 3 at Store 2 \u2192 \u22122 after this sale. Will go negative.')
-  })
-
-  it('says when the store is already below zero', () => {
-    expect(stockWarningText(negativeStockWarning(-1.5, 1, 'Xafiiska')!)).toBe(
-      'Stock: \u22121.50 at Xafiiska \u2192 \u22122.50 after this sale. Already below zero.',
+  it('formats the bare number with a minus sign and a hover description', () => {
+    expect(formatStockQty(-9)).toBe('\u22129')
+    expect(formatStockQty(-102)).toBe('\u2212102')
+    expect(formatStockQty(-2.5)).toBe('\u22122.50')
+    expect(stockWarningTitle(negativeStockWarning(-7, 2, 'Xafiiska')!)).toBe(
+      'Xafiiska after this sale: \u22129 (on hand \u22127)',
     )
   })
 })

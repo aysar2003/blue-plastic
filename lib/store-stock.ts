@@ -64,7 +64,7 @@ export function shortStockNote(
   return `Also in ${others.join(', ')}.`
 }
 
-/** What the person entering a sale should know before stock goes below zero. */
+/** Stock left in a store after this sale, when that is below zero. */
 export type StockWarning = {
   storeName: string
   /** On hand in that store before this sale. */
@@ -74,14 +74,14 @@ export type StockWarning = {
 }
 
 /**
- * Warn when the store is already at or below zero, or when this sale takes it
- * below zero. Never blocks: negative stock is allowed and a later bill fixes it.
+ * Only when this sale leaves the store below zero; null while on hand covers it.
+ * Never blocks: negative stock is allowed and a later bill fixes it.
  */
 export function negativeStockWarning(onHand: number, selling: number, storeName: string): StockWarning | null {
   if (!Number.isFinite(onHand)) return null
   const qty = Number.isFinite(selling) && selling > 0 ? selling : 0
   const after = onHand - qty
-  if (onHand > 0 && after >= 0) return null
+  if (after >= 0) return null
   return { storeName, onHand, after }
 }
 
@@ -91,10 +91,8 @@ export function formatStockQty(value: number): string {
   return value < 0 ? `\u2212${text}` : text
 }
 
-/** "Stock: 0 at Xafiiska → −2 after this sale. Will go negative." */
-export function stockWarningText(warning: StockWarning): string {
-  const head = `Stock: ${formatStockQty(warning.onHand)}${warning.storeName ? ` at ${warning.storeName}` : ''}`
-  const tail = warning.onHand < 0 ? 'Already below zero.' : 'Will go negative.'
-  if (warning.after === warning.onHand) return `${head}. ${tail}`
-  return `${head} \u2192 ${formatStockQty(warning.after)} after this sale. ${tail}`
+/** Hover / screen-reader text for the bare number, e.g. "Xafiiska after this sale: −9 (on hand −7)". */
+export function stockWarningTitle(warning: StockWarning): string {
+  const where = warning.storeName ? `${warning.storeName} after this sale` : 'After this sale'
+  return `${where}: ${formatStockQty(warning.after)} (on hand ${formatStockQty(warning.onHand)})`
 }
