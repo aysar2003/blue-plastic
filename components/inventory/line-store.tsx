@@ -1,7 +1,8 @@
 'use client'
 
+import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { NativeSelect } from '@/components/ui/native-select'
-import { shortStockNote, type StockByStore, type StoreChoice } from '@/lib/store-stock'
+import { shortStockNote, type StockByStore, type StockWarning, type StoreChoice } from '@/lib/store-stock'
 import { cn } from '@/lib/utils'
 
 export function LineStore({
@@ -9,6 +10,7 @@ export function LineStore({
   stock,
   tracked,
   warn,
+  warning,
   itemId,
   storeId,
   quantity,
@@ -21,6 +23,8 @@ export function LineStore({
   tracked: boolean
   /** On a sale, say which store still has the item when this one is short. */
   warn: boolean
+  /** Amber note when this sale takes the store to or below zero (never blocks). */
+  warning?: StockWarning | null
   itemId: string
   storeId: string
   quantity: string
@@ -52,6 +56,7 @@ export function LineStore({
           )
         })}
       </NativeSelect>
+      <StockWarningNote warning={warning} className="max-w-48" />
       {note ? <p className="mt-1 max-w-48 text-[11px] leading-snug text-[#C2410C]">{note}</p> : null}
     </div>
   )
