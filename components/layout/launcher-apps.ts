@@ -228,6 +228,12 @@ export const LAUNCHER_APPS: LauncherApp[] = [
   },
 ]
 
+/** Paths that belong to an app whose own door uses a different prefix. */
+export const APP_ALSO: Record<string, string[]> = {
+  inventory: ['/items'],
+  accounting: ['/accounts'],
+}
+
 export function appsForPermissions(permissions: ReadonlySet<string> | Iterable<string>): LauncherApp[] {
   const allowed = permissions instanceof Set ? permissions : new Set(permissions)
   return LAUNCHER_APPS.filter((app) => !app.permission || allowed.has(app.permission))

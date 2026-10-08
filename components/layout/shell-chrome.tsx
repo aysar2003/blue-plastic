@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import { HeaderApps } from './app-launcher'
+import { AppMemoryProvider } from './app-memory'
 import { AccountantNav } from './accountant-nav'
 import { HistoryBack } from './history-back'
 import { CommandPalette } from './command-palette'
@@ -98,6 +99,7 @@ export function ShellChrome({
     // overflow-x-hidden turns this into a scroll container, which stops sticky children
     // from pinning to the window. POS needs the till's cart/payment panel to stick, so it
     // clips instead (same visual result, no scroll container).
+    <AppMemoryProvider userId={user.id}>
     <div className={cn('app-surface relative flex min-h-svh', isPos ? 'overflow-x-clip' : 'overflow-x-hidden')}>
       <NavigationProgress />
       {isPos ? null : <AppAtmosphere />}
@@ -165,6 +167,7 @@ export function ShellChrome({
         ) : null}
       </div>
     </div>
+    </AppMemoryProvider>
   )
 }
 

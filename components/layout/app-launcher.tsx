@@ -24,6 +24,7 @@ import {
   PaletteIcon,
   PercentIcon,
   ReceiptIcon,
+  RotateCcwIcon,
   ScaleIcon,
   ScrollTextIcon,
   SearchIcon,
@@ -37,7 +38,8 @@ import {
 
 import { cn } from '@/lib/utils'
 import { menuForApp } from './header-app-menus'
-import { appsForPermissions, type LauncherIcon } from './launcher-apps'
+import { APP_ALSO, appsForPermissions, type LauncherApp, type LauncherIcon } from './launcher-apps'
+import { useAppDoor, useAppMemoryControls } from './app-memory'
 
 const ICONS: Record<LauncherIcon, LucideIcon> = {
   receipt: ReceiptIcon,
@@ -91,11 +93,6 @@ export type LauncherSection = {
   apps: LauncherTile[]
 }
 
-/** Paths that belong to an app whose own door uses a different prefix. */
-const APP_ALSO: Record<string, string[]> = {
-  inventory: ['/items'],
-  accounting: ['/accounts'],
-}
 
 function appIsCurrent(pathname: string, href: string, also: string[] = []) {
   const paths = [href, ...also]
@@ -146,7 +143,7 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
   const appsMenuOpen = openKey === '__apps__'
 
   return (
-    <nav ref={navRef} aria-label="Apps" className="flex flex-wrap items-center gap-1">
+    <nav ref={navRef} aria-label="Apps" data-app-nav className="flex flex-wrap items-center gap-1">
       <div className="relative">
         <button
           type="button"
@@ -187,40 +184,10 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
               </Link>
             </li>
             <li className="my-1 border-t border-border" aria-hidden />
-            {apps.map((app) => {
-              const Icon = ICONS[app.icon]
-              return (
-                <li key={app.key}>
-                  <Link
-                    href={app.href}
-                    role="menuitem"
-                    onClick={() => setOpenKey(null)}
-                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted"
-                  >
-                    {isAppGlyph(app.glyph) ? (
-                      <span className="app-glyph-tile grid size-7 shrink-0 place-items-center rounded-lg">
-                        <AppGlyph name={app.glyph} className="size-[1.125rem]" />
-                      </span>
-                    ) : (
-                      <span
-                        className="grid size-5 shrink-0 place-items-center rounded"
-                        style={{ backgroundColor: app.wash, color: app.accent }}
-                      >
-                        <Icon className="size-3" strokeWidth={2} aria-hidden />
-                      </span>
-                    )}
-                    <span className="min-w-0">
-                      <span className="block text-xs font-semibold text-[#141418] dark:text-popover-foreground">{app.label}</span>
-                      {app.blurb ? (
-                        <span className="block text-[0.65rem] leading-snug text-[#4a4a54] dark:text-muted-foreground">
-                          {app.blurb}
-                        </span>
-                      ) : null}
-                    </span>
-                  </Link>
-                </li>
-              )
-            })}
+            {apps.map((app) => (
+              <AppsMenuRow key={app.key} app={app} onDone={() => setOpenKey(null)} />
+            ))}
+            <ForgetPlacesRow onDone={() => setOpenKey(null)} />
           </ul>
         </div>
       </div>
@@ -238,16 +205,12 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
             }}
             onMouseLeave={() => setOpenKey((key) => (key === app.key ? null : key))}
           >
-            <Link
-              href={app.href}
-              aria-current={current ? 'page' : undefined}
-              aria-haspopup={children.length > 0 ? 'menu' : undefined}
-              aria-expanded={children.length > 0 ? open : undefined}
-              onClick={() => setOpenKey(null)}
-              className={cn(
-                'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-[#26262d] hover:bg-card hover:text-black dark:text-muted-foreground dark:hover:text-foreground',
-                current && 'bg-card text-foreground shadow-sm ring-1 ring-border dark:text-foreground',
-              )}
+            <AppChipLink
+              app={app}
+              current={current}
+              hasMenu={children.length > 0}
+              open={open}
+              onDone={() => setOpenKey(null)}
             >
               <span
                 className="grid size-4 place-items-center rounded"
@@ -256,7 +219,7 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
                 <Icon className="size-3" strokeWidth={2} aria-hidden />
               </span>
               {app.label}
-            </Link>
+            </AppChipLink>
             {children.length > 0 ? (
               <div
                 role="menu"
@@ -303,6 +266,123 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
         )
       })}
     </nav>
+  )
+}
+
+/** A top-bar app chip: reopens the place left in that app (see lib/app-memory). */
+function AppChipLink({
+  app,
+  current,
+  hasMenu,
+  open,
+  onDone,
+  children,
+}: {
+  app: LauncherApp
+  current: boolean
+  hasMenu: boolean
+  open: boolean
+  onDone: () => void
+  children: ReactNode
+}) {
+  const door = useAppDoor(app.key, app.href)
+  return (
+    <Link
+      href={door.href}
+      aria-current={current ? 'page' : undefined}
+      aria-haspopup={hasMenu ? 'menu' : undefined}
+      aria-expanded={hasMenu ? open : undefined}
+      title={door.remembered ? `${app.label} \u2014 back to where you left off` : undefined}
+      onClick={() => {
+        door.onClick()
+        onDone()
+      }}
+      className={cn(
+        'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-[#26262d] hover:bg-card hover:text-black dark:text-muted-foreground dark:hover:text-foreground',
+        current && 'bg-card text-foreground shadow-sm ring-1 ring-border dark:text-foreground',
+      )}
+    >
+      {children}
+    </Link>
+  )
+}
+
+/** One app in the Apps menu: opens where you left off, with a "start over" door beside it. */
+function AppsMenuRow({ app, onDone }: { app: LauncherApp; onDone: () => void }) {
+  const Icon = ICONS[app.icon]
+  const door = useAppDoor(app.key, app.href)
+  return (
+    <li className="flex items-stretch hover:bg-muted">
+      <Link
+        href={door.href}
+        role="menuitem"
+        onClick={() => {
+          door.onClick()
+          onDone()
+        }}
+        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5"
+      >
+        {isAppGlyph(app.glyph) ? (
+          <span className="app-glyph-tile grid size-7 shrink-0 place-items-center rounded-lg">
+            <AppGlyph name={app.glyph} className="size-[1.125rem]" />
+          </span>
+        ) : (
+          <span
+            className="grid size-5 shrink-0 place-items-center rounded"
+            style={{ backgroundColor: app.wash, color: app.accent }}
+          >
+            <Icon className="size-3" strokeWidth={2} aria-hidden />
+          </span>
+        )}
+        <span className="min-w-0">
+          <span className="block text-xs font-semibold text-[#141418] dark:text-popover-foreground">{app.label}</span>
+          {door.remembered ? (
+            <span className="block text-[0.65rem] leading-snug text-primary">Back to where you left off</span>
+          ) : app.blurb ? (
+            <span className="block text-[0.65rem] leading-snug text-[#4a4a54] dark:text-muted-foreground">
+              {app.blurb}
+            </span>
+          ) : null}
+        </span>
+      </Link>
+      {door.remembered ? (
+        <Link
+          href={app.href}
+          role="menuitem"
+          onClick={onDone}
+          aria-label={`Open ${app.label} from the start`}
+          title={`Open ${app.label} from the start`}
+          className="grid w-9 shrink-0 place-items-center text-[#4a4a54] hover:text-foreground dark:text-muted-foreground"
+        >
+          <RotateCcwIcon className="size-3.5" aria-hidden />
+        </Link>
+      ) : null}
+    </li>
+  )
+}
+
+/** Clears every remembered place for this user in this browser. */
+function ForgetPlacesRow({ onDone }: { onDone: () => void }) {
+  const { remembersAnything, forgetAll } = useAppMemoryControls()
+  if (!remembersAnything) return null
+  return (
+    <>
+      <li className="my-1 border-t border-border" aria-hidden />
+      <li>
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            forgetAll()
+            onDone()
+          }}
+          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-[#4a4a54] hover:bg-muted hover:text-foreground dark:text-muted-foreground"
+        >
+          <RotateCcwIcon className="size-3.5" aria-hidden />
+          Start every app from the beginning
+        </button>
+      </li>
+    </>
   )
 }
 
@@ -453,7 +533,7 @@ export function AppLauncher({
 
 function TileGrid({ apps }: { apps: LauncherTile[] }) {
   return (
-    <ul className="mx-auto grid max-w-3xl grid-cols-4 gap-x-3 gap-y-6 sm:max-w-4xl sm:grid-cols-5 sm:gap-x-5 sm:gap-y-8">
+    <ul data-app-nav className="mx-auto grid max-w-3xl grid-cols-4 gap-x-3 gap-y-6 sm:max-w-4xl sm:grid-cols-5 sm:gap-x-5 sm:gap-y-8">
       {apps.map((app, index) => (
         <li
           key={app.key}
@@ -472,10 +552,15 @@ function TileGrid({ apps }: { apps: LauncherTile[] }) {
 function AppTile({ app }: { app: LauncherTile }) {
   const Icon = ICONS[app.icon]
   const glyph = isAppGlyph(app.glyph) ? app.glyph : null
+  // Home-grid apps reopen where they were left; hub sub-tiles are plain links.
+  const door = useAppDoor(app.key, app.href)
+  const href = glyph ? door.href : app.href
 
   return (
     <Link
-      href={app.href}
+      href={href}
+      onClick={glyph ? door.onClick : undefined}
+      title={glyph && door.remembered ? `${app.label} \u2014 back to where you left off` : undefined}
       className={cn(
         'group flex flex-col items-center gap-2.5 outline-none',
         'focus-visible:rounded-2xl focus-visible:ring-2 focus-visible:ring-sky-500/50 focus-visible:ring-offset-4',

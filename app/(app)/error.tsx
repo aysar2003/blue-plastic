@@ -2,11 +2,13 @@
 
 import { AlertTriangleIcon } from 'lucide-react'
 
+import { ForgetMissingPlace } from '@/components/layout/app-memory'
 import { Button } from '@/components/ui/button'
 
 export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-md border border-dashed px-6 py-16 text-center">
+      <ForgetMissingPlace />
       <AlertTriangleIcon className="size-8 text-destructive/70" />
       <div className="space-y-1">
         <p className="text-sm font-medium">Something went wrong</p>
