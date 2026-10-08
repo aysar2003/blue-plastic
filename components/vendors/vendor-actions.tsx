@@ -20,7 +20,7 @@ import type { AccountPickerOption } from '@/lib/account-options'
 import { vendorContactMenu, vendorQuickReportHref } from '@/lib/contact-menus'
 import { cn } from '@/lib/utils'
 
-const TEAL = 'bg-[#2ca01c] text-white hover:bg-[#248a18]'
+const ACTION = 'bg-primary text-primary-foreground hover:bg-primary/90'
 
 /**
  * Bills, receiving, pay, QuickReport, edit, and make active / inactive for one vendor.
@@ -95,7 +95,7 @@ export function VendorActions({
       {layout === 'panel' ? (
         <div className="flex flex-col gap-2">
           {primary ? (
-            <Link href={primary.href} className={cn(buttonVariants({ size: 'sm' }), TEAL, 'w-full')}>
+            <Link href={primary.href} className={cn(buttonVariants({ size: 'sm' }), ACTION, 'w-full')}>
               {primary.label}
             </Link>
           ) : null}
@@ -132,14 +132,14 @@ export function VendorActions({
           ) : null}
           {primary ? (
             <div className="inline-flex">
-              <Link href={primary.href} className={cn(buttonVariants({ size: 'sm' }), TEAL, 'rounded-r-none')}>
+              <Link href={primary.href} className={cn(buttonVariants({ size: 'sm' }), ACTION, 'rounded-r-none')}>
                 {primary.label}
               </Link>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     size="sm"
-                    className={cn(TEAL, 'rounded-l-none border-l border-white/25 px-1.5')}
+                    className={cn(ACTION, 'rounded-l-none border-l border-white/25 px-1.5')}
                     aria-label="More actions for this vendor"
                   >
                     <ChevronDownIcon />

@@ -52,14 +52,7 @@ export default async function NewSalesDocumentPage({
   return (
     <>
 
-      <PageHeader
-        title={`New ${config.singular.toLowerCase()}`}
-        description={
-          config.type === 'INVOICE'
-            ? 'Start a blank invoice, or pick an open quotation to reuse its items and prices.'
-            : config.effect
-        }
-      />
+      <PageHeader title={`New ${config.singular.toLowerCase()}`} className="mb-2 pb-2" />
 
       <DocumentForm
         config={config}

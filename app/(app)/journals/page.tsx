@@ -64,7 +64,7 @@ export default async function JournalsPage({
   const narrowed = Boolean(query.q || datePreset || source)
 
   const canPost = ctx.permissions.has('journal:post')
-  const canDelete = ctx.permissions.has('journal:reverse')
+  const canDelete = ctx.features.allowJournalDelete && ctx.permissions.has('journal:reverse')
   const currency = ctx.organization.baseCurrency
 
   const newEntry = canPost ? (

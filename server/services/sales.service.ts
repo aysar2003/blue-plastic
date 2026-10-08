@@ -37,6 +37,7 @@ function documentDiscount(input: SalesDocumentInput) {
 /** Till metadata written before a POS sales receipt is posted. */
 export type PosCheckoutMeta = {
   registerId: string
+  sessionId: string
   payments: { paymentMethodId: string; ledgerAccountId: string; amount: string }[]
 }
 
@@ -608,6 +609,7 @@ export async function create(
         data: {
           orgId: ctx.orgId,
           registerId: options.pos.registerId,
+          sessionId: options.pos.sessionId,
           salesDocumentId: document.id,
           payments: {
             create: options.pos.payments.map((payment) => ({

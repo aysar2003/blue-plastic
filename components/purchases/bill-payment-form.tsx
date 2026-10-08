@@ -195,14 +195,14 @@ export function BillPaymentForm({
     vendorId !== '' && paymentAccountId !== '' && appliedTotal.greaterThan(0) && !overApplied
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} className="space-y-2">
       <input type="hidden" name="payload" value={payload} />
 
       <Card>
-        <CardContent className="space-y-4 p-4">
+        <CardContent className="space-y-3 p-3 sm:p-4">
           <FormStatus state={state} />
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             <LockedNumber
               label="Payment number"
               value={number}

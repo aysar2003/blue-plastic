@@ -25,15 +25,22 @@ export default async function SignInPage() {
     if (session?.user) redirect('/dashboard')
 
     return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle>Sign in</CardTitle>
-        <CardDescription>Enter your credentials to reach the books.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <SignInForm />
-      </CardContent>
-    </Card>
+    <div className="flex w-full max-w-sm flex-col gap-4">
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle>Sign in</CardTitle>
+          <CardDescription>Enter your credentials to reach the books.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SignInForm />
+        </CardContent>
+      </Card>
+      <p className="text-center text-[0.6875rem] tracking-wide text-muted-foreground">
+        <span className="font-medium text-foreground/80">Abdisalm Hero</span>
+        <span className="mx-1.5">·</span>
+        System brand
+      </p>
+    </div>
     )
   })
 }

@@ -2,10 +2,12 @@ import 'server-only'
 
 import { formatDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
+import { odooPdfLetterhead, odooPdfTableHead } from '@/lib/odoo-pdf'
+import { ODOO_PDF } from '@/lib/odoo-brand'
 import { buildTextPdf, type PdfRow } from '@/lib/pdf-text'
 
 /**
- * Sales document (invoice, quotation, receipt, credit) as a plain PDF file.
+ * Sales document (invoice, quotation, receipt, credit) as an Odoo-styled PDF.
  */
 export function renderSalesDocumentPdf(input: {
   orgName: string
@@ -41,7 +43,7 @@ export function renderSalesDocumentPdf(input: {
     rows.push({
       size: options.size ?? 10,
       height: options.height ?? 14,
-      runs: [{ text, x: 40, bold: options.bold }],
+      runs: [{ text, x: 40, bold: options.bold, color: ODOO_PDF.ink }],
     })
   }
 
@@ -54,13 +56,17 @@ export function renderSalesDocumentPdf(input: {
         ? input.dueDate
         : toCalendarDate(input.dueDate)
 
-  line(input.orgName, { bold: true, size: 14, height: 18 })
-  for (const part of input.orgAddress) line(part, { size: 9, height: 12 })
-  if (input.orgPhone) line(`Phone ${input.orgPhone}`, { size: 9, height: 12 })
-  if (input.orgEmail) line(`Email ${input.orgEmail}`, { size: 9, height: 12 })
+  rows.push(
+    ...odooPdfLetterhead({
+      orgName: input.orgName,
+      orgAddress: input.orgAddress,
+      orgPhone: input.orgPhone,
+      orgEmail: input.orgEmail,
+      title: input.title,
+      subtitle: input.number,
+    }),
+  )
 
-  line(input.title, { bold: true, size: 12, height: 18 })
-  line(input.number, { bold: true, size: 11, height: 14 })
   line(`Date ${formatDate(date)}`, { size: 9, height: 12 })
   if (due) line(`Due ${formatDate(due)}`, { size: 9, height: 14 })
 
@@ -69,29 +75,26 @@ export function renderSalesDocumentPdf(input: {
   for (const part of input.customerAddress) line(part, { size: 9, height: 12 })
   if (input.customerEmail) line(input.customerEmail, { size: 9, height: 14 })
 
-  rows.push({
-    size: 8,
-    height: 14,
-    rule: true,
-    runs: [
-      { text: 'Qty', x: 40, bold: true },
-      { text: 'Item', x: 80, bold: true },
-      { text: 'Description', x: 160, bold: true },
-      { text: 'Unit', x: 400, bold: true },
-      { text: 'Amount', x: 480, bold: true },
-    ],
-  })
+  rows.push(
+    odooPdfTableHead([
+      { text: 'Qty', x: 40 },
+      { text: 'Item', x: 80 },
+      { text: 'Description', x: 160 },
+      { text: 'Unit', x: 400 },
+      { text: 'Amount', x: 480 },
+    ]),
+  )
 
   for (const row of input.lines) {
     rows.push({
       size: 8,
       height: 12,
       runs: [
-        { text: row.quantity, x: 40 },
-        { text: (row.sku ?? '').slice(0, 12), x: 80 },
-        { text: row.description.slice(0, 40), x: 160 },
-        { text: money(row.unitPrice), x: 400 },
-        { text: money(row.amount), x: 480 },
+        { text: row.quantity, x: 40, color: ODOO_PDF.ink },
+        { text: (row.sku ?? '').slice(0, 12), x: 80, color: ODOO_PDF.ink },
+        { text: row.description.slice(0, 40), x: 160, color: ODOO_PDF.ink },
+        { text: money(row.unitPrice), x: 400, color: ODOO_PDF.ink },
+        { text: money(row.amount), x: 480, color: ODOO_PDF.ink },
       ],
     })
   }
@@ -104,7 +107,20 @@ export function renderSalesDocumentPdf(input: {
   if (Number(input.taxTotal) > 0) {
     line(`Tax ${money(input.taxTotal)}`, { size: 9, height: 12 })
   }
-  line(`Total ${money(input.total)}`, { bold: true, size: 11, height: 16 })
+  rows.push({
+    size: 11,
+    height: 18,
+    fill: ODOO_PDF.purpleSoft,
+    fillInset: 36,
+    runs: [
+      {
+        text: `Total ${money(input.total)}`,
+        x: 40,
+        bold: true,
+        color: ODOO_PDF.purple,
+      },
+    ],
+  })
   if (input.amountApplied && Number(input.amountApplied) > 0) {
     line(`Paid ${money(input.amountApplied)}`, { size: 9, height: 12 })
     if (input.balance) line(`Amount due ${money(input.balance)}`, { bold: true, size: 10, height: 14 })

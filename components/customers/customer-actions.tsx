@@ -19,7 +19,9 @@ import {
 import { customerContactMenu, customerQuickReportHref } from '@/lib/contact-menus'
 import { cn } from '@/lib/utils'
 
-const TEAL = 'bg-[#2ca01c] text-white hover:bg-[#248a18]'
+/** Theme-aware primary action (Odoo plum when Odoo theme is on). */
+const ACTION = 'bg-primary text-primary-foreground hover:bg-primary/90'
+const LINK = 'text-primary hover:underline'
 
 /**
  * Create sales from here with this customer chosen — plus QuickReport, edit,
@@ -120,11 +122,11 @@ export function CustomerActions({
         </div>
       ) : layout === 'row' && primary ? (
         <div className="inline-flex items-center gap-1">
-          <Link href={primary.href} className="text-sm font-medium text-[#2ca01c] hover:underline">
+          <Link href={primary.href} className={cn('text-sm font-medium', LINK)}>
             {primary.label}
           </Link>
           <DropdownMenu>
-            <DropdownMenuTrigger className="text-[#2ca01c]" aria-label="More actions for this customer">
+            <DropdownMenuTrigger className="text-primary" aria-label="More actions for this customer">
               <ChevronDownIcon className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -149,14 +151,14 @@ export function CustomerActions({
           ) : null}
           {primary ? (
             <div className="inline-flex">
-              <Link href={primary.href} className={cn(buttonVariants({ size: 'sm' }), TEAL, 'rounded-r-none')}>
+              <Link href={primary.href} className={cn(buttonVariants({ size: 'sm' }), ACTION, 'rounded-r-none')}>
                 {primary.label}
               </Link>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     size="sm"
-                    className={cn(TEAL, 'rounded-l-none border-l border-white/25 px-1.5')}
+                    className={cn(ACTION, 'rounded-l-none border-l border-white/25 px-1.5')}
                     aria-label="More actions for this customer"
                   >
                     <ChevronDownIcon />

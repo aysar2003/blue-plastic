@@ -1,8 +1,16 @@
 import 'server-only'
 
-import { Decimal, toMoneyString, ZERO } from '@/lib/money'
-import { today } from '@/lib/date'
-import type { PosCheckoutInput, PosPaymentMethodInput, PosRegisterInput } from '@/lib/validation/pos'
+import { Decimal, formatMoney, toMoneyString, ZERO } from '@/lib/money'
+import { formatDate, today, toCalendarDate } from '@/lib/date'
+import type {
+  PosCashMoveInput,
+  PosCheckoutInput,
+  PosCloseSessionInput,
+  PosOpenSessionInput,
+  PosPaymentMethodInput,
+  PosRefundInput,
+  PosRegisterInput,
+} from '@/lib/validation/pos'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { notFound, precondition, validation } from '@/server/errors'
@@ -18,6 +26,192 @@ export async function listRegisters(ctx: OrgContext) {
     },
     orderBy: { name: 'asc' },
   })
+}
+
+/** Dashboard cards: each register with its open session (if any). */
+export async function dashboardRegisters(ctx: OrgContext) {
+  const registers = await db.posRegister.findMany({
+    where: { orgId: ctx.orgId, isActive: true },
+    select: {
+      id: true,
+      name: true,
+      store: { select: { id: true, name: true } },
+      sessions: {
+        where: { status: 'OPEN' },
+        select: {
+          id: true,
+          openedAt: true,
+          openingCash: true,
+        },
+        take: 1,
+      },
+    },
+    orderBy: { name: 'asc' },
+  })
+
+  const currency = ctx.organization.baseCurrency
+  return registers.map((register) => {
+    const session = register.sessions[0] ?? null
+    return {
+      id: register.id,
+      name: register.name,
+      storeName: register.store?.name ?? null,
+      session: session
+        ? {
+            id: session.id,
+            openedAt: session.openedAt,
+            dateLabel: formatDate(toCalendarDate(session.openedAt)),
+            openingCash: formatMoney(session.openingCash, currency),
+            openingCashRaw: session.openingCash.toString(),
+          }
+        : null,
+    }
+  })
+}
+
+export async function openSession(ctx: OrgContext, input: PosOpenSessionInput) {
+  const register = await db.posRegister.findFirst({
+    where: { id: input.registerId, orgId: ctx.orgId, isActive: true },
+    select: { id: true },
+  })
+  if (!register) throw notFound('Register')
+
+  const opening = new Decimal(input.openingCash)
+  if (opening.isNegative()) throw validation('Opening cash cannot be negative.')
+
+  const existing = await db.posSession.findFirst({
+    where: { registerId: register.id, status: 'OPEN' },
+    select: { id: true },
+  })
+  if (existing) {
+    throw precondition('This register already has an open session. Continue selling or close it first.')
+  }
+
+  return db.posSession.create({
+    data: {
+      orgId: ctx.orgId,
+      registerId: register.id,
+      openingCash: opening.toFixed(4),
+      openedByUserId: ctx.userId,
+      status: 'OPEN',
+    },
+    select: { id: true, registerId: true },
+  })
+}
+
+export async function closeSession(ctx: OrgContext, input: PosCloseSessionInput) {
+  const session = await db.posSession.findFirst({
+    where: { id: input.sessionId, orgId: ctx.orgId, status: 'OPEN' },
+    select: { id: true, registerId: true },
+  })
+  if (!session) throw notFound('Session')
+
+  const closing = new Decimal(input.closingCash)
+  if (closing.isNegative()) throw validation('Closing cash cannot be negative.')
+
+  await db.posSession.update({
+    where: { id: session.id },
+    data: {
+      status: 'CLOSED',
+      closedAt: new Date(),
+      closingCash: closing.toFixed(4),
+      closedByUserId: ctx.userId,
+    },
+  })
+
+  return { id: session.id, registerId: session.registerId }
+}
+
+export async function openSessionForRegister(ctx: OrgContext, registerId: string) {
+  return db.posSession.findFirst({
+    where: { orgId: ctx.orgId, registerId, status: 'OPEN' },
+    select: {
+      id: true,
+      openedAt: true,
+      openingCash: true,
+      register: { select: { id: true, name: true } },
+    },
+  })
+}
+
+export async function listSessions(ctx: OrgContext, limit = 50) {
+  const currency = ctx.organization.baseCurrency
+  const rows = await db.posSession.findMany({
+    where: { orgId: ctx.orgId },
+    select: {
+      id: true,
+      status: true,
+      openedAt: true,
+      closedAt: true,
+      openingCash: true,
+      closingCash: true,
+      register: { select: { id: true, name: true } },
+      _count: { select: { orders: true } },
+    },
+    orderBy: { openedAt: 'desc' },
+    take: limit,
+  })
+
+  return rows.map((row) => ({
+    id: row.id,
+    status: row.status,
+    registerId: row.register.id,
+    registerName: row.register.name,
+    openedAt: row.openedAt,
+    closedAt: row.closedAt,
+    dateLabel: formatDate(toCalendarDate(row.openedAt)),
+    openingCash: formatMoney(row.openingCash, currency),
+    closingCash: row.closingCash ? formatMoney(row.closingCash, currency) : null,
+    orderCount: row._count.orders,
+  }))
+}
+
+export async function listPosOrders(ctx: OrgContext, limit = 80) {
+  const currency = ctx.organization.baseCurrency
+  const rows = await db.posOrder.findMany({
+    where: { orgId: ctx.orgId },
+    select: {
+      id: true,
+      createdAt: true,
+      register: { select: { name: true } },
+      session: { select: { id: true } },
+      salesDocument: {
+        select: {
+          id: true,
+          number: true,
+          total: true,
+          status: true,
+        },
+      },
+      payments: {
+        select: {
+          amount: true,
+          paymentMethod: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  })
+
+  return rows.map((row) => ({
+    id: row.id,
+    createdAt: row.createdAt,
+    dateLabel: formatDate(toCalendarDate(row.createdAt)),
+    registerName: row.register.name,
+    sessionId: row.session?.id ?? null,
+    documentId: row.salesDocument.id,
+    number: row.salesDocument.number,
+    status: row.salesDocument.status,
+    total: formatMoney(row.salesDocument.total, currency),
+    payments: row.payments
+      .map((payment) => `${payment.paymentMethod.name} ${formatMoney(payment.amount, currency)}`)
+      .join(' · '),
+  }))
+}
+
+function isCashMethodName(name: string) {
+  return /\bcash\b/i.test(name.trim())
 }
 
 export async function registerForTerminal(ctx: OrgContext, registerId: string) {
@@ -58,7 +252,10 @@ export async function registerForTerminal(ctx: OrgContext, registerId: string) {
     name: register.name,
     storeId: register.storeId,
     defaultCustomerId: register.defaultCustomerId,
-    paymentMethods: methods,
+    paymentMethods: methods.map((method) => ({
+      ...method,
+      isCash: isCashMethodName(method.name),
+    })),
   }
 }
 
@@ -92,6 +289,29 @@ export async function catalog(ctx: OrgContext, _storeId: string | null) {
 
 export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
   const register = await registerForTerminal(ctx, input.registerId)
+
+  const session = await db.posSession.findFirst({
+    where: {
+      id: input.sessionId,
+      orgId: ctx.orgId,
+      registerId: register.id,
+      status: 'OPEN',
+    },
+    select: { id: true },
+  })
+  if (!session) {
+    throw precondition('Open a POS session on this register before selling.')
+  }
+
+  let customerId = register.defaultCustomerId
+  if (input.customerId) {
+    const customer = await db.customer.findFirst({
+      where: { id: input.customerId, orgId: ctx.orgId, isActive: true },
+      select: { id: true },
+    })
+    if (!customer) throw notFound('Customer')
+    customerId = customer.id
+  }
 
   const methodById = new Map(register.paymentMethods.map((method) => [method.id, method]))
 
@@ -135,16 +355,18 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
     'SALES_RECEIPT',
     {
       number: undefined,
-      customerId: register.defaultCustomerId,
+      customerId,
       date: receiptDate,
       depositAccountId: primaryDeposit,
       lines,
       saveAsDraft: false,
       discountKind: 'percent',
+      customerMessage: input.note ?? undefined,
     },
     {
       pos: {
         registerId: register.id,
+        sessionId: session.id,
         payments: resolvedPayments,
       },
     },
@@ -155,6 +377,276 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
     number: document.number,
     total: toMoneyString(priced.total, 2),
   }
+}
+
+export async function recordCashMove(ctx: OrgContext, input: PosCashMoveInput) {
+  const session = await db.posSession.findFirst({
+    where: { id: input.sessionId, orgId: ctx.orgId, status: 'OPEN' },
+    select: { id: true },
+  })
+  if (!session) throw precondition('Open a session before recording cash in/out.')
+
+  const amount = new Decimal(input.amount)
+  if (amount.isZero() || amount.isNegative()) {
+    throw validation('Enter a positive cash amount.')
+  }
+
+  return db.posCashMovement.create({
+    data: {
+      orgId: ctx.orgId,
+      sessionId: session.id,
+      kind: input.kind,
+      amount: amount.toFixed(4),
+      reason: input.reason ?? null,
+      createdByUserId: ctx.userId,
+    },
+    select: { id: true, kind: true, amount: true },
+  })
+}
+
+/** Expected drawer cash for close-register variance. */
+export async function sessionCashSummary(ctx: OrgContext, sessionId: string) {
+  const session = await db.posSession.findFirst({
+    where: { id: sessionId, orgId: ctx.orgId },
+    select: {
+      id: true,
+      openingCash: true,
+      cashMoves: { select: { kind: true, amount: true } },
+      orders: {
+        select: {
+          salesDocument: { select: { type: true } },
+          payments: {
+            select: {
+              amount: true,
+              paymentMethod: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+  if (!session) throw notFound('Session')
+
+  let cashIn = ZERO
+  let cashOut = ZERO
+  for (const move of session.cashMoves) {
+    const amount = new Decimal(move.amount.toString())
+    if (move.kind === 'IN') cashIn = cashIn.plus(amount)
+    else cashOut = cashOut.plus(amount)
+  }
+
+  let cashSales = ZERO
+  let cashRefunds = ZERO
+  for (const order of session.orders) {
+    for (const payment of order.payments) {
+      if (!isCashMethodName(payment.paymentMethod.name)) continue
+      const amount = new Decimal(payment.amount.toString())
+      if (order.salesDocument.type === 'SALES_RECEIPT') cashSales = cashSales.plus(amount)
+      else if (order.salesDocument.type === 'REFUND_RECEIPT') cashRefunds = cashRefunds.plus(amount)
+    }
+  }
+
+  const opening = new Decimal(session.openingCash.toString())
+  const expected = opening.plus(cashIn).minus(cashOut).plus(cashSales).minus(cashRefunds)
+  const currency = ctx.organization.baseCurrency
+
+  return {
+    openingCash: toMoneyString(opening, 2),
+    cashIn: toMoneyString(cashIn, 2),
+    cashOut: toMoneyString(cashOut, 2),
+    cashSales: toMoneyString(cashSales, 2),
+    cashRefunds: toMoneyString(cashRefunds, 2),
+    expectedCash: toMoneyString(expected, 2),
+    expectedCashRaw: expected.toFixed(4),
+    currency,
+  }
+}
+
+/** Recent sales receipts on this session — for till refunds. */
+export async function recentSessionOrders(ctx: OrgContext, sessionId: string, limit = 40) {
+  const currency = ctx.organization.baseCurrency
+  const rows = await db.posOrder.findMany({
+    where: {
+      orgId: ctx.orgId,
+      sessionId,
+      salesDocument: { type: 'SALES_RECEIPT' },
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      salesDocument: {
+        select: {
+          id: true,
+          number: true,
+          total: true,
+          customer: { select: { displayName: true } },
+          lines: {
+            select: {
+              itemId: true,
+              quantity: true,
+              unitPrice: true,
+              storeId: true,
+              description: true,
+            },
+            orderBy: { lineNumber: 'asc' },
+          },
+        },
+      },
+      payments: {
+        select: {
+          amount: true,
+          paymentMethod: { select: { id: true, name: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  })
+
+  return rows.map((row) => ({
+    id: row.id,
+    documentId: row.salesDocument.id,
+    number: row.salesDocument.number,
+    total: formatMoney(row.salesDocument.total, currency),
+    totalRaw: row.salesDocument.total.toString(),
+    customerName: row.salesDocument.customer.displayName,
+    dateLabel: formatDate(toCalendarDate(row.createdAt)),
+    payments: row.payments
+      .map((payment) => `${payment.paymentMethod.name} ${formatMoney(payment.amount, currency)}`)
+      .join(' · '),
+  }))
+}
+
+/** Full refund of a POS sales receipt, paid back through till methods. */
+export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
+  const register = await registerForTerminal(ctx, input.registerId)
+
+  const session = await db.posSession.findFirst({
+    where: {
+      id: input.sessionId,
+      orgId: ctx.orgId,
+      registerId: register.id,
+      status: 'OPEN',
+    },
+    select: { id: true },
+  })
+  if (!session) {
+    throw precondition('Open a POS session on this register before refunding.')
+  }
+
+  const order = await db.posOrder.findFirst({
+    where: {
+      id: input.orderId,
+      orgId: ctx.orgId,
+      sessionId: session.id,
+      registerId: register.id,
+    },
+    select: {
+      id: true,
+      salesDocument: {
+        select: {
+          id: true,
+          number: true,
+          type: true,
+          customerId: true,
+          total: true,
+          lines: {
+            select: {
+              itemId: true,
+              quantity: true,
+              unitPrice: true,
+              storeId: true,
+              description: true,
+            },
+            orderBy: { lineNumber: 'asc' },
+          },
+        },
+      },
+    },
+  })
+  if (!order) throw notFound('Order')
+  if (order.salesDocument.type !== 'SALES_RECEIPT') {
+    throw precondition('Only open POS sales receipts can be refunded from the till.')
+  }
+  const refundableLines = order.salesDocument.lines.filter((line) => line.itemId)
+  if (refundableLines.length === 0) {
+    throw validation('That receipt has no lines to refund.')
+  }
+
+  const methodById = new Map(register.paymentMethods.map((method) => [method.id, method]))
+  let paymentTotal = ZERO
+  const resolvedPayments: salesService.PosCheckoutMeta['payments'] = []
+
+  for (const payment of input.payments) {
+    const method = methodById.get(payment.paymentMethodId)
+    if (!method) throw validation('One of the payment methods is not allowed on this register.')
+    const amount = new Decimal(payment.amount)
+    if (amount.isZero() || amount.isNegative()) {
+      throw validation('Each payment must be a positive amount.')
+    }
+    paymentTotal = paymentTotal.plus(amount)
+    resolvedPayments.push({
+      paymentMethodId: method.id,
+      ledgerAccountId: method.ledgerAccountId,
+      amount: amount.toFixed(4),
+    })
+  }
+
+  const docTotal = new Decimal(order.salesDocument.total.toString())
+  if (!paymentTotal.equals(docTotal)) {
+    throw validation(
+      `Refund payments (${toMoneyString(paymentTotal, 2)}) must equal the receipt total (${toMoneyString(docTotal, 2)}).`,
+    )
+  }
+
+  const lines = refundableLines.map((line) => ({
+    itemId: line.itemId!,
+    quantity: line.quantity.toString(),
+    unitPrice: line.unitPrice.toString(),
+    storeId: line.storeId ?? register.storeId,
+    description: line.description ?? undefined,
+  }))
+
+  const receiptDate = today(ctx.organization.timeZone)
+  const primaryDeposit = resolvedPayments[0]!.ledgerAccountId
+
+  const document = await salesService.create(
+    ctx,
+    'REFUND_RECEIPT',
+    {
+      number: undefined,
+      customerId: order.salesDocument.customerId,
+      date: receiptDate,
+      depositAccountId: primaryDeposit,
+      lines,
+      saveAsDraft: false,
+      discountKind: 'percent',
+      reference: order.salesDocument.number,
+      memo: `POS refund of ${order.salesDocument.number}`,
+    },
+    {
+      pos: {
+        registerId: register.id,
+        sessionId: session.id,
+        payments: resolvedPayments,
+      },
+    },
+  )
+
+  return {
+    id: document.id,
+    number: document.number,
+    total: toMoneyString(docTotal, 2),
+  }
+}
+
+export async function walkInCustomers(ctx: OrgContext) {
+  return db.customer.findMany({
+    where: { orgId: ctx.orgId, isActive: true },
+    select: { id: true, displayName: true },
+    orderBy: { displayName: 'asc' },
+    take: 300,
+  })
 }
 
 /* --- Settings ------------------------------------------------------------- */

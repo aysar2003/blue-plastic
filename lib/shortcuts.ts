@@ -68,13 +68,13 @@ export const GLOBAL_KEYS: { keys: string; label: string }[] = [
   { keys: 'Ctrl K', label: 'Search the whole system' },
   { keys: '?', label: 'Show keyboard shortcuts' },
   { keys: '/', label: 'Jump to the search box on the page' },
-  { keys: 'Ctrl S', label: 'Save and close' },
-  { keys: 'Ctrl Shift S', label: 'Save and start another' },
+  { keys: 'Ctrl S', label: 'Save and close (invoice, bill, and every other form)' },
+  { keys: 'Ctrl Shift S', label: 'Save and start another blank form' },
   { keys: 'Ctrl L', label: 'Add a line on the document you are filling in' },
-  { keys: 'Enter', label: 'Next field on a document line, or open the highlighted row' },
-  { keys: '↑ ↓', label: 'Move through the rows of a list' },
+  { keys: 'Enter', label: 'Accept a name in a picker, then move to the next field on the line' },
+  { keys: '↑ ↓', label: 'Move through the rows of a list or a picker' },
   { keys: 'Esc', label: 'Leave a field, or close a dialog' },
-  { keys: 'Tab', label: 'Move to the next field, and accept a highlighted name' },
+  { keys: 'Tab', label: 'Accept the highlighted name and move to the next field' },
 ]
 
 /** How a key sequence is written on screen. */

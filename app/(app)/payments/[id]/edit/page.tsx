@@ -24,10 +24,7 @@ export default async function EditPaymentPage({ params }: { params: Promise<{ id
 
   return (
     <>
-      <PageHeader
-        title={`Edit payment ${payment.number}`}
-        description="Change the receipt or what it settles. Changing amount, date, customer, or deposit account reverses the original entry and posts a replacement."
-      />
+      <PageHeader title={`Edit payment ${payment.number}`} className="mb-2 pb-2" />
 
       <PaymentForm
         customers={options.customers}

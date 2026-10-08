@@ -24,6 +24,8 @@ type ShellChromeProps = {
   user: { id: string; name: string; email: string; image: string | null }
   moduleKeys: string[]
   permissions: string[]
+  /** Creator credit (Abdisalm Hero) — off via Settings → Features. */
+  showCreatorBrand?: boolean
   /** Streamed server slot; null when the user lacks inventory:read. */
   stockAlertsSlot: React.ReactNode
   /** Streamed server slot; null when the user lacks customer:read. */
@@ -64,6 +66,7 @@ export function ShellChrome({
   roleLabel,
   user,
   permissions,
+  showCreatorBrand = true,
   stockAlertsSlot,
   balanceAlertsSlot,
   children,
@@ -71,14 +74,17 @@ export function ShellChrome({
   const pathname = usePathname()
   const current = moduleFor(pathname)
   const isHome = !current || current.key === 'dashboard'
+  const isPos = pathname === '/pos' || pathname.startsWith('/pos/')
   const isHub = HUB_PATHS.has(pathname)
+  // POS owns its chrome and needs a full-bleed ground (no side padding / atmosphere gaps).
+  const fullBleed = isHub || isPos
   // The left list belongs to the Accounting app only. Sales, reports, and the
   // other apps keep the header they had before.
   const showNav = current?.key === 'accounting' && !pathname.endsWith('/print')
   const isPrint = pathname.endsWith('/print')
   const working = !isPrint
-  // Print pages still need a way back to the document.
-  const showBack = pathname !== '/dashboard'
+  // Print pages still need a way back to the document. POS has its own back/nav.
+  const showBack = pathname !== '/dashboard' && !isPos
 
   const brandLabel = isHome ? orgName : current.label
   const brandHref = isHome ? '/dashboard' : current.href
@@ -86,15 +92,15 @@ export function ShellChrome({
   return (
     <div className="app-surface relative flex min-h-svh overflow-x-hidden">
       <NavigationProgress />
-      <AppAtmosphere />
+      {isPos ? null : <AppAtmosphere />}
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card/80 px-4 backdrop-blur-md sm:px-6">
+        <header className="shell-topbar relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card/80 px-4 backdrop-blur-md sm:px-6">
           <Link href={brandHref} className="flex min-w-0 items-center gap-2.5">
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-[0.7rem] font-bold tracking-wide text-primary-foreground shadow-sm">
+            <span className="shell-brand-mark grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-[0.7rem] font-bold tracking-wide text-primary-foreground shadow-sm">
               BP
             </span>
-            <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+            <span className="shell-brand-label truncate text-sm font-semibold tracking-tight text-foreground">
               {brandLabel}
             </span>
           </Link>
@@ -110,7 +116,7 @@ export function ShellChrome({
         </header>
 
         {working ? (
-          <div className="relative z-20 border-b border-border/70 bg-card/85 px-4 py-1.5 print:hidden sm:px-6">
+          <div className="shell-apps relative z-20 border-b border-border/70 bg-card/85 px-4 py-1.5 print:hidden sm:px-6">
             <HeaderApps permissions={permissions} />
           </div>
         ) : null}
@@ -127,18 +133,28 @@ export function ShellChrome({
 
         <main
           className={
-            isHub
+            fullBleed
               ? 'relative min-w-0 w-full flex-1'
               : 'relative min-w-0 w-full flex-1 px-[clamp(0.75rem,1.6vw,2rem)] py-[clamp(0.75rem,1.4vw,1.5rem)]'
           }
         >
           {showBack ? (
-            <div className={isHub ? 'px-4 pt-4 print:hidden sm:px-6' : 'mb-3 print:hidden'}>
+            <div className={fullBleed && !isPos ? 'px-4 pt-4 print:hidden sm:px-6' : 'mb-3 print:hidden'}>
               <HistoryBack />
             </div>
           ) : null}
           {children}
         </main>
+
+        {showCreatorBrand && !isPrint && !isPos ? (
+          <footer className="relative z-10 border-t border-border/60 px-4 py-2 text-center print:hidden sm:px-6">
+            <p className="text-[0.6875rem] tracking-wide text-muted-foreground">
+              <span className="font-medium text-foreground/80">Abdisalm Hero</span>
+              <span className="mx-1.5 text-border">·</span>
+              System brand
+            </p>
+          </footer>
+        ) : null}
       </div>
     </div>
   )

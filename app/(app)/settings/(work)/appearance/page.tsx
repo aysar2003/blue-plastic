@@ -10,9 +10,11 @@ export default function AppearancePage() {
       <div>
         <h2 className="text-base font-semibold">Appearance</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          The theme colours every screen: the home, the lists, the forms and the reports. Lagoon is the
-          teal shell. Ink is black, white, and gray. The choice stays on this browser until you choose
-          another.
+          Choose colours for the whole system — home, lists, forms, reports, and POS.{' '}
+          <strong className="font-medium text-foreground">Odoo</strong> and{' '}
+          <strong className="font-medium text-foreground">Odoo Dark</strong> apply the full brand
+          skin: purple top bar (#714B67), teal accents (#017E84), Inter type, flat panels. Pick one
+          again if another theme was saved in this browser earlier.
         </p>
       </div>
       <ThemePicker />

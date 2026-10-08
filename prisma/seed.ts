@@ -62,9 +62,9 @@ async function main() {
   const ownerName = process.env.SEED_OWNER_NAME ?? 'Owner'
   const password = process.env.SEED_OWNER_PASSWORD
 
-  if (!password || password.length < 12) {
+  if (!password || password.length < 6) {
     throw new Error(
-      'Set SEED_OWNER_PASSWORD in .env to at least 12 characters before seeding.\n' +
+      'Set SEED_OWNER_PASSWORD in .env to at least 6 characters before seeding.\n' +
         'There is no default password: an accounting system should never ship with one.',
     )
   }

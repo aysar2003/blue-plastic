@@ -2,14 +2,13 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { PlusIcon, Trash2Icon } from 'lucide-react'
+import { ChevronDownIcon, ChevronUpIcon, PlusIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { idleState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
-import { PartyInfo } from '@/components/forms/party-info'
 import { LockedNumber } from '@/components/forms/locked-number'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
@@ -22,6 +21,7 @@ import type { AccountPickerOption } from '@/lib/account-options'
 import { formatDate, isCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
 import { dueDateFor, type PaymentTermShape } from '@/lib/payment-terms'
+import { FORM_SHEET, VENDOR_CREDIT } from '@/lib/credit-brand'
 import type { PurchaseTypeConfig } from '@/lib/purchase-types'
 import { cn } from '@/lib/utils'
 import { LineStore } from '@/components/inventory/line-store'
@@ -75,7 +75,7 @@ type Line = {
   storeId: string
 }
 
-const ITEM_ROWS = 10
+const ITEM_ROWS = 4
 
 const empty = (key: number, account = '', kind: LineKind = 'category', storeId = ''): Line => ({
   key,
@@ -193,11 +193,28 @@ export function BillForm({
     ),
   )
   const [saveAsDraft, setSaveAsDraft] = useState(false)
+  /** Category lines stay hidden until asked for — most bills are item-only. */
+  const [showCategories, setShowCategories] = useState(() =>
+    Boolean(
+      document?.lines.some(
+        (line) =>
+          !line.itemId &&
+          (Boolean(line.expenseAccountId) || Boolean(line.description) || Number(line.unitPrice) !== 0),
+      ),
+    ),
+  )
   const nextKey = useRef(lines.reduce((max, line) => Math.max(max, line.key), 0) + 1)
   const handled = useRef(false)
   const afterSave = useRef<'close' | 'new'>('close')
 
   useEffect(() => setNumber(documentNumber), [documentNumber])
+
+  // Start on the vendor name so Tab walks the form without the mouse.
+  useEffect(() => {
+    if (vendorId) return
+    const timer = window.setTimeout(() => document.getElementById('vendorId')?.focus(), 0)
+    return () => window.clearTimeout(timer)
+  }, [vendorId])
 
   useEffect(() => {
     if (document || !initialVendorId) return
@@ -385,51 +402,45 @@ export function BillForm({
         ? date
         : ''
   const owed = config.type === 'BILL' || config.type === 'VENDOR_CREDIT'
+  const isVendorCredit = config.type === 'VENDOR_CREDIT'
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} className="space-y-2">
       <input type="hidden" name="payload" value={payload} />
 
       <Card className="overflow-hidden bg-white p-0">
-        <CardContent className="space-y-5 p-4 sm:p-6">
+        {isVendorCredit ? (
+          <div className="px-4 py-2 text-white sm:px-5" style={{ background: VENDOR_CREDIT.accent }}>
+            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/85">Vendor credit</p>
+            <p className="text-base font-semibold tracking-wide">{config.singular}</p>
+          </div>
+        ) : null}
+        <CardContent
+          className="space-y-3 p-3 sm:p-4"
+          style={isVendorCredit ? { background: VENDOR_CREDIT.wash } : undefined}
+        >
           <FormStatus state={state} />
 
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <PartyInfo>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field name="vendorId" label="Vendor" required error={state.fieldErrors?.vendorId}>
-                  <EntityPicker
-                    id="vendorId"
-                    kind="vendor"
-                    options={vendors}
-                    value={vendorId || null}
-                    onChange={(next) => chooseVendor(next ?? '')}
-                    placeholder="Choose a vendor"
-                    required
-                    error={state.fieldErrors?.vendorId}
-                  />
-                </Field>
-                <Field name="vendorEmail" label="Email">
-                  <Input id="vendorEmail" value={vendor?.email ?? ''} readOnly placeholder="No email on this vendor" />
-                </Field>
-              </div>
-              <div className="space-y-1.5">
-                <p className="text-sm font-medium">Mailing address</p>
-                <div className="min-h-24 whitespace-pre-line rounded-md border bg-white px-3 py-2 text-sm text-slate-700">
-                  {vendor?.mailingAddress || <span className="text-muted-foreground">No mailing address</span>}
-                </div>
-              </div>
-            </PartyInfo>
-            <div className="text-right">
-              <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
-                {config.needsPaymentAccount ? 'Amount paid' : 'Balance due'}
-              </p>
-              <p className="text-2xl font-semibold tabular text-primary">{formatMoney(totals.total, currency)}</p>
-            </div>
-          </div>
-
-          <div className={`grid gap-3 sm:grid-cols-2 ${owed ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-            <Field name="date" label={config.needsPaymentAccount ? 'Payment date' : `${config.singular} date`} required error={state.fieldErrors?.date}>
+          {/* Name → Date → Number → Due → PO */}
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.35fr)_repeat(4,minmax(0,1fr))]">
+            <Field name="vendorId" label="Vendor name" required error={state.fieldErrors?.vendorId}>
+              <EntityPicker
+                id="vendorId"
+                kind="vendor"
+                options={vendors}
+                value={vendorId || null}
+                onChange={(next) => chooseVendor(next ?? '')}
+                placeholder="Choose a vendor"
+                required
+                error={state.fieldErrors?.vendorId}
+              />
+            </Field>
+            <Field
+              name="date"
+              label={config.needsPaymentAccount ? 'Payment date' : 'Date'}
+              required
+              error={state.fieldErrors?.date}
+            >
               <DateField
                 id="date"
                 value={date}
@@ -439,6 +450,31 @@ export function BillForm({
                 aria-invalid={state.fieldErrors?.date ? true : undefined}
               />
             </Field>
+            <LockedNumber
+              label={`${config.singular} no.`}
+              value={number}
+              onChange={setNumber}
+              error={state.fieldErrors?.number}
+              recordId={document?.id}
+            />
+            {owed ? (
+              <Field name="dueDate" label="Due date">
+                <Input id="dueDate" value={due ? formatDate(due) : ''} readOnly />
+              </Field>
+            ) : (
+              <div />
+            )}
+            <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
+              <Input
+                {...fieldProps('reference', state.fieldErrors?.reference, true)}
+                value={reference}
+                onChange={(event) => setReference(event.target.value)}
+                placeholder="PO / bill no."
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {owed ? (
               <Field name="paymentTermId" label="Terms" error={state.fieldErrors?.paymentTermId}>
                 <NativeSelect
@@ -455,18 +491,6 @@ export function BillForm({
                 </NativeSelect>
               </Field>
             ) : null}
-            {owed ? (
-              <Field name="dueDate" label="Due date">
-                <Input id="dueDate" value={due ? formatDate(due) : ''} readOnly />
-              </Field>
-            ) : null}
-            <LockedNumber
-              label={`${config.singular} no.`}
-              value={number}
-              onChange={setNumber}
-              error={state.fieldErrors?.number}
-              recordId={document?.id}
-            />
             {config.needsPaymentAccount ? (
               <Field
                 name="paymentAccountId"
@@ -484,92 +508,133 @@ export function BillForm({
                 />
               </Field>
             ) : null}
+            <div className="text-right lg:col-start-4">
+              <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                {config.needsPaymentAccount ? 'Amount paid' : 'Balance due'}
+              </p>
+              <p
+                className={cn('text-lg font-semibold tabular', !isVendorCredit && 'text-primary')}
+                style={isVendorCredit ? { color: VENDOR_CREDIT.ink } : undefined}
+              >
+                {formatMoney(totals.total, currency)}
+              </p>
+            </div>
           </div>
 
       <div>
-        <h2 className="text-sm font-semibold">Category details</h2>
-        <p className="text-xs text-muted-foreground">A cost posted straight to an account. No quantity.</p>
-        <div className="mt-2 overflow-x-auto rounded-md border">
-          <table className="w-full border-separate border-spacing-0 text-sm">
-            <thead>
-              <tr className="ledger-head text-[12px] font-semibold uppercase tracking-wide">
-                <th className="w-64 px-2 py-2 text-left">Category</th>
-                <th className="px-2 py-2 text-left">Description</th>
-                {showTax ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
-                <th className="w-32 px-2 py-2 text-right">Amount</th>
-                <th className="w-8" />
-              </tr>
-            </thead>
-            <tbody>
-              {categoryLines.length === 0 ? (
-                <tr>
-                  <td colSpan={showTax ? 5 : 4} className="px-3 py-4 text-sm text-muted-foreground">
-                    Nothing categorised yet.
-                  </td>
-                </tr>
-              ) : null}
-              {categoryLines.map((line, index) => (
-                <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
-                  <td className="px-2 py-1.5">
-                    <AccountPicker
-                      options={expenseAccounts}
-                      value={line.expenseAccountId || null}
-                      onChange={(next) => update(line.key, { expenseAccountId: next ?? '' })}
-                      clearable
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <Input
-                      aria-label="Description"
-                      value={line.description}
-                      onChange={(event) => update(line.key, { description: event.target.value })}
-                    />
-                  </td>
-                  {showTax ? (
-                    <td className="px-2 py-1.5">
-                      <NativeSelect
-                        aria-label="Tax code"
-                        value={line.taxCodeId}
-                        onChange={(event) => update(line.key, { taxCodeId: event.target.value })}
-                      >
-                        <option value="">No tax</option>
-                        {taxCodes.map((code) => (
-                          <option key={code.id} value={code.id}>
-                            {code.label}
-                          </option>
-                        ))}
-                      </NativeSelect>
-                    </td>
-                  ) : null}
-                  <td className="px-2 py-1.5">
-                    <Input
-                      aria-label="Amount"
-                      inputMode="decimal"
-                      className="tabular text-right"
-                      value={line.unitPrice}
-                      onChange={(event) => update(line.key, { unitPrice: event.target.value })}
-                    />
-                  </td>
-                  <td className="px-1 py-1.5">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Remove line"
-                      onClick={() => setLines((current) => current.filter((row) => row.key !== line.key))}
-                    >
-                      <Trash2Icon />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold">Category details</h2>
+            <p className="text-xs text-muted-foreground">
+              A cost posted straight to an account. No quantity.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-expanded={showCategories}
+            onClick={() => {
+              setShowCategories((open) => {
+                if (!open && categoryLines.length === 0) addCategoryLine()
+                return !open
+              })
+            }}
+          >
+            {showCategories ? <ChevronUpIcon /> : <ChevronDownIcon />}
+            {showCategories ? 'Hide categories' : 'Show categories'}
+          </Button>
         </div>
 
-        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addCategoryLine}>
-          <PlusIcon /> Add a category
-        </Button>
+        {showCategories ? (
+          <>
+            <div className="mt-2 overflow-x-auto rounded-md border">
+              <table className="w-full border-separate border-spacing-0 text-sm">
+                <thead>
+                  <tr
+                    className="text-[12px] font-semibold uppercase tracking-wide text-white"
+                    style={{ background: isVendorCredit ? VENDOR_CREDIT.accent : FORM_SHEET.accent }}
+                  >
+                    <th className="w-64 px-2 py-2 text-left">Category</th>
+                    <th className="px-2 py-2 text-left">Description</th>
+                    {showTax ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
+                    <th className="w-32 px-2 py-2 text-right">Amount</th>
+                    <th className="w-8" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {categoryLines.length === 0 ? (
+                    <tr>
+                      <td colSpan={showTax ? 5 : 4} className="px-3 py-4 text-sm text-muted-foreground">
+                        Nothing categorised yet.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {categoryLines.map((line, index) => (
+                    <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
+                      <td className="px-2 py-1.5">
+                        <AccountPicker
+                          options={expenseAccounts}
+                          value={line.expenseAccountId || null}
+                          onChange={(next) => update(line.key, { expenseAccountId: next ?? '' })}
+                          clearable
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          aria-label="Description"
+                          value={line.description}
+                          onChange={(event) => update(line.key, { description: event.target.value })}
+                        />
+                      </td>
+                      {showTax ? (
+                        <td className="px-2 py-1.5">
+                          <NativeSelect
+                            aria-label="Tax code"
+                            value={line.taxCodeId}
+                            onChange={(event) => update(line.key, { taxCodeId: event.target.value })}
+                          >
+                            <option value="">No tax</option>
+                            {taxCodes.map((code) => (
+                              <option key={code.id} value={code.id}>
+                                {code.label}
+                              </option>
+                            ))}
+                          </NativeSelect>
+                        </td>
+                      ) : null}
+                      <td className="px-2 py-1.5">
+                        <Input
+                          aria-label="Amount"
+                          inputMode="decimal"
+                          className="tabular text-right"
+                          value={line.unitPrice}
+                          onChange={(event) => update(line.key, { unitPrice: event.target.value })}
+                        />
+                      </td>
+                      <td className="px-1 py-1.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          tabIndex={-1}
+                          aria-label="Remove line"
+                          onClick={() => setLines((current) => current.filter((row) => row.key !== line.key))}
+                        >
+                          <Trash2Icon />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addCategoryLine}>
+              <PlusIcon /> Add a category
+            </Button>
+          </>
+        ) : null}
       </div>
 
       <div>
@@ -578,7 +643,10 @@ export function BillForm({
         <div className="mt-2 overflow-x-auto rounded-md border">
           <table className="w-full border-separate border-spacing-0 text-sm">
             <thead>
-              <tr className="ledger-head text-[12px] font-semibold uppercase tracking-wide">
+                <tr
+                  className="text-[12px] font-semibold uppercase tracking-wide text-white"
+                  style={{ background: isVendorCredit ? VENDOR_CREDIT.accent : FORM_SHEET.accent }}
+                >
                 <th className="w-44 px-2 py-2 text-left">Item</th>
                 <th className="px-2 py-2 text-left">Description</th>
                 <th className="w-16 px-2 py-2 text-center">Qty</th>
@@ -674,6 +742,7 @@ export function BillForm({
                         type="button"
                         variant="ghost"
                         size="icon-sm"
+                        tabIndex={-1}
                         aria-label="Clear line"
                         onClick={() =>
                           setLines((current) => {
@@ -697,35 +766,21 @@ export function BillForm({
           </table>
         </div>
 
-        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addItemLine}>
+        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={addItemLine}>
           <PlusIcon /> Add line
         </Button>
       </div>
 
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="grid gap-4">
-          {config.needsPaymentAccount ? null : (
-            <Field name="reference" label="Vendor bill no." error={state.fieldErrors?.reference}>
-              <Input
-                {...fieldProps('reference', state.fieldErrors?.reference, true)}
-                value={reference}
-                onChange={(event) => setReference(event.target.value)}
-                placeholder="The number on the vendor's bill"
-              />
-            </Field>
-          )}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
         <Field name="memo" label="Memo" error={state.fieldErrors?.memo}>
-          <textarea
-            id="memo"
-            name="memo"
-            rows={3}
+          <Input
+            {...fieldProps('memo', state.fieldErrors?.memo)}
             value={memo}
             onChange={(event) => setMemo(event.target.value)}
-            className="flex min-h-20 w-full rounded-md border border-input bg-card px-2.5 py-2 text-[0.8125rem] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
+            placeholder="Internal note"
           />
         </Field>
-        </div>
-        <dl className="space-y-2 text-sm">
+        <dl className="space-y-1 text-sm">
           <div className="flex justify-between gap-6">
             <dt className="text-muted-foreground">Subtotal</dt>
             <dd className="tabular">{formatMoney(totals.subtotal, currency)}</dd>
@@ -736,13 +791,9 @@ export function BillForm({
               <dd className="tabular">{formatMoney(totals.tax, currency)}</dd>
             </div>
           ) : null}
-          <div className="flex justify-between gap-6 border-t pt-2 font-medium">
+          <div className="flex justify-between gap-6 border-t pt-1 font-medium">
             <dt>Total</dt>
             <dd className="tabular">{formatMoney(totals.total, currency)}</dd>
-          </div>
-          <div className="flex justify-between gap-6 text-base font-semibold">
-            <dt>{config.needsPaymentAccount ? 'Amount paid' : 'Balance due'}</dt>
-            <dd className="tabular text-primary">{formatMoney(totals.total, currency)}</dd>
           </div>
         </dl>
       </div>
@@ -776,13 +827,12 @@ export function BillForm({
         </SubmitButton>
       </div>
 
-      <p className="text-right text-xs text-muted-foreground">{config.effect}</p>
     </form>
   )
 }
 
 const lineInput =
-  'h-7 border-transparent bg-transparent px-1.5 shadow-none focus-visible:border-[#3A7CA8] focus-visible:bg-white'
+  'h-7 border-transparent bg-transparent px-1.5 shadow-none focus-visible:border-[#714B67] focus-visible:bg-white'
 
 function costFromTotal(quantity: string, totalText: string): { quantity: string; unitPrice: string } | null {
   if (totalText.trim() === '') return { quantity, unitPrice: '' }

@@ -34,12 +34,11 @@ export const email = z
   .email('Enter a valid email address')
 
 /**
- * Passwords are checked for length and variety, not for a punctuation ritual.
- * Length is what actually resists guessing.
+ * Letters, numbers, and symbols are all fine — only a short floor is enforced.
  */
 export const password = z
   .string()
-  .min(12, 'Password must be at least 12 characters')
+  .min(6, 'Password must be at least 6 characters')
   .max(200, 'Password must be 200 characters or fewer')
 
 export const currencyCode = z

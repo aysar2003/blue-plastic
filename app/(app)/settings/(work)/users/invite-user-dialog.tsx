@@ -16,18 +16,18 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/roles'
 import { inviteUserForm } from './actions'
 
-type AccessMode = 'preset' | 'manual'
+type AccessMode = 'preset' | 'apps'
 
 export function InviteUserDialog({
   roles,
   roleTemplates,
 }: {
   roles: string[]
-  /** Permission keys for each preset role — seeds the manual matrix. */
+  /** Permission keys for each preset role — seeds the apps matrix. */
   roleTemplates: Record<string, string[]>
 }) {
   const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState<AccessMode>('preset')
+  const [mode, setMode] = useState<AccessMode>('apps')
   const [role, setRole] = useState(roles[0] ?? 'VIEWER')
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(roleTemplates[roles[0] ?? 'VIEWER'] ?? []),
@@ -36,7 +36,7 @@ export function InviteUserDialog({
   const closeRef = useRef(false)
 
   const permissionsJson = useMemo(
-    () => JSON.stringify(mode === 'manual' ? [...selected] : []),
+    () => JSON.stringify(mode === 'apps' ? [...selected] : []),
     [mode, selected],
   )
 
@@ -69,14 +69,14 @@ export function InviteUserDialog({
           <DialogTitle>Add a member</DialogTitle>
         </DialogHeader>
         <p className="mt-1 mb-4 text-sm text-muted-foreground">
-          Choose a ready-made role, or pick every module by hand. They can sign in with the
-          temporary password you set here.
+          Give them a temporary password, then choose which Apps they may open — the same apps
+          on the home screen.
         </p>
 
         <form action={formAction} className="space-y-4">
           <FormStatus state={state} />
           <input type="hidden" name="permissionsOverride" value={permissionsJson} />
-          <input type="hidden" name="role" value={mode === 'manual' ? 'CUSTOM' : role} />
+          <input type="hidden" name="role" value={mode === 'apps' ? 'CUSTOM' : role} />
 
           <Field name="name" label="Name" required error={state.fieldErrors?.name}>
             <Input {...fieldProps('name', state.fieldErrors?.name)} autoFocus required />
@@ -86,9 +86,37 @@ export function InviteUserDialog({
             <Input {...fieldProps('email', state.fieldErrors?.email)} type="email" required />
           </Field>
 
+          <Field
+            name="temporaryPassword"
+            label="Temporary password"
+            hint="At least 6 characters. Letters, numbers, and symbols are fine."
+            required
+            error={state.fieldErrors?.temporaryPassword}
+          >
+            <Input
+              {...fieldProps('temporaryPassword', state.fieldErrors?.temporaryPassword, true)}
+              type="text"
+              autoComplete="off"
+              required
+            />
+          </Field>
+
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">Access</legend>
             <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={mode === 'apps' ? 'default' : 'outline'}
+                onClick={() => {
+                  if (mode !== 'apps') {
+                    setSelected(new Set(roleTemplates[role] ?? []))
+                  }
+                  setMode('apps')
+                }}
+              >
+                Apps & permissions
+              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -96,19 +124,6 @@ export function InviteUserDialog({
                 onClick={() => setMode('preset')}
               >
                 Ready-made role
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={mode === 'manual' ? 'default' : 'outline'}
-                onClick={() => {
-                  if (mode !== 'manual') {
-                    setSelected(new Set(roleTemplates[role] ?? []))
-                  }
-                  setMode('manual')
-                }}
-              >
-                Manual permissions
               </Button>
             </div>
           </fieldset>
@@ -137,8 +152,8 @@ export function InviteUserDialog({
             <div className="space-y-3">
               <Field
                 name="template"
-                label="Start from template"
-                hint="Optional — loads a role’s permissions so you can tick or untick modules."
+                label="Start from a role template"
+                hint="Optional — loads that role’s apps so you can tick or untick."
               >
                 <NativeSelect
                   value={role}
@@ -161,21 +176,6 @@ export function InviteUserDialog({
               <PermissionMatrix selected={selected} onChange={setSelected} />
             </div>
           )}
-
-          <Field
-            name="temporaryPassword"
-            label="Temporary password"
-            hint="At least 12 characters."
-            required
-            error={state.fieldErrors?.temporaryPassword}
-          >
-            <Input
-              {...fieldProps('temporaryPassword', state.fieldErrors?.temporaryPassword, true)}
-              type="text"
-              autoComplete="off"
-              required
-            />
-          </Field>
 
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

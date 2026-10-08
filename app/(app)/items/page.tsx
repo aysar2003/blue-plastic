@@ -44,21 +44,23 @@ export default async function ItemsPage({
   const params = await searchParams
   const query = parseListQuery(params)
   const type = typeof params.type === 'string' ? params.type : undefined
+  const categoryId = typeof params.category === 'string' ? params.category : undefined
   const includeInactive = params.archived === '1'
   const sort = readSort(params, SORTABLE, { sort: 'type', dir: 'asc' })
   const linkParams = {
     q: query.q,
     type,
+    category: categoryId,
     archived: includeInactive ? '1' : undefined,
     sort: sort.sort,
     dir: sort.dir,
   }
 
   const [page, accounts, taxCodes, categories, shelf] = await Promise.all([
-    itemService.list(ctx, query, { type, includeInactive, ...sort }),
+    itemService.list(ctx, query, { type, categoryId, includeInactive, ...sort }),
     accountService.selectableAccounts(ctx),
     taxService.listCodes(ctx),
-    itemService.listCategories(ctx),
+    itemService.ensureStandardCategories(ctx),
     storeService.quantities(ctx),
   ])
 
@@ -97,9 +99,12 @@ export default async function ItemsPage({
     <>
       <PageHeader
         title="Products and services"
-        description="Everything the business sells, with what is on hand beside it. Click a row to open its report. An item carries the accounts it posts to and — when it is tracked — its stock."
+        description="Everything the business sells, with what is on hand beside it. Filter by category, turn on store columns in the table, or open Categories for a shelf view per group."
         actions={
           <>
+            <Link href="/items/categories" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+              Categories
+            </Link>
             {canCreate ? <ImportDialog kind="item" columns={ITEM_COLUMNS} /> : null}
             {newButton}
           </>
@@ -111,7 +116,11 @@ export default async function ItemsPage({
         <div className="flex gap-1">
           {TYPE_FILTERS.map((filter) => {
             const active = (type ?? '') === filter.value
-            const href = filter.value ? `/items?type=${filter.value}` : '/items'
+            const href = filter.value
+              ? `/items?type=${filter.value}${categoryId ? `&category=${categoryId}` : ''}`
+              : categoryId
+                ? `/items?category=${categoryId}`
+                : '/items'
             return (
               <Link
                 key={filter.label}
@@ -139,16 +148,48 @@ export default async function ItemsPage({
         </div>
       </div>
 
+      {categories.length > 0 ? (
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          <Link
+            href={type ? `/items?type=${type}` : '/items'}
+            className={cn(
+              'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
+              !categoryId ? 'border-primary bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            All categories
+          </Link>
+          {categories.map((category) => {
+            const active = categoryId === category.id
+            const href = type
+              ? `/items?type=${type}&category=${category.id}`
+              : `/items?category=${category.id}`
+            return (
+              <Link
+                key={category.id}
+                href={href}
+                className={cn(
+                  'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
+                  active ? 'border-primary bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {category.name}
+              </Link>
+            )
+          })}
+        </div>
+      ) : null}
+
       {page.total === 0 ? (
         <EmptyState
           icon={PackageIcon}
-          title={query.q || type ? 'No items match' : 'No products or services yet'}
+          title={query.q || type || categoryId ? 'No items match' : 'No products or services yet'}
           description={
-            query.q || type
+            query.q || type || categoryId
               ? 'Try a different search or filter.'
               : 'Add what the business sells. An inventory item also needs a stock account and a cost of goods sold account, so selling one moves both in the same journal as the sale.'
           }
-          action={!query.q && !type ? newButton : undefined}
+          action={!query.q && !type && !categoryId ? newButton : undefined}
         />
       ) : (
         <Card className="overflow-hidden p-0">

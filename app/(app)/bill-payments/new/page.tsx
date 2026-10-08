@@ -29,10 +29,7 @@ export default async function NewBillPaymentPage({
   return (
     <>
 
-      <PageHeader
-        title="Pay bills"
-        description="Money out, payables down. Tick what you are settling — one payment can cover several bills — and the account you are paying from shows what it holds."
-      />
+      <PageHeader title="Pay bills" className="mb-2 pb-2" />
 
       <BillPaymentForm
         vendors={vendors}

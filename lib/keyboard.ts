@@ -74,21 +74,40 @@ function isFocusable(node: HTMLElement) {
   return true
 }
 
+/** Every focusable field in the form, in DOM order. */
+export function formFields(from: HTMLElement) {
+  const form = from.closest('form')
+  if (!form) return []
+  return [...form.querySelectorAll<HTMLElement>('input, select, textarea, button')].filter(isFocusable)
+}
+
+/**
+ * Move focus to the next (or previous) field in the same form.
+ * Used after a combobox accepts a name so Tab/Enter do not fall back to the
+ * top of the page when the picker remounts.
+ */
+export function focusNextField(from: HTMLElement, direction: 1 | -1 = 1) {
+  if (from.closest('[aria-expanded="true"]')) return false
+  const fields = formFields(from)
+  const index = fields.indexOf(from)
+  if (index < 0) return false
+  const next = fields[index + direction]
+  if (!next) return false
+  next.focus()
+  if (next instanceof HTMLInputElement || next instanceof HTMLTextAreaElement) {
+    next.select?.()
+  }
+  return true
+}
+
 /**
  * Enter on a document line moves to the next field, the way a bookkeeper
  * expects a grid to work. Comboboxes and date fields handle Enter themselves
  * and mark the event handled, so this leaves those alone.
  */
 export function focusNextInGrid(from: HTMLElement) {
-  const form = from.closest('form')
-  if (!form || !from.closest('form table')) return false
-  if (from.tagName === 'TEXTAREA' || from.tagName === 'BUTTON') return false
-  if (from.closest('[aria-expanded="true"]')) return false
-
-  const fields = [...form.querySelectorAll<HTMLElement>('input, select, textarea, button')].filter(isFocusable)
-  const index = fields.indexOf(from)
-  const next = index >= 0 ? fields[index + 1] : undefined
-  if (!next) return false
-  next.focus()
-  return true
+  if (!from.closest('form table')) return false
+  if (from.tagName === 'TEXTAREA') return false
+  if (from.tagName === 'BUTTON' && from.getAttribute('role') !== 'combobox') return false
+  return focusNextField(from, 1)
 }

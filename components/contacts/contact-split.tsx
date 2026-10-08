@@ -1,23 +1,56 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { cn } from '@/lib/utils'
 
 const MIN = 176
 const MAX = 520
 const DEFAULT = 256
 
+type DetailPanelContextValue = {
+  open: boolean
+  hide: () => void
+  show: () => void
+  toggle: () => void
+}
+
+const DetailPanelContext = createContext<DetailPanelContextValue | null>(null)
+
+/** Hide / show the customer or vendor information pane (list expands when closed). */
+export function useContactDetailPanel() {
+  const value = useContext(DetailPanelContext)
+  if (!value) {
+    throw new Error('useContactDetailPanel must be used inside ContactSplit')
+  }
+  return value
+}
+
+export function useOptionalContactDetailPanel() {
+  return useContext(DetailPanelContext)
+}
+
 /**
  * Left list / right detail, with a drag handle between them — the same gesture
- * as widening a column in Excel. Width is remembered per screen.
+ * as widening a column in Excel. Width is remembered per screen. The detail
+ * pane can be closed so the name list fills the row.
  */
 export function ContactSplit({
   storageKey,
+  detailStorageKey,
   left,
   right,
 }: {
   storageKey: string
+  /** Remembers whether Customer / Vendor information is visible. */
+  detailStorageKey: string
   left: ReactNode
   right: ReactNode
 }) {
@@ -25,6 +58,7 @@ export function ContactSplit({
   const widthRef = useRef(DEFAULT)
   const [width, setWidth] = useState(DEFAULT)
   const [dragging, setDragging] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(true)
 
   useEffect(() => {
     try {
@@ -39,6 +73,35 @@ export function ContactSplit({
       // Private mode — keep the default.
     }
   }, [storageKey])
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(detailStorageKey)
+      if (stored === '0') setDetailOpen(false)
+      if (stored === '1') setDetailOpen(true)
+    } catch {
+      /* keep default */
+    }
+  }, [detailStorageKey])
+
+  const persistDetail = useCallback(
+    (next: boolean) => {
+      setDetailOpen(next)
+      try {
+        localStorage.setItem(detailStorageKey, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+    },
+    [detailStorageKey],
+  )
+
+  const detailApi: DetailPanelContextValue = {
+    open: detailOpen,
+    hide: () => persistDetail(false),
+    show: () => persistDetail(true),
+    toggle: () => persistDetail(!detailOpen),
+  }
 
   useEffect(() => {
     if (!dragging) return
@@ -86,45 +149,57 @@ export function ContactSplit({
   }
 
   return (
-    <div ref={shell} className="flex min-h-0 flex-1">
-      <aside className="flex min-h-0 shrink-0 flex-col border-r" style={{ width }}>
-        {left}
-      </aside>
+    <DetailPanelContext.Provider value={detailApi}>
+      <div ref={shell} className="flex min-h-0 flex-1">
+        <aside
+          className={cn(
+            'flex min-h-0 flex-col',
+            detailOpen ? 'shrink-0 border-r' : 'min-w-0 flex-1',
+          )}
+          style={detailOpen ? { width } : undefined}
+        >
+          {left}
+        </aside>
 
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize list and detail"
-        aria-valuemin={MIN}
-        aria-valuemax={MAX}
-        aria-valuenow={Math.round(width)}
-        tabIndex={0}
-        onPointerDown={(event) => {
-          event.preventDefault()
-          setDragging(true)
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowLeft') {
-            event.preventDefault()
-            persist(widthRef.current - 16)
-          }
-          if (event.key === 'ArrowRight') {
-            event.preventDefault()
-            persist(widthRef.current + 16)
-          }
-        }}
-        className={cn(
-          'group relative z-10 w-1.5 shrink-0 cursor-col-resize bg-transparent',
-          'after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-border',
-          'hover:after:w-0.5 hover:after:bg-primary/60 focus-visible:outline-none focus-visible:after:w-0.5 focus-visible:after:bg-primary',
-          dragging && 'after:w-0.5 after:bg-primary',
-        )}
-      >
-        <span className="pointer-events-none absolute inset-y-0 -left-1.5 -right-1.5" />
+        {detailOpen ? (
+          <>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize list and detail"
+              aria-valuemin={MIN}
+              aria-valuemax={MAX}
+              aria-valuenow={Math.round(width)}
+              tabIndex={0}
+              onPointerDown={(event) => {
+                event.preventDefault()
+                setDragging(true)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowLeft') {
+                  event.preventDefault()
+                  persist(widthRef.current - 16)
+                }
+                if (event.key === 'ArrowRight') {
+                  event.preventDefault()
+                  persist(widthRef.current + 16)
+                }
+              }}
+              className={cn(
+                'group relative z-10 w-1.5 shrink-0 cursor-col-resize bg-transparent',
+                'after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-border',
+                'hover:after:w-0.5 hover:after:bg-primary/60 focus-visible:outline-none focus-visible:after:w-0.5 focus-visible:after:bg-primary',
+                dragging && 'after:w-0.5 after:bg-primary',
+              )}
+            >
+              <span className="pointer-events-none absolute inset-y-0 -left-1.5 -right-1.5" />
+            </div>
+
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{right}</div>
+          </>
+        ) : null}
       </div>
-
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{right}</div>
-    </div>
+    </DetailPanelContext.Provider>
   )
 }
 

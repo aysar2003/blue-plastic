@@ -30,6 +30,7 @@ export function LineStore({
 }) {
   if (stores.length === 0) return null
   const note = warn && tracked ? shortStockNote(stores, stock, itemId, storeId, quantity) : null
+  const places = itemId ? (stock[itemId] ?? {}) : {}
   return (
     <div className={className}>
       <NativeSelect
@@ -38,11 +39,18 @@ export function LineStore({
         onChange={(event) => onChange(event.target.value)}
         className="h-7 border-transparent bg-transparent px-1 text-xs"
       >
-        {stores.map((store) => (
-          <option key={store.id} value={store.id}>
-            {store.name}
-          </option>
-        ))}
+        {stores.map((store) => {
+          const onHand = tracked && itemId ? Number(places[store.id] ?? '0') : null
+          const qtyLabel =
+            onHand == null || !Number.isFinite(onHand)
+              ? store.name
+              : `${store.name} (${onHand.toFixed(onHand % 1 === 0 ? 0 : 2)})`
+          return (
+            <option key={store.id} value={store.id}>
+              {qtyLabel}
+            </option>
+          )
+        })}
       </NativeSelect>
       {note ? <p className="mt-1 max-w-48 text-[11px] leading-snug text-[#C2410C]">{note}</p> : null}
     </div>

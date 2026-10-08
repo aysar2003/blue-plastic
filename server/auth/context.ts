@@ -3,6 +3,11 @@ import { cache } from 'react'
 import type { Role } from '@prisma/client'
 
 import { auth } from '@/auth'
+import {
+  DEFAULT_FEATURE_FLAGS,
+  parseFeatureFlags,
+  type OrgFeatureFlags,
+} from '@/lib/feature-flags'
 import { db } from '@/server/db'
 import { forbidden, unauthenticated } from '@/server/errors'
 import { type Permission, effectivePermissions } from './permissions'
@@ -17,6 +22,8 @@ export type OrgContext = {
   userId: string
   role: Role
   permissions: ReadonlySet<Permission>
+  /** Odoo-style Configuration switches for this organisation. */
+  features: OrgFeatureFlags
   organization: {
     id: string
     name: string
@@ -70,6 +77,7 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
           fiscalYearStartMonth: true,
           timeZone: true,
           allowNegativeStock: true,
+          featureFlags: true,
           addressLine1: true,
           addressLine2: true,
           city: true,
@@ -89,12 +97,15 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
   if (membership.status !== 'ACTIVE') return null
   if (membership.version !== session.user.membershipVersion) return null
 
+  const { featureFlags, ...organization } = membership.organization
+
   return {
     orgId: membership.organization.id,
     userId: membership.user.id,
     role: membership.role,
     permissions: effectivePermissions(membership.role, membership.permissionsOverride),
-    organization: membership.organization,
+    features: parseFeatureFlags(featureFlags) ?? DEFAULT_FEATURE_FLAGS,
+    organization,
     user: membership.user,
   }
 })

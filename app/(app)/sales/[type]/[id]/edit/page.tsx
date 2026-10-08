@@ -47,7 +47,7 @@ export default async function EditSalesDocumentPage({
 
       <PageHeader
         title={`Edit ${config.singular.toLowerCase()} ${document.number}`}
-        description="Saving reverses the original entry and posts a replacement. Both stay in the ledger."
+        className="mb-2 pb-2"
       />
 
       <DocumentForm

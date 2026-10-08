@@ -11,7 +11,7 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/roles'
 import { updateMemberAccess } from './actions'
 
-type AccessMode = 'preset' | 'manual'
+type AccessMode = 'preset' | 'apps'
 
 export function EditMemberAccessDialog({
   open,
@@ -35,7 +35,7 @@ export function EditMemberAccessDialog({
   const router = useRouter()
   const [pending, start] = useTransition()
   const wasCustom = initialRole === 'CUSTOM' || initialPermissions.length > 0
-  const [mode, setMode] = useState<AccessMode>(wasCustom ? 'manual' : 'preset')
+  const [mode, setMode] = useState<AccessMode>(wasCustom ? 'apps' : 'preset')
   const [role, setRole] = useState(wasCustom ? roles[0] ?? 'VIEWER' : initialRole)
   const [selected, setSelected] = useState<Set<string>>(
     () =>
@@ -57,8 +57,8 @@ export function EditMemberAccessDialog({
     start(async () => {
       const result = await updateMemberAccess({
         membershipId,
-        role: mode === 'manual' ? 'CUSTOM' : role,
-        permissionsOverride: mode === 'manual' ? [...selected] : [],
+        role: mode === 'apps' ? 'CUSTOM' : role,
+        permissionsOverride: mode === 'apps' ? [...selected] : [],
       })
       if (!result.ok) {
         toast.error(result.error.message)
@@ -77,7 +77,8 @@ export function EditMemberAccessDialog({
           <DialogTitle>Access · {name}</DialogTitle>
         </DialogHeader>
         <p className="mt-1 mb-4 text-sm text-muted-foreground">
-          Switch between a ready-made role and a manual permission set for every module.
+          Choose a ready-made role, or tick the Apps this person may open — the same apps on the
+          home screen.
         </p>
 
         <div className="space-y-4">
@@ -85,17 +86,9 @@ export function EditMemberAccessDialog({
             <Button
               type="button"
               size="sm"
-              variant={mode === 'preset' ? 'default' : 'outline'}
-              onClick={() => setMode('preset')}
-            >
-              Ready-made role
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={mode === 'manual' ? 'default' : 'outline'}
+              variant={mode === 'apps' ? 'default' : 'outline'}
               onClick={() => {
-                if (mode !== 'manual') {
+                if (mode !== 'apps') {
                   setSelected(
                     new Set(
                       initialPermissions.length > 0
@@ -104,10 +97,18 @@ export function EditMemberAccessDialog({
                     ),
                   )
                 }
-                setMode('manual')
+                setMode('apps')
               }}
             >
-              Manual permissions
+              Apps & permissions
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={mode === 'preset' ? 'default' : 'outline'}
+              onClick={() => setMode('preset')}
+            >
+              Ready-made role
             </Button>
           </div>
 

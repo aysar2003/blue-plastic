@@ -31,3 +31,23 @@ export const organizationAccountingSchema = z.object({
 })
 
 export type OrganizationAccountingInput = z.infer<typeof organizationAccountingSchema>
+
+const boolFlag = z
+  .union([z.literal('true'), z.literal('false'), z.literal('on'), z.boolean()])
+  .transform((v) => v === true || v === 'true' || v === 'on')
+
+export const organizationFeaturesSchema = z.object({
+  allowJournalDelete: boolFlag.default(true),
+  allowContactDelete: boolFlag.default(true),
+  allowDocumentDelete: boolFlag.default(true),
+  showCreatorBrand: boolFlag.default(true),
+  moduleSales: boolFlag.default(true),
+  modulePurchases: boolFlag.default(true),
+  moduleBanking: boolFlag.default(true),
+  moduleInventory: boolFlag.default(true),
+  modulePos: boolFlag.default(true),
+  moduleAccounting: boolFlag.default(true),
+  moduleReports: boolFlag.default(true),
+})
+
+export type OrganizationFeaturesInput = z.infer<typeof organizationFeaturesSchema>

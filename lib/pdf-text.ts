@@ -1,12 +1,30 @@
 /**
- * A small PDF writer for a statement or a month export.
+ * A small PDF writer for statements, sales papers, and month exports.
  *
- * Standard fonts only, one column of rows, page breaks when the page fills.
- * A run can sit at an x position or be centred on the page.
+ * Standard fonts only. Rows can carry fills and text colours so documents
+ * can share an Odoo-style purple letterhead without a heavier PDF stack.
  */
 
-export type PdfRun = { text: string; x?: number; bold?: boolean; align?: 'center' }
-export type PdfRow = { size?: number; height?: number; runs: PdfRun[]; rule?: boolean }
+export type PdfRgb = readonly [number, number, number]
+
+export type PdfRun = {
+  text: string
+  x?: number
+  bold?: boolean
+  align?: 'center'
+  color?: PdfRgb
+}
+
+export type PdfRow = {
+  size?: number
+  height?: number
+  runs: PdfRun[]
+  rule?: boolean
+  /** Full-width band behind the row (letterhead / table head). */
+  fill?: PdfRgb
+  /** Left/right inset for the fill; defaults to page margins. */
+  fillInset?: number
+}
 
 const LETTER = { width: 612, height: 792 }
 
@@ -16,7 +34,7 @@ export function buildTextPdf(
 ): Uint8Array {
   const width = options.width ?? LETTER.width
   const height = options.height ?? LETTER.height
-  const top = height - 42
+  const top = height - 36
   const bottom = 40
   const header = options.header ?? []
   const headerHeight = header.reduce((sum, row) => sum + (row.height ?? 14), 0)
@@ -85,6 +103,14 @@ function pageStream(rows: PdfRow[], pageWidth: number, top: number): string {
     const size = row.size ?? 9
     const height = row.height ?? 14
     y -= height
+    if (row.fill) {
+      const inset = row.fillInset ?? 0
+      const [r, g, b] = row.fill
+      parts.push(
+        `${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg ` +
+          `${inset} ${y - 2} ${pageWidth - inset * 2} ${height + 2} re f`,
+      )
+    }
     if (row.rule) {
       parts.push(`0.75 0.75 0.75 RG 40 ${y + height - 3} m ${pageWidth - 40} ${y + height - 3} l S`)
     }
@@ -93,6 +119,13 @@ function pageStream(rows: PdfRow[], pageWidth: number, top: number): string {
       for (const run of row.runs) {
         const font = run.bold ? 'F2' : 'F1'
         const x = run.align === 'center' ? centeredX(run.text, size, pageWidth) : (run.x ?? 40)
+        if (run.color) {
+          const [r, g, b] = run.color
+          parts.push(`${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg`)
+        } else if (row.fill) {
+          // Light fill bands keep dark text; purple letterhead uses white runs.
+          parts.push('0 0 0 rg')
+        }
         parts.push(`/${font} ${size} Tf 1 0 0 1 ${x} ${y} Tm (${pdfText(run.text)}) Tj`)
       }
       parts.push('ET')

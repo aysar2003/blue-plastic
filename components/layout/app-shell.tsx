@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 
+import { isModuleEnabled } from '@/lib/feature-flags'
 import { ROLE_LABELS } from '@/lib/roles'
 import type { OrgContext } from '@/server/auth/context'
 import { listBalanceAlerts } from '@/server/services/contact.service'
@@ -18,11 +19,15 @@ import { StockAlerts } from './stock-alerts'
  * on those queries; each loader is also short-cached per organisation.
  */
 export async function AppShell({ ctx, children }: { ctx: OrgContext; children: React.ReactNode }) {
-  const modules = MODULES.filter((entry) => !entry.permission || ctx.permissions.has(entry.permission))
+  const modules = MODULES.filter(
+    (entry) =>
+      isModuleEnabled(ctx.features, entry.key) &&
+      (!entry.permission || ctx.permissions.has(entry.permission)),
+  )
   const moduleKeys = modules.map((entry) => entry.key)
   const permissions = [...ctx.permissions]
 
-  return (
+    return (
     <ShellChrome
       orgName={ctx.organization.name}
       organization={ctx.organization}
@@ -32,6 +37,7 @@ export async function AppShell({ ctx, children }: { ctx: OrgContext; children: R
       user={ctx.user}
       moduleKeys={moduleKeys}
       permissions={permissions}
+      showCreatorBrand={ctx.features.showCreatorBrand}
       stockAlertsSlot={
         ctx.permissions.has('inventory:read') ? (
           <Suspense fallback={<StockAlerts alerts={[]} total={0} />}>
