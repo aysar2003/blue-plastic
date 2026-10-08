@@ -12,6 +12,7 @@ import {
   posRefundSchema,
   posRegisterSchema,
 } from '@/lib/validation/pos'
+import { readRegisterForm } from '@/lib/pos-register-form'
 import { action } from '@/server/action'
 import * as posService from '@/server/services/pos.service'
 
@@ -104,10 +105,9 @@ export async function savePosPaymentMethodForm(
 }
 
 export async function savePosRegisterForm(_prev: FormState, formData: FormData): Promise<FormState> {
-  const values = formValues(formData)
-  const ids = formData.getAll('paymentMethodIds').map(String)
+  const input = readRegisterForm(formData)
   return toFormState(
-    await savePosRegister({ ...values, paymentMethodIds: ids }),
-    'Register saved.',
+    await savePosRegister(input),
+    input.id ? 'Register updated.' : 'Register added.',
   )
 }
