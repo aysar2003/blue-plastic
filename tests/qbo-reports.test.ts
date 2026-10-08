@@ -1,3 +1,4 @@
+import { DEFAULT_FEATURE_FLAGS } from '@/lib/feature-flags'
 import { describe, expect, it } from 'vitest'
 
 import { toDate } from '@/lib/date'
@@ -134,6 +135,7 @@ suite('QuickBooks-style lists follow the documents', () => {
       userId: user.id,
       role: 'OWNER',
       permissions: permissionsFor('OWNER'),
+      features: DEFAULT_FEATURE_FLAGS,
       organization,
       user: { id: user.id, name: user.name ?? '', email: user.email, image: user.image },
     }

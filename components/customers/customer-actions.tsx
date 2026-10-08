@@ -95,7 +95,7 @@ export function CustomerActions({
       {layout === 'panel' ? (
         <div className="flex flex-col gap-2">
           {primary ? (
-            <Link href={primary.href} className={cn(buttonVariants({ size: 'sm' }), TEAL, 'w-full')}>
+            <Link href={primary.href} className={cn(buttonVariants({ size: 'sm' }), ACTION, 'w-full')}>
               {primary.label}
             </Link>
           ) : null}

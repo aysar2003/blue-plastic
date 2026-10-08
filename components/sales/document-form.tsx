@@ -279,7 +279,7 @@ export function DocumentForm({
   // Start on the customer name so Tab walks the form without the mouse.
   useEffect(() => {
     if (customerId) return
-    const timer = window.setTimeout(() => document.getElementById('customerId')?.focus(), 0)
+    const timer = window.setTimeout(() => globalThis.document.getElementById('customerId')?.focus(), 0)
     return () => window.clearTimeout(timer)
   }, [customerId])
 

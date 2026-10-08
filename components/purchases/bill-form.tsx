@@ -212,7 +212,7 @@ export function BillForm({
   // Start on the vendor name so Tab walks the form without the mouse.
   useEffect(() => {
     if (vendorId) return
-    const timer = window.setTimeout(() => document.getElementById('vendorId')?.focus(), 0)
+    const timer = window.setTimeout(() => globalThis.document.getElementById('vendorId')?.focus(), 0)
     return () => window.clearTimeout(timer)
   }, [vendorId])
 
