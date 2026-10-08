@@ -155,8 +155,8 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
           aria-current={home ? 'page' : undefined}
           onClick={() => setOpenKey((key) => (key === '__apps__' ? null : '__apps__'))}
           className={cn(
-            'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-muted-foreground hover:bg-card hover:text-foreground',
-            (home || appsMenuOpen) && 'bg-card text-foreground shadow-sm ring-1 ring-border',
+            'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-[#26262d] hover:bg-card hover:text-black dark:text-muted-foreground dark:hover:text-foreground',
+            (home || appsMenuOpen) && 'bg-card text-foreground shadow-sm ring-1 ring-border dark:text-foreground',
           )}
         >
           <LayoutGridIcon className="size-3.5 text-primary" aria-hidden />
@@ -181,7 +181,7 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
                 href="/dashboard"
                 role="menuitem"
                 onClick={() => setOpenKey(null)}
-                className="block px-3 py-1.5 text-xs font-semibold text-popover-foreground hover:bg-muted"
+                className="block px-3 py-1.5 text-xs font-bold text-[#141418] hover:bg-muted dark:text-popover-foreground"
               >
                 Apps home
               </Link>
@@ -210,9 +210,9 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
                       </span>
                     )}
                     <span className="min-w-0">
-                      <span className="block text-xs font-medium text-popover-foreground">{app.label}</span>
+                      <span className="block text-xs font-semibold text-[#141418] dark:text-popover-foreground">{app.label}</span>
                       {app.blurb ? (
-                        <span className="block text-[0.65rem] leading-snug text-muted-foreground">
+                        <span className="block text-[0.65rem] leading-snug text-[#4a4a54] dark:text-muted-foreground">
                           {app.blurb}
                         </span>
                       ) : null}
@@ -245,8 +245,8 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
               aria-expanded={children.length > 0 ? open : undefined}
               onClick={() => setOpenKey(null)}
               className={cn(
-                'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-muted-foreground hover:bg-card hover:text-foreground',
-                current && 'bg-card text-foreground shadow-sm ring-1 ring-border',
+                'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-[#26262d] hover:bg-card hover:text-black dark:text-muted-foreground dark:hover:text-foreground',
+                current && 'bg-card text-foreground shadow-sm ring-1 ring-border dark:text-foreground',
               )}
             >
               <span
@@ -273,7 +273,7 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
                       href={app.href}
                       role="menuitem"
                       onClick={() => setOpenKey(null)}
-                      className="block px-3 py-1.5 text-xs font-semibold text-popover-foreground hover:bg-muted"
+                      className="block px-3 py-1.5 text-xs font-bold text-[#141418] hover:bg-muted dark:text-popover-foreground"
                     >
                       {app.label} home
                     </Link>
@@ -287,9 +287,9 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
                         onClick={() => setOpenKey(null)}
                         className="block px-3 py-1.5 hover:bg-muted"
                       >
-                        <span className="block text-xs font-medium text-popover-foreground">{item.label}</span>
+                        <span className="block text-xs font-semibold text-[#141418] dark:text-popover-foreground">{item.label}</span>
                         {item.blurb ? (
-                          <span className="block text-[0.65rem] leading-snug text-muted-foreground">
+                          <span className="block text-[0.65rem] leading-snug text-[#4a4a54] dark:text-muted-foreground">
                             {item.blurb}
                           </span>
                         ) : null}
@@ -307,7 +307,8 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
 }
 
 /**
- * Shared home / module switcher: white tiles, coloured marks, labels underneath.
+ * Shared home / module switcher: app tiles with labels underneath (near-black on
+ * light themes, theme foreground on dark/ink/odoo-dark).
  */
 export function AppLauncher({
   eyebrow,
@@ -348,7 +349,7 @@ export function AppLauncher({
     <div className="relative mx-auto w-full px-[clamp(0.75rem,2vw,2.5rem)] pb-16 pt-8 sm:pt-12 lg:pt-14">
       <div className="mb-8 text-center sm:mb-10">
         <p
-          className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+          className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-[#4a4a54] dark:text-muted-foreground"
           style={{ animation: 'launcher-fade 480ms ease both' }}
         >
           {eyebrow}
@@ -360,7 +361,7 @@ export function AppLauncher({
           {title}
         </h1>
         <p
-          className="mx-auto mt-2 max-w-md text-sm text-muted-foreground"
+          className="mx-auto mt-2 max-w-md text-sm text-[#4a4a54] dark:text-muted-foreground"
           style={{ animation: 'launcher-fade 640ms ease both' }}
         >
           {subtitle}
@@ -509,11 +510,11 @@ function AppTile({ app }: { app: LauncherTile }) {
         </span>
       )}
       <span className="max-w-[7rem] text-center">
-        <span className="block text-[0.8125rem] font-medium leading-snug text-foreground/85 transition-colors group-hover:text-foreground">
+        <span className="block text-[0.8125rem] font-semibold leading-snug text-[#141418] dark:text-foreground transition-colors group-hover:text-black dark:group-hover:text-white">
           {app.label}
         </span>
         {app.blurb ? (
-          <span className="mt-0.5 hidden text-[0.6875rem] leading-snug text-muted-foreground sm:block">
+          <span className="mt-0.5 hidden text-[0.6875rem] font-medium leading-snug text-[#4a4a54] dark:text-muted-foreground sm:block">
             {app.blurb}
           </span>
         ) : null}
