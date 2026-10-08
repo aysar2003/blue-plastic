@@ -13,7 +13,7 @@ import type {
 } from '@/lib/validation/pos'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
-import { notFound, precondition, validation } from '@/server/errors'
+import { conflict, notFound, precondition, validation } from '@/server/errors'
 import * as salesService from '@/server/services/sales.service'
 
 export async function listRegisters(ctx: OrgContext) {
@@ -707,8 +707,10 @@ export async function settingsOverview(ctx: OrgContext) {
         id: true,
         name: true,
         isActive: true,
+        storeId: true,
+        defaultCustomerId: true,
         store: { select: { name: true } },
-        defaultCustomer: { select: { displayName: true } },
+        defaultCustomer: { select: { id: true, displayName: true } },
         methods: { select: { paymentMethodId: true } },
       },
       orderBy: { name: 'asc' },
@@ -725,6 +727,22 @@ export async function settingsOverview(ctx: OrgContext) {
     }),
   ])
 
+  const customerList = await db.customer.findMany({
+    where: { orgId: ctx.orgId, isActive: true },
+    select: { id: true, displayName: true },
+    orderBy: { displayName: 'asc' },
+    take: 200,
+  })
+  // The list is capped, so make sure every till's current walk-in customer is
+  // selectable in its Edit form even when it falls outside the first 200.
+  const customerById = new Map(customerList.map((customer) => [customer.id, customer]))
+  for (const register of registers) {
+    customerById.set(register.defaultCustomer.id, register.defaultCustomer)
+  }
+  const customers = [...customerById.values()].sort((a, b) =>
+    a.displayName.localeCompare(b.displayName),
+  )
+
   return {
     methods: methods.map((method) => ({
       id: method.id,
@@ -738,17 +756,14 @@ export async function settingsOverview(ctx: OrgContext) {
       id: register.id,
       name: register.name,
       isActive: register.isActive,
+      storeId: register.storeId,
       storeName: register.store?.name ?? null,
+      defaultCustomerId: register.defaultCustomerId,
       customerName: register.defaultCustomer.displayName,
       paymentMethodIds: register.methods.map((row) => row.paymentMethodId),
     })),
     assetAccounts,
-    customers: await db.customer.findMany({
-      where: { orgId: ctx.orgId, isActive: true },
-      select: { id: true, displayName: true },
-      orderBy: { displayName: 'asc' },
-      take: 200,
-    }),
+    customers,
     stores: await db.store.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: { id: true, name: true },
@@ -793,6 +808,17 @@ export async function upsertPaymentMethod(ctx: OrgContext, input: PosPaymentMeth
 }
 
 export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
+  const name = input.name.trim()
+  const taken = await db.posRegister.findFirst({
+    where: {
+      orgId: ctx.orgId,
+      name: { equals: name, mode: 'insensitive' },
+      ...(input.id ? { id: { not: input.id } } : {}),
+    },
+    select: { id: true },
+  })
+  if (taken) throw conflict(`A register called "${name}" already exists.`)
+
   const customer = await db.customer.findFirst({
     where: { id: input.defaultCustomerId, orgId: ctx.orgId, isActive: true },
     select: { id: true },
@@ -818,15 +844,18 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
   if (input.id) {
     const existing = await db.posRegister.findFirst({
       where: { id: input.id, orgId: ctx.orgId },
-      select: { id: true },
+      select: { id: true, isActive: true, sessions: { where: { status: 'OPEN' }, select: { id: true }, take: 1 } },
     })
     if (!existing) throw notFound('Register')
+    if (existing.isActive && !input.isActive && existing.sessions.length > 0) {
+      throw precondition('This register has an open session. Close the session before switching the register off.')
+    }
 
     await db.$transaction(async (tx) => {
       await tx.posRegister.update({
         where: { id: input.id },
         data: {
-          name: input.name,
+          name,
           storeId: input.storeId ?? null,
           defaultCustomerId: input.defaultCustomerId,
           isActive: input.isActive,
@@ -841,7 +870,7 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
     const register = await tx.posRegister.create({
       data: {
         orgId: ctx.orgId,
-        name: input.name,
+        name,
         storeId: input.storeId ?? null,
         defaultCustomerId: input.defaultCustomerId,
         isActive: input.isActive,
