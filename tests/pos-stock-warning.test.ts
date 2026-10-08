@@ -38,25 +38,21 @@ function render(products: { id: string; name: string; onHand: string | null }[])
   )
 }
 
-/** Visible text of every amber stock note in the markup. */
+/** Visible text of every stock note in the markup. */
 function notes(html: string) {
-  return [...html.matchAll(/<p role="status"[^>]*>.*?<span>(.*?)<\/span><\/p>/g)].map((match) =>
-    match[1].replace(/<!-- -->/g, ''),
-  )
+  return [...html.matchAll(/<p role="status"[^>]*>(.*?)<\/p>/g)].map((match) => match[1].replace(/<!-- -->/g, ''))
 }
 
 describe('POS stock warning (product tiles)', () => {
-  it('marks products at or below zero and leaves stocked items and services alone', () => {
+  it('shows a bare red number only for products already below zero', () => {
     const html = render([
       { id: 'aasto', name: 'AASTO', onHand: '-7.0000' },
       { id: 'aresto', name: 'ARESTO GERMANY', onHand: '0.0000' },
       { id: 'a4', name: 'A4', onHand: '100.0000' },
       { id: 'svc', name: 'Delivery', onHand: null },
     ])
-    expect(notes(html)).toEqual([
-      'Stock: \u22127 left \u2014 will go negative',
-      'Stock: 0 left \u2014 will go negative',
-    ])
+    expect(notes(html)).toEqual(['\u22127'])
+    expect(html).toContain('color:#f87171') // the till starts in dark mode
   })
 
   it('never disables a product tile because of stock', () => {
