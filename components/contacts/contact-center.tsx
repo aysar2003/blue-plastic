@@ -6,6 +6,8 @@ import { CollapsibleProfile, ProfileFieldGrid } from '@/components/contacts/coll
 import { ContactDetailReopen } from '@/components/contacts/contact-detail-reopen'
 import { ContactPeopleList } from '@/components/contacts/contact-people-list'
 import { ContactSplit } from '@/components/contacts/contact-split'
+import { ContactCenterFrame, ResizableProfile } from '@/components/contacts/contact-panel-size'
+import { panelHeightKey, profileHeightKey } from '@/lib/contact-panel-size'
 import { WordFile } from '@/components/contacts/word-file'
 import { FilterChips } from '@/components/data/filter-chips'
 import { SearchInput } from '@/components/data/search-input'
@@ -257,7 +259,7 @@ export function ContactCenter({
   })
 
   return (
-    <section className="flex h-[calc(100dvh-7.25rem)] flex-col overflow-hidden rounded-xl border bg-card">
+    <ContactCenterFrame storageKey={panelHeightKey(contactSide)}>
       <div className="flex flex-wrap items-center gap-2 border-b px-2 py-1.5">
         {newContact}
         <DropdownMenu>
@@ -360,6 +362,7 @@ export function ContactCenter({
         }
         right={
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <ResizableProfile storageKey={profileHeightKey(contactSide)}>
           <CollapsibleProfile title={title} headerExtra={headerExtra}>
             {profile ? (
               <div className="flex items-start justify-between gap-4">
@@ -420,6 +423,7 @@ export function ContactCenter({
               <p className="text-sm text-muted-foreground">{chooseLabel}</p>
             )}
           </CollapsibleProfile>
+          </ResizableProfile>
 
           <div className="flex gap-1 overflow-x-auto border-b px-2 py-1">
             {TABS.map((item) => (
@@ -440,7 +444,7 @@ export function ContactCenter({
           <div className="min-h-0 flex-1 overflow-auto">
             {tab === 'transactions' ? (
               <div className="flex min-h-full flex-col">
-                <div className="flex flex-col gap-2 border-b px-3 py-2">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b px-3 py-1.5">
                   <FilterChips
                     options={[{ value: '', label: 'All' }, ...kinds]}
                     active={activeKind}
@@ -458,7 +462,7 @@ export function ContactCenter({
                   />
                 </div>
                 <div className="flex min-h-0 min-w-[42rem] flex-1 flex-col">
-                <div className="grid grid-cols-[7rem_6rem_7.5rem_minmax(0,1fr)_7rem] border-b bg-card px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="sticky top-0 z-[1] grid grid-cols-[7rem_6rem_7.5rem_minmax(0,1fr)_7rem] border-b bg-card px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
                   {ACTIVITY_COLUMNS.map((column) => {
                     const active = activitySort?.sort === column.key
                     const Icon = active ? (activitySort.dir === 'asc' ? ArrowUpIcon : ArrowDownIcon) : ChevronsUpDownIcon
@@ -578,7 +582,7 @@ export function ContactCenter({
         </div>
         }
       />
-    </section>
+    </ContactCenterFrame>
   )
 }
 
