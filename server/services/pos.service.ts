@@ -2,6 +2,8 @@ import 'server-only'
 
 import { Decimal, formatMoney, toMoneyString, ZERO } from '@/lib/money'
 import { formatDate, today, toCalendarDate } from '@/lib/date'
+import { chooseLineStore } from '@/lib/pos-line-store'
+import { foldStoreQuantities } from '@/lib/store-stock'
 import type {
   PosCashMoveInput,
   PosCheckoutInput,
@@ -14,6 +16,7 @@ import type {
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
+import * as salesDelivery from '@/server/services/sales-delivery.service'
 import * as salesService from '@/server/services/sales.service'
 
 export async function listRegisters(ctx: OrgContext) {
@@ -286,32 +289,39 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
       take: 2000,
     }),
     db.store.findMany({
-      where: { orgId: ctx.orgId, OR: [{ isOffice: true }, ...(storeId ? [{ id: storeId }] : [])] },
+      where: { orgId: ctx.orgId, isActive: true },
       select: { id: true, name: true, isOffice: true },
+      orderBy: [{ isOffice: 'desc' }, { name: 'asc' }],
     }),
   ])
 
   const office = stores.find((store) => store.isOffice) ?? null
   const selling = (storeId ? stores.find((store) => store.id === storeId) : null) ?? office
-  const storeFilter = !selling
-    ? {}
-    : selling.id === office?.id
-      ? { OR: [{ storeId: selling.id }, { storeId: null }] }
-      : { storeId: selling.id }
 
+  // On hand per store for every tracked product (store-less movements count at
+  // the office), so a cart line can show — and take from — another store.
   const tracked = items.filter((item) => item.type === 'INVENTORY').map((item) => item.id)
-  const sums =
+  const groups =
     tracked.length === 0
       ? []
       : await db.inventoryTransaction.groupBy({
-          by: ['itemId'],
-          where: { orgId: ctx.orgId, itemId: { in: tracked }, ...storeFilter },
+          by: ['itemId', 'storeId'],
+          where: { orgId: ctx.orgId, itemId: { in: tracked } },
           _sum: { quantity: true },
         })
-  const onHand = new Map(sums.map((row) => [row.itemId, row._sum.quantity?.toString() ?? '0']))
+  const byItem = foldStoreQuantities(
+    groups.map((row) => ({
+      itemId: row.itemId,
+      storeId: row.storeId,
+      quantity: row._sum.quantity?.toString() ?? '0',
+    })),
+    office?.id ?? '',
+  )
 
   return {
     storeName: selling?.name ?? null,
+    storeId: selling?.id ?? null,
+    stores: stores.map((store) => ({ id: store.id, name: store.name })),
     products: items.map((item) => ({
       id: item.id,
       name: item.name,
@@ -319,9 +329,72 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
       category: item.category?.name ?? null,
       price: item.salesPrice?.toString() ?? '0',
       /** Null for services and non-stock items: no warning for those. */
-      onHand: item.type === 'INVENTORY' ? (onHand.get(item.id) ?? '0') : null,
+      onHand:
+        item.type === 'INVENTORY'
+          ? (selling ? (byItem[item.id]?.[selling.id] ?? '0') : '0')
+          : null,
+      /** store id → on hand; null for services and non-stock items. */
+      stock: item.type === 'INVENTORY' ? (byItem[item.id] ?? {}) : null,
     })),
   }
+}
+
+/**
+ * Decides each cart line's store (see chooseLineStore): the cashier's pick,
+ * else the counter's store, else another store that holds enough.
+ */
+async function lineStoreResolver(
+  ctx: OrgContext,
+  registerStoreId: string | null,
+  cartLines: { itemId: string; quantity: string; storeId?: string }[],
+) {
+  const itemIds = [...new Set(cartLines.map((line) => line.itemId))]
+  const [counter, stores, items] = await Promise.all([
+    salesDelivery.posCounterStoreId(db, ctx.orgId, registerStoreId),
+    db.store.findMany({
+      where: { orgId: ctx.orgId, isActive: true },
+      select: { id: true, isOffice: true },
+    }),
+    db.item.findMany({
+      where: { orgId: ctx.orgId, id: { in: itemIds } },
+      select: { id: true, type: true },
+    }),
+  ])
+  for (const line of cartLines) {
+    if (line.storeId && !stores.some((store) => store.id === line.storeId)) {
+      throw notFound('Store')
+    }
+  }
+  const tracked = new Set(items.filter((item) => item.type === 'INVENTORY').map((item) => item.id))
+  const trackedIds = itemIds.filter((id) => tracked.has(id))
+  const officeId = stores.find((store) => store.isOffice)?.id ?? ''
+  const groups =
+    trackedIds.length === 0
+      ? []
+      : await db.inventoryTransaction.groupBy({
+          by: ['itemId', 'storeId'],
+          where: { orgId: ctx.orgId, itemId: { in: trackedIds } },
+          _sum: { quantity: true },
+        })
+  const byItem = foldStoreQuantities(
+    groups.map((row) => ({
+      itemId: row.itemId,
+      storeId: row.storeId,
+      quantity: row._sum.quantity?.toString() ?? '0',
+    })),
+    officeId,
+  )
+  const activeStoreIds = stores.map((store) => store.id)
+
+  return (line: { itemId: string; quantity: string; storeId?: string }) =>
+    chooseLineStore({
+      requested: line.storeId ?? null,
+      counterStoreId: counter,
+      tracked: tracked.has(line.itemId),
+      quantity: Number(line.quantity),
+      onHandByStore: byItem[line.itemId] ?? {},
+      activeStoreIds,
+    })
 }
 
 export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
@@ -370,11 +443,14 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
     })
   }
 
+  const storeOf = await lineStoreResolver(ctx, register.storeId, input.lines)
   const lines = input.lines.map((line) => ({
     itemId: line.itemId,
     quantity: line.quantity,
     unitPrice: '',
-    storeId: register.storeId,
+    // Always explicit, so the stock movement and the item history show the
+    // store (the office when the register says "Office default").
+    storeId: storeOf(line),
   }))
 
   const priced = await salesService.quoteLines(ctx, lines)

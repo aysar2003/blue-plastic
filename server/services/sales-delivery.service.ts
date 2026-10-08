@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
+import { needsPickTicket } from '@/lib/pos-line-store'
 import { Decimal, ZERO } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
@@ -61,6 +62,20 @@ type MovementCost = {
   quantity: Decimal
   unitCost: Decimal
   value: Decimal
+}
+
+/** A POS counter's own store: the register's store, else the office. */
+export async function posCounterStoreId(
+  client: Tx | typeof db,
+  orgId: string,
+  registerStoreId: string | null,
+): Promise<string | null> {
+  if (registerStoreId) return registerStoreId
+  const office = await client.store.findFirst({
+    where: { orgId, isActive: true, isOffice: true },
+    select: { id: true },
+  })
+  return office?.id ?? null
 }
 
 /** After an invoice or sales receipt posts stock out — raise DN + tickets. */
@@ -184,8 +199,20 @@ export async function syncFromSale(
   const costByLine = new Map(movements.map((m) => [m.lineId, m]))
   const takenBy = document.customer.displayName
 
+  // A POS sale hands goods from the counter's own store over the till; only
+  // lines taken from another store need a pick ticket. Other sales: every
+  // stocked line gets one, as before.
+  const posOrder = await tx.posOrder.findUnique({
+    where: { salesDocumentId: document.id },
+    select: { register: { select: { storeId: true } } },
+  })
+  const counterStore = posOrder
+    ? await posCounterStoreId(tx, ctx.orgId, posOrder.register.storeId)
+    : undefined
+
   for (const line of packLines) {
     if (line.item?.type !== 'INVENTORY' || !line.storeId) continue
+    if (!needsPickTicket(line.storeId, counterStore)) continue
     const cost = costByLine.get(line.id)
     const quantity = new Decimal(line.quantity.toString())
     if (quantity.lte(0)) continue
