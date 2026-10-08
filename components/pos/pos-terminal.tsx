@@ -571,11 +571,57 @@ export function PosTerminal(props: {
       ) : null}
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[22rem_1fr]">
+        {/* Total and Payment sit at the top of the cart and the panel stays pinned while the
+            product grid scrolls, so paying never needs a scroll (laptops at ~1024x576). */}
         <aside
-          className="flex min-h-[18rem] flex-col border-b lg:border-b-0 lg:border-r"
+          className="flex min-h-[18rem] flex-col border-b lg:sticky lg:top-0 lg:max-h-svh lg:self-start lg:border-b-0 lg:border-r"
           style={{ background: panel, borderColor: border }}
         >
-          <ul className="flex-1 space-y-1 overflow-y-auto p-3">
+          <div className="shrink-0 border-b p-3" style={{ borderColor: border }}>
+            <div className="mb-3 flex justify-between text-base font-semibold">
+              <span>Total</span>
+              <span className="tabular">{formatMoney(subtotal, props.currency)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMenu('customer')}
+                className="min-w-0 flex-1 truncate rounded-lg px-3 py-2.5 text-sm font-medium"
+                style={{ border: `1px solid ${border}`, background: chip }}
+              >
+                {customerName ?? 'Customer'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMenu('note')}
+                className="rounded-lg px-3 py-2.5 text-sm font-medium"
+                style={{ border: `1px solid ${border}`, background: chip }}
+              >
+                Note{note ? ' ·' : ''}
+              </button>
+              <button
+                type="button"
+                disabled={cart.length === 0 || pending}
+                onClick={openPay}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+                style={{ background: ODOO.teal }}
+                title="Pay"
+              >
+                <UploadIcon className="size-4" />
+                Payment
+              </button>
+              <button
+                type="button"
+                onClick={() => setMenu('actions')}
+                className="inline-flex size-10 items-center justify-center rounded-lg"
+                style={{ border: `1px solid ${border}` }}
+                aria-label="Actions"
+              >
+                <MoreVerticalIcon className="size-4" />
+              </button>
+            </div>
+          </div>
+          <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
             {cart.map((line) => (
               <li
                 key={line.itemId}
@@ -618,49 +664,6 @@ export function PosTerminal(props: {
             ) : null}
           </ul>
 
-          <div className="border-t p-3" style={{ borderColor: border }}>
-            <div className="mb-3 flex justify-between text-base font-semibold">
-              <span>Total</span>
-              <span className="tabular">{formatMoney(subtotal, props.currency)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setMenu('customer')}
-                className="flex-1 rounded-lg px-3 py-2.5 text-sm font-medium"
-                style={{ border: `1px solid ${border}`, background: chip }}
-              >
-                {customerName ?? 'Customer'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setMenu('note')}
-                className="rounded-lg px-3 py-2.5 text-sm font-medium"
-                style={{ border: `1px solid ${border}`, background: chip }}
-              >
-                Note{note ? ' ·' : ''}
-              </button>
-              <button
-                type="button"
-                disabled={cart.length === 0 || pending}
-                onClick={openPay}
-                className="rounded-lg px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
-                style={{ background: ODOO.teal }}
-                title="Pay"
-              >
-                <UploadIcon className="size-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setMenu('actions')}
-                className="inline-flex size-10 items-center justify-center rounded-lg"
-                style={{ border: `1px solid ${border}` }}
-                aria-label="Actions"
-              >
-                <MoreVerticalIcon className="size-4" />
-              </button>
-            </div>
-          </div>
         </aside>
 
         <section className="flex min-h-0 flex-col p-3 sm:p-4">

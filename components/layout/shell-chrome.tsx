@@ -15,6 +15,7 @@ import { UserMenu } from './user-menu'
 import { CompanyLetterhead } from '@/components/print/company-letterhead'
 import { CREATOR_BRAND_NAME } from '@/lib/feature-flags'
 import type { LetterheadSource } from '@/lib/letterhead'
+import { cn } from '@/lib/utils'
 
 type ShellChromeProps = {
   orgName: string
@@ -94,7 +95,10 @@ export function ShellChrome({
   const brandHref = isHome ? '/dashboard' : current.href
 
   return (
-    <div className="app-surface relative flex min-h-svh overflow-x-hidden">
+    // overflow-x-hidden turns this into a scroll container, which stops sticky children
+    // from pinning to the window. POS needs the till's cart/payment panel to stick, so it
+    // clips instead (same visual result, no scroll container).
+    <div className={cn('app-surface relative flex min-h-svh', isPos ? 'overflow-x-clip' : 'overflow-x-hidden')}>
       <NavigationProgress />
       {isPos ? null : <AppAtmosphere />}
 
