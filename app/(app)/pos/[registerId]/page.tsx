@@ -64,6 +64,8 @@ export default async function PosRegisterPage({ params }: Props) {
       }))}
       products={catalog.products}
       stockStoreName={catalog.storeName}
+      stockStoreId={catalog.storeId}
+      stores={catalog.stores}
       customers={customers}
       currency={currency}
       orgName={ctx.organization.name}

@@ -8,6 +8,11 @@ const posLine = z.object({
     (v) => Number(v) > 0,
     'Quantity must be more than zero',
   ),
+  /** Store the goods come from, when the cashier picks one. Blank = automatic. */
+  storeId: z
+    .union([cuid, z.literal('')])
+    .transform((v) => (v === '' ? undefined : v))
+    .optional(),
 })
 
 const posPayment = z.object({

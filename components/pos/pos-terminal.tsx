@@ -31,7 +31,8 @@ import { closePosSession, posCheckout, posRefund, recordPosCashMove } from '@/ap
 import { RegisterLock, useClientReady, useRegisterLocked, writeRegisterLocked } from '@/components/pos/register-lock'
 import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { ODOO } from '@/lib/odoo-brand'
-import { negativeStockWarning } from '@/lib/store-stock'
+import { chooseLineStore } from '@/lib/pos-line-store'
+import { formatStockQty, negativeStockWarning } from '@/lib/store-stock'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
@@ -43,11 +44,14 @@ type Product = {
   price: string
   /** On hand in this register's store; null for services / non-stock items. */
   onHand: string | null
+  /** store id → on hand; null for services / non-stock items. */
+  stock?: Record<string, string> | null
 }
 
 type PaymentMethod = { id: string; name: string; isCash: boolean }
 type Customer = { id: string; displayName: string }
-type CartLine = { itemId: string; name: string; price: string; quantity: number }
+/** `storeId` null = automatic (counter store, else a store that has enough). */
+type CartLine = { itemId: string; name: string; price: string; quantity: number; storeId: string | null }
 type RecentOrder = {
   id: string
   documentId: string
@@ -99,6 +103,9 @@ export function PosTerminal(props: {
   products: Product[]
   /** Store the till sells from (register store, else the office). */
   stockStoreName?: string | null
+  /** Its id, and every active store a line may be taken from instead. */
+  stockStoreId?: string | null
+  stores?: { id: string; name: string }[]
   customers: Customer[]
   currency: string
   orgName: string
@@ -166,6 +173,25 @@ export function PosTerminal(props: {
   const productById = useMemo(() => new Map(props.products.map((product) => [product.id, product])), [props.products])
   const inCart = useMemo(() => new Map(cart.map((line) => [line.itemId, line.quantity])), [cart])
   const stockStore = props.stockStoreName ?? ''
+  const stores = useMemo(() => props.stores ?? [], [props.stores])
+  const storeName = useMemo(() => new Map(stores.map((store) => [store.id, store.name])), [stores])
+
+  /** The store a cart line will be taken from — same rule the server applies. */
+  function lineStore(line: CartLine): string | null {
+    const product = productById.get(line.itemId)
+    return chooseLineStore({
+      requested: line.storeId,
+      counterStoreId: props.stockStoreId ?? null,
+      tracked: product?.stock != null,
+      quantity: line.quantity,
+      onHandByStore: product?.stock ?? {},
+      activeStoreIds: stores.map((store) => store.id),
+    })
+  }
+
+  function setLineStore(itemId: string, storeId: string | null) {
+    setCart((prev) => prev.map((line) => (line.itemId === itemId ? { ...line, storeId } : line)))
+  }
 
   const subtotal = useMemo(
     () => cart.reduce((sum, line) => sum + Number(line.price) * line.quantity, 0),
@@ -195,7 +221,10 @@ export function PosTerminal(props: {
           line.itemId === product.id ? { ...line, quantity: line.quantity + 1 } : line,
         )
       }
-      return [...prev, { itemId: product.id, name: product.name, price: product.price, quantity: 1 }]
+      return [
+        ...prev,
+        { itemId: product.id, name: product.name, price: product.price, quantity: 1, storeId: null },
+      ]
     })
   }
 
@@ -342,7 +371,11 @@ export function PosTerminal(props: {
         sessionId: props.session.id,
         customerId: customerId ?? undefined,
         note: note || null,
-        lines: cart.map((line) => ({ itemId: line.itemId, quantity: String(line.quantity) })),
+        lines: cart.map((line) => ({
+          itemId: line.itemId,
+          quantity: String(line.quantity),
+          storeId: line.storeId ?? undefined,
+        })),
         payments: built.payments,
       })
       if (!result.ok) {
@@ -637,13 +670,51 @@ export function PosTerminal(props: {
                     {formatMoney(line.price, props.currency)} · qty {line.quantity}
                   </p>
                   {(() => {
-                    const onHand = productById.get(line.itemId)?.onHand
-                    if (onHand == null) return null
+                    const product = productById.get(line.itemId)
+                    if (!product?.stock) return null
+                    const from = lineStore(line)
+                    const fromName = (from && storeName.get(from)) || stockStore
+                    const auto = lineStore({ ...line, storeId: null })
+                    const autoName = (auto && storeName.get(auto)) || stockStore
+                    const onHand = from ? Number(product.stock[from] ?? 0) : Number(product.onHand ?? 0)
+                    const elsewhere = Boolean(from && props.stockStoreId && from !== props.stockStoreId)
                     return (
-                      <StockWarningNote
-                        warning={negativeStockWarning(Number(onHand), line.quantity, stockStore)}
-                        tone={dark ? 'dark' : 'light'}
-                      />
+                      <>
+                        {stores.length > 1 ? (
+                          <label
+                            className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs"
+                            style={{ color: elsewhere ? (dark ? '#f5c97a' : '#9a5b00') : muted }}
+                          >
+                            From
+                            <select
+                              data-line-store={line.itemId}
+                              value={line.storeId ?? ''}
+                              onChange={(event) => setLineStore(line.itemId, event.target.value || null)}
+                              className="min-w-0 max-w-[11rem] rounded border px-1 py-0.5 text-xs"
+                              // Native selects ignore a transparent background; set both
+                              // colours so the text stays readable in the dark till.
+                              style={{
+                                borderColor: border,
+                                background: dark ? '#1f1f23' : '#ffffff',
+                                color: dark ? '#f4f4f5' : '#18181b',
+                                colorScheme: dark ? 'dark' : 'light',
+                              }}
+                            >
+                              <option value="">Auto · {autoName}</option>
+                              {stores.map((store) => (
+                                <option key={store.id} value={store.id}>
+                                  {store.name} ({formatStockQty(Number(product.stock?.[store.id] ?? 0))})
+                                </option>
+                              ))}
+                            </select>
+                            {elsewhere ? <span className="whitespace-nowrap">· pick ticket</span> : null}
+                          </label>
+                        ) : null}
+                        <StockWarningNote
+                          warning={negativeStockWarning(onHand, line.quantity, fromName)}
+                          tone={dark ? 'dark' : 'light'}
+                        />
+                      </>
                     )
                   })()}
                 </div>
