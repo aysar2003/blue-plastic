@@ -1266,7 +1266,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                     placeholder="Item"
                     clearable
                   />
-                  <StockWarningNote warning={props.stockWarnings[line.key]} />
+                  {props.stores.length === 0 ? <StockWarningNote warning={props.stockWarnings[line.key]} /> : null}
                 </td>
                 <td className="px-1 py-1">
                   <Input
@@ -1304,6 +1304,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                       stock={props.stock}
                       tracked={props.trackedIds.includes(line.itemId)}
                       warn={props.config.type === 'INVOICE' || props.config.type === 'SALES_RECEIPT'}
+                      warning={props.stockWarnings[line.key]}
                       itemId={line.itemId}
                       storeId={line.storeId}
                       quantity={line.quantity}
@@ -1876,7 +1877,7 @@ function SalesLines({ props }: { props: LayoutProps }) {
                     onChange={(next) => props.chooseItem(line.key, next ?? '')}
                     placeholder="Item"
                   />
-                  <StockWarningNote warning={props.stockWarnings[line.key]} />
+                  {props.stores.length === 0 ? <StockWarningNote warning={props.stockWarnings[line.key]} /> : null}
                 </td>
                 <td className="px-1 py-1 align-top">
                   <Input
@@ -2131,7 +2132,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
                     clearable
                     className={sheetLineInput}
                   />
-                  <StockWarningNote warning={props.stockWarnings[line.key]} />
+                  {props.stores.length === 0 ? <StockWarningNote warning={props.stockWarnings[line.key]} /> : null}
                 </td>
                 <td className="px-1 py-1">
                   <Input
@@ -2188,6 +2189,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
                       stock={props.stock}
                       tracked={props.trackedIds.includes(line.itemId)}
                       warn={props.config.type === 'INVOICE' || props.config.type === 'SALES_RECEIPT'}
+                      warning={props.stockWarnings[line.key]}
                       itemId={line.itemId}
                       storeId={line.storeId}
                       quantity={line.quantity}
