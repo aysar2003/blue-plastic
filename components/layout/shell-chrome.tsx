@@ -105,7 +105,15 @@ export function ShellChrome({
       {isPos ? null : <AppAtmosphere />}
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <header className="shell-topbar relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card/80 px-4 backdrop-blur-md sm:px-6">
+        {/*
+          The three header bars stack above the page and above each other, top
+          bar highest, so a menu opened from any of them is never covered by
+          the bar below it or by the page's own sticky bars (the POS
+          Products / Reporting / Configuration bar is sticky z-20). Page
+          content stays at z-20 or below; full-screen overlays (POS payment,
+          register lock) sit higher still and keep covering everything.
+        */}
+        <header className="shell-topbar relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card/80 px-4 backdrop-blur-md sm:px-6">
           <Link href={brandHref} className="flex min-w-0 items-center gap-2.5">
             <span className="shell-brand-mark grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-[0.7rem] font-bold tracking-wide text-primary-foreground shadow-sm">
               BP
@@ -126,13 +134,13 @@ export function ShellChrome({
         </header>
 
         {working ? (
-          <div className="shell-apps relative z-20 border-b border-border/70 bg-card/85 px-4 py-1.5 print:hidden sm:px-6">
+          <div className="shell-apps relative z-30 border-b border-border/70 bg-card/85 px-4 py-1.5 print:hidden sm:px-6">
             <HeaderApps permissions={permissions} hidden={hiddenApps} />
           </div>
         ) : null}
 
         {showNav ? (
-          <div className="relative z-20 border-b border-primary/15 bg-card/80 print:hidden">
+          <div className="shell-tabs relative z-[25] border-b border-primary/15 bg-card/80 print:hidden">
             <AccountantNav permissions={permissions} currency={baseCurrency} />
           </div>
         ) : null}
