@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ChevronDownIcon, MoreHorizontalIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { setVendorsActive } from '@/app/(app)/customers/actions'
+import { deleteVendor, setVendorsActive } from '@/app/(app)/customers/actions'
 import { ContactDialog, type ContactValues, type Option } from '@/components/master-data/contact-dialog'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -37,6 +37,7 @@ export function VendorActions({
   canReport,
   canEdit,
   canArchive,
+  canDelete = false,
   isActive,
   layout = 'menu',
 }: {
@@ -51,6 +52,8 @@ export function VendorActions({
   canReport: boolean
   canEdit: boolean
   canArchive: boolean
+  /** Settings → Configuration allows contact delete (archives the contact). */
+  canDelete?: boolean
   isActive: boolean
   layout?: 'menu' | 'panel'
 }) {
@@ -76,15 +79,35 @@ export function VendorActions({
     })
   }
 
+  const showDelete = canDelete && isActive
+
+  const remove = () => {
+    if (!window.confirm('Delete this vendor? They leave your active lists; posted history is kept.')) return
+    startTransition(async () => {
+      const result = await deleteVendor({ id: vendorId })
+      if (result.ok) {
+        toast.success('Vendor deleted.')
+        router.refresh()
+      } else {
+        toast.error(result.error.message)
+      }
+    })
+  }
+
   const editArchiveItems = (
     <>
-      {(canEdit || canArchive) && rest.length > 0 ? <DropdownMenuSeparator /> : null}
+      {(canEdit || canArchive || showDelete) && rest.length > 0 ? <DropdownMenuSeparator /> : null}
       {canEdit && contact ? (
         <DropdownMenuItem onSelect={() => setEditing(true)}>Edit</DropdownMenuItem>
       ) : null}
       {canArchive ? (
         <DropdownMenuItem variant={isActive ? 'destructive' : 'default'} onSelect={archive}>
           {isActive ? 'Make inactive' : 'Make active'}
+        </DropdownMenuItem>
+      ) : null}
+      {showDelete ? (
+        <DropdownMenuItem variant="destructive" onSelect={remove}>
+          Delete
         </DropdownMenuItem>
       ) : null}
     </>
@@ -108,7 +131,9 @@ export function VendorActions({
               {action.label}
             </Link>
           ))}
-          {(canEdit || canArchive) && (primary || rest.length > 0) ? <div className="my-1 h-px bg-border" /> : null}
+          {(canEdit || canArchive || showDelete) && (primary || rest.length > 0) ? (
+            <div className="my-1 h-px bg-border" />
+          ) : null}
           {canEdit && contact ? (
             <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
               Edit
@@ -119,8 +144,13 @@ export function VendorActions({
               {isActive ? 'Make inactive' : 'Make active'}
             </Button>
           ) : null}
+          {showDelete ? (
+            <Button variant="destructive" size="sm" disabled={isPending} onClick={remove}>
+              Delete
+            </Button>
+          ) : null}
         </div>
-      ) : primary || canEdit || canArchive ? (
+      ) : primary || canEdit || canArchive || showDelete ? (
         <div className="inline-flex flex-wrap items-center gap-1.5">
           {canReport ? (
             <Link

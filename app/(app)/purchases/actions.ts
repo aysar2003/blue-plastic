@@ -17,6 +17,7 @@ import { requireOrgContext } from '@/server/auth/context'
 import { action } from '@/server/action'
 import * as billPaymentService from '@/server/services/bill-payment.service'
 import * as purchaseService from '@/server/services/purchase.service'
+import { assertDocumentDeleteAllowed } from '@/server/feature-guards'
 
 function revalidatePurchases() {
   for (const slug of ['bills', 'expenses', 'vendor-credits', 'purchase-orders']) {
@@ -56,6 +57,7 @@ export const deletePurchase = action
   .requires('bill:void')
   .input(deleteRecordSchema)
   .handler(async (ctx, input) => {
+    assertDocumentDeleteAllowed(ctx)
     const document = await purchaseService.remove(ctx, input.id, input.reason)
     revalidatePurchases()
     revalidatePath('/inventory/stock')
@@ -111,6 +113,7 @@ export const deleteBillPayment = action
   .requires('expense:void')
   .input(deleteRecordSchema)
   .handler(async (ctx, input) => {
+    assertDocumentDeleteAllowed(ctx)
     const payment = await billPaymentService.remove(ctx, input.id, input.reason)
     revalidatePurchases()
     return payment

@@ -384,6 +384,7 @@ export default async function VendorsPage({
             canReport={canReport}
             canEdit={canEdit}
             canArchive={canArchive}
+            canDelete={canArchive && ctx.features.allowContactDelete}
             isActive={vendor.isActive}
           />
         ) : null

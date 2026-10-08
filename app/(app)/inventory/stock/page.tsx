@@ -365,7 +365,7 @@ export default async function InventoryPage({
                     )}
                   </TableCell>
                   <TableCell className="print:hidden">
-                    {canAdjust ? (
+                    {canAdjust && ctx.features.allowDocumentDelete ? (
                       <DeleteButton
                         kind="inventory-adjustment"
                         id={adjustment.id}

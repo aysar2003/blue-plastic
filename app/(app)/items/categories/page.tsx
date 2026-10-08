@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
+import { StandardCategoriesButton } from '@/components/master-data/standard-categories-button'
 import { requireOrgContext } from '@/server/auth/context'
 import * as itemService from '@/server/services/item.service'
 
@@ -13,7 +14,11 @@ export const metadata: Metadata = { title: 'Product categories' }
 
 export default async function ItemCategoriesPage() {
   const ctx = await requireOrgContext('item:read')
-  const categories = await itemService.categoryDashboard(ctx)
+  const canSeed = ctx.permissions.has('item:update')
+  const [categories, missing] = await Promise.all([
+    itemService.categoryDashboard(ctx),
+    canSeed ? itemService.missingStandardCategories(ctx) : Promise.resolve([] as string[]),
+  ])
   const canCreate = ctx.permissions.has('item:create')
 
   return (
@@ -22,9 +27,12 @@ export default async function ItemCategoriesPage() {
         title="Product categories"
         description="Standard merchandise groups — building materials, plumbing, electrical, electronics, and the rest. Open a category to see its items and stock in every store."
         actions={
-          <Link href="/items" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            All products
-          </Link>
+          <>
+            {canSeed && missing.length > 0 ? <StandardCategoriesButton missing={missing.length} /> : null}
+            <Link href="/items" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              All products
+            </Link>
+          </>
         }
       />
 
@@ -32,7 +40,11 @@ export default async function ItemCategoriesPage() {
         <EmptyState
           icon={FolderOpenIcon}
           title="No categories yet"
-          description="Categories appear when you add products, or when the standard catalogue is seeded."
+          description={
+            canSeed
+              ? 'Add the standard catalogue (building materials, plumbing, electrical, …) with the button above, or create categories from the product form.'
+              : 'Categories appear when someone adds them from the product form.'
+          }
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -59,8 +71,8 @@ export default async function ItemCategoriesPage() {
 
       {canCreate ? (
         <p className="mt-6 text-sm text-muted-foreground">
-          Assign a category on each product. New organisations get the international standard list
-          automatically.
+          Assign a category on each product. The standard list can be added in one step with
+          Add standard categories.
         </p>
       ) : null}
     </>

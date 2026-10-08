@@ -73,6 +73,18 @@ export const createCategory = action
     return { id: category.id, name: category.name }
   })
 
+/** Add the standard merchandise categories (Building materials, Plumbing, …) that are missing. */
+export const addStandardCategories = action
+  .requires('item:update')
+  .input(z.object({}))
+  .handler(async (ctx) => {
+    const before = await itemService.missingStandardCategories(ctx)
+    await itemService.ensureStandardCategories(ctx)
+    revalidatePath('/items')
+    revalidatePath('/items/categories')
+    return { added: before.length }
+  })
+
 /**
  * Delete an item.
  *

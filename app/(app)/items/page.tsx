@@ -60,7 +60,7 @@ export default async function ItemsPage({
     itemService.list(ctx, query, { type, categoryId, includeInactive, ...sort }),
     accountService.selectableAccounts(ctx),
     taxService.listCodes(ctx),
-    itemService.ensureStandardCategories(ctx),
+    itemService.listCategories(ctx),
     storeService.quantities(ctx),
   ])
 

@@ -55,6 +55,14 @@ export const MODULE_KEY_TO_FLAG: Record<string, ModuleFlag | null> = {
   reports: 'reports',
   settings: null,
   help: null,
+  // Launcher-only apps follow the module they belong to.
+  customers: 'sales',
+  payments: 'sales',
+  vendors: 'purchases',
+  'bill-payments': 'purchases',
+  stores: 'inventory',
+  journals: 'accounting',
+  periods: 'accounting',
 }
 
 export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {

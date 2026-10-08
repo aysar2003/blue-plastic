@@ -30,7 +30,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
   const trail = await trailFor(ctx, payment.id)
   const currency = ctx.organization.baseCurrency
   const canEdit = ctx.permissions.has('payment:update') && payment.status !== 'VOID'
-  const canDelete = ctx.permissions.has('payment:void') && payment.status !== 'VOID'
+  const canDelete = ctx.features.allowDocumentDelete && ctx.permissions.has('payment:void') && payment.status !== 'VOID'
   const canEditInvoice = ctx.permissions.has('invoice:update')
   const canReport = ctx.permissions.has('report:read')
 

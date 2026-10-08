@@ -115,6 +115,19 @@ export async function updateAccountingSettings(
  * True once anything has been posted to the ledger. The journal tables arrive in
  * Phase 2; until then there is by definition no activity to protect.
  */
+/**
+ * Sign-in renders before there is a session, so it cannot use OrgContext. The
+ * instance's first organisation decides whether the creator brand shows there.
+ * Read-only.
+ */
+export async function creatorBrandVisibleBeforeSignIn(): Promise<boolean> {
+  const org = await db.organization.findFirst({
+    orderBy: { createdAt: 'asc' },
+    select: { featureFlags: true },
+  })
+  return parseFeatureFlags(org?.featureFlags).showCreatorBrand
+}
+
 export async function getFeatureFlags(ctx: OrgContext): Promise<OrgFeatureFlags> {
   const org = await db.organization.findUnique({
     where: { id: ctx.orgId },

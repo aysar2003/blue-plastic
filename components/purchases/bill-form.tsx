@@ -212,7 +212,7 @@ export function BillForm({
   // Start on the vendor name so Tab walks the form without the mouse.
   useEffect(() => {
     if (vendorId) return
-    const timer = window.setTimeout(() => document.getElementById('vendorId')?.focus(), 0)
+    const timer = window.setTimeout(() => window.document.getElementById('vendorId')?.focus(), 0)
     return () => window.clearTimeout(timer)
   }, [vendorId])
 
@@ -393,7 +393,6 @@ export function BillForm({
   })
 
   const canSave = vendorId !== '' && filled.length > 0 && totals.total.greaterThan(0)
-  const vendor = vendors.find((row) => row.id === vendorId)
   const term = terms.find((row) => row.id === paymentTermId)
   const due =
     isCalendarDate(date) && term?.type

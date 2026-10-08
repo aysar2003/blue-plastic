@@ -21,6 +21,7 @@ import {
   storeCustomerUploads,
   uploadProblem,
 } from '@/server/files/customer-files'
+import { assertContactDeleteAllowed } from '@/server/feature-guards'
 import * as contactService from '@/server/services/contact.service'
 import { importContacts } from '@/server/services/import.service'
 
@@ -72,6 +73,21 @@ export const setCustomersActive = action
     return result
   })
 
+/**
+ * Delete a customer (Settings → Configuration → Delete customers and vendors).
+ * Archives rather than erases, so posted history stays reconstructible; an open
+ * balance blocks it exactly as Make inactive does.
+ */
+export const deleteCustomer = action
+  .requires('customer:archive')
+  .input(z.object({ id: cuid }))
+  .handler(async (ctx, input) => {
+    assertContactDeleteAllowed(ctx)
+    const result = await contactService.setActive(ctx, 'customer', [input.id], false)
+    revalidateContacts()
+    return result
+  })
+
 /* --- Vendors -------------------------------------------------------------- */
 
 export const createVendor = action
@@ -98,6 +114,21 @@ export const setVendorsActive = action
   .input(bulkSetActiveSchema)
   .handler(async (ctx, input) => {
     const result = await contactService.setActive(ctx, 'vendor', input.ids, input.isActive)
+    revalidateContacts()
+    return result
+  })
+
+/**
+ * Delete a vendor (Settings → Configuration → Delete customers and vendors).
+ * Archives rather than erases, so posted history stays reconstructible; an open
+ * balance blocks it exactly as Make inactive does.
+ */
+export const deleteVendor = action
+  .requires('vendor:archive')
+  .input(z.object({ id: cuid }))
+  .handler(async (ctx, input) => {
+    assertContactDeleteAllowed(ctx)
+    const result = await contactService.setActive(ctx, 'vendor', [input.id], false)
     revalidateContacts()
     return result
   })

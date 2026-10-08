@@ -28,6 +28,7 @@ import * as bankingService from '@/server/services/banking.service'
 import * as reconciliationService from '@/server/services/reconciliation.service'
 import * as feedService from '@/server/services/bank-feed.service'
 import * as importService from '@/server/services/statement-import.service'
+import { assertDocumentDeleteAllowed } from '@/server/feature-guards'
 
 function revalidateBanking() {
   revalidatePath('/banking/accounts')
@@ -59,6 +60,7 @@ export const deleteTransfer = action
   .requires('bank:transact')
   .input(deleteRecordSchema)
   .handler(async (ctx, input) => {
+    assertDocumentDeleteAllowed(ctx)
     const result = await bankingService.removeTransfer(ctx, input.id, input.reason)
     revalidateBanking()
     return result
@@ -68,6 +70,7 @@ export const deleteDeposit = action
   .requires('bank:transact')
   .input(deleteRecordSchema)
   .handler(async (ctx, input) => {
+    assertDocumentDeleteAllowed(ctx)
     const result = await bankingService.removeDeposit(ctx, input.id, input.reason)
     revalidateBanking()
     return result

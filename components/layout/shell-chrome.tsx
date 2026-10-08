@@ -13,6 +13,7 @@ import { QuickCreate } from './quick-create'
 import { ShellMenus } from './shell-menus'
 import { UserMenu } from './user-menu'
 import { CompanyLetterhead } from '@/components/print/company-letterhead'
+import { CREATOR_BRAND_NAME } from '@/lib/feature-flags'
 import type { LetterheadSource } from '@/lib/letterhead'
 
 type ShellChromeProps = {
@@ -24,6 +25,8 @@ type ShellChromeProps = {
   user: { id: string; name: string; email: string; image: string | null }
   moduleKeys: string[]
   permissions: string[]
+  /** Launcher app keys switched off in Settings → Configuration. */
+  hiddenApps?: string[]
   /** Creator credit (Abdisalm Hero) — off via Settings → Features. */
   showCreatorBrand?: boolean
   /** Streamed server slot; null when the user lacks inventory:read. */
@@ -66,6 +69,7 @@ export function ShellChrome({
   roleLabel,
   user,
   permissions,
+  hiddenApps,
   showCreatorBrand = true,
   stockAlertsSlot,
   balanceAlertsSlot,
@@ -117,7 +121,7 @@ export function ShellChrome({
 
         {working ? (
           <div className="shell-apps relative z-20 border-b border-border/70 bg-card/85 px-4 py-1.5 print:hidden sm:px-6">
-            <HeaderApps permissions={permissions} />
+            <HeaderApps permissions={permissions} hidden={hiddenApps} />
           </div>
         ) : null}
 
@@ -149,7 +153,7 @@ export function ShellChrome({
         {showCreatorBrand && !isPrint && !isPos ? (
           <footer className="relative z-10 border-t border-border/60 px-4 py-2 text-center print:hidden sm:px-6">
             <p className="text-[0.6875rem] tracking-wide text-muted-foreground">
-              <span className="font-medium text-foreground/80">Abdisalm Hero</span>
+              <span className="font-medium text-foreground/80">{CREATOR_BRAND_NAME}</span>
               <span className="mx-1.5 text-border">·</span>
               System brand
             </p>

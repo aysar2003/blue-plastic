@@ -389,9 +389,21 @@ export async function listCategories(ctx: OrgContext) {
   })
 }
 
+/** Standard catalogue groups this organisation does not have yet (any casing). */
+export async function missingStandardCategories(ctx: OrgContext): Promise<string[]> {
+  const { STANDARD_ITEM_CATEGORIES } = await import('@/lib/standard-categories')
+  const existing = await db.itemCategory.findMany({
+    where: { orgId: ctx.orgId },
+    select: { name: true },
+  })
+  const have = new Set(existing.map((row) => row.name.toLowerCase()))
+  return STANDARD_ITEM_CATEGORIES.filter((name) => !have.has(name.toLowerCase()))
+}
+
 /**
- * Ensure the international standard catalogue groups exist for this organisation.
- * Idempotent — skips names that are already present (any casing).
+ * Add the international standard catalogue groups for this organisation.
+ * Idempotent — skips names that are already present (any casing). Run from an
+ * explicit action, never from a page render: reading a list must not write.
  */
 export async function ensureStandardCategories(ctx: OrgContext) {
   const { STANDARD_ITEM_CATEGORIES } = await import('@/lib/standard-categories')
@@ -410,9 +422,9 @@ export async function ensureStandardCategories(ctx: OrgContext) {
   return listCategories(ctx)
 }
 
-/** Category cards for the catalogue hub: item counts and on-hand value. */
+/** Category cards for the catalogue hub: item counts per category. Read-only. */
 export async function categoryDashboard(ctx: OrgContext) {
-  const categories = await ensureStandardCategories(ctx)
+  const categories = await listCategories(ctx)
   const counts = await db.item.groupBy({
     by: ['categoryId'],
     where: { orgId: ctx.orgId, isActive: true },

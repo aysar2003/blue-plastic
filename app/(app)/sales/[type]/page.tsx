@@ -159,7 +159,7 @@ export default async function SalesListPage({
   const canCreate = ctx.permissions.has(config.createPermission)
   const canCreateInvoice = ctx.permissions.has('invoice:create')
   const canEditDocuments = ctx.permissions.has('invoice:update')
-  const canDelete = ctx.permissions.has('invoice:void')
+  const canDelete = ctx.features.allowDocumentDelete && ctx.permissions.has('invoice:void')
   const convertToday = today(ctx.organization.timeZone)
   const newButton = canCreate ? (
     <Link href={`/sales/${config.slug}/new`} className={buttonVariants({ size: 'sm' })}>

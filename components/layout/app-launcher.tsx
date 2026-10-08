@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
@@ -106,9 +106,12 @@ function appIsCurrent(pathname: string, href: string, also: string[] = []) {
  * and receipts, Purchases shows Delivery — without first opening the hub.
  * Clicking Apps opens the full app list (works on touch where hover does not).
  */
-export function HeaderApps({ permissions }: { permissions: string[] }) {
+export function HeaderApps({ permissions, hidden }: { permissions: string[]; hidden?: string[] }) {
   const pathname = usePathname()
-  const apps = appsForPermissions(permissions)
+  const apps = useMemo(() => {
+    const all = appsForPermissions(permissions)
+    return hidden && hidden.length > 0 ? all.filter((app) => !hidden.includes(app.key)) : all
+  }, [permissions, hidden])
   const home = pathname === '/dashboard'
   const [openKey, setOpenKey] = useState<string | null>(null)
   const navRef = useRef<HTMLElement>(null)

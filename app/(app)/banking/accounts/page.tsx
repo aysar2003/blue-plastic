@@ -344,7 +344,7 @@ export default async function BankingPage({
                       </Badge>
                     </TableCell>
                     <TableCell className="print:hidden">
-                      {canTransact ? (
+                      {canTransact && ctx.features.allowDocumentDelete ? (
                         <DeleteButton
                           kind={row.kind}
                           id={row.id}

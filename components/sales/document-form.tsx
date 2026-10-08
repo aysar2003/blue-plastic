@@ -218,7 +218,6 @@ export function DocumentForm({
   const [state, formAction] = useActionState(saveDocumentForm, idleState)
   // Invoice, quotation, sales receipt, credit, and refund share the print sheet —
   // the same paper POS and the counter print. No template picker on those.
-  const isCreditMemo = config.type === 'CREDIT_MEMO'
   const usesPrintSheet = (PRINT_SHEET_SALES_TYPES as readonly string[]).includes(config.type)
   const usesInvoiceSheet = config.type === 'INVOICE' || config.type === 'ESTIMATE'
   const templateKey = usesInvoiceSheet
@@ -279,7 +278,7 @@ export function DocumentForm({
   // Start on the customer name so Tab walks the form without the mouse.
   useEffect(() => {
     if (customerId) return
-    const timer = window.setTimeout(() => document.getElementById('customerId')?.focus(), 0)
+    const timer = window.setTimeout(() => window.document.getElementById('customerId')?.focus(), 0)
     return () => window.clearTimeout(timer)
   }, [customerId])
 

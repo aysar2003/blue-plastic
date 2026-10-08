@@ -19,6 +19,7 @@ import { db } from '@/server/db'
 import * as inventoryService from '@/server/services/inventory.service'
 import { readStockCountFile } from '@/server/services/stock-count-sheet'
 import * as storeService from '@/server/services/store.service'
+import { assertDocumentDeleteAllowed } from '@/server/feature-guards'
 
 export const createAdjustment = action
   .requires('inventory:adjust')
@@ -41,6 +42,7 @@ export const deleteAdjustment = action
   .requires('inventory:adjust')
   .input(deleteRecordSchema)
   .handler(async (ctx, input) => {
+    assertDocumentDeleteAllowed(ctx)
     const result = await inventoryService.removeAdjustment(ctx, input.id, input.reason)
     revalidatePath('/inventory/stock')
     revalidatePath('/accounts')

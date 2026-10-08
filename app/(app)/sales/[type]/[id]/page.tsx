@@ -47,7 +47,7 @@ export default async function SalesDocumentPage({
   const currency = ctx.organization.baseCurrency
   // A draft can now be deleted, so the control shows for it too — what it does
   // is decided by `disposition` below.
-  const canDelete = ctx.permissions.has('invoice:void') && document.status !== 'VOID'
+  const canDelete = ctx.features.allowDocumentDelete && ctx.permissions.has('invoice:void') && document.status !== 'VOID'
 
   // The same rule the service enforces: a voided document cannot be edited, and
   // neither can one with money already applied to it — the payment would have to

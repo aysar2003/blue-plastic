@@ -7,6 +7,7 @@ import { db } from '@/server/db'
 import { tableReport } from '@/server/reports/catalogue'
 import { CODE, inRolledBackTransaction, makeOrg, type Fixture } from './ledger-helpers'
 import type { Tx } from '@/server/db'
+import { DEFAULT_FEATURE_FLAGS } from '@/lib/feature-flags'
 
 const suite = process.env.DATABASE_URL ? describe : describe.skip
 
@@ -134,6 +135,7 @@ suite('QuickBooks-style lists follow the documents', () => {
       userId: user.id,
       role: 'OWNER',
       permissions: permissionsFor('OWNER'),
+      features: DEFAULT_FEATURE_FLAGS,
       organization,
       user: { id: user.id, name: user.name ?? '', email: user.email, image: user.image },
     }

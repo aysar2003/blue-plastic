@@ -6,6 +6,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { listBalanceAlerts } from '@/server/services/contact.service'
 import * as inventoryService from '@/server/services/inventory.service'
 import { BalanceAlerts } from './balance-alerts'
+import { LAUNCHER_APPS } from './launcher-apps'
 import { MODULES } from './nav-items'
 import { ShellChrome } from './shell-chrome'
 import { StockAlerts } from './stock-alerts'
@@ -26,6 +27,11 @@ export async function AppShell({ ctx, children }: { ctx: OrgContext; children: R
   )
   const moduleKeys = modules.map((entry) => entry.key)
   const permissions = [...ctx.permissions]
+  // Apps switched off in Settings → Configuration. Plain strings, not a filter
+  // function: this crosses into a client component.
+  const hiddenApps = LAUNCHER_APPS.filter((app) => !isModuleEnabled(ctx.features, app.key)).map(
+    (app) => app.key,
+  )
 
     return (
     <ShellChrome
@@ -37,6 +43,7 @@ export async function AppShell({ ctx, children }: { ctx: OrgContext; children: R
       user={ctx.user}
       moduleKeys={moduleKeys}
       permissions={permissions}
+      hiddenApps={hiddenApps}
       showCreatorBrand={ctx.features.showCreatorBrand}
       stockAlertsSlot={
         ctx.permissions.has('inventory:read') ? (
