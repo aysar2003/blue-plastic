@@ -72,6 +72,7 @@ export default async function VendorPage({
               canReport={canReport}
               canEdit={ctx.permissions.has('vendor:update')}
               canArchive={ctx.permissions.has('vendor:archive')}
+              canDelete={ctx.features.allowContactDelete && ctx.permissions.has('vendor:archive')}
               isActive={vendor.isActive}
             />
           </>

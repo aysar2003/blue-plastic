@@ -42,7 +42,7 @@ export default async function PurchaseDocumentPage({
   const isOrder = config.type === 'PURCHASE_ORDER'
   // One control, one verb. A document already voided under the old scheme is
   // left alone: its entry has been reversed and there is nothing left to remove.
-  const canDelete = ctx.permissions.has('bill:void') && document.status !== 'VOID'
+  const canDelete = ctx.features.allowDocumentDelete && ctx.permissions.has('bill:void') && document.status !== 'VOID'
 
   // The same rule the service enforces: no editing a voided document, or one
   // with a payment or credit already applied to it.

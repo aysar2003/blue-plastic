@@ -156,6 +156,32 @@ export default async function HelpPage() {
         </section>
 
         <section>
+          <h2 className="mb-3 text-sm font-semibold">Filling a form with the keyboard</h2>
+          <Card>
+            <CardContent className="space-y-2 p-4 text-sm text-muted-foreground">
+              <p>
+                Open an invoice or a bill and the customer or vendor name is focused. Tab moves through
+                Date, number, due date, PO, then each line — Item, Description, Qty, Rate, Amount, Store.
+                In a name picker, type a few letters and press Tab or Enter to take the highlighted match
+                and continue; you do not need the mouse for the grid.
+              </p>
+              <p>
+                <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">Ctrl S</kbd> saves
+                and closes.{' '}
+                <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">Ctrl Shift S</kbd>{' '}
+                saves and opens another blank one.{' '}
+                <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">Ctrl L</kbd> adds a
+                line. The full list is on{' '}
+                <Link href="/help/shortcuts" className="text-foreground underline underline-offset-4">
+                  Keyboard shortcuts
+                </Link>
+                .
+              </p>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section>
           <h2 className="mb-3 text-sm font-semibold">Rules that will not bend</h2>
           <Card>
             <CardContent className="divide-y p-0">

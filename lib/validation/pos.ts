@@ -17,7 +17,34 @@ const posPayment = z.object({
 
 export const posCheckoutSchema = z.object({
   registerId: cuid,
+  sessionId: cuid,
+  customerId: cuid.optional(),
+  note: optionalText(500),
   lines: z.array(posLine).min(1, 'Add at least one product').max(100),
+  payments: z.array(posPayment).min(1, 'Choose at least one payment method'),
+})
+
+export const posOpenSessionSchema = z.object({
+  registerId: cuid,
+  openingCash: moneyString,
+})
+
+export const posCloseSessionSchema = z.object({
+  sessionId: cuid,
+  closingCash: moneyString,
+})
+
+export const posCashMoveSchema = z.object({
+  sessionId: cuid,
+  kind: z.enum(['IN', 'OUT']),
+  amount: moneyString,
+  reason: optionalText(500),
+})
+
+export const posRefundSchema = z.object({
+  registerId: cuid,
+  sessionId: cuid,
+  orderId: cuid,
   payments: z.array(posPayment).min(1, 'Choose at least one payment method'),
 })
 
@@ -49,5 +76,9 @@ export const posRegisterSchema = z.object({
 })
 
 export type PosCheckoutInput = z.infer<typeof posCheckoutSchema>
+export type PosOpenSessionInput = z.infer<typeof posOpenSessionSchema>
+export type PosCloseSessionInput = z.infer<typeof posCloseSessionSchema>
+export type PosCashMoveInput = z.infer<typeof posCashMoveSchema>
+export type PosRefundInput = z.infer<typeof posRefundSchema>
 export type PosPaymentMethodInput = z.infer<typeof posPaymentMethodSchema>
 export type PosRegisterInput = z.infer<typeof posRegisterSchema>

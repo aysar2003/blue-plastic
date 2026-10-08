@@ -301,6 +301,16 @@ export const INVENTORY_HUB_APPS: HubApp[] = [
     blurb: 'What you sell and buy',
   },
   {
+    key: 'categories',
+    label: 'Categories',
+    href: '/items/categories',
+    icon: 'package',
+    permission: 'item:read',
+    accent: '#714B67',
+    wash: '#F3EEF2',
+    blurb: 'Building, plumbing, electrical…',
+  },
+  {
     key: 'stock',
     label: 'Stock on hand',
     href: '/inventory/stock',
@@ -500,6 +510,16 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     accent: '#0B4F6C',
     wash: '#E0F2FE',
     blurb: 'Name and year',
+  },
+  {
+    key: 'features',
+    label: 'Configuration',
+    href: '/settings/features',
+    icon: 'sliders',
+    permission: 'org:update',
+    accent: '#714B67',
+    wash: '#F3EAF1',
+    blurb: 'Turn apps and deletes on or off',
   },
   {
     key: 'accounts',

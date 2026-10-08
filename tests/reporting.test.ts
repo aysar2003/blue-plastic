@@ -178,5 +178,6 @@ suite('trial balance', () => {
 })
 
 afterAll(async () => {
-  await db.$disconnect()
+  // Touching db without DATABASE_URL throws; the suite above is skipped then.
+  if (process.env.DATABASE_URL) await db.$disconnect()
 })

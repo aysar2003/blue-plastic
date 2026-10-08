@@ -40,8 +40,9 @@ export function foldStoreQuantities(
 }
 
 /**
- * When the chosen store does not hold enough, say so, and name any store that does.
- * A store is allowed to go below zero; a later bill fills it.
+ * When the chosen store does not hold enough and another store does, name it so
+ * the line can be moved. The negative-stock warning on the item line covers the
+ * rest (selling below zero is allowed; a later bill corrects it).
  */
 export function shortStockNote(
   stores: StoreChoice[],
@@ -56,12 +57,44 @@ export function shortStockNote(
   const places = stock[itemId] ?? {}
   const have = Number(places[storeId] ?? '0')
   if (have >= need) return null
-  const name = stores.find((store) => store.id === storeId)?.name ?? 'This store'
   const others = stores
     .filter((store) => store.id !== storeId && Number(places[store.id] ?? '0') > 0)
-    .map((store) => `${store.name} has ${places[store.id]}`)
-  if (others.length === 0) {
-    return `${name} has ${have.toFixed(2)}. This store can go below zero. A later bill fills it.`
-  }
-  return `${name} has ${have.toFixed(2)}. ${others.join('. ')}.`
+    .map((store) => `${store.name} (${formatStockQty(Number(places[store.id]))})`)
+  if (others.length === 0) return null
+  return `Also in ${others.join(', ')}.`
+}
+
+/** What the person entering a sale should know before stock goes below zero. */
+export type StockWarning = {
+  storeName: string
+  /** On hand in that store before this sale. */
+  onHand: number
+  /** On hand after this sale (this line plus earlier lines for the same item and store). */
+  after: number
+}
+
+/**
+ * Warn when the store is already at or below zero, or when this sale takes it
+ * below zero. Never blocks: negative stock is allowed and a later bill fixes it.
+ */
+export function negativeStockWarning(onHand: number, selling: number, storeName: string): StockWarning | null {
+  if (!Number.isFinite(onHand)) return null
+  const qty = Number.isFinite(selling) && selling > 0 ? selling : 0
+  const after = onHand - qty
+  if (onHand > 0 && after >= 0) return null
+  return { storeName, onHand, after }
+}
+
+/** 12 → "12", 2.5 → "2.50", -3 → "−3" (true minus sign). */
+export function formatStockQty(value: number): string {
+  const text = Math.abs(value).toFixed(value % 1 === 0 ? 0 : 2)
+  return value < 0 ? `\u2212${text}` : text
+}
+
+/** "Stock: 0 at Xafiiska → −2 after this sale. Will go negative." */
+export function stockWarningText(warning: StockWarning): string {
+  const head = `Stock: ${formatStockQty(warning.onHand)}${warning.storeName ? ` at ${warning.storeName}` : ''}`
+  const tail = warning.onHand < 0 ? 'Already below zero.' : 'Will go negative.'
+  if (warning.after === warning.onHand) return `${head}. ${tail}`
+  return `${head} \u2192 ${formatStockQty(warning.after)} after this sale. ${tail}`
 }

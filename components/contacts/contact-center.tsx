@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon } from 'lucide-react'
 
 import { CollapsibleProfile, ProfileFieldGrid } from '@/components/contacts/collapsible-profile'
+import { ContactDetailReopen } from '@/components/contacts/contact-detail-reopen'
 import { ContactPeopleList } from '@/components/contacts/contact-people-list'
 import { ContactSplit } from '@/components/contacts/contact-split'
 import { WordFile } from '@/components/contacts/word-file'
@@ -294,6 +295,9 @@ export function ContactCenter({
 
       <ContactSplit
         storageKey={splitKey}
+        detailStorageKey={
+          contactSide === 'customer' ? 'contact-detail:customers' : 'contact-detail:vendors'
+        }
         left={
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-center gap-2 border-b px-2 py-1.5">
@@ -308,6 +312,7 @@ export function ContactCenter({
                   {archivedLabel}
                 </Link>
               ) : null}
+              <ContactDetailReopen />
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_1.75rem] border-b px-2 py-1 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
               {(
@@ -355,20 +360,7 @@ export function ContactCenter({
         }
         right={
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <CollapsibleProfile
-            title={title}
-            headerExtra={headerExtra}
-            storageKey={
-              contactSide === 'customer' ? 'bp-customer-info-open' : 'bp-vendor-info-open'
-            }
-            empty={
-              profile ? (
-                <p className="truncate text-sm text-muted-foreground">{profile.company}</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">{chooseLabel}</p>
-              )
-            }
-          >
+          <CollapsibleProfile title={title} headerExtra={headerExtra}>
             {profile ? (
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">

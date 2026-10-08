@@ -42,7 +42,7 @@ export default async function ReceiveOrderPage({
 
       <PageHeader
         title={`Receive items · ${order.number}`}
-        description={`Ordered from ${order.vendor.displayName} on ${formatDate(toCalendarDate(order.date))}. Enter what arrived; a bill is raised for exactly that, and the order keeps count of the rest.`}
+        className="mb-2 pb-2"
         actions={
           <>
             {returnTo ? (

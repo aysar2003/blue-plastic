@@ -44,7 +44,7 @@ export default async function NewPurchasePage({
   return (
     <>
 
-      <PageHeader title={`New ${config.singular.toLowerCase()}`} description={config.effect} />
+      <PageHeader title={`New ${config.singular.toLowerCase()}`} className="mb-2 pb-2" />
 
       <BillForm
         config={config}

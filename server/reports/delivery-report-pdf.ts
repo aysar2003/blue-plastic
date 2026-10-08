@@ -2,6 +2,8 @@ import 'server-only'
 
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
+import { ODOO_PDF } from '@/lib/odoo-brand'
+import { odooPdfLetterhead, odooPdfTableHead } from '@/lib/odoo-pdf'
 import { buildTextPdf, type PdfRow } from '@/lib/pdf-text'
 import type { DeliveryOrderDetail } from '@/server/services/delivery.service'
 
@@ -17,13 +19,17 @@ export function renderDeliveryReportPdf(input: {
     rows.push({
       size: options.size ?? 10,
       height: options.height ?? 14,
-      runs: [{ text, x: 40, bold: options.bold }],
+      runs: [{ text, x: 40, bold: options.bold, color: ODOO_PDF.ink }],
     })
   }
 
-  line(input.orgName, { bold: true, size: 14, height: 18 })
-  line('Delivery report', { bold: true, size: 12, height: 16 })
-  line(input.filterLabel, { size: 9, height: 14 })
+  rows.push(
+    ...odooPdfLetterhead({
+      orgName: input.orgName,
+      title: 'Delivery report',
+      subtitle: input.filterLabel,
+    }),
+  )
   line(`${input.orders.length} purchase order${input.orders.length === 1 ? '' : 's'}`, {
     size: 9,
     height: 18,
@@ -40,29 +46,26 @@ export function renderDeliveryReportPdf(input: {
       { size: 8, height: 14 },
     )
 
-    rows.push({
-      size: 8,
-      height: 14,
-      rule: true,
-      runs: [
-        { text: 'Item', x: 40, bold: true },
-        { text: 'Ordered', x: 280, bold: true },
-        { text: 'Received', x: 360, bold: true },
-        { text: 'Outstanding', x: 440, bold: true },
-        { text: 'Value due', x: 520, bold: true },
-      ],
-    })
+    rows.push(
+      odooPdfTableHead([
+        { text: 'Item', x: 40 },
+        { text: 'Ordered', x: 280 },
+        { text: 'Received', x: 360 },
+        { text: 'Outstanding', x: 440 },
+        { text: 'Value due', x: 520 },
+      ]),
+    )
 
     for (const row of order.lines) {
       rows.push({
         size: 8,
         height: 12,
         runs: [
-          { text: (row.itemName || row.description || 'Line').slice(0, 36), x: 40 },
-          { text: row.ordered, x: 280 },
-          { text: row.received, x: 360 },
-          { text: row.outstanding, x: 440 },
-          { text: money(row.outstandingValue), x: 520 },
+          { text: (row.itemName || row.description || 'Line').slice(0, 36), x: 40, color: ODOO_PDF.ink },
+          { text: row.ordered, x: 280, color: ODOO_PDF.ink },
+          { text: row.received, x: 360, color: ODOO_PDF.ink },
+          { text: row.outstanding, x: 440, color: ODOO_PDF.ink },
+          { text: money(row.outstandingValue), x: 520, color: ODOO_PDF.ink },
         ],
       })
     }

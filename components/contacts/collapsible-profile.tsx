@@ -1,64 +1,45 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
-import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
+import { type ReactNode } from 'react'
+import { PanelRightCloseIcon } from 'lucide-react'
 
+import { useOptionalContactDetailPanel } from '@/components/contacts/contact-split'
 import { cn } from '@/lib/utils'
 
 /**
- * The customer / vendor information block on the right. A small chevron hides
- * the detail grid so the transaction list gets the height — QuickBooks style.
+ * Customer / vendor information header. The close control hides the whole
+ * detail pane so the name list expands — QuickBooks-style.
  */
 export function CollapsibleProfile({
   title,
   headerExtra,
-  storageKey,
   children,
-  empty,
 }: {
   title: string
   headerExtra?: ReactNode
-  storageKey: string
+  /** @deprecated Detail open state lives on ContactSplit. */
+  storageKey?: string
   children: ReactNode
   empty?: ReactNode
 }) {
-  const [open, setOpen] = useState(true)
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(storageKey)
-      if (stored === '0') setOpen(false)
-      if (stored === '1') setOpen(true)
-    } catch {
-      /* keep default */
-    }
-  }, [storageKey])
-
-  function toggle() {
-    setOpen((current) => {
-      const next = !current
-      try {
-        window.localStorage.setItem(storageKey, next ? '1' : '0')
-      } catch {
-        /* ignore */
-      }
-      return next
-    })
-  }
+  const detail = useOptionalContactDetailPanel()
 
   return (
     <div className="border-b">
       <div className="flex items-start justify-between gap-3 px-4 py-3">
         <div className="flex min-w-0 flex-1 items-start gap-2">
-          <button
-            type="button"
-            onClick={toggle}
-            className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-expanded={open}
-            aria-label={open ? 'Hide information' : 'Show information'}
-          >
-            {open ? <ChevronUpIcon className="size-4" /> : <ChevronDownIcon className="size-4" />}
-          </button>
+          {detail ? (
+            <button
+              type="button"
+              onClick={detail.hide}
+              className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-expanded={detail.open}
+              aria-label="Hide information"
+              title="Hide information"
+            >
+              <PanelRightCloseIcon className="size-4" />
+            </button>
+          ) : null}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <h1 className="text-lg font-semibold">{title}</h1>
@@ -66,8 +47,7 @@ export function CollapsibleProfile({
                 <div className="flex shrink-0 items-center [&>div]:flex-row [&>div]:gap-1">{headerExtra}</div>
               ) : null}
             </div>
-            {open ? <div className="mt-3">{children}</div> : null}
-            {!open && empty ? <div className="mt-1">{empty}</div> : null}
+            <div className="mt-3">{children}</div>
           </div>
         </div>
       </div>

@@ -166,7 +166,7 @@ export default async function PaymentsPage({
                           : []),
                       ]}
                       onDelete={
-                        canVoid && payment.status !== 'VOID'
+                        canVoid && ctx.features.allowDocumentDelete && payment.status !== 'VOID'
                           ? { kind: 'customer-payment', id: payment.id, number: payment.number }
                           : undefined
                       }

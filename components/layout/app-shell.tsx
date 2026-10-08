@@ -1,10 +1,12 @@
 import { Suspense } from 'react'
 
+import { isModuleEnabled } from '@/lib/feature-flags'
 import { ROLE_LABELS } from '@/lib/roles'
 import type { OrgContext } from '@/server/auth/context'
 import { listBalanceAlerts } from '@/server/services/contact.service'
 import * as inventoryService from '@/server/services/inventory.service'
 import { BalanceAlerts } from './balance-alerts'
+import { LAUNCHER_APPS } from './launcher-apps'
 import { MODULES } from './nav-items'
 import { ShellChrome } from './shell-chrome'
 import { StockAlerts } from './stock-alerts'
@@ -18,11 +20,20 @@ import { StockAlerts } from './stock-alerts'
  * on those queries; each loader is also short-cached per organisation.
  */
 export async function AppShell({ ctx, children }: { ctx: OrgContext; children: React.ReactNode }) {
-  const modules = MODULES.filter((entry) => !entry.permission || ctx.permissions.has(entry.permission))
+  const modules = MODULES.filter(
+    (entry) =>
+      isModuleEnabled(ctx.features, entry.key) &&
+      (!entry.permission || ctx.permissions.has(entry.permission)),
+  )
   const moduleKeys = modules.map((entry) => entry.key)
   const permissions = [...ctx.permissions]
+  // Apps switched off in Settings → Configuration. Plain strings, not a filter
+  // function: this crosses into a client component.
+  const hiddenApps = LAUNCHER_APPS.filter((app) => !isModuleEnabled(ctx.features, app.key)).map(
+    (app) => app.key,
+  )
 
-  return (
+    return (
     <ShellChrome
       orgName={ctx.organization.name}
       organization={ctx.organization}
@@ -32,6 +43,8 @@ export async function AppShell({ ctx, children }: { ctx: OrgContext; children: R
       user={ctx.user}
       moduleKeys={moduleKeys}
       permissions={permissions}
+      hiddenApps={hiddenApps}
+      showCreatorBrand={ctx.features.showCreatorBrand}
       stockAlertsSlot={
         ctx.permissions.has('inventory:read') ? (
           <Suspense fallback={<StockAlerts alerts={[]} total={0} />}>

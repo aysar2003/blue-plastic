@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { DeleteButton } from '@/components/data/delete-record'
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { DocumentActions } from '@/components/print/document-actions'
@@ -28,6 +29,10 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
 
   const currency = ctx.organization.baseCurrency
   const canReverse = ctx.permissions.has('journal:reverse') && journal.status === 'POSTED'
+  const canDelete =
+    ctx.features.allowJournalDelete &&
+    ctx.permissions.has('journal:reverse') &&
+    journal.status !== 'DELETED'
   const lineCustomer = journal.lines.find((line) => line.customer)?.customer
   const lineVendor = journal.lines.find((line) => line.vendor)?.vendor
   const party = journal.source.partyName
@@ -65,6 +70,14 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
                 .filter((line) => line !== null)
                 .join('\n')}
             />
+            {canDelete ? (
+              <DeleteButton
+                kind="journal"
+                id={journal.id}
+                number={journal.journalNumber}
+                redirectTo="/journals"
+              />
+            ) : null}
             {canReverse ? (
               <ReverseDialog
                 journalId={journal.id}
@@ -210,8 +223,9 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
       </Card>
 
       <p className="mt-4 text-xs text-muted-foreground">
-        Posted entries cannot be edited or deleted, by this application or by anything else with access to
-        the database. Corrections are reversals.
+        Posted amounts are never rewritten. Delete withdraws the entry from balances and reports while
+        keeping the row for history. Reverse posts an equal opposite entry. Configuration → Settings
+        controls whether Delete is offered.
       </p>
     </>
   )

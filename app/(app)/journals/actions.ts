@@ -56,6 +56,10 @@ export const deleteJournal = action
   .requires('journal:reverse')
   .input(deleteRecordSchema)
   .handler(async (ctx, input) => {
+    if (!ctx.features.allowJournalDelete) {
+      const { precondition } = await import('@/server/errors')
+      throw precondition('Journal delete is turned off in Settings → Configuration.')
+    }
     const result = await journalService.remove(ctx, input.id, input.reason)
     revalidateLedger()
     revalidatePath('/sales')

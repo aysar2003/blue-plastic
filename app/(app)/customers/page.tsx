@@ -374,6 +374,7 @@ export default async function CustomersPage({
             canReport={canReport}
             canEdit={canEdit}
             canArchive={canArchive}
+            canDelete={canArchive && ctx.features.allowContactDelete}
             isActive={customer.isActive}
           />
         ) : null

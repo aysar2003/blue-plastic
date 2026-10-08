@@ -123,7 +123,7 @@ export default async function BillPaymentsPage({
                   </TableCell>
                   <EnteredByCell trail={trails.get(payment.id)} />
                   <TableCell className="print:hidden">
-                    {canVoid ? (
+                    {canVoid && ctx.features.allowDocumentDelete ? (
                       <DeleteButton
                         kind="bill-payment"
                         id={payment.id}

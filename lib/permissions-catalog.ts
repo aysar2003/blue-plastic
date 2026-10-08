@@ -100,65 +100,15 @@ export type PermissionGroup = {
   permissions: { key: Permission; label: string; hint?: string }[]
 }
 
-/** Modules shown when assigning access manually — one section per business area. */
+/**
+ * Access matrix grouped like the home Apps launcher — one section per app so
+ * inviting a user maps directly to what they will see on the dashboard.
+ */
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   {
-    id: 'organisation',
-    label: 'Organisation & people',
-    description: 'Company profile, users, and the audit trail.',
-    permissions: [
-      { key: 'org:read', label: 'View organisation' },
-      { key: 'org:update', label: 'Edit organisation settings' },
-      { key: 'user:read', label: 'View users' },
-      { key: 'user:invite', label: 'Invite users' },
-      { key: 'user:update', label: 'Change roles & suspend users' },
-      { key: 'user:remove', label: 'Remove users' },
-      { key: 'audit:read', label: 'View audit log' },
-    ],
-  },
-  {
-    id: 'ledger',
-    label: 'Ledger & periods',
-    description: 'Chart of accounts, journals, and fiscal periods.',
-    permissions: [
-      { key: 'account:read', label: 'View chart of accounts' },
-      { key: 'account:create', label: 'Create accounts' },
-      { key: 'account:update', label: 'Edit accounts' },
-      { key: 'account:archive', label: 'Archive accounts' },
-      { key: 'journal:read', label: 'View journals' },
-      { key: 'journal:create', label: 'Create journal entries' },
-      { key: 'journal:post', label: 'Post journals' },
-      { key: 'journal:reverse', label: 'Reverse journals' },
-      { key: 'period:read', label: 'View periods' },
-      { key: 'period:close', label: 'Close periods' },
-      { key: 'period:reopen', label: 'Reopen periods' },
-    ],
-  },
-  {
-    id: 'master',
-    label: 'Customers, vendors & items',
-    description: 'Master data used across sales, purchases, and stock.',
-    permissions: [
-      { key: 'customer:read', label: 'View customers' },
-      { key: 'customer:create', label: 'Create customers' },
-      { key: 'customer:update', label: 'Edit customers' },
-      { key: 'customer:archive', label: 'Archive customers' },
-      { key: 'vendor:read', label: 'View vendors' },
-      { key: 'vendor:create', label: 'Create vendors' },
-      { key: 'vendor:update', label: 'Edit vendors' },
-      { key: 'vendor:archive', label: 'Archive vendors' },
-      { key: 'item:read', label: 'View items' },
-      { key: 'item:create', label: 'Create items' },
-      { key: 'item:update', label: 'Edit items' },
-      { key: 'item:archive', label: 'Archive items' },
-      { key: 'tax:read', label: 'View tax codes' },
-      { key: 'tax:manage', label: 'Manage tax codes' },
-    ],
-  },
-  {
     id: 'pos',
-    label: 'Point of sale',
-    description: 'Tills, mobile wallets, and in-store checkout.',
+    label: 'Point of Sale',
+    description: 'Sell at the till — registers and checkout.',
     permissions: [
       { key: 'pos:read', label: 'Open POS and view registers' },
       { key: 'pos:sell', label: 'Ring up sales at the till' },
@@ -168,38 +118,52 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   {
     id: 'sales',
     label: 'Sales',
-    description: 'Invoices, estimates, receipts, credit memos, and customer payments.',
+    description: 'Invoices, quotations, receipts, and credit memos.',
     permissions: [
       { key: 'invoice:read', label: 'View sales documents' },
       { key: 'invoice:create', label: 'Create sales documents' },
       { key: 'invoice:update', label: 'Edit sales documents' },
       { key: 'invoice:void', label: 'Void / delete sales documents' },
       { key: 'invoice:send', label: 'Send sales documents' },
-      { key: 'payment:read', label: 'View customer payments' },
-      { key: 'payment:create', label: 'Record customer payments' },
-      { key: 'payment:update', label: 'Edit customer payments' },
-      { key: 'payment:void', label: 'Void customer payments' },
+    ],
+  },
+  {
+    id: 'customers',
+    label: 'Customers',
+    description: 'Who you sell to — customer list and profiles.',
+    permissions: [
+      { key: 'customer:read', label: 'View customers' },
+      { key: 'customer:create', label: 'Create customers' },
+      { key: 'customer:update', label: 'Edit customers' },
+      { key: 'customer:archive', label: 'Archive customers' },
     ],
   },
   {
     id: 'purchases',
     label: 'Purchases',
-    description: 'Bills, purchase orders, expenses, and receiving stock.',
+    description: 'Bills, purchase orders, and receiving goods.',
     permissions: [
       { key: 'bill:read', label: 'View bills & purchase orders' },
       { key: 'bill:create', label: 'Create bills & receive goods' },
       { key: 'bill:update', label: 'Edit bills & purchase orders' },
       { key: 'bill:void', label: 'Void bills & purchase orders' },
-      { key: 'expense:read', label: 'View expenses & bill payments' },
-      { key: 'expense:create', label: 'Record expenses & bill payments' },
-      { key: 'expense:update', label: 'Edit expenses & bill payments' },
-      { key: 'expense:void', label: 'Void expenses & bill payments' },
+    ],
+  },
+  {
+    id: 'vendors',
+    label: 'Vendors',
+    description: 'Who you buy from — vendor list and profiles.',
+    permissions: [
+      { key: 'vendor:read', label: 'View vendors' },
+      { key: 'vendor:create', label: 'Create vendors' },
+      { key: 'vendor:update', label: 'Edit vendors' },
+      { key: 'vendor:archive', label: 'Archive vendors' },
     ],
   },
   {
     id: 'banking',
     label: 'Banking',
-    description: 'Bank accounts, transfers, deposits, import, and reconciliation.',
+    description: 'Bank accounts, transfers, deposits, and reconciliation.',
     permissions: [
       { key: 'bank:read', label: 'View bank accounts' },
       { key: 'bank:transact', label: 'Transfers & deposits' },
@@ -208,12 +172,56 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    id: 'payments',
+    label: 'Payments',
+    description: 'Money received from customers.',
+    permissions: [
+      { key: 'payment:read', label: 'View customer payments' },
+      { key: 'payment:create', label: 'Record customer payments' },
+      { key: 'payment:update', label: 'Edit customer payments' },
+      { key: 'payment:void', label: 'Void customer payments' },
+    ],
+  },
+  {
     id: 'inventory',
-    label: 'Inventory & stores',
-    description: 'Stock levels, adjustments, transfers, and store tickets.',
+    label: 'Inventory',
+    description: 'Products, items, and stock on hand.',
+    permissions: [
+      { key: 'item:read', label: 'View items / products' },
+      { key: 'item:create', label: 'Create items' },
+      { key: 'item:update', label: 'Edit items' },
+      { key: 'item:archive', label: 'Archive items' },
+    ],
+  },
+  {
+    id: 'stores',
+    label: 'Store',
+    description: 'Quantity by warehouse, transfers, and store tickets.',
     permissions: [
       { key: 'inventory:read', label: 'View stock & stores' },
       { key: 'inventory:adjust', label: 'Adjust, transfer & prepare tickets' },
+    ],
+  },
+  {
+    id: 'accounting',
+    label: 'Accounting',
+    description: 'Chart of accounts and the ledger.',
+    permissions: [
+      { key: 'account:read', label: 'View chart of accounts' },
+      { key: 'account:create', label: 'Create accounts' },
+      { key: 'account:update', label: 'Edit accounts' },
+      { key: 'account:archive', label: 'Archive accounts' },
+    ],
+  },
+  {
+    id: 'journals',
+    label: 'Journals',
+    description: 'Manual journal entries.',
+    permissions: [
+      { key: 'journal:read', label: 'View journals' },
+      { key: 'journal:create', label: 'Create journal entries' },
+      { key: 'journal:post', label: 'Post journals' },
+      { key: 'journal:reverse', label: 'Reverse journals' },
     ],
   },
   {
@@ -223,6 +231,43 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     permissions: [
       { key: 'report:read', label: 'View reports' },
       { key: 'report:export', label: 'Export reports' },
+    ],
+  },
+  {
+    id: 'bill-payments',
+    label: 'Bill payments',
+    description: 'Money paid out — expenses and settling vendor bills.',
+    permissions: [
+      { key: 'expense:read', label: 'View expenses & bill payments' },
+      { key: 'expense:create', label: 'Record expenses & bill payments' },
+      { key: 'expense:update', label: 'Edit expenses & bill payments' },
+      { key: 'expense:void', label: 'Void expenses & bill payments' },
+    ],
+  },
+  {
+    id: 'periods',
+    label: 'Periods',
+    description: 'Close and reopen the books.',
+    permissions: [
+      { key: 'period:read', label: 'View periods' },
+      { key: 'period:close', label: 'Close periods' },
+      { key: 'period:reopen', label: 'Reopen periods' },
+    ],
+  },
+  {
+    id: 'settings',
+    label: 'Settings',
+    description: 'Organisation, users, tax, and the audit trail.',
+    permissions: [
+      { key: 'org:read', label: 'View organisation' },
+      { key: 'org:update', label: 'Edit organisation settings' },
+      { key: 'user:read', label: 'View users' },
+      { key: 'user:invite', label: 'Invite users' },
+      { key: 'user:update', label: 'Change roles & suspend users' },
+      { key: 'user:remove', label: 'Remove users' },
+      { key: 'tax:read', label: 'View tax codes' },
+      { key: 'tax:manage', label: 'Manage tax codes' },
+      { key: 'audit:read', label: 'View audit log' },
     ],
   },
 ]

@@ -2,6 +2,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { permissionsFor } from '@/server/auth/permissions'
 import { db, type Tx } from '@/server/db'
 import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
+import { DEFAULT_FEATURE_FLAGS } from '@/lib/feature-flags'
 
 class Rollback extends Error {}
 
@@ -76,6 +77,7 @@ export async function makeOrg(tx: Tx, options: { fiscalYearStartMonth?: number }
       userId: user.id,
       role: 'OWNER',
       permissions: permissionsFor('OWNER'),
+      features: DEFAULT_FEATURE_FLAGS,
       organization,
       user,
     },

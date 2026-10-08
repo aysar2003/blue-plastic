@@ -95,7 +95,7 @@ export function SetupForm() {
           <Field
             name="password"
             label="Password"
-            hint="At least 12 characters."
+            hint="At least 6 characters. Letters, numbers, and symbols are fine."
             required
             error={state.fieldErrors?.password}
           >

@@ -323,6 +323,16 @@ enum JournalStatus {
 /// What kind of business transaction produced this journal. Values beyond the
 /// first four belong to later phases and are declared now so the enum is not
 /// migrated on every subsequent phase.
+enum PosSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum PosCashMoveKind {
+  IN
+  OUT
+}
+
 enum JournalSourceType {
   MANUAL
   OPENING_BALANCE
@@ -376,11 +386,14 @@ model Organization {
 
   /// Whether stock may be sold before it has been received.
   ///
-  /// Off by default. Selling what you do not have means costing it at a price
-  /// nobody has paid, and the error only surfaces later as a margin that moves
-  /// on its own. A business that genuinely sells ahead of delivery can turn it
-  /// on and accept that costs are estimated until the goods arrive.
-  allowNegativeStock Boolean @default(false)
+  /// On by default so a till or invoice can sell ahead of a later bill — the
+  /// store goes below zero and a receipt fills it. Turn off only when the
+  /// business must refuse sales that would leave a shelf short.
+  allowNegativeStock Boolean @default(true)
+
+  /// Odoo-style Configuration switches: which deletes are offered, which apps are on.
+  /// Shape: `lib/feature-flags.ts` (`OrgFeatureFlags`). Null means defaults (all on).
+  featureFlags Json?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -421,6 +434,7 @@ model Organization {
   ledgerFiles    LedgerFile[]
   posPaymentMethods PosPaymentMethod[]
   posRegisters      PosRegister[]
+  posSessions       PosSession[]
   posOrders         PosOrder[]
 
   @@map("organizations")
@@ -1241,11 +1255,58 @@ model PosRegister {
   store           Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
   defaultCustomer Customer     @relation(fields: [defaultCustomerId], references: [id], onDelete: Restrict)
   methods         PosRegisterMethod[]
+  sessions        PosSession[]
   orders          PosOrder[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
   @@map("pos_registers")
+}
+
+/// A cash-control period on one register — open with opening float, close with counted cash.
+model PosSession {
+  id             String           @id @default(cuid())
+  orgId          String
+  registerId     String
+  status         PosSessionStatus @default(OPEN)
+
+  openedAt       DateTime @default(now()) @db.Timestamptz(6)
+  closedAt       DateTime? @db.Timestamptz(6)
+  openingCash    Decimal  @default(0) @db.Decimal(19, 4)
+  closingCash    Decimal? @db.Decimal(19, 4)
+
+  openedByUserId String
+  closedByUserId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  register     PosRegister  @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  orders       PosOrder[]
+  cashMoves    PosCashMovement[]
+
+  @@index([orgId, status, openedAt(sort: Desc)])
+  @@index([registerId, status])
+  @@map("pos_sessions")
+}
+
+/// Manual cash put into / taken from the drawer during an open session.
+model PosCashMovement {
+  id             String          @id @default(cuid())
+  orgId          String
+  sessionId      String
+  kind           PosCashMoveKind
+  amount         Decimal         @db.Decimal(19, 4)
+  reason         String?
+  createdByUserId String
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+
+  session PosSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt(sort: Desc)])
+  @@index([orgId, createdAt(sort: Desc)])
+  @@map("pos_cash_movements")
 }
 
 model PosRegisterMethod {
@@ -1264,16 +1325,19 @@ model PosOrder {
   id              String @id @default(cuid())
   orgId           String
   registerId      String
+  sessionId       String?
   salesDocumentId String @unique
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   organization  Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
   register      PosRegister       @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  session       PosSession?       @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   salesDocument SalesDocument     @relation(fields: [salesDocumentId], references: [id], onDelete: Cascade)
   payments      PosOrderPayment[]
 
   @@index([orgId, registerId, createdAt(sort: Desc)])
+  @@index([sessionId, createdAt(sort: Desc)])
   @@map("pos_orders")
 }
 

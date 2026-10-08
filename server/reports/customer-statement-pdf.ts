@@ -7,6 +7,8 @@ import {
   type StatementFilter,
 } from '@/lib/customer-statement'
 import { Decimal, formatMoney } from '@/lib/money'
+import { ODOO_PDF } from '@/lib/odoo-brand'
+import { odooPdfLetterhead, odooPdfTableHead } from '@/lib/odoo-pdf'
 import { buildTextPdf, type PdfRow } from '@/lib/pdf-text'
 import type { StatementEntry } from '@/server/services/receivables.service'
 
@@ -31,7 +33,7 @@ export type StatementPdfInput = {
 }
 
 /**
- * The statement as a PDF file, the same rows the screen is showing.
+ * The statement as a PDF file, the same rows the screen is showing — Odoo letterhead.
  */
 export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array {
   const money = (value: Decimal.Value) => formatMoney(value, input.currency)
@@ -40,16 +42,21 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
     rows.push({
       size: options.size ?? 10,
       height: options.height ?? 14,
-      runs: [{ text, x: options.x ?? 40, bold: options.bold }],
+      runs: [{ text, x: options.x ?? 40, bold: options.bold, color: ODOO_PDF.ink }],
     })
   }
 
-  line(input.orgName, { bold: true, size: 14, height: 18 })
-  for (const part of input.orgAddress) line(part, { size: 9, height: 12 })
-  if (input.orgPhone) line(`Phone ${input.orgPhone}`, { size: 9, height: 12 })
-  if (input.orgEmail) line(`Email ${input.orgEmail}`, { size: 9, height: 12 })
-  line('Customer statement', { bold: true, size: 12, height: 16 })
-  line(input.customerName, { bold: true })
+  rows.push(
+    ...odooPdfLetterhead({
+      orgName: input.orgName,
+      orgAddress: input.orgAddress,
+      orgPhone: input.orgPhone,
+      orgEmail: input.orgEmail,
+      title: 'Customer statement',
+      subtitle: input.customerName,
+    }),
+  )
+
   for (const part of input.address) line(part, { size: 9, height: 12 })
   if (input.email) line(input.email, { size: 9, height: 12 })
   line(`${formatDate(input.from)} to ${formatDate(input.to)}`, { size: 9, height: 16 })
@@ -72,12 +79,7 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
     input.ledger ? 'Balance' : 'Balance due',
   ]
   const xs = [40, 95, 165, 300, 370, 440, 510]
-  rows.push({
-    size: 8,
-    height: 16,
-    rule: true,
-    runs: head.map((label, index) => ({ text: label, x: xs[index]!, bold: true })),
-  })
+  rows.push(odooPdfTableHead(head.map((label, index) => ({ text: label, x: xs[index]! }))))
 
   if (input.ledger) {
     rows.push(amountRow(['', '', 'Balance brought forward', '', '', '', input.opening], xs, true))
@@ -101,10 +103,10 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
         size: 8,
         height: 12,
         runs: [
-          { text: 'Name', x: 110, bold: true },
-          { text: 'Qty', x: 320, bold: true },
-          { text: 'Price', x: 370, bold: true },
-          { text: 'Amount', x: 450, bold: true },
+          { text: 'Name', x: 110, bold: true, color: ODOO_PDF.purple },
+          { text: 'Qty', x: 320, bold: true, color: ODOO_PDF.purple },
+          { text: 'Price', x: 370, bold: true, color: ODOO_PDF.purple },
+          { text: 'Amount', x: 450, bold: true, color: ODOO_PDF.purple },
         ],
       })
       for (const item of entry.lines) {
@@ -112,20 +114,29 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
           size: 8,
           height: 12,
           runs: [
-            { text: clip(item.description, 42), x: 110 },
-            { text: item.quantity ? plainQty(item.quantity) : '', x: 320 },
-            { text: item.rate ? money(item.rate) : '', x: 370 },
-            { text: money(item.amount), x: 450 },
+            { text: clip(item.description, 42), x: 110, color: ODOO_PDF.ink },
+            { text: item.quantity ? plainQty(item.quantity) : '', x: 320, color: ODOO_PDF.ink },
+            { text: item.rate ? money(item.rate) : '', x: 370, color: ODOO_PDF.ink },
+            { text: money(item.amount), x: 450, color: ODOO_PDF.ink },
           ],
         })
       }
     }
   }
 
-  line(input.ledger ? `Amount due ${input.closing}` : `Rows shown ${input.entries.length}`, {
-    bold: true,
+  rows.push({
     size: 10,
     height: 22,
+    fill: ODOO_PDF.purpleSoft,
+    fillInset: 36,
+    runs: [
+      {
+        text: input.ledger ? `Amount due ${input.closing}` : `Rows shown ${input.entries.length}`,
+        x: 40,
+        bold: true,
+        color: ODOO_PDF.purple,
+      },
+    ],
   })
 
   return buildTextPdf(rows)
@@ -135,7 +146,7 @@ function amountRow(cells: string[], xs: number[], bold: boolean): PdfRow {
   return {
     size: 8,
     height: 13,
-    runs: cells.map((text, index) => ({ text, x: xs[index]!, bold })),
+    runs: cells.map((text, index) => ({ text, x: xs[index]!, bold, color: ODOO_PDF.ink })),
   }
 }
 

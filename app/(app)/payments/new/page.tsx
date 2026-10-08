@@ -30,10 +30,7 @@ export default async function NewPaymentPage({
   return (
     <>
 
-      <PageHeader
-        title="Receive payment"
-        description="Money in, receivables down. Anything you do not apply stays as a credit on the customer's account."
-      />
+      <PageHeader title="Receive payment" className="mb-2 pb-2" />
 
       <PaymentForm
         customers={options.customers}

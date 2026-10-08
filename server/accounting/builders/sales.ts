@@ -158,13 +158,9 @@ export function buildCreditMemoJournal(input: SalesJournalInput): DraftJournal {
  *
  *   Dr Income (per line)          net
  *   Dr Sales Tax Payable          tax
- *     Cr Bank                       total
+ *     Cr Bank / till accounts        total  (one line, or split payments)
  */
 export function buildRefundReceiptJournal(input: SalesJournalInput): DraftJournal {
-  if (!input.depositAccountId) {
-    throw new Error('A refund must say which account the money came out of.')
-  }
-
   return {
     date: input.date,
     memo: input.memo ?? `Refund ${input.number}`,
@@ -174,13 +170,36 @@ export function buildRefundReceiptJournal(input: SalesJournalInput): DraftJourna
       ...discountLines(input, 'credit'),
       ...incomeLines(input, 'debit'),
       ...taxLines(input, 'debit'),
-      {
-        accountId: input.depositAccountId,
-        credit: input.priced.total,
-        description: `Refund ${input.number}`,
-      },
+      ...refundDepositLines(input),
     ],
   }
+}
+
+function refundDepositLines(input: SalesJournalInput) {
+  const splits = input.paymentSplits?.filter((split) => !new Decimal(split.amount).isZero()) ?? []
+  if (splits.length > 0) {
+    const total = splits.reduce((sum, split) => sum.plus(split.amount), new Decimal(0))
+    if (!total.equals(input.priced.total)) {
+      throw new Error('Split refund payments must add up to the refund total.')
+    }
+    return splits.map((split) => ({
+      accountId: split.accountId,
+      credit: split.amount,
+      description: split.description ?? `Refund ${input.number}`,
+    }))
+  }
+
+  if (!input.depositAccountId) {
+    throw new Error('A refund must say which account the money came out of.')
+  }
+
+  return [
+    {
+      accountId: input.depositAccountId,
+      credit: input.priced.total,
+      description: `Refund ${input.number}`,
+    },
+  ]
 }
 
 /**

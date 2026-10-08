@@ -16,6 +16,7 @@ import {
 import { action } from '@/server/action'
 import * as paymentService from '@/server/services/payment.service'
 import * as salesService from '@/server/services/sales.service'
+import { assertDocumentDeleteAllowed } from '@/server/feature-guards'
 
 function revalidateSales() {
   revalidatePath('/sales')
@@ -74,6 +75,7 @@ export const deleteDocument = action
   .requires('invoice:void')
   .input(deleteRecordSchema)
   .handler(async (ctx, input) => {
+    assertDocumentDeleteAllowed(ctx)
     const document = await salesService.remove(ctx, input.id, input.reason)
     revalidateSales()
     revalidatePath('/reports')
@@ -131,6 +133,7 @@ export const deletePayment = action
   .requires('payment:void')
   .input(deleteRecordSchema)
   .handler(async (ctx, input) => {
+    assertDocumentDeleteAllowed(ctx)
     const payment = await paymentService.remove(ctx, input.id, input.reason)
     revalidateSales()
     revalidatePath('/banking/accounts')

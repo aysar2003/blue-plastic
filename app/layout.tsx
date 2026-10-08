@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
+import { Geist, Geist_Mono, Inter } from "next/font/google"
 
 import { Providers } from "@/components/providers"
 import "./globals.css"
@@ -7,6 +7,8 @@ import { Analytics } from "@vercel/analytics/next"
 
 const sans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
 const mono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] })
+/** Odoo brand typeface — applied when the Odoo / Odoo Dark theme is selected. */
+const inter = Inter({ variable: "--font-odoo", subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: {
@@ -23,7 +25,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${sans.variable} ${mono.variable} antialiased`}>
+      <body className={`${sans.variable} ${mono.variable} ${inter.variable} antialiased`}>
         <Providers>
           <Analytics />
           {children}

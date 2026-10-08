@@ -3,12 +3,22 @@
 import { revalidatePath } from 'next/cache'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
-import { posCheckoutSchema, posPaymentMethodSchema, posRegisterSchema } from '@/lib/validation/pos'
+import {
+  posCashMoveSchema,
+  posCheckoutSchema,
+  posCloseSessionSchema,
+  posOpenSessionSchema,
+  posPaymentMethodSchema,
+  posRefundSchema,
+  posRegisterSchema,
+} from '@/lib/validation/pos'
 import { action } from '@/server/action'
 import * as posService from '@/server/services/pos.service'
 
 function revalidatePos() {
   revalidatePath('/pos')
+  revalidatePath('/pos/orders')
+  revalidatePath('/pos/sessions')
   revalidatePath('/pos/settings')
   revalidatePath('/sales/sales-receipts')
   revalidatePath('/accounts')
@@ -20,6 +30,43 @@ export const posCheckout = action
   .handler(async (ctx, input) => {
     const result = await posService.checkout(ctx, input)
     revalidatePos()
+    return result
+  })
+
+export const openPosSession = action
+  .requires('pos:sell')
+  .input(posOpenSessionSchema)
+  .handler(async (ctx, input) => {
+    const session = await posService.openSession(ctx, input)
+    revalidatePos()
+    return session
+  })
+
+export const closePosSession = action
+  .requires('pos:sell')
+  .input(posCloseSessionSchema)
+  .handler(async (ctx, input) => {
+    const session = await posService.closeSession(ctx, input)
+    revalidatePos()
+    return session
+  })
+
+export const recordPosCashMove = action
+  .requires('pos:sell')
+  .input(posCashMoveSchema)
+  .handler(async (ctx, input) => {
+    const move = await posService.recordCashMove(ctx, input)
+    revalidatePos()
+    return move
+  })
+
+export const posRefund = action
+  .requires('pos:sell')
+  .input(posRefundSchema)
+  .handler(async (ctx, input) => {
+    const result = await posService.refundOrder(ctx, input)
+    revalidatePos()
+    revalidatePath('/sales/refunds')
     return result
   })
 
@@ -45,7 +92,15 @@ export async function savePosPaymentMethodForm(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  return toFormState(await savePosPaymentMethod(formValues(formData)), 'Payment method saved.')
+  const values = formValues(formData)
+  return toFormState(
+    await savePosPaymentMethod({
+      ...values,
+      // Unchecked checkboxes are omitted from FormData — treat missing as off.
+      isActive: formData.get('isActive') === 'true',
+    }),
+    'Payment method saved.',
+  )
 }
 
 export async function savePosRegisterForm(_prev: FormState, formData: FormData): Promise<FormState> {

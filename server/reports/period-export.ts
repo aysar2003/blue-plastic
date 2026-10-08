@@ -7,6 +7,7 @@ import { MONTHS } from '@/lib/constants'
 import { formatDate, toCalendarDate } from '@/lib/date'
 import { letterheadOf, type LetterheadSource } from '@/lib/letterhead'
 import { formatMoney } from '@/lib/money'
+import { ODOO_PDF } from '@/lib/odoo-brand'
 import { buildTextPdf, type PdfRow } from '@/lib/pdf-text'
 import type { JournalRow } from '@/server/services/journal.service'
 
@@ -55,11 +56,42 @@ export function renderMonthPdf(input: MonthExport): Uint8Array {
   }
 
   const [name, ...rest] = companyHeader(input.org)
-  centre(name ?? input.org.name, { bold: true, size: 16, height: 22 })
-  for (const line of rest) centre(line, { size: 9, height: 12 })
-  header.push({ height: 8, runs: [] })
-  centre(input.label, { bold: true, size: 13, height: 18 })
-  centre(`${formatDate(input.from)} to ${formatDate(input.to)}`, { size: 9, height: 13 })
+  header.push({
+    size: 14,
+    height: 26,
+    fill: ODOO_PDF.purple,
+    fillInset: 0,
+    runs: [{ text: name ?? input.org.name, align: 'center', bold: true, color: [1, 1, 1] }],
+  })
+  for (const line of rest) {
+    header.push({
+      size: 9,
+      height: 12,
+      fill: ODOO_PDF.purple,
+      fillInset: 0,
+      runs: [{ text: line, align: 'center', color: [1, 1, 1] }],
+    })
+  }
+  header.push({
+    size: 12,
+    height: 20,
+    fill: ODOO_PDF.purple,
+    fillInset: 0,
+    runs: [{ text: input.label, align: 'center', bold: true, color: [1, 1, 1] }],
+  })
+  header.push({
+    size: 9,
+    height: 14,
+    fill: ODOO_PDF.purple,
+    fillInset: 0,
+    runs: [
+      {
+        text: `${formatDate(input.from)} to ${formatDate(input.to)}`,
+        align: 'center',
+        color: [1, 1, 1],
+      },
+    ],
+  })
   if (input.income && input.expenses && input.net) {
     centre(`Income ${input.income}    Expenses ${input.expenses}    Net income ${input.net}`, {
       bold: true,
@@ -71,9 +103,15 @@ export function renderMonthPdf(input: MonthExport): Uint8Array {
   header.push({
     size: 8,
     height: 14,
-    rule: true,
+    fill: ODOO_PDF.purpleSoft,
+    fillInset: 24,
     runs: ['Entry', 'Date', 'Description', 'Source', 'Document', 'Customer / vendor', 'Amount'].map(
-      (label, index) => ({ text: label, x: COLUMNS[index], bold: true }),
+      (label, index) => ({
+        text: label,
+        x: COLUMNS[index],
+        bold: true,
+        color: ODOO_PDF.purple,
+      }),
     ),
   })
 

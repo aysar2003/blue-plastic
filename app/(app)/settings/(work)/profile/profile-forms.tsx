@@ -56,7 +56,7 @@ export function PasswordForm() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Password</CardTitle>
-          <CardDescription>At least 12 characters.</CardDescription>
+          <CardDescription>At least 6 characters. Letters, numbers, and symbols are fine.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <FormStatus state={state} />

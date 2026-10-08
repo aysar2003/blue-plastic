@@ -46,12 +46,15 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import type { AccountPickerOption } from '@/lib/account-options'
 import {
+  DEFAULT_INVOICE_FORM_TEMPLATE,
   DEFAULT_SALES_FORM_TEMPLATE,
+  DEFAULT_SALES_RECEIPT_FORM_TEMPLATE,
   INVOICE_FORM_TEMPLATES,
   INVOICE_FORM_TEMPLATE_STORAGE_KEY,
   isInvoiceFormTemplateId,
   isSalesFormTemplateId,
   isSalesReceiptFormTemplateId,
+  PRINT_SHEET_SALES_TYPES,
   SALES_FORM_TEMPLATE_STORAGE_KEY,
   SALES_FORM_TEMPLATES,
   SALES_RECEIPT_FORM_TEMPLATES,
@@ -66,8 +69,16 @@ import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
 import { defaultLineRows, type SalesTypeConfig } from '@/lib/sales-types'
 import { cn } from '@/lib/utils'
 import { LineStore } from '@/components/inventory/line-store'
+import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { SheetMarks } from '@/components/sales/sheet-marks'
-import { officeStoreId, type StockByStore, type StoreChoice } from '@/lib/store-stock'
+import { CUSTOMER_CREDIT, FORM_SHEET } from '@/lib/credit-brand'
+import {
+  negativeStockWarning,
+  officeStoreId,
+  type StockByStore,
+  type StockWarning,
+  type StoreChoice,
+} from '@/lib/store-stock'
 import { findSalesReceipts, saveDocumentForm } from '@/app/(app)/sales/actions'
 
 export type ItemOption = {
@@ -212,8 +223,9 @@ export function DocumentForm({
     initialStoreId && stores.some((store) => store.id === initialStoreId) ? initialStoreId : officeId
   const router = useRouter()
   const [state, formAction] = useActionState(saveDocumentForm, idleState)
-  // Quotation uses the same sheet and template choice as invoice — one form,
-  // one look — so switching between the two does not rearrange the page.
+  // Invoice, quotation, sales receipt, credit, and refund share the print sheet —
+  // the same paper POS and the counter print. No template picker on those.
+  const usesPrintSheet = (PRINT_SHEET_SALES_TYPES as readonly string[]).includes(config.type)
   const usesInvoiceSheet = config.type === 'INVOICE' || config.type === 'ESTIMATE'
   const templateKey = usesInvoiceSheet
     ? INVOICE_FORM_TEMPLATE_STORAGE_KEY
@@ -221,7 +233,13 @@ export function DocumentForm({
       ? SALES_RECEIPT_FORM_TEMPLATE_STORAGE_KEY
       : SALES_FORM_TEMPLATE_STORAGE_KEY
   const [template, setTemplate] = useState<FormTemplateId>(
-    usesInvoiceSheet || config.type === 'SALES_RECEIPT' ? 'invoice' : DEFAULT_SALES_FORM_TEMPLATE,
+    usesPrintSheet
+      ? 'sheet'
+      : usesInvoiceSheet
+        ? DEFAULT_INVOICE_FORM_TEMPLATE
+        : config.type === 'SALES_RECEIPT'
+          ? DEFAULT_SALES_RECEIPT_FORM_TEMPLATE
+          : DEFAULT_SALES_FORM_TEMPLATE,
   )
   const savedDiscount = Number(document?.discountAmount ?? 0)
   const liftedPercent =
@@ -264,7 +282,18 @@ export function DocumentForm({
 
   useEffect(() => setNumber(documentNumber), [documentNumber])
 
+  // Start on the customer name so Tab walks the form without the mouse.
   useEffect(() => {
+    if (customerId) return
+    const timer = window.setTimeout(() => window.document.getElementById('customerId')?.focus(), 0)
+    return () => window.clearTimeout(timer)
+  }, [customerId])
+
+  useEffect(() => {
+    if (usesPrintSheet) {
+      setTemplate('sheet')
+      return
+    }
     try {
       const stored = window.localStorage.getItem(templateKey)
       const known =
@@ -277,15 +306,16 @@ export function DocumentForm({
     } catch {
       // Private mode — keep the default.
     }
-  }, [templateKey, config.type, usesInvoiceSheet])
+  }, [templateKey, config.type, usesInvoiceSheet, usesPrintSheet])
 
   useEffect(() => {
+    if (usesPrintSheet) return
     try {
       window.localStorage.setItem(templateKey, template)
     } catch {
       // Ignore quota / private mode.
     }
-  }, [template, templateKey])
+  }, [template, templateKey, usesPrintSheet])
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
@@ -329,6 +359,45 @@ export function DocumentForm({
       })),
     [items],
   )
+  /**
+   * Line key → amber note when this sale takes a store to or below zero. Uses the
+   * per-store stock already loaded for the store picker; no extra queries. Only
+   * invoices and sales receipts move stock. Earlier lines for the same item and
+   * store count first, and on edit this document's own saved lines are added
+   * back (they are already in the figures).
+   */
+  const stockWarnings = useMemo(() => {
+    const out: Record<number, StockWarning> = {}
+    if (config.type !== 'INVOICE' && config.type !== 'SALES_RECEIPT') return out
+    const tracked = new Set(trackedIds)
+    const keyFor = (itemId: string, storeId: string | null | undefined) =>
+      `${itemId}|${stores.length > 0 ? storeId || officeId : ''}`
+    const ownSaved = new Map<string, number>()
+    if (document?.id) {
+      for (const saved of document.lines) {
+        if (!saved.itemId) continue
+        const key = keyFor(saved.itemId, saved.storeId)
+        ownSaved.set(key, (ownSaved.get(key) ?? 0) + (Number(saved.quantity) || 0))
+      }
+    }
+    const taken = new Map<string, number>()
+    for (const line of lines) {
+      if (!line.itemId || !tracked.has(line.itemId)) continue
+      const storeId = line.storeId || officeId
+      const key = keyFor(line.itemId, storeId)
+      const recorded =
+        stores.length > 0
+          ? Number(stock[line.itemId]?.[storeId] ?? '0')
+          : Number(itemById.get(line.itemId)?.onHand ?? Number.NaN)
+      const before = recorded + (ownSaved.get(key) ?? 0) - (taken.get(key) ?? 0)
+      const qty = Number(line.quantity)
+      const storeName = stores.find((store) => store.id === storeId)?.name ?? ''
+      const warning = negativeStockWarning(before, qty, storeName)
+      if (warning) out[line.key] = warning
+      if (Number.isFinite(qty) && qty > 0) taken.set(key, (taken.get(key) ?? 0) + qty)
+    }
+    return out
+  }, [config.type, trackedIds, stores, officeId, document, lines, stock, itemById])
   const taxById = useMemo(() => new Map(taxCodes.map((code) => [code.id, code])), [taxCodes])
   const showTax = taxCodes.length > 0
 
@@ -487,6 +556,7 @@ export function DocumentForm({
     stores,
     stock,
     trackedIds,
+    stockWarnings,
     update,
     chooseItem,
     addLine,
@@ -506,7 +576,7 @@ export function DocumentForm({
     <form
       action={formAction}
       className={
-        config.type === 'SALES_RECEIPT' ? 'mx-auto w-full max-w-5xl space-y-4' : 'space-y-4'
+        config.type === 'SALES_RECEIPT' ? 'mx-auto w-full max-w-5xl space-y-2' : 'space-y-2'
       }
     >
       <input type="hidden" name="payload" value={payloadFor(saveAsDraft)} />
@@ -524,18 +594,18 @@ export function DocumentForm({
         />
       ) : null}
 
-      {usesInvoiceSheet ? (
+      {usesPrintSheet ? null : usesInvoiceSheet ? (
         <TemplateMenu options={INVOICE_FORM_TEMPLATES} value={template} onChange={setTemplate} />
       ) : config.type === 'SALES_RECEIPT' ? (
         <TemplateMenu options={SALES_RECEIPT_FORM_TEMPLATES} value={template} onChange={setTemplate} />
       ) : (
         <TemplatePicker value={template as SalesFormTemplateId} onChange={setTemplate} />
       )}
-      {template === 'invoice' ? <InvoiceLayout {...shared} /> : null}
-      {template === 'classic' ? <ClassicLayout {...shared} /> : null}
-      {template === 'service' ? <ServiceLayout {...shared} /> : null}
-      {template === 'modern' ? <ModernLayout {...shared} /> : null}
-      {template === 'sheet' ? <SheetLayout {...shared} /> : null}
+      {usesPrintSheet || template === 'sheet' ? <SheetLayout {...shared} /> : null}
+      {!usesPrintSheet && template === 'invoice' ? <InvoiceLayout {...shared} /> : null}
+      {!usesPrintSheet && template === 'classic' ? <ClassicLayout {...shared} /> : null}
+      {!usesPrintSheet && template === 'service' ? <ServiceLayout {...shared} /> : null}
+      {!usesPrintSheet && template === 'modern' ? <ModernLayout {...shared} /> : null}
 
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
         <Button type="button" variant="outline" onClick={() => router.push(`/sales/${config.slug}`)}>
@@ -564,7 +634,6 @@ export function DocumentForm({
         </SubmitButton>
       </div>
 
-      <p className="text-right text-xs text-muted-foreground print:hidden">{config.effect}</p>
     </form>
   )
 }
@@ -739,6 +808,8 @@ type LayoutProps = {
   stores: StoreChoice[]
   stock: StockByStore
   trackedIds: string[]
+  /** Line key → negative-stock note (information only, never blocks). */
+  stockWarnings: Record<number, StockWarning>
   update: (key: number, patch: Partial<Line>) => void
   chooseItem: (key: number, itemId: string) => void
   addLine: () => void
@@ -762,89 +833,116 @@ function HeaderFields({
 }) {
   void quantityLabel
   const { config, state, customers, depositAccounts, terms, today } = props
+  const customer = customers.find((row) => row.id === props.customerId)
+  const termId = props.paymentTermId || customer?.paymentTermId || ''
+  const term = terms.find((row) => row.id === termId)
+  const due =
+    isCalendarDate(props.date)
+      ? dueDateFor(props.date, term ? { type: term.type, dueDays: term.dueDays } : null)
+      : props.date
+  const showDue =
+    config.type === 'INVOICE' || config.type === 'CREDIT_MEMO' || config.type === 'ESTIMATE'
+  const dueLabel = config.type === 'ESTIMATE' ? 'Valid until' : 'Due date'
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <LockedNumber
-        label={`${config.singular} number`}
-        value={props.number}
-        onChange={props.setNumber}
-        error={state.fieldErrors?.number}
-        recordId={props.recordId}
-      />
-
-      <Field name="reference" label="PO number" error={state.fieldErrors?.reference}>
-        <Input
-          {...fieldProps('reference', state.fieldErrors?.reference)}
-          value={props.reference}
-          onChange={(event) => props.setReference(event.target.value)}
-          placeholder="Customer PO"
-        />
-      </Field>
-
-      <Field name="date" label="Date" required error={state.fieldErrors?.date}>
-        <DateField
-          id="date"
-          value={props.date}
-          onChange={props.setDate}
-          today={today}
-          required
-          aria-invalid={state.fieldErrors?.date ? true : undefined}
-        />
-      </Field>
-
-      <Field name="customerId" label="Customer" required error={state.fieldErrors?.customerId}>
-        <EntityPicker
-          id="customerId"
-          kind="customer"
-          options={customers}
-          value={props.customerId || null}
-          onChange={(next) => props.setCustomerId(next ?? '')}
-          placeholder="Search or add a customer"
-          required
-          error={state.fieldErrors?.customerId}
-        />
-      </Field>
-
-      {config.type === 'INVOICE' ? (
-        <Field
-          name="paymentTermId"
-          label="Terms"
-          hint="Sets the due date from this document's own date."
-          error={state.fieldErrors?.paymentTermId}
-        >
-          <NativeSelect
-            {...fieldProps('paymentTermId', state.fieldErrors?.paymentTermId, true)}
-            value={props.paymentTermId}
-            onChange={(event) => props.setPaymentTermId(event.target.value)}
-          >
-            <option value="">Customer&rsquo;s default</option>
-            {terms.map((term) => (
-              <option key={term.id} value={term.id}>
-                {term.label}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-      ) : null}
-
-      {config.needsDeposit ? (
-        <Field
-          name="depositAccountId"
-          label={config.type === 'REFUND_RECEIPT' ? 'Paid from' : 'Deposit to'}
-          required
-          error={state.fieldErrors?.depositAccountId}
-        >
-          <AccountPicker
-            id="depositAccountId"
-            options={depositAccounts}
-            value={props.depositAccountId || null}
-            onChange={(next) => props.setDepositAccountId(next ?? '')}
+    <div className="space-y-2.5">
+      {/* Odoo-style: Customer name first, then date / number / due / PO */}
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]">
+        <Field name="customerId" label="Customer name" required error={state.fieldErrors?.customerId}>
+          <EntityPicker
+            id="customerId"
+            kind="customer"
+            options={customers}
+            value={props.customerId || null}
+            onChange={(next) => {
+              const id = next ?? ''
+              props.setCustomerId(id)
+              const chosen = customers.find((row) => row.id === id)
+              if (chosen?.paymentTermId) props.setPaymentTermId(chosen.paymentTermId)
+            }}
+            placeholder="Search or add a customer"
             required
-            error={state.fieldErrors?.depositAccountId}
+            error={state.fieldErrors?.customerId}
           />
         </Field>
-      ) : null}
+
+        <Field name="date" label="Date" required error={state.fieldErrors?.date}>
+          <DateField
+            id="date"
+            value={props.date}
+            onChange={props.setDate}
+            today={today}
+            required
+            aria-invalid={state.fieldErrors?.date ? true : undefined}
+          />
+        </Field>
+
+        <LockedNumber
+          label={`${config.singular} no.`}
+          value={props.number}
+          onChange={props.setNumber}
+          error={state.fieldErrors?.number}
+          recordId={props.recordId}
+        />
+
+        {showDue ? (
+          <Field name="dueDate" label={dueLabel}>
+            <Input id="dueDate" value={isCalendarDate(due) ? formatDate(due) : ''} readOnly />
+          </Field>
+        ) : null}
+
+        <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
+          <Input
+            {...fieldProps('reference', state.fieldErrors?.reference)}
+            value={props.reference}
+            onChange={(event) => props.setReference(event.target.value)}
+            placeholder="PO number"
+          />
+        </Field>
+      </div>
+
+      {(config.type === 'INVOICE' || config.needsDeposit) && (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {config.type === 'INVOICE' ? (
+            <Field
+              name="paymentTermId"
+              label="Terms"
+              error={state.fieldErrors?.paymentTermId}
+            >
+              <NativeSelect
+                {...fieldProps('paymentTermId', state.fieldErrors?.paymentTermId, true)}
+                value={props.paymentTermId}
+                onChange={(event) => props.setPaymentTermId(event.target.value)}
+              >
+                <option value="">Customer&rsquo;s default</option>
+                {terms.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+          ) : null}
+
+          {config.needsDeposit ? (
+            <Field
+              name="depositAccountId"
+              label={config.type === 'REFUND_RECEIPT' ? 'Paid from' : 'Deposit to'}
+              required
+              error={state.fieldErrors?.depositAccountId}
+            >
+              <AccountPicker
+                id="depositAccountId"
+                options={depositAccounts}
+                value={props.depositAccountId || null}
+                onChange={(next) => props.setDepositAccountId(next ?? '')}
+                required
+                error={state.fieldErrors?.depositAccountId}
+              />
+            </Field>
+          ) : null}
+        </div>
+      )}
     </div>
   )
 }
@@ -909,8 +1007,8 @@ function TotalsBlock({ props }: { props: LayoutProps }) {
 
 function NotesFields({ props }: { props: LayoutProps }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <Field name="customerMessage" label="Message on the document" error={props.state.fieldErrors?.customerMessage}>
+    <div className="grid gap-2 sm:grid-cols-2">
+      <Field name="customerMessage" label="Message" error={props.state.fieldErrors?.customerMessage}>
         <Input
           {...fieldProps('customerMessage', props.state.fieldErrors?.customerMessage)}
           value={props.customerMessage}
@@ -918,16 +1016,12 @@ function NotesFields({ props }: { props: LayoutProps }) {
           placeholder="Thank you for your business"
         />
       </Field>
-      <Field name="memo" label="Memo" hint="Write an explanation. It stays on the receipt and is not printed for the customer." error={props.state.fieldErrors?.memo}>
-        <textarea
-          id="memo"
-          name="memo"
-          rows={3}
+      <Field name="memo" label="Memo" error={props.state.fieldErrors?.memo}>
+        <Input
+          {...fieldProps('memo', props.state.fieldErrors?.memo)}
           value={props.memo}
           onChange={(event) => props.setMemo(event.target.value)}
-          placeholder="Write an explanation"
-          aria-invalid={props.state.fieldErrors?.memo ? true : undefined}
-          className="flex min-h-20 w-full rounded-md border border-input bg-card px-2.5 py-2 text-[0.8125rem] transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
+          placeholder="Internal note"
         />
       </Field>
     </div>
@@ -946,12 +1040,12 @@ function InvoiceLayout(props: LayoutProps) {
 
   return (
     <Card className="overflow-hidden bg-white p-0">
-      <CardContent className="space-y-5 p-4 sm:p-6">
+      <CardContent className="space-y-3 p-3 sm:p-4">
         <FormStatus state={state} />
 
-        <div className="flex flex-wrap items-start justify-between gap-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <PartyInfo>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               <Field name="customerId" label="Customer" required error={state.fieldErrors?.customerId}>
                 <EntityPicker
                   id="customerId"
@@ -973,10 +1067,12 @@ function InvoiceLayout(props: LayoutProps) {
                 <Input id="customerEmail" value={customer?.email ?? ''} readOnly placeholder="No email on this customer" />
               </Field>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <AddressBox label="Billing address" value={customer?.billingAddress ?? ''} empty="No billing address" />
-              <AddressBox label="Shipping address" value={customer?.shippingAddress ?? ''} empty="No shipping address" />
-            </div>
+            {customer?.billingAddress || customer?.shippingAddress ? (
+              <div className="grid gap-2 md:grid-cols-2">
+                <AddressBox label="Billing address" value={customer?.billingAddress ?? ''} empty="No billing address" />
+                <AddressBox label="Shipping address" value={customer?.shippingAddress ?? ''} empty="No shipping address" />
+              </div>
+            ) : null}
           </PartyInfo>
           <div className="text-right">
             <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -986,7 +1082,7 @@ function InvoiceLayout(props: LayoutProps) {
                   ? 'Total'
                   : 'Balance due'}
             </p>
-            <p className="text-2xl font-semibold tabular text-primary">{formatMoney(props.totals.total, props.currency)}</p>
+            <p className="text-xl font-semibold tabular text-primary">{formatMoney(props.totals.total, props.currency)}</p>
           </div>
         </div>
 
@@ -1000,7 +1096,7 @@ function InvoiceLayout(props: LayoutProps) {
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Field name="date" label={`${props.config.singular} date`} required error={state.fieldErrors?.date}>
+          <Field name="date" label="Date" required error={state.fieldErrors?.date}>
             <DateField
               id="date"
               value={props.date}
@@ -1008,6 +1104,26 @@ function InvoiceLayout(props: LayoutProps) {
               today={today}
               required
               aria-invalid={state.fieldErrors?.date ? true : undefined}
+            />
+          </Field>
+          <LockedNumber
+            label={`${props.config.singular} no.`}
+            value={props.number}
+            onChange={props.setNumber}
+            error={state.fieldErrors?.number}
+            recordId={props.recordId}
+          />
+          {props.config.needsDeposit ? null : (
+            <Field name="dueDate" label={props.config.type === 'ESTIMATE' ? 'Valid until' : 'Due date'}>
+              <Input id="dueDate" value={isCalendarDate(due) ? formatDate(due) : ''} readOnly />
+            </Field>
+          )}
+          <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
+            <Input
+              {...fieldProps('reference', state.fieldErrors?.reference)}
+              value={props.reference}
+              onChange={(event) => props.setReference(event.target.value)}
+              placeholder="PO number"
             />
           </Field>
           {props.config.needsDeposit ? (
@@ -1042,25 +1158,6 @@ function InvoiceLayout(props: LayoutProps) {
               </NativeSelect>
             </Field>
           )}
-          {props.config.needsDeposit ? null : (
-            <Field name="dueDate" label={props.config.type === 'ESTIMATE' ? 'Valid until' : 'Due date'}>
-              <Input id="dueDate" value={isCalendarDate(due) ? formatDate(due) : ''} readOnly />
-            </Field>
-          )}
-          <LockedNumber
-            label={`${props.config.singular} no.`}
-            value={props.number}
-            onChange={props.setNumber}
-            error={state.fieldErrors?.number}
-            recordId={props.recordId}
-          />
-          <Field name="reference" label="P.O. number" error={state.fieldErrors?.reference}>
-            <Input
-              {...fieldProps('reference', state.fieldErrors?.reference)}
-              value={props.reference}
-              onChange={(event) => props.setReference(event.target.value)}
-            />
-          </Field>
         </div>
 
         <InvoiceLines props={props} />
@@ -1129,9 +1226,9 @@ function InvoiceLayout(props: LayoutProps) {
 
 function AddressBox({ label, value, empty }: { label: string; value: string; empty: string }) {
   return (
-    <div className="space-y-1.5">
-      <p className="text-sm font-medium">{label}</p>
-      <div className="min-h-24 whitespace-pre-line rounded-md border bg-white px-3 py-2 text-sm text-slate-700">
+    <div className="space-y-1">
+      <p className="text-xs font-medium">{label}</p>
+      <div className="max-h-16 overflow-hidden whitespace-pre-line rounded-md border bg-white px-2 py-1.5 text-xs text-slate-700">
         {value || <span className="text-muted-foreground">{empty}</span>}
       </div>
     </div>
@@ -1169,6 +1266,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                     placeholder="Item"
                     clearable
                   />
+                  <StockWarningNote warning={props.stockWarnings[line.key]} />
                 </td>
                 <td className="px-1 py-1">
                   <Input
@@ -1219,6 +1317,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                     type="button"
                     variant="ghost"
                     size="icon-sm"
+                    tabIndex={-1}
                     aria-label={`Clear line ${index + 1}`}
                     onClick={() => props.removeLine(line.key)}
                   >
@@ -1238,22 +1337,57 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
 }
 
 function SheetLayout(props: LayoutProps) {
+  const credit = props.config.type === 'CREDIT_MEMO'
+  const accent = credit ? CUSTOMER_CREDIT.accent : FORM_SHEET.accent
+  const wash = credit ? CUSTOMER_CREDIT.wash : FORM_SHEET.wash
+  const marks = credit
+    ? {
+        markA: CUSTOMER_CREDIT.markA,
+        markB: CUSTOMER_CREDIT.markB,
+        markC: CUSTOMER_CREDIT.markC,
+        markD: CUSTOMER_CREDIT.markD,
+      }
+    : {
+        markA: FORM_SHEET.markA,
+        markB: FORM_SHEET.markB,
+        markC: FORM_SHEET.markC,
+        markD: FORM_SHEET.markD,
+      }
+
   return (
-    <Card className="relative overflow-hidden bg-white p-0">
-      <SheetMarks />
-      <CardContent className="relative space-y-6 px-5 py-8 sm:px-8">
-        <div className="text-right">
-          <p className="text-xl font-bold uppercase tracking-[0.04em] text-[#1B3A4B] sm:text-2xl">
+    <Card className="relative overflow-hidden bg-white p-0 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+      <div
+        className="relative z-10 flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-white sm:px-5"
+        style={{ background: accent }}
+      >
+        <div className="min-w-0">
+          <p className="truncate text-[10px] font-medium uppercase tracking-[0.14em] text-white/80">
+            {credit ? 'Customer credit' : props.organizationName}
+          </p>
+          <p className="text-base font-semibold tracking-wide sm:text-lg">{props.config.singular}</p>
+        </div>
+        {!credit ? (
+          <p className="hidden text-right text-xs font-medium text-white/90 sm:block">
             {props.organizationName}
           </p>
-          <p className="mt-5 text-sm font-bold uppercase tracking-[0.18em] text-[#0E8A6A]">
-            {props.config.singular}
-          </p>
-        </div>
-
+        ) : null}
+      </div>
+      <SheetMarks colors={marks} />
+      <CardContent className="relative space-y-2.5 px-3 py-3 sm:px-4" style={{ background: wash }}>
         <FormStatus state={props.state} />
-        <div className="[&_label]:text-xs [&_label]:font-bold [&_label]:uppercase [&_label]:tracking-[0.12em] [&_label]:text-[#0E8A6A]">
-          <HeaderFields props={props} />
+
+        <div
+          className="rounded-md border border-slate-200/80 bg-white px-3 py-2.5 shadow-sm"
+          style={{ borderTopColor: accent, borderTopWidth: 2 }}
+        >
+          <div
+            className={cn(
+              '[&_label]:text-[10px] [&_label]:font-semibold [&_label]:uppercase [&_label]:tracking-[0.08em]',
+              credit ? '[&_label]:text-[#3F2C38]' : '[&_label]:text-[#714B67]',
+            )}
+          >
+            <HeaderFields props={props} />
+          </div>
         </div>
 
         {props.config.type === 'INVOICE' && !props.recordId ? (
@@ -1267,7 +1401,9 @@ function SheetLayout(props: LayoutProps) {
 
         <StripedLines props={props} />
 
-        <NotesFields props={props} />
+        <div className="rounded-md border border-slate-200/80 bg-white px-3 py-2.5 shadow-sm">
+          <NotesFields props={props} />
+        </div>
       </CardContent>
     </Card>
   )
@@ -1602,9 +1738,11 @@ function unitPriceFromTotal(
 function AmountField({
   line,
   onCommit,
+  className,
 }: {
   line: Line
   onCommit: (next: { quantity: string; unitPrice: string }) => void
+  className?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
   const quantity = parseMoneyInput(line.quantity) ?? ZERO
@@ -1622,7 +1760,7 @@ function AmountField({
     <Input
       aria-label="Amount"
       inputMode="decimal"
-      className={cn(lineInput, 'tabular text-right')}
+      className={cn(className ?? lineInput, 'tabular text-right')}
       value={shown}
       onChange={(event) => setDraft(event.target.value)}
       onBlur={(event) => {
@@ -1702,7 +1840,7 @@ function SalesLines({ props }: { props: LayoutProps }) {
           <col style={{ width: 36 }} />
         </colgroup>
         <thead>
-          <tr className="bg-[#3A7CA8] text-left text-xs font-semibold uppercase tracking-wide text-white">
+          <tr className="text-left text-xs font-semibold uppercase tracking-wide text-white" style={{ background: FORM_SHEET.accent }}>
             {SALES_COLUMNS.map((column) => (
               <th key={column.key} className="relative px-2 py-2 font-semibold">
                 {column.label}
@@ -1738,6 +1876,7 @@ function SalesLines({ props }: { props: LayoutProps }) {
                     onChange={(next) => props.chooseItem(line.key, next ?? '')}
                     placeholder="Item"
                   />
+                  <StockWarningNote warning={props.stockWarnings[line.key]} />
                 </td>
                 <td className="px-1 py-1 align-top">
                   <Input
@@ -1935,54 +2074,69 @@ function ModernLayout(props: LayoutProps) {
 }
 
 const lineInput =
-  'h-7 border-transparent bg-transparent px-1.5 shadow-none focus-visible:border-[#3A7CA8] focus-visible:bg-white'
+  'h-7 border-transparent bg-transparent px-1.5 shadow-none focus-visible:border-[#714B67] focus-visible:bg-white'
 
-/** The line band from a ruled sales sheet: blue head, then pale stripes. */
+/** Sheet line cells — rounded fields matching the sales item grid. */
+const sheetLineInput =
+  'h-7 rounded-full border border-[#D4C4CE] bg-white px-2 shadow-none focus-visible:border-[#714B67] focus-visible:ring-1 focus-visible:ring-[#714B67]/25'
+
+/** The line band from a ruled sales sheet: Odoo purple head, then pale stripes. */
 function StripedLines({ props }: { props: LayoutProps }) {
+  const head =
+    props.config.type === 'CREDIT_MEMO' ? CUSTOMER_CREDIT.accent : FORM_SHEET.accent
+
   return (
-    <div>
-      <div className="overflow-x-auto">
+    <div className="rounded-lg p-1.5 sm:p-2" style={{ background: `${FORM_SHEET.wash}B3` }}>
+      <div className="overflow-x-auto rounded-md">
         <table className="w-full border-separate border-spacing-0 text-sm">
           <thead>
-            <tr className="bg-[#3A7CA8] text-white">
-              <th className="w-16 px-2 py-2 text-center text-[13px] font-medium">Qty</th>
-              <th className="w-44 px-2 py-2 text-left text-[13px] font-medium">Item #</th>
-              <th className="px-2 py-2 text-left text-[13px] font-medium">Description</th>
-              <th className="w-28 px-2 py-2 text-right text-[13px] font-medium">Unit Price</th>
-              <th className="w-24 px-2 py-2 text-right text-[13px] font-medium">Discount</th>
-              <th className="w-28 px-2 py-2 text-right text-[13px] font-medium">Line Total</th>
+            <tr className="text-white" style={{ background: head }}>
+              <th className="w-40 rounded-tl-md px-1.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide">
+                Item
+              </th>
+              <th className="px-1.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide">
+                Description
+              </th>
+              <th className="w-14 px-1.5 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide">
+                Qty
+              </th>
+              <th className="w-24 px-1.5 py-1.5 text-right text-[11px] font-semibold uppercase tracking-wide">
+                Rate
+              </th>
+              <th className="w-24 px-1.5 py-1.5 text-right text-[11px] font-semibold uppercase tracking-wide">
+                Amount
+              </th>
               {props.stores.length > 0 ? (
-                <th className="w-40 px-2 py-2 text-left text-[13px] font-medium">Store</th>
+                <th className="w-36 px-1.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide">
+                  Store
+                </th>
               ) : null}
-              <th className="w-8" />
+              <th className="w-8 rounded-tr-md" />
             </tr>
           </thead>
           <tbody>
             {props.lines.map((line, index) => (
-              <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
-                <td className="px-1 py-1">
-                  <Input
-                    aria-label={`Quantity, line ${index + 1}`}
-                    inputMode="decimal"
-                    className={cn(lineInput, 'tabular text-center')}
-                    value={line.quantity}
-                    onChange={(event) => props.update(line.key, { quantity: event.target.value })}
-                  />
-                </td>
+              <tr
+                key={line.key}
+                className={index % 2 === 0 ? 'bg-white/90' : undefined}
+                style={index % 2 === 1 ? { background: FORM_SHEET.rowAlt } : undefined}
+              >
                 <td className="px-1 py-1">
                   <EntityPicker
                     kind="item"
                     options={props.itemOptions}
                     value={line.itemId || null}
                     onChange={(next) => props.chooseItem(line.key, next ?? '')}
-                    placeholder="Item #"
+                    placeholder="Item"
                     clearable
+                    className={sheetLineInput}
                   />
+                  <StockWarningNote warning={props.stockWarnings[line.key]} />
                 </td>
                 <td className="px-1 py-1">
                   <Input
                     aria-label={`Description, line ${index + 1}`}
-                    className={lineInput}
+                    className={sheetLineInput}
                     value={line.description}
                     onChange={(event) => props.update(line.key, { description: event.target.value })}
                   />
@@ -1991,7 +2145,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
                       aria-label={`Tax, line ${index + 1}`}
                       value={line.taxCodeId}
                       onChange={(event) => props.update(line.key, { taxCodeId: event.target.value })}
-                      className="mt-1 h-7 border-transparent bg-transparent px-1 text-xs"
+                      className="mt-0.5 h-6 rounded-full border border-[#D4C4CE] bg-white px-2 text-xs"
                     >
                       <option value="">No tax</option>
                       {props.taxCodes.map((code) => (
@@ -2004,25 +2158,28 @@ function StripedLines({ props }: { props: LayoutProps }) {
                 </td>
                 <td className="px-1 py-1">
                   <Input
-                    aria-label={`Unit price, line ${index + 1}`}
+                    aria-label={`Quantity, line ${index + 1}`}
                     inputMode="decimal"
-                    className={cn(lineInput, 'tabular text-right')}
+                    className={cn(sheetLineInput, 'tabular text-center')}
+                    value={line.quantity}
+                    onChange={(event) => props.update(line.key, { quantity: event.target.value })}
+                  />
+                </td>
+                <td className="px-1 py-1">
+                  <Input
+                    aria-label={`Rate, line ${index + 1}`}
+                    inputMode="decimal"
+                    className={cn(sheetLineInput, 'tabular text-right')}
                     value={line.unitPrice}
                     onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
                   />
                 </td>
                 <td className="px-1 py-1">
-                  <Input
-                    aria-label={`Discount percent, line ${index + 1}`}
-                    inputMode="decimal"
-                    className={cn(lineInput, 'tabular text-right')}
-                    value={line.discountPercent}
-                    onChange={(event) => props.update(line.key, { discountPercent: event.target.value })}
-                    placeholder="%"
+                  <AmountField
+                    line={line}
+                    onCommit={(next) => props.update(line.key, next)}
+                    className={sheetLineInput}
                   />
-                </td>
-                <td className="px-1 py-1">
-                  <AmountField line={line} onCommit={(next) => props.update(line.key, next)} />
                 </td>
                 {props.stores.length > 0 ? (
                   <td className="px-1 py-1 align-top">
@@ -2036,6 +2193,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
                       quantity={line.quantity}
                       onChange={(storeId) => props.update(line.key, { storeId })}
                       label={`Store, line ${index + 1}`}
+                      className="[&_select]:h-7 [&_select]:rounded-full [&_select]:border [&_select]:border-[#D4C4CE] [&_select]:bg-white [&_select]:px-2 [&_select]:text-sm"
                     />
                   </td>
                 ) : null}
@@ -2044,6 +2202,8 @@ function StripedLines({ props }: { props: LayoutProps }) {
                     type="button"
                     variant="ghost"
                     size="icon-sm"
+                    className="rounded-md"
+                    tabIndex={-1}
                     aria-label={`Clear line ${index + 1}`}
                     onClick={() => props.removeLine(line.key)}
                   >
@@ -2056,8 +2216,8 @@ function StripedLines({ props }: { props: LayoutProps }) {
         </table>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
-        <Button type="button" variant="outline" size="sm" onClick={props.addLine}>
+      <div className="mt-1 flex flex-wrap items-start justify-between gap-3 px-1 py-1.5">
+        <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={props.addLine}>
           <PlusIcon /> Add line
         </Button>
         <TotalsBlock props={props} />

@@ -109,14 +109,14 @@ export function ReceiveForm({
   }
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} className="space-y-2">
       <input type="hidden" name="payload" value={payload} />
 
       <Card>
-        <CardContent className="space-y-4 p-4">
+        <CardContent className="space-y-3 p-3 sm:p-4">
           <FormStatus state={state} />
 
-          <div className="grid gap-4 sm:grid-cols-[12rem_1fr]">
+          <div className="grid gap-2 sm:grid-cols-[12rem_1fr]">
             <Field
               name="date"
               label="Date received"

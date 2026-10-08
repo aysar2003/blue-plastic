@@ -4,6 +4,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { CheckIcon, ChevronDownIcon, PlusIcon } from 'lucide-react'
 
+import { focusNextField } from '@/lib/keyboard'
 import { cn } from '@/lib/utils'
 
 /**
@@ -181,7 +182,33 @@ export function Combobox({
   function close(refocus = true) {
     setOpen(false)
     setQuery('')
-    if (refocus) inputRef.current?.focus()
+    if (refocus) {
+      // Keep focus on this control after the list closes — never drop to <body>,
+      // or the next Tab starts again at the top of the form.
+      queueMicrotask(() => inputRef.current?.focus())
+    }
+  }
+
+  /** Accept a row, then move to the next field (Enter / Tab) or stay put (click). */
+  function choose(row: Row, advance: 0 | 1 | -1 = 0) {
+    if (row.kind === 'option') {
+      onChange(row.option.value)
+      setOpen(false)
+      setQuery('')
+      queueMicrotask(() => {
+        const input = inputRef.current
+        if (!input) return
+        if (advance !== 0) focusNextField(input, advance)
+        else input.focus()
+      })
+      return
+    }
+
+    if (!onCreate) return
+    const label = query.trim()
+    setOpen(false)
+    setQuery('')
+    onCreate(label)
   }
 
   React.useEffect(() => {
@@ -239,25 +266,20 @@ export function Combobox({
     setOpen(true)
   }
 
-  function choose(row: Row) {
-    if (row.kind === 'option') {
-      onChange(row.option.value)
-      close()
-      return
-    }
-
-    if (!onCreate) return
-    const label = query.trim()
-    close(false)
-    onCreate(label)
-  }
-
-  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement | HTMLButtonElement>) {
+  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (!open) {
-      if (event.key === 'ArrowDown' || event.key === 'Enter') {
+      if (event.key === 'ArrowDown') {
         event.preventDefault()
         openList()
-      } else if (event.key === 'Backspace' && value) {
+      } else if (event.key === 'Enter') {
+        // On a document line, Enter advances like a grid when a name is already set.
+        if (value && inputRef.current && focusNextField(inputRef.current, 1)) {
+          event.preventDefault()
+          return
+        }
+        event.preventDefault()
+        openList()
+      } else if (event.key === 'Backspace' && value && query === '') {
         onChange(null)
       } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
         setQuery(event.key)
@@ -277,23 +299,32 @@ export function Combobox({
     } else if (event.key === 'Enter') {
       event.preventDefault()
       const row = rows[active]
-      if (row) choose(row)
+      if (row) choose(row, 1)
     } else if (event.key === 'Escape') {
       event.preventDefault()
       close()
     } else if (event.key === 'Tab') {
-      // Two letters and Tab is enough: take the highlighted name, then move on.
+      // Typed letters + Tab → take the highlighted match. Bare Tab through an
+      // already-chosen name keeps it. Always preventDefault so focus cannot fall
+      // to the document start when the list closes.
+      const direction: 1 | -1 = event.shiftKey ? -1 : 1
       const needle = query.trim()
       const highlighted = rows[active]
       const choice =
-        highlighted?.kind === 'option' ? highlighted : rows.find((row) => row.kind === 'option')
+        highlighted?.kind === 'option'
+          ? highlighted
+          : rows.find((row) => row.kind === 'option')
       if (needle && choice?.kind === 'option') {
-        onChange(choice.option.value)
-        setOpen(false)
-        setQuery('')
+        event.preventDefault()
+        choose(choice, direction)
         return
       }
-      close(false)
+      event.preventDefault()
+      setOpen(false)
+      setQuery('')
+      queueMicrotask(() => {
+        if (inputRef.current) focusNextField(inputRef.current, direction)
+      })
     } else if (event.key === 'Backspace' && query === '' && value) {
       // Backspacing an empty box clears the selection, which is what every other
       // text field does and what makes this one feel like one.
@@ -325,45 +356,31 @@ export function Combobox({
           disabled && 'cursor-not-allowed opacity-50',
         )}
       >
-        {open || !selected ? (
-          <input
-            ref={inputRef}
-            id={id}
-            role="combobox"
-            aria-expanded={open}
-            aria-autocomplete="list"
-            aria-controls={`${id ?? name ?? 'combobox'}-list`}
-            aria-describedby={aria['aria-describedby']}
-            aria-required={required}
-            disabled={disabled}
-            autoComplete="off"
-            value={open ? query : ''}
-            placeholder={open && selected ? selected.label : placeholder}
-            onChange={(event) => {
-              if (!open) setOpen(true)
-              setQuery(event.target.value)
-            }}
-            onFocus={openList}
-            onClick={openList}
-            onKeyDown={onKeyDown}
-            className="h-8 min-w-0 flex-1 bg-transparent px-2.5 text-[0.8125rem] outline-none placeholder:text-muted-foreground"
-          />
-        ) : (
-          <button
-            type="button"
-            id={id}
-            role="combobox"
-            aria-expanded={false}
-            aria-controls={`${id ?? name ?? 'combobox'}-list`}
-            disabled={disabled}
-            title={selected.label}
-            onClick={openList}
-            onKeyDown={onKeyDown}
-            className="h-8 min-w-0 flex-1 truncate whitespace-nowrap px-2.5 text-left text-[0.8125rem] leading-8"
-          >
-            {selected.label}
-          </button>
-        )}
+        {/* Always an input — swapping to a button after pick drops focus and
+            sends the next Tab back to the top of the form. */}
+        <input
+          ref={inputRef}
+          id={id}
+          role="combobox"
+          aria-expanded={open}
+          aria-autocomplete="list"
+          aria-controls={`${id ?? name ?? 'combobox'}-list`}
+          aria-describedby={aria['aria-describedby']}
+          aria-required={required}
+          disabled={disabled}
+          autoComplete="off"
+          title={selected && !open ? selected.label : undefined}
+          value={open ? query : (selected?.label ?? '')}
+          placeholder={placeholder}
+          onChange={(event) => {
+            if (!open) setOpen(true)
+            setQuery(event.target.value)
+          }}
+          onFocus={openList}
+          onClick={openList}
+          onKeyDown={onKeyDown}
+          className="h-8 min-w-0 flex-1 truncate bg-transparent px-2.5 text-[0.8125rem] outline-none placeholder:text-muted-foreground"
+        />
 
         <button
           type="button"
@@ -414,7 +431,7 @@ export function Combobox({
                         onPointerDown={(event) => {
                           event.preventDefault()
                           event.stopPropagation()
-                          choose(row)
+                          choose(row, 0)
                         }}
                         className={cn(
                           'flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm font-medium text-primary',
@@ -447,7 +464,7 @@ export function Combobox({
                         onPointerDown={(event) => {
                           event.preventDefault()
                           event.stopPropagation()
-                          choose(row)
+                          choose(row, 0)
                         }}
                         className={cn(
                           'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm',

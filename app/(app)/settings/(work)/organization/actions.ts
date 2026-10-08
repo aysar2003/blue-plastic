@@ -6,6 +6,7 @@ import { formValues, toFormState, type FormState } from '@/components/forms/acti
 
 import {
   organizationAccountingSchema,
+  organizationFeaturesSchema,
   organizationUpdateSchema,
 } from '@/lib/validation/organization'
 import { action } from '@/server/action'
@@ -47,4 +48,40 @@ export async function updateAccountingSettingsForm(
 ): Promise<FormState> {
   const result = await updateAccountingSettings(formValues(formData))
   return toFormState(result, 'Accounting settings saved.')
+}
+
+export const updateFeatureFlags = action
+  .requires('org:update')
+  .input(organizationFeaturesSchema)
+  .handler(async (ctx, input) => {
+    const flags = await organizationService.updateFeatureFlags(ctx, input)
+    revalidatePath('/settings/features')
+    revalidatePath('/', 'layout')
+    return flags
+  })
+
+export async function updateFeatureFlagsForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  // Unchecked boxes are omitted — treat missing as off.
+  const keys = [
+    'allowJournalDelete',
+    'allowContactDelete',
+    'allowDocumentDelete',
+    'showCreatorBrand',
+    'moduleSales',
+    'modulePurchases',
+    'moduleBanking',
+    'moduleInventory',
+    'modulePos',
+    'moduleAccounting',
+    'moduleReports',
+  ] as const
+  const values: Record<string, string> = {}
+  for (const key of keys) {
+    values[key] = formData.get(key) === 'true' || formData.get(key) === 'on' ? 'true' : 'false'
+  }
+  const result = await updateFeatureFlags(values)
+  return toFormState(result, 'Configuration saved.')
 }

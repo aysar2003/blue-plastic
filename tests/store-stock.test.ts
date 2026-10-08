@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { foldStoreQuantities, shortStockNote, type StoreChoice } from '@/lib/store-stock'
+import {
+  foldStoreQuantities,
+  negativeStockWarning,
+  shortStockNote,
+  stockWarningText,
+  type StoreChoice,
+} from '@/lib/store-stock'
 
 const stores: StoreChoice[] = [
   { id: 'office', name: 'Xafiiska', isOffice: true },
@@ -35,18 +41,38 @@ describe('shortStockNote', () => {
   const stock = { tabo: { office: '0.00', two: '250.00' } }
 
   it('names the store that still has the item when the office is out', () => {
-    expect(shortStockNote(stores, stock, 'tabo', 'office', '1')).toBe(
-      'Xafiiska has 0.00. Store 2 has 250.00.',
-    )
+    expect(shortStockNote(stores, stock, 'tabo', 'office', '1')).toBe('Also in Store 2 (250).')
   })
 
   it('stays quiet when the chosen store has enough', () => {
     expect(shortStockNote(stores, stock, 'tabo', 'two', '10')).toBeNull()
   })
 
-  it('says the store may go below zero when nowhere else has it', () => {
-    expect(shortStockNote(stores, { tabo: { office: '0.00', two: '0.00' } }, 'tabo', 'office', '2')).toBe(
-      'Xafiiska has 0.00. This store can go below zero. A later bill fills it.',
+  it('leaves the below-zero message to the line warning when nowhere else has it', () => {
+    expect(shortStockNote(stores, { tabo: { office: '0.00', two: '0.00' } }, 'tabo', 'office', '2')).toBeNull()
+  })
+})
+
+describe('negativeStockWarning', () => {
+  it('stays quiet while the store still covers the sale', () => {
+    expect(negativeStockWarning(5, 5, 'Xafiiska')).toBeNull()
+    expect(negativeStockWarning(5, 2, 'Xafiiska')).toBeNull()
+  })
+
+  it('warns at zero even before a quantity is typed', () => {
+    const warning = negativeStockWarning(0, Number(''), 'Xafiiska')
+    expect(warning).toEqual({ storeName: 'Xafiiska', onHand: 0, after: 0 })
+    expect(stockWarningText(warning!)).toBe('Stock: 0 at Xafiiska. Will go negative.')
+  })
+
+  it('shows store quantity and the quantity after the sale', () => {
+    const warning = negativeStockWarning(3, 5, 'Store 2')
+    expect(stockWarningText(warning!)).toBe('Stock: 3 at Store 2 \u2192 \u22122 after this sale. Will go negative.')
+  })
+
+  it('says when the store is already below zero', () => {
+    expect(stockWarningText(negativeStockWarning(-1.5, 1, 'Xafiiska')!)).toBe(
+      'Stock: \u22121.50 at Xafiiska \u2192 \u22122.50 after this sale. Already below zero.',
     )
   })
 })

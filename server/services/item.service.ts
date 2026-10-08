@@ -52,12 +52,23 @@ const ITEM_ORDER: Record<string, (dir: 'asc' | 'desc') => Prisma.ItemOrderByWith
 export async function list(
   ctx: OrgContext,
   query: ListQuery,
-  options: { includeInactive?: boolean; type?: string; sort?: string; dir?: 'asc' | 'desc' } = {},
+  options: {
+    includeInactive?: boolean
+    type?: string
+    categoryId?: string
+    sort?: string
+    dir?: 'asc' | 'desc'
+  } = {},
 ) {
   const where: Prisma.ItemWhereInput = {
     orgId: ctx.orgId,
     ...(options.includeInactive ? {} : { isActive: true }),
     ...(options.type ? { type: options.type as Prisma.EnumItemTypeFilter['equals'] } : {}),
+    ...(options.categoryId === 'none'
+      ? { categoryId: null }
+      : options.categoryId
+        ? { categoryId: options.categoryId }
+        : {}),
     ...(query.q
       ? {
           OR: [
@@ -376,6 +387,63 @@ export async function listCategories(ctx: OrgContext) {
     select: { id: true, name: true, parentId: true },
     orderBy: { name: 'asc' },
   })
+}
+
+/** Standard catalogue groups this organisation does not have yet (any casing). */
+export async function missingStandardCategories(ctx: OrgContext): Promise<string[]> {
+  const { STANDARD_ITEM_CATEGORIES } = await import('@/lib/standard-categories')
+  const existing = await db.itemCategory.findMany({
+    where: { orgId: ctx.orgId },
+    select: { name: true },
+  })
+  const have = new Set(existing.map((row) => row.name.toLowerCase()))
+  return STANDARD_ITEM_CATEGORIES.filter((name) => !have.has(name.toLowerCase()))
+}
+
+/**
+ * Add the international standard catalogue groups for this organisation.
+ * Idempotent — skips names that are already present (any casing). Run from an
+ * explicit action, never from a page render: reading a list must not write.
+ */
+export async function ensureStandardCategories(ctx: OrgContext) {
+  const { STANDARD_ITEM_CATEGORIES } = await import('@/lib/standard-categories')
+  const existing = await db.itemCategory.findMany({
+    where: { orgId: ctx.orgId },
+    select: { name: true },
+  })
+  const have = new Set(existing.map((row) => row.name.toLowerCase()))
+  const missing = STANDARD_ITEM_CATEGORIES.filter((name) => !have.has(name.toLowerCase()))
+  if (missing.length === 0) return listCategories(ctx)
+
+  await db.itemCategory.createMany({
+    data: missing.map((name) => ({ orgId: ctx.orgId, name })),
+    skipDuplicates: true,
+  })
+  return listCategories(ctx)
+}
+
+/** Category cards for the catalogue hub: item counts per category. Read-only. */
+export async function categoryDashboard(ctx: OrgContext) {
+  const categories = await listCategories(ctx)
+  const counts = await db.item.groupBy({
+    by: ['categoryId'],
+    where: { orgId: ctx.orgId, isActive: true },
+    _count: { _all: true },
+  })
+  const byCategory = new Map(counts.map((row) => [row.categoryId ?? 'none', row._count._all]))
+  return categories.map((category) => ({
+    ...category,
+    itemCount: byCategory.get(category.id) ?? 0,
+  }))
+}
+
+export async function getCategory(ctx: OrgContext, id: string) {
+  const category = await db.itemCategory.findFirst({
+    where: { id, orgId: ctx.orgId, isActive: true },
+    select: { id: true, name: true, parentId: true },
+  })
+  if (!category) throw notFound('Category')
+  return category
 }
 
 /** Create a product category from the item form when one is missing. */

@@ -17,7 +17,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider
       attribute="class"
-      defaultTheme="ocean"
+      defaultTheme="odoo"
       enableSystem={false}
       themes={[...THEME_IDS]}
       disableTransitionOnChange

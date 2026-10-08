@@ -84,7 +84,7 @@ export default async function PurchaseListPage({
   const trails = await trailsFor(ctx, page.rows.map((row) => row.id))
   const basePath = `/purchases/${config.slug}`
   const canEditDocuments = ctx.permissions.has('bill:update')
-  const canDelete = ctx.permissions.has('bill:void')
+  const canDelete = ctx.features.allowDocumentDelete && ctx.permissions.has('bill:void')
   const canReceive = ctx.permissions.has('bill:create')
   const linkParams = {
     q: query.q,
