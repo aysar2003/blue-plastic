@@ -8,22 +8,30 @@ import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { StatementFilters } from '@/components/reports/statement-filters'
 import { StatementSend } from '@/components/reports/statement-send'
 import { Card, CardContent } from '@/components/ui/card'
-import { readStatementFilter, statementFilterCaption, visibleEntries } from '@/lib/customer-statement'
+import {
+  readStatementFilter,
+  statementFilterCaption,
+  statementInvoices,
+  visibleEntries,
+} from '@/lib/customer-statement'
 import { readVendorFilter, vendorFilterCaption, vendorTypeOptions, visibleVendorEntries } from '@/lib/vendor-statement'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { accountOptions } from '@/lib/account-options'
 import { formatDate, toCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
-import { PERIOD_LABELS } from '@/lib/report-periods'
+import { PERIOD_LABELS, type PeriodKey } from '@/lib/report-periods'
 import { requireOrgContext } from '@/server/auth/context'
 import { generalLedger } from '@/server/accounting/balances'
 import { db } from '@/server/db'
 import * as payables from '@/server/services/payables.service'
 import * as receivables from '@/server/services/receivables.service'
 import * as accountService from '@/server/services/account.service'
+import * as organizationService from '@/server/services/organization.service'
+import * as salesService from '@/server/services/sales.service'
 import { readSettings, type SearchParams } from '../../params'
 import { ReportControls } from '../../report-controls'
 import { CustomerStatement, statementEmailBody } from './customer-statement'
+import { StatementInvoices } from './statement-invoices'
 import { StatementPicker } from './statement-picker'
 
 /**
@@ -45,6 +53,21 @@ import { StatementPicker } from './statement-picker'
  */
 const KINDS = ['customer', 'vendor', 'account'] as const
 type Kind = (typeof KINDS)[number]
+
+/**
+ * The period a statement opens on when the link does not name one. A party's
+ * statement starts on 1 January of this year (year to date): the usual "what
+ * happened this year" paper, with everything earlier carried in as the balance
+ * brought forward. "All dates" stays one choice away in the period menu.
+ */
+const DEFAULT_PERIOD: Record<Kind, PeriodKey> = {
+  customer: 'year-to-date',
+  vendor: 'year-to-date',
+  account: 'this-fiscal-year',
+}
+
+/** One "invoice by invoice" paper prints at most this many invoices. */
+const INVOICE_PAPER_LIMIT = 200
 
 const TITLES: Record<Kind, string> = {
   customer: 'Customer statement',
@@ -77,7 +100,7 @@ export default async function StatementPage({
 
   const ctx = await requireOrgContext('report:read')
   const query = await searchParams
-  const settings = readSettings(query, ctx.organization, 'this-fiscal-year')
+  const settings = readSettings(query, ctx.organization, DEFAULT_PERIOD[kind as Kind])
   const currency = ctx.organization.baseCurrency
 
   const one = (value: string | string[] | undefined) =>
@@ -192,6 +215,7 @@ export default async function StatementPage({
             status={customerFilter.status}
             totals={customerFilter.totals}
             defaultView="detail"
+            invoiceView
           />
         ) : null}
         {vendorFilter ? (
@@ -257,6 +281,73 @@ export default async function StatementPage({
       [customer.billingLine1, customer.billingLine2].filter(Boolean).join(', '),
       [customer.billingCity, customer.billingRegion, customer.billingPostalCode].filter(Boolean).join(' '),
     ].filter(Boolean)
+    if (customerFilter.view === 'invoices') {
+      const invoices = statementInvoices(statement.entries, customerFilter, settings.asOf)
+      const [documents, organization] = await Promise.all([
+        salesService.getMany(
+          ctx,
+          invoices.slice(0, INVOICE_PAPER_LIMIT).map((entry) => entry.id),
+        ),
+        organizationService.get(ctx),
+      ])
+      const periodText =
+        settings.period === 'all-dates'
+          ? 'All dates'
+          : `${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}`
+      const invoicesBody = [
+        `Invoices — ${customer.displayName}`,
+        ctx.organization.name,
+        periodText,
+        ...documents.map(
+          (document) =>
+            `${document.number} · ${formatDate(toCalendarDate(document.date))} · ${formatMoney(document.total, currency)}`,
+        ),
+        `Balance ${formatMoney(statement.closing, currency)}`,
+      ].join('\n')
+      return (
+        <>
+          <PageHeader
+            className="print:hidden"
+            title="Customer statement"
+            description={`${customer.displayName} · ${periodText} · Invoice by invoice`}
+            actions={
+              <PrintButton
+                paper="invoices"
+                filename={`invoices-${customer.displayName
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '-')
+                  .replace(/^-|-$/g, '')
+                  .slice(0, 40) || 'customer'}.pdf`}
+                defaultTo={customer.email ?? ''}
+                defaultSubject={`Invoices from ${ctx.organization.name}`}
+                defaultBody={invoicesBody}
+                whatsappPhone={customer.phone}
+                whatsappText={invoicesBody}
+              />
+            }
+          />
+          {controls}
+          <StatementInvoices
+            organization={organization}
+            baseCurrency={currency}
+            customer={{
+              displayName: customer.displayName,
+              companyName: customer.companyName,
+              email: customer.email,
+              address,
+            }}
+            from={settings.range.from}
+            to={settings.range.to}
+            allDates={settings.period === 'all-dates'}
+            caption={statementFilterCaption({ ...customerFilter, type: 'all' })}
+            documents={documents}
+            omitted={Math.max(0, invoices.length - INVOICE_PAPER_LIMIT)}
+            closing={statement.closing}
+          />
+        </>
+      )
+    }
+
     const pdfParams = new URLSearchParams()
     pdfParams.set('customerId', subjectId)
     for (const key of ['period', 'from', 'to', 'asOf', 'view', 'type', 'status']) {

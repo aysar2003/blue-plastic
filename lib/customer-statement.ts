@@ -19,11 +19,13 @@ export type FilterableEntry = {
 /**
  * How a customer statement is asked for.
  *
- * The view is the paper: a regular list of documents, or the same list with
- * every invoice written out line by line. The type and the status narrow which
- * rows are on that paper. The amount due stays the full balance either way.
+ * The view is the paper: a regular list of documents, the same list with
+ * every invoice written out line by line, or — "invoice by invoice" — each
+ * invoice of the period printed whole, on the invoice sheet, one per page. The
+ * type and the status narrow which rows are on that paper. The amount due stays
+ * the full balance either way.
  */
-export const STATEMENT_VIEWS = ['regular', 'arrow', 'detail'] as const
+export const STATEMENT_VIEWS = ['regular', 'arrow', 'detail', 'invoices'] as const
 export const STATEMENT_TOTALS = ['line', 'cards', 'band', 'stack'] as const
 export const STATEMENT_TYPES = [
   'all',
@@ -53,6 +55,7 @@ export const STATEMENT_VIEW_LABELS: Record<StatementView, string> = {
   regular: 'Grouped — one row',
   arrow: 'Open one by one',
   detail: 'Items, qty and price',
+  invoices: 'Invoice by invoice',
 }
 
 export const STATEMENT_TOTALS_LABELS: Record<StatementTotals, string> = {
@@ -100,7 +103,7 @@ export function readStatementFilter(
   const status = one(query.status)
   const totals = one(query.totals)
   return {
-    view: view === 'regular' || view === 'arrow' || view === 'detail' ? view : 'detail',
+    view: (STATEMENT_VIEWS as readonly string[]).includes(view ?? '') ? (view as StatementView) : 'detail',
     type: (STATEMENT_TYPES as readonly string[]).includes(type ?? '')
       ? (type as StatementType)
       : 'all',
@@ -185,4 +188,18 @@ export function visibleEntries<T extends FilterableEntry>(
   asOf: CalendarDate,
 ): T[] {
   return entries.filter((entry) => entryVisible(entry, filter, asOf))
+}
+
+/**
+ * The invoices an "invoice by invoice" statement prints: every invoice in the
+ * period, in statement (date) order, still narrowed by the balance filter so
+ * "open" or "overdue" prints only what is owed. The type menu does not apply —
+ * the paper is invoices by definition.
+ */
+export function statementInvoices<T extends FilterableEntry>(
+  entries: T[],
+  filter: StatementFilter,
+  asOf: CalendarDate,
+): T[] {
+  return visibleEntries(entries, { ...filter, type: 'invoice' }, asOf)
 }

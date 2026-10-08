@@ -160,7 +160,7 @@ export default async function PaymentsPage({
                           ? [
                               {
                                 label: 'QuickReport',
-                                href: `/reports/statements/customer?customerId=${payment.customer.id}&view=detail&period=all-dates`,
+                                href: `/reports/statements/customer?customerId=${payment.customer.id}&view=detail`,
                               },
                             ]
                           : []),

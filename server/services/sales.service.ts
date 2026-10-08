@@ -430,34 +430,31 @@ export async function findReceipts(
   }))
 }
 
-export async function get(ctx: OrgContext, id: string) {
-  const document = await db.salesDocument.findFirst({
-    where: { id, orgId: ctx.orgId },
+const DETAIL_SELECT = {
+  ...DOCUMENT_SELECT,
+  lines: {
+    orderBy: { lineNumber: 'asc' },
     select: {
-      ...DOCUMENT_SELECT,
-      lines: {
-        orderBy: { lineNumber: 'asc' },
-        select: {
-          id: true, lineNumber: true, description: true, quantity: true, unitPrice: true,
-          discountPercent: true, amount: true, taxAmount: true, serviceDate: true, storeId: true,
-          item: { select: { id: true, name: true, sku: true } },
-          taxCode: { select: { id: true, name: true } },
-          incomeAccount: { select: { id: true, code: true, name: true } },
-        },
-      },
-      applications: {
-        select: {
-          id: true, amount: true, appliedAt: true,
-          payment: { select: { id: true, number: true, date: true } },
-          creditDocument: { select: { id: true, number: true, date: true } },
-        },
-      },
-      journal: { select: { id: true, journalNumber: true, status: true } },
+      id: true, lineNumber: true, description: true, quantity: true, unitPrice: true,
+      discountPercent: true, amount: true, taxAmount: true, serviceDate: true, storeId: true,
+      item: { select: { id: true, name: true, sku: true } },
+      taxCode: { select: { id: true, name: true } },
+      incomeAccount: { select: { id: true, code: true, name: true } },
     },
-  })
+  },
+  applications: {
+    select: {
+      id: true, amount: true, appliedAt: true,
+      payment: { select: { id: true, number: true, date: true } },
+      creditDocument: { select: { id: true, number: true, date: true } },
+    },
+  },
+  journal: { select: { id: true, journalNumber: true, status: true } },
+} satisfies Prisma.SalesDocumentSelect
 
-  if (!document) throw notFound('Document')
+type DetailRow = Prisma.SalesDocumentGetPayload<{ select: typeof DETAIL_SELECT }>
 
+function toDetail(document: DetailRow) {
   const applied = document.applications.reduce(
     (sum, application) => sum.plus(application.amount.toString()),
     ZERO,
@@ -482,6 +479,38 @@ export async function get(ctx: OrgContext, id: string) {
     amountApplied: toMoneyString(applied, 2),
     balance: toMoneyString(total.minus(applied), 2),
   }
+}
+
+export async function get(ctx: OrgContext, id: string) {
+  const document = await db.salesDocument.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: DETAIL_SELECT,
+  })
+
+  if (!document) throw notFound('Document')
+
+  return toDetail(document)
+}
+
+export type SalesDocumentDetail = ReturnType<typeof toDetail>
+
+/**
+ * Several documents in full, for papers that print many at once (a customer's
+ * invoices, invoice by invoice). One query rather than one per document; the
+ * result follows the order of `ids`, and ids that are not this organisation's
+ * are simply absent.
+ */
+export async function getMany(ctx: OrgContext, ids: string[]): Promise<SalesDocumentDetail[]> {
+  if (ids.length === 0) return []
+  const rows = await db.salesDocument.findMany({
+    where: { id: { in: ids }, orgId: ctx.orgId },
+    select: DETAIL_SELECT,
+  })
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  return ids.flatMap((id) => {
+    const row = byId.get(id)
+    return row ? [toDetail(row)] : []
+  })
 }
 
 /**
