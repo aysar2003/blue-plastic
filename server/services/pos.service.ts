@@ -259,32 +259,69 @@ export async function registerForTerminal(ctx: OrgContext, registerId: string) {
   }
 }
 
-export async function catalog(ctx: OrgContext, _storeId: string | null) {
-  const items = await db.item.findMany({
-    where: {
-      orgId: ctx.orgId,
-      isActive: true,
-      deletedAt: null,
-      availableInPos: true,
-    },
-    select: {
-      id: true,
-      name: true,
-      sku: true,
-      salesPrice: true,
-      category: { select: { name: true } },
-    },
-    orderBy: [{ category: { name: 'asc' } }, { name: 'asc' }],
-    take: 2000,
-  })
+/**
+ * Products for the till, with on-hand for the store this register sells from
+ * (register store, else the office — where store-less movements are counted).
+ * One grouped query for the whole catalogue, so the cart can warn when a sale
+ * takes stock below zero without asking the database per line.
+ */
+export async function catalog(ctx: OrgContext, storeId: string | null) {
+  const [items, stores] = await Promise.all([
+    db.item.findMany({
+      where: {
+        orgId: ctx.orgId,
+        isActive: true,
+        deletedAt: null,
+        availableInPos: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        type: true,
+        salesPrice: true,
+        category: { select: { name: true } },
+      },
+      orderBy: [{ category: { name: 'asc' } }, { name: 'asc' }],
+      take: 2000,
+    }),
+    db.store.findMany({
+      where: { orgId: ctx.orgId, OR: [{ isOffice: true }, ...(storeId ? [{ id: storeId }] : [])] },
+      select: { id: true, name: true, isOffice: true },
+    }),
+  ])
 
-  return items.map((item) => ({
-    id: item.id,
-    name: item.name,
-    sku: item.sku,
-    category: item.category?.name ?? null,
-    price: item.salesPrice?.toString() ?? '0',
-  }))
+  const office = stores.find((store) => store.isOffice) ?? null
+  const selling = (storeId ? stores.find((store) => store.id === storeId) : null) ?? office
+  const storeFilter = !selling
+    ? {}
+    : selling.id === office?.id
+      ? { OR: [{ storeId: selling.id }, { storeId: null }] }
+      : { storeId: selling.id }
+
+  const tracked = items.filter((item) => item.type === 'INVENTORY').map((item) => item.id)
+  const sums =
+    tracked.length === 0
+      ? []
+      : await db.inventoryTransaction.groupBy({
+          by: ['itemId'],
+          where: { orgId: ctx.orgId, itemId: { in: tracked }, ...storeFilter },
+          _sum: { quantity: true },
+        })
+  const onHand = new Map(sums.map((row) => [row.itemId, row._sum.quantity?.toString() ?? '0']))
+
+  return {
+    storeName: selling?.name ?? null,
+    products: items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      sku: item.sku,
+      category: item.category?.name ?? null,
+      price: item.salesPrice?.toString() ?? '0',
+      /** Null for services and non-stock items: no warning for those. */
+      onHand: item.type === 'INVENTORY' ? (onHand.get(item.id) ?? '0') : null,
+    })),
+  }
 }
 
 export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {

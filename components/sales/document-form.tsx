@@ -69,9 +69,16 @@ import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
 import { defaultLineRows, type SalesTypeConfig } from '@/lib/sales-types'
 import { cn } from '@/lib/utils'
 import { LineStore } from '@/components/inventory/line-store'
+import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { SheetMarks } from '@/components/sales/sheet-marks'
 import { CUSTOMER_CREDIT, FORM_SHEET } from '@/lib/credit-brand'
-import { officeStoreId, type StockByStore, type StoreChoice } from '@/lib/store-stock'
+import {
+  negativeStockWarning,
+  officeStoreId,
+  type StockByStore,
+  type StockWarning,
+  type StoreChoice,
+} from '@/lib/store-stock'
 import { findSalesReceipts, saveDocumentForm } from '@/app/(app)/sales/actions'
 
 export type ItemOption = {
@@ -352,6 +359,45 @@ export function DocumentForm({
       })),
     [items],
   )
+  /**
+   * Line key → amber note when this sale takes a store to or below zero. Uses the
+   * per-store stock already loaded for the store picker; no extra queries. Only
+   * invoices and sales receipts move stock. Earlier lines for the same item and
+   * store count first, and on edit this document's own saved lines are added
+   * back (they are already in the figures).
+   */
+  const stockWarnings = useMemo(() => {
+    const out: Record<number, StockWarning> = {}
+    if (config.type !== 'INVOICE' && config.type !== 'SALES_RECEIPT') return out
+    const tracked = new Set(trackedIds)
+    const keyFor = (itemId: string, storeId: string | null | undefined) =>
+      `${itemId}|${stores.length > 0 ? storeId || officeId : ''}`
+    const ownSaved = new Map<string, number>()
+    if (document?.id) {
+      for (const saved of document.lines) {
+        if (!saved.itemId) continue
+        const key = keyFor(saved.itemId, saved.storeId)
+        ownSaved.set(key, (ownSaved.get(key) ?? 0) + (Number(saved.quantity) || 0))
+      }
+    }
+    const taken = new Map<string, number>()
+    for (const line of lines) {
+      if (!line.itemId || !tracked.has(line.itemId)) continue
+      const storeId = line.storeId || officeId
+      const key = keyFor(line.itemId, storeId)
+      const recorded =
+        stores.length > 0
+          ? Number(stock[line.itemId]?.[storeId] ?? '0')
+          : Number(itemById.get(line.itemId)?.onHand ?? Number.NaN)
+      const before = recorded + (ownSaved.get(key) ?? 0) - (taken.get(key) ?? 0)
+      const qty = Number(line.quantity)
+      const storeName = stores.find((store) => store.id === storeId)?.name ?? ''
+      const warning = negativeStockWarning(before, qty, storeName)
+      if (warning) out[line.key] = warning
+      if (Number.isFinite(qty) && qty > 0) taken.set(key, (taken.get(key) ?? 0) + qty)
+    }
+    return out
+  }, [config.type, trackedIds, stores, officeId, document, lines, stock, itemById])
   const taxById = useMemo(() => new Map(taxCodes.map((code) => [code.id, code])), [taxCodes])
   const showTax = taxCodes.length > 0
 
@@ -510,6 +556,7 @@ export function DocumentForm({
     stores,
     stock,
     trackedIds,
+    stockWarnings,
     update,
     chooseItem,
     addLine,
@@ -761,6 +808,8 @@ type LayoutProps = {
   stores: StoreChoice[]
   stock: StockByStore
   trackedIds: string[]
+  /** Line key → negative-stock note (information only, never blocks). */
+  stockWarnings: Record<number, StockWarning>
   update: (key: number, patch: Partial<Line>) => void
   chooseItem: (key: number, itemId: string) => void
   addLine: () => void
@@ -1217,6 +1266,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                     placeholder="Item"
                     clearable
                   />
+                  <StockWarningNote warning={props.stockWarnings[line.key]} />
                 </td>
                 <td className="px-1 py-1">
                   <Input
@@ -1826,6 +1876,7 @@ function SalesLines({ props }: { props: LayoutProps }) {
                     onChange={(next) => props.chooseItem(line.key, next ?? '')}
                     placeholder="Item"
                   />
+                  <StockWarningNote warning={props.stockWarnings[line.key]} />
                 </td>
                 <td className="px-1 py-1 align-top">
                   <Input
@@ -2080,6 +2131,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
                     clearable
                     className={sheetLineInput}
                   />
+                  <StockWarningNote warning={props.stockWarnings[line.key]} />
                 </td>
                 <td className="px-1 py-1">
                   <Input

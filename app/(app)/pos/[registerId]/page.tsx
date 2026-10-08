@@ -17,9 +17,10 @@ export default async function PosRegisterPage({ params }: Props) {
   const session = await posService.openSessionForRegister(ctx, registerId)
   if (!session) redirect(`/pos?open=${registerId}`)
 
-  const [register, products, customers, cashSummary, recentOrders] = await Promise.all([
-    posService.registerForTerminal(ctx, registerId),
-    posService.catalog(ctx, null),
+  // The register decides which store's stock the cart warns about.
+  const register = await posService.registerForTerminal(ctx, registerId)
+  const [catalog, customers, cashSummary, recentOrders] = await Promise.all([
+    posService.catalog(ctx, register.storeId),
     posService.walkInCustomers(ctx),
     posService.sessionCashSummary(ctx, session.id),
     posService.recentSessionOrders(ctx, session.id),
@@ -61,7 +62,8 @@ export default async function PosRegisterPage({ params }: Props) {
         dateLabel: order.dateLabel,
         payments: order.payments,
       }))}
-      products={products}
+      products={catalog.products}
+      stockStoreName={catalog.storeName}
       customers={customers}
       currency={currency}
       orgName={ctx.organization.name}

@@ -29,7 +29,9 @@ import {
 
 import { closePosSession, posCheckout, posRefund, recordPosCashMove } from '@/app/(app)/pos/actions'
 import { RegisterLock, useClientReady, useRegisterLocked, writeRegisterLocked } from '@/components/pos/register-lock'
+import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { ODOO } from '@/lib/odoo-brand'
+import { formatStockQty, negativeStockWarning } from '@/lib/store-stock'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
@@ -39,6 +41,8 @@ type Product = {
   sku: string | null
   category: string | null
   price: string
+  /** On hand in this register's store; null for services / non-stock items. */
+  onHand: string | null
 }
 
 type PaymentMethod = { id: string; name: string; isCash: boolean }
@@ -92,6 +96,8 @@ export function PosTerminal(props: {
   }
   recentOrders: RecentOrder[]
   products: Product[]
+  /** Store the till sells from (register store, else the office). */
+  stockStoreName?: string | null
   customers: Customer[]
   currency: string
   orgName: string
@@ -154,6 +160,11 @@ export function PosTerminal(props: {
         (p.category?.toLowerCase().includes(q) ?? false),
     )
   }, [props.products, query])
+
+  // Selling below zero is allowed; these notes only tell the cashier it is happening.
+  const productById = useMemo(() => new Map(props.products.map((product) => [product.id, product])), [props.products])
+  const inCart = useMemo(() => new Map(cart.map((line) => [line.itemId, line.quantity])), [cart])
+  const stockStore = props.stockStoreName ?? ''
 
   const subtotal = useMemo(
     () => cart.reduce((sum, line) => sum + Number(line.price) * line.quantity, 0),
@@ -576,6 +587,16 @@ export function PosTerminal(props: {
                   <p className="text-xs" style={{ color: muted }}>
                     {formatMoney(line.price, props.currency)} · qty {line.quantity}
                   </p>
+                  {(() => {
+                    const onHand = productById.get(line.itemId)?.onHand
+                    if (onHand == null) return null
+                    return (
+                      <StockWarningNote
+                        warning={negativeStockWarning(Number(onHand), line.quantity, stockStore)}
+                        tone={dark ? 'dark' : 'light'}
+                      />
+                    )
+                  })()}
                 </div>
                 <input
                   type="number"
@@ -690,6 +711,18 @@ export function PosTerminal(props: {
                       {product.category}
                     </span>
                   ) : null}
+                  {(() => {
+                    if (product.onHand == null) return null
+                    const left = Number(product.onHand) - (inCart.get(product.id) ?? 0)
+                    if (!Number.isFinite(left) || left > 0) return null
+                    return (
+                      <StockWarningNote
+                        warning={{ storeName: stockStore, onHand: left, after: left }}
+                        text={`Stock: ${formatStockQty(left)} left \u2014 will go negative`}
+                        tone={dark ? 'dark' : 'light'}
+                      />
+                    )
+                  })()}
                   <span
                     className="mt-auto pt-2 text-sm font-semibold"
                     style={{ color: dark ? '#9fe0e3' : ODOO.teal }}
