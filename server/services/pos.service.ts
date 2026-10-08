@@ -872,3 +872,90 @@ async function assertAssetAccount(orgId: string, accountId: string) {
     throw validation('Payment methods must post to an asset account (bank, cash, or wallet).')
   }
 }
+
+/**
+ * Everything the thermal receipt prints, read in one go. Works for any sales
+ * receipt; the till link (register, payments) is filled in when there is one.
+ */
+export async function receipt(ctx: OrgContext, documentId: string) {
+  const document = await db.salesDocument.findFirst({
+    where: { id: documentId, orgId: ctx.orgId, type: 'SALES_RECEIPT', deletedAt: null },
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      customerId: true,
+      customerMessage: true,
+      subtotal: true,
+      discountAmount: true,
+      taxTotal: true,
+      total: true,
+      currencyCode: true,
+      createdById: true,
+      createdAt: true,
+      customer: { select: { displayName: true, phone: true } },
+      lines: {
+        orderBy: { lineNumber: 'asc' },
+        select: {
+          id: true,
+          description: true,
+          quantity: true,
+          unitPrice: true,
+          discountPercent: true,
+          amount: true,
+          item: { select: { name: true } },
+        },
+      },
+    },
+  })
+  if (!document) throw notFound('Receipt')
+
+  const [order, cashier] = await Promise.all([
+    db.posOrder.findFirst({
+      where: { orgId: ctx.orgId, salesDocumentId: document.id },
+      select: {
+        register: { select: { name: true, defaultCustomerId: true } },
+        payments: {
+          select: { amount: true, paymentMethod: { select: { name: true } } },
+          orderBy: { id: 'asc' },
+        },
+      },
+    }),
+    document.createdById
+      ? db.user.findUnique({ where: { id: document.createdById }, select: { name: true, email: true } })
+      : null,
+  ])
+
+  return {
+    id: document.id,
+    number: document.number,
+    isVoid: document.status === 'VOID',
+    currency: document.currencyCode || ctx.organization.baseCurrency,
+    createdAt: document.createdAt,
+    note: document.customerMessage,
+    subtotal: document.subtotal.toString(),
+    discount: document.discountAmount.toString(),
+    tax: document.taxTotal.toString(),
+    total: document.total.toString(),
+    registerName: order?.register.name ?? null,
+    cashierName: cashier ? (cashier.name ?? cashier.email) : null,
+    // The register's walk-in customer is not worth printing; a named one is.
+    customer:
+      order && order.register.defaultCustomerId === document.customerId
+        ? null
+        : { name: document.customer.displayName, phone: document.customer.phone },
+    lines: document.lines.map((line) => ({
+      id: line.id,
+      name: line.description || line.item?.name || '',
+      quantity: line.quantity.toString(),
+      unitPrice: line.unitPrice.toString(),
+      discountPercent: line.discountPercent ? line.discountPercent.toString() : null,
+      amount: line.amount.toString(),
+    })),
+    payments: (order?.payments ?? []).map((payment) => ({
+      method: payment.paymentMethod.name,
+      amount: payment.amount.toString(),
+      isCash: isCashMethodName(payment.paymentMethod.name),
+    })),
+  }
+}

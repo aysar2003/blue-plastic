@@ -76,12 +76,13 @@ function broadcastCart(payload: {
   }
 }
 
-function openReceiptPrint(documentId: string) {
-  window.open(
-    `/sales/sales-receipts/${documentId}/print`,
-    'pos-receipt-print',
-    'noopener,noreferrer,width=900,height=1000',
-  )
+/** The thermal till slip. Right after a sale it prints itself and shows the change given. */
+function openReceiptPrint(documentId: string, options: { autoprint?: boolean; change?: number } = {}) {
+  const query = new URLSearchParams()
+  if (options.autoprint) query.set('autoprint', '1')
+  if (options.change && options.change > 0.004) query.set('change', options.change.toFixed(2))
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  window.open(`/pos-receipt/${documentId}${suffix}`, 'pos-receipt-print', 'noopener,noreferrer,width=420,height=800')
 }
 
 export function PosTerminal(props: {
@@ -333,6 +334,8 @@ export function PosTerminal(props: {
       return
     }
 
+    // Change is only known here; the receipt shows it on the first print.
+    const changeAtSale = changeDue
     startTransition(async () => {
       const result = await posCheckout({
         registerId: props.register.id,
@@ -353,7 +356,7 @@ export function PosTerminal(props: {
       setCashTendered('')
       setLastReceiptId(result.data.id)
       setToast(`Receipt ${result.data.number} · ${formatMoney(result.data.total, props.currency)}`)
-      openReceiptPrint(result.data.id)
+      openReceiptPrint(result.data.id, { autoprint: true, change: changeAtSale })
       router.refresh()
     })
   }

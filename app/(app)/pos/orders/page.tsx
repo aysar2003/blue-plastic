@@ -28,6 +28,9 @@ export default async function PosOrdersPage() {
               <th className="px-4 py-3 font-medium">Register</th>
               <th className="px-4 py-3 font-medium">Payments</th>
               <th className="px-4 py-3 font-medium text-right">Total</th>
+              <th className="px-4 py-3 font-medium text-right">
+                <span className="sr-only">Print</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -45,11 +48,20 @@ export default async function PosOrdersPage() {
                 <td className="px-4 py-2.5">{order.registerName}</td>
                 <td className="px-4 py-2.5 text-white/65">{order.payments || '—'}</td>
                 <td className="px-4 py-2.5 text-right tabular font-medium">{order.total}</td>
+                <td className="px-4 py-2.5 text-right">
+                  <Link
+                    href={`/pos-receipt/${order.documentId}`}
+                    className="text-[#8fd4d7] hover:underline"
+                    aria-label={`Print receipt ${order.number}`}
+                  >
+                    Print
+                  </Link>
+                </td>
               </tr>
             ))}
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-white/45">
+                <td colSpan={6} className="px-4 py-10 text-center text-white/45">
                   No POS orders yet. Open a session and continue selling.
                 </td>
               </tr>
