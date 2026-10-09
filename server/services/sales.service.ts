@@ -38,7 +38,10 @@ function documentDiscount(input: SalesDocumentInput) {
 export type PosCheckoutMeta = {
   registerId: string
   sessionId: string
+  /** Gross tendered. May add up to more than the sale when cash was handed back. */
   payments: { paymentMethodId: string; ledgerAccountId: string; amount: string }[]
+  /** Outgoing movement. Null on an exact tender and on sales from before change was recorded. */
+  change: { paymentMethodId: string; ledgerAccountId: string; amount: string } | null
 }
 
 async function salesDiscountAccountId(tx: Tx, orgId: string) {
@@ -640,6 +643,9 @@ export async function create(
           registerId: options.pos.registerId,
           sessionId: options.pos.sessionId,
           salesDocumentId: document.id,
+          changeAmount: options.pos.change?.amount ?? '0',
+          changePaymentMethodId: options.pos.change?.paymentMethodId ?? null,
+          changeLedgerAccountId: options.pos.change?.ledgerAccountId ?? null,
           payments: {
             create: options.pos.payments.map((payment) => ({
               paymentMethodId: payment.paymentMethodId,
@@ -862,6 +868,9 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
   const posOrder = await tx.posOrder.findUnique({
     where: { salesDocumentId: id },
     select: {
+      changeAmount: true,
+      changeLedgerAccountId: true,
+      changePaymentMethod: { select: { name: true } },
       payments: {
         select: {
           ledgerAccountId: true,
@@ -877,6 +886,18 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       amount: new Decimal(payment.amount.toString()),
       description: payment.paymentMethod.name,
     }))
+    const change = new Decimal(posOrder.changeAmount.toString())
+    if (change.gt(0) && posOrder.changeLedgerAccountId) {
+      input.changeReturns = [
+        {
+          accountId: posOrder.changeLedgerAccountId,
+          amount: change,
+          description: posOrder.changePaymentMethod
+            ? `Change · ${posOrder.changePaymentMethod.name}`
+            : 'Change',
+        },
+      ]
+    }
   }
 
   // Tracked stock moves as part of posting, and its cost joins the same journal.

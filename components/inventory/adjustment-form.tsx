@@ -1,6 +1,8 @@
 'use client'
 
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
+
+import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import { PlusIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -63,7 +65,7 @@ export function AdjustmentForm({
   const router = useRouter()
   const [state, formAction] = useActionState(saveAdjustmentForm, idleState)
 
-  const [number, setNumber] = useState(documentNumber)
+  const [number, setNumber] = usePropState(documentNumber)
   const [date, setDate] = useState(today)
   const [accountId, setAccountId] = useState('')
   const [reason, setReason] = useState('')
@@ -77,8 +79,6 @@ export function AdjustmentForm({
   const nextKey = useRef(ITEM_ROWS + 1)
   const handled = useRef(false)
   const afterSave = useRef<'close' | 'new'>('close')
-
-  useEffect(() => setNumber(documentNumber), [documentNumber])
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
