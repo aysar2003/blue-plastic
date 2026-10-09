@@ -34,6 +34,8 @@ export async function GET(
       title: config.singular,
       number: document.number,
       date: document.date,
+      createdAt: document.createdAt,
+      timeZone: org.timeZone,
       dueDate: document.dueDate,
       customerName: document.customer.displayName,
       customerAddress: [document.customer.billingLine1, document.customer.billingCity].filter(

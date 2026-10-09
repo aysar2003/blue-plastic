@@ -4,7 +4,7 @@ import type { JournalSourceType } from '@prisma/client'
 
 import { JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
 import { MONTHS } from '@/lib/constants'
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatDate, formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { letterheadOf, type LetterheadSource } from '@/lib/letterhead'
 import { formatMoney } from '@/lib/money'
 import { ODOO_PDF } from '@/lib/odoo-brand'
@@ -21,6 +21,7 @@ export type MonthExport = {
   from: string
   to: string
   currency: string
+  timeZone?: string
   income: string | null
   expenses: string | null
   net: string | null
@@ -120,7 +121,7 @@ export function renderMonthPdf(input: MonthExport): Uint8Array {
     height: 13,
     runs: [
       journal.journalNumber,
-      formatDate(toCalendarDate(journal.date)),
+      formatTransactionDate(toCalendarDate(journal.date), journal.postedAt, input.timeZone || 'UTC'),
       clip(journal.memo ?? '', 28),
       JOURNAL_SOURCE_LABELS[journal.sourceType as JournalSourceType] ?? journal.sourceType,
       journal.source.number ?? '',
@@ -203,7 +204,7 @@ export async function renderMonthWorkbook(input: MonthExport): Promise<Uint8Arra
     const line = sheet.getRow(row)
     writeCells(line, [
       journal.journalNumber,
-      formatDate(toCalendarDate(journal.date)),
+      formatTransactionDate(toCalendarDate(journal.date), journal.postedAt, input.timeZone || 'UTC'),
       journal.memo ?? '',
       JOURNAL_SOURCE_LABELS[journal.sourceType as JournalSourceType] ?? journal.sourceType,
       journal.source.number ?? '',

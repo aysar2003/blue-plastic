@@ -14,7 +14,7 @@ import { readSort } from '@/components/data/sortable-header'
 import { PurchaseOrderTable } from '@/components/purchases/purchase-order-table'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { formatDate, toCalendarDate, today } from '@/lib/date'
+import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { DATE_PRESETS, listHref, presetRange, readDatePreset } from '@/lib/list-filters'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -169,7 +169,7 @@ export async function PurchaseOrderScreen({
               rows={page.rows.map((row) => ({
                 id: row.id,
                 number: row.number,
-                date: formatDate(toCalendarDate(row.date)),
+                date: formatTransactionDate(toCalendarDate(row.date), row.createdAt, ctx.organization.timeZone),
                 dueDate: row.dueDate ? formatDate(toCalendarDate(row.dueDate)) : null,
                 status: row.status,
                 memo: row.memo,

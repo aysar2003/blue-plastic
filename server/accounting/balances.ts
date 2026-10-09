@@ -210,6 +210,8 @@ export type LedgerEntry = {
   journalId: string
   journalNumber: string
   date: Date
+  /** When the journal was posted — the time shown beside the date on a register. */
+  recordedAt: Date
   memo: string | null
   description: string | null
   sourceType: string
@@ -276,6 +278,7 @@ export async function generalLedger(
       journalId: string
       journalNumber: string
       date: Date
+      recordedAt: Date
       memo: string | null
       description: string | null
       sourceType: string
@@ -294,6 +297,7 @@ export async function generalLedger(
            j.id              AS "journalId",
            j."journalNumber" AS "journalNumber",
            j.date            AS "date",
+           j."postedAt"      AS "recordedAt",
            j.memo            AS "memo",
            l.description     AS "description",
            j."sourceType"::text AS "sourceType",
@@ -349,6 +353,7 @@ export async function generalLedger(
       journalId: row.journalId,
       journalNumber: row.journalNumber,
       date: row.date,
+      recordedAt: row.recordedAt instanceof Date ? row.recordedAt : new Date(row.recordedAt),
       memo: row.memo,
       description: row.description,
       sourceType: row.sourceType,

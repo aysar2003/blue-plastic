@@ -66,6 +66,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ peri
       from,
       to,
       currency: ctx.organization.baseCurrency,
+      timeZone: ctx.organization.timeZone,
       income,
       expenses,
       net,

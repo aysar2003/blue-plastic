@@ -40,17 +40,19 @@ export function receiptCashierName(
 /**
  * The payment block under the total. The ledger records what the sale took from
  * each method; cash handed over beyond that came back as change, so the cash line
- * shows what the customer actually handed over.
+ * shows what the customer actually handed over. Methods recorded at zero are
+ * omitted — a blank tender is not a payment.
  */
 export function paymentRows(payments: ReceiptPayment[], total: string, change: number) {
-  const cashIndex = change > 0 ? payments.findIndex((payment) => payment.isCash) : -1
+  const active = payments.filter((payment) => Number(payment.amount) > 0.004)
+  const cashIndex = change > 0 ? active.findIndex((payment) => payment.isCash) : -1
   const effectiveChange = cashIndex >= 0 ? change : 0
-  const rows = payments.map((payment, index) => ({
+  const rows = active.map((payment, index) => ({
     label: payment.method,
     amount: Number(payment.amount) + (index === cashIndex ? effectiveChange : 0),
   }))
-  const recorded = payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
-  const paid = (payments.length > 0 ? recorded : Number(total)) + effectiveChange
+  const recorded = active.reduce((sum, payment) => sum + Number(payment.amount), 0)
+  const paid = (active.length > 0 ? recorded : Number(total)) + effectiveChange
   return { rows, paid, change: effectiveChange }
 }
 

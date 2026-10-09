@@ -99,10 +99,53 @@ export function formatDate(date: CalendarDate, locale = 'en-US'): string {
   }).format(toDate(date))
 }
 
+/** The calendar day of a real instant, as YYYY-MM-DD in `timeZone`. */
+export function calendarDateInZone(value: Date, timeZone = 'UTC'): CalendarDate {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(value)
+}
+
+/**
+ * Date and clock time of a real instant, in the reader's timezone.
+ * "Oct 9, 2026, 11:05 AM" for en-US in Africa/Mogadishu (UTC+3).
+ */
 export function formatDateTime(value: Date, timeZone = 'UTC', locale = 'en-US'): string {
   return new Intl.DateTimeFormat(locale, {
     timeZone,
-    dateStyle: 'medium',
-    timeStyle: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
   }).format(value)
+}
+
+/**
+ * A transaction date for lists, detail pages, and printed paper.
+ *
+ * `date` is the business calendar day. `instant`, when the row stores one
+ * (createdAt, openedAt, postedAt), supplies the clock — but only when that
+ * instant falls on `date` in `timeZone`. A date-only column, or a document
+ * dated on a different day from when it was typed, stays "Oct 9, 2026" with
+ * no invented midnight. A till sale created at 11:05 in Mogadishu reads
+ * "Oct 9, 2026, 11:05 AM".
+ */
+export function formatTransactionDate(
+  date: CalendarDate,
+  instant?: Date | null,
+  timeZone = 'UTC',
+  locale = 'en-US',
+): string {
+  if (
+    instant instanceof Date &&
+    !Number.isNaN(instant.getTime()) &&
+    calendarDateInZone(instant, timeZone) === date
+  ) {
+    return formatDateTime(instant, timeZone, locale)
+  }
+  return formatDate(date, locale)
 }

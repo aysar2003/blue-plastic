@@ -23,6 +23,7 @@ export type JournalRow = {
   id: string
   journalNumber: string
   date: Date
+  postedAt: Date
   memo: string | null
   sourceType: string
   status: string
@@ -101,6 +102,7 @@ export async function list(
         id: true,
         journalNumber: true,
         date: true,
+        postedAt: true,
         memo: true,
         sourceType: true,
         sourceId: true,
@@ -148,6 +150,7 @@ export async function list(
       id: journal.id,
       journalNumber: journal.journalNumber,
       date: journal.date,
+      postedAt: journal.postedAt,
       memo: journal.memo,
       sourceType: journal.sourceType,
       status: journal.status,

@@ -36,12 +36,6 @@ export type EstimateRegisterRow = {
   canConvert: boolean
 }
 
-function sheetDate(iso: string) {
-  const [year, month, day] = iso.split('-')
-  if (!year || !month || !day) return iso
-  return `${Number(month)}/${Number(day)}/${year.slice(2)}`
-}
-
 /**
  * Quotation list under the dashboard — same register shape as invoices and
  * sales receipts, with Create invoice when a quote can still become a sale.
@@ -198,7 +192,7 @@ export function EstimateRegister({
                   state={sort}
                   basePath={basePath}
                   params={params}
-                  className="w-24"
+                  className="w-44"
                   defaultDirection="desc"
                 />
                 <SortableHeader column="number" label="No." state={sort} basePath={basePath} params={params} className="w-28" />
@@ -239,7 +233,7 @@ export function EstimateRegister({
                       className="size-3.5 accent-[#2ca01c]"
                     />
                   </TableCell>
-                  <TableCell className="tabular whitespace-nowrap">{sheetDate(row.date)}</TableCell>
+                  <TableCell className="tabular whitespace-nowrap">{row.date}</TableCell>
                   <TableCell>
                     <Link href={row.href} className="font-medium text-[#2ca01c] hover:underline">
                       {row.number}
