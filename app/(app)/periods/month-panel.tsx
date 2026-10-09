@@ -18,7 +18,7 @@ import { Card } from '@/components/ui/card'
 import { TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { JOURNAL_SOURCE_LABELS, PERIOD_STATUS_LABELS } from '@/lib/accounting-labels'
 import { MONTHS } from '@/lib/constants'
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatDate, formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { listHref } from '@/lib/list-filters'
 import { formatMoney } from '@/lib/money'
 import type { ListQuery } from '@/lib/validation/common'
@@ -237,7 +237,7 @@ async function monthBody(
                     </Link>
                   </TableCell>
                   <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                    {formatDate(toCalendarDate(journal.date))}
+                    {formatTransactionDate(toCalendarDate(journal.date), journal.postedAt, ctx.organization.timeZone)}
                   </TableCell>
                   <TableCell>{journal.memo ?? '—'}</TableCell>
                   <TableCell className="text-muted-foreground">

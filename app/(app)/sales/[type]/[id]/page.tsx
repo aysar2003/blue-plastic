@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatDate, toCalendarDate, today } from '@/lib/date'
+import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { bySlug, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -64,7 +64,7 @@ export default async function SalesDocumentPage({
   const shareBody = [
     `${config.singular} ${document.number}`,
     `To: ${document.customer.displayName}`,
-    `Date: ${formatDate(toCalendarDate(document.date))}`,
+    `Date: ${formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)}`,
     `Total: ${formatMoney(document.total, currency)}`,
     Number(document.balance) > 0
       ? `Amount due: ${formatMoney(document.balance, currency)}`
@@ -151,7 +151,7 @@ export default async function SalesDocumentPage({
           </Badge>
         </Detail>
         <Detail label="Date" tone="zero">
-          {formatDate(toCalendarDate(document.date))}
+          {formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)}
         </Detail>
         {document.dueDate ? (
           <Detail label="Due" tone="warning">

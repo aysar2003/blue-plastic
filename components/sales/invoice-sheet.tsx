@@ -1,4 +1,4 @@
-import { toCalendarDate, toDate } from '@/lib/date'
+import { calendarDateInZone, toCalendarDate, toDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { printSheetLinePad, type SalesTypeConfig } from '@/lib/sales-types'
 import { CUSTOMER_CREDIT, FORM_SHEET } from '@/lib/credit-brand'
@@ -18,6 +18,7 @@ export type InvoiceSheetOrganization = {
   phone: string | null
   email: string | null
   taxRegistrationNumber: string | null
+  timeZone?: string | null
 }
 
 /**
@@ -127,7 +128,9 @@ export function InvoiceSheet({
           <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
             Date
           </dt>
-          <dd className="text-[#5C6B7A]">{longDate(toCalendarDate(document.date))}</dd>
+          <dd className="text-[#5C6B7A]">
+            {longDate(toCalendarDate(document.date), document.createdAt, organization.timeZone)}
+          </dd>
           {document.dueDate ? (
             <>
               <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
@@ -245,13 +248,22 @@ export function InvoiceSheet({
   )
 }
 
-export function longDate(iso: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
+export function longDate(iso: string, instant?: Date | null, timeZone?: string | null): string {
+  const zone = timeZone || 'UTC'
+  const day = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'UTC',
     day: '2-digit',
     month: 'long',
     year: 'numeric',
   }).format(toDate(iso))
+  if (!(instant instanceof Date) || Number.isNaN(instant.getTime())) return day
+  if (calendarDateInZone(instant, zone) !== iso) return day
+  const time = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone,
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(instant)
+  return `${day}, ${time}`
 }
 
 function trimNumber(value: string): string {

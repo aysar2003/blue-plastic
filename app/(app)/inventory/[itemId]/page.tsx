@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -131,7 +131,7 @@ export default async function ItemMovementsPage({
                 <TableRow key={movement.id}>
                   <TableCell className="tabular text-muted-foreground">{movement.sequence}</TableCell>
                   <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                    {formatDate(toCalendarDate(movement.date))}
+                    {formatTransactionDate(toCalendarDate(movement.date), movement.createdAt, ctx.organization.timeZone)}
                   </TableCell>
                   <TableCell>
                     <span className="block">{TYPE_LABELS[movement.type] ?? movement.type}</span>

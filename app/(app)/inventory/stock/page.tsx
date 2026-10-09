@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { DeleteButton } from '@/components/data/delete-record'
 import { ItemNameMenu } from '@/components/inventory/item-name-menu'
 import { ReorderLimitField } from '@/components/inventory/reorder-limit'
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { formatMoney, ZERO } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import * as inventoryService from '@/server/services/inventory.service'
@@ -345,7 +345,7 @@ export default async function InventoryPage({
                     ) : null}
                   </TableCell>
                   <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                    {formatDate(toCalendarDate(adjustment.date))}
+                    {formatTransactionDate(toCalendarDate(adjustment.date), adjustment.createdAt, ctx.organization.timeZone)}
                   </TableCell>
                   <TableCell>{adjustment.reason ?? adjustment.memo ?? '—'}</TableCell>
                   <TableCell className="numeric tabular">{adjustment.lineCount}</TableCell>

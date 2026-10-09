@@ -17,7 +17,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DeleteButton } from '@/components/data/delete-record'
-import { formatDate, toCalendarDate, today } from '@/lib/date'
+import { formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { DATE_PRESETS, presetRange, readDatePreset } from '@/lib/list-filters'
 import { formatMoney } from '@/lib/money'
 import { PAYMENT_METHOD_LABELS, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
@@ -89,7 +89,7 @@ export default async function BillPaymentsPage({
             <TableHeader>
               <TableRow>
                 <SortableHeader column="number" label="Number" state={sort} basePath="/bill-payments" params={linkParams} className="w-32" />
-                <SortableHeader column="date" label="Date" state={sort} basePath="/bill-payments" params={linkParams} className="w-28" defaultDirection="desc" />
+                <SortableHeader column="date" label="Date" state={sort} basePath="/bill-payments" params={linkParams} className="w-44" defaultDirection="desc" />
                 <SortableHeader column="vendor" label="Vendor" state={sort} basePath="/bill-payments" params={linkParams} />
                 <SortableHeader column="method" label="Method" state={sort} basePath="/bill-payments" params={linkParams} />
                 <TableHead>From</TableHead>
@@ -106,7 +106,7 @@ export default async function BillPaymentsPage({
                     {payment.number}
                   </TableCell>
                   <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                    {formatDate(toCalendarDate(payment.date))}
+                    {formatTransactionDate(toCalendarDate(payment.date), payment.createdAt, ctx.organization.timeZone)}
                   </TableCell>
                   <TableCell>{payment.vendor.displayName}</TableCell>
                   <TableCell className="text-muted-foreground">

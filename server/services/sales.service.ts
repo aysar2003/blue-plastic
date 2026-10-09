@@ -62,7 +62,7 @@ const SEQUENCE_FOR: Record<SalesDocumentType, DocumentType> = {
 }
 
 const DOCUMENT_SELECT = {
-  id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true,
+  id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true,
   status: true, reference: true, memo: true, customerMessage: true,
   subtotal: true, discountAmount: true, taxTotal: true, total: true,
   currencyCode: true, depositAccountId: true, journalId: true, version: true,

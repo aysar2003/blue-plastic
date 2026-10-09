@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatDate, toCalendarDate, today } from '@/lib/date'
+import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { DATE_PRESETS, presetRange, readDatePreset } from '@/lib/list-filters'
 import { formatMoney } from '@/lib/money'
 import { purchaseBySlug } from '@/lib/purchase-types'
@@ -137,7 +137,7 @@ export default async function PurchaseListPage({
             <TableHeader>
               <TableRow>
                 <SortableHeader column="number" label="Number" state={sort} basePath={basePath} params={linkParams} className="w-32" />
-                <SortableHeader column="date" label="Date" state={sort} basePath={basePath} params={linkParams} className="w-28" defaultDirection="desc" />
+                <SortableHeader column="date" label="Date" state={sort} basePath={basePath} params={linkParams} className="w-44" defaultDirection="desc" />
                 <SortableHeader column="vendor" label="Vendor" state={sort} basePath={basePath} params={linkParams} />
                 <SortableHeader column="reference" label="Their ref" state={sort} basePath={basePath} params={linkParams} />
                 {config.type === 'BILL' ? (
@@ -172,7 +172,7 @@ export default async function PurchaseListPage({
                       </Link>
                     </TableCell>
                     <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                      {formatDate(toCalendarDate(row.date))}
+                      {formatTransactionDate(toCalendarDate(row.date), row.createdAt, ctx.organization.timeZone)}
                     </TableCell>
                     <TableCell>{row.vendor.displayName}</TableCell>
                     <TableCell className="text-muted-foreground">{row.reference ?? '—'}</TableCell>
