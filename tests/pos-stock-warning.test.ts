@@ -60,4 +60,18 @@ describe('POS stock warning (product tiles)', () => {
     const tile = html.slice(html.lastIndexOf('<button', html.indexOf('AASTO')), html.indexOf('AASTO'))
     expect(tile).not.toContain('disabled')
   })
+
+  it('highlights a product tile on hover and keyboard focus with the till teal', () => {
+    const html = render([{ id: 'a4', name: 'A4', onHand: '100.0000' }])
+    const tile = html.slice(html.lastIndexOf('<button', html.indexOf('A4')), html.indexOf('A4'))
+    expect(tile).toContain('cursor-pointer')
+    expect(tile).toContain('[&amp;:hover]:border-[color:var(--product-hover-border)]')
+    expect(tile).toContain('[&amp;:hover]:bg-[var(--product-hover-bg)]')
+    expect(tile).toContain('focus-visible:border-[color:var(--product-hover-border)]')
+    expect(tile).toContain('focus-visible:bg-[var(--product-hover-bg)]')
+    expect(tile).toContain('transition-colors')
+    // Dark till (the default): accent border, lighter teal fill.
+    expect(tile).toContain('--product-hover-border:#017e84')
+    expect(tile).toContain('--product-hover-bg:#226066')
+  })
 })
