@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useMemo } from 'react'
+import { Fragment, isValidElement, useState, useTransition, useMemo, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -18,6 +18,7 @@ import {
   type ItemValues,
   type SimpleOption,
 } from '@/components/master-data/item-dialog'
+import { ColumnBand } from '@/components/data/column-band'
 import { ClickableRow } from '@/components/data/clickable-row'
 import { DeleteMenuItem } from '@/components/data/delete-record'
 import { ScrollSheet } from '@/components/data/scroll-sheet'
@@ -40,10 +41,12 @@ import { QtyCell } from '@/components/inventory/line-store'
 import {
   buildItemTableColumns,
   ITEM_DEFAULT_HIDDEN,
+  ITEM_MAIN_COLUMN_IDS,
   ITEM_TABLE_STORAGE_KEY,
   isStoreColumnId,
   type ItemColumnDef,
 } from '@/lib/item-table-columns'
+import { partitionColumns } from '@/lib/table-fit'
 import { useTableColumnPrefs } from '@/lib/use-table-column-prefs'
 import { setItemsActive } from './actions'
 
@@ -126,6 +129,11 @@ export function ItemTable({
     ITEM_DEFAULT_HIDDEN,
   )
   const visibleIds = useMemo(() => new Set(visible.map((c) => c.id)), [visible])
+  const { main: mainCols, extra: extraCols } = useMemo(
+    () => partitionColumns(visible, ITEM_MAIN_COLUMN_IDS),
+    [visible],
+  )
+  const span = mainCols.length + (canArchive ? 1 : 0) + 1
 
   const allSelected = rows.length > 0 && rows.every((row) => selected.has(row.id))
 
@@ -391,6 +399,17 @@ export function ItemTable({
     }
   }
 
+  function renderBandValue(row: ItemRow, col: ItemColumnDef): ReactNode {
+    const cell = renderCell(row, col)
+    if (!isValidElement<{ className?: string; children?: ReactNode }>(cell)) return cell
+    const className = cell.props.className ?? ''
+    return (
+      <div key={col.id} className={cn('min-w-0 break-words', className, className.includes('numeric') && 'text-right')}>
+        {cell.props.children}
+      </div>
+    )
+  }
+
   return (
     <>
       {selected.size > 0 && canArchive ? (
@@ -429,19 +448,33 @@ export function ItemTable({
                   />
                 </TableHead>
               ) : null}
-              {visible.map((col) => renderHeader(col))}
+              {mainCols.map((col) => renderHeader(col))}
               <TableHead className="w-10 bg-[var(--band)]" />
             </TableRow>
+            {extraCols.length > 0 ? (
+              <TableRow data-column-band="" className="ledger-head hover:bg-[var(--band)]">
+                <TableHead colSpan={span} className="h-auto bg-[var(--band)] py-2 normal-case tracking-normal">
+                  <ColumnBand>
+                    {extraCols.map((col) => (
+                      <div key={col.id} className="min-w-0 text-[0.65rem] font-semibold uppercase leading-tight tracking-wide">
+                        {col.label}
+                      </div>
+                    ))}
+                  </ColumnBand>
+                </TableHead>
+              </TableRow>
+            ) : null}
           </TableHeader>
           <TableBody>
             {rows.map((row, index) => (
+              <Fragment key={row.id}>
               <ClickableRow
-                key={row.id}
                 href={`/items/${row.id}/report`}
                 title={`Open report for ${row.name}`}
                 className={cn(
                   index % 2 === 1 ? 'ledger-row-alt' : 'ledger-row',
                   !row.isActive && 'opacity-55',
+                  extraCols.length > 0 && 'border-b-0',
                 )}
               >
                 {canArchive ? (
@@ -462,7 +495,7 @@ export function ItemTable({
                     />
                   </TableCell>
                 ) : null}
-                {visible.map((col) => renderCell(row, col))}
+                {mainCols.map((col) => renderCell(row, col))}
                 <TableCell>
                   <div className="flex items-center justify-end gap-0.5">
                     {canEdit ? (
@@ -518,6 +551,23 @@ export function ItemTable({
                   </div>
                 </TableCell>
               </ClickableRow>
+              {extraCols.length > 0 ? (
+                <ClickableRow
+                  href={`/items/${row.id}/report`}
+                  band
+                  className={cn(
+                    index % 2 === 1 ? 'ledger-row-alt' : 'ledger-row',
+                    !row.isActive && 'opacity-55',
+                  )}
+                >
+                  <TableCell colSpan={span} className="py-1.5">
+                    <ColumnBand>
+                      {extraCols.map((col) => renderBandValue(row, col))}
+                    </ColumnBand>
+                  </TableCell>
+                </ClickableRow>
+              ) : null}
+              </Fragment>
             ))}
           </TableBody>
         </Table>

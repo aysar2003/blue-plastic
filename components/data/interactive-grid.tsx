@@ -1,14 +1,17 @@
 'use client'
 
-import { useMemo, useState, useSyncExternalStore } from 'react'
+import { Fragment, useMemo, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon, GripVerticalIcon } from 'lucide-react'
 
+import { ColumnBand } from '@/components/data/column-band'
 import { TableColumnCustomize } from '@/components/data/table-column-customize'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate, formatDateTime, isCalendarDate } from '@/lib/date'
 import {
+  columnShareWeights,
+  columnsForViewport,
   compareSortValues,
   defaultColumnWidth,
   mergeGridLayout,
@@ -260,7 +263,15 @@ export function InteractiveGrid({
     document.body.style.userSelect = 'none'
   }
 
-  const tableWidth = visible.reduce((sum, column) => sum + (layout.widths[column.id] ?? 160), 0)
+  const preferred: Record<string, number> = {}
+  for (const column of visible) {
+    preferred[column.id] = layout.widths[column.id] ?? column.defaultWidth ?? defaultColumnWidth(column.kind)
+  }
+  const placed = columnsForViewport(visible, preferred)
+  const main = placed.main.length > 0 ? placed.main : visible
+  const extra = placed.main.length > 0 ? placed.extra : []
+  const weights = columnShareWeights(main, preferred)
+  const weightSum = weights.reduce((sum, weight) => sum + weight, 0) || 1
 
   return (
     <div>
@@ -276,15 +287,15 @@ export function InteractiveGrid({
       ) : null}
 
       <div className="overflow-hidden rounded-md border bg-card">
-        <Table containerClassName="overflow-x-auto" style={{ width: Math.max(tableWidth, 0), minWidth: '100%', tableLayout: 'fixed' }}>
+        <Table style={{ width: '100%', tableLayout: 'fixed' }}>
           <colgroup>
-            {visible.map((column) => (
-              <col key={column.id} style={{ width: layout.widths[column.id] ?? 160 }} />
+            {main.map((column, index) => (
+              <col key={column.id} style={{ width: `${((weights[index] ?? 1) / weightSum) * 100}%` }} />
             ))}
           </colgroup>
           <TableHeader>
             <TableRow>
-              {visible.map((column) => {
+              {main.map((column) => {
                 const numeric = isFigure(column.kind)
                 const active = sort?.id === column.id
                 const Icon = active ? (sort.dir === 'asc' ? ArrowUpIcon : ArrowDownIcon) : ChevronsUpDownIcon
@@ -301,7 +312,7 @@ export function InteractiveGrid({
                       setDragId(null)
                     }}
                   >
-                    <div className={cn('flex items-center gap-1', numeric && 'flex-row-reverse')}>
+                    <div className={cn('flex items-start gap-1', numeric && 'flex-row-reverse')}>
                       <span
                         draggable
                         onDragStart={(event) => {
@@ -320,12 +331,12 @@ export function InteractiveGrid({
                         type="button"
                         onClick={() => toggleSort(column)}
                         className={cn(
-                          'inline-flex min-w-0 flex-1 items-center gap-1 rounded-sm text-left transition-colors hover:text-foreground',
+                          'inline-flex min-w-0 flex-1 items-start gap-1 rounded-sm text-left transition-colors hover:text-foreground',
                           numeric && 'flex-row-reverse text-right',
                           active ? 'text-foreground' : 'text-foreground/80',
                         )}
                       >
-                        <span className="truncate">{column.label}</span>
+                        <span className="min-w-0 flex-1 whitespace-normal break-words leading-tight">{column.label}</span>
                         <Icon className={cn('size-3.5 shrink-0', !active && 'opacity-55')} />
                       </button>
                     </div>
@@ -340,50 +351,137 @@ export function InteractiveGrid({
                 )
               })}
             </TableRow>
+            {extra.length > 0 ? (
+              <TableRow data-column-band="" className="hover:bg-transparent">
+                <TableHead colSpan={main.length} className="h-auto bg-[var(--band)] py-2 normal-case tracking-normal">
+                  <ColumnBand>
+                    {extra.map((column) => {
+                      const numeric = isFigure(column.kind)
+                      const active = sort?.id === column.id
+                      const Icon = active ? (sort.dir === 'asc' ? ArrowUpIcon : ArrowDownIcon) : ChevronsUpDownIcon
+                      return (
+                        <div key={column.id} data-split-account={column.id.startsWith('split:') ? column.label : undefined}>
+                          <button
+                            type="button"
+                            onClick={() => toggleSort(column)}
+                            className={cn(
+                              'flex w-full min-w-0 items-start gap-1 text-[0.65rem] font-semibold uppercase leading-tight tracking-wide',
+                              numeric && 'flex-row-reverse text-right',
+                              active ? 'text-foreground' : 'text-foreground/80',
+                            )}
+                          >
+                            <span className="min-w-0 flex-1 whitespace-normal break-words">{column.label}</span>
+                            <Icon className={cn('mt-0.5 size-3.5 shrink-0', !active && 'opacity-55')} />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </ColumnBand>
+                </TableHead>
+              </TableRow>
+            ) : null}
           </TableHeader>
           <TableBody>
-            {sortedRows.map((row) => (
-              <TableRow key={row.id} className={cn(row.emphasis && 'bg-muted/40', row.className)}>
-                {visible.map((column) => (
-                  <GridCellView
-                    key={column.id}
-                    column={column}
-                    cell={row.cells[column.id]}
-                    currency={currency}
-                    timeZone={timeZone}
-                    emphasis={row.emphasis}
-                  />
-                ))}
-              </TableRow>
-            ))}
+            {sortedRows.map((row) => {
+              const extraCells = extra.map((column) => ({
+                column,
+                text: present(column, row.cells[column.id], currency, timeZone),
+              }))
+              const showBand = extraCells.some((item) => item.text)
+              return (
+              <Fragment key={row.id}>
+                <TableRow className={cn(row.emphasis && 'bg-muted/40', showBand && 'border-b-0', row.className)}>
+                  {main.map((column) => (
+                    <GridCellView
+                      key={column.id}
+                      column={column}
+                      cell={row.cells[column.id]}
+                      currency={currency}
+                      timeZone={timeZone}
+                      emphasis={row.emphasis}
+                    />
+                  ))}
+                </TableRow>
+                {showBand ? (
+                  <TableRow data-column-band="" className="bg-muted/30 hover:bg-muted/40">
+                    <TableCell colSpan={main.length} className="py-1.5">
+                      <ColumnBand>
+                        {extraCells.map(({ column, text }) => (
+                          <div
+                            key={column.id}
+                            data-split-account={column.id.startsWith('split:') ? column.label : undefined}
+                            className={cn(
+                              'min-w-0 break-words text-[0.8125rem]',
+                              isFigure(column.kind) && 'text-right tabular',
+                            )}
+                          >
+                            {text}
+                          </div>
+                        ))}
+                      </ColumnBand>
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </Fragment>
+              )
+            })}
           </TableBody>
           {renderedFooters.length > 0 ? (
             <TableFooter>
               {renderedFooters.map((footer) => {
+                const shown = new Set([...main, ...extra].map((column) => column.id))
                 const hiddenFigures = columns
-                  .filter((column) => !visible.some((shown) => shown.id === column.id))
+                  .filter((column) => !shown.has(column.id))
                   .map((column) => present(column, footer.cells[column.id], currency, timeZone))
                   .filter(Boolean)
+                const extraFigures = extra
+                  .map((column) => ({
+                    column,
+                    text: present(column, footer.cells[column.id], currency, timeZone),
+                  }))
+                  .filter((item) => item.text)
                 return (
-                  <TableRow key={footer.id}>
-                    {visible.map((column, index) => {
-                      const explicit = footer.cells[column.id]
-                      const labelHere = Boolean(footer.label) && !explicit?.value && index === firstLabelIndex(visible, footer)
-                      const text = labelHere
-                        ? hiddenFigures.length
-                          ? `${footer.label} ${hiddenFigures.join(' · ')}`
-                          : footer.label!
-                        : present(column, explicit, currency, timeZone)
-                      return (
-                        <TableCell
-                          key={column.id}
-                          className={cn('font-semibold', isFigure(column.kind) && 'numeric tabular', column.kind === 'datetime' && 'whitespace-nowrap')}
-                        >
-                          {text || (labelHere ? footer.label : '')}
+                  <Fragment key={footer.id}>
+                    <TableRow>
+                      {main.map((column, index) => {
+                        const explicit = footer.cells[column.id]
+                        const labelHere = Boolean(footer.label) && !explicit?.value && index === firstLabelIndex(main, footer)
+                        const text = labelHere
+                          ? hiddenFigures.length
+                            ? `${footer.label} ${hiddenFigures.join(' · ')}`
+                            : footer.label!
+                          : present(column, explicit, currency, timeZone)
+                        return (
+                          <TableCell
+                            key={column.id}
+                            className={cn('font-semibold', isFigure(column.kind) && 'numeric tabular')}
+                          >
+                            {text || (labelHere ? footer.label : '')}
+                          </TableCell>
+                        )
+                      })}
+                    </TableRow>
+                    {extraFigures.length > 0 ? (
+                      <TableRow data-column-band="" className="hover:bg-transparent">
+                        <TableCell colSpan={main.length} className="py-1.5">
+                          <ColumnBand>
+                            {extraFigures.map(({ column, text }) => (
+                              <div
+                                key={column.id}
+                                data-split-account={column.id.startsWith('split:') ? column.label : undefined}
+                                className="min-w-0 text-right text-[0.8125rem] font-semibold tabular"
+                              >
+                                <div className="text-[0.65rem] font-semibold uppercase leading-tight tracking-wide text-muted-foreground">
+                                  {column.label}
+                                </div>
+                                {text}
+                              </div>
+                            ))}
+                          </ColumnBand>
                         </TableCell>
-                      )
-                    })}
-                  </TableRow>
+                      </TableRow>
+                    ) : null}
+                  </Fragment>
                 )
               })}
             </TableFooter>
@@ -417,9 +515,8 @@ function GridCellView({
   const text = present(column, cell, currency, timeZone)
   const className = cn(
     numeric && 'numeric tabular',
-    (column.kind === 'date' || column.kind === 'datetime') && 'tabular whitespace-nowrap',
+    (column.kind === 'date' || column.kind === 'datetime') && 'tabular',
     emphasis && 'font-medium',
-    !numeric && 'truncate',
   )
   if (!text) {
     return (
@@ -442,7 +539,7 @@ function GridCellView({
     <TableCell className={className} title={text}>
       {cell?.href ? (
         <Link href={cell.href} className={cn(LINK, 'inline-flex max-w-full items-center')}>
-          <span className={cn(!numeric && 'truncate')}>{body}</span>
+          <span className="min-w-0">{body}</span>
         </Link>
       ) : (
         body

@@ -57,13 +57,13 @@ export function SortableHeader({
         // ordering is not the same rows, and landing there is disorienting.
         scroll={false}
         className={cn(
-          'inline-flex items-center gap-1 rounded-sm transition-colors hover:text-foreground',
+          'flex w-full min-w-0 items-start gap-1 whitespace-normal rounded-sm transition-colors hover:text-foreground',
           numeric && 'flex-row-reverse',
           active ? 'text-foreground' : 'text-foreground/80',
         )}
       >
-        {label}
-        <Icon className={cn('size-3.5 shrink-0', !active && 'opacity-55')} />
+        <span className="min-w-0">{label}</span>
+        <Icon className={cn('mt-0.5 size-3.5 shrink-0', !active && 'opacity-55')} />
       </Link>
     </TableHead>
   )

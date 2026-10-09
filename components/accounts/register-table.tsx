@@ -111,7 +111,6 @@ export function RegisterTable({ accountId, currency, timeZone, rows, closingBala
       rows={gridRows}
       currency={currency}
       timeZone={timeZone}
-      defaultHidden={['contra']}
       customizable
       totalLabel="Total"
       footers={[

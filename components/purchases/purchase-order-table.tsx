@@ -1,8 +1,10 @@
 'use client'
 
+import { Fragment } from 'react'
 import Link from 'next/link'
 import { ChevronDownIcon } from 'lucide-react'
 
+import { ColumnBand } from '@/components/data/column-band'
 import { TableColumnCustomize } from '@/components/data/table-column-customize'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
@@ -15,6 +17,8 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatMoney } from '@/lib/money'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
+import { partitionColumns } from '@/lib/table-fit'
+import { cn } from '@/lib/utils'
 import { useTableColumnPrefs } from '@/lib/use-table-column-prefs'
 
 type ColumnId =
@@ -70,6 +74,9 @@ export type PurchaseOrderBoardRow = {
 }
 
 const NUMERIC = new Set<ColumnId>(['subtotal', 'tax', 'total', 'attachments'])
+
+/** First row of the order list. The rest wrap underneath so the page does not scroll sideways. */
+const PO_MAIN_IDS: ColumnId[] = ['supplier', 'number', 'date', 'total', 'due', 'status']
 const PO_DEFAULT_HIDDEN: string[] = []
 
 export function PurchaseOrderTable({
@@ -85,6 +92,11 @@ export function PurchaseOrderTable({
 }) {
   const { prefs, visible, toggle, reorder } = useTableColumnPrefs('bpc.poColumns', COLUMNS, PO_DEFAULT_HIDDEN)
   const shown = new Set(visible.map((column) => column.id as ColumnId))
+  const { main: mainColumns, extra: extraColumns } = partitionColumns(
+    COLUMNS.filter((column) => shown.has(column.id)),
+    PO_MAIN_IDS,
+  )
+  const span = mainColumns.length + 1
 
   return (
     <div>
@@ -94,13 +106,32 @@ export function PurchaseOrderTable({
       <Table>
         <TableHeader>
           <TableRow>
-            {COLUMNS.filter((column) => shown.has(column.id)).map((column) => (
+            {mainColumns.map((column) => (
               <TableHead key={column.id} className={NUMERIC.has(column.id) ? 'numeric' : undefined}>
                 {column.label}
               </TableHead>
             ))}
             <TableHead className="w-28 print:hidden">Action</TableHead>
           </TableRow>
+          {extraColumns.length > 0 ? (
+            <TableRow data-column-band="" className="hover:bg-transparent">
+              <TableHead colSpan={span} className="h-auto py-2 normal-case tracking-normal">
+                <ColumnBand>
+                  {extraColumns.map((column) => (
+                    <div
+                      key={column.id}
+                      className={cn(
+                        'min-w-0 text-[0.65rem] font-semibold uppercase leading-tight tracking-wide',
+                        NUMERIC.has(column.id) && 'text-right',
+                      )}
+                    >
+                      {column.label}
+                    </div>
+                  ))}
+                </ColumnBand>
+              </TableHead>
+            </TableRow>
+          ) : null}
         </TableHeader>
         <TableBody>
           {rows.map((row) => {
@@ -123,11 +154,12 @@ export function PurchaseOrderTable({
             }
             const receivable = canReceive && row.status !== 'VOID' && row.status !== 'DRAFT' && row.status !== 'CLOSED'
             return (
-              <TableRow key={row.id}>
-                {COLUMNS.filter((column) => shown.has(column.id)).map((column) => (
+              <Fragment key={row.id}>
+              <TableRow className={extraColumns.length > 0 ? 'border-b-0' : undefined}>
+                {mainColumns.map((column) => (
                   <TableCell
                     key={column.id}
-                    className={NUMERIC.has(column.id) ? 'numeric tabular whitespace-nowrap' : 'whitespace-nowrap'}
+                    className={NUMERIC.has(column.id) ? 'numeric tabular' : undefined}
                   >
                     {column.id === 'status' ? (
                       <Badge variant={STATUS_VARIANTS[row.status] ?? 'secondary'}>{cells.status}</Badge>
@@ -164,6 +196,30 @@ export function PurchaseOrderTable({
                   </DropdownMenu>
                 </TableCell>
               </TableRow>
+              {extraColumns.length > 0 ? (
+                <TableRow data-column-band="" className="bg-muted/30">
+                  <TableCell colSpan={span} className="py-1.5">
+                    <ColumnBand>
+                      {extraColumns.map((column) => (
+                        <div
+                          key={column.id}
+                          className={cn(
+                            'min-w-0 break-words text-[0.8125rem]',
+                            NUMERIC.has(column.id) && 'text-right tabular',
+                          )}
+                        >
+                          {column.id === 'status' ? (
+                            <Badge variant={STATUS_VARIANTS[row.status] ?? 'secondary'}>{cells.status}</Badge>
+                          ) : (
+                            cells[column.id]
+                          )}
+                        </div>
+                      ))}
+                    </ColumnBand>
+                  </TableCell>
+                </TableRow>
+              ) : null}
+              </Fragment>
             )
           })}
         </TableBody>

@@ -49,7 +49,9 @@ export function ReportTools() {
   const splitRaw = useBrowserStore(splitKey(pathname))
   const savedTemplate = useBrowserStore(templateKey)
   const hidden = useMemo(() => parseList(hiddenRaw), [hiddenRaw])
-  const shownSplits = useMemo(() => parseList(splitRaw), [splitRaw])
+  // No saved choice means every split account is on. A stored list, even an
+  // empty one, is a choice the person already made.
+  const shownSplits = useMemo(() => (splitRaw === null ? null : parseList(splitRaw)), [splitRaw])
   const [match, setMatch] = useState<{ shown: number; total: number } | null>(null)
   const template: ReportTemplate =
     savedTemplate === 'compact' || savedTemplate === 'plain' || savedTemplate === 'standard'
@@ -74,37 +76,65 @@ export function ReportTools() {
         return
       }
 
-      const headRow = table.querySelector(':scope > thead > tr')
+      const headRow = table.querySelector(':scope > thead > tr:not([data-column-band])')
       const headCells = headRow ? ([...headRow.children] as HTMLElement[]) : []
       const labels: string[] = []
-      const splitLabels: string[] = []
       headCells.forEach((cell) => {
-        const split = cell.dataset.splitAccount
-        if (split) splitLabels.push(split)
-        else labels.push(cell.textContent?.replace(/\s+/g, ' ').trim() || 'Column')
+        if (cell.dataset.splitAccount || cell.hasAttribute('data-column-band')) return
+        labels.push(cell.textContent?.replace(/\s+/g, ' ').trim() || 'Column')
       })
+      const splitLabels = [
+        ...new Set(
+          [...table.querySelectorAll<HTMLElement>('[data-split-account]')]
+            .map((cell) => cell.dataset.splitAccount)
+            .filter((label): label is string => Boolean(label)),
+        ),
+      ]
       setHeaders((current) => (current.join('\n') === labels.join('\n') ? current : labels))
       setSplits((current) => (current.join('\n') === splitLabels.join('\n') ? current : splitLabels))
 
       const hiddenSet = new Set(hidden)
-      const shownSplitSet = new Set(shownSplits)
+      const shownSplitSet = shownSplits === null ? null : new Set(shownSplits)
       headCells.forEach((cell, index) => {
-        const split = cell.dataset.splitAccount
+        if (cell.dataset.splitAccount) return
         const label = cell.textContent?.replace(/\s+/g, ' ').trim() || 'Column'
-        const off = split ? !shownSplitSet.has(split) : hiddenSet.has(label)
+        const off = hiddenSet.has(label)
         table.querySelectorAll(':scope > thead > tr, :scope > tbody > tr, :scope > tfoot > tr').forEach((row) => {
+          if ((row as HTMLElement).hasAttribute('data-column-band')) return
           const target = row.children[index] as HTMLElement | undefined
           if (target) target.hidden = off
         })
       })
 
+      table.querySelectorAll<HTMLElement>('[data-split-account]').forEach((cell) => {
+        const split = cell.dataset.splitAccount
+        if (!split || shownSplitSet === null) {
+          cell.hidden = false
+          return
+        }
+        cell.hidden = !shownSplitSet.has(split)
+      })
+      table.querySelectorAll<HTMLElement>('[data-column-band]').forEach((row) => {
+        const items = [...row.querySelectorAll<HTMLElement>('[data-split-account]')]
+        if (items.length === 0) return
+        row.hidden = items.every((item) => item.hidden)
+      })
+
       const needle = query.trim().toLowerCase()
       const rows = [...table.querySelectorAll(':scope > tbody > tr')]
       let shown = 0
-      rows.forEach((row) => {
-        const text = row.textContent?.toLowerCase() ?? ''
+      rows.forEach((row, index) => {
+        if ((row as HTMLElement).hasAttribute('data-column-band')) return
+        const next = rows[index + 1] as HTMLElement | undefined
+        const band = next?.hasAttribute('data-column-band') ? next : null
+        const text = `${row.textContent ?? ''} ${band?.textContent ?? ''}`.toLowerCase()
         const keep = !needle || text.includes(needle)
         ;(row as HTMLElement).hidden = !keep
+        if (band) {
+          const bandSplits = [...band.querySelectorAll<HTMLElement>('[data-split-account]')]
+          const splitsOff = bandSplits.length > 0 && bandSplits.every((item) => item.hidden)
+          band.hidden = !keep || splitsOff
+        }
         if (keep) shown += 1
       })
       const footer = table.querySelector(':scope > tfoot') as HTMLElement | null
@@ -133,7 +163,8 @@ export function ReportTools() {
   }
 
   const toggleSplit = (label: string) => {
-    const next = shownSplits.includes(label) ? shownSplits.filter((item) => item !== label) : [...shownSplits, label]
+    const base = shownSplits ?? splits
+    const next = base.includes(label) ? base.filter((item) => item !== label) : [...base, label]
     writeBrowserStore(splitKey(pathname), JSON.stringify(next))
   }
 
@@ -196,7 +227,7 @@ export function ReportTools() {
                 <label key={label} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent">
                   <input
                     type="checkbox"
-                    checked={shownSplits.includes(label)}
+                    checked={shownSplits === null || shownSplits.includes(label)}
                     onChange={() => toggleSplit(label)}
                     className="size-3.5 accent-primary"
                   />

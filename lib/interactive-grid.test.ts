@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  columnMinWidth,
+  columnShareWeights,
+  columnsForViewport,
   compareSortValues,
   mergeGridLayout,
   moveItem,
@@ -48,6 +51,73 @@ describe('column layout', () => {
     expect(layout.hidden).toEqual(['name'])
     expect(layout.widths.date).toBe(200)
     expect(layout.widths.amount).toBe(128)
+  })
+})
+
+describe('fitted columns', () => {
+  const ledger = [
+    { id: 'date', kind: 'datetime' as const },
+    { id: 'entry', kind: 'text' as const },
+    { id: 'type', kind: 'text' as const },
+    { id: 'name', kind: 'text' as const },
+    { id: 'description', kind: 'text' as const },
+    { id: 'document', kind: 'text' as const },
+    { id: 'contra', kind: 'text' as const },
+    { id: 'split:1010', kind: 'money' as const },
+    { id: 'split:4000', kind: 'money' as const },
+    { id: 'split:5000', kind: 'money' as const },
+    { id: 'debit', kind: 'money' as const },
+    { id: 'credit', kind: 'money' as const },
+    { id: 'balance', kind: 'money' as const },
+  ]
+  const preferred: Record<string, number> = {
+    date: 188,
+    entry: 128,
+    type: 148,
+    name: 168,
+    description: 240,
+    document: 128,
+    contra: 180,
+    'split:1010': 150,
+    'split:4000': 150,
+    'split:5000': 150,
+    debit: 120,
+    credit: 120,
+    balance: 136,
+  }
+
+  it('keeps the ledger on one row and the other accounts underneath', () => {
+    const { main, extra } = columnsForViewport(ledger, preferred, 1180)
+    expect(main.map((column) => column.id)).toEqual([
+      'date',
+      'entry',
+      'type',
+      'name',
+      'description',
+      'document',
+      'contra',
+      'debit',
+      'credit',
+      'balance',
+    ])
+    expect(extra.map((column) => column.id)).toEqual(['split:1010', 'split:4000', 'split:5000'])
+  })
+
+  it('gives every amount a readable share of a laptop page', () => {
+    const main = ledger.filter((column) => !column.id.startsWith('split:'))
+    const weights = columnShareWeights(main, preferred, 1180)
+    const sum = weights.reduce((total, weight) => total + weight, 0)
+    for (const [index, column] of main.entries()) {
+      const pixels = ((weights[index] ?? 0) / sum) * 1180
+      expect(pixels).toBeGreaterThanOrEqual(columnMinWidth(column.kind) - 0.5)
+    }
+  })
+
+  it('moves the widest note under the row when the page cannot hold it', () => {
+    const { main, extra } = columnsForViewport(ledger, preferred, 700)
+    expect(main.map((column) => column.id)).not.toContain('description')
+    expect(extra.map((column) => column.id)).toContain('description')
+    expect(main.map((column) => column.id)).toEqual(expect.arrayContaining(['debit', 'credit', 'balance']))
   })
 })
 
