@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { Decimal, formatMoney, toMoneyString, ZERO } from '@/lib/money'
-import { formatDate, today, toCalendarDate, toDate } from '@/lib/date'
+import { formatDateTime, formatTransactionDate, today, toCalendarDate, toDate } from '@/lib/date'
 import { posOrderListLimit, summarizePosWallets, type PosOrderListFilters } from '@/lib/pos-order-report'
 import { chooseLineStore } from '@/lib/pos-line-store'
 import { receiptCashierName } from '@/lib/pos-receipt'
@@ -65,7 +65,7 @@ export async function dashboardRegisters(ctx: OrgContext) {
         ? {
             id: session.id,
             openedAt: session.openedAt,
-            dateLabel: formatDate(toCalendarDate(session.openedAt)),
+            dateLabel: formatDateTime(session.openedAt, ctx.organization.timeZone),
             openingCash: formatMoney(session.openingCash, currency),
             openingCashRaw: session.openingCash.toString(),
           }
@@ -164,7 +164,7 @@ export async function listSessions(ctx: OrgContext, limit = 50) {
     registerName: row.register.name,
     openedAt: row.openedAt,
     closedAt: row.closedAt,
-    dateLabel: formatDate(toCalendarDate(row.openedAt)),
+    dateLabel: formatDateTime(row.openedAt, ctx.organization.timeZone),
     openingCash: formatMoney(row.openingCash, currency),
     closingCash: row.closingCash ? formatMoney(row.closingCash, currency) : null,
     orderCount: row._count.orders,
@@ -273,8 +273,11 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
       return {
         id: row.id,
         createdAt: row.createdAt,
-        // The receipt's business date, so the column matches Today and the date boxes.
-        dateLabel: formatDate(toCalendarDate(row.salesDocument.date)),
+        dateLabel: formatTransactionDate(
+          toCalendarDate(row.salesDocument.date),
+          row.createdAt,
+          ctx.organization.timeZone,
+        ),
         registerName: row.register.name,
         sessionId: row.session?.id ?? null,
         documentId: row.salesDocument.id,
@@ -702,7 +705,7 @@ export async function recentSessionOrders(ctx: OrgContext, sessionId: string, li
     total: formatMoney(row.salesDocument.total, currency),
     totalRaw: row.salesDocument.total.toString(),
     customerName: row.salesDocument.customer.displayName,
-    dateLabel: formatDate(toCalendarDate(row.createdAt)),
+    dateLabel: formatDateTime(row.createdAt, ctx.organization.timeZone),
     payments: row.payments
       .map((payment) => `${payment.paymentMethod.name} ${formatMoney(payment.amount, currency)}`)
       .join(' · '),

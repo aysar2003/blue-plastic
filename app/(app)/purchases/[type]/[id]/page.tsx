@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatDate, formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
@@ -73,7 +73,7 @@ export default async function PurchaseDocumentPage({
               defaultBody={[
                 `${config.singular} ${document.number}`,
                 `Vendor: ${document.vendor.displayName}`,
-                `Date: ${formatDate(toCalendarDate(document.date))}`,
+                `Date: ${formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)}`,
                 `Total: ${formatMoney(document.total, currency)}`,
                 '',
                 `From ${ctx.organization.name}`,
@@ -134,7 +134,9 @@ export default async function PurchaseDocumentPage({
             {STATUS_LABELS[document.status] ?? document.status}
           </Badge>
         </Detail>
-        <Detail label="Date">{formatDate(toCalendarDate(document.date))}</Detail>
+        <Detail label="Date">
+          {formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)}
+        </Detail>
         {document.dueDate ? (
           <Detail label="Due">{formatDate(toCalendarDate(document.dueDate))}</Detail>
         ) : null}

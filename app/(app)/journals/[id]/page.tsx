@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { JOURNAL_SOURCE_LABELS, PERIOD_STATUS_LABELS } from '@/lib/accounting-labels'
-import { formatDate, formatDateTime, toCalendarDate } from '@/lib/date'
+import { formatDate, formatDateTime, formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import { trailFor } from '@/server/services/audit.service'
@@ -62,7 +62,7 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
               defaultBody={[
                 journal.journalNumber,
                 journal.memo ?? '',
-                `Date: ${formatDate(toCalendarDate(journal.date))}`,
+                `Date: ${formatTransactionDate(toCalendarDate(journal.date), journal.postedAt, ctx.organization.timeZone)}`,
                 party ? `Party: ${party.name}` : null,
                 '',
                 ctx.organization.name,
@@ -92,7 +92,10 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
       <RecordedBy trail={trail} timeZone={ctx.organization.timeZone} />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Detail label="Date" value={formatDate(toCalendarDate(journal.date))} />
+        <Detail
+          label="Date"
+          value={formatTransactionDate(toCalendarDate(journal.date), journal.postedAt, ctx.organization.timeZone)}
+        />
         <Detail
           label="Source"
           value={JOURNAL_SOURCE_LABELS[journal.sourceType] ?? journal.sourceType}
@@ -120,7 +123,7 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
         <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2 text-sm text-destructive">
           This entry was deleted
           {journal.deletedAt
-            ? ` on ${formatDate(toCalendarDate(journal.deletedAt))}`
+            ? ` on ${formatDateTime(journal.deletedAt, ctx.organization.timeZone)}`
             : ''}
           {journal.deleteReason ? ` — ${journal.deleteReason}` : ''}. It is excluded from every
           balance and every report. The entry is kept, exactly as it was posted, so what was once in

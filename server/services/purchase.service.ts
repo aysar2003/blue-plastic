@@ -36,7 +36,7 @@ const SEQUENCE_FOR: Record<PurchaseDocumentType, DocumentType> = {
 }
 
 const DOCUMENT_SELECT = {
-  id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true,
+  id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true,
   status: true, reference: true, memo: true,
   subtotal: true, taxTotal: true, total: true,
   currencyCode: true, paymentAccountId: true, journalId: true, version: true,

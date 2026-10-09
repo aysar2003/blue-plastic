@@ -17,7 +17,7 @@ import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import { outstandingBalances, refreshStatus } from '@/server/services/purchase.service'
 
 const PAYMENT_SELECT = {
-  id: true, number: true, date: true, amount: true, method: true, reference: true,
+  id: true, number: true, date: true, createdAt: true, amount: true, method: true, reference: true,
   memo: true, status: true, journalId: true, voidedAt: true, voidReason: true,
   vendor: { select: { id: true, displayName: true } },
   paymentAccount: { select: { id: true, code: true, name: true } },

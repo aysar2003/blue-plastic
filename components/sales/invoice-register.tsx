@@ -228,7 +228,7 @@ export function InvoiceRegister({
                   className="size-3.5 accent-[#2ca01c]"
                 />
               </TableHead>
-              <SortableHeader column="date" label="Date" state={sort} basePath={basePath} params={params} className="w-24" defaultDirection="desc" />
+              <SortableHeader column="date" label="Date" state={sort} basePath={basePath} params={params} className="w-44" defaultDirection="desc" />
               <SortableHeader column="number" label="No." state={sort} basePath={basePath} params={params} className="w-28" />
               <SortableHeader column="customer" label="Customer" state={sort} basePath={basePath} params={params} />
               <SortableHeader column="total" label="Amount" state={sort} basePath={basePath} params={params} className="w-28" numeric defaultDirection="desc" />
@@ -251,7 +251,7 @@ export function InvoiceRegister({
                     className="size-3.5 accent-[#2ca01c]"
                   />
                 </TableCell>
-                <TableCell className="tabular whitespace-nowrap">{sheetDate(row.date)}</TableCell>
+                <TableCell className="tabular whitespace-nowrap">{row.date}</TableCell>
                 <TableCell>
                   <Link href={row.href} className="font-medium text-[#2ca01c] hover:underline">
                     {row.number}

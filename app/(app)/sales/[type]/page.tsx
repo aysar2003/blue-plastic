@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatDate, toCalendarDate, toDate, today } from '@/lib/date'
+import { formatDate, formatTransactionDate, toCalendarDate, toDate, today } from '@/lib/date'
 import { DATE_PRESETS, isDatePreset, presetRange, readDatePreset } from '@/lib/list-filters'
 import { formatMoney } from '@/lib/money'
 import { ConvertEstimateButton } from '@/components/sales/document-actions'
@@ -142,7 +142,8 @@ export default async function SalesListPage({
   ])
   const trails = await trailsFor(ctx, page.rows.map((row) => row.id))
   const currency = ctx.organization.baseCurrency
-  const now = today(ctx.organization.timeZone)
+  const timeZone = ctx.organization.timeZone
+  const now = today(timeZone)
 
   const basePath = `/sales/${config.slug}`
   const customers = choices.map((customer) => ({ value: customer.id, label: customer.displayName }))
@@ -210,7 +211,7 @@ export default async function SalesListPage({
             return {
               id: row.id,
               number: row.number,
-              date: toCalendarDate(row.date),
+              date: formatTransactionDate(toCalendarDate(row.date), row.createdAt, timeZone),
               due,
               customer: row.customer.displayName,
               amount: formatMoney(row.total, currency),
@@ -252,7 +253,7 @@ export default async function SalesListPage({
             return {
               id: row.id,
               number: row.number,
-              date: toCalendarDate(row.date),
+              date: formatTransactionDate(toCalendarDate(row.date), row.createdAt, timeZone),
               customer: row.customer.displayName,
               amount: formatMoney(row.total, currency),
               deposit: account ? `${account.code} ${account.name}` : '—',
@@ -295,7 +296,7 @@ export default async function SalesListPage({
             return {
               id: row.id,
               number: row.number,
-              date: toCalendarDate(row.date),
+              date: formatTransactionDate(toCalendarDate(row.date), row.createdAt, timeZone),
               customer: row.customer.displayName,
               amount: formatMoney(row.total, currency),
               statusText:
@@ -358,7 +359,7 @@ export default async function SalesListPage({
             <TableHeader>
               <TableRow>
                 <SortableHeader column="number" label="Number" state={sort} basePath={basePath} params={linkParams} className="w-32" />
-                <SortableHeader column="date" label="Date" state={sort} basePath={basePath} params={linkParams} className="w-28" defaultDirection="desc" />
+                <SortableHeader column="date" label="Date" state={sort} basePath={basePath} params={linkParams} className="w-44" defaultDirection="desc" />
                 <SortableHeader column="customer" label="Customer" state={sort} basePath={basePath} params={linkParams} />
                 {config.type === 'INVOICE' ? (
                   <SortableHeader column="dueDate" label="Due" state={sort} basePath={basePath} params={linkParams} className="w-28" />
@@ -394,7 +395,7 @@ export default async function SalesListPage({
                       </Link>
                     </TableCell>
                     <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                      {formatDate(toCalendarDate(row.date))}
+                      {formatTransactionDate(toCalendarDate(row.date), row.createdAt, timeZone)}
                     </TableCell>
                     <TableCell>{row.customer.displayName}</TableCell>
                     {config.type === 'INVOICE' ? (
