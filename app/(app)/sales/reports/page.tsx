@@ -11,13 +11,13 @@ export const metadata: Metadata = { title: 'Sales reports' }
  * Reports index, reached without walking past every other module's questions.
  */
 export default async function SalesReportsHubPage() {
-  const ctx = await requireOrgContext('report:read')
+  await requireOrgContext('report:read')
 
   return (
     <AppLauncher
       eyebrow="Sales"
       title="Sales reports"
-      subtitle="Who buys, what sells, and who still owes."
+      subtitle="Who buys, what sells, and who still owes."
       apps={SALES_REPORT_APPS}
       searchable
     />

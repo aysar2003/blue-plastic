@@ -1,6 +1,8 @@
 'use client'
 
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+
+import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -69,7 +71,7 @@ export function PaymentForm({
   const [state, formAction] = useActionState(savePaymentForm, idleState)
   const editing = Boolean(payment)
 
-  const [number, setNumber] = useState(documentNumber)
+  const [number, setNumber] = usePropState(documentNumber)
   const [customerId, setCustomerId] = useState(payment?.customerId ?? initialCustomerId ?? '')
   const [date, setDate] = useState(payment?.date ?? today)
   const [amount, setAmount] = useState(payment?.amount ?? '')
@@ -88,7 +90,14 @@ export function PaymentForm({
   const [isLoading, startLoading] = useTransition()
   const handled = useRef(false)
 
-  useEffect(() => setNumber(documentNumber), [documentNumber])
+  const urlCustomer = payment ? null : (initialCustomerId ?? '')
+  const [trackedUrlCustomer, setTrackedUrlCustomer] = useState(urlCustomer)
+  if (urlCustomer !== null && urlCustomer !== trackedUrlCustomer) {
+    setTrackedUrlCustomer(urlCustomer)
+    setCustomerId(urlCustomer)
+    setApplied({})
+    if (!urlCustomer) setInvoices([])
+  }
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
@@ -116,10 +125,15 @@ export function PaymentForm({
 
   useEffect(() => {
     if (payment || !initialCustomerId) return
-    chooseCustomer(initialCustomerId)
-    // The customer arrived on the URL. Load their open invoices once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCustomerId])
+    let cancel = false
+    startLoading(async () => {
+      const rows = await loadOpenInvoices(initialCustomerId)
+      if (!cancel) setInvoices(rows)
+    })
+    return () => {
+      cancel = true
+    }
+  }, [payment, initialCustomerId, loadOpenInvoices])
 
   const totals = useMemo(() => {
     const received = parseMoneyInput(amount) ?? ZERO

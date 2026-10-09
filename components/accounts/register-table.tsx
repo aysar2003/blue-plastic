@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Columns3Icon, GripVerticalIcon } from 'lucide-react'
 
@@ -25,6 +25,7 @@ import {
   type RegisterColumnId,
   type RegisterColumnPrefs,
 } from '@/lib/register-table-columns'
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import { formatMoney, money } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
@@ -68,9 +69,7 @@ function collectSplits(rows: RegisterTableRow[]) {
   return [...map.values()].sort((a, b) => a.code.localeCompare(b.code))
 }
 
-function readPrefs(key: string): RegisterColumnPrefs | null {
-  if (typeof window === 'undefined') return null
-  const raw = window.localStorage.getItem(key)
+function parsePrefs(raw: string | null): RegisterColumnPrefs | null {
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as RegisterColumnPrefs
@@ -96,20 +95,15 @@ export function RegisterTable({
   const catalog = useMemo(() => buildRegisterColumns(splits), [splits])
   const allIds = useMemo(() => catalog.map((c) => c.id), [catalog])
 
-  const [prefs, setPrefs] = useState<RegisterColumnPrefs>(() =>
-    mergeRegisterPrefs(null, allIds),
-  )
+  const storedPrefs = useBrowserStore(storageKey)
+  const savedPrefs = useMemo(() => parsePrefs(storedPrefs), [storedPrefs])
+  const prefs = useMemo(() => mergeRegisterPrefs(savedPrefs, allIds), [savedPrefs, allIds])
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const [dragId, setDragId] = useState<RegisterColumnId | null>(null)
 
-  useEffect(() => {
-    setPrefs(mergeRegisterPrefs(readPrefs(storageKey), allIds))
-  }, [storageKey, allIds])
-
   const persist = useCallback(
     (next: RegisterColumnPrefs) => {
-      setPrefs(next)
-      window.localStorage.setItem(storageKey, JSON.stringify(next))
+      writeBrowserStore(storageKey, JSON.stringify(next))
     },
     [storageKey],
   )

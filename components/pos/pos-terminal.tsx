@@ -31,7 +31,9 @@ import { closePosSession, posCheckout, posRefund, recordPosCashMove } from '@/ap
 import { PosPaymentForm } from '@/components/pos/payment-dialog'
 import { RegisterLock, useClientReady, useRegisterLocked, writeRegisterLocked } from '@/components/pos/register-lock'
 import { StockWarningNote } from '@/components/inventory/stock-warning'
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import { ODOO } from '@/lib/odoo-brand'
+import { usePropState } from '@/lib/use-prop-state'
 import { minorUnits, formatMoney } from '@/lib/money'
 import { chooseLineStore } from '@/lib/pos-line-store'
 import { CHANGE_ACCOUNT_MESSAGE, changeReturnChoices, paymentCanValidate } from '@/lib/pos-change'
@@ -125,7 +127,8 @@ export function PosTerminal(props: {
   const [cart, setCart] = useState<CartLine[]>([])
   const [customerId, setCustomerId] = useState<string | null>(null)
   const [note, setNote] = useState('')
-  const [dark, setDark] = useState(true)
+  const themeStored = useBrowserStore(THEME_KEY)
+  const dark = themeStored !== 'light'
   const [payOpen, setPayOpen] = useState(false)
   const [amounts, setAmounts] = useState<Record<string, string>>({})
   const [changeMethodId, setChangeMethodId] = useState('')
@@ -140,7 +143,7 @@ export function PosTerminal(props: {
   const [cashKind, setCashKind] = useState<'IN' | 'OUT'>('OUT')
   const [cashAmount, setCashAmount] = useState('')
   const [cashReason, setCashReason] = useState('')
-  const [closingCash, setClosingCash] = useState(props.cashSummary.expectedCash)
+  const [closingCash, setClosingCash] = usePropState(props.cashSummary.expectedCash)
   const [pending, startTransition] = useTransition()
   const ready = useClientReady()
   const locked = useRegisterLocked(props.register.id)
@@ -149,19 +152,6 @@ export function PosTerminal(props: {
     () => props.register.paymentMethods.find((method) => method.isCash) ?? null,
     [props.register.paymentMethods],
   )
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem(THEME_KEY)
-    if (saved === 'light') setDark(false)
-  }, [])
-
-  useEffect(() => {
-    window.localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light')
-  }, [dark])
-
-  useEffect(() => {
-    setClosingCash(props.cashSummary.expectedCash)
-  }, [props.cashSummary.expectedCash])
 
   const customerName = useMemo(
     () => props.customers.find((row) => row.id === customerId)?.displayName ?? null,
@@ -878,7 +868,7 @@ export function PosTerminal(props: {
               label={dark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               icon={dark ? <SunIcon className="size-6" /> : <MoonIcon className="size-6" />}
               onClick={() => {
-                setDark((value) => !value)
+                writeBrowserStore(THEME_KEY, dark ? 'light' : 'dark')
                 setMenu(null)
               }}
               dark={dark}

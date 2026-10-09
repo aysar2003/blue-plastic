@@ -1,6 +1,8 @@
 'use client'
 
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
+
+import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import { AlertTriangleIcon, PackageIcon, PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -120,16 +122,12 @@ export function ItemDialog({
     idleState,
   )
   const [type, setType] = useState<ItemType>(item?.type ?? 'NON_INVENTORY')
-  const [categoryOptions, setCategoryOptions] = useState(categories)
+  const [categoryOptions, setCategoryOptions] = usePropState(categories)
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? '')
   const [addingCategory, setAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [savingCategory, setSavingCategory] = useState(false)
   const handled = useRef(false)
-
-  useEffect(() => {
-    setCategoryOptions(categories)
-  }, [categories])
 
   async function saveNewCategory() {
     const name = newCategoryName.trim()

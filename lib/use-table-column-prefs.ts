@@ -1,13 +1,24 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import {
   mergeColumnPrefs,
-  readColumnPrefs,
   visibleFromCatalog,
   type ColumnPrefs,
 } from '@/lib/table-column-prefs'
+
+function parsePrefs(raw: string | null): ColumnPrefs | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as ColumnPrefs
+    if (!parsed || !Array.isArray(parsed.order) || !Array.isArray(parsed.hidden)) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
 
 export function useTableColumnPrefs<T extends { id: string }>(
   storageKey: string,
@@ -15,19 +26,16 @@ export function useTableColumnPrefs<T extends { id: string }>(
   defaultHidden: string[] = [],
 ) {
   const allIds = useMemo(() => catalog.map((c) => c.id), [catalog])
-
-  const [prefs, setPrefs] = useState<ColumnPrefs>(() =>
-    mergeColumnPrefs(null, allIds, defaultHidden),
+  const raw = useBrowserStore(storageKey)
+  const saved = useMemo(() => parsePrefs(raw), [raw])
+  const prefs = useMemo(
+    () => mergeColumnPrefs(saved, allIds, defaultHidden),
+    [saved, allIds, defaultHidden],
   )
-
-  useEffect(() => {
-    setPrefs(mergeColumnPrefs(readColumnPrefs(storageKey), allIds, defaultHidden))
-  }, [storageKey, allIds, defaultHidden])
 
   const persist = useCallback(
     (next: ColumnPrefs) => {
-      setPrefs(next)
-      window.localStorage.setItem(storageKey, JSON.stringify(next))
+      writeBrowserStore(storageKey, JSON.stringify(next))
     },
     [storageKey],
   )

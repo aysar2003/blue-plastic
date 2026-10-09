@@ -28,7 +28,7 @@ import type { DraftLine } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
-import type { StockAlert, StockAlertSummary } from '@/lib/stock-alert'
+import type { StockAlertSummary } from '@/lib/stock-alert'
 import { notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 
