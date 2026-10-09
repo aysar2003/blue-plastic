@@ -672,6 +672,7 @@ model LedgerAccount {
   rulesForBank      BankRule[]            @relation("RuleBank")
   rulesForCategory  BankRule[]            @relation("RuleCategory")
   posPaymentMethods PosPaymentMethod[]    @relation("PosPaymentAccount")
+  posRegisters      PosRegister[]         @relation("PosRegisterBank")
 
   @@unique([orgId, code])
   @@unique([orgId, systemKey])
@@ -1238,7 +1239,8 @@ model PosPaymentMethod {
   @@map("pos_payment_methods")
 }
 
-/// A physical or logical till. Links a default walk-in customer and store.
+/// A physical or logical till. Links a default walk-in customer, store, and
+/// its own bank sub-account under the POS Banks heading.
 model PosRegister {
   id                String @id @default(cuid())
   orgId             String
@@ -1246,6 +1248,10 @@ model PosRegister {
   name              String
   storeId           String?
   defaultCustomerId String
+  /// BANK sub-account under POS Banks. Nullable until the backfill runs.
+  /// Sales still post to each payment method's wallet; this account is the
+  /// till's place on the chart, ready to receive a later sweep.
+  ledgerAccountId   String? @unique
   isActive          Boolean @default(true)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -1254,6 +1260,7 @@ model PosRegister {
   organization    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store           Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
   defaultCustomer Customer     @relation(fields: [defaultCustomerId], references: [id], onDelete: Restrict)
+  account         LedgerAccount? @relation("PosRegisterBank", fields: [ledgerAccountId], references: [id], onDelete: Restrict)
   methods         PosRegisterMethod[]
   sessions        PosSession[]
   orders          PosOrder[]
