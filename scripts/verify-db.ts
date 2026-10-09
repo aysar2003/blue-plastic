@@ -381,6 +381,16 @@ async function main() {
       rule: '—',
       protects: 'one reconciliation in progress per account at a time',
     },
+    {
+      name: 'ledger_accounts_one_pos_banks',
+      rule: '—',
+      protects: 'one POS Banks heading per organisation',
+    },
+    {
+      name: 'ledger_accounts_one_pos_register',
+      rule: '—',
+      protects: 'one chart account per POS register',
+    },
   ]
 
   const failures: string[] = []

@@ -28,6 +28,7 @@ type Overview = {
     defaultCustomerId: string
     customerName: string
     paymentMethodIds: string[]
+    accountLabel: string | null
     changeMethodIds: string[]
     defaultChangeMethodId: string | null
     allowWalletChangeReturn: boolean
@@ -288,7 +289,8 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
         <p className="mt-1 text-sm text-white/50">
           Click Edit to rename a till, set its cashier PIN, or change its walk-in customer, store,
           payment methods, change-return accounts, or whether it is active. A till with no PIN can
-          be opened by anyone who can sell.
+          be opened by anyone who can sell. Each till has its own bank account under POS Banks on
+          the chart of accounts.
         </p>
         <ul className="mt-4 space-y-2 text-sm">
           {data.registers.map((register) => (
@@ -313,6 +315,9 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
                     · {register.customerName}
                     {register.storeName ? ` · ${register.storeName}` : ''}
                   </span>
+                  {register.accountLabel ? (
+                    <p className="text-xs text-white/45">{register.accountLabel}</p>
+                  ) : null}
                   {register.hasPin ? (
                     <p className="mt-0.5 text-xs text-white/40">PIN set</p>
                   ) : (

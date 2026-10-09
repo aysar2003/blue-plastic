@@ -15,6 +15,7 @@ import {
   type PosOrderListFilters,
   type PosOrderSummaryPayment,
 } from '@/lib/pos-order-report'
+import { POS_BANKS_DETAIL, POS_REGISTER_DETAIL } from '@/lib/pos-register-account'
 import { chooseLineStore } from '@/lib/pos-line-store'
 import { CASHIER_PIN_REQUIRED, CASHIER_PIN_WRONG } from '@/lib/pos-pin'
 import { receiptCashierName } from '@/lib/pos-receipt'
@@ -33,6 +34,7 @@ import { hashPassword, verifyPassword } from '@/server/auth/password'
 import { db, type Tx } from '@/server/db'
 import { registerUnlockMatches } from '@/server/pos/cashier-unlock'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
+import { ensurePosRegisterAccounts } from '@/server/services/pos-register-account'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
 import * as salesService from '@/server/services/sales.service'
 
@@ -1070,6 +1072,10 @@ export async function walkInCustomers(ctx: OrgContext) {
 /* --- Settings ------------------------------------------------------------- */
 
 export async function settingsOverview(ctx: OrgContext) {
+  await db.$transaction(async (tx) => {
+    await ensurePosRegisterAccounts(tx, ctx.orgId)
+  })
+
   const [methods, registers, assetAccounts] = await Promise.all([
     db.posPaymentMethod.findMany({
       where: { orgId: ctx.orgId },
@@ -1097,6 +1103,7 @@ export async function settingsOverview(ctx: OrgContext) {
         store: { select: { name: true } },
         defaultCustomer: { select: { id: true, displayName: true } },
         methods: { select: { paymentMethodId: true, allowsChangeReturn: true } },
+        account: { select: { code: true, name: true } },
       },
       orderBy: { name: 'asc' },
     }),
@@ -1106,6 +1113,14 @@ export async function settingsOverview(ctx: OrgContext) {
         isActive: true,
         type: { in: ['ASSET'] },
         subtype: { in: ['BANK', 'UNDEPOSITED_FUNDS', 'OTHER_CURRENT_ASSET'] },
+        // Wallet setup posts the sale. Register bank accounts stay out of that
+        // list so a till's account is not used as a payment method.
+        NOT: {
+          OR: [
+            { detailType: { in: [POS_BANKS_DETAIL, POS_REGISTER_DETAIL] } },
+            { children: { some: {} } },
+          ],
+        },
       },
       select: { id: true, code: true, name: true },
       orderBy: { code: 'asc' },
@@ -1148,6 +1163,7 @@ export async function settingsOverview(ctx: OrgContext) {
       defaultCustomerId: register.defaultCustomerId,
       customerName: register.defaultCustomer.displayName,
       paymentMethodIds: register.methods.map((row) => row.paymentMethodId),
+      accountLabel: register.account ? `${register.account.code} · ${register.account.name}` : null,
       changeMethodIds: register.methods.filter((row) => row.allowsChangeReturn).map((row) => row.paymentMethodId),
       defaultChangeMethodId: register.defaultChangeMethodId,
       allowWalletChangeReturn: register.allowWalletChangeReturn,
@@ -1274,6 +1290,7 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
         },
       })
       await syncRegisterMethods(tx, input.id!, input.paymentMethodIds, changeMethodIds)
+      await ensurePosRegisterAccounts(tx, ctx.orgId)
     })
     return { id: input.id }
   }
@@ -1293,6 +1310,7 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
       select: { id: true },
     })
     await syncRegisterMethods(tx, register.id, input.paymentMethodIds, changeMethodIds)
+    await ensurePosRegisterAccounts(tx, ctx.orgId)
     return register
   })
 
@@ -1319,11 +1337,23 @@ async function syncRegisterMethods(
 async function assertAssetAccount(orgId: string, accountId: string) {
   const account = await db.ledgerAccount.findFirst({
     where: { id: accountId, orgId, isActive: true },
-    select: { type: true, subtype: true },
+    select: {
+      type: true,
+      detailType: true,
+      _count: { select: { children: true } },
+    },
   })
   if (!account) throw notFound('Account')
   if (account.type !== 'ASSET') {
     throw validation('Payment methods must post to an asset account (bank, cash, or wallet).')
+  }
+  if (account._count.children > 0 || account.detailType === POS_BANKS_DETAIL) {
+    throw validation('That account is a grouping heading. Choose an account you can post to.')
+  }
+  if (account.detailType === POS_REGISTER_DETAIL) {
+    throw validation(
+      'A register bank account sits under POS Banks. Payment methods keep their own wallet accounts.',
+    )
   }
 }
 
