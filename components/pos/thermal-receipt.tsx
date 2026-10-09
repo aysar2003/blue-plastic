@@ -201,7 +201,6 @@ export function ThermalReceipt({
         </p>
         <Row label="Receipt" value={receipt.number} />
         <Row label="Date" value={stamp(receipt.createdAt, shop.timeZone)} />
-        {receipt.registerName ? <Row label="Register" value={receipt.registerName} /> : null}
         {receipt.cashierName ? <Row label="Salesman" value={receipt.cashierName} /> : null}
         {receipt.customer ? <Row label="Customer" value={receipt.customer.name} /> : null}
         {receipt.customer?.phone ? <Row label="Phone" value={receipt.customer.phone} /> : null}

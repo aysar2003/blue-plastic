@@ -23,6 +23,21 @@ export function parseChange(value: unknown): number {
 export type ReceiptPayment = { method: string; amount: string; isCash: boolean }
 
 /**
+ * Who the slip names as cashier.
+ * A till is named for the person who sells on it. The document creator is
+ * whoever was signed in, often an admin, so a till sale uses the register name.
+ * A receipt with no till keeps the person who created it.
+ */
+export function receiptCashierName(
+  registerName: string | null,
+  signedIn: { name: string | null; email: string } | null,
+): string | null {
+  if (registerName) return registerName
+  if (!signedIn) return null
+  return signedIn.name || signedIn.email
+}
+
+/**
  * The payment block under the total. The ledger records what the sale took from
  * each method; cash handed over beyond that came back as change, so the cash line
  * shows what the customer actually handed over. Methods recorded at zero are

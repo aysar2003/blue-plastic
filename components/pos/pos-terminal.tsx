@@ -729,12 +729,20 @@ export function PosTerminal(props: {
           ) : (
             <div className="grid flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 xl:grid-cols-4">
               {filtered.map((product) => (
+                // &:hover tracks the pointer on a touch-first till, where the primary pointer is not a mouse.
                 <button
                   key={product.id}
                   type="button"
                   onClick={() => addProduct(product)}
-                  className="flex flex-col rounded-xl border p-3 text-left transition hover:opacity-95"
-                  style={{ background: panel, borderColor: border }}
+                  className="flex cursor-pointer flex-col rounded-xl border border-[color:var(--product-border)] bg-[var(--product-bg)] p-3 text-left transition-colors duration-200 ease-out [&:hover]:border-[color:var(--product-hover-border)] [&:hover]:bg-[var(--product-hover-bg)] focus-visible:border-[color:var(--product-hover-border)] focus-visible:bg-[var(--product-hover-bg)] focus-visible:outline-none"
+                  style={
+                    {
+                      '--product-bg': panel,
+                      '--product-border': border,
+                      '--product-hover-border': ODOO.teal,
+                      '--product-hover-bg': dark ? '#226066' : '#dfeef0',
+                    } as React.CSSProperties
+                  }
                 >
                   <span className="line-clamp-2 text-sm font-medium">{product.name}</span>
                   {product.sku ? (
