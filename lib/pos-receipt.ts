@@ -43,8 +43,21 @@ export function receiptCashierName(
  * shows what the customer actually handed over. Methods recorded at zero are
  * omitted — a blank tender is not a payment.
  */
-export function paymentRows(payments: ReceiptPayment[], total: string, change: number) {
+export function paymentRows(
+  payments: ReceiptPayment[],
+  total: string,
+  change: number,
+  options: { tendered?: boolean } = {},
+) {
   const active = payments.filter((payment) => Number(payment.amount) > 0.004)
+  // New sales store the notes that were handed over. Adding change again would
+  // show Cash 113 on a $100 tender. Older slips stored the net and passed change
+  // separately, so that cash line still has to grow by the change.
+  if (options.tendered) {
+    const rows = active.map((payment) => ({ label: payment.method, amount: Number(payment.amount) }))
+    const paid = rows.reduce((sum, row) => sum + row.amount, 0)
+    return { rows, paid: active.length > 0 ? paid : Number(total), change: change > 0.004 ? change : 0 }
+  }
   const cashIndex = change > 0 ? active.findIndex((payment) => payment.isCash) : -1
   const effectiveChange = cashIndex >= 0 ? change : 0
   const rows = active.map((payment, index) => ({

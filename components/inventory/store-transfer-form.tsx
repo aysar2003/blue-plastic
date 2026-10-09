@@ -1,6 +1,8 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState } from 'react'
+
+import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -37,7 +39,7 @@ export function StoreTransferForm({
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveStoreTransferForm, idleState)
-  const [number, setNumber] = useState(documentNumber)
+  const [number, setNumber] = usePropState(documentNumber)
   const [date, setDate] = useState(today)
   const [fromStoreId, setFromStoreId] = useState(initialFromStoreId ?? stores[0]?.id ?? '')
   const [toStoreId, setToStoreId] = useState(
@@ -47,8 +49,6 @@ export function StoreTransferForm({
   const [quantity, setQuantity] = useState('')
   const [memo, setMemo] = useState('')
   const handled = useRef(false)
-
-  useEffect(() => setNumber(documentNumber), [documentNumber])
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {

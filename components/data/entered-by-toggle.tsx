@@ -1,26 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Columns3Icon } from 'lucide-react'
+
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 
 const KEY = 'bpc.showEnteredBy'
 
 /** Shows or hides the Entered by column on transaction lists. The choice is kept on this browser. */
 export function EnteredByToggle() {
-  const [shown, setShown] = useState(true)
-  const [ready, setReady] = useState(false)
-
-  useEffect(() => {
-    setShown(window.localStorage.getItem(KEY) !== '0')
-    setReady(true)
-  }, [])
+  const shown = useBrowserStore(KEY) !== '0'
 
   useEffect(() => {
     document.querySelectorAll<HTMLElement>('[data-column="entered-by"]').forEach((cell) => {
       cell.hidden = !shown
     })
-    if (ready) window.localStorage.setItem(KEY, shown ? '1' : '0')
-  }, [shown, ready])
+  }, [shown])
 
   return (
     <label className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm print:hidden">
@@ -28,7 +23,7 @@ export function EnteredByToggle() {
       <input
         type="checkbox"
         checked={shown}
-        onChange={(event) => setShown(event.target.checked)}
+        onChange={(event) => writeBrowserStore(KEY, event.target.checked ? '1' : '0')}
         className="size-3.5 accent-[#2ca01c]"
       />
       Entered by

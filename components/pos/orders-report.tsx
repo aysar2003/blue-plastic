@@ -12,7 +12,15 @@ export type PosOrdersReportOrder = {
   documentId: string
   number: string
   payments: string
+  changeLabel: string | null
   total: string
+}
+
+export type PosOrdersAccountTotal = {
+  name: string
+  tendered: string
+  change: string
+  net: string
 }
 
 export type PosOrdersReportProps = {
@@ -24,6 +32,7 @@ export type PosOrdersReportProps = {
   }
   registers: { id: string; name: string; isActive: boolean }[]
   methods: { id: string; name: string; isActive: boolean }[]
+  totals: PosOrdersAccountTotal[]
   query: PosOrderReportQuery
   truncated: boolean
   limit: number
@@ -37,6 +46,7 @@ export function PosOrdersReport({
   summary,
   registers,
   methods,
+  totals,
   query,
   truncated,
   limit,
@@ -196,6 +206,7 @@ export function PosOrdersReport({
               <th className="px-4 py-3 font-medium">Receipt</th>
               <th className="px-4 py-3 font-medium">Register</th>
               <th className="px-4 py-3 font-medium">Payments</th>
+              <th className="px-4 py-3 font-medium">Change</th>
               <th className="px-4 py-3 font-medium text-right">Total</th>
               <th className="px-4 py-3 font-medium text-right">
                 <span className="sr-only">Print</span>
@@ -216,6 +227,7 @@ export function PosOrdersReport({
                 </td>
                 <td className="px-4 py-2.5 whitespace-nowrap">{order.registerName}</td>
                 <td className="px-4 py-2.5 text-white/65">{order.payments || '—'}</td>
+                <td className="px-4 py-2.5 text-white/65">{order.changeLabel ?? '—'}</td>
                 <td className="px-4 py-2.5 text-right font-medium tabular whitespace-nowrap">{order.total}</td>
                 <td className="px-4 py-2.5 text-right whitespace-nowrap">
                   <Link
@@ -230,7 +242,7 @@ export function PosOrdersReport({
             ))}
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-white/45">
+                <td colSpan={7} className="px-4 py-10 text-center text-white/45">
                   {filtered
                     ? 'No orders match these filters.'
                     : 'No POS orders yet. Open a session and continue selling.'}
@@ -240,6 +252,34 @@ export function PosOrdersReport({
           </tbody>
         </table>
       </div>
+      {totals.length > 0 ? (
+        <div className="mt-4 overflow-hidden rounded-xl border border-white/10" style={{ background: ODOO.surface }}>
+          <h2 className="px-4 py-3 text-sm font-semibold text-white">Received by account</h2>
+          <p className="px-4 pb-2 text-xs text-white/45">
+            Tendered is what was handed over. Net is what each account kept after change.
+          </p>
+          <table className="w-full text-left text-sm">
+            <thead className="bg-black/30 text-xs uppercase tracking-wide text-white/50">
+              <tr>
+                <th className="px-4 py-2 font-medium">Account</th>
+                <th className="px-4 py-2 text-right font-medium">Tendered</th>
+                <th className="px-4 py-2 text-right font-medium">Change returned</th>
+                <th className="px-4 py-2 text-right font-medium">Net received</th>
+              </tr>
+            </thead>
+            <tbody>
+              {totals.map((total) => (
+                <tr key={total.name} className="border-t border-white/8 text-white/90">
+                  <td className="px-4 py-2">{total.name}</td>
+                  <td className="px-4 py-2 text-right tabular">{total.tendered}</td>
+                  <td className="px-4 py-2 text-right tabular">{total.change}</td>
+                  <td className="px-4 py-2 text-right font-medium tabular">{total.net}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   )
 }

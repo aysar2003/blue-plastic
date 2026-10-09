@@ -26,8 +26,13 @@ export type SalesJournalInput = {
   receivableAccountId: string
   /** Bank or Undeposited Funds, for documents that move cash immediately. */
   depositAccountId?: string | null
-  /** When the till splits one sale across several wallets or drawers. */
+  /** When the till splits one sale across several wallets or drawers. Gross tendered, before change. */
   paymentSplits?: { accountId: string; amount: Decimal; description?: string | null }[]
+  /**
+   * Change handed back from a till account. A credit, so the account the notes
+   * left is the one that falls. Debits minus these credits equal the sale.
+   */
+  changeReturns?: { accountId: string; amount: Decimal; description?: string | null }[]
   /** Where a line lands when its item names no income account. */
   fallbackIncomeAccountId: string
   /** Contra-revenue account. Required when the document carries a discount. */
@@ -98,16 +103,26 @@ export function buildSalesReceiptJournal(input: SalesJournalInput): DraftJournal
 
 function receiptDepositLines(input: SalesJournalInput): DraftLine[] {
   const splits = input.paymentSplits?.filter((split) => !new Decimal(split.amount).isZero()) ?? []
+  const changes = input.changeReturns?.filter((row) => !new Decimal(row.amount).isZero()) ?? []
   if (splits.length > 0) {
-    const total = splits.reduce((sum, split) => sum.plus(split.amount), new Decimal(0))
-    if (!total.equals(input.priced.total)) {
+    const tendered = splits.reduce((sum, split) => sum.plus(split.amount), new Decimal(0))
+    const handedBack = changes.reduce((sum, row) => sum.plus(row.amount), new Decimal(0))
+    // Cash +100 and EVC −13 still have to leave the sale (87) in income.
+    if (!tendered.minus(handedBack).equals(input.priced.total)) {
       throw new Error('Split payments must add up to the receipt total.')
     }
-    return splits.map((split) => ({
-      accountId: split.accountId,
-      debit: split.amount,
-      description: split.description ?? `Sales receipt ${input.number}`,
-    }))
+    return [
+      ...splits.map((split) => ({
+        accountId: split.accountId,
+        debit: split.amount,
+        description: split.description ?? `Sales receipt ${input.number}`,
+      })),
+      ...changes.map((row) => ({
+        accountId: row.accountId,
+        credit: row.amount,
+        description: row.description ?? `Change ${input.number}`,
+      })),
+    ]
   }
 
   if (!input.depositAccountId) {

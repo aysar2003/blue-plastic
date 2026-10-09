@@ -31,12 +31,16 @@ import { closePosSession, posCheckout, posRefund, recordPosCashMove } from '@/ap
 import { PosPaymentForm } from '@/components/pos/payment-dialog'
 import { RegisterLock, useClientReady, useRegisterLocked, writeRegisterLocked } from '@/components/pos/register-lock'
 import { StockWarningNote } from '@/components/inventory/stock-warning'
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import { ODOO } from '@/lib/odoo-brand'
+import { usePropState } from '@/lib/use-prop-state'
 import { minorUnits, formatMoney } from '@/lib/money'
 import { chooseLineStore } from '@/lib/pos-line-store'
+import { CHANGE_ACCOUNT_MESSAGE, changeReturnChoices, paymentCanValidate } from '@/lib/pos-change'
 import {
   clampPaymentDraft,
   exactRemainingAmount,
+  nonCashDraftError,
   prefilledPaymentAmounts,
   settlePosPayments,
 } from '@/lib/pos-payment'
@@ -55,7 +59,7 @@ type Product = {
   stock?: Record<string, string> | null
 }
 
-type PaymentMethod = { id: string; name: string; isCash: boolean }
+type PaymentMethod = { id: string; name: string; isCash: boolean; allowsChangeReturn: boolean }
 type Customer = { id: string; displayName: string }
 /** `storeId` null = automatic (counter store, else a store that has enough). */
 type CartLine = { itemId: string; name: string; price: string; quantity: number; storeId: string | null }
@@ -97,7 +101,14 @@ function openReceiptPrint(documentId: string, options: { autoprint?: boolean; ch
 }
 
 export function PosTerminal(props: {
-  register: { id: string; name: string; paymentMethods: PaymentMethod[] }
+  register: {
+    id: string
+    name: string
+    paymentMethods: PaymentMethod[]
+    /** Null means open on the cash method. */
+    defaultChangeMethodId: string | null
+    allowWalletChangeReturn: boolean
+  }
   session: { id: string; dateLabel: string; openingCash: string; orderBadge: string }
   cashSummary: {
     expectedCash: string
@@ -127,9 +138,11 @@ export function PosTerminal(props: {
   const [cart, setCart] = useState<CartLine[]>([])
   const [customerId, setCustomerId] = useState<string | null>(null)
   const [note, setNote] = useState('')
-  const [dark, setDark] = useState(true)
+  const themeStored = useBrowserStore(THEME_KEY)
+  const dark = themeStored !== 'light'
   const [payOpen, setPayOpen] = useState(false)
   const [amounts, setAmounts] = useState<Record<string, string>>({})
+  const [changeMethodId, setChangeMethodId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [lastReceiptId, setLastReceiptId] = useState<string | null>(null)
@@ -141,7 +154,7 @@ export function PosTerminal(props: {
   const [cashKind, setCashKind] = useState<'IN' | 'OUT'>('OUT')
   const [cashAmount, setCashAmount] = useState('')
   const [cashReason, setCashReason] = useState('')
-  const [closingCash, setClosingCash] = useState(props.cashSummary.expectedCash)
+  const [closingCash, setClosingCash] = usePropState(props.cashSummary.expectedCash)
   const [pending, startTransition] = useTransition()
   const ready = useClientReady()
   const locked = useRegisterLocked(props.register.id)
@@ -150,19 +163,6 @@ export function PosTerminal(props: {
     () => props.register.paymentMethods.find((method) => method.isCash) ?? null,
     [props.register.paymentMethods],
   )
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem(THEME_KEY)
-    if (saved === 'light') setDark(false)
-  }, [])
-
-  useEffect(() => {
-    window.localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light')
-  }, [dark])
-
-  useEffect(() => {
-    setClosingCash(props.cashSummary.expectedCash)
-  }, [props.cashSummary.expectedCash])
 
   const customerName = useMemo(
     () => props.customers.find((row) => row.id === customerId)?.displayName ?? null,
@@ -277,6 +277,15 @@ export function PosTerminal(props: {
   }
 
   const paymentDecimals = minorUnits(props.currency)
+  const changeChoices = useMemo(
+    () =>
+      changeReturnChoices({
+        methods: props.register.paymentMethods,
+        allowWalletChangeReturn: props.register.allowWalletChangeReturn,
+        defaultMethodId: props.register.defaultChangeMethodId,
+      }),
+    [props.register.allowWalletChangeReturn, props.register.defaultChangeMethodId, props.register.paymentMethods],
+  )
   const settlement = useMemo(
     () =>
       settlePosPayments({
@@ -287,6 +296,18 @@ export function PosTerminal(props: {
       }),
     [amounts, paymentDecimals, props.register.paymentMethods, subtotal],
   )
+  const changeAccountError =
+    Number(settlement.change) > 0 && !changeChoices.options.some((method) => method.id === changeMethodId)
+      ? CHANGE_ACCOUNT_MESSAGE
+      : null
+  const paymentError = error ?? changeAccountError
+  const canValidatePayment = paymentCanValidate({
+    canSettle: settlement.canValidate,
+    blockingError: paymentError,
+    change: settlement.change,
+    changeMethodId,
+    allowedChangeMethodIds: changeChoices.options.map((method) => method.id),
+  })
 
   function openPay() {
     if (cart.length === 0) return
@@ -296,11 +317,12 @@ export function PosTerminal(props: {
       : (cashMethod?.id ?? props.register.paymentMethods[0]?.id ?? null)
     // One field gets the amount due. The cashier can clear it and split the rest.
     setAmounts(prefilledPaymentAmounts({ due: subtotal, methodId, decimals: paymentDecimals }))
+    setChangeMethodId(changeChoices.defaultId)
     setError(null)
     setPayOpen(true)
   }
 
-  function setMethodAmount(method: PaymentMethod, raw: string) {
+  function setMethodAmount(method: { id: string; isCash: boolean }, raw: string) {
     const next = clampPaymentDraft({
       due: subtotal,
       method,
@@ -311,7 +333,8 @@ export function PosTerminal(props: {
     })
     if (!next) return
     setAmounts((prev) => ({ ...prev, [method.id]: next.value }))
-    setError(next.clamped ? 'Non-cash payments cannot exceed the remaining balance.' : null)
+    // An empty wallet after cash already covers the sale is not an overpayment.
+    setError(nonCashDraftError(next.clamped, next.value))
   }
 
   function fillMethod(methodId: string) {
@@ -326,19 +349,20 @@ export function PosTerminal(props: {
   }
 
   function completeSale() {
-    setError(null)
-    if (!settlement.canValidate) {
+    if (!canValidatePayment) {
       setError(
-        settlement.nonCashWithinBalance
-          ? 'Enter payments that cover the amount due.'
-          : 'Non-cash payments cannot exceed the remaining balance.',
+        paymentError ??
+          (settlement.nonCashWithinBalance
+            ? 'Enter payments that cover the amount due.'
+            : 'Non-cash payments cannot exceed the remaining balance.'),
       )
       return
     }
+    setError(null)
 
     // Change is only known here; the receipt shows it on the first print.
     const changeAtSale = Number(settlement.change)
-    const payments = settlement.payments
+    const payments = settlement.tenders
     startTransition(async () => {
       const result = await posCheckout({
         registerId: props.register.id,
@@ -351,6 +375,7 @@ export function PosTerminal(props: {
           storeId: line.storeId ?? undefined,
         })),
         payments,
+        changeMethodId: changeAtSale > 0.004 ? changeMethodId : undefined,
       })
       if (!result.ok) {
         setError(result.error.message)
@@ -858,7 +883,7 @@ export function PosTerminal(props: {
               label={dark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               icon={dark ? <SunIcon className="size-6" /> : <MoonIcon className="size-6" />}
               onClick={() => {
-                setDark((value) => !value)
+                writeBrowserStore(THEME_KEY, dark ? 'light' : 'dark')
                 setMenu(null)
               }}
               dark={dark}
@@ -1213,10 +1238,16 @@ export function PosTerminal(props: {
             paid={settlement.paid}
             remaining={settlement.remaining}
             change={settlement.change}
-            canValidate={settlement.canValidate}
+            canValidate={canValidatePayment}
             pending={pending}
-            error={error}
+            error={paymentError}
             dark={dark}
+            changeMethods={changeChoices.options}
+            changeMethodId={changeMethodId}
+            onChangeMethod={(methodId) => {
+              setChangeMethodId(methodId)
+              setError(null)
+            }}
             onAmount={setMethodAmount}
             onFill={fillMethod}
             onCancel={() => setPayOpen(false)}

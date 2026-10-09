@@ -6,6 +6,8 @@ import { PosPaymentForm, type PosPaymentMethodField } from '@/components/pos/pay
 import {
   clampPaymentDraft,
   exactRemainingAmount,
+  nonCashDraftError,
+  NON_CASH_OVERPAY_MESSAGE,
   prefilledPaymentAmounts,
   preferredPaymentMethodId,
   settlePosPayments,
@@ -31,6 +33,7 @@ describe('settlePosPayments', () => {
       nonCashWithinBalance: true,
       canValidate: false,
       payments: [],
+      tenders: [],
     })
   })
 
@@ -48,6 +51,7 @@ describe('settlePosPayments', () => {
       { paymentMethodId: 'evc', amount: '15.00' },
       { paymentMethodId: 'evc-blue', amount: '8.00' },
     ])
+    expect(result.tenders).toEqual(result.payments)
   })
 
   it('validates once the remaining dollar is entered as cash, with no change', () => {
@@ -63,6 +67,7 @@ describe('settlePosPayments', () => {
       { paymentMethodId: 'evc', amount: '15.00' },
       { paymentMethodId: 'evc-blue', amount: '8.00' },
     ])
+    expect(result.tenders).toEqual(result.payments)
   })
 
   it('turns only the extra cash into change and saves the cash the sale actually took', () => {
@@ -75,6 +80,10 @@ describe('settlePosPayments', () => {
       paymentMethodId: 'cash',
       amount: '1.00',
     })
+    expect(result.tenders.find((payment) => payment.paymentMethodId === 'cash')).toEqual({
+      paymentMethodId: 'cash',
+      amount: '5.00',
+    })
     const saved = result.payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
     expect(saved).toBe(54)
   })
@@ -85,6 +94,7 @@ describe('settlePosPayments', () => {
     expect(result.paid).toBe('30.00')
     expect(result.change).toBe('2.00')
     expect(result.payments).toEqual([{ paymentMethodId: 'cash', amount: '28.00' }])
+    expect(result.tenders).toEqual([{ paymentMethodId: 'cash', amount: '30.00' }])
   })
 
   it('takes an exact wallet payment and does not invent a cash line', () => {
@@ -92,6 +102,7 @@ describe('settlePosPayments', () => {
     expect(result.canValidate).toBe(true)
     expect(result.change).toBe('0.00')
     expect(result.payments).toEqual([{ paymentMethodId: 'evc', amount: '54.00' }])
+    expect(result.tenders).toEqual(result.payments)
   })
 
   it('refuses a non-cash amount past the sale and does not call the excess change', () => {
@@ -124,6 +135,7 @@ describe('settlePosPayments', () => {
       { paymentMethodId: 'edahab', amount: '14.00' },
       { paymentMethodId: 'evc', amount: '40.00' },
     ])
+    expect(exact.tenders).toEqual(exact.payments)
   })
 
   it('keeps a zero-total sale from validating', () => {
@@ -156,8 +168,15 @@ function validateButton(html: string) {
   return html.match(/<button\b[^>]*>Validate<\/button>/)?.[0] ?? ''
 }
 
-function renderPayment(amounts: Record<string, string>, due = '54.00') {
+function renderPayment(
+  amounts: Record<string, string>,
+  options: string | { due?: string; error?: string | null; canValidate?: boolean; changeMethodId?: string } = {},
+) {
+  const settings = typeof options === 'string' ? { due: options } : options
+  const due = settings.due ?? '54.00'
   const settlement = settlePosPayments({ due, methods: named, amounts })
+  const error = settings.error === undefined ? null : settings.error
+  const canValidate = settings.canValidate ?? settlement.canValidate
   return renderToString(
     createElement(PosPaymentForm, {
       due,
@@ -167,10 +186,13 @@ function renderPayment(amounts: Record<string, string>, due = '54.00') {
       paid: settlement.paid,
       remaining: settlement.remaining,
       change: settlement.change,
-      canValidate: settlement.canValidate,
+      canValidate,
       pending: false,
-      error: null,
+      error,
       dark: true,
+      changeMethods: named.map((method) => ({ id: method.id, name: method.name })),
+      changeMethodId: (typeof options === 'string' ? undefined : options.changeMethodId) ?? 'cash',
+      onChangeMethod: () => {},
       onAmount: () => {},
       onFill: () => {},
       onCancel: () => {},
@@ -194,6 +216,7 @@ describe('payment dialog', () => {
     expect(html).toContain('Paid')
     expect(html).toContain('Remaining')
     expect(html).toContain('Change')
+    expect(html).toContain('Return change from')
     expect(html).toContain('$0.00')
     expect(validateButton(html)).toContain('disabled=""')
   })
@@ -224,7 +247,31 @@ describe('payment dialog', () => {
     expect(html).toMatch(/id="pay-cash"[^>]*value="5"/)
     expect(html).toContain('$58.00')
     expect(html).toContain('$4.00')
+    expect(html).toContain('Return change from')
     expect(validateButton(html)).not.toContain('disabled=""')
+  })
+
+  it('does not show the non-cash error when only cash overpays and the wallet field is empty', () => {
+    const html = renderPayment({ cash: '100' }, { due: '87.00' })
+    expect(html).toMatch(/id="pay-edahab"[^>]*value=""/)
+    expect(html).toContain('$13.00')
+    expect(html).not.toContain(NON_CASH_OVERPAY_MESSAGE)
+    expect(validateButton(html)).not.toContain('disabled=""')
+  })
+
+  it('disables Validate whenever a validation error is showing', () => {
+    const html = renderPayment(
+      { evc: '90' },
+      { due: '87.00', error: NON_CASH_OVERPAY_MESSAGE, canValidate: true },
+    )
+    expect(html).toContain(NON_CASH_OVERPAY_MESSAGE)
+    expect(validateButton(html)).toContain('disabled=""')
+  })
+
+  it('disables Validate when change is due and no return account is selected', () => {
+    const html = renderPayment({ cash: '100' }, { due: '87.00', changeMethodId: '', canValidate: false })
+    expect(html).toContain('Return change from')
+    expect(validateButton(html)).toContain('disabled=""')
   })
 })
 
@@ -299,6 +346,8 @@ describe('clampPaymentDraft', () => {
 
   it('stops a wallet from exceeding the balance still owed, including cash already typed', () => {
     // Other wallets are $53 and cash is $20, so nothing of the $54 sale is left.
+    // The digit is dropped and the field stays empty. That is not an overpayment
+    // sitting in the field, so it must not raise the non-cash error.
     expect(
       clampPaymentDraft({
         due: '54.00',
@@ -307,7 +356,8 @@ describe('clampPaymentDraft', () => {
         methods,
         amounts: { ...wallets, cash: '20' },
       }),
-    ).toEqual({ value: '', clamped: true })
+    ).toEqual({ value: '', clamped: false })
+    expect(nonCashDraftError(false, '')).toBeNull()
 
     // Cash $5 plus wallets $45 leaves $4. An $8 wallet entry is cut to that $4.
     expect(
@@ -319,6 +369,28 @@ describe('clampPaymentDraft', () => {
         amounts: { edahab: '10', 'edahab-blue': '20', evc: '15', cash: '5' },
       }),
     ).toEqual({ value: '4.00', clamped: true })
+    expect(nonCashDraftError(true, '4.00')).toBe(NON_CASH_OVERPAY_MESSAGE)
+  })
+
+  it('does not treat a focused empty wallet as a non-cash overpayment when only cash overpays', () => {
+    // The till in the screenshot: $87 due, cash 100, change $13, EDAHAB focused and blank.
+    // Typing into that blank field used to wipe the digit and stick the overpay error on screen.
+    const draft = clampPaymentDraft({
+      due: '87.00',
+      method: methods[1]!,
+      raw: '1',
+      methods,
+      amounts: { cash: '100' },
+    })
+    expect(draft).toEqual({ value: '', clamped: false })
+    expect(nonCashDraftError(draft?.clamped ?? false, draft?.value ?? '')).toBeNull()
+
+    const settled = settlePosPayments({ due: '87.00', methods, amounts: { cash: '100', edahab: '' } })
+    expect(settled.nonCashWithinBalance).toBe(true)
+    expect(settled.change).toBe('13.00')
+    expect(settled.canValidate).toBe(true)
+    expect(settled.tenders).toEqual([{ paymentMethodId: 'cash', amount: '100.00' }])
+    expect(settled.payments).toEqual([{ paymentMethodId: 'cash', amount: '87.00' }])
   })
 
   it('rejects keystrokes that are not an amount and clears a field', () => {

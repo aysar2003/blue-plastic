@@ -39,6 +39,9 @@ export type ThermalReceiptData = {
     amount: string
   }[]
   payments: ReceiptPayment[]
+  /** Set when the stored payment lines are the gross tender, not the net the sale kept. */
+  tendered?: boolean
+  changeFrom?: string | null
 }
 
 export type ThermalShop = {
@@ -80,7 +83,7 @@ export function ThermalReceipt({
   const printed = useRef(false)
   const spec = RECEIPT_PAPERS[paper]
   const money = (value: string | number) => formatMoney(value, receipt.currency)
-  const pay = paymentRows(receipt.payments, receipt.total, change)
+  const pay = paymentRows(receipt.payments, receipt.total, change, { tendered: receipt.tendered })
   const hasDiscount = Number(receipt.discount) > 0
   const hasTax = Number(receipt.tax) > 0
   const itemCount = receipt.lines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0)
@@ -240,7 +243,13 @@ export function ThermalReceipt({
           <Row key={`${row.label}-${index}`} label={row.label} value={money(row.amount)} />
         ))}
         <Row label="Paid" value={money(pay.paid)} bold />
-        {pay.change > 0 ? <Row label="Change" value={money(pay.change)} bold /> : null}
+        {pay.change > 0 ? (
+          <Row
+            label={receipt.changeFrom ? `Change (${receipt.changeFrom})` : 'Change'}
+            value={money(pay.change)}
+            bold
+          />
+        ) : null}
 
         {receipt.note ? (
           <>
