@@ -3,6 +3,7 @@ import 'server-only'
 import { Decimal, formatMoney, toMoneyString, ZERO } from '@/lib/money'
 import { formatDate, today, toCalendarDate } from '@/lib/date'
 import { chooseLineStore } from '@/lib/pos-line-store'
+import { receiptCashierName } from '@/lib/pos-receipt'
 import { foldStoreQuantities } from '@/lib/store-stock'
 import type {
   PosCashMoveInput,
@@ -1043,7 +1044,7 @@ export async function receipt(ctx: OrgContext, documentId: string) {
     tax: document.taxTotal.toString(),
     total: document.total.toString(),
     registerName: order?.register.name ?? null,
-    cashierName: cashier ? (cashier.name ?? cashier.email) : null,
+    cashierName: receiptCashierName(order?.register.name ?? null, cashier),
     // The register's walk-in customer is not worth printing; a named one is.
     customer:
       order && order.register.defaultCustomerId === document.customerId
