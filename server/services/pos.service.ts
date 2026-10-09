@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { Decimal, formatMoney, toMoneyString, ZERO } from '@/lib/money'
-import { formatDateTime, today } from '@/lib/date'
+import { formatDateTime, formatTransactionDate, today, toCalendarDate, toDate } from '@/lib/date'
+import { posOrderListLimit, summarizePosWallets, type PosOrderListFilters } from '@/lib/pos-order-report'
 import { chooseLineStore } from '@/lib/pos-line-store'
 import { receiptCashierName } from '@/lib/pos-receipt'
 import { foldStoreQuantities } from '@/lib/store-stock'
@@ -170,48 +171,128 @@ export async function listSessions(ctx: OrgContext, limit = 50) {
   }))
 }
 
-export async function listPosOrders(ctx: OrgContext, limit = 80) {
+export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilters = {}) {
   const currency = ctx.organization.baseCurrency
-  const rows = await db.posOrder.findMany({
-    where: { orgId: ctx.orgId },
-    select: {
-      id: true,
-      createdAt: true,
-      register: { select: { name: true } },
-      session: { select: { id: true } },
-      salesDocument: {
-        select: {
-          id: true,
-          number: true,
-          total: true,
-          status: true,
-        },
-      },
-      payments: {
-        select: {
-          amount: true,
-          paymentMethod: { select: { name: true } },
-        },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-  })
+  const limit = posOrderListLimit(filters)
+  const date =
+    filters.from || filters.to
+      ? {
+          ...(filters.from ? { gte: toDate(filters.from) } : {}),
+          ...(filters.to ? { lte: toDate(filters.to) } : {}),
+        }
+      : undefined
 
-  return rows.map((row) => ({
-    id: row.id,
-    createdAt: row.createdAt,
-    dateLabel: formatDateTime(row.createdAt, ctx.organization.timeZone),
-    registerName: row.register.name,
-    sessionId: row.session?.id ?? null,
-    documentId: row.salesDocument.id,
-    number: row.salesDocument.number,
-    status: row.salesDocument.status,
-    total: formatMoney(row.salesDocument.total, currency),
-    payments: row.payments
-      .map((payment) => `${payment.paymentMethod.name} ${formatMoney(payment.amount, currency)}`)
-      .join(' · '),
-  }))
+  const [rows, registers, methods] = await Promise.all([
+    db.posOrder.findMany({
+      where: {
+        orgId: ctx.orgId,
+        ...(filters.registerId ? { registerId: filters.registerId } : {}),
+        ...(filters.paymentMethodId
+          ? { payments: { some: { paymentMethodId: filters.paymentMethodId } } }
+          : {}),
+        salesDocument: {
+          deletedAt: null,
+          ...(date ? { date } : {}),
+        },
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        register: { select: { name: true } },
+        session: { select: { id: true } },
+        salesDocument: {
+          select: {
+            id: true,
+            number: true,
+            total: true,
+            status: true,
+            type: true,
+            date: true,
+          },
+        },
+        payments: {
+          select: {
+            amount: true,
+            paymentMethod: { select: { id: true, name: true, sortOrder: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+    }),
+    db.posRegister.findMany({
+      where: { orgId: ctx.orgId },
+      select: { id: true, name: true, isActive: true },
+      orderBy: { name: 'asc' },
+    }),
+    db.posPaymentMethod.findMany({
+      where: { orgId: ctx.orgId },
+      select: { id: true, name: true, isActive: true, sortOrder: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    }),
+  ])
+
+  const truncated = rows.length > limit
+  const visible = truncated ? rows.slice(0, limit) : rows
+  const summary = summarizePosWallets(
+    visible.map((row) => ({
+      payments: row.payments.map((payment) => ({
+        methodId: payment.paymentMethod.id,
+        methodName: payment.paymentMethod.name,
+        sortOrder: payment.paymentMethod.sortOrder,
+        amount: payment.amount.toString(),
+        refund: row.salesDocument.type === 'REFUND_RECEIPT',
+      })),
+    })),
+    methods,
+  )
+
+  return {
+    truncated,
+    limit,
+    registers,
+    methods: methods.map((method) => ({
+      id: method.id,
+      name: method.name,
+      isActive: method.isActive,
+    })),
+    summary: {
+      orderCount: summary.orderCount,
+      total: formatMoney(summary.total, currency),
+      wallets: summary.wallets.map((wallet) => ({
+        methodId: wallet.methodId,
+        name: wallet.name,
+        total: formatMoney(wallet.amount, currency),
+      })),
+    },
+    orders: visible.map((row) => {
+      const refund = row.salesDocument.type === 'REFUND_RECEIPT'
+      const signedTotal = refund
+        ? new Decimal(row.salesDocument.total.toString()).negated()
+        : row.salesDocument.total
+      return {
+        id: row.id,
+        createdAt: row.createdAt,
+        dateLabel: formatTransactionDate(
+          toCalendarDate(row.salesDocument.date),
+          row.createdAt,
+          ctx.organization.timeZone,
+        ),
+        registerName: row.register.name,
+        sessionId: row.session?.id ?? null,
+        documentId: row.salesDocument.id,
+        number: row.salesDocument.number,
+        status: row.salesDocument.status,
+        total: formatMoney(signedTotal, currency),
+        payments: row.payments
+          .map((payment) => {
+            const amount = refund ? new Decimal(payment.amount.toString()).negated() : payment.amount
+            return `${payment.paymentMethod.name} ${formatMoney(amount, currency)}`
+          })
+          .join(' · '),
+      }
+    }),
+  }
 }
 
 function isCashMethodName(name: string) {
