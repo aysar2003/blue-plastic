@@ -1,8 +1,10 @@
+import { Fragment } from 'react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ScrollTextIcon } from 'lucide-react'
 import type { JournalSourceType } from '@prisma/client'
 
+import { ColumnBand } from '@/components/data/column-band'
 import { EmptyState } from '@/components/data/empty-state'
 import { ClickableRow } from '@/components/reports/clickable-row'
 import { PageHeader } from '@/components/data/page-header'
@@ -174,7 +176,7 @@ export default async function TransactionDetailPage({
 
       {splitColumns.length > 0 ? (
         <p className="mb-3 text-sm text-muted-foreground">
-          Each other account on an entry is its own column. Turn the ones you want on under Columns.
+          Each other account on an entry is listed under that row, so it is on screen when the page opens.
         </p>
       ) : null}
 
@@ -195,15 +197,27 @@ export default async function TransactionDetailPage({
                   <TableHead className="w-32">Number</TableHead>
                   <TableHead className="w-44">Name</TableHead>
                   <TableHead>Memo</TableHead>
-                  {splitColumns.map((column) => (
-                    <TableHead key={column} data-split-account={column} hidden className="numeric w-36 whitespace-nowrap">
-                      {column}
-                    </TableHead>
-                  ))}
-                  <TableHead className="numeric w-32">Debit</TableHead>
-                  <TableHead className="numeric w-32">Credit</TableHead>
-                  <TableHead className="numeric w-36">Balance</TableHead>
+                  <TableHead className="numeric">Debit</TableHead>
+                  <TableHead className="numeric">Credit</TableHead>
+                  <TableHead className="numeric">Balance</TableHead>
                 </TableRow>
+                {splitColumns.length > 0 ? (
+                  <TableRow data-column-band="" className="hover:bg-transparent">
+                    <TableHead colSpan={8} className="h-auto bg-[var(--band)] py-2 normal-case tracking-normal">
+                      <ColumnBand>
+                        {splitColumns.map((column) => (
+                          <div
+                            key={column}
+                            data-split-account={column}
+                            className="min-w-0 text-right text-[0.65rem] font-semibold uppercase leading-tight tracking-wide"
+                          >
+                            {column}
+                          </div>
+                        ))}
+                      </ColumnBand>
+                    </TableHead>
+                  </TableRow>
+                ) : null}
               </TableHeader>
               <TableBody>
                 {ledger.entries.map((entry) => {
@@ -232,7 +246,8 @@ export default async function TransactionDetailPage({
                       : source.partyHref
 
                   return (
-                    <ClickableRow key={entry.lineId} href={href}>
+                    <Fragment key={entry.lineId}>
+                    <ClickableRow href={href} className={splitColumns.length > 0 ? 'border-b-0' : undefined}>
                       <TableCell className="tabular whitespace-nowrap text-muted-foreground">
                         {formatDate(toCalendarDate(entry.date))}
                       </TableCell>
@@ -264,20 +279,6 @@ export default async function TransactionDetailPage({
                         )}
                       </TableCell>
                       <TableCell>{parts.note ?? '—'}</TableCell>
-                      {splitColumns.map((column) => {
-                        const split = entry.splits.find((item) => `${item.code} ${item.name}` === column)
-                        return (
-                          <TableCell key={column} hidden className="numeric tabular">
-                            {split ? (
-                              <Link href={href} className="underline-offset-4 hover:underline">
-                                {formatMoney(split.amount, currency)}
-                              </Link>
-                            ) : (
-                              ''
-                            )}
-                          </TableCell>
-                        )
-                      })}
                       <TableCell className="numeric tabular">
                         {entry.debit.isZero() ? (
                           ''
@@ -302,6 +303,33 @@ export default async function TransactionDetailPage({
                         </Link>
                       </TableCell>
                     </ClickableRow>
+                    {splitColumns.length > 0 ? (
+                      <ClickableRow href={href} band className="bg-muted/30">
+                        <TableCell colSpan={8} className="py-1.5">
+                          <ColumnBand>
+                            {splitColumns.map((column) => {
+                              const split = entry.splits.find((item) => `${item.code} ${item.name}` === column)
+                              return (
+                                <div
+                                  key={column}
+                                  data-split-account={column}
+                                  className="min-w-0 text-right text-[0.8125rem] tabular"
+                                >
+                                  {split ? (
+                                    <Link href={href} className="underline-offset-4 hover:underline">
+                                      {formatMoney(split.amount, currency)}
+                                    </Link>
+                                  ) : (
+                                    ''
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </ColumnBand>
+                        </TableCell>
+                      </ClickableRow>
+                    ) : null}
+                    </Fragment>
                   )
                 })}
               </TableBody>
@@ -312,9 +340,6 @@ export default async function TransactionDetailPage({
                   <TableCell />
                   <TableCell />
                   <TableCell />
-                  {splitColumns.map((column) => (
-                    <TableCell key={column} hidden />
-                  ))}
                   <TableCell className="numeric tabular font-semibold">
                     {formatMoney(
                       ledger.entries.reduce((sum, entry) => sum.plus(entry.debit), ledger.opening.minus(ledger.opening)),

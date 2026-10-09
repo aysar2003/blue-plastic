@@ -40,8 +40,8 @@ export function addLineFromKeyboard() {
 
 /** Rows a person can open, in the order they appear on the page. */
 export function listRows() {
-  return [...document.querySelectorAll<HTMLElement>('main tbody [data-slot="table-row"]')].filter((row) =>
-    row.querySelector('a[href]'),
+  return [...document.querySelectorAll<HTMLElement>('main tbody [data-slot="table-row"]')].filter(
+    (row) => row.querySelector('a[href]') && !row.hasAttribute('data-column-band'),
   )
 }
 

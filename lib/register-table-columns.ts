@@ -78,7 +78,7 @@ export function buildRegisterColumns(
 export function defaultRegisterPrefs(allIds: RegisterColumnId[]): RegisterColumnPrefs {
   return {
     order: [...allIds],
-    hidden: ['contra'],
+    hidden: [],
   }
 }
 

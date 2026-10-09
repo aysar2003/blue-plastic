@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Columns3Icon, GripVerticalIcon } from 'lucide-react'
 
+import { ColumnBand } from '@/components/data/column-band'
 import { SortableHeader, type SortState } from '@/components/data/sortable-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,12 +20,14 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import {
   buildRegisterColumns,
   mergeRegisterPrefs,
+  REGISTER_FIXED_COLUMN_IDS,
   storageKeyForRegister,
   visibleRegisterColumns,
   type RegisterColumnDef,
   type RegisterColumnId,
   type RegisterColumnPrefs,
 } from '@/lib/register-table-columns'
+import { partitionColumns } from '@/lib/table-fit'
 import { formatMoney, money } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
@@ -57,6 +60,9 @@ type Props = {
   linkParams: Record<string, string | undefined>
   balanceHeader: string
 }
+
+/** The row a person reads across. Split accounts and the contra sit on the band below. */
+const REGISTER_MAIN_IDS = REGISTER_FIXED_COLUMN_IDS.filter((id) => id !== 'contra')
 
 function collectSplits(rows: RegisterTableRow[]) {
   const map = new Map<string, { code: string; name: string }>()
@@ -115,7 +121,8 @@ export function RegisterTable({
   )
 
   const visible = useMemo(() => visibleRegisterColumns(catalog, prefs), [catalog, prefs])
-  const balanceVisible = visible.some((c) => c.id === 'balance')
+  const { main, extra } = useMemo(() => partitionColumns(visible, REGISTER_MAIN_IDS), [visible])
+  const balanceVisible = main.some((c) => c.id === 'balance')
 
   const splitAmountByRow = useMemo(() => {
     return rows.map((row) => {
@@ -344,6 +351,14 @@ export function RegisterTable({
     }
   }
 
+  function extraValue(row: RegisterTableRow, col: RegisterColumnDef, rowIndex: number) {
+    if (col.id === 'contra') return row.contraAccounts
+    const code = col.id.slice('split:'.length)
+    const amount = splitAmountByRow[rowIndex]?.get(code)
+    const value = amount ? money(amount) : money(0)
+    return value.isZero() ? '' : formatMoney(value, currency)
+  }
+
   const customizeList = prefs.order
     .map((id) => catalog.find((c) => c.id === id))
     .filter((c): c is RegisterColumnDef => Boolean(c))
@@ -360,24 +375,94 @@ export function RegisterTable({
       <Card className="overflow-hidden p-0">
         <Table>
           <TableHeader>
-            <TableRow>{visible.map((col) => renderHeader(col))}</TableRow>
+            {main.length > 0 ? <TableRow>{main.map((col) => renderHeader(col))}</TableRow> : null}
+            {extra.length > 0 ? (
+              <TableRow data-column-band="" className="hover:bg-transparent">
+                <TableHead colSpan={Math.max(1, main.length)} className="h-auto bg-[var(--band)] py-2 normal-case tracking-normal">
+                  <ColumnBand>
+                    {extra.map((col) => (
+                      <div
+                        key={col.id}
+                        className={cn(
+                          'min-w-0 text-[0.65rem] font-semibold uppercase leading-tight tracking-wide',
+                          col.kind !== 'text' && 'text-right',
+                        )}
+                      >
+                        {col.label}
+                      </div>
+                    ))}
+                  </ColumnBand>
+                </TableHead>
+              </TableRow>
+            ) : null}
           </TableHeader>
           <TableBody>
             {rows.map((row, rowIndex) => (
-              <TableRow key={row.lineId}>{visible.map((col) => renderCell(row, col, rowIndex))}</TableRow>
+              <Fragment key={row.lineId}>
+                {main.length > 0 ? (
+                  <TableRow className={extra.length > 0 ? 'border-b-0' : undefined}>
+                    {main.map((col) => renderCell(row, col, rowIndex))}
+                  </TableRow>
+                ) : null}
+                {extra.length > 0 ? (
+                  <TableRow data-column-band="" className="bg-muted/30 hover:bg-muted/40">
+                    <TableCell colSpan={Math.max(1, main.length)} className="py-1.5">
+                      <ColumnBand>
+                        {extra.map((col) => (
+                          <div
+                            key={col.id}
+                            className={cn(
+                              'min-w-0 break-words text-[0.8125rem]',
+                              col.kind !== 'text' && 'text-right tabular',
+                            )}
+                          >
+                            {extraValue(row, col, rowIndex)}
+                          </div>
+                        ))}
+                      </ColumnBand>
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </Fragment>
             ))}
           </TableBody>
           <TableFooter>
             <TableRow>
-              {balanceVisible ? (
-                <>
-                  <TableCell colSpan={Math.max(1, visible.length - 1)}>Closing balance</TableCell>
-                  <TableCell className="numeric tabular font-semibold">
-                    {formatMoney(money(closingBalance), currency)}
-                  </TableCell>
-                </>
+              {main.length === 0 ? (
+                <TableCell>
+                  <div className="flex items-baseline justify-between gap-4">
+                    <span>Closing balance</span>
+                    <span className="numeric tabular font-semibold">
+                      {formatMoney(money(closingBalance), currency)}
+                    </span>
+                  </div>
+                </TableCell>
+              ) : balanceVisible ? (
+                main.map((col, index) =>
+                  col.id === 'balance' && index === 0 ? (
+                    <TableCell key={col.id}>
+                      <div className="flex items-baseline justify-between gap-4">
+                        <span>Closing balance</span>
+                        <span className="numeric tabular font-semibold">
+                          {formatMoney(money(closingBalance), currency)}
+                        </span>
+                      </div>
+                    </TableCell>
+                  ) : (
+                    <TableCell
+                      key={col.id}
+                      className={col.id === 'balance' ? 'numeric tabular font-semibold' : undefined}
+                    >
+                      {col.id === 'balance'
+                        ? formatMoney(money(closingBalance), currency)
+                        : index === 0
+                          ? 'Closing balance'
+                          : null}
+                    </TableCell>
+                  ),
+                )
               ) : (
-                <TableCell colSpan={visible.length}>
+                <TableCell colSpan={main.length}>
                   <div className="flex items-baseline justify-between gap-4">
                     <span>Closing balance</span>
                     <span className="numeric tabular font-semibold">

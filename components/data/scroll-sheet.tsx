@@ -14,7 +14,7 @@ export function ScrollSheet({
   className?: string
 }) {
   return (
-    <div className={cn('max-h-[min(70vh,42rem)] overflow-auto overscroll-contain', className)}>
+    <div className={cn('max-h-[min(70vh,42rem)] overflow-x-clip overflow-y-auto overscroll-contain', className)}>
       {children}
     </div>
   )

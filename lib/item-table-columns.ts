@@ -46,14 +46,20 @@ export const ITEM_COLUMN_LABELS: Record<ItemFixedColumnId, string> = {
   unitOfMeasure: 'Unit of measure',
 }
 
-/** Hidden until the user turns them on — same idea as QuickBooks. */
-export const ITEM_DEFAULT_HIDDEN: ItemFixedColumnId[] = [
-  'sku',
-  'category',
-  'salesDescription',
-  'purchaseDescription',
-  'reorderPoint',
-  'unitOfMeasure',
+/** Every column is on when the list opens. A person can still hide one. */
+export const ITEM_DEFAULT_HIDDEN: ItemFixedColumnId[] = []
+
+/**
+ * These stay on the first row. The rest of the catalogue (accounts, each
+ * store, descriptions) is drawn in the band under the row.
+ */
+export const ITEM_MAIN_COLUMN_IDS: ItemFixedColumnId[] = [
+  'name',
+  'type',
+  'onHand',
+  'price',
+  'stockValue',
+  'cost',
 ]
 
 export function storeColumnId(storeId: string): ItemColumnId {

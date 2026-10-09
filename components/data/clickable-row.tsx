@@ -16,19 +16,29 @@ export function ClickableRow({
   href,
   className,
   title,
+  band,
   children,
 }: {
   href?: string
   className?: string
   title?: string
+  /** A second line of the same record. Arrow keys stay on the main row. */
+  band?: boolean
   children: React.ReactNode
 }) {
   const router = useRouter()
-  if (!href) return <TableRow className={className}>{children}</TableRow>
+  if (!href) {
+    return (
+      <TableRow className={className} data-column-band={band ? '' : undefined}>
+        {children}
+      </TableRow>
+    )
+  }
 
   return (
     <TableRow
       title={title}
+      data-column-band={band ? '' : undefined}
       className={cn('cursor-pointer hover:bg-muted/50', className)}
       onClick={(event) => {
         const target = event.target
