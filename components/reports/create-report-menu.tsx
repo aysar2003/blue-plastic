@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { withoutBusinessOverview } from '@/lib/business-overview-access'
 
 const STARTS = [
   { href: '/reports/profit-loss', label: 'Profit and Loss' },
@@ -22,7 +23,12 @@ const STARTS = [
 ]
 
 /** Opens an existing report. A custom report here is a saved favourite, not a second engine. */
-export function CreateReportMenu() {
+export function reportMenuItems(permissions: Iterable<string>) {
+  return withoutBusinessOverview(STARTS, permissions)
+}
+
+export function CreateReportMenu({ permissions }: { permissions: Iterable<string> }) {
+  const starts = reportMenuItems(permissions)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className={buttonVariants({ size: 'sm' })}>
@@ -30,7 +36,7 @@ export function CreateReportMenu() {
         <ChevronDownIcon />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-56">
-        {STARTS.map((report) => (
+        {starts.map((report) => (
           <DropdownMenuItem key={report.href} asChild>
             <Link href={report.href}>{report.label}</Link>
           </DropdownMenuItem>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { ASSIGNABLE_ROLES } from '@/lib/roles'
-import { PERMISSIONS } from '@/lib/permissions-catalog'
+import { PERMISSION_GROUPS, PERMISSIONS } from '@/lib/permissions-catalog'
 import {
   ROLE_PERMISSIONS,
   can,
@@ -47,6 +47,28 @@ describe('permission matrix', () => {
     expect(can('SALES', 'journal:read')).toBe(false)
     expect(can('SALES', 'bill:create')).toBe(false)
     expect(can('SALES', 'user:invite')).toBe(false)
+    expect(can('SALES', 'report:overview')).toBe(false)
+  })
+
+  it('reserves the business overview for owner, admin, and accountant', () => {
+    expect(can('OWNER', 'report:overview')).toBe(true)
+    expect(can('ADMIN', 'report:overview')).toBe(true)
+    expect(can('ACCOUNTANT', 'report:overview')).toBe(true)
+    expect(can('BOOKKEEPER', 'report:overview')).toBe(false)
+    expect(can('SALES', 'report:overview')).toBe(false)
+    expect(can('STORE_KEEPER', 'report:overview')).toBe(false)
+    expect(can('VIEWER', 'report:overview')).toBe(false)
+    expect(can('CUSTOM', 'report:overview')).toBe(false)
+  })
+
+  it('lets an override grant or withhold the business overview', () => {
+    const granted = effectivePermissions('SALES', ['report:read', 'report:overview'])
+    expect(granted.has('report:overview')).toBe(true)
+    expect(granted.has('invoice:create')).toBe(false)
+
+    const withheld = effectivePermissions('ADMIN', ['report:read', 'invoice:read'])
+    expect(withheld.has('report:overview')).toBe(false)
+    expect(withheld.has('report:read')).toBe(true)
   })
 
   it('gives store keepers stock work without the ledger', () => {
@@ -90,6 +112,13 @@ describe('permission matrix', () => {
 
   it('declares no duplicate permissions', () => {
     expect(new Set(PERMISSIONS).size).toBe(PERMISSIONS.length)
+  })
+
+  it('shows every permission in the access matrix, including the business overview', () => {
+    const shown = PERMISSION_GROUPS.flatMap((group) => group.permissions.map((item) => item.key))
+    expect(new Set(shown)).toEqual(new Set(PERMISSIONS))
+    const reports = PERMISSION_GROUPS.find((group) => group.id === 'reports')
+    expect(reports?.permissions.map((item) => item.key)).toContain('report:overview')
   })
 
   it('uses an explicit override list when present', () => {

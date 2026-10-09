@@ -5,13 +5,20 @@ import { usePathname } from 'next/navigation'
 import { ChevronDownIcon, ShoppingBagIcon } from 'lucide-react'
 
 import { ODOO } from '@/lib/odoo-brand'
+import type { Permission } from '@/lib/permissions-catalog'
 import { cn } from '@/lib/utils'
+
+type NavChild = {
+  label: string
+  href: string
+  permission?: Permission
+}
 
 type NavItem = {
   label: string
   href: string
   match?: (path: string) => boolean
-  children?: { label: string; href: string }[]
+  children?: NavChild[]
 }
 
 const NAV: NavItem[] = [
@@ -44,7 +51,7 @@ const NAV: NavItem[] = [
     children: [
       { label: 'Sessions', href: '/pos/sessions' },
       { label: 'Sales receipts', href: '/sales/sales-receipts' },
-      { label: 'Business overview', href: '/reports/business-overview' },
+      { label: 'Business overview', href: '/reports/business-overview', permission: 'report:overview' },
     ],
   },
   {
@@ -71,14 +78,29 @@ function isPosTillRoute(pathname: string) {
   )
 }
 
+/** Reporting links the caller may open. Business overview is not part of the till. */
+export function visiblePosNav(permissions: Iterable<string>): NavItem[] {
+  const allowed = new Set(permissions)
+  return NAV.map((item) => {
+    if (!item.children) return item
+    return {
+      ...item,
+      children: item.children.filter((child) => !child.permission || allowed.has(child.permission)),
+    }
+  })
+}
+
 export function PosShell({
   orgName,
+  permissions,
   children,
 }: {
   orgName: string
+  permissions: readonly string[]
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const nav = visiblePosNav(permissions)
   const hideChrome =
     pathname.includes('/lock') ||
     pathname.includes('/display') ||
@@ -102,7 +124,7 @@ export function PosShell({
           Point of Sale
         </Link>
         <nav className="flex flex-1 flex-wrap items-center gap-0.5">
-          {NAV.map((item) => (
+          {nav.map((item) => (
             <PosNavItem key={item.label} item={item} pathname={pathname} />
           ))}
         </nav>

@@ -1,3 +1,5 @@
+import { withoutBusinessOverview } from '@/lib/business-overview-access'
+
 import type { LauncherSection } from './app-launcher'
 
 /**
@@ -412,3 +414,13 @@ export const REPORT_SECTIONS: LauncherSection[] = [
     ],
   },
 ]
+
+/** Catalogue tiles the caller may open. The business overview tile is not a general report. */
+export function reportSectionsFor(
+  permissions: ReadonlySet<string> | Iterable<string>,
+): LauncherSection[] {
+  return REPORT_SECTIONS.map((section) => ({
+    ...section,
+    apps: withoutBusinessOverview(section.apps, permissions),
+  })).filter((section) => section.apps.length > 0)
+}

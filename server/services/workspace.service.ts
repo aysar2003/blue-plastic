@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { withoutBusinessOverview } from '@/lib/business-overview-access'
 import { startOfMonth, today } from '@/lib/date'
 import { Decimal, formatMoney } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
@@ -8,11 +9,12 @@ import { accountFigures, present } from '@/server/reports/framework'
 import * as bankingService from '@/server/services/banking.service'
 
 export async function listBookmarks(ctx: OrgContext) {
-  return db.workspaceBookmark.findMany({
+  const rows = await db.workspaceBookmark.findMany({
     where: { orgId: ctx.orgId, userId: ctx.userId },
     select: { id: true, label: true, href: true, kind: true },
     orderBy: [{ sort: 'asc' }, { createdAt: 'asc' }],
   })
+  return withoutBusinessOverview(rows, ctx.permissions)
 }
 
 export async function saveBookmark(

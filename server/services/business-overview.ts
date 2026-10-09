@@ -2,7 +2,7 @@ import 'server-only'
 
 import { addDays, addMonths, endOfMonth, startOfMonth, toDate, today, type CalendarDate } from '@/lib/date'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
-import type { OrgContext } from '@/server/auth/context'
+import { assertPermission, type OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { bankAccounts } from '@/server/services/banking.service'
 import { profitAndLoss } from '@/server/reports/statements'
@@ -19,6 +19,7 @@ function changePercent(current: Decimal, prior: Decimal): string | null {
  * documents that posted to it.
  */
 export async function businessOverview(ctx: OrgContext) {
+  assertPermission(ctx, 'report:overview')
   const now = today(ctx.organization.timeZone)
   const year = now.slice(0, 4)
   const yearStart = `${year}-01-01`
