@@ -3,6 +3,7 @@ import 'server-only'
 import { JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
 import { addDays, formatDateTime, toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
 import { postedLineParts } from '@/lib/ledger-text'
+import { accountTenderTotals, type PosSaleTender } from '@/lib/pos-change'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -1528,7 +1529,8 @@ const activityByUser: TableReport = {
 const salesByDeposit: TableReport = {
   key: 'sales-by-deposit',
   title: 'Sales by Deposit Account',
-  description: 'Cash sales grouped by the bank account the money was deposited into.',
+  description:
+    'Cash sales by the account that received them. Till change is taken out of the account it left, so the net is what that account kept.',
   group: 'Data analysis',
   mode: 'range',
   async build(input) {
@@ -1543,43 +1545,117 @@ const salesByDeposit: TableReport = {
       select: {
         total: true,
         depositAccount: { select: { id: true, code: true, name: true } },
+        posOrder: {
+          select: {
+            changeAmount: true,
+            changePaymentMethodId: true,
+            changeLedgerAccountId: true,
+            changePaymentMethod: { select: { name: true } },
+            payments: {
+              select: {
+                amount: true,
+                ledgerAccountId: true,
+                paymentMethod: { select: { name: true } },
+              },
+            },
+          },
+        },
       },
     })
 
-    const grouped = new Map<string, { id: string; label: string; count: number; amount: Decimal }>()
+    type Bucket = { id: string; label: string; count: number; tendered: Decimal; change: Decimal }
+    const grouped = new Map<string, Bucket>()
+    const touch = (id: string, label: string) => {
+      const current = grouped.get(id) ?? { id, label, count: 0, tendered: ZERO, change: ZERO }
+      if (current.label === id && label !== id) current.label = label
+      grouped.set(id, current)
+      return current
+    }
+
+    const accountIds = new Set<string>()
     for (const receipt of receipts) {
+      for (const payment of receipt.posOrder?.payments ?? []) accountIds.add(payment.ledgerAccountId)
+      if (receipt.posOrder?.changeLedgerAccountId) accountIds.add(receipt.posOrder.changeLedgerAccountId)
+    }
+    const accountRows = accountIds.size
+      ? await books(input).ledgerAccount.findMany({
+          where: { orgId: ctx.orgId, id: { in: [...accountIds] } },
+          select: { id: true, code: true, name: true },
+        })
+      : []
+    const accountLabel = new Map(accountRows.map((account) => [account.id, `${account.code} ${account.name}`]))
+
+    for (const receipt of receipts) {
+      const order = receipt.posOrder
+      if (order && order.payments.length > 0) {
+        const sale: PosSaleTender = {
+          payments: order.payments.map((payment) => ({
+            methodId: payment.ledgerAccountId,
+            methodName: payment.paymentMethod.name,
+            accountId: payment.ledgerAccountId,
+            amount: payment.amount.toString(),
+          })),
+          changeAmount: order.changeAmount.toString(),
+          changeMethodId: order.changePaymentMethodId,
+          changeMethodName: order.changePaymentMethod?.name ?? null,
+          changeAccountId: order.changeLedgerAccountId,
+        }
+        const seen = new Set<string>()
+        for (const total of accountTenderTotals([sale])) {
+          const label = accountLabel.get(total.accountId) ?? total.methodName
+          const row = touch(total.accountId, label)
+          if (!seen.has(total.accountId)) {
+            row.count += 1
+            seen.add(total.accountId)
+          }
+          row.tendered = row.tendered.plus(total.tendered)
+          row.change = row.change.plus(total.change)
+        }
+        continue
+      }
+
       const account = receipt.depositAccount
       const id = account?.id ?? 'none'
       const label = account ? `${account.code} ${account.name}` : 'No deposit account'
-      const current = grouped.get(id) ?? { id, label, count: 0, amount: ZERO }
-      current.count += 1
-      current.amount = current.amount.plus(receipt.total.toString())
-      grouped.set(id, current)
+      const row = touch(id, label)
+      row.count += 1
+      row.tendered = row.tendered.plus(receipt.total.toString())
     }
 
     const rows = [...grouped.values()]
-      .sort((a, b) => b.amount.comparedTo(a.amount))
+      .sort((a, b) => b.tendered.minus(b.change).comparedTo(a.tendered.minus(a.change)))
       .map((row) => ({
         href: row.id === 'none' ? null : `/reports/transaction-detail?account=${row.id}&period=custom&from=${range.from}&to=${range.to}`,
         cells: {
           account: row.label,
           count: String(row.count),
-          amount: money(row.amount),
+          tendered: money(row.tendered),
+          change: money(row.change),
+          amount: money(row.tendered.minus(row.change)),
         },
       }))
 
-    const total = [...grouped.values()].reduce((sum, row) => sum.plus(row.amount), ZERO)
+    const tendered = [...grouped.values()].reduce((sum, row) => sum.plus(row.tendered), ZERO)
+    const change = [...grouped.values()].reduce((sum, row) => sum.plus(row.change), ZERO)
 
     return {
       columns: [
         { key: 'account', label: 'Deposit to' },
         { key: 'count', label: 'Receipts', format: 'number', width: 'w-28' },
-        { key: 'amount', label: 'Amount', format: 'money', width: 'w-36' },
+        { key: 'tendered', label: 'Tendered', format: 'money', width: 'w-32' },
+        { key: 'change', label: 'Change returned', format: 'money', width: 'w-36' },
+        { key: 'amount', label: 'Net received', format: 'money', width: 'w-36' },
       ],
       rows,
-      totals: { account: 'Total', count: String(receipts.length), amount: money(total) },
+      totals: {
+        account: 'Total',
+        count: String(receipts.length),
+        tendered: money(tendered),
+        change: money(change),
+        amount: money(tendered.minus(change)),
+      },
       empty: 'No cash sales were deposited in this period.',
-      note: 'Click an account to see the lines posted to it.',
+      note: 'Net received is the tender minus change handed back from that account. Click an account to see the lines posted to it.',
     }
   },
 }

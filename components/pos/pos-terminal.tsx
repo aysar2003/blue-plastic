@@ -34,7 +34,8 @@ import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { ODOO } from '@/lib/odoo-brand'
 import { minorUnits, formatMoney } from '@/lib/money'
 import { chooseLineStore } from '@/lib/pos-line-store'
-import { clampPaymentDraft, exactRemainingAmount, settlePosPayments } from '@/lib/pos-payment'
+import { CHANGE_ACCOUNT_MESSAGE, changeReturnChoices, paymentCanValidate } from '@/lib/pos-change'
+import { clampPaymentDraft, exactRemainingAmount, nonCashDraftError, settlePosPayments } from '@/lib/pos-payment'
 import { formatStockQty, negativeStockWarning } from '@/lib/store-stock'
 import { cn } from '@/lib/utils'
 
@@ -50,7 +51,7 @@ type Product = {
   stock?: Record<string, string> | null
 }
 
-type PaymentMethod = { id: string; name: string; isCash: boolean }
+type PaymentMethod = { id: string; name: string; isCash: boolean; allowsChangeReturn: boolean }
 type Customer = { id: string; displayName: string }
 /** `storeId` null = automatic (counter store, else a store that has enough). */
 type CartLine = { itemId: string; name: string; price: string; quantity: number; storeId: string | null }
@@ -92,7 +93,14 @@ function openReceiptPrint(documentId: string, options: { autoprint?: boolean; ch
 }
 
 export function PosTerminal(props: {
-  register: { id: string; name: string; paymentMethods: PaymentMethod[] }
+  register: {
+    id: string
+    name: string
+    paymentMethods: PaymentMethod[]
+    /** Null means open on the cash method. */
+    defaultChangeMethodId: string | null
+    allowWalletChangeReturn: boolean
+  }
   session: { id: string; dateLabel: string; openingCash: string; orderBadge: string }
   cashSummary: {
     expectedCash: string
@@ -120,6 +128,7 @@ export function PosTerminal(props: {
   const [dark, setDark] = useState(true)
   const [payOpen, setPayOpen] = useState(false)
   const [amounts, setAmounts] = useState<Record<string, string>>({})
+  const [changeMethodId, setChangeMethodId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [lastReceiptId, setLastReceiptId] = useState<string | null>(null)
@@ -267,6 +276,15 @@ export function PosTerminal(props: {
   }
 
   const paymentDecimals = minorUnits(props.currency)
+  const changeChoices = useMemo(
+    () =>
+      changeReturnChoices({
+        methods: props.register.paymentMethods,
+        allowWalletChangeReturn: props.register.allowWalletChangeReturn,
+        defaultMethodId: props.register.defaultChangeMethodId,
+      }),
+    [props.register.allowWalletChangeReturn, props.register.defaultChangeMethodId, props.register.paymentMethods],
+  )
   const settlement = useMemo(
     () =>
       settlePosPayments({
@@ -277,16 +295,29 @@ export function PosTerminal(props: {
       }),
     [amounts, paymentDecimals, props.register.paymentMethods, subtotal],
   )
+  const changeAccountError =
+    Number(settlement.change) > 0 && !changeChoices.options.some((method) => method.id === changeMethodId)
+      ? CHANGE_ACCOUNT_MESSAGE
+      : null
+  const paymentError = error ?? changeAccountError
+  const canValidatePayment = paymentCanValidate({
+    canSettle: settlement.canValidate,
+    blockingError: paymentError,
+    change: settlement.change,
+    changeMethodId,
+    allowedChangeMethodIds: changeChoices.options.map((method) => method.id),
+  })
 
   function openPay() {
     if (cart.length === 0) return
     // Every method starts blank, cash included. The cashier types what was paid.
     setAmounts({})
+    setChangeMethodId(changeChoices.defaultId)
     setError(null)
     setPayOpen(true)
   }
 
-  function setMethodAmount(method: PaymentMethod, raw: string) {
+  function setMethodAmount(method: { id: string; isCash: boolean }, raw: string) {
     const next = clampPaymentDraft({
       due: subtotal,
       method,
@@ -297,7 +328,8 @@ export function PosTerminal(props: {
     })
     if (!next) return
     setAmounts((prev) => ({ ...prev, [method.id]: next.value }))
-    setError(next.clamped ? 'Non-cash payments cannot exceed the remaining balance.' : null)
+    // An empty wallet after cash already covers the sale is not an overpayment.
+    setError(nonCashDraftError(next.clamped, next.value))
   }
 
   function fillMethod(methodId: string) {
@@ -312,19 +344,20 @@ export function PosTerminal(props: {
   }
 
   function completeSale() {
-    setError(null)
-    if (!settlement.canValidate) {
+    if (!canValidatePayment) {
       setError(
-        settlement.nonCashWithinBalance
-          ? 'Enter payments that cover the amount due.'
-          : 'Non-cash payments cannot exceed the remaining balance.',
+        paymentError ??
+          (settlement.nonCashWithinBalance
+            ? 'Enter payments that cover the amount due.'
+            : 'Non-cash payments cannot exceed the remaining balance.'),
       )
       return
     }
+    setError(null)
 
     // Change is only known here; the receipt shows it on the first print.
     const changeAtSale = Number(settlement.change)
-    const payments = settlement.payments
+    const payments = settlement.tenders
     startTransition(async () => {
       const result = await posCheckout({
         registerId: props.register.id,
@@ -337,6 +370,7 @@ export function PosTerminal(props: {
           storeId: line.storeId ?? undefined,
         })),
         payments,
+        changeMethodId: changeAtSale > 0.004 ? changeMethodId : undefined,
       })
       if (!result.ok) {
         setError(result.error.message)
@@ -1199,10 +1233,16 @@ export function PosTerminal(props: {
             paid={settlement.paid}
             remaining={settlement.remaining}
             change={settlement.change}
-            canValidate={settlement.canValidate}
+            canValidate={canValidatePayment}
             pending={pending}
-            error={error}
+            error={paymentError}
             dark={dark}
+            changeMethods={changeChoices.options}
+            changeMethodId={changeMethodId}
+            onChangeMethod={(methodId) => {
+              setChangeMethodId(methodId)
+              setError(null)
+            }}
             onAmount={setMethodAmount}
             onFill={fillMethod}
             onCancel={() => setPayOpen(false)}

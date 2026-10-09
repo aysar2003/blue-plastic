@@ -99,6 +99,7 @@ export async function savePosPaymentMethodForm(
       ...values,
       // Unchecked checkboxes are omitted from FormData — treat missing as off.
       isActive: formData.get('isActive') === 'true',
+      allowsChangeReturn: formData.get('allowsChangeReturn') === 'true',
     }),
     'Payment method saved.',
   )

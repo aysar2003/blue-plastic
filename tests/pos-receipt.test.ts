@@ -85,6 +85,18 @@ describe('receipt helpers', () => {
     })
   })
 
+  it('does not add change on top of a tender that was already stored in full', () => {
+    const payments = [
+      { method: 'Cash', amount: '100.00', isCash: true },
+      { method: 'EVC 88', amount: '0', isCash: false },
+    ]
+    expect(paymentRows(payments, '87.00', 13, { tendered: true })).toEqual({
+      rows: [{ label: 'Cash', amount: 100 }],
+      paid: 100,
+      change: 13,
+    })
+  })
+
   it('trims quantities and converts px to mm at 96dpi', () => {
     expect(trimQty('2.0000')).toBe('2')
     expect(trimQty('1.5000')).toBe('1.5')

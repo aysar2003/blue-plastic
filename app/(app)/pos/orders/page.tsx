@@ -27,6 +27,7 @@ export default async function PosOrdersPage() {
               <th className="px-4 py-3 font-medium">Receipt</th>
               <th className="px-4 py-3 font-medium">Register</th>
               <th className="px-4 py-3 font-medium">Payments</th>
+              <th className="px-4 py-3 font-medium">Change</th>
               <th className="px-4 py-3 font-medium text-right">Total</th>
               <th className="px-4 py-3 font-medium text-right">
                 <span className="sr-only">Print</span>
@@ -34,7 +35,7 @@ export default async function PosOrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {orders.map((order) => (
+            {orders.orders.map((order) => (
               <tr key={order.id} className="border-t border-white/8 text-white/90">
                 <td className="px-4 py-2.5 text-white/60">{order.dateLabel}</td>
                 <td className="px-4 py-2.5">
@@ -47,6 +48,7 @@ export default async function PosOrdersPage() {
                 </td>
                 <td className="px-4 py-2.5">{order.registerName}</td>
                 <td className="px-4 py-2.5 text-white/65">{order.payments || '—'}</td>
+                <td className="px-4 py-2.5 text-white/65">{order.changeLabel ?? '—'}</td>
                 <td className="px-4 py-2.5 text-right tabular font-medium">{order.total}</td>
                 <td className="px-4 py-2.5 text-right">
                   <Link
@@ -59,9 +61,9 @@ export default async function PosOrdersPage() {
                 </td>
               </tr>
             ))}
-            {orders.length === 0 ? (
+            {orders.orders.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-white/45">
+                <td colSpan={7} className="px-4 py-10 text-center text-white/45">
                   No POS orders yet. Open a session and continue selling.
                 </td>
               </tr>
@@ -69,6 +71,34 @@ export default async function PosOrdersPage() {
           </tbody>
         </table>
       </div>
+      {orders.totals.length > 0 ? (
+        <div
+          className="mt-4 overflow-hidden rounded-xl border border-white/10"
+          style={{ background: ODOO.surface }}
+        >
+          <h2 className="px-4 py-3 text-sm font-semibold text-white">Received by account</h2>
+          <table className="w-full text-left text-sm">
+            <thead className="bg-black/30 text-xs uppercase tracking-wide text-white/50">
+              <tr>
+                <th className="px-4 py-2 font-medium">Account</th>
+                <th className="px-4 py-2 font-medium text-right">Tendered</th>
+                <th className="px-4 py-2 font-medium text-right">Change returned</th>
+                <th className="px-4 py-2 font-medium text-right">Net received</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.totals.map((total) => (
+                <tr key={total.name} className="border-t border-white/8 text-white/90">
+                  <td className="px-4 py-2">{total.name}</td>
+                  <td className="px-4 py-2 text-right tabular">{total.tendered}</td>
+                  <td className="px-4 py-2 text-right tabular">{total.change}</td>
+                  <td className="px-4 py-2 text-right tabular font-medium">{total.net}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   )
 }
