@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
     '*': ['./uploads/**'],
   },
   experimental: {
+    // `forbidden()` renders app/forbidden.tsx instead of the generic error page.
+    authInterrupts: true,
     serverActions: {
       // A customer photo plus the debt-agreement papers.
       bodySizeLimit: '20mb',

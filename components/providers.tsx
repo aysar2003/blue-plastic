@@ -3,6 +3,7 @@
 import { ThemeProvider } from 'next-themes'
 import { Toaster } from 'sonner'
 
+import { ForbiddenWatcher } from '@/components/system/forbidden-watcher'
 import { THEME_IDS } from '@/lib/themes'
 
 /**
@@ -23,6 +24,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange
     >
       {children}
+      <ForbiddenWatcher />
       <Toaster richColors closeButton position="bottom-right" />
     </ThemeProvider>
   )

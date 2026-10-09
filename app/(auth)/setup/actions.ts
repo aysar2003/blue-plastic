@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { signIn } from '@/auth'
 import { setupSchema } from '@/lib/validation/auth'
 import { runSetup } from '@/server/services/setup.service'
+import { isNavigationError } from '@/lib/db-error'
 import { isAppError } from '@/server/errors'
 
 export type SetupState = {
@@ -27,6 +28,7 @@ export async function setupAction(_prev: SetupState, formData: FormData): Promis
   try {
     await runSetup(parsed.data)
   } catch (error) {
+    if (isNavigationError(error)) throw error
     if (isAppError(error)) return { error: error.message, values }
     console.error('[setup]', error)
     return { error: 'Setup could not be completed. Please try again.', values }

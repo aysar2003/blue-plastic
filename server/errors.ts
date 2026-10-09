@@ -1,3 +1,5 @@
+import { FORBIDDEN_DIGEST } from '@/lib/forbidden-digest'
+
 /**
  * Errors that are safe to show a user and stable enough to branch on.
  * Anything not thrown as an AppError is treated as a bug: logged with a
@@ -28,6 +30,8 @@ export class AppError extends Error {
   readonly code: AppErrorCode
   readonly status: number
   readonly details?: Record<string, string[]>
+  /** Set for FORBIDDEN so the page boundary can render access denied. */
+  readonly digest?: string
 
   constructor(code: AppErrorCode, message: string, details?: Record<string, string[]>) {
     super(message)
@@ -35,11 +39,29 @@ export class AppError extends Error {
     this.code = code
     this.status = STATUS[code]
     this.details = details
+    if (code === 'FORBIDDEN') this.digest = FORBIDDEN_DIGEST
   }
 }
 
 export const unauthenticated = (m = 'You are not signed in.') => new AppError('UNAUTHENTICATED', m)
-export const forbidden = (m = 'You do not have permission to do that.') => new AppError('FORBIDDEN', m)
+
+/**
+ * Permission denial. On a page render this switches to the access-denied
+ * screen. Actions and route handlers still receive the AppError.
+ */
+export function forbidden(message = 'You do not have permission to do that.'): AppError {
+  if (!process.env.VITEST) {
+    let interrupt: (() => void) | undefined
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      interrupt = (require('./forbidden-page') as typeof import('./forbidden-page')).interruptForbiddenPage
+    } catch {
+      interrupt = undefined
+    }
+    interrupt?.()
+  }
+  return new AppError('FORBIDDEN', message)
+}
 export const notFound = (what = 'Record') => new AppError('NOT_FOUND', `${what} not found.`)
 export const conflict = (m: string) => new AppError('CONFLICT', m)
 export const validation = (m: string, details?: Record<string, string[]>) =>
