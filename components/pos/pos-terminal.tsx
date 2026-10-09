@@ -34,7 +34,12 @@ import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { ODOO } from '@/lib/odoo-brand'
 import { minorUnits, formatMoney } from '@/lib/money'
 import { chooseLineStore } from '@/lib/pos-line-store'
-import { clampPaymentDraft, exactRemainingAmount, settlePosPayments } from '@/lib/pos-payment'
+import {
+  clampPaymentDraft,
+  exactRemainingAmount,
+  prefilledPaymentAmounts,
+  settlePosPayments,
+} from '@/lib/pos-payment'
 import { formatStockQty, negativeStockWarning } from '@/lib/store-stock'
 import { cn } from '@/lib/utils'
 
@@ -111,6 +116,11 @@ export function PosTerminal(props: {
   customers: Customer[]
   currency: string
   orgName: string
+  /**
+   * Method Payment fills with the amount due. Computed when the till loads,
+   * so opening the dialog does not wait on past sales.
+   */
+  usualPaymentMethodId?: string | null
 }) {
   const router = useRouter()
   const [query, setQuery] = useState('')
@@ -280,8 +290,12 @@ export function PosTerminal(props: {
 
   function openPay() {
     if (cart.length === 0) return
-    // Every method starts blank, cash included. The cashier types what was paid.
-    setAmounts({})
+    const onTill = props.register.paymentMethods.some((method) => method.id === props.usualPaymentMethodId)
+    const methodId = onTill
+      ? (props.usualPaymentMethodId ?? null)
+      : (cashMethod?.id ?? props.register.paymentMethods[0]?.id ?? null)
+    // One field gets the amount due. The cashier can clear it and split the rest.
+    setAmounts(prefilledPaymentAmounts({ due: subtotal, methodId, decimals: paymentDecimals }))
     setError(null)
     setPayOpen(true)
   }

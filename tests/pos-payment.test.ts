@@ -3,7 +3,13 @@ import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { PosPaymentForm, type PosPaymentMethodField } from '@/components/pos/payment-dialog'
-import { clampPaymentDraft, exactRemainingAmount, settlePosPayments } from '@/lib/pos-payment'
+import {
+  clampPaymentDraft,
+  exactRemainingAmount,
+  prefilledPaymentAmounts,
+  preferredPaymentMethodId,
+  settlePosPayments,
+} from '@/lib/pos-payment'
 
 const methods = [
   { id: 'cash', isCash: true },
@@ -150,11 +156,11 @@ function validateButton(html: string) {
   return html.match(/<button\b[^>]*>Validate<\/button>/)?.[0] ?? ''
 }
 
-function renderPayment(amounts: Record<string, string>) {
-  const settlement = settlePosPayments({ due: '54.00', methods: named, amounts })
+function renderPayment(amounts: Record<string, string>, due = '54.00') {
+  const settlement = settlePosPayments({ due, methods: named, amounts })
   return renderToString(
     createElement(PosPaymentForm, {
-      due: '54.00',
+      due,
       currency: 'USD',
       methods: named,
       amounts,
@@ -201,12 +207,74 @@ describe('payment dialog', () => {
     expect(validateButton(html)).toContain('disabled=""')
   })
 
+  it('shows the usual wallet prefilled with the amount due and the other methods empty', () => {
+    const html = renderPayment(prefilledPaymentAmounts({ due: '22.00', methodId: 'merchant' }), '22.00')
+    expect(html).toMatch(/id="pay-merchant"[^>]*value="22.00"/)
+    for (const method of named) {
+      if (method.id === 'merchant') continue
+      expect(html).toMatch(new RegExp(`id="pay-${method.id}"[^>]*value=""`))
+    }
+    expect(html).toContain('$22.00')
+    expect(html).toContain('$0.00')
+    expect(validateButton(html)).not.toContain('disabled=""')
+  })
+
   it('enables Validate and shows change only for the extra cash', () => {
     const html = renderPayment({ ...wallets, cash: '5' })
     expect(html).toMatch(/id="pay-cash"[^>]*value="5"/)
     expect(html).toContain('$58.00')
     expect(html).toContain('$4.00')
     expect(validateButton(html)).not.toContain('disabled=""')
+  })
+})
+
+describe('preferredPaymentMethodId', () => {
+  it('picks the method with the most sale payments on this till', () => {
+    expect(
+      preferredPaymentMethodId(methods, [
+        { methodId: 'cash', count: 4 },
+        { methodId: 'edahab', count: 9 },
+        { methodId: 'merchant', count: 40 },
+        { methodId: 'evc', count: 12 },
+      ]),
+    ).toBe('merchant')
+  })
+
+  it('ignores payments for methods no longer on the till, and breaks ties by till order', () => {
+    expect(
+      preferredPaymentMethodId(methods, [
+        { methodId: 'retired', count: 100 },
+        { methodId: 'evc', count: 8 },
+        { methodId: 'edahab', count: 8 },
+      ]),
+    ).toBe('edahab')
+    expect(preferredPaymentMethodId(methods, [{ methodId: 'retired', count: 3 }])).toBe('cash')
+  })
+
+  it('falls back to cash when the till has no sale history', () => {
+    expect(preferredPaymentMethodId(methods, [])).toBe('cash')
+    expect(preferredPaymentMethodId(methods.filter((method) => !method.isCash), [])).toBe('edahab')
+    expect(preferredPaymentMethodId([], [])).toBeNull()
+  })
+})
+
+describe('prefilledPaymentAmounts', () => {
+  it('writes the amount due into the usual method and leaves the others empty', () => {
+    const amounts = prefilledPaymentAmounts({ due: '22', methodId: 'merchant' })
+    expect(amounts).toEqual({ merchant: '22.00' })
+    const settled = settlePosPayments({ due: '22.00', methods, amounts })
+    expect(settled.canValidate).toBe(true)
+    expect(settled.change).toBe('0.00')
+    expect(settled.payments).toEqual([{ paymentMethodId: 'merchant', amount: '22.00' }])
+    // The sale is already covered, so Remaining on another method stays blank
+    // until the cashier clears the prefilled wallet.
+    expect(exactRemainingAmount({ due: '22', methodId: 'evc', amounts })).toBe('')
+    expect(exactRemainingAmount({ due: '22', methodId: 'cash', amounts: { merchant: '' } })).toBe('22.00')
+  })
+
+  it('does not invent a payment for a zero sale', () => {
+    expect(prefilledPaymentAmounts({ due: '0', methodId: 'cash' })).toEqual({})
+    expect(prefilledPaymentAmounts({ due: '22', methodId: null })).toEqual({})
   })
 })
 
