@@ -1263,6 +1263,9 @@ model PosRegister {
   /// When off, change can only come back from a cash method, even if wallets are allowed below.
   allowWalletChangeReturn Boolean @default(true)
 
+  /// bcrypt hash of the cashier PIN. Null until an admin sets one; those tills stay openable.
+  pinHash String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 

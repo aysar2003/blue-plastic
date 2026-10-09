@@ -22,6 +22,7 @@ type Overview = {
     id: string
     name: string
     isActive: boolean
+    hasPin: boolean
     storeId: string | null
     storeName: string | null
     defaultCustomerId: string
@@ -286,9 +287,10 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
       >
         <h2 className="font-semibold text-white">Registers (tills)</h2>
         <p className="mt-1 text-sm text-white/50">
-          Click Edit to rename a till or change its walk-in customer, store, payment methods,
-          change-return accounts, or whether it is active. Each till has its own bank account under
-          POS Banks on the chart of accounts.
+          Click Edit to rename a till, set its cashier PIN, or change its walk-in customer, store,
+          payment methods, change-return accounts, or whether it is active. A till with no PIN can
+          be opened by anyone who can sell. Each till has its own bank account under POS Banks on
+          the chart of accounts.
         </p>
         <ul className="mt-4 space-y-2 text-sm">
           {data.registers.map((register) => (
@@ -316,6 +318,14 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
                   {register.accountLabel ? (
                     <p className="text-xs text-white/45">{register.accountLabel}</p>
                   ) : null}
+                  {register.hasPin ? (
+                    <p className="mt-0.5 text-xs text-white/40">PIN set</p>
+                  ) : (
+                    <p className="mt-0.5 text-xs text-amber-200/90">
+                      No PIN yet — anyone who can sell can use this cashier until an admin sets a
+                      PIN.
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -379,15 +389,23 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
   )
 }
 
-function FormMessage({ state }: { state: { status: string; message?: string | null } }) {
-  if (state.status === 'idle' || !state.message) return null
+function FormMessage({
+  state,
+}: {
+  state: { status: string; message?: string | null; fieldErrors?: Record<string, string[]> }
+}) {
+  const fieldText = state.fieldErrors
+    ? [...new Set(Object.values(state.fieldErrors).flat())].join(' ')
+    : ''
+  const message = state.message || fieldText
+  if (state.status === 'idle' || !message) return null
   return (
     <p
       role="status"
       className="text-sm sm:col-span-2"
       style={{ color: state.status === 'success' ? '#8fd4d7' : ODOO.danger }}
     >
-      {state.message}
+      {message}
     </p>
   )
 }
@@ -445,6 +463,29 @@ function RegisterFields({
           defaultValue={register?.name ?? ''}
           className={fieldClass}
         />
+      </label>
+      <label className={`${labelClass} sm:col-span-2`}>
+        Cashier PIN
+        <input
+          name="pin"
+          type="password"
+          autoComplete="new-password"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          minLength={4}
+          maxLength={64}
+          pattern="[A-Za-z0-9]{4,64}"
+          title="Use at least 4 letters or numbers."
+          className={fieldClass}
+        />
+        <span className="mt-1 block text-xs text-white/45">
+          {register
+            ? register.hasPin
+              ? 'Leave blank to keep the current PIN. Enter a new one — at least 4 letters or numbers — to replace it.'
+              : 'No PIN yet. Anyone can sell as this cashier until you set one (at least 4 letters or numbers).'
+            : 'Optional. At least 4 letters or numbers. Leave blank and this till opens without a PIN.'}
+        </span>
       </label>
       <label className={labelClass}>
         Default customer (walk-in)
