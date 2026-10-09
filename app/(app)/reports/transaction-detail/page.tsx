@@ -1,29 +1,18 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { ScrollTextIcon } from 'lucide-react'
 import type { JournalSourceType } from '@prisma/client'
 
 import { EmptyState } from '@/components/data/empty-state'
-import { ClickableRow } from '@/components/reports/clickable-row'
+import { InteractiveGrid, type InteractiveColumn, type InteractiveRow } from '@/components/data/interactive-grid'
 import { PageHeader } from '@/components/data/page-header'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import {
   ACCOUNT_SUBTYPE_LABELS,
   ACCOUNT_TYPE_LABELS,
   isDebitNormalType,
   JOURNAL_SOURCE_LABELS,
 } from '@/lib/accounting-labels'
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatDate } from '@/lib/date'
 import { postedLineParts } from '@/lib/ledger-text'
 import { formatMoney } from '@/lib/money'
 import { generalLedger } from '@/server/accounting/balances'
@@ -124,11 +113,30 @@ export default async function TransactionDetailPage({
 
   const debitNormal = isDebitNormalType(account.type)
   const movement = ledger.closing.minus(ledger.opening)
-  const splitColumns = [
-    ...new Map(
-      ledger.entries.flatMap((entry) => entry.splits.map((split) => [`${split.code} ${split.name}`, split.code] as const)),
-    ).keys(),
-  ].sort((a, b) => a.localeCompare(b))
+  const splitAccounts = new Map<string, { code: string; name: string }>()
+  for (const entry of ledger.entries) {
+    for (const split of entry.splits) {
+      if (!splitAccounts.has(split.code)) splitAccounts.set(split.code, { code: split.code, name: split.name })
+    }
+  }
+  const splitList = [...splitAccounts.values()].sort((a, b) => a.code.localeCompare(b.code))
+  const columns: InteractiveColumn[] = [
+    { id: 'date', label: 'Date', kind: 'datetime', defaultWidth: 188 },
+    { id: 'type', label: 'Type', defaultWidth: 148 },
+    { id: 'number', label: 'Number', defaultWidth: 132 },
+    { id: 'name', label: 'Name', defaultWidth: 168 },
+    { id: 'memo', label: 'Memo', defaultWidth: 220 },
+    ...splitList.map((split) => ({
+      id: `split:${split.code}`,
+      label: split.name,
+      kind: 'money' as const,
+      total: true,
+      defaultWidth: 150,
+    })),
+    { id: 'debit', label: 'Debit', kind: 'money', total: true, defaultWidth: 120 },
+    { id: 'credit', label: 'Credit', kind: 'money', total: true, defaultWidth: 120 },
+    { id: 'balance', label: 'Balance', kind: 'money', total: false, defaultWidth: 136 },
+  ]
 
   return (
     <>
@@ -172,12 +180,6 @@ export default async function TransactionDetailPage({
         />
       </div>
 
-      {splitColumns.length > 0 ? (
-        <p className="mb-3 text-sm text-muted-foreground">
-          Each other account on an entry is its own column. Turn the ones you want on under Columns.
-        </p>
-      ) : null}
-
       {ledger.entries.length === 0 ? (
         <EmptyState
           icon={ScrollTextIcon}
@@ -185,156 +187,60 @@ export default async function TransactionDetailPage({
           description={`Showing ${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}. Widen the dates, or pick another account.`}
         />
       ) : (
-        <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-28">Date</TableHead>
-                  <TableHead className="w-36">Type</TableHead>
-                  <TableHead className="w-32">Number</TableHead>
-                  <TableHead className="w-44">Name</TableHead>
-                  <TableHead>Memo</TableHead>
-                  {splitColumns.map((column) => (
-                    <TableHead key={column} data-split-account={column} hidden className="numeric w-36 whitespace-nowrap">
-                      {column}
-                    </TableHead>
-                  ))}
-                  <TableHead className="numeric w-32">Debit</TableHead>
-                  <TableHead className="numeric w-32">Credit</TableHead>
-                  <TableHead className="numeric w-36">Balance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ledger.entries.map((entry) => {
-                  const source = sourceFor(sources, {
-                    sourceType: entry.sourceType as JournalSourceType,
-                    sourceId: entry.sourceId,
-                  })
-
-                  // The document if there is one, the journal if there is not.
-                  // Either way the row leads somewhere that explains the figure.
-                  const href = source.href ?? `/journals/${entry.journalId}`
-                  const number = source.number ?? entry.journalNumber
-
-                  const sourceLabel =
-                    JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ?? entry.sourceType
-                  const parts = postedLineParts({
-                    sourceLabel,
-                    memo: entry.memo,
-                    description: entry.description,
-                    partyName: entry.partyName ?? source.partyName,
-                  })
-                  const nameHref = entry.customerId
-                    ? `/customers?id=${entry.customerId}`
-                    : entry.vendorId
-                      ? `/vendors?id=${entry.vendorId}`
-                      : source.partyHref
-
-                  return (
-                    <ClickableRow key={entry.lineId} href={href}>
-                      <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                        {formatDate(toCalendarDate(entry.date))}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">{sourceLabel}</TableCell>
-                      <TableCell>
-                        <Link
-                          href={href}
-                          className="tabular font-medium underline-offset-4 hover:underline"
-                        >
-                          {number}
-                        </Link>
-                        {entry.status === 'REVERSED' ? (
-                          <Badge variant="outline" className="ml-1.5">
-                            reversed
-                          </Badge>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="truncate">
-                        {parts.name ? (
-                          nameHref ? (
-                            <Link href={nameHref} className="underline-offset-4 hover:underline">
-                              {parts.name}
-                            </Link>
-                          ) : (
-                            parts.name
-                          )
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>{parts.note ?? '—'}</TableCell>
-                      {splitColumns.map((column) => {
-                        const split = entry.splits.find((item) => `${item.code} ${item.name}` === column)
-                        return (
-                          <TableCell key={column} hidden className="numeric tabular">
-                            {split ? (
-                              <Link href={href} className="underline-offset-4 hover:underline">
-                                {formatMoney(split.amount, currency)}
-                              </Link>
-                            ) : (
-                              ''
-                            )}
-                          </TableCell>
-                        )
-                      })}
-                      <TableCell className="numeric tabular">
-                        {entry.debit.isZero() ? (
-                          ''
-                        ) : (
-                          <Link href={href} className="underline-offset-4 hover:underline">
-                            {formatMoney(entry.debit, currency)}
-                          </Link>
-                        )}
-                      </TableCell>
-                      <TableCell className="numeric tabular">
-                        {entry.credit.isZero() ? (
-                          ''
-                        ) : (
-                          <Link href={href} className="underline-offset-4 hover:underline">
-                            {formatMoney(entry.credit, currency)}
-                          </Link>
-                        )}
-                      </TableCell>
-                      <TableCell className="numeric tabular font-medium">
-                        <Link href={href} className="underline-offset-4 hover:underline">
-                          {formatMoney(entry.balance, currency)}
-                        </Link>
-                      </TableCell>
-                    </ClickableRow>
-                  )
-                })}
-              </TableBody>
-              <TableFooter>
-                <TableRow>
-                  <TableCell>Total for {account.code} {account.name}</TableCell>
-                  <TableCell />
-                  <TableCell />
-                  <TableCell />
-                  <TableCell />
-                  {splitColumns.map((column) => (
-                    <TableCell key={column} hidden />
-                  ))}
-                  <TableCell className="numeric tabular font-semibold">
-                    {formatMoney(
-                      ledger.entries.reduce((sum, entry) => sum.plus(entry.debit), ledger.opening.minus(ledger.opening)),
-                      currency,
-                    )}
-                  </TableCell>
-                  <TableCell className="numeric tabular font-semibold">
-                    {formatMoney(
-                      ledger.entries.reduce((sum, entry) => sum.plus(entry.credit), ledger.opening.minus(ledger.opening)),
-                      currency,
-                    )}
-                  </TableCell>
-                  <TableCell className="numeric tabular font-semibold">
-                    {formatMoney(ledger.closing, currency)}
-                  </TableCell>
-                </TableRow>
-              </TableFooter>
-            </Table>
-          </div>
-        </Card>
+        <InteractiveGrid
+          storageKey={`bp-txn-detail-${accountId}`}
+          columns={columns}
+          rows={ledger.entries.map((entry): InteractiveRow => {
+            const source = sourceFor(sources, {
+              sourceType: entry.sourceType as JournalSourceType,
+              sourceId: entry.sourceId,
+            })
+            const href = source.href ?? `/journals/${entry.journalId}`
+            const sourceLabel =
+              JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ?? entry.sourceType
+            const parts = postedLineParts({
+              sourceLabel,
+              memo: entry.memo,
+              description: entry.description,
+              partyName: entry.partyName ?? source.partyName,
+            })
+            const nameHref = entry.customerId
+              ? `/customers?id=${entry.customerId}`
+              : entry.vendorId
+                ? `/vendors?id=${entry.vendorId}`
+                : source.partyHref
+            const cells: InteractiveRow['cells'] = {
+              date: { value: entry.recordedAt.toISOString() },
+              type: { value: sourceLabel, href },
+              number: {
+                value: source.number ?? entry.journalNumber,
+                href,
+                badge: entry.status === 'REVERSED' ? 'reversed' : null,
+              },
+              name: parts.name ? { value: parts.name, href: nameHref } : { value: null },
+              memo: { value: parts.note },
+              debit: { value: entry.debit.isZero() ? null : entry.debit.toString() },
+              credit: { value: entry.credit.isZero() ? null : entry.credit.toString() },
+              balance: { value: entry.balance.toString() },
+            }
+            for (const split of splitList) {
+              const amount = entry.splits.find((item) => item.code === split.code)?.amount
+              cells[`split:${split.code}`] = amount && Number(amount) !== 0 ? { value: amount } : { value: null }
+            }
+            return { id: entry.lineId, cells }
+          })}
+          currency={currency}
+          timeZone={ctx.organization.timeZone}
+          customizable
+          totalLabel="Total"
+          footers={[
+            {
+              id: 'closing',
+              label: 'Closing balance',
+              cells: { balance: { value: ledger.closing.toString() } },
+            },
+          ]}
+        />
       )}
     </>
   )

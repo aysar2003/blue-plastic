@@ -124,7 +124,7 @@ export async function movementsFor(ctx: OrgContext, itemId: string, limit = 200)
     orderBy: { sequence: 'asc' },
     take: limit,
     select: {
-      id: true, date: true, type: true, quantity: true, unitCost: true, value: true,
+      id: true, date: true, createdAt: true, type: true, quantity: true, unitCost: true, value: true,
       runningQuantity: true, runningValue: true, sequence: true,
       journal: { select: { id: true, journalNumber: true } },
     },
@@ -147,7 +147,7 @@ export async function listAdjustments(ctx: OrgContext) {
       orderBy: [{ date: 'desc' }, { number: 'desc' }],
       take: 100,
       select: {
-        id: true, number: true, date: true, memo: true, reason: true, status: true,
+        id: true, number: true, date: true, createdAt: true, memo: true, reason: true, status: true,
         journalId: true, voidedAt: true, voidReason: true,
         account: { select: { code: true, name: true } },
         journal: { select: { id: true, journalNumber: true } },

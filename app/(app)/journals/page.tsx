@@ -19,7 +19,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
-import { formatDate, toCalendarDate, today } from '@/lib/date'
+import { formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { DATE_PRESETS, presetRange, readDatePreset } from '@/lib/list-filters'
 import { formatMoney } from '@/lib/money'
 import { parseListQuery } from '@/lib/validation/common'
@@ -123,7 +123,7 @@ export default async function JournalsPage({
             <TableHeader>
               <TableRow>
                 <SortableHeader column="number" label="Entry" state={sort} basePath="/journals" params={linkParams} className="w-28" />
-                <SortableHeader column="date" label="Date" state={sort} basePath="/journals" params={linkParams} className="w-28" defaultDirection="desc" />
+                <SortableHeader column="date" label="Date" state={sort} basePath="/journals" params={linkParams} className="w-44" defaultDirection="desc" />
                 <SortableHeader column="memo" label="Description" state={sort} basePath="/journals" params={linkParams} />
                 <SortableHeader column="source" label="Source" state={sort} basePath="/journals" params={linkParams} />
                 <TableHead className="w-36">Document</TableHead>
@@ -150,7 +150,7 @@ export default async function JournalsPage({
                     </Link>
                   </TableCell>
                   <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                    {formatDate(toCalendarDate(journal.date))}
+                    {formatTransactionDate(toCalendarDate(journal.date), journal.postedAt, ctx.organization.timeZone)}
                   </TableCell>
                   <TableCell>
                     {journal.memo ?? <span className="text-muted-foreground">—</span>}

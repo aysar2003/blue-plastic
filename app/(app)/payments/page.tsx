@@ -18,7 +18,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { RowActions } from '@/components/data/row-actions'
-import { formatDate, toCalendarDate, today } from '@/lib/date'
+import { formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { DATE_PRESETS, presetRange, readDatePreset } from '@/lib/list-filters'
 import { formatMoney } from '@/lib/money'
 import { PAYMENT_METHOD_LABELS, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
@@ -92,7 +92,7 @@ export default async function PaymentsPage({
             <TableHeader>
               <TableRow>
                 <SortableHeader column="number" label="Number" state={sort} basePath="/payments" params={linkParams} className="w-32" />
-                <SortableHeader column="date" label="Date" state={sort} basePath="/payments" params={linkParams} className="w-28" defaultDirection="desc" />
+                <SortableHeader column="date" label="Date" state={sort} basePath="/payments" params={linkParams} className="w-44" defaultDirection="desc" />
                 <SortableHeader column="customer" label="Customer" state={sort} basePath="/payments" params={linkParams} />
                 <SortableHeader column="method" label="Method" state={sort} basePath="/payments" params={linkParams} />
                 <TableHead>Into</TableHead>
@@ -119,7 +119,7 @@ export default async function PaymentsPage({
                     </Link>
                   </TableCell>
                   <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                    {formatDate(toCalendarDate(payment.date))}
+                    {formatTransactionDate(toCalendarDate(payment.date), payment.createdAt, ctx.organization.timeZone)}
                   </TableCell>
                   <TableCell>
                     <Link
