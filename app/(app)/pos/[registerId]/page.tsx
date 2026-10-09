@@ -26,10 +26,10 @@ export default async function PosRegisterPage({ params }: Props) {
     posService.recentSessionOrders(ctx, session.id),
   ])
   const currency = ctx.organization.baseCurrency
-  const orderBadge = session.id.slice(-4).toUpperCase()
 
   return (
     <PosTerminal
+      cashierUserId={ctx.userId}
       register={{
         id: register.id,
         name: register.name,
@@ -43,7 +43,6 @@ export default async function PosRegisterPage({ params }: Props) {
         id: session.id,
         dateLabel: formatDateTime(session.openedAt, ctx.organization.timeZone),
         openingCash: formatMoney(session.openingCash, currency),
-        orderBadge,
       }}
       cashSummary={{
         expectedCash: cashSummary.expectedCash,
