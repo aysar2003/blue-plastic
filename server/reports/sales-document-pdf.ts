@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatDate, formatTransactionDate, isCalendarDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { odooPdfLetterhead, odooPdfTableHead } from '@/lib/odoo-pdf'
 import { ODOO_PDF } from '@/lib/odoo-brand'
@@ -17,6 +17,9 @@ export function renderSalesDocumentPdf(input: {
   title: string
   number: string
   date: Date | string
+  /** Clock time of the document, when the row stores one. */
+  createdAt?: Date | null
+  timeZone?: string
   dueDate?: Date | string | null
   customerName: string
   customerAddress: string[]
@@ -47,8 +50,15 @@ export function renderSalesDocumentPdf(input: {
     })
   }
 
-  const date =
-    typeof input.date === 'string' ? input.date : toCalendarDate(input.date)
+  const calendar =
+    typeof input.date === 'string' && isCalendarDate(input.date)
+      ? input.date
+      : input.date instanceof Date
+        ? toCalendarDate(input.date)
+        : null
+  const date = calendar
+    ? formatTransactionDate(calendar, input.createdAt, input.timeZone || 'UTC')
+    : String(input.date)
   const due =
     input.dueDate == null
       ? null
@@ -67,7 +77,7 @@ export function renderSalesDocumentPdf(input: {
     }),
   )
 
-  line(`Date ${formatDate(date)}`, { size: 9, height: 12 })
+  line(`Date ${date}`, { size: 9, height: 12 })
   if (due) line(`Due ${formatDate(due)}`, { size: 9, height: 14 })
 
   line('Billed to', { bold: true, size: 9, height: 14 })

@@ -75,7 +75,7 @@ export async function listTransfers(ctx: OrgContext, query: ListQuery) {
     db.bankTransfer.findMany({
       where,
       select: {
-        id: true, number: true, date: true, amount: true, memo: true, reference: true, status: true,
+        id: true, number: true, date: true, createdAt: true, amount: true, memo: true, reference: true, status: true,
         journalId: true,
         fromAccount: { select: { id: true, code: true, name: true } },
         toAccount: { select: { id: true, code: true, name: true } },
@@ -188,7 +188,7 @@ export async function listDeposits(ctx: OrgContext, query: ListQuery) {
     db.deposit.findMany({
       where,
       select: {
-        id: true, number: true, date: true, total: true, memo: true, status: true,
+        id: true, number: true, date: true, createdAt: true, total: true, memo: true, status: true,
         journalId: true,
         bankAccount: { select: { id: true, code: true, name: true } },
         _count: { select: { lines: true } },

@@ -41,7 +41,7 @@ export default async function PrintDocumentPage({
   const shareBody = [
     `${config.singular} ${document.number}`,
     `To: ${customer.displayName}`,
-    `Date: ${longDate(toCalendarDate(document.date))}`,
+    `Date: ${longDate(toCalendarDate(document.date), document.createdAt, organization.timeZone)}`,
     `Total: ${money(document.total)}`,
     document.balance && Number(document.balance) > 0 ? `Amount due: ${money(document.balance)}` : null,
     '',

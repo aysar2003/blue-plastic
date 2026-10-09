@@ -17,7 +17,7 @@ import {
 import { readVendorFilter, vendorFilterCaption, vendorTypeOptions, visibleVendorEntries } from '@/lib/vendor-statement'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { accountOptions } from '@/lib/account-options'
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatDate, formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import { PERIOD_LABELS, type PeriodKey } from '@/lib/report-periods'
 import { requireOrgContext } from '@/server/auth/context'
@@ -300,7 +300,7 @@ export default async function StatementPage({
         periodText,
         ...documents.map(
           (document) =>
-            `${document.number} · ${formatDate(toCalendarDate(document.date))} · ${formatMoney(document.total, currency)}`,
+            `${document.number} · ${formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)} · ${formatMoney(document.total, currency)}`,
         ),
         `Balance ${formatMoney(statement.closing, currency)}`,
       ].join('\n')

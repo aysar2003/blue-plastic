@@ -17,7 +17,7 @@ import {
   ACCOUNT_TYPE_LABELS,
   ACCOUNT_TYPE_ORDER,
 } from '@/lib/accounting-labels'
-import { formatDate, toCalendarDate, today } from '@/lib/date'
+import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { Decimal, formatMoney } from '@/lib/money'
 import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { requireOrgContext } from '@/server/auth/context'
@@ -305,6 +305,7 @@ export default async function BankingPage({
                   id: row.id,
                   number: row.number,
                   date: row.date,
+                  createdAt: row.createdAt,
                   kind: 'transfer' as const,
                   detail: `${row.fromAccount.code} ${row.fromAccount.name} → ${row.toAccount.code} ${row.toAccount.name}`,
                   amount: row.amount,
@@ -315,6 +316,7 @@ export default async function BankingPage({
                   id: row.id,
                   number: row.number,
                   date: row.date,
+                  createdAt: row.createdAt,
                   kind: 'deposit' as const,
                   detail: `${row.bankAccount.code} ${row.bankAccount.name}`,
                   amount: row.total,
@@ -331,7 +333,7 @@ export default async function BankingPage({
                   >
                     <TableCell className="tabular font-medium">{row.number}</TableCell>
                     <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                      {formatDate(toCalendarDate(row.date))}
+                      {formatTransactionDate(toCalendarDate(row.date), row.createdAt, ctx.organization.timeZone)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {row.kind === 'transfer' ? 'Transfer' : 'Deposit'}

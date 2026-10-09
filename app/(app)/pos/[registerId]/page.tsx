@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 
 import { PosTerminal } from '@/components/pos/pos-terminal'
 import { formatMoney } from '@/lib/money'
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatDateTime } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import * as posService from '@/server/services/pos.service'
 
@@ -41,7 +41,7 @@ export default async function PosRegisterPage({ params }: Props) {
       }}
       session={{
         id: session.id,
-        dateLabel: formatDate(toCalendarDate(session.openedAt)),
+        dateLabel: formatDateTime(session.openedAt, ctx.organization.timeZone),
         openingCash: formatMoney(session.openingCash, currency),
         orderBadge,
       }}

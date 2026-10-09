@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatDate, formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { PAYMENT_METHOD_LABELS, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -52,7 +52,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
               defaultBody={[
                 `Payment ${payment.number}`,
                 `Customer: ${payment.customer.displayName}`,
-                `Date: ${formatDate(toCalendarDate(payment.date))}`,
+                `Date: ${formatTransactionDate(toCalendarDate(payment.date), payment.createdAt, ctx.organization.timeZone)}`,
                 `Amount: ${formatMoney(payment.amount, currency)}`,
                 '',
                 `From ${ctx.organization.name}`,
@@ -93,7 +93,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
           </Badge>
         </Detail>
         <Detail label="Date" tone="zero">
-          {formatDate(toCalendarDate(payment.date))}
+          {formatTransactionDate(toCalendarDate(payment.date), payment.createdAt, ctx.organization.timeZone)}
         </Detail>
         <Detail label="Amount" tone="money">
           <span className="tabular font-semibold">{formatMoney(payment.amount, currency)}</span>
