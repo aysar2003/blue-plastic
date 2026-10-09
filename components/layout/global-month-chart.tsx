@@ -22,28 +22,21 @@ export type MonthChartData = {
   openInvoices: number
 }
 
-/** Explicit show only — default is hidden everywhere outside Reports. */
+/** Explicit show only — the chart stays collapsed until someone taps Show. */
 const STORAGE_KEY = 'bp.month-chart.visible'
 
-function isReportPath(pathname: string) {
-  return pathname === '/reports' || pathname.startsWith('/reports/')
-}
-
-/** Live till / print — do not steal space from selling or paper. */
-function hideOnPath(pathname: string) {
-  if (isReportPath(pathname)) return true
-  if (pathname.endsWith('/print') || pathname.includes('/display') || pathname.includes('/lock')) {
-    return true
-  }
-  if (!pathname.startsWith('/pos')) return false
-  const segments = pathname.split('/').filter(Boolean)
-  const hubs = new Set(['orders', 'quotations', 'sessions', 'settings'])
-  return segments.length === 2 && segments[0] === 'pos' && !hubs.has(segments[1]!)
+/**
+ * The books chart is part of the Reports home only.
+ * Report detail pages keep their own figures, and every other module stays clear of it.
+ */
+export function showsBooksMonthChart(pathname: string) {
+  const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
+  return path === '/reports'
 }
 
 /**
- * Optional this-month chart for non-report screens.
- * Stays hidden until someone taps Show — reports keep their own charts.
+ * This-month income, expenses, and net income.
+ * Rendered from the app shell, but only on the Reports home (`/reports`).
  */
 export function GlobalMonthChart({ data }: { data: MonthChartData | null }) {
   const pathname = usePathname()
@@ -55,7 +48,7 @@ export function GlobalMonthChart({ data }: { data: MonthChartData | null }) {
     setReady(true)
   }, [])
 
-  if (!data || hideOnPath(pathname)) return null
+  if (!data || !showsBooksMonthChart(pathname)) return null
 
   function toggle() {
     setVisible((current) => {

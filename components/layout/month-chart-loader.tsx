@@ -6,7 +6,7 @@ import { db } from '@/server/db'
 import { profitAndLoss } from '@/server/reports/statements'
 import { GlobalMonthChart, type MonthChartData } from './global-month-chart'
 
-/** Server fetch for the shell-wide this-month chart. */
+/** Server fetch for the Reports-home this-month chart. */
 export async function MonthChartLoader({ ctx }: { ctx: OrgContext }) {
   const currency = ctx.organization.baseCurrency
   const now = today(ctx.organization.timeZone)
