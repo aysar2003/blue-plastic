@@ -9,9 +9,12 @@ import { byType } from '@/lib/sales-types'
 import type { SalesDocumentDetail } from '@/server/services/sales.service'
 
 /**
- * "Invoice by invoice": the customer's invoices for the period, each printed
- * whole on the same sheet as the single-invoice PDF, one per page, behind a
- * one-page summary. Print → Save as PDF gives one file with all of them.
+ * The two invoice papers, kept apart on purpose.
+ *
+ * "summary" is only the list: date, number, due, total, paid, balance.
+ * "invoices" is each invoice whole, on the same sheet as the single-invoice
+ * PDF, one per page. Print → Save as PDF gives one file of whichever paper
+ * is on screen.
  */
 export function StatementInvoices({
   organization,
@@ -24,6 +27,7 @@ export function StatementInvoices({
   documents,
   omitted,
   closing,
+  part,
 }: {
   organization: InvoiceSheetOrganization
   baseCurrency: string
@@ -36,6 +40,8 @@ export function StatementInvoices({
   /** Invoices in the period beyond what one paper prints. */
   omitted: number
   closing: Decimal
+  /** Which of the two papers this is. They are never drawn together. */
+  part: 'summary' | 'invoices'
 }) {
   const brand = FORM_SHEET.accent
   const brandSoft = FORM_SHEET.wash
@@ -50,15 +56,22 @@ export function StatementInvoices({
   )
   const period = allDates ? 'All dates' : `${longDate(from)} – ${longDate(to)}`
 
+  const count = `${documents.length} invoice${documents.length === 1 ? '' : 's'}`
+  const lead =
+    documents.length === 0
+      ? 'No invoices in this period.'
+      : part === 'summary'
+        ? `${count} on this summary only. Invoice by invoice prints each one on its own page.`
+        : `${count}, each on its own page. Print, or Save as PDF, for one file with all of them.`
+
   return (
-    <div className="mx-auto max-w-3xl" data-statement-invoices>
+    <div className="mx-auto max-w-3xl" data-statement-invoices data-statement-part={part}>
       <p className="mb-4 text-sm text-muted-foreground print:hidden">
-        {documents.length === 0
-          ? 'No invoices in this period.'
-          : `${documents.length} invoice${documents.length === 1 ? '' : 's'} below, each on its own page after a summary. Print, or Save as PDF, for one file with all of them.`}
+        {lead}
         {omitted > 0 ? ` ${omitted} more in this period are not shown — choose a shorter period to print them.` : ''}
       </p>
 
+      {part === 'summary' ? (
       <article className="invoice-sheet relative min-h-[920px] overflow-hidden bg-white text-[#1f1f23] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:min-h-0 print:shadow-none">
         <div className="px-8 py-4 text-white sm:px-12" style={{ background: brand }}>
           <p className="text-xs font-medium uppercase tracking-[0.14em] text-white/80">Invoices</p>
@@ -152,14 +165,16 @@ export function StatementInvoices({
           </dl>
         </div>
       </article>
+      ) : null}
 
-      {documents.map((document) => {
+      {part === 'invoices'
+        ? documents.map((document, index) => {
         const config = byType(document.type)
         return (
         <section
           key={document.id}
           id={`invoice-${document.id}`}
-          className="mt-8 scroll-mt-20 break-before-page print:mt-0"
+          className={index === 0 ? 'scroll-mt-20 print:mt-0' : 'mt-8 scroll-mt-20 break-before-page print:mt-0'}
           data-invoice-page
         >
           <p className="mb-2 text-right text-xs print:hidden">
@@ -175,7 +190,8 @@ export function StatementInvoices({
           />
         </section>
         )
-      })}
+      })
+        : null}
     </div>
   )
 }

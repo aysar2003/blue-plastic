@@ -101,37 +101,61 @@ describe('invoice by invoice', () => {
     expect(statementInvoices(entries, open, '2026-10-08')).toEqual([entries[0]])
   })
 
-  it('offers the option on customer statements only', () => {
+  it('offers the three papers separately, and only on a customer statement', () => {
     const props = { view: 'detail' as const, type: 'all', status: 'all' as const, totals: 'line' as const }
-    expect(renderToStaticMarkup(createElement(StatementFilters, { ...props, invoiceView: true }))).toContain(
-      'Invoice by invoice',
-    )
-    expect(renderToStaticMarkup(createElement(StatementFilters, props))).not.toContain('Invoice by invoice')
+    const customer = renderToStaticMarkup(createElement(StatementFilters, { ...props, invoiceView: true }))
+    expect(customer).toContain('Invoice by invoice')
+    expect(customer).toContain('Invoice summary')
+    expect(customer).toContain('Transaction detail')
+    const vendor = renderToStaticMarkup(createElement(StatementFilters, props))
+    expect(vendor).not.toContain('Invoice by invoice')
+    expect(vendor).not.toContain('Invoice summary')
+    expect(vendor).toContain('Transaction detail')
   })
 
-  it('renders a summary, then every invoice on the single-invoice sheet, each on a new page', () => {
+  it('reads the summary paper on its own', () => {
+    expect(readStatementFilter({ view: 'summary' }).view).toBe('summary')
+  })
+
+  const paper = {
+    organization,
+    baseCurrency: 'USD',
+    customer: { displayName: 'UNION ELECTRONIC MAC', companyName: null, email: null, address: [] },
+    from: '2026-01-01' as const,
+    to: '2026-10-08' as const,
+    allDates: false,
+    caption: '',
+    omitted: 0,
+    closing: new Decimal('180'),
+  }
+
+  it('prints the summary alone, with no invoice pages after it', () => {
     const documents = [invoice('a', 'INV-0001', '125', '25'), invoice('b', 'INV-0002', '80', '0')]
     const html = renderToStaticMarkup(
-      createElement(StatementInvoices, {
-        organization,
-        baseCurrency: 'USD',
-        customer: { displayName: 'UNION ELECTRONIC MAC', companyName: null, email: null, address: [] },
-        from: '2026-01-01',
-        to: '2026-10-08',
-        allDates: false,
-        caption: '',
-        documents,
-        omitted: 0,
-        closing: new Decimal('180'),
-      }),
+      createElement(StatementInvoices, { ...paper, documents, part: 'summary' }),
     )
+    expect(html).toContain('data-statement-part="summary"')
     expect(html).toContain('Invoice summary')
+    expect(html).not.toContain('data-invoice-page')
+    expect(html.match(/class="invoice-sheet /g)).toHaveLength(1)
+  })
+
+  it('prints every invoice on the single-invoice sheet, each on its own page, with no summary', () => {
+    const documents = [invoice('a', 'INV-0001', '125', '25'), invoice('b', 'INV-0002', '80', '0')]
+    const html = renderToStaticMarkup(
+      createElement(StatementInvoices, { ...paper, documents, part: 'invoices' }),
+    )
+    expect(html).toContain('data-statement-part="invoices"')
+    expect(html).not.toContain('Invoice summary')
     expect(html.match(/data-invoice-page/g)).toHaveLength(2)
-    expect(html.match(/break-before-page/g)).toHaveLength(2)
-    // Cover + two invoices, all on the invoice paper.
-    expect(html.match(/class="invoice-sheet /g)).toHaveLength(3)
+    // The first invoice is the first page; only the ones after it break.
+    expect(html.match(/break-before-page/g)).toHaveLength(1)
+    expect(html.match(/class="invoice-sheet /g)).toHaveLength(2)
     expect(html).toContain('INV-0001')
     expect(html).toContain('INV-0002')
+    expect(html).toContain('>Item<')
+    expect(html).toContain('>Rate<')
+    expect(html).toContain('Amount due')
 
     // The print stylesheet hides <header> (the app bar); the sheets must not use one.
     expect(html).not.toContain('<header')

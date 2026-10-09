@@ -280,7 +280,7 @@ export default async function StatementPage({
       [customer.billingLine1, customer.billingLine2].filter(Boolean).join(', '),
       [customer.billingCity, customer.billingRegion, customer.billingPostalCode].filter(Boolean).join(' '),
     ].filter(Boolean)
-    if (customerFilter.view === 'invoices') {
+    if (customerFilter.view === 'invoices' || customerFilter.view === 'summary') {
       const invoices = statementInvoices(statement.entries, customerFilter, settings.asOf)
       const [documents, organization] = await Promise.all([
         salesService.getMany(
@@ -308,7 +308,9 @@ export default async function StatementPage({
           <PageHeader
             className="print:hidden"
             title="Customer statement"
-            description={`${customer.displayName} · ${periodText} · Invoice by invoice`}
+            description={`${customer.displayName} · ${periodText} · ${
+              customerFilter.view === 'summary' ? 'Invoice summary' : 'Invoice by invoice'
+            }`}
             actions={
               <PrintButton
                 paper="invoices"
@@ -342,6 +344,7 @@ export default async function StatementPage({
             documents={documents}
             omitted={Math.max(0, invoices.length - INVOICE_PAPER_LIMIT)}
             closing={statement.closing}
+            part={customerFilter.view === 'summary' ? 'summary' : 'invoices'}
           />
         </>
       )

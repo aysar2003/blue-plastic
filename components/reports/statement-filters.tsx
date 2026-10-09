@@ -43,7 +43,7 @@ export function StatementFilters({
   typeOptions?: { value: string; label: string }[]
   /** The view omitted from the URL, because it is what the page shows anyway. */
   defaultView?: StatementView
-  /** Offer "Invoice by invoice" — every invoice printed whole. Customers only. */
+  /** Offer the invoice papers — each invoice, and the summary alone. Customers only. */
   invoiceView?: boolean
 }) {
   const router = useRouter()
@@ -68,7 +68,7 @@ export function StatementFilters({
           value={view}
           onChange={(event) => set('view', event.target.value)}
         >
-          {STATEMENT_VIEWS.filter((key) => invoiceView || key !== 'invoices').map((key) => (
+          {STATEMENT_VIEWS.filter((key) => invoiceView || (key !== 'invoices' && key !== 'summary')).map((key) => (
             <option key={key} value={key}>
               {STATEMENT_VIEW_LABELS[key]}
             </option>

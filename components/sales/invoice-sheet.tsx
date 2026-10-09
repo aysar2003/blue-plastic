@@ -1,6 +1,6 @@
 import { calendarDateInZone, toCalendarDate, toDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
-import { printSheetLinePad, type SalesTypeConfig } from '@/lib/sales-types'
+import { printSheetLinePad, STATUS_LABELS, type SalesTypeConfig } from '@/lib/sales-types'
 import { CUSTOMER_CREDIT, FORM_SHEET } from '@/lib/credit-brand'
 import { SheetMarks } from '@/components/sales/sheet-marks'
 import type { SalesDocumentDetail } from '@/server/services/sales.service'
@@ -47,7 +47,7 @@ export function InvoiceSheet({
   const money = (value: string | number) => formatMoney(value, currency)
   const hasDiscount = Number(document.discountAmount) > 0
   const hasTax = Number(document.taxTotal) > 0
-  const hasPayment = config.type === 'INVOICE' && Number(document.amountApplied) > 0
+  const showsSettlement = config.type === 'INVOICE'
   const isCredit = config.type === 'CREDIT_MEMO'
   const brand = isCredit ? CUSTOMER_CREDIT.accent : FORM_SHEET.accent
   const brandSoft = isCredit ? CUSTOMER_CREDIT.wash : FORM_SHEET.wash
@@ -104,12 +104,12 @@ export function InvoiceSheet({
               {config.singular}
             </p>
             <p className="mt-1 text-lg font-semibold tracking-wide">{document.number}</p>
-            {document.status === 'DRAFT' ? (
+            {document.status === 'DRAFT' || config.type === 'INVOICE' ? (
               <p
                 className="mt-1 text-xs font-semibold uppercase tracking-[0.16em]"
-                style={{ color: isCredit ? CUSTOMER_CREDIT.ink : '#017e84' }}
+                style={{ color: document.status === 'PAID' ? '#017e84' : isCredit ? CUSTOMER_CREDIT.ink : '#9f1239' }}
               >
-                Draft
+                {STATUS_LABELS[document.status] ?? document.status}
               </p>
             ) : null}
           </div>
@@ -123,6 +123,7 @@ export function InvoiceSheet({
             <span className="text-[#3d4c5c]">{customer.displayName}</span>
             {customer.billingLine1 ? <span className="mt-0.5 block">{customer.billingLine1}</span> : null}
             {customer.billingCity ? <span className="block">{customer.billingCity}</span> : null}
+            {customer.phone ? <span className="block">{customer.phone}</span> : null}
             {customer.email ? <span className="block">{customer.email}</span> : null}
           </dd>
           <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
@@ -155,36 +156,40 @@ export function InvoiceSheet({
               <dd className="text-[#5C6B7A]">{document.reference}</dd>
             </>
           ) : null}
+          {document.paymentTerm?.name ? (
+            <>
+              <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
+                Terms
+              </dt>
+              <dd className="text-[#5C6B7A]">{document.paymentTerm.name}</dd>
+            </>
+          ) : null}
         </dl>
 
         <div className="mt-8">
           <div
-            className="grid grid-cols-[3.25rem_4.5rem_minmax(0,1fr)_5.75rem_4.75rem_6.25rem] px-2 py-2 text-[13px] font-medium text-white"
+            className="grid grid-cols-[2.25rem_minmax(0,1fr)_4.25rem_6rem_6.5rem] px-2 py-2 text-[13px] font-medium text-white"
             style={{ background: brand }}
           >
-            <span className="text-center">Qty</span>
-            <span>Item #</span>
-            <span>Description</span>
-            <span className="text-right">Unit Price</span>
-            <span className="text-right">Discount</span>
-            <span className="text-right">Line Total</span>
+            <span className="text-center">#</span>
+            <span>Item</span>
+            <span className="text-right">Qty</span>
+            <span className="text-right">Rate</span>
+            <span className="text-right">Amount</span>
           </div>
           <div>
             {paddedLines(document.lines, printSheetLinePad(config.type)).map((line, index) => (
               <div
                 key={line.id}
-                className="grid h-8 grid-cols-[3.25rem_4.5rem_minmax(0,1fr)_5.75rem_4.75rem_6.25rem] items-center px-2 text-[13px] text-[#3d4c5c]"
+                className="grid h-8 grid-cols-[2.25rem_minmax(0,1fr)_4.25rem_6rem_6.5rem] items-center px-2 text-[13px] text-[#3d4c5c]"
                 style={{ background: index % 2 === 0 ? '#ffffff' : brandSoft }}
               >
-                <span className="tabular text-center">{line.blank ? '' : trimNumber(line.quantity)}</span>
-                <span className="truncate pr-2">{line.blank ? '' : (line.item?.sku ?? '')}</span>
-                <span className="truncate pr-3">{line.blank ? '' : (line.description ?? line.item?.name ?? '')}</span>
-                <span className="tabular text-right">{line.blank ? '' : money(line.unitPrice)}</span>
-                <span className="tabular text-right">
-                  {line.blank || !line.discountPercent || Number(line.discountPercent) === 0
-                    ? ''
-                    : `${trimNumber(line.discountPercent)}%`}
+                <span className="tabular text-center">{line.blank ? '' : line.lineNumber}</span>
+                <span className="truncate pr-3">
+                  {line.blank ? '' : lineLabel(line)}
                 </span>
+                <span className="tabular text-right">{line.blank ? '' : trimNumber(line.quantity)}</span>
+                <span className="tabular text-right">{line.blank ? '' : money(line.unitPrice)}</span>
                 <span className="tabular text-right font-medium" style={{ color: brand }}>
                   {line.blank ? '' : money(line.amount)}
                 </span>
@@ -217,7 +222,7 @@ export function InvoiceSheet({
             <dt className="uppercase tracking-[0.08em]">Total</dt>
             <dd className="tabular text-lg">{money(document.total)}</dd>
           </div>
-          {hasPayment ? (
+          {showsSettlement ? (
             <>
               <div className="flex justify-between gap-6 pt-1 font-normal text-[#5C6B7A]">
                 <dt>Paid</dt>
@@ -264,6 +269,16 @@ export function longDate(iso: string, instant?: Date | null, timeZone?: string |
     minute: '2-digit',
   }).format(instant)
   return `${day}, ${time}`
+}
+
+function lineLabel(line: {
+  description: string | null
+  discountPercent: string | null
+  item: { name: string; sku: string | null } | null
+}): string {
+  const name = line.description || line.item?.name || line.item?.sku || ''
+  if (!line.discountPercent || Number(line.discountPercent) === 0) return name
+  return `${name} (−${trimNumber(line.discountPercent)}%)`
 }
 
 function trimNumber(value: string): string {

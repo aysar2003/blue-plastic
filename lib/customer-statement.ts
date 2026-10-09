@@ -19,13 +19,13 @@ export type FilterableEntry = {
 /**
  * How a customer statement is asked for.
  *
- * The view is the paper: a regular list of documents, the same list with
- * every invoice written out line by line, or — "invoice by invoice" — each
- * invoice of the period printed whole, on the invoice sheet, one per page. The
- * type and the status narrow which rows are on that paper. The amount due stays
- * the full balance either way.
+ * The view is the paper, and the three customer papers stay separate:
+ * "invoice by invoice" prints each invoice whole, one page each; "invoice
+ * summary" is only the list of those invoices; "transaction detail" is the
+ * statement with every line written out. The type and the status narrow which
+ * rows are on that paper. The amount due stays the full balance either way.
  */
-export const STATEMENT_VIEWS = ['regular', 'arrow', 'detail', 'invoices'] as const
+export const STATEMENT_VIEWS = ['invoices', 'summary', 'detail', 'regular', 'arrow'] as const
 export const STATEMENT_TOTALS = ['line', 'cards', 'band', 'stack'] as const
 export const STATEMENT_TYPES = [
   'all',
@@ -52,10 +52,11 @@ export type StatementFilter = {
 }
 
 export const STATEMENT_VIEW_LABELS: Record<StatementView, string> = {
+  invoices: 'Invoice by invoice',
+  summary: 'Invoice summary',
+  detail: 'Transaction detail',
   regular: 'Grouped — one row',
   arrow: 'Open one by one',
-  detail: 'Items, qty and price',
-  invoices: 'Invoice by invoice',
 }
 
 export const STATEMENT_TOTALS_LABELS: Record<StatementTotals, string> = {
