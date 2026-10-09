@@ -11,9 +11,11 @@ import {
   posPaymentMethodSchema,
   posRefundSchema,
   posRegisterSchema,
+  posUnlockSchema,
 } from '@/lib/validation/pos'
 import { readRegisterForm } from '@/lib/pos-register-form'
 import { action } from '@/server/action'
+import { clearRegisterUnlock, grantRegisterUnlock } from '@/server/pos/cashier-unlock'
 import * as posService from '@/server/services/pos.service'
 
 function revalidatePos() {
@@ -38,10 +40,28 @@ export const openPosSession = action
   .requires('pos:sell')
   .input(posOpenSessionSchema)
   .handler(async (ctx, input) => {
+    const pin = await posService.assertCashierPin(ctx, input.registerId, input.pin)
     const session = await posService.openSession(ctx, input)
+    if (pin.required) await grantRegisterUnlock(ctx.orgId, input.registerId)
     revalidatePos()
     return session
   })
+
+/** Continue Selling: the PIN is checked again, then this browser may sell on this till. */
+export const unlockPosRegister = action
+  .requires('pos:sell')
+  .input(posUnlockSchema)
+  .handler(async (ctx, input) => {
+    const pin = await posService.assertCashierPin(ctx, input.registerId, input.pin)
+    if (pin.required) await grantRegisterUnlock(ctx.orgId, input.registerId)
+    return { unlocked: true as const }
+  })
+
+/** Drop the unlock when the register list is shown, so the next open asks again. */
+export const clearPosRegisterUnlock = action.requires('pos:read').handler(async () => {
+  await clearRegisterUnlock()
+  return { cleared: true as const }
+})
 
 export const closePosSession = action
   .requires('pos:sell')

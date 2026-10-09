@@ -3,6 +3,7 @@ import 'server-only'
 import { Decimal, formatMoney, toMoneyString, ZERO } from '@/lib/money'
 import { formatDate, today, toCalendarDate } from '@/lib/date'
 import { chooseLineStore } from '@/lib/pos-line-store'
+import { CASHIER_PIN_REQUIRED, CASHIER_PIN_WRONG } from '@/lib/pos-pin'
 import { receiptCashierName } from '@/lib/pos-receipt'
 import { foldStoreQuantities } from '@/lib/store-stock'
 import type {
@@ -15,7 +16,9 @@ import type {
   PosRegisterInput,
 } from '@/lib/validation/pos'
 import type { OrgContext } from '@/server/auth/context'
+import { hashPassword, verifyPassword } from '@/server/auth/password'
 import { db, type Tx } from '@/server/db'
+import { registerUnlockMatches } from '@/server/pos/cashier-unlock'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
 import * as salesService from '@/server/services/sales.service'
@@ -39,6 +42,7 @@ export async function dashboardRegisters(ctx: OrgContext) {
     select: {
       id: true,
       name: true,
+      pinHash: true,
       store: { select: { id: true, name: true } },
       sessions: {
         where: { status: 'OPEN' },
@@ -60,6 +64,7 @@ export async function dashboardRegisters(ctx: OrgContext) {
       id: register.id,
       name: register.name,
       storeName: register.store?.name ?? null,
+      hasPin: Boolean(register.pinHash),
       session: session
         ? {
             id: session.id,
@@ -71,6 +76,49 @@ export async function dashboardRegisters(ctx: OrgContext) {
         : null,
     }
   })
+}
+
+/**
+ * Checks the PIN the cashier just typed. Registers with no PIN stay open
+ * (`required: false`) so existing tills are not locked out.
+ */
+export async function assertCashierPin(
+  ctx: OrgContext,
+  registerId: string,
+  pin: string | undefined,
+): Promise<{ required: boolean }> {
+  const register = await db.posRegister.findFirst({
+    where: { id: registerId, orgId: ctx.orgId, isActive: true },
+    select: { pinHash: true },
+  })
+  if (!register) throw notFound('Register')
+  if (!register.pinHash) return { required: false }
+  if (!pin || !(await verifyPassword(pin, register.pinHash))) {
+    throw validation(CASHIER_PIN_WRONG)
+  }
+  return { required: true }
+}
+
+/** Blocks a sale or refund until this browser has entered this register's PIN. */
+export async function requireCashierUnlock(ctx: OrgContext, registerId: string) {
+  const register = await db.posRegister.findFirst({
+    where: { id: registerId, orgId: ctx.orgId, isActive: true },
+    select: { pinHash: true },
+  })
+  if (!register) throw notFound('Register')
+  if (!register.pinHash) return
+  if (await registerUnlockMatches(ctx.orgId, registerId)) return
+  throw validation(CASHIER_PIN_REQUIRED)
+}
+
+/** Name and whether a PIN is set. The hash never leaves the server. */
+export async function registerPinState(ctx: OrgContext, registerId: string) {
+  const register = await db.posRegister.findFirst({
+    where: { id: registerId, orgId: ctx.orgId, isActive: true },
+    select: { id: true, name: true, pinHash: true },
+  })
+  if (!register) throw notFound('Register')
+  return { id: register.id, name: register.name, hasPin: Boolean(register.pinHash) }
 }
 
 export async function openSession(ctx: OrgContext, input: PosOpenSessionInput) {
@@ -399,6 +447,7 @@ async function lineStoreResolver(
 }
 
 export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
+  await requireCashierUnlock(ctx, input.registerId)
   const register = await registerForTerminal(ctx, input.registerId)
 
   const session = await db.posSession.findFirst({
@@ -633,6 +682,7 @@ export async function recentSessionOrders(ctx: OrgContext, sessionId: string, li
 
 /** Full refund of a POS sales receipt, paid back through till methods. */
 export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
+  await requireCashierUnlock(ctx, input.registerId)
   const register = await registerForTerminal(ctx, input.registerId)
 
   const session = await db.posSession.findFirst({
@@ -784,6 +834,7 @@ export async function settingsOverview(ctx: OrgContext) {
         id: true,
         name: true,
         isActive: true,
+        pinHash: true,
         storeId: true,
         defaultCustomerId: true,
         store: { select: { name: true } },
@@ -833,6 +884,7 @@ export async function settingsOverview(ctx: OrgContext) {
       id: register.id,
       name: register.name,
       isActive: register.isActive,
+      hasPin: Boolean(register.pinHash),
       storeId: register.storeId,
       storeName: register.store?.name ?? null,
       defaultCustomerId: register.defaultCustomerId,
@@ -918,6 +970,9 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
     throw validation('Every payment method on a register must exist and be active.')
   }
 
+  // A blank PIN leaves the stored hash alone. A new PIN replaces it.
+  const pinHash = input.pin ? await hashPassword(input.pin) : null
+
   if (input.id) {
     const existing = await db.posRegister.findFirst({
       where: { id: input.id, orgId: ctx.orgId },
@@ -936,6 +991,7 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
           storeId: input.storeId ?? null,
           defaultCustomerId: input.defaultCustomerId,
           isActive: input.isActive,
+          ...(pinHash ? { pinHash } : {}),
         },
       })
       await syncRegisterMethods(tx, input.id!, input.paymentMethodIds)
@@ -951,6 +1007,7 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
         storeId: input.storeId ?? null,
         defaultCustomerId: input.defaultCustomerId,
         isActive: input.isActive,
+        pinHash,
       },
       select: { id: true },
     })

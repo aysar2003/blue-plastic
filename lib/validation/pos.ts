@@ -1,6 +1,15 @@
 import { z } from 'zod'
 
+import { CASHIER_PIN_MAX, CASHIER_PIN_MESSAGE, isCashierPin } from '@/lib/pos-pin'
 import { calculatedDecimal, cuid, moneyString, optionalText, requiredText } from './common'
+
+/** Blank means "no change" on edit and "no PIN yet" on create. */
+const cashierPin = z
+  .string()
+  .trim()
+  .max(CASHIER_PIN_MAX, `PIN must be ${CASHIER_PIN_MAX} characters or fewer`)
+  .refine((value) => value === '' || isCashierPin(value), CASHIER_PIN_MESSAGE)
+  .transform((value) => (value === '' ? undefined : value))
 
 const posLine = z.object({
   itemId: cuid,
@@ -32,6 +41,17 @@ export const posCheckoutSchema = z.object({
 export const posOpenSessionSchema = z.object({
   registerId: cuid,
   openingCash: moneyString,
+  pin: z
+    .string()
+    .trim()
+    .max(CASHIER_PIN_MAX)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+})
+
+export const posUnlockSchema = z.object({
+  registerId: cuid,
+  pin: z.string().trim().min(1, 'Enter the PIN.').max(CASHIER_PIN_MAX),
 })
 
 export const posCloseSessionSchema = z.object({
@@ -78,10 +98,12 @@ export const posRegisterSchema = z.object({
   defaultCustomerId: cuid,
   paymentMethodIds: z.array(cuid).min(1, 'Pick at least one payment method for this register'),
   isActive: z.coerce.boolean().default(true),
+  pin: cashierPin,
 })
 
 export type PosCheckoutInput = z.infer<typeof posCheckoutSchema>
 export type PosOpenSessionInput = z.infer<typeof posOpenSessionSchema>
+export type PosUnlockInput = z.infer<typeof posUnlockSchema>
 export type PosCloseSessionInput = z.infer<typeof posCloseSessionSchema>
 export type PosCashMoveInput = z.infer<typeof posCashMoveSchema>
 export type PosRefundInput = z.infer<typeof posRefundSchema>

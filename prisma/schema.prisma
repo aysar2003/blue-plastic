@@ -1248,6 +1248,9 @@ model PosRegister {
   defaultCustomerId String
   isActive          Boolean @default(true)
 
+  /// bcrypt hash of the cashier PIN. Null until an admin sets one; those tills stay openable.
+  pinHash String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 

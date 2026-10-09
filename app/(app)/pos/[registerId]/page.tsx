@@ -2,9 +2,11 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 
 import { PosTerminal } from '@/components/pos/pos-terminal'
+import { RegisterPinGate } from '@/components/pos/register-pin-gate'
 import { formatMoney } from '@/lib/money'
 import { formatDate, toCalendarDate } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
+import { registerUnlockMatches } from '@/server/pos/cashier-unlock'
 import * as posService from '@/server/services/pos.service'
 
 export const metadata: Metadata = { title: 'Till' }
@@ -16,6 +18,11 @@ export default async function PosRegisterPage({ params }: Props) {
   const ctx = await requireOrgContext('pos:sell')
   const session = await posService.openSessionForRegister(ctx, registerId)
   if (!session) redirect(`/pos?open=${registerId}`)
+
+  const pin = await posService.registerPinState(ctx, registerId)
+  if (pin.hasPin && !(await registerUnlockMatches(ctx.orgId, registerId))) {
+    return <RegisterPinGate registerId={pin.id} registerName={pin.name} />
+  }
 
   // The register decides which store's stock the cart warns about.
   const register = await posService.registerForTerminal(ctx, registerId)
