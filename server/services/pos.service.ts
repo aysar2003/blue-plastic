@@ -657,6 +657,32 @@ export async function sessionCashSummary(ctx: OrgContext, sessionId: string) {
   }
 }
 
+/**
+ * How often each method was used on sales at this register.
+ *
+ * One grouped count, loaded with the till — opening Payment does not query.
+ * Refunds and voided or draft receipts are left out; a split sale counts once
+ * for each method that took money.
+ */
+export async function paymentMethodUseCounts(ctx: OrgContext, registerId: string) {
+  const rows = await db.posOrderPayment.groupBy({
+    by: ['paymentMethodId'],
+    where: {
+      order: {
+        orgId: ctx.orgId,
+        registerId,
+        salesDocument: {
+          type: 'SALES_RECEIPT',
+          deletedAt: null,
+          status: { notIn: ['VOID', 'DRAFT'] },
+        },
+      },
+    },
+    _count: { _all: true },
+  })
+  return rows.map((row) => ({ methodId: row.paymentMethodId, count: row._count._all }))
+}
+
 /** Recent sales receipts on this session — for till refunds. */
 export async function recentSessionOrders(ctx: OrgContext, sessionId: string, limit = 40) {
   const currency = ctx.organization.baseCurrency

@@ -210,3 +210,44 @@ export function clampPaymentDraft(input: {
   if (entered.lte(room)) return { value: input.raw, clamped: false }
   return { value: room.gt(0) ? format(room, decimals) : '', clamped: true }
 }
+
+export type PaymentUseCount = { methodId: string; count: number }
+
+/**
+ * Which method Payment should fill in when it opens.
+ *
+ * The winner is the method on this till with the most sale payments. A tie
+ * keeps the earlier method in `methods` (the till's own order). No history,
+ * or history only for methods no longer on the till, falls back to cash, then
+ * to the first method.
+ */
+export function preferredPaymentMethodId(
+  methods: PosPayMethod[],
+  counts: PaymentUseCount[],
+): string | null {
+  if (methods.length === 0) return null
+  const indexOf = new Map(methods.map((method, index) => [method.id, index]))
+  let best: { id: string; count: number; index: number } | null = null
+  for (const row of counts) {
+    const index = indexOf.get(row.methodId)
+    if (index == null || row.count <= 0) continue
+    if (!best || row.count > best.count || (row.count === best.count && index < best.index)) {
+      best = { id: row.methodId, count: row.count, index }
+    }
+  }
+  if (best) return best.id
+  return methods.find((method) => method.isCash)?.id ?? methods[0]!.id
+}
+
+/** The amount due written into one method. Every other field stays empty. */
+export function prefilledPaymentAmounts(input: {
+  due: Decimal.Value
+  methodId: string | null
+  decimals?: number
+}): Record<string, string> {
+  if (!input.methodId) return {}
+  const decimals = scaleOf(input.decimals)
+  const due = quantize(input.due, decimals)
+  if (!due.gt(0)) return {}
+  return { [input.methodId]: format(due, decimals) }
+}
