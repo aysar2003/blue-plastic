@@ -3,7 +3,7 @@ import { renderToString } from 'react-dom/server'
 import { createElement } from 'react'
 
 import { ThermalReceipt, type ThermalReceiptData } from '@/components/pos/thermal-receipt'
-import { parseChange, parseReceiptPaper, paymentRows, pxToMm, trimQty } from '@/lib/pos-receipt'
+import { parseChange, parseReceiptPaper, paymentRows, pxToMm, receiptCashierName, trimQty } from '@/lib/pos-receipt'
 
 describe('receipt helpers', () => {
   it('defaults to the 80mm roll and only accepts 80 or 58', () => {
@@ -45,6 +45,14 @@ describe('receipt helpers', () => {
     expect(trimQty('2.0000')).toBe('2')
     expect(trimQty('1.5000')).toBe('1.5')
     expect(pxToMm(96)).toBeCloseTo(25.4)
+  })
+
+  it('names the till person as cashier, not the signed-in account', () => {
+    const admin = { name: 'abdisalam abdullahi mohamed', email: 'admin@shop.test' }
+    expect(receiptCashierName('MOHAMED AHMED IIZE', admin)).toBe('MOHAMED AHMED IIZE')
+    expect(receiptCashierName(null, admin)).toBe('abdisalam abdullahi mohamed')
+    expect(receiptCashierName(null, { name: null, email: 'admin@shop.test' })).toBe('admin@shop.test')
+    expect(receiptCashierName(null, null)).toBeNull()
   })
 })
 
@@ -90,7 +98,10 @@ describe('thermal receipt', () => {
     expect(html).toContain('Tel: +252 61 000 0000')
     expect(html).toContain('SR-1042')
     expect(html).toContain('08/10/2026 17:56') // shop time, not UTC
-    expect(html).toContain('Main till')
+    expect(html).toContain('Cashier')
+    expect(html).toContain('Fahad')
+    expect(html).not.toContain('Register')
+    expect(html).not.toContain('Main till')
     expect(html).toContain('2 x $20.00')
     expect(html).toContain('$46.00')
     expect(html).toMatch(/Cash<\/span><span[^>]*>\$50\.00/)
