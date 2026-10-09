@@ -1,8 +1,10 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { canViewBusinessOverview } from '@/lib/business-overview-access'
 import { formatDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import { cn } from '@/lib/utils'
@@ -27,7 +29,10 @@ function changeText(value: string | null, prior: string) {
 }
 
 export default async function BusinessOverviewPage() {
-  const ctx = await requireOrgContext('report:read')
+  const ctx = await requireOrgContext()
+  if (!canViewBusinessOverview(ctx.permissions)) {
+    redirect(ctx.permissions.has('report:read') ? '/reports' : '/dashboard')
+  }
   const overview = await businessOverview(ctx)
   const currency = ctx.organization.baseCurrency
   const money = (value: string) => formatMoney(value, currency)

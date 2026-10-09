@@ -139,6 +139,9 @@ export function PermissionMatrix({
                       />
                       <span>
                         <span className="block leading-snug">{perm.label}</span>
+                        {perm.hint ? (
+                          <span className="block text-xs leading-snug text-muted-foreground">{perm.hint}</span>
+                        ) : null}
                         <span className="block font-mono text-[0.65rem] text-muted-foreground">
                           {perm.key}
                         </span>

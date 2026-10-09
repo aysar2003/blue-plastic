@@ -84,6 +84,7 @@ export const PERMISSIONS = [
 
   // Reporting
   'report:read',
+  'report:overview',
   'report:export',
 ] as const
 
@@ -230,6 +231,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     description: 'Financial and operational reports.',
     permissions: [
       { key: 'report:read', label: 'View reports' },
+      {
+        key: 'report:overview',
+        label: 'View business overview',
+        hint: 'Cash, bank balances, profit, expenses, and invoice totals',
+      },
       { key: 'report:export', label: 'Export reports' },
     ],
   },

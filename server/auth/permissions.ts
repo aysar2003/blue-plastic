@@ -21,8 +21,9 @@ const READ_ONLY = ALL.filter((p) => p.endsWith(':read')) as Permission[]
 
 /**
  * SALES can raise invoices and take payments but cannot touch the chart of
- * accounts, post journals, reconcile a bank account or close a period. That
- * separation is the whole point of having roles in an accounting system.
+ * accounts, post journals, reconcile a bank account, close a period, or open
+ * the business overview. That separation is the whole point of having roles
+ * in an accounting system.
  */
 const SALES: Permission[] = [
   ...READ_ONLY.filter((p) => !p.startsWith('audit') && !p.startsWith('journal') && !p.startsWith('bank')),
@@ -73,7 +74,12 @@ const BOOKKEEPER: Permission[] = [
   'report:export',
 ]
 
-/** ACCOUNTANT adds the ledger-level authority: posting, reversing, closing. */
+/**
+ * ACCOUNTANT adds the ledger-level authority: posting, reversing, closing,
+ * and the business overview (cash, bank balances, profit, expenses).
+ * A bookkeeper does not get that snapshot with the role; an owner can grant
+ * `report:overview` from the matrix.
+ */
 const ACCOUNTANT: Permission[] = [
   ...BOOKKEEPER,
   'account:create',
@@ -87,6 +93,7 @@ const ACCOUNTANT: Permission[] = [
   'bank:reconcile',
   'pos:manage',
   'audit:read',
+  'report:overview',
 ]
 
 const ADMIN: Permission[] = [
