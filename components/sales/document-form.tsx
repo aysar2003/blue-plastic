@@ -1,12 +1,14 @@
 'use client'
 
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
+
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
+import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import {
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  ImageIcon,
   LayoutTemplateIcon,
   PlusIcon,
   PrinterIcon,
@@ -232,22 +234,31 @@ export function DocumentForm({
     : config.type === 'SALES_RECEIPT'
       ? SALES_RECEIPT_FORM_TEMPLATE_STORAGE_KEY
       : SALES_FORM_TEMPLATE_STORAGE_KEY
-  const [template, setTemplate] = useState<FormTemplateId>(
-    usesPrintSheet
-      ? 'sheet'
-      : usesInvoiceSheet
-        ? DEFAULT_INVOICE_FORM_TEMPLATE
-        : config.type === 'SALES_RECEIPT'
-          ? DEFAULT_SALES_RECEIPT_FORM_TEMPLATE
-          : DEFAULT_SALES_FORM_TEMPLATE,
-  )
+  const storedTemplate = useBrowserStore(templateKey)
+  const template: FormTemplateId = (() => {
+    if (usesPrintSheet) return 'sheet'
+    const known = usesInvoiceSheet
+      ? isInvoiceFormTemplateId(storedTemplate ?? '')
+      : config.type === 'SALES_RECEIPT'
+        ? isSalesReceiptFormTemplateId(storedTemplate ?? '')
+        : isSalesFormTemplateId(storedTemplate ?? '')
+    if (storedTemplate && known) return storedTemplate as FormTemplateId
+    return usesInvoiceSheet
+      ? DEFAULT_INVOICE_FORM_TEMPLATE
+      : config.type === 'SALES_RECEIPT'
+        ? DEFAULT_SALES_RECEIPT_FORM_TEMPLATE
+        : DEFAULT_SALES_FORM_TEMPLATE
+  })()
+  const setTemplate = (next: FormTemplateId) => {
+    writeBrowserStore(templateKey, next)
+  }
   const savedDiscount = Number(document?.discountAmount ?? 0)
   const liftedPercent =
     config.type === 'SALES_RECEIPT' && savedDiscount <= 0 ? sharedLineDiscount(document) : ''
   const [discountKind, setDiscountKind] = useState<'amount' | 'percent'>(savedDiscount > 0 ? 'amount' : 'percent')
   const [discountValue, setDiscountValue] = useState(savedDiscount > 0 ? savedDiscount.toFixed(2) : liftedPercent)
 
-  const [number, setNumber] = useState(documentNumber)
+  const [number, setNumber] = usePropState(documentNumber)
   const [customerId, setCustomerId] = useState(document?.customerId ?? initialCustomerId ?? '')
   const [date, setDate] = useState(document?.date ?? today)
   const [reference, setReference] = useState(document?.reference ?? '')
@@ -280,42 +291,12 @@ export function DocumentForm({
   const handled = useRef(false)
   const afterSave = useRef<'close' | 'new'>('close')
 
-  useEffect(() => setNumber(documentNumber), [documentNumber])
-
   // Start on the customer name so Tab walks the form without the mouse.
   useEffect(() => {
     if (customerId) return
     const timer = window.setTimeout(() => window.document.getElementById('customerId')?.focus(), 0)
     return () => window.clearTimeout(timer)
   }, [customerId])
-
-  useEffect(() => {
-    if (usesPrintSheet) {
-      setTemplate('sheet')
-      return
-    }
-    try {
-      const stored = window.localStorage.getItem(templateKey)
-      const known =
-        usesInvoiceSheet
-          ? isInvoiceFormTemplateId(stored ?? '')
-          : config.type === 'SALES_RECEIPT'
-            ? isSalesReceiptFormTemplateId(stored ?? '')
-            : isSalesFormTemplateId(stored ?? '')
-      if (stored && known) setTemplate(stored as FormTemplateId)
-    } catch {
-      // Private mode — keep the default.
-    }
-  }, [templateKey, config.type, usesInvoiceSheet, usesPrintSheet])
-
-  useEffect(() => {
-    if (usesPrintSheet) return
-    try {
-      window.localStorage.setItem(templateKey, template)
-    } catch {
-      // Ignore quota / private mode.
-    }
-  }, [template, templateKey, usesPrintSheet])
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
@@ -1410,18 +1391,6 @@ function SheetLayout(props: LayoutProps) {
   )
 }
 
-const SALES_COLUMNS = [
-  { key: 'item', label: 'Item', width: 360, min: 220 },
-  { key: 'description', label: 'Description', width: 220, min: 120 },
-  { key: 'qty', label: 'Qty', width: 72, min: 56 },
-  { key: 'price', label: 'Unit price', width: 120, min: 80 },
-  { key: 'total', label: 'Line total', width: 120, min: 80 },
-] as const
-
-const SALES_COLUMN_STORAGE_KEY = 'bpc.salesReceiptColumns'
-const SALES_LOGO_STORAGE_KEY = 'bpc.salesLogo'
-
-type SalesColumnKey = (typeof SALES_COLUMNS)[number]['key']
 
 function SalesReceiptToolbar({
   slug,
@@ -1575,147 +1544,6 @@ function ReceiptFinder({ slug }: { slug: string }) {
   )
 }
 
-function SalesReceiptLayout(props: LayoutProps) {
-  const { config, state, customers, depositAccounts, today } = props
-
-  useEffect(() => {
-    if (props.customerId) return
-    const timer = window.setTimeout(() => document.getElementById('customerId')?.focus(), 0)
-    return () => window.clearTimeout(timer)
-  }, [props.customerId])
-
-  return (
-    <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-5">
-      <FormStatus state={props.state} />
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Field name="customerId" label="Customer name" required error={state.fieldErrors?.customerId}>
-            <EntityPicker
-              id="customerId"
-              kind="customer"
-              options={customers}
-              value={props.customerId || null}
-              onChange={(next) => props.setCustomerId(next ?? '')}
-              placeholder="Search or add a customer"
-              required
-              error={state.fieldErrors?.customerId}
-            />
-          </Field>
-          <Field name="date" label="Date" required error={state.fieldErrors?.date}>
-            <DateField
-              id="date"
-              value={props.date}
-              onChange={props.setDate}
-              today={today}
-              required
-              aria-invalid={state.fieldErrors?.date ? true : undefined}
-            />
-          </Field>
-          <Field
-            name="depositAccountId"
-            label={config.type === 'REFUND_RECEIPT' ? 'Paid from' : 'Deposit to'}
-            required
-            error={state.fieldErrors?.depositAccountId}
-          >
-            <AccountPicker
-              id="depositAccountId"
-              options={depositAccounts}
-              value={props.depositAccountId || null}
-              onChange={(next) => props.setDepositAccountId(next ?? '')}
-              required
-              error={state.fieldErrors?.depositAccountId}
-            />
-          </Field>
-          <LockedNumber
-            label="Sales receipt"
-            value={props.number}
-            onChange={props.setNumber}
-            error={state.fieldErrors?.number}
-            recordId={props.recordId}
-          />
-        </div>
-        <LogoSlot />
-      </div>
-
-      <Field name="reference" label="PO number" error={state.fieldErrors?.reference}>
-        <Input
-          {...fieldProps('reference', state.fieldErrors?.reference)}
-          value={props.reference}
-          onChange={(event) => props.setReference(event.target.value)}
-          placeholder="Customer PO"
-          className="max-w-xs"
-        />
-      </Field>
-
-      <SalesLines props={props} />
-
-      <NotesFields props={props} />
-    </section>
-  )
-}
-
-function LogoSlot() {
-  const [logo, setLogo] = useState<string | null>(null)
-
-  useEffect(() => {
-    try {
-      setLogo(window.localStorage.getItem(SALES_LOGO_STORAGE_KEY))
-    } catch {
-      setLogo(null)
-    }
-  }, [])
-
-  const keep = (value: string | null) => {
-    setLogo(value)
-    try {
-      if (value) window.localStorage.setItem(SALES_LOGO_STORAGE_KEY, value)
-      else window.localStorage.removeItem(SALES_LOGO_STORAGE_KEY)
-    } catch {
-      toast.error('That logo is too large to keep on this browser.')
-      setLogo(null)
-    }
-  }
-
-  return (
-    <div className="flex w-40 shrink-0 flex-col items-end gap-1">
-      <label className="flex h-24 w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border border-dashed border-slate-300 bg-slate-50 text-center text-xs text-slate-500 hover:border-primary hover:text-primary">
-        {logo ? (
-          // The file is chosen on this browser and kept only here.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logo} alt="Company logo" className="max-h-full max-w-full object-contain" />
-        ) : (
-          <span className="flex flex-col items-center gap-1 px-2">
-            <ImageIcon className="size-5" aria-hidden />
-            Add a logo
-          </span>
-        )}
-        <input
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          onChange={(event) => {
-            const file = event.target.files?.[0]
-            event.target.value = ''
-            if (!file) return
-            if (file.size > 400_000) {
-              toast.error('Use a logo under 400 KB.')
-              return
-            }
-            const reader = new FileReader()
-            reader.onload = () => keep(String(reader.result ?? ''))
-            reader.readAsDataURL(file)
-          }}
-        />
-      </label>
-      {logo ? (
-        <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => keep(null)}>
-          Remove logo
-        </button>
-      ) : null}
-    </div>
-  )
-}
-
 function unitPriceFromTotal(
   quantity: string,
   totalText: string,
@@ -1773,220 +1601,6 @@ function AmountField({
   )
 }
 
-function SalesLines({ props }: { props: LayoutProps }) {
-  const [widths, setWidths] = useState<Record<SalesColumnKey, number>>(() => {
-    const fallback = Object.fromEntries(SALES_COLUMNS.map((column) => [column.key, column.width])) as Record<
-      SalesColumnKey,
-      number
-    >
-    return fallback
-  })
-  const drag = useRef<{ key: SalesColumnKey; startX: number; startWidth: number } | null>(null)
-  const [totalDraft, setTotalDraft] = useState<{ key: number; value: string } | null>(null)
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(SALES_COLUMN_STORAGE_KEY)
-      if (!stored) return
-      const parsed = JSON.parse(stored) as Partial<Record<SalesColumnKey, number>>
-      setWidths((current) => {
-        const next = { ...current }
-        for (const column of SALES_COLUMNS) {
-          const value = parsed[column.key]
-          if (typeof value === 'number' && value >= column.min) next[column.key] = value
-        }
-        return next
-      })
-    } catch {
-      // Keep the wide item column.
-    }
-  }, [])
-
-  useEffect(() => {
-    const move = (event: PointerEvent) => {
-      const active = drag.current
-      if (!active) return
-      const column = SALES_COLUMNS.find((entry) => entry.key === active.key)
-      const min = column?.min ?? 56
-      const width = Math.max(min, active.startWidth + event.clientX - active.startX)
-      setWidths((current) => ({ ...current, [active.key]: width }))
-    }
-    const stop = () => {
-      if (!drag.current) return
-      drag.current = null
-      setWidths((current) => {
-        try {
-          window.localStorage.setItem(SALES_COLUMN_STORAGE_KEY, JSON.stringify(current))
-        } catch {
-          // The widths still apply for this visit.
-        }
-        return current
-      })
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', stop)
-    return () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', stop)
-    }
-  }, [])
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm" style={{ minWidth: SALES_COLUMNS.reduce((sum, column) => sum + widths[column.key], 36) }}>
-        <colgroup>
-          {SALES_COLUMNS.map((column) => (
-            <col key={column.key} style={{ width: widths[column.key] }} />
-          ))}
-          <col style={{ width: 36 }} />
-        </colgroup>
-        <thead>
-          <tr className="text-left text-xs font-semibold uppercase tracking-wide text-white" style={{ background: FORM_SHEET.accent }}>
-            {SALES_COLUMNS.map((column) => (
-              <th key={column.key} className="relative px-2 py-2 font-semibold">
-                {column.label}
-                <span
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label={`Resize ${column.label}`}
-                  className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-white/40"
-                  onPointerDown={(event) => {
-                    event.preventDefault()
-                    drag.current = { key: column.key, startX: event.clientX, startWidth: widths[column.key] }
-                  }}
-                />
-              </th>
-            ))}
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {props.lines.map((line, index) => {
-            const started = Boolean(line.itemId || line.description || parseMoneyInput(line.unitPrice)?.greaterThan(0))
-            const quantity = parseMoneyInput(line.quantity) ?? ZERO
-            const price = parseMoneyInput(line.unitPrice) ?? ZERO
-            const lineTotal = quantity.isZero() && price.isZero() ? null : quantity.times(price).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
-            return (
-              <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
-                <td className="px-1 py-1 align-top">
-                  <EntityPicker
-                    id={`item-${line.key}`}
-                    kind="item"
-                    options={props.itemOptions}
-                    value={line.itemId || null}
-                    onChange={(next) => props.chooseItem(line.key, next ?? '')}
-                    placeholder="Item"
-                  />
-                  {props.stores.length === 0 ? <StockWarningNote warning={props.stockWarnings[line.key]} /> : null}
-                </td>
-                <td className="px-1 py-1 align-top">
-                  <Input
-                    value={line.description}
-                    onChange={(event) => props.update(line.key, { description: event.target.value })}
-                    className={lineInput}
-                    aria-label="Description"
-                  />
-                </td>
-                <td className="px-1 py-1 align-top">
-                  <Input
-                    value={line.quantity}
-                    onChange={(event) => props.update(line.key, { quantity: event.target.value })}
-                    inputMode="decimal"
-                    className={cn(lineInput, 'text-right tabular')}
-                    aria-label="Qty"
-                  />
-                </td>
-                <td className="px-1 py-1 align-top">
-                  <Input
-                    value={line.unitPrice}
-                    onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
-                    inputMode="decimal"
-                    className={cn(lineInput, 'text-right tabular')}
-                    aria-label="Unit price"
-                  />
-                </td>
-                <td className="px-1 py-1 align-top">
-                  <Input
-                    value={totalDraft?.key === line.key ? totalDraft.value : lineTotal ? lineTotal.toFixed(2) : ''}
-                    onFocus={() => setTotalDraft({ key: line.key, value: lineTotal ? lineTotal.toFixed(2) : '' })}
-                    onChange={(event) => setTotalDraft({ key: line.key, value: event.target.value })}
-                    onBlur={(event) => {
-                      const next = unitPriceFromTotal(line.quantity, event.target.value, line.discountPercent)
-                      if (next) props.update(line.key, next)
-                      setTotalDraft(null)
-                    }}
-                    inputMode="decimal"
-                    className={cn(lineInput, 'text-right tabular')}
-                    aria-label="Line total"
-                    placeholder="0.00"
-                  />
-                </td>
-                <td className="px-1 py-1 align-middle">
-                  {started || props.lines.length > defaultLineRows() ? (
-                    <Button type="button" variant="ghost" size="icon" onClick={() => props.removeLine(line.key)} aria-label="Remove line">
-                      <Trash2Icon />
-                    </Button>
-                  ) : null}
-                  {props.showTax && started ? (
-                    <NativeSelect
-                      value={line.taxCodeId}
-                      onChange={(event) => props.update(line.key, { taxCodeId: event.target.value })}
-                      aria-label="Tax"
-                      className="mt-1 h-7"
-                    >
-                      <option value="">No tax</option>
-                      {props.taxCodes.map((code) => (
-                        <option key={code.id} value={code.id}>
-                          {code.label}
-                        </option>
-                      ))}
-                    </NativeSelect>
-                  ) : null}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colSpan={3} className="px-2 pt-3">
-              <Button type="button" variant="outline" size="sm" onClick={props.addLine}>
-                <PlusIcon />
-                Add line
-              </Button>
-            </td>
-            <td className="px-2 pt-3 text-right text-muted-foreground">Subtotal</td>
-            <td className="px-2 pt-3 text-right tabular">{formatMoney(props.totals.subtotal, props.currency)}</td>
-            <td />
-          </tr>
-          <tr>
-            <td colSpan={3} />
-            <td className="px-2 py-1 text-right" colSpan={2}>
-              <DiscountControl props={props} />
-            </td>
-            <td />
-          </tr>
-          {props.showTax ? (
-            <tr>
-              <td colSpan={3} />
-              <td className="px-2 py-1 text-right text-muted-foreground">Tax</td>
-              <td className="px-2 py-1 text-right tabular">{formatMoney(props.totals.tax, props.currency)}</td>
-              <td />
-            </tr>
-          ) : null}
-          <tr>
-            <td colSpan={3} />
-            <td className="px-2 py-2 text-right font-semibold">Total</td>
-            <td className="border-t px-2 py-2 text-right font-semibold tabular">
-              {formatMoney(props.totals.total, props.currency)}
-            </td>
-            <td />
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  )
-}
 
 function ClassicLayout(props: LayoutProps) {
   return (

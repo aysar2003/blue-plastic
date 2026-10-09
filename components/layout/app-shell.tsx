@@ -1,15 +1,9 @@
-import { Suspense } from 'react'
-
 import { isModuleEnabled } from '@/lib/feature-flags'
 import { ROLE_LABELS } from '@/lib/roles'
 import type { OrgContext } from '@/server/auth/context'
-import { listBalanceAlerts } from '@/server/services/contact.service'
-import * as inventoryService from '@/server/services/inventory.service'
-import { BalanceAlerts } from './balance-alerts'
 import { LAUNCHER_APPS } from './launcher-apps'
 import { MODULES } from './nav-items'
 import { ShellChrome } from './shell-chrome'
-import { StockAlerts } from './stock-alerts'
 
 /**
  * A Server Component. Permission filtering happens here, once, and the client
@@ -19,7 +13,17 @@ import { StockAlerts } from './stock-alerts'
  * Stock and balance bells stream in via Suspense so page content is not blocked
  * on those queries; each loader is also short-cached per organisation.
  */
-export async function AppShell({ ctx, children }: { ctx: OrgContext; children: React.ReactNode }) {
+export async function AppShell({
+  ctx,
+  children,
+  stockAlertsSlot = null,
+  balanceAlertsSlot = null,
+}: {
+  ctx: OrgContext
+  children: React.ReactNode
+  stockAlertsSlot?: React.ReactNode
+  balanceAlertsSlot?: React.ReactNode
+}) {
   const modules = MODULES.filter(
     (entry) =>
       isModuleEnabled(ctx.features, entry.key) &&
@@ -45,32 +49,10 @@ export async function AppShell({ ctx, children }: { ctx: OrgContext; children: R
       permissions={permissions}
       hiddenApps={hiddenApps}
       showCreatorBrand={ctx.features.showCreatorBrand}
-      stockAlertsSlot={
-        ctx.permissions.has('inventory:read') ? (
-          <Suspense fallback={<StockAlerts alerts={[]} total={0} />}>
-            <StockAlertsLoader ctx={ctx} />
-          </Suspense>
-        ) : null
-      }
-      balanceAlertsSlot={
-        ctx.permissions.has('customer:read') ? (
-          <Suspense fallback={<BalanceAlerts alerts={[]} />}>
-            <BalanceAlertsLoader ctx={ctx} />
-          </Suspense>
-        ) : null
-      }
+      stockAlertsSlot={stockAlertsSlot}
+      balanceAlertsSlot={balanceAlertsSlot}
     >
       {children}
     </ShellChrome>
   )
-}
-
-async function StockAlertsLoader({ ctx }: { ctx: OrgContext }) {
-  const { alerts, total } = await inventoryService.listStockAlerts(ctx)
-  return <StockAlerts alerts={alerts} total={total} />
-}
-
-async function BalanceAlertsLoader({ ctx }: { ctx: OrgContext }) {
-  const alerts = await listBalanceAlerts(ctx)
-  return <BalanceAlerts alerts={alerts} />
 }

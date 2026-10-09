@@ -6,25 +6,40 @@ import { Loader2Icon } from 'lucide-react'
 
 import { openPosSession } from '@/app/(app)/pos/actions'
 import { ODOO } from '@/lib/odoo-brand'
+import { CASHIER_PIN_MAX, CASHIER_PIN_MESSAGE, isCashierPin } from '@/lib/pos-pin'
 
 export function SessionOpenForm({
   registerId,
   registerName,
   currency,
+  hasPin = false,
+  beforeSubmit,
 }: {
   registerId: string
   registerName: string
   currency: string
+  hasPin?: boolean
+  beforeSubmit?: () => Promise<unknown>
 }) {
   const router = useRouter()
   const [openingCash, setOpeningCash] = useState('0.00')
+  const [pin, setPin] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
   function submit() {
     setError(null)
+    if (hasPin && !isCashierPin(pin.trim())) {
+      setError(pin.trim() === '' ? 'Enter the PIN.' : CASHIER_PIN_MESSAGE)
+      return
+    }
     startTransition(async () => {
-      const result = await openPosSession({ registerId, openingCash })
+      await beforeSubmit?.()
+      const result = await openPosSession({
+        registerId,
+        openingCash,
+        ...(hasPin ? { pin } : {}),
+      })
       if (!result.ok) {
         setError(result.error.message)
         return
@@ -52,7 +67,31 @@ export function SessionOpenForm({
           className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#714B67]"
         />
       </label>
-      {error ? <p className="mt-2 text-sm text-red-300">{error}</p> : null}
+      {hasPin ? (
+        <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-white/50">
+          Cashier PIN
+          <input
+            type="password"
+            value={pin}
+            onChange={(event) => setPin(event.target.value)}
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+            minLength={4}
+            maxLength={CASHIER_PIN_MAX}
+            pattern="[A-Za-z0-9]{4,64}"
+            title="Use at least 4 letters or numbers."
+            className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#714B67]"
+          />
+        </label>
+      ) : null}
+      {error ? (
+        <p role="alert" className="mt-2 text-sm text-red-300">
+          {error}
+        </p>
+      ) : null}
       <button
         type="button"
         disabled={pending}

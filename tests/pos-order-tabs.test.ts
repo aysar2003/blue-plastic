@@ -25,7 +25,13 @@ function render() {
   return renderToString(
     createElement(PosTerminal, {
       cashierUserId: 'user-1',
-      register: { id: 'reg-1', name: 'Till 1', paymentMethods: [{ id: 'cash', name: 'Cash', isCash: true }] },
+      register: {
+        id: 'reg-1',
+        name: 'Till 1',
+        defaultChangeMethodId: 'cash',
+        allowWalletChangeReturn: true,
+        paymentMethods: [{ id: 'cash', name: 'Cash', isCash: true, allowsChangeReturn: true }],
+      },
       session: { id: 'sess-1', dateLabel: '8 Oct 2026', openingCash: '$0.00' },
       cashSummary: { expectedCash: '0', cashIn: '0', cashOut: '0', cashSales: '0', cashRefunds: '0' },
       recentOrders: [],

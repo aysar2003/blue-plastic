@@ -4,7 +4,15 @@ import { round, ZERO, type Money } from './money'
 
 export type PosPayMethod = { id: string; isCash: boolean }
 
+/** Cash is the method whose name is cash, not a wallet that happens to contain the letters. */
+export function isCashMethodName(name: string) {
+  return /\bcash\b/i.test(name.trim())
+}
+
 export type SettledPosPayment = { paymentMethodId: string; amount: string }
+
+/** Shown when a non-cash amount that is still in the field passes what is left. */
+export const NON_CASH_OVERPAY_MESSAGE = 'Non-cash payments cannot exceed the remaining balance.'
 
 export type PosPaymentSettlement = {
   /** What the customer handed over or transferred, including cash that comes back as change. */
@@ -18,10 +26,15 @@ export type PosPaymentSettlement = {
   /** Validate may be pressed: the sale is covered and the lines to save add up to it. */
   canValidate: boolean
   /**
-   * Lines to save. Cash is the amount the sale took, not the notes handed over.
-   * Methods left blank are omitted.
+   * Lines the sale took. Cash is the amount the sale kept, not the notes handed over.
+   * Methods left blank are omitted. These add up to the amount due.
    */
   payments: SettledPosPayment[]
+  /**
+   * What was actually handed over or transferred, including cash that comes back
+   * as change. This is what the ledger debits.
+   */
+  tenders: SettledPosPayment[]
 }
 
 const DEFAULT_DECIMALS = 2
@@ -132,7 +145,11 @@ export function settlePosPayments(input: {
 
   // Same order as the dialog, so the slip lists the methods the cashier just saw.
   const payments: SettledPosPayment[] = []
+  const tenders: SettledPosPayment[] = []
   for (const line of lines) {
+    if (line.amount.gt(0)) {
+      tenders.push({ paymentMethodId: line.id, amount: format(line.amount, decimals) })
+    }
     const amount = applied.get(line.id)
     if (!amount || amount.lte(0)) continue
     payments.push({ paymentMethodId: line.id, amount: format(amount, decimals) })
@@ -152,6 +169,7 @@ export function settlePosPayments(input: {
     nonCashWithinBalance,
     canValidate,
     payments,
+    tenders,
   }
 }
 
@@ -208,5 +226,60 @@ export function clampPaymentDraft(input: {
   }
   if (!entered.isFinite() || entered.isNegative()) return null
   if (entered.lte(room)) return { value: input.raw, clamped: false }
-  return { value: room.gt(0) ? format(room, decimals) : '', clamped: true }
+  // Room of zero means the other lines — usually cash, including the part that
+  // is change — already cover the sale. Wiping the keystroke leaves the field
+  // empty. An empty field is not a non-cash payment, so it must not raise the
+  // overpay error. A reduced amount that is still sitting in the field does.
+  if (!room.gt(0)) return { value: '', clamped: false }
+  return { value: format(room, decimals), clamped: true }
+}
+
+/**
+ * The overpay message follows a clamp that left a non-cash amount in the field.
+ * Cash overpay with the focused wallet still empty is change, not this error.
+ */
+export function nonCashDraftError(clamped: boolean, value: string): string | null {
+  if (!clamped || value.trim() === '') return null
+  return NON_CASH_OVERPAY_MESSAGE
+}
+
+export type PaymentUseCount = { methodId: string; count: number }
+
+/**
+ * Which method Payment should fill in when it opens.
+ *
+ * The winner is the method on this till with the most sale payments. A tie
+ * keeps the earlier method in `methods` (the till's own order). No history,
+ * or history only for methods no longer on the till, falls back to cash, then
+ * to the first method.
+ */
+export function preferredPaymentMethodId(
+  methods: PosPayMethod[],
+  counts: PaymentUseCount[],
+): string | null {
+  if (methods.length === 0) return null
+  const indexOf = new Map(methods.map((method, index) => [method.id, index]))
+  let best: { id: string; count: number; index: number } | null = null
+  for (const row of counts) {
+    const index = indexOf.get(row.methodId)
+    if (index == null || row.count <= 0) continue
+    if (!best || row.count > best.count || (row.count === best.count && index < best.index)) {
+      best = { id: row.methodId, count: row.count, index }
+    }
+  }
+  if (best) return best.id
+  return methods.find((method) => method.isCash)?.id ?? methods[0]!.id
+}
+
+/** The amount due written into one method. Every other field stays empty. */
+export function prefilledPaymentAmounts(input: {
+  due: Decimal.Value
+  methodId: string | null
+  decimals?: number
+}): Record<string, string> {
+  if (!input.methodId) return {}
+  const decimals = scaleOf(input.decimals)
+  const due = quantize(input.due, decimals)
+  if (!due.gt(0)) return {}
+  return { [input.methodId]: format(due, decimals) }
 }

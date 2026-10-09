@@ -9,18 +9,10 @@ import {
   NET_COLOR,
   statementPicture,
 } from '@/components/reports/figure-chart'
-import { ClickableRow } from '@/components/reports/clickable-row'
+import { InteractiveGrid } from '@/components/data/interactive-grid'
 import { Card } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
-import { formatDate, toCalendarDate, toDate } from '@/lib/date'
+import { formatDate, toDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -76,6 +68,7 @@ export default async function ProfitAndLossDetailPage({
           memo: true,
           sourceType: true,
           sourceId: true,
+          postedAt: true,
         },
       },
       customer: { select: { displayName: true } },
@@ -100,12 +93,12 @@ export default async function ProfitAndLossDetailPage({
       total: Decimal
       rows: {
         lineId: string
-        date: Date
+        recordedAt: string
         number: string
         label: string
         party: string | null
         href: string
-        amount: Decimal
+        amount: string
       }[]
     }
   >()
@@ -130,7 +123,7 @@ export default async function ProfitAndLossDetailPage({
     existing.total = existing.total.plus(amount)
     existing.rows.push({
       lineId: line.id,
-      date: line.journalDate,
+      recordedAt: line.journal.postedAt.toISOString(),
       number: source?.number ?? line.journal.journalNumber,
       label:
         JOURNAL_SOURCE_LABELS[line.journal.sourceType] ??
@@ -139,7 +132,7 @@ export default async function ProfitAndLossDetailPage({
         'Journal',
       party: line.customer?.displayName ?? line.vendor?.displayName ?? source?.partyName ?? null,
       href: source?.href ?? `/journals/${line.journal.id}`,
-      amount,
+      amount: amount.toString(),
     })
     byAccount.set(line.account.id, existing)
   }
@@ -260,39 +253,29 @@ export default async function ProfitAndLossDetailPage({
                           {formatMoney(account.total, currency)}
                         </span>
                       </summary>
-                      <div className="overflow-x-auto border-t bg-[#fbfcfd]">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Transaction</TableHead>
-                              <TableHead>Name</TableHead>
-                              <TableHead className="numeric">Amount</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {account.rows.map((row) => (
-                              <ClickableRow key={row.lineId} href={row.href}>
-                                <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                                  {formatDate(toCalendarDate(row.date))}
-                                </TableCell>
-                                <TableCell>
-                                  <Link
-                                    href={row.href}
-                                    className="font-medium underline-offset-4 hover:underline"
-                                  >
-                                    {row.number}
-                                  </Link>
-                                  <span className="mt-0.5 block text-xs text-muted-foreground">{row.label}</span>
-                                </TableCell>
-                                <TableCell className="text-muted-foreground">{row.party ?? '—'}</TableCell>
-                                <TableCell className="numeric tabular">
-                                  {formatMoney(row.amount, currency)}
-                                </TableCell>
-                              </ClickableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                      <div className="border-t bg-[#fbfcfd] p-2">
+                        <InteractiveGrid
+                          storageKey="bp-pl-detail-lines"
+                          currency={currency}
+                          timeZone={ctx.organization.timeZone}
+                          columns={[
+                            { id: 'date', label: 'Date', kind: 'datetime', defaultWidth: 188 },
+                            { id: 'type', label: 'Type', defaultWidth: 148 },
+                            { id: 'number', label: 'Number', defaultWidth: 128 },
+                            { id: 'name', label: 'Name', defaultWidth: 180 },
+                            { id: 'amount', label: 'Amount', kind: 'money', total: true, defaultWidth: 128 },
+                          ]}
+                          rows={account.rows.map((row) => ({
+                            id: row.lineId,
+                            cells: {
+                              date: { value: row.recordedAt },
+                              type: { value: row.label, href: row.href },
+                              number: { value: row.number, href: row.href },
+                              name: { value: row.party },
+                              amount: { value: row.amount },
+                            },
+                          }))}
+                        />
                         <p className="border-t px-4 py-2 text-xs">
                           <Link
                             href={`/reports/transaction-detail?account=${account.accountId}&period=custom&from=${settings.range.from}&to=${settings.range.to}&back=${encodeURIComponent('/reports/profit-loss/detail')}`}

@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import { cn } from '@/lib/utils'
 
 const MIN = 176
@@ -56,42 +57,24 @@ export function ContactSplit({
 }) {
   const shell = useRef<HTMLDivElement>(null)
   const widthRef = useRef(DEFAULT)
+  const storedWidth = useBrowserStore(storageKey)
   const [width, setWidth] = useState(DEFAULT)
+  const [appliedWidth, setAppliedWidth] = useState<string | null>(null)
+  if (storedWidth !== appliedWidth) {
+    setAppliedWidth(storedWidth)
+    const next = Number(storedWidth)
+    if (storedWidth && Number.isFinite(next)) setWidth(clamp(next))
+  }
   const [dragging, setDragging] = useState(false)
-  const [detailOpen, setDetailOpen] = useState(true)
+  const detailOpen = useBrowserStore(detailStorageKey) !== '0'
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(storageKey)
-      if (!stored) return
-      const next = Number(stored)
-      if (!Number.isFinite(next)) return
-      const clamped = clamp(next)
-      widthRef.current = clamped
-      setWidth(clamped)
-    } catch {
-      // Private mode — keep the default.
-    }
-  }, [storageKey])
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(detailStorageKey)
-      if (stored === '0') setDetailOpen(false)
-      if (stored === '1') setDetailOpen(true)
-    } catch {
-      /* keep default */
-    }
-  }, [detailStorageKey])
+    widthRef.current = width
+  }, [width])
 
   const persistDetail = useCallback(
     (next: boolean) => {
-      setDetailOpen(next)
-      try {
-        localStorage.setItem(detailStorageKey, next ? '1' : '0')
-      } catch {
-        /* ignore */
-      }
+      writeBrowserStore(detailStorageKey, next ? '1' : '0')
     },
     [detailStorageKey],
   )
@@ -116,11 +99,7 @@ export function ContactSplit({
 
     const onUp = () => {
       setDragging(false)
-      try {
-        localStorage.setItem(storageKey, String(widthRef.current))
-      } catch {
-        // Ignore quota / private mode.
-      }
+      writeBrowserStore(storageKey, String(widthRef.current))
     }
 
     window.addEventListener('pointermove', onMove)
@@ -141,11 +120,7 @@ export function ContactSplit({
     const clamped = clamp(next)
     widthRef.current = clamped
     setWidth(clamped)
-    try {
-      localStorage.setItem(storageKey, String(clamped))
-    } catch {
-      // Ignore.
-    }
+    writeBrowserStore(storageKey, String(clamped))
   }
 
   return (

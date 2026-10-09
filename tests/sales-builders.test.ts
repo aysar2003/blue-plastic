@@ -128,6 +128,49 @@ describe('sales receipt', () => {
     const { debit, credit } = totals(journal.lines)
     expect(debit.toString()).toBe(credit.toString())
   })
+
+  it('debits the cash handed over and credits the wallet the change left', () => {
+    const sale = priceDocument(
+      [{ quantity: '1', unitPrice: '87', incomeAccountId: 'acct-sales' }],
+      new Map(),
+      'USD',
+    )
+    const journal = buildSalesReceiptJournal({
+      ...base,
+      number: 'SR-87',
+      priced: sale,
+      depositAccountId: 'acct-cash',
+      paymentSplits: [{ accountId: 'acct-cash', amount: new Decimal('100'), description: 'Cash' }],
+      changeReturns: [{ accountId: 'acct-evc', amount: new Decimal('13'), description: 'Change · EVC' }],
+    })
+    expect(journal.lines.find((line) => line.accountId === 'acct-cash')?.debit?.toString()).toBe('100')
+    expect(journal.lines.find((line) => line.accountId === 'acct-evc')?.credit?.toString()).toBe('13')
+    expect(journal.lines.find((line) => line.accountId === 'acct-sales')?.credit?.toString()).toBe('87')
+    const { debit, credit } = totals(journal.lines)
+    expect(debit.toString()).toBe(credit.toString())
+    expect(debit.toString()).toBe('100')
+  })
+
+  it('nets change returned from the same cash account', () => {
+    const sale = priceDocument(
+      [{ quantity: '1', unitPrice: '87', incomeAccountId: 'acct-sales' }],
+      new Map(),
+      'USD',
+    )
+    const journal = buildSalesReceiptJournal({
+      ...base,
+      priced: sale,
+      depositAccountId: 'acct-cash',
+      paymentSplits: [{ accountId: 'acct-cash', amount: new Decimal('100'), description: 'Cash' }],
+      changeReturns: [{ accountId: 'acct-cash', amount: new Decimal('13'), description: 'Change · Cash' }],
+    })
+    const cashLines = journal.lines.filter((line) => line.accountId === 'acct-cash')
+    const debit = cashLines.reduce((sum, line) => sum.plus(String(line.debit ?? 0)), new Decimal(0))
+    const credit = cashLines.reduce((sum, line) => sum.plus(String(line.credit ?? 0)), new Decimal(0))
+    expect(debit.minus(credit).toString()).toBe('87')
+    const { debit: allDebit, credit: allCredit } = totals(journal.lines)
+    expect(allDebit.toString()).toBe(allCredit.toString())
+  })
 })
 
 describe('credit memo', () => {

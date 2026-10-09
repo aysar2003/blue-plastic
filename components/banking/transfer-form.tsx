@@ -1,6 +1,8 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState } from 'react'
+
+import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -33,7 +35,7 @@ export function TransferForm({
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveTransferForm, idleState)
-  const [number, setNumber] = useState(documentNumber)
+  const [number, setNumber] = usePropState(documentNumber)
   const [date, setDate] = useState(today)
   const initialFrom =
     (defaultFromAccountId && accounts.some((a) => a.id === defaultFromAccountId)
@@ -44,8 +46,6 @@ export function TransferForm({
     () => accounts.find((a) => a.id !== initialFrom)?.id ?? accounts[1]?.id ?? '',
   )
   const handled = useRef(false)
-
-  useEffect(() => setNumber(documentNumber), [documentNumber])
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {

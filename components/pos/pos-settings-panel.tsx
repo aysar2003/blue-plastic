@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useActionState, useState } from 'react'
 
 import { savePosPaymentMethodForm, savePosRegisterForm } from '@/app/(app)/pos/actions'
+import { isCashMethodName } from '@/lib/pos-payment'
 import { idleState } from '@/components/forms/action-state'
 import { ODOO } from '@/lib/odoo-brand'
 
@@ -13,6 +14,7 @@ type Overview = {
     name: string
     isActive: boolean
     sortOrder: number
+    allowsChangeReturn: boolean
     accountLabel: string
     accountId: string
   }[]
@@ -20,11 +22,16 @@ type Overview = {
     id: string
     name: string
     isActive: boolean
+    hasPin: boolean
     storeId: string | null
     storeName: string | null
     defaultCustomerId: string
     customerName: string
     paymentMethodIds: string[]
+    accountLabel: string | null
+    changeMethodIds: string[]
+    defaultChangeMethodId: string | null
+    allowWalletChangeReturn: boolean
   }[]
   assetAccounts: { id: string; code: string; name: string }[]
   customers: { id: string; displayName: string }[]
@@ -95,6 +102,9 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
                     ) : null}
                   </span>
                   <span className="ml-2 text-white/45">{method.accountLabel}</span>
+                  {method.allowsChangeReturn ? (
+                    <span className="ml-2 text-white/35">· change</span>
+                  ) : null}
                 </div>
                 <button
                   type="button"
@@ -182,6 +192,16 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
               />
               Active
             </label>
+            <label className="flex items-center gap-2 text-sm text-white/70 sm:col-span-2">
+              <input
+                type="checkbox"
+                name="allowsChangeReturn"
+                value="true"
+                defaultChecked={editingMethod.allowsChangeReturn}
+                className="size-4 rounded border-white/20"
+              />
+              Allow change return from this account
+            </label>
             <button
               type="submit"
               disabled={methodPending}
@@ -239,6 +259,16 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
             />
             Active
           </label>
+          <label className="flex items-center gap-2 text-sm text-white/70 sm:col-span-2">
+            <input
+              type="checkbox"
+              name="allowsChangeReturn"
+              defaultChecked
+              value="true"
+              className="size-4 rounded border-white/20"
+            />
+            Allow change return from this account
+          </label>
           <button
             type="submit"
             disabled={methodPending}
@@ -257,8 +287,10 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
       >
         <h2 className="font-semibold text-white">Registers (tills)</h2>
         <p className="mt-1 text-sm text-white/50">
-          Click Edit to rename a till or change its walk-in customer, store, payment methods or
-          whether it is active.
+          Click Edit to rename a till, set its cashier PIN, or change its walk-in customer, store,
+          payment methods, change-return accounts, or whether it is active. A till with no PIN can
+          be opened by anyone who can sell. Each till has its own bank account under POS Banks on
+          the chart of accounts.
         </p>
         <ul className="mt-4 space-y-2 text-sm">
           {data.registers.map((register) => (
@@ -283,6 +315,17 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
                     · {register.customerName}
                     {register.storeName ? ` · ${register.storeName}` : ''}
                   </span>
+                  {register.accountLabel ? (
+                    <p className="text-xs text-white/45">{register.accountLabel}</p>
+                  ) : null}
+                  {register.hasPin ? (
+                    <p className="mt-0.5 text-xs text-white/40">PIN set</p>
+                  ) : (
+                    <p className="mt-0.5 text-xs text-amber-200/90">
+                      No PIN yet — anyone who can sell can use this cashier until an admin sets a
+                      PIN.
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -346,15 +389,23 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
   )
 }
 
-function FormMessage({ state }: { state: { status: string; message?: string | null } }) {
-  if (state.status === 'idle' || !state.message) return null
+function FormMessage({
+  state,
+}: {
+  state: { status: string; message?: string | null; fieldErrors?: Record<string, string[]> }
+}) {
+  const fieldText = state.fieldErrors
+    ? [...new Set(Object.values(state.fieldErrors).flat())].join(' ')
+    : ''
+  const message = state.message || fieldText
+  if (state.status === 'idle' || !message) return null
   return (
     <p
       role="status"
       className="text-sm sm:col-span-2"
       style={{ color: state.status === 'success' ? '#8fd4d7' : ODOO.danger }}
     >
-      {state.message}
+      {message}
     </p>
   )
 }
@@ -372,9 +423,37 @@ function RegisterFields({
   // (disabled) on a till that still lists it, so saving visibly drops it.
   const methods = data.methods.filter((method) => method.isActive || linked.has(method.id))
   const hasOffMethod = methods.some((method) => !method.isActive)
+  const [onTill, setOnTill] = useState<string[]>(() =>
+    methods.filter((method) => method.isActive && linked.has(method.id)).map((method) => method.id),
+  )
+  const [changeIds, setChangeIds] = useState<string[]>(() => register?.changeMethodIds ?? [])
+  const [defaultChangeId, setDefaultChangeId] = useState(register?.defaultChangeMethodId ?? '')
+  const [walletChange, setWalletChange] = useState(register?.allowWalletChangeReturn ?? true)
+
+  function toggleTill(id: string, checked: boolean) {
+    setOnTill((current) => {
+      const next = checked ? [...new Set([...current, id])] : current.filter((value) => value !== id)
+      return next
+    })
+    if (checked) {
+      const method = methods.find((row) => row.id === id)
+      if (method?.allowsChangeReturn) {
+        setChangeIds((current) => (current.includes(id) ? current : [...current, id]))
+      }
+    } else {
+      setChangeIds((current) => current.filter((value) => value !== id))
+      setDefaultChangeId((current) => (current === id ? '' : current))
+    }
+  }
+
+  const tillMethods = methods.filter((method) => onTill.includes(method.id) && method.isActive)
+  const changeOptions = tillMethods.filter(
+    (method) => method.allowsChangeReturn && changeIds.includes(method.id) && (walletChange || isCashMethodName(method.name)),
+  )
 
   return (
     <>
+      <input type="hidden" name="changeReturnConfigured" value="true" />
       <label className={`${labelClass} sm:col-span-2`}>
         Register name
         <input
@@ -384,6 +463,29 @@ function RegisterFields({
           defaultValue={register?.name ?? ''}
           className={fieldClass}
         />
+      </label>
+      <label className={`${labelClass} sm:col-span-2`}>
+        Cashier PIN
+        <input
+          name="pin"
+          type="password"
+          autoComplete="new-password"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          minLength={4}
+          maxLength={64}
+          pattern="[A-Za-z0-9]{4,64}"
+          title="Use at least 4 letters or numbers."
+          className={fieldClass}
+        />
+        <span className="mt-1 block text-xs text-white/45">
+          {register
+            ? register.hasPin
+              ? 'Leave blank to keep the current PIN. Enter a new one — at least 4 letters or numbers — to replace it.'
+              : 'No PIN yet. Anyone can sell as this cashier until you set one (at least 4 letters or numbers).'
+            : 'Optional. At least 4 letters or numbers. Leave blank and this till opens without a PIN.'}
+        </span>
       </label>
       <label className={labelClass}>
         Default customer (walk-in)
@@ -425,7 +527,8 @@ function RegisterFields({
                 name="paymentMethodIds"
                 value={method.id}
                 disabled={!method.isActive}
-                defaultChecked={method.isActive && linked.has(method.id)}
+                checked={method.isActive && onTill.includes(method.id)}
+                onChange={(event) => toggleTill(method.id, event.target.checked)}
                 className="size-4 rounded border-white/20"
               />
               {method.name}
@@ -438,6 +541,81 @@ function RegisterFields({
             Methods marked (off) are switched off and will be removed from this till when you save.
           </p>
         ) : null}
+      </fieldset>
+      <fieldset className="sm:col-span-2 rounded-lg border border-white/10 p-3">
+        <legend className="px-1 text-sm font-medium text-white/80">Change</legend>
+        <p className="text-xs text-white/45">
+          Which accounts may hand change back, which one the Payment dialog opens on, and whether a
+          wallet can do it.
+        </p>
+        <label className="mt-3 flex items-center gap-2 text-sm text-white/75">
+          <input
+            type="checkbox"
+            name="allowWalletChangeReturn"
+            value="true"
+            checked={walletChange}
+            onChange={(event) => {
+              const next = event.target.checked
+              setWalletChange(next)
+              if (!next) {
+                setDefaultChangeId((current) => {
+                  const method = methods.find((row) => row.id === current)
+                  return method && !isCashMethodName(method.name) ? '' : current
+                })
+              }
+            }}
+            className="size-4 rounded border-white/20"
+          />
+          Allow change return from wallets
+        </label>
+        <div className="mt-3 flex flex-wrap gap-3">
+          {tillMethods.map((method) => (
+            <label
+              key={method.id}
+              className={`flex items-center gap-2 text-sm ${method.allowsChangeReturn ? 'text-white/75' : 'text-white/35'}`}
+            >
+              <input
+                type="checkbox"
+                name="changeMethodIds"
+                value={method.id}
+                disabled={!method.allowsChangeReturn}
+                checked={method.allowsChangeReturn && changeIds.includes(method.id)}
+                onChange={(event) => {
+                  setChangeIds((current) =>
+                    event.target.checked
+                      ? [...new Set([...current, method.id])]
+                      : current.filter((id) => id !== method.id),
+                  )
+                  if (!event.target.checked) {
+                    setDefaultChangeId((current) => (current === method.id ? '' : current))
+                  }
+                }}
+                className="size-4 rounded border-white/20"
+              />
+              {method.name}
+              {!method.allowsChangeReturn ? ' (off on the method)' : ''}
+            </label>
+          ))}
+          {tillMethods.length === 0 ? (
+            <p className="text-xs text-white/45">Pick the till&apos;s payment methods first.</p>
+          ) : null}
+        </div>
+        <label className={`${labelClass} mt-3`}>
+          Default change-return account
+          <select
+            name="defaultChangeMethodId"
+            value={changeOptions.some((method) => method.id === defaultChangeId) ? defaultChangeId : ''}
+            onChange={(event) => setDefaultChangeId(event.target.value)}
+            className={fieldClass}
+          >
+            <option value="">Cash, if this till has it</option>
+            {changeOptions.map((method) => (
+              <option key={method.id} value={method.id}>
+                {method.name}
+              </option>
+            ))}
+          </select>
+        </label>
       </fieldset>
       <label className="flex items-center gap-2 text-sm text-white/70 sm:col-span-2">
         <input

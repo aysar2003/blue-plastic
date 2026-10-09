@@ -1,9 +1,9 @@
+import type { JournalSourceType } from '@prisma/client'
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { InteractiveGrid } from '@/components/data/interactive-grid'
 import { PageHeader } from '@/components/data/page-header'
-import { ClickableRow } from '@/components/reports/clickable-row'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { StatementFilters } from '@/components/reports/statement-filters'
 import { StatementSend } from '@/components/reports/statement-send'
@@ -15,13 +15,13 @@ import {
   visibleEntries,
 } from '@/lib/customer-statement'
 import { readVendorFilter, vendorFilterCaption, vendorTypeOptions, visibleVendorEntries } from '@/lib/vendor-statement'
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { accountOptions } from '@/lib/account-options'
 import { formatDate, formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import { PERIOD_LABELS, type PeriodKey } from '@/lib/report-periods'
 import { requireOrgContext } from '@/server/auth/context'
 import { generalLedger } from '@/server/accounting/balances'
+import { resolveSources, sourceFor } from '@/server/services/journal-sources'
 import { db } from '@/server/db'
 import * as payables from '@/server/services/payables.service'
 import * as receivables from '@/server/services/receivables.service'
@@ -253,10 +253,9 @@ export default async function StatementPage({
 
   type Line = {
     id: string
-    date: Date
+    recordedAt: string
     number: string
     description: string
-    dueDate: Date | null
     charge: Decimal
     credit: Decimal
     balance: Decimal
@@ -490,17 +489,29 @@ export default async function StatementPage({
     closing = ledger.closing
     chargeLabel = 'Debit'
     creditLabel = 'Credit'
-    lines = ledger.entries.map((entry) => ({
-      id: entry.lineId,
-      date: entry.date,
-      number: entry.journalNumber,
-      description: entry.description ?? entry.memo ?? entry.contraAccounts,
-      dueDate: null,
-      charge: entry.debit,
-      credit: entry.credit,
-      balance: entry.balance,
-      href: `/journals/${entry.journalId}`,
-    }))
+    const sources = await resolveSources(
+      ctx.orgId,
+      ledger.entries.map((entry) => ({
+        sourceType: entry.sourceType as JournalSourceType,
+        sourceId: entry.sourceId,
+      })),
+    )
+    lines = ledger.entries.map((entry) => {
+      const source = sourceFor(sources, {
+        sourceType: entry.sourceType as JournalSourceType,
+        sourceId: entry.sourceId,
+      })
+      return {
+        id: entry.lineId,
+        recordedAt: entry.recordedAt.toISOString(),
+        number: source.number ?? entry.journalNumber,
+        description: entry.description ?? entry.memo ?? entry.contraAccounts,
+        charge: entry.debit,
+        credit: entry.credit,
+        balance: entry.balance,
+        href: source.href ?? `/journals/${entry.journalId}`,
+      }
+    })
   }
 
   const totalCharges = lines.reduce((sum, line) => sum.plus(line.charge), ZERO)
@@ -545,95 +556,50 @@ export default async function StatementPage({
         <Summary label="Closing balance" value={formatMoney(closing, currency)} emphasis />
       </div>
 
-      <Card className="overflow-hidden p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-28">Date</TableHead>
-              <TableHead className="w-36">Document</TableHead>
-              <TableHead>Description</TableHead>
-              {kind !== 'account' ? <TableHead className="w-28">Due</TableHead> : null}
-              <TableHead className="numeric w-32">{chargeLabel}</TableHead>
-              <TableHead className="numeric w-32">{creditLabel}</TableHead>
-              <TableHead className="numeric w-32">Balance</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow className="bg-muted/40">
-              <TableCell className="tabular whitespace-nowrap">
-                {settings.period === 'all-dates' ? '—' : formatDate(settings.range.from)}
-              </TableCell>
-              <TableCell />
-              <TableCell colSpan={kind !== 'account' ? 2 : 1} className="font-medium">
-                Balance brought forward
-              </TableCell>
-              <TableCell />
-              <TableCell />
-              <TableCell className="numeric tabular font-medium">
-                {formatMoney(opening, currency)}
-              </TableCell>
-            </TableRow>
-
-            {lines.map((line) => (
-              <ClickableRow key={line.id} href={line.href}>
-                <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                  {formatDate(toCalendarDate(line.date))}
-                </TableCell>
-                <TableCell className="tabular">
-                  <Link href={line.href} className="font-medium underline-offset-4 hover:underline">
-                    {line.number}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-muted-foreground">{line.description}</TableCell>
-                {kind !== 'account' ? (
-                  <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                    {line.dueDate ? formatDate(toCalendarDate(line.dueDate)) : '—'}
-                  </TableCell>
-                ) : null}
-                <TableCell className="numeric tabular">
-                  {line.charge.isZero() ? (
-                    ''
-                  ) : (
-                    <Link href={line.href} className="underline-offset-4 hover:underline">
-                      {formatMoney(line.charge, currency)}
-                    </Link>
-                  )}
-                </TableCell>
-                <TableCell className="numeric tabular">
-                  {line.credit.isZero() ? (
-                    ''
-                  ) : (
-                    <Link href={line.href} className="underline-offset-4 hover:underline">
-                      {formatMoney(line.credit, currency)}
-                    </Link>
-                  )}
-                </TableCell>
-                <TableCell className="numeric tabular font-medium">
-                  <Link href={line.href} className="underline-offset-4 hover:underline">
-                    {formatMoney(line.balance, currency)}
-                  </Link>
-                </TableCell>
-              </ClickableRow>
-            ))}
-          </TableBody>
-          <TableFooter>
-            <TableRow>
-              <TableCell colSpan={kind !== 'account' ? 4 : 3} className="font-semibold">
-                Closing balance at {formatDate(settings.range.to)}
-              </TableCell>
-              <TableCell className="numeric tabular font-semibold">
-                {formatMoney(totalCharges, currency)}
-              </TableCell>
-              <TableCell className="numeric tabular font-semibold">
-                {formatMoney(totalCredits, currency)}
-              </TableCell>
-              <TableCell className="numeric tabular font-semibold">
-                {formatMoney(closing, currency)}
-              </TableCell>
-            </TableRow>
-          </TableFooter>
-        </Table>
-      </Card>
+      <InteractiveGrid
+        storageKey={`bp-account-statement-${subjectId}`}
+        currency={currency}
+        timeZone={ctx.organization.timeZone}
+        customizable
+        columns={[
+          { id: 'date', label: 'Date', kind: 'datetime', defaultWidth: 188 },
+          { id: 'document', label: 'Document', defaultWidth: 140 },
+          { id: 'description', label: 'Description', defaultWidth: 240 },
+          { id: 'charge', label: chargeLabel, kind: 'money', total: true, defaultWidth: 128 },
+          { id: 'credit', label: creditLabel, kind: 'money', total: true, defaultWidth: 128 },
+          { id: 'balance', label: 'Balance', kind: 'money', total: false, defaultWidth: 136 },
+        ]}
+        rows={[
+          {
+            id: 'opening',
+            excludeFromTotal: true,
+            emphasis: true,
+            cells: {
+              date: { value: settings.period === 'all-dates' ? null : settings.range.from },
+              description: { value: 'Balance brought forward' },
+              balance: { value: opening.toString() },
+            },
+          },
+          ...lines.map((line) => ({
+            id: line.id,
+            cells: {
+              date: { value: line.recordedAt },
+              document: { value: line.number, href: line.href },
+              description: { value: line.description, href: line.href },
+              charge: { value: line.charge.isZero() ? null : line.charge.toString(), href: line.href },
+              credit: { value: line.credit.isZero() ? null : line.credit.toString(), href: line.href },
+              balance: { value: line.balance.toString(), href: line.href },
+            },
+          })),
+        ]}
+        footers={[
+          {
+            id: 'closing',
+            label: `Closing balance at ${formatDate(settings.range.to)}`,
+            cells: { balance: { value: closing.toString() } },
+          },
+        ]}
+      />
 
       {lines.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">
