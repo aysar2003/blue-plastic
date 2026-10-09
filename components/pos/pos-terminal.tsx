@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -38,6 +38,22 @@ import { minorUnits, formatMoney } from '@/lib/money'
 import { chooseLineStore } from '@/lib/pos-line-store'
 import { CHANGE_ACCOUNT_MESSAGE, changeReturnChoices, paymentCanValidate } from '@/lib/pos-change'
 import {
+  activePosOrder,
+  addPosOrder,
+  clearPosOrder,
+  closePosOrder,
+  createPosOrderBook,
+  loadPosOrderBook,
+  patchPosOrder,
+  POS_OPEN_ORDER_LIMIT,
+  posOrderIsEmpty,
+  type PosOpenCartLine,
+  type PosOrderBook,
+  savePosOrderBook,
+  selectPosOrder,
+  settlePosOrder,
+} from '@/lib/pos-open-orders'
+import {
   clampPaymentDraft,
   exactRemainingAmount,
   nonCashDraftError,
@@ -62,7 +78,7 @@ type Product = {
 type PaymentMethod = { id: string; name: string; isCash: boolean; allowsChangeReturn: boolean }
 type Customer = { id: string; displayName: string }
 /** `storeId` null = automatic (counter store, else a store that has enough). */
-type CartLine = { itemId: string; name: string; price: string; quantity: number; storeId: string | null }
+type CartLine = PosOpenCartLine
 type RecentOrder = {
   id: string
   documentId: string
@@ -75,6 +91,18 @@ type RecentOrder = {
 }
 
 const THEME_KEY = 'pos-till-theme'
+const EMPTY_CART: CartLine[] = []
+
+function orderTabStyle(selected: boolean, dark: boolean, border: string, text: string) {
+  if (!selected) {
+    return { border: `1px solid ${border}`, color: text, background: 'transparent' }
+  }
+  return {
+    background: dark ? 'transparent' : '#d1e7dd',
+    border: `1px solid ${ODOO.teal}`,
+    color: dark ? '#ffffff' : ODOO.tealDark,
+  }
+}
 
 function broadcastCart(payload: {
   orgName: string
@@ -101,6 +129,8 @@ function openReceiptPrint(documentId: string, options: { autoprint?: boolean; ch
 }
 
 export function PosTerminal(props: {
+  /** Signed-in cashier. Open tickets are stored for this user only. */
+  cashierUserId: string
   register: {
     id: string
     name: string
@@ -109,7 +139,7 @@ export function PosTerminal(props: {
     defaultChangeMethodId: string | null
     allowWalletChangeReturn: boolean
   }
-  session: { id: string; dateLabel: string; openingCash: string; orderBadge: string }
+  session: { id: string; dateLabel: string; openingCash: string }
   cashSummary: {
     expectedCash: string
     cashIn: string
@@ -135,9 +165,19 @@ export function PosTerminal(props: {
 }) {
   const router = useRouter()
   const [query, setQuery] = useState('')
-  const [cart, setCart] = useState<CartLine[]>([])
-  const [customerId, setCustomerId] = useState<string | null>(null)
-  const [note, setNote] = useState('')
+  // No window during the server render, so the till starts from a blank
+  // Register ticket there. In the browser the signed-in cashier's tickets for
+  // this session are read before paint, and a refresh keeps them.
+  const ticketKey = `${props.cashierUserId}\0${props.session.id}`
+  const [book, setBook] = useState<PosOrderBook | null>(() =>
+    typeof window === 'undefined' ? createPosOrderBook() : null,
+  )
+  const [storedFor, setStoredFor] = useState<string | null>(null)
+  if (typeof window !== 'undefined' && storedFor !== ticketKey) {
+    setStoredFor(ticketKey)
+    setBook(loadPosOrderBook(window.localStorage, props.cashierUserId, props.session.id))
+  }
+  const bookRef = useRef<PosOrderBook | null>(book)
   const themeStored = useBrowserStore(THEME_KEY)
   const dark = themeStored !== 'light'
   const [payOpen, setPayOpen] = useState(false)
@@ -158,6 +198,69 @@ export function PosTerminal(props: {
   const [pending, startTransition] = useTransition()
   const ready = useClientReady()
   const locked = useRegisterLocked(props.register.id)
+
+  useEffect(() => {
+    bookRef.current = book
+  })
+
+  useEffect(() => {
+    if (!book || storedFor !== ticketKey) return
+    savePosOrderBook(window.localStorage, props.cashierUserId, props.session.id, book)
+  }, [book, storedFor, ticketKey, props.cashierUserId, props.session.id])
+
+  function commitBook(recipe: (current: PosOrderBook) => PosOrderBook) {
+    const base = bookRef.current ?? book ?? createPosOrderBook()
+    const next = recipe(base)
+    bookRef.current = next
+    savePosOrderBook(window.localStorage, props.cashierUserId, props.session.id, next)
+    setBook(next)
+  }
+
+  const active = book ? activePosOrder(book) : null
+  const cart = active?.cart ?? EMPTY_CART
+  const customerId = active?.customerId ?? null
+  const note = active?.note ?? ''
+
+  function setCart(updater: CartLine[] | ((prev: CartLine[]) => CartLine[])) {
+    commitBook((current) => {
+      const order = activePosOrder(current)
+      const nextCart = typeof updater === 'function' ? updater(order.cart) : updater
+      return patchPosOrder(current, order.id, { cart: nextCart })
+    })
+  }
+
+  function setCustomerId(nextCustomerId: string | null) {
+    commitBook((current) => patchPosOrder(current, activePosOrder(current).id, { customerId: nextCustomerId }))
+  }
+
+  function setNote(nextNote: string) {
+    commitBook((current) => patchPosOrder(current, activePosOrder(current).id, { note: nextNote }))
+  }
+
+  function leavePayment() {
+    setPayOpen(false)
+    setAmounts({})
+    setError(null)
+  }
+
+  function focusOrder(id: string) {
+    if (pending) return
+    leavePayment()
+    commitBook((current) => selectPosOrder(current, id))
+  }
+
+  function openNewOrder() {
+    if (pending) return
+    leavePayment()
+    setToast(null)
+    commitBook((current) => addPosOrder(current))
+  }
+
+  function dismissOrder(id: string) {
+    if (pending) return
+    leavePayment()
+    commitBook((current) => closePosOrder(current, id))
+  }
 
   const cashMethod = useMemo(
     () => props.register.paymentMethods.find((method) => method.isCash) ?? null,
@@ -210,6 +313,7 @@ export function PosTerminal(props: {
   )
 
   useEffect(() => {
+    if (!book) return
     broadcastCart({
       orgName: props.orgName,
       customerName,
@@ -220,7 +324,7 @@ export function PosTerminal(props: {
         amount: formatMoney(Number(line.price) * line.quantity, props.currency),
       })),
     })
-  }, [cart, customerName, props.currency, props.orgName, subtotal])
+  }, [book, cart, customerName, props.currency, props.orgName, subtotal])
 
   function addProduct(product: Product) {
     setToast(null)
@@ -269,11 +373,12 @@ export function PosTerminal(props: {
   }
 
   function cancelOrder() {
-    setCart([])
-    setNote('')
-    setCustomerId(null)
+    const current = bookRef.current ? activePosOrder(bookRef.current) : null
+    if (!current) return
+    leavePayment()
     setMenu(null)
-    setToast('Order cancelled')
+    commitBook((book) => clearPosOrder(book, current.id))
+    setToast(current.kind === 'register' ? 'Order cancelled' : `Order ${current.label} cancelled`)
   }
 
   const paymentDecimals = minorUnits(props.currency)
@@ -363,28 +468,30 @@ export function PosTerminal(props: {
     // Change is only known here; the receipt shows it on the first print.
     const changeAtSale = Number(settlement.change)
     const payments = settlement.tenders
+    const selling = bookRef.current ? activePosOrder(bookRef.current) : null
+    if (!selling || selling.cart.length === 0) return
     startTransition(async () => {
+      // The signed-in user is whoever the server action sees. The sale is
+      // posted on this open session, the same way a single-cart checkout was.
       const result = await posCheckout({
         registerId: props.register.id,
         sessionId: props.session.id,
-        customerId: customerId ?? undefined,
-        note: note || null,
-        lines: cart.map((line) => ({
+        customerId: selling.customerId ?? undefined,
+        note: selling.note || null,
+        lines: selling.cart.map((line) => ({
           itemId: line.itemId,
           quantity: String(line.quantity),
           storeId: line.storeId ?? undefined,
         })),
         payments,
-        changeMethodId: changeAtSale > 0.004 ? changeMethodId : undefined,
+        ...(changeAtSale > 0.004 ? { changeMethodId } : {}),
       })
       if (!result.ok) {
         setError(result.error.message)
         return
       }
-      setPayOpen(false)
-      setCart([])
-      setNote('')
-      setAmounts({})
+      leavePayment()
+      commitBook((current) => settlePosOrder(current, selling.id))
       setLastReceiptId(result.data.id)
       setToast(`Receipt ${result.data.number} · ${formatMoney(result.data.total, props.currency)}`)
       openReceiptPrint(result.data.id, { autoprint: true, change: changeAtSale })
@@ -498,7 +605,7 @@ export function PosTerminal(props: {
     return counted - expected
   }, [closingCash, props.cashSummary.expectedCash])
 
-  if (!ready) return null
+  if (!ready || !book || !active) return null
 
   const bg = dark ? ODOO.ink : ODOO.wash
   const panel = dark ? ODOO.surface : '#ffffff'
@@ -513,17 +620,16 @@ export function PosTerminal(props: {
         className="flex flex-wrap items-center gap-2 border-b px-2 py-2 sm:px-3"
         style={{ borderColor: border, background: dark ? '#161618' : '#fff' }}
       >
-        <div className="flex items-center gap-1">
-          <span
+        <div className="flex max-w-full items-center gap-1 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => focusOrder((book.orders.find((order) => order.kind === 'register') ?? book.orders[0]!).id)}
+            aria-pressed={active.kind === 'register'}
             className="rounded-md px-3 py-1.5 text-sm font-medium"
-            style={{
-              background: dark ? 'transparent' : '#d1e7dd',
-              border: `1px solid ${ODOO.teal}`,
-              color: dark ? '#fff' : ODOO.tealDark,
-            }}
+            style={orderTabStyle(active.kind === 'register', dark, border, text)}
           >
             Register
-          </span>
+          </button>
           <Link
             href="/pos/orders"
             className="rounded-md px-3 py-1.5 text-sm"
@@ -533,19 +639,49 @@ export function PosTerminal(props: {
           </Link>
           <button
             type="button"
-            onClick={cancelOrder}
-            className="inline-flex size-8 items-center justify-center rounded-md"
+            onClick={openNewOrder}
+            disabled={book.orders.length >= POS_OPEN_ORDER_LIMIT || pending}
+            className="inline-flex size-8 items-center justify-center rounded-md disabled:opacity-40"
             style={{ border: `1px solid ${border}` }}
             title="New order"
+            aria-label="New order"
           >
             <PlusIcon className="size-4" />
           </button>
-          <span
-            className="rounded-md px-2.5 py-1.5 text-sm font-semibold tabular"
-            style={{ border: `1px solid ${ODOO.teal}`, color: dark ? '#9fe0e3' : ODOO.tealDark }}
-          >
-            {props.session.orderBadge}
-          </span>
+          {book.orders
+            .filter((order) => order.kind === 'order')
+            .map((order) => {
+              const selected = order.id === active.id
+              const customer = props.customers.find((row) => row.id === order.customerId)?.displayName
+              return (
+                <span
+                  key={order.id}
+                  className="inline-flex items-center rounded-md"
+                  style={orderTabStyle(selected, dark, border, text)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => focusOrder(order.id)}
+                    aria-pressed={selected}
+                    title={customer ? `${order.label} · ${customer}` : `Order ${order.label}`}
+                    className="px-2.5 py-1.5 text-sm font-semibold tabular"
+                  >
+                    {order.label}
+                  </button>
+                  {posOrderIsEmpty(order) ? (
+                    <button
+                      type="button"
+                      onClick={() => dismissOrder(order.id)}
+                      aria-label={`Close order ${order.label}`}
+                      title="Close empty order"
+                      className="pr-1.5"
+                    >
+                      <XIcon className="size-3.5 opacity-70" />
+                    </button>
+                  ) : null}
+                </span>
+              )
+            })}
         </div>
 
         <div className="ml-auto flex flex-1 items-center justify-end gap-2 sm:max-w-xl">
@@ -612,6 +748,10 @@ export function PosTerminal(props: {
           style={{ background: panel, borderColor: border }}
         >
           <div className="shrink-0 border-b p-3" style={{ borderColor: border }}>
+            <p className="mb-1 text-xs font-medium" style={{ color: muted }} data-active-order={active.label}>
+              {active.kind === 'register' ? 'Register' : `Order ${active.label}`}
+              {customerName ? ` · ${customerName}` : ''}
+            </p>
             <div className="mb-3 flex justify-between text-base font-semibold">
               <span>Total</span>
               <span className="tabular">{formatMoney(subtotal, props.currency)}</span>
