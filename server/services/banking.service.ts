@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 
 import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
+import { POS_BANKS_DETAIL } from '@/lib/pos-register-account'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { DepositInput, TransferInput } from '@/lib/validation/banking'
 import { buildDepositJournal, buildTransferJournal } from '@/server/accounting/builders/banking'
@@ -22,6 +23,10 @@ export async function bankAccounts(ctx: OrgContext) {
       orgId: ctx.orgId,
       isActive: true,
       subtype: { in: ['BANK', 'CREDIT_CARD', 'UNDEPOSITED_FUNDS'] },
+      // POS Banks is a heading. A parent cannot take a transfer or a deposit.
+      NOT: {
+        OR: [{ detailType: POS_BANKS_DETAIL }, { children: { some: {} } }],
+      },
     },
     select: { id: true, code: true, name: true, subtype: true, type: true },
     orderBy: { code: 'asc' },

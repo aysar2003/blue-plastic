@@ -672,6 +672,8 @@ model LedgerAccount {
   rulesForBank      BankRule[]            @relation("RuleBank")
   rulesForCategory  BankRule[]            @relation("RuleCategory")
   posPaymentMethods PosPaymentMethod[]    @relation("PosPaymentAccount")
+  posRegisters      PosRegister[]         @relation("PosRegisterBank")
+  posChangeOrders   PosOrder[]            @relation("PosChangeAccount")
 
   @@unique([orgId, code])
   @@unique([orgId, systemKey])
@@ -1222,6 +1224,8 @@ model PosPaymentMethod {
 
   name            String
   ledgerAccountId String
+  /// Cashiers may hand change back from this method. The till can still turn it off.
+  allowsChangeReturn Boolean @default(true)
   isActive        Boolean @default(true)
   sortOrder       Int     @default(0) @db.SmallInt
 
@@ -1232,13 +1236,16 @@ model PosPaymentMethod {
   account      LedgerAccount @relation("PosPaymentAccount", fields: [ledgerAccountId], references: [id], onDelete: Restrict)
   registers    PosRegisterMethod[]
   payments     PosOrderPayment[]
+  changeOrders PosOrder[] @relation("PosChangeMethod")
+  defaultOnRegisters PosRegister[] @relation("RegisterDefaultChange")
 
   @@unique([orgId, name])
   @@index([orgId, isActive, sortOrder])
   @@map("pos_payment_methods")
 }
 
-/// A physical or logical till. Links a default walk-in customer and store.
+/// A physical or logical till. Links a default walk-in customer, store, and
+/// its own bank sub-account under the POS Banks heading.
 model PosRegister {
   id                String @id @default(cuid())
   orgId             String
@@ -1246,7 +1253,18 @@ model PosRegister {
   name              String
   storeId           String?
   defaultCustomerId String
+  /// BANK sub-account under POS Banks. Nullable until the backfill runs.
+  /// Sales still post to each payment method's wallet; this account is the
+  /// till's place on the chart, ready to receive a later sweep.
+  ledgerAccountId   String? @unique
   isActive          Boolean @default(true)
+  /// Till setting: which method is selected when the Payment dialog opens. Null means cash.
+  defaultChangeMethodId String?
+  /// When off, change can only come back from a cash method, even if wallets are allowed below.
+  allowWalletChangeReturn Boolean @default(true)
+
+  /// bcrypt hash of the cashier PIN. Null until an admin sets one; those tills stay openable.
+  pinHash String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -1254,12 +1272,15 @@ model PosRegister {
   organization    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store           Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
   defaultCustomer Customer     @relation(fields: [defaultCustomerId], references: [id], onDelete: Restrict)
+  account         LedgerAccount? @relation("PosRegisterBank", fields: [ledgerAccountId], references: [id], onDelete: Restrict)
+  defaultChangeMethod PosPaymentMethod? @relation("RegisterDefaultChange", fields: [defaultChangeMethodId], references: [id], onDelete: SetNull)
   methods         PosRegisterMethod[]
   sessions        PosSession[]
   orders          PosOrder[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
+  @@index([defaultChangeMethodId])
   @@map("pos_registers")
 }
 
@@ -1312,6 +1333,8 @@ model PosCashMovement {
 model PosRegisterMethod {
   registerId      String
   paymentMethodId String
+  /// This till may hand change back from this method. Combined with the method's own flag.
+  allowsChangeReturn Boolean @default(true)
 
   register      PosRegister      @relation(fields: [registerId], references: [id], onDelete: Cascade)
   paymentMethod PosPaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
@@ -1328,16 +1351,24 @@ model PosOrder {
   sessionId       String?
   salesDocumentId String @unique
 
+  /// Money handed back. Zero on sales rung up before change was recorded, and on exact tenders.
+  changeAmount            Decimal @default(0) @db.Decimal(19, 4)
+  changePaymentMethodId   String?
+  changeLedgerAccountId   String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   organization  Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
   register      PosRegister       @relation(fields: [registerId], references: [id], onDelete: Restrict)
   session       PosSession?       @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   salesDocument SalesDocument     @relation(fields: [salesDocumentId], references: [id], onDelete: Cascade)
+  changePaymentMethod PosPaymentMethod? @relation("PosChangeMethod", fields: [changePaymentMethodId], references: [id], onDelete: Restrict)
+  changeAccount       LedgerAccount?    @relation("PosChangeAccount", fields: [changeLedgerAccountId], references: [id], onDelete: Restrict)
   payments      PosOrderPayment[]
 
   @@index([orgId, registerId, createdAt(sort: Desc)])
   @@index([sessionId, createdAt(sort: Desc)])
+  @@index([changePaymentMethodId])
   @@map("pos_orders")
 }
 

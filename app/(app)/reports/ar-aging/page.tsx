@@ -1,13 +1,10 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
+import { InteractiveGrid } from '@/components/data/interactive-grid'
 import { PageHeader } from '@/components/data/page-header'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
-import { ClickableRow } from '@/components/reports/clickable-row'
-import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { Card } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableFooter, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
@@ -24,8 +21,6 @@ const AGING_COLORS: Record<AgingBucket, string> = {
   d61_90: '#C2410C',
   d90_plus: '#BE123C',
 }
-
-const SORTABLE = ['name', 'total', ...AGING_BUCKETS] as const
 
 export const metadata: Metadata = { title: 'A/R Aging Summary' }
 
@@ -50,18 +45,6 @@ export default async function AgingPage({
 
   const report = await aging(ctx, asOf)
   const currency = ctx.organization.baseCurrency
-
-  // "Who owes the most" and "who is furthest overdue" are the two questions this
-  // report exists to answer, so every bucket is sortable, not only the total.
-  const sort = readSort(params, SORTABLE, { sort: 'total', dir: 'desc' })
-  const linkParams = { asOf, sort: sort.sort, dir: sort.dir }
-  const direction = sort.dir === 'asc' ? 1 : -1
-  const rows = [...report.rows].sort((a, b) => {
-    if (sort.sort === 'name') return direction * a.customerName.localeCompare(b.customerName)
-    if (sort.sort === 'total') return direction * a.total.comparedTo(b.total)
-    const bucket = sort.sort as (typeof AGING_BUCKETS)[number]
-    return direction * a.buckets[bucket].comparedTo(b.buckets[bucket])
-  })
 
   return (
     <>
@@ -102,83 +85,50 @@ export default async function AgingPage({
         </div>
       )}
 
-      <Card className="overflow-hidden p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortableHeader column="name" label="Customer" state={sort} basePath="/reports/ar-aging" params={linkParams} />
-              {AGING_BUCKETS.map((bucket) => (
-                <SortableHeader
-                  key={bucket}
-                  column={bucket}
-                  label={BUCKET_LABELS[bucket]}
-                  state={sort}
-                  basePath="/reports/ar-aging"
-                  params={linkParams}
-                  className="w-32"
-                  numeric
-                  defaultDirection="desc"
-                />
-              ))}
-              <SortableHeader column="total" label="Total" state={sort} basePath="/reports/ar-aging" params={linkParams} className="w-32" numeric defaultDirection="desc" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  Nothing outstanding.
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((row) => (
-                <ClickableRow key={row.customerId} href={customerStatement(row.customerId)}>
-                  <TableCell>
-                    <Link
-                      href={customerStatement(row.customerId)}
-                      className="font-medium underline-offset-4 hover:underline"
-                    >
-                      {row.customerName}
-                    </Link>
-                  </TableCell>
-                  {AGING_BUCKETS.map((bucket) => (
-                    <TableCell key={bucket} className="numeric tabular">
-                      {row.buckets[bucket].isZero() ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        <Link
-                          href={customerStatement(row.customerId, bucket === 'current' || bucket === 'unapplied' ? 'open' : 'overdue')}
-                          className="underline-offset-4 hover:underline"
-                        >
-                          {formatMoney(row.buckets[bucket], currency)}
-                        </Link>
-                      )}
-                    </TableCell>
-                  ))}
-                  <TableCell className="numeric tabular font-medium">
-                    <Link href={customerStatement(row.customerId, 'open')} className="underline-offset-4 hover:underline">
-                      {formatMoney(row.total, currency)}
-                    </Link>
-                  </TableCell>
-                </ClickableRow>
-              ))
-            )}
-          </TableBody>
-          <TableFooter>
-            <TableRow>
-              <TableCell className="font-semibold">Total</TableCell>
-              {AGING_BUCKETS.map((bucket) => (
-                <TableCell key={bucket} className="numeric tabular font-semibold">
-                  {formatMoney(report.totals[bucket], currency)}
-                </TableCell>
-              ))}
-              <TableCell className="numeric tabular font-semibold">
-                {formatMoney(report.grandTotal, currency)}
-              </TableCell>
-            </TableRow>
-          </TableFooter>
-        </Table>
+      {report.rows.length === 0 ? (
+        <div className="rounded-md border bg-card p-10 text-center text-sm text-muted-foreground">
+          Nothing outstanding.
+        </div>
+      ) : (
+        <InteractiveGrid
+          storageKey="bp-ar-aging"
+          currency={currency}
+          customizable
+          initialSort={{ id: 'total', dir: 'desc' }}
+          columns={[
+            { id: 'name', label: 'Customer', defaultWidth: 220 },
+            ...AGING_BUCKETS.map((bucket) => ({
+              id: bucket,
+              label: BUCKET_LABELS[bucket],
+              kind: 'money' as const,
+              total: true,
+              defaultWidth: 128,
+            })),
+            { id: 'total', label: 'Total', kind: 'money' as const, total: true, defaultWidth: 128 },
+          ]}
+          rows={report.rows.map((row) => ({
+            id: row.customerId,
+            cells: {
+              name: { value: row.customerName, href: customerStatement(row.customerId) },
+              ...Object.fromEntries(
+                AGING_BUCKETS.map((bucket) => [
+                  bucket,
+                  {
+                    value: row.buckets[bucket].isZero() ? null : row.buckets[bucket].toString(),
+                    href: customerStatement(
+                      row.customerId,
+                      bucket === 'current' || bucket === 'unapplied' ? 'open' : 'overdue',
+                    ),
+                  },
+                ]),
+              ),
+              total: { value: row.total.toString(), href: customerStatement(row.customerId, 'open') },
+            },
+          }))}
+        />
+      )}
 
+      <Card className="mt-4 overflow-hidden p-0">
         <div
           className={`flex items-start gap-2 border-t px-3 py-2.5 text-sm ${
             report.agrees ? 'text-success' : 'text-destructive'

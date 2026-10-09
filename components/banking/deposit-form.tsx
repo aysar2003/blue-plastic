@@ -1,6 +1,8 @@
 'use client'
 
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
+
+import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import { PlusIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -50,7 +52,7 @@ export function DepositForm({
   const router = useRouter()
   const [state, formAction] = useActionState(saveDepositForm, idleState)
 
-  const [number, setNumber] = useState(documentNumber)
+  const [number, setNumber] = usePropState(documentNumber)
   const [bankAccountId, setBankAccountId] = useState(
     defaultBankAccountId && bankAccounts.some((a) => a.id === defaultBankAccountId)
       ? defaultBankAccountId
@@ -63,8 +65,6 @@ export function DepositForm({
   const [otherLines, setOtherLines] = useState<OtherLine[]>([])
   const nextKey = useRef(1)
   const handled = useRef(false)
-
-  useEffect(() => setNumber(documentNumber), [documentNumber])
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {

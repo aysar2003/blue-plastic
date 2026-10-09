@@ -1,12 +1,16 @@
 import 'server-only'
 
+import type { JournalSourceType } from '@prisma/client'
+
 import { JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
 import { addDays, formatDateTime, toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
 import { postedLineParts } from '@/lib/ledger-text'
+import { accountTenderTotals, type PosSaleTender } from '@/lib/pos-change'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { generalLedger } from '@/server/accounting/balances'
+import { resolveSources, sourceFor } from '@/server/services/journal-sources'
 import { valuation } from '@/server/accounting/inventory'
 import type { Tx } from '@/server/db'
 
@@ -26,7 +30,7 @@ import type { Tx } from '@/server/db'
  * Every figure is read from the ledger or from the documents that produced it —
  * never from a stored total.
  */
-export type ColumnFormat = 'text' | 'money' | 'number' | 'signed' | 'date' | 'badge'
+export type ColumnFormat = 'text' | 'money' | 'number' | 'signed' | 'date' | 'datetime' | 'badge'
 
 export type ReportColumn = {
   key: string
@@ -34,6 +38,13 @@ export type ReportColumn = {
   format?: ColumnFormat
   /** Narrow columns keep a wide table readable. */
   width?: string
+  /**
+   * How the shared report grid treats this column. `kind` overrides `format`
+   * for sorting and display. `total: false` keeps a running balance out of the
+   * Total row.
+   */
+  kind?: 'text' | 'money' | 'number' | 'signed' | 'date' | 'datetime'
+  total?: boolean
 }
 
 export type ReportCell = string | null
@@ -82,6 +93,12 @@ export type TableReport = {
 
 const money = (value: Decimal.Value) => toMoneyString(value, 2)
 const date = (value: Date | null) => (value ? toCalendarDate(value) : null)
+/** ISO timestamp so a date column can show the time the row was recorded. */
+const recorded = (value: Date | null | undefined) => {
+  if (!value) return null
+  const time = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(time.getTime()) ? null : time.toISOString()
+}
 
 /* --- Customers ------------------------------------------------------------ */
 
@@ -811,7 +828,7 @@ const stockMovements: TableReport = {
         date: { gte: toDate(range.from), lte: toDate(range.to) },
       },
       select: {
-        id: true, date: true, type: true, quantity: true, unitCost: true, value: true,
+        id: true, date: true, createdAt: true, type: true, quantity: true, unitCost: true, value: true,
         runningQuantity: true, sourceType: true,
         item: { select: { id: true, name: true, sku: true } },
         journal: { select: { id: true, journalNumber: true } },
@@ -824,7 +841,7 @@ const stockMovements: TableReport = {
 
     return {
       columns: [
-        { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+        { key: 'date', label: 'Date', format: 'datetime', width: 'w-44' },
         { key: 'item', label: 'Item' },
         { key: 'type', label: 'Movement', width: 'w-32' },
         { key: 'entry', label: 'Entry', width: 'w-28' },
@@ -838,7 +855,7 @@ const stockMovements: TableReport = {
         return {
           href: movement.journal ? `/journals/${movement.journal.id}` : `/inventory/${movement.item.id}`,
           cells: {
-            date: date(movement.date),
+            date: recorded(movement.createdAt),
             item: movement.item.sku ? `${movement.item.sku} — ${movement.item.name}` : movement.item.name,
             type: movement.type.replace('_', ' ').toLowerCase(),
             entry: movement.journal?.journalNumber ?? null,
@@ -907,6 +924,7 @@ const generalLedgerReport: TableReport = {
     })
 
     const rows: ReportRow[] = []
+    const pending: { row: ReportRow; sourceType: string; sourceId: string | null; journalId: string }[] = []
 
     for (const account of accounts) {
       const ledger = await generalLedger(ctx.orgId, account.id, range, { limit: 500 })
@@ -920,6 +938,7 @@ const generalLedgerReport: TableReport = {
           account: `${account.code} — ${account.name}`,
           entry: null,
           type: null,
+          document: null,
           name: null,
           description: 'Opening balance',
           debit: null,
@@ -936,19 +955,27 @@ const generalLedgerReport: TableReport = {
           description: entry.description,
           partyName: entry.partyName,
         })
-        rows.push({
+        const row: ReportRow = {
           href: `/journals/${entry.journalId}`,
           cells: {
-            date: date(entry.date),
+            date: recorded(entry.recordedAt),
             account: null,
             entry: entry.journalNumber,
             type: sourceLabel,
+            document: null,
             name: parts.name,
             description: parts.note,
             debit: entry.debit.isZero() ? null : money(entry.debit),
             credit: entry.credit.isZero() ? null : money(entry.credit),
             balance: money(entry.balance),
           },
+        }
+        rows.push(row)
+        pending.push({
+          row,
+          sourceType: entry.sourceType,
+          sourceId: entry.sourceId,
+          journalId: entry.journalId,
         })
       }
 
@@ -959,6 +986,7 @@ const generalLedgerReport: TableReport = {
           account: null,
           entry: null,
           type: null,
+          document: null,
           name: null,
           description: `Closing balance — ${account.code} ${account.name}`,
           debit: null,
@@ -968,17 +996,36 @@ const generalLedgerReport: TableReport = {
       })
     }
 
+    const sources = await resolveSources(
+      ctx.orgId,
+      pending.map((item) => ({
+        sourceType: item.sourceType as JournalSourceType,
+        sourceId: item.sourceId,
+      })),
+    )
+    for (const item of pending) {
+      const source = sourceFor(sources, {
+        sourceType: item.sourceType as JournalSourceType,
+        sourceId: item.sourceId,
+      })
+      const href = source.href ?? `/journals/${item.journalId}`
+      item.row.href = href
+      item.row.cells.document = source.number
+      item.row.cellHrefs = { type: href, entry: href, document: href }
+    }
+
     return {
       columns: [
-        { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+        { key: 'date', label: 'Date', format: 'datetime', width: 'w-44' },
         { key: 'account', label: 'Account' },
         { key: 'entry', label: 'Entry', width: 'w-28' },
         { key: 'type', label: 'Type', width: 'w-36' },
+        { key: 'document', label: 'Document', width: 'w-32' },
         { key: 'name', label: 'Name', width: 'w-44' },
         { key: 'description', label: 'Description' },
         { key: 'debit', label: 'Debit', format: 'money', width: 'w-32' },
         { key: 'credit', label: 'Credit', format: 'money', width: 'w-32' },
-        { key: 'balance', label: 'Balance', format: 'money', width: 'w-32' },
+        { key: 'balance', label: 'Balance', format: 'money', width: 'w-32', total: false },
       ],
       rows,
       note: 'Balances are shown on each account’s natural side. The name is the customer, vendor, or item. Up to 500 entries per account.',
@@ -1001,7 +1048,7 @@ const journalReport: TableReport = {
         date: { gte: toDate(range.from), lte: toDate(range.to) },
       },
       select: {
-        id: true, journalNumber: true, date: true, memo: true, sourceType: true, status: true,
+        id: true, journalNumber: true, date: true, postedAt: true, memo: true, sourceType: true, sourceId: true, status: true,
         lines: {
           orderBy: { lineNumber: 'asc' },
           select: {
@@ -1016,22 +1063,31 @@ const journalReport: TableReport = {
       take: 500,
     })
 
+    const sources = await resolveSources(
+      ctx.orgId,
+      journals.map((journal) => ({ sourceType: journal.sourceType, sourceId: journal.sourceId })),
+    )
+
     const rows: ReportRow[] = []
     let totalDebit = ZERO
 
     for (const journal of journals) {
+      const source = sourceFor(sources, { sourceType: journal.sourceType, sourceId: journal.sourceId })
+      const href = source.href ?? `/journals/${journal.id}`
+      const sourceLabel = JOURNAL_SOURCE_LABELS[journal.sourceType] ?? journal.sourceType
       for (const [index, line] of journal.lines.entries()) {
         totalDebit = totalDebit.plus(line.debit.toString())
         rows.push({
-          href: `/journals/${journal.id}`,
+          href,
+          cellHrefs: index === 0 ? { entry: href, source: href } : undefined,
           cells: {
-            date: index === 0 ? date(journal.date) : null,
+            date: index === 0 ? recorded(journal.postedAt) : null,
             entry: index === 0 ? journal.journalNumber : null,
-            source: index === 0 ? journal.sourceType.replace('_', ' ').toLowerCase() : null,
+            source: index === 0 ? sourceLabel : null,
             account: `${line.account.code} — ${line.account.name}`,
             party: line.customer?.displayName ?? line.vendor?.displayName ?? null,
             description: postedLineParts({
-              sourceLabel: JOURNAL_SOURCE_LABELS[journal.sourceType] ?? journal.sourceType,
+              sourceLabel,
               memo: journal.memo,
               description: line.description,
               partyName: line.customer?.displayName ?? line.vendor?.displayName ?? null,
@@ -1045,7 +1101,7 @@ const journalReport: TableReport = {
 
     return {
       columns: [
-        { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+        { key: 'date', label: 'Date', format: 'datetime', width: 'w-44' },
         { key: 'entry', label: 'Entry', width: 'w-28' },
         { key: 'source', label: 'Source', width: 'w-32' },
         { key: 'account', label: 'Account' },
@@ -1161,7 +1217,7 @@ const invoiceList: TableReport = {
         date: { gte: toDate(range.from), lte: toDate(range.to) },
       },
       select: {
-        id: true, number: true, date: true, dueDate: true, total: true, status: true,
+        id: true, number: true, date: true, createdAt: true, dueDate: true, total: true, status: true,
         customer: { select: { displayName: true } },
         applications: { select: { amount: true } },
       },
@@ -1179,7 +1235,7 @@ const invoiceList: TableReport = {
       return {
         href: `/sales/invoices/${invoice.id}`,
         cells: {
-          date: date(invoice.date),
+          date: recorded(invoice.createdAt),
           number: invoice.number,
           customer: invoice.customer.displayName,
           dueDate: date(invoice.dueDate),
@@ -1192,7 +1248,7 @@ const invoiceList: TableReport = {
 
     return {
       columns: [
-        { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+        { key: 'date', label: 'Date', format: 'datetime', width: 'w-44' },
         { key: 'number', label: 'No.', width: 'w-32' },
         { key: 'customer', label: 'Customer' },
         { key: 'dueDate', label: 'Due', format: 'date', width: 'w-28' },
@@ -1295,7 +1351,7 @@ const billList: TableReport = {
         date: { gte: toDate(range.from), lte: toDate(range.to) },
       },
       select: {
-        id: true, number: true, date: true, dueDate: true, total: true, status: true,
+        id: true, number: true, date: true, createdAt: true, dueDate: true, total: true, status: true,
         vendor: { select: { displayName: true } },
         applications: { select: { amount: true } },
       },
@@ -1313,7 +1369,7 @@ const billList: TableReport = {
       return {
         href: `/purchases/bills/${bill.id}`,
         cells: {
-          date: date(bill.date),
+          date: recorded(bill.createdAt),
           number: bill.number,
           vendor: bill.vendor.displayName,
           dueDate: date(bill.dueDate),
@@ -1326,7 +1382,7 @@ const billList: TableReport = {
 
     return {
       columns: [
-        { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+        { key: 'date', label: 'Date', format: 'datetime', width: 'w-44' },
         { key: 'number', label: 'No.', width: 'w-32' },
         { key: 'vendor', label: 'Vendor' },
         { key: 'dueDate', label: 'Due', format: 'date', width: 'w-28' },
@@ -1528,7 +1584,8 @@ const activityByUser: TableReport = {
 const salesByDeposit: TableReport = {
   key: 'sales-by-deposit',
   title: 'Sales by Deposit Account',
-  description: 'Cash sales grouped by the bank account the money was deposited into.',
+  description:
+    'Cash sales by the account that received them. Till change is taken out of the account it left, so the net is what that account kept.',
   group: 'Data analysis',
   mode: 'range',
   async build(input) {
@@ -1543,43 +1600,117 @@ const salesByDeposit: TableReport = {
       select: {
         total: true,
         depositAccount: { select: { id: true, code: true, name: true } },
+        posOrder: {
+          select: {
+            changeAmount: true,
+            changePaymentMethodId: true,
+            changeLedgerAccountId: true,
+            changePaymentMethod: { select: { name: true } },
+            payments: {
+              select: {
+                amount: true,
+                ledgerAccountId: true,
+                paymentMethod: { select: { name: true } },
+              },
+            },
+          },
+        },
       },
     })
 
-    const grouped = new Map<string, { id: string; label: string; count: number; amount: Decimal }>()
+    type Bucket = { id: string; label: string; count: number; tendered: Decimal; change: Decimal }
+    const grouped = new Map<string, Bucket>()
+    const touch = (id: string, label: string) => {
+      const current = grouped.get(id) ?? { id, label, count: 0, tendered: ZERO, change: ZERO }
+      if (current.label === id && label !== id) current.label = label
+      grouped.set(id, current)
+      return current
+    }
+
+    const accountIds = new Set<string>()
     for (const receipt of receipts) {
+      for (const payment of receipt.posOrder?.payments ?? []) accountIds.add(payment.ledgerAccountId)
+      if (receipt.posOrder?.changeLedgerAccountId) accountIds.add(receipt.posOrder.changeLedgerAccountId)
+    }
+    const accountRows = accountIds.size
+      ? await books(input).ledgerAccount.findMany({
+          where: { orgId: ctx.orgId, id: { in: [...accountIds] } },
+          select: { id: true, code: true, name: true },
+        })
+      : []
+    const accountLabel = new Map(accountRows.map((account) => [account.id, `${account.code} ${account.name}`]))
+
+    for (const receipt of receipts) {
+      const order = receipt.posOrder
+      if (order && order.payments.length > 0) {
+        const sale: PosSaleTender = {
+          payments: order.payments.map((payment) => ({
+            methodId: payment.ledgerAccountId,
+            methodName: payment.paymentMethod.name,
+            accountId: payment.ledgerAccountId,
+            amount: payment.amount.toString(),
+          })),
+          changeAmount: order.changeAmount.toString(),
+          changeMethodId: order.changePaymentMethodId,
+          changeMethodName: order.changePaymentMethod?.name ?? null,
+          changeAccountId: order.changeLedgerAccountId,
+        }
+        const seen = new Set<string>()
+        for (const total of accountTenderTotals([sale])) {
+          const label = accountLabel.get(total.accountId) ?? total.methodName
+          const row = touch(total.accountId, label)
+          if (!seen.has(total.accountId)) {
+            row.count += 1
+            seen.add(total.accountId)
+          }
+          row.tendered = row.tendered.plus(total.tendered)
+          row.change = row.change.plus(total.change)
+        }
+        continue
+      }
+
       const account = receipt.depositAccount
       const id = account?.id ?? 'none'
       const label = account ? `${account.code} ${account.name}` : 'No deposit account'
-      const current = grouped.get(id) ?? { id, label, count: 0, amount: ZERO }
-      current.count += 1
-      current.amount = current.amount.plus(receipt.total.toString())
-      grouped.set(id, current)
+      const row = touch(id, label)
+      row.count += 1
+      row.tendered = row.tendered.plus(receipt.total.toString())
     }
 
     const rows = [...grouped.values()]
-      .sort((a, b) => b.amount.comparedTo(a.amount))
+      .sort((a, b) => b.tendered.minus(b.change).comparedTo(a.tendered.minus(a.change)))
       .map((row) => ({
         href: row.id === 'none' ? null : `/reports/transaction-detail?account=${row.id}&period=custom&from=${range.from}&to=${range.to}`,
         cells: {
           account: row.label,
           count: String(row.count),
-          amount: money(row.amount),
+          tendered: money(row.tendered),
+          change: money(row.change),
+          amount: money(row.tendered.minus(row.change)),
         },
       }))
 
-    const total = [...grouped.values()].reduce((sum, row) => sum.plus(row.amount), ZERO)
+    const tendered = [...grouped.values()].reduce((sum, row) => sum.plus(row.tendered), ZERO)
+    const change = [...grouped.values()].reduce((sum, row) => sum.plus(row.change), ZERO)
 
     return {
       columns: [
         { key: 'account', label: 'Deposit to' },
         { key: 'count', label: 'Receipts', format: 'number', width: 'w-28' },
-        { key: 'amount', label: 'Amount', format: 'money', width: 'w-36' },
+        { key: 'tendered', label: 'Tendered', format: 'money', width: 'w-32' },
+        { key: 'change', label: 'Change returned', format: 'money', width: 'w-36' },
+        { key: 'amount', label: 'Net received', format: 'money', width: 'w-36' },
       ],
       rows,
-      totals: { account: 'Total', count: String(receipts.length), amount: money(total) },
+      totals: {
+        account: 'Total',
+        count: String(receipts.length),
+        tendered: money(tendered),
+        change: money(change),
+        amount: money(tendered.minus(change)),
+      },
       empty: 'No cash sales were deposited in this period.',
-      note: 'Click an account to see the lines posted to it.',
+      note: 'Net received is the tender minus change handed back from that account. Click an account to see the lines posted to it.',
     }
   },
 }
@@ -1606,6 +1737,7 @@ const salesByCustomerDetail: TableReport = {
         type: true,
         number: true,
         date: true,
+        createdAt: true,
         subtotal: true,
         customer: { select: { displayName: true } },
       },
@@ -1622,7 +1754,7 @@ const salesByCustomerDetail: TableReport = {
         href: `/sales/${SALES_SLUG[document.type] ?? 'invoices'}/${document.id}`,
         cells: {
           customer: document.customer.displayName,
-          date: date(document.date),
+          date: recorded(document.createdAt),
           type: document.type === 'SALES_RECEIPT' ? 'Sales receipt' : document.type === 'CREDIT_MEMO' ? 'Credit memo' : document.type === 'REFUND_RECEIPT' ? 'Refund' : 'Invoice',
           number: document.number,
           amount: money(signed),
@@ -1633,7 +1765,7 @@ const salesByCustomerDetail: TableReport = {
     return {
       columns: [
         { key: 'customer', label: 'Customer' },
-        { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+        { key: 'date', label: 'Date', format: 'datetime', width: 'w-44' },
         { key: 'type', label: 'Type', width: 'w-36' },
         { key: 'number', label: 'No.', width: 'w-28' },
         { key: 'amount', label: 'Amount', format: 'money', width: 'w-32' },

@@ -12,14 +12,18 @@ export function readRegisterForm(formData: FormData) {
     const value = formData.get(key)
     return typeof value === 'string' ? value.trim() : ''
   }
-  const paymentMethodIds = [
+  const ids = (key: string) => [
     ...new Set(
       formData
-        .getAll('paymentMethodIds')
+        .getAll(key)
         .map((value) => (typeof value === 'string' ? value.trim() : ''))
         .filter(Boolean),
     ),
   ]
+  const paymentMethodIds = ids('paymentMethodIds')
+  // Absent on a caller that predates the setting. Present (even with nothing
+  // checked) means the till named exactly which accounts may return change.
+  const changeConfigured = formData.get('changeReturnConfigured') === 'true'
   return {
     id: text('id'),
     name: text('name'),
@@ -27,5 +31,10 @@ export function readRegisterForm(formData: FormData) {
     storeId: text('storeId'),
     paymentMethodIds,
     isActive: formData.get('isActive') === 'true',
+    // Blank on edit means "keep the current PIN". Never echo a stored PIN back.
+    pin: text('pin'),
+    allowWalletChangeReturn: formData.get('allowWalletChangeReturn') === 'true',
+    defaultChangeMethodId: text('defaultChangeMethodId'),
+    changeMethodIds: changeConfigured ? ids('changeMethodIds') : undefined,
   }
 }

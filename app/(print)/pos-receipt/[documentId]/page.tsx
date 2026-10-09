@@ -45,7 +45,9 @@ export default async function PosReceiptPage({ params, searchParams }: Props) {
         taxRegistrationNumber: organization.taxRegistrationNumber,
         timeZone: organization.timeZone || 'UTC',
       }}
-      change={parseChange(query.change)}
+      change={
+        Number(receipt.change) > 0.004 ? Math.round(Number(receipt.change) * 100) / 100 : parseChange(query.change)
+      }
       autoprint={query.autoprint === '1'}
       creatorBrand={ctx.features.showCreatorBrand ? CREATOR_BRAND_NAME : null}
     />

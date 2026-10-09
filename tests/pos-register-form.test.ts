@@ -35,11 +35,16 @@ describe('readRegisterForm', () => {
       storeId: STORE,
       paymentMethodIds: [CASH, EVC],
       isActive: false,
+      pin: '',
+      allowWalletChangeReturn: false,
+      defaultChangeMethodId: '',
+      changeMethodIds: undefined,
     })
     const parsed = posRegisterSchema.parse(input)
     expect(parsed.id).toBe(REGISTER)
     expect(parsed.isActive).toBe(false)
     expect(parsed.storeId).toBe(STORE)
+    expect(parsed.pin).toBeUndefined()
   })
 
   it('reads an add (no id, office default store, active checked)', () => {
@@ -50,14 +55,66 @@ describe('readRegisterForm', () => {
         ['defaultCustomerId', CUSTOMER],
         ['storeId', ''],
         ['paymentMethodIds', CASH],
+        ['paymentMethodIds', EVC],
         ['isActive', 'true'],
+        ['changeReturnConfigured', 'true'],
+        ['changeMethodIds', CASH],
+        ['allowWalletChangeReturn', 'true'],
+        ['defaultChangeMethodId', CASH],
       ]),
     )
     const parsed = posRegisterSchema.parse(input)
     expect(parsed.id).toBeUndefined()
     expect(parsed.storeId).toBeNull()
     expect(parsed.isActive).toBe(true)
-    expect(parsed.paymentMethodIds).toEqual([CASH])
+    expect(parsed.paymentMethodIds).toEqual([CASH, EVC])
+    expect(parsed.pin).toBeUndefined()
+    expect(parsed.allowWalletChangeReturn).toBe(true)
+    expect(parsed.defaultChangeMethodId).toBe(CASH)
+    expect(parsed.changeMethodIds).toEqual([CASH])
+  })
+
+  it('accepts a letter-and-number PIN, including one longer than 4', () => {
+    const short = posRegisterSchema.parse(
+      readRegisterForm(
+        form([
+          ['name', 'New till'],
+          ['defaultCustomerId', CUSTOMER],
+          ['paymentMethodIds', CASH],
+          ['isActive', 'true'],
+          ['pin', '  Ab12  '],
+        ]),
+      ),
+    )
+    expect(short.pin).toBe('Ab12')
+
+    const longer = posRegisterSchema.parse(
+      readRegisterForm(
+        form([
+          ['name', 'New till'],
+          ['defaultCustomerId', CUSTOMER],
+          ['paymentMethodIds', CASH],
+          ['pin', 'cashier19'],
+        ]),
+      ),
+    )
+    expect(longer.pin).toBe('cashier19')
+  })
+
+  it('rejects a PIN that is too short, has symbols, or contains a space', () => {
+    for (const pin of ['abc', '12!', 'ab cd', 'a'.repeat(65)]) {
+      const result = posRegisterSchema.safeParse(
+        readRegisterForm(
+          form([
+            ['name', 'New till'],
+            ['defaultCustomerId', CUSTOMER],
+            ['paymentMethodIds', CASH],
+            ['pin', pin],
+          ]),
+        ),
+      )
+      expect(result.success, pin).toBe(false)
+    }
   })
 
   it('rejects a till without payment methods or name', () => {

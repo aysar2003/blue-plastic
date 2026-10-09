@@ -1,8 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useRef, useState, useTransition } from 'react'
 
+import { clearPosRegisterUnlock, unlockPosRegister } from '@/app/(app)/pos/actions'
+import { CashierPinPrompt } from '@/components/pos/cashier-pin-prompt'
 import { SessionOpenForm } from '@/components/pos/session-open-form'
 import { ODOO } from '@/lib/odoo-brand'
 
@@ -10,6 +13,7 @@ export type DashboardRegister = {
   id: string
   name: string
   storeName: string | null
+  hasPin: boolean
   session: {
     id: string
     dateLabel: string
@@ -30,7 +34,20 @@ export function PosDashboard({
   orgInitial: string
   initialOpenRegisterId?: string | null
 }) {
+  const router = useRouter()
   const [openingId, setOpeningId] = useState<string | null>(initialOpenRegisterId)
+  const [continuingId, setContinuingId] = useState<string | null>(null)
+  const [pinError, setPinError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+  // The list drops any previous unlock. Wait for that before storing a new one,
+  // so a slow clear cannot wipe the PIN the cashier just entered.
+  const clearUnlock = useRef<Promise<unknown>>(Promise.resolve())
+
+  useEffect(() => {
+    clearUnlock.current = clearPosRegisterUnlock(undefined)
+  }, [])
+
+  const continuing = registers.find((row) => row.id === continuingId) ?? null
 
   return (
     <div>
@@ -51,12 +68,42 @@ export function PosDashboard({
         ) : null}
       </div>
 
+      {continuing ? (
+        <div className="mb-6 max-w-md">
+          <CashierPinPrompt
+            registerName={continuing.name}
+            pending={pending}
+            error={pinError}
+            submitLabel="Continue selling"
+            onCancel={() => {
+              setContinuingId(null)
+              setPinError(null)
+            }}
+            onSubmit={(pin) => {
+              setPinError(null)
+              startTransition(async () => {
+                await clearUnlock.current
+                const result = await unlockPosRegister({ registerId: continuing.id, pin })
+                if (!result.ok) {
+                  setPinError(result.error.message)
+                  return
+                }
+                router.push(`/pos/${continuing.id}`)
+                router.refresh()
+              })
+            }}
+          />
+        </div>
+      ) : null}
+
       {openingId ? (
         <div className="mb-6 max-w-md">
           <SessionOpenForm
             registerId={openingId}
             registerName={registers.find((row) => row.id === openingId)?.name ?? 'Register'}
             currency={currency}
+            hasPin={registers.find((row) => row.id === openingId)?.hasPin ?? false}
+            beforeSubmit={() => clearUnlock.current}
           />
           <button
             type="button"
@@ -89,13 +136,28 @@ export function PosDashboard({
             <div className="mt-5 flex flex-wrap items-center gap-4">
               {register.session ? (
                 <>
-                  <Link
-                    href={`/pos/${register.id}`}
-                    className="inline-flex rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm"
-                    style={{ background: ODOO.purple }}
-                  >
-                    Continue Selling
-                  </Link>
+                  {register.hasPin ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpeningId(null)
+                        setPinError(null)
+                        setContinuingId(register.id)
+                      }}
+                      className="inline-flex rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm"
+                      style={{ background: ODOO.purple }}
+                    >
+                      Continue Selling
+                    </button>
+                  ) : (
+                    <Link
+                      href={`/pos/${register.id}`}
+                      className="inline-flex rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm"
+                      style={{ background: ODOO.purple }}
+                    >
+                      Continue Selling
+                    </Link>
+                  )}
                   <div className="text-sm text-white/55">
                     <p>Date: {register.session.dateLabel}</p>
                     <p>Opening: {register.session.openingCash}</p>
@@ -104,7 +166,11 @@ export function PosDashboard({
               ) : (
                 <button
                   type="button"
-                  onClick={() => setOpeningId(register.id)}
+                  onClick={() => {
+                    setContinuingId(null)
+                    setPinError(null)
+                    setOpeningId(register.id)
+                  }}
                   className="inline-flex rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm"
                   style={{ background: ODOO.purple }}
                 >

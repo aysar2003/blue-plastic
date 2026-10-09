@@ -114,13 +114,12 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
   }, [permissions, hidden])
   const home = pathname === '/dashboard'
   const [openKey, setOpenKey] = useState<string | null>(null)
-  const navRef = useRef<HTMLElement>(null)
-
-  // Choosing a destination navigates in place; close the flyout so it does not
-  // stay open over the new screen while the pointer is still on the chip.
-  useEffect(() => {
+  const [openPath, setOpenPath] = useState(pathname)
+  if (openPath !== pathname) {
+    setOpenPath(pathname)
     setOpenKey(null)
-  }, [pathname])
+  }
+  const navRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (!openKey) return

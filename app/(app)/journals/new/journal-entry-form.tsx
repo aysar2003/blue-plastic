@@ -1,6 +1,8 @@
 'use client'
 
 import { useActionState, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+
+import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import { PlusIcon, PrinterIcon, SaveIcon, SearchIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -155,7 +157,7 @@ export function JournalEntryForm({
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(postManualJournalForm, idleState)
-  const [number, setNumber] = useState(entryNumber)
+  const [number, setNumber] = usePropState(entryNumber)
   const [lines, setLines] = useState<Line[]>(blankLines)
   const [date, setDate] = useState(today)
   const [memo, setMemo] = useState('')
@@ -166,8 +168,6 @@ export function JournalEntryForm({
   const attempt = useRef(0)
   const handledAttempt = useRef(0)
   const afterSave = useRef<'close' | 'new'>('close')
-
-  useEffect(() => setNumber(entryNumber), [entryNumber])
 
   useEffect(() => {
     if (state.status === 'success' && handledAttempt.current !== attempt.current) {

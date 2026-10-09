@@ -42,7 +42,9 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
   const listRef = React.useRef<HTMLDivElement>(null)
   const openRef = React.useRef(open)
   const sequenceRef = React.useRef<string | null>(null)
-  openRef.current = open
+  React.useLayoutEffect(() => {
+    openRef.current = open
+  }, [open])
 
   const allowed = React.useMemo(() => new Set(permissions), [permissions])
 
@@ -88,12 +90,11 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
     return [...creates, ...navigation]
   }, [allowed])
 
+  const needle = query.trim()
+  if (needle.length < 2 && remote.length > 0) setRemote([])
+
   React.useEffect(() => {
-    const needle = query.trim()
-    if (needle.length < 2) {
-      setRemote([])
-      return
-    }
+    if (needle.length < 2) return
     const handle = window.setTimeout(() => {
       void fetch(`/api/search?q=${encodeURIComponent(needle)}`)
         .then((response) => (response.ok ? response.json() : { hits: [] }))
@@ -110,7 +111,7 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
         .catch(() => setRemote([]))
     }, 180)
     return () => window.clearTimeout(handle)
-  }, [query])
+  }, [needle])
 
   const filtered = React.useMemo(() => {
     const needle = query.trim().toLowerCase()

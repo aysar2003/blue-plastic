@@ -1,6 +1,15 @@
 import { z } from 'zod'
 
+import { CASHIER_PIN_MAX, CASHIER_PIN_MESSAGE, isCashierPin } from '@/lib/pos-pin'
 import { calculatedDecimal, cuid, moneyString, optionalText, requiredText } from './common'
+
+/** Blank means "no change" on edit and "no PIN yet" on create. */
+const cashierPin = z
+  .string()
+  .trim()
+  .max(CASHIER_PIN_MAX, `PIN must be ${CASHIER_PIN_MAX} characters or fewer`)
+  .refine((value) => value === '' || isCashierPin(value), CASHIER_PIN_MESSAGE)
+  .transform((value) => (value === '' ? undefined : value))
 
 const posLine = z.object({
   itemId: cuid,
@@ -17,8 +26,13 @@ const posLine = z.object({
 
 const posPayment = z.object({
   paymentMethodId: cuid,
-  amount: moneyString,
+  amount: moneyString.refine((value) => Number(value) > 0, 'Each payment must be a positive amount.'),
 })
+
+const optionalMethodId = z
+  .union([cuid, z.literal('')])
+  .transform((value) => (value === '' ? undefined : value))
+  .optional()
 
 export const posCheckoutSchema = z.object({
   registerId: cuid,
@@ -26,12 +40,26 @@ export const posCheckoutSchema = z.object({
   customerId: cuid.optional(),
   note: optionalText(500),
   lines: z.array(posLine).min(1, 'Add at least one product').max(100),
+  /** Gross tendered. Cash may be more than the sale; the difference is change. */
   payments: z.array(posPayment).min(1, 'Choose at least one payment method'),
+  /** Required when the tender is more than the sale. Ignored on an exact tender. */
+  changeMethodId: optionalMethodId,
 })
 
 export const posOpenSessionSchema = z.object({
   registerId: cuid,
   openingCash: moneyString,
+  pin: z
+    .string()
+    .trim()
+    .max(CASHIER_PIN_MAX)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+})
+
+export const posUnlockSchema = z.object({
+  registerId: cuid,
+  pin: z.string().trim().min(1, 'Enter the PIN.').max(CASHIER_PIN_MAX),
 })
 
 export const posCloseSessionSchema = z.object({
@@ -61,6 +89,8 @@ export const posPaymentMethodSchema = z.object({
   name: requiredText('Name', 80),
   ledgerAccountId: cuid,
   isActive: z.coerce.boolean().default(true),
+  /** Cashiers may hand change back from this method's account. */
+  allowsChangeReturn: z.boolean().default(true),
   sortOrder: z.coerce.number().int().min(0).max(999).default(0),
 })
 
@@ -78,10 +108,24 @@ export const posRegisterSchema = z.object({
   defaultCustomerId: cuid,
   paymentMethodIds: z.array(cuid).min(1, 'Pick at least one payment method for this register'),
   isActive: z.coerce.boolean().default(true),
+  pin: cashierPin,
+  /** Null means the till opens on its cash method. */
+  defaultChangeMethodId: z
+    .union([cuid, z.literal('')])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+  allowWalletChangeReturn: z.boolean().default(true),
+  /**
+   * Methods on this till that may return change. Omitted means every method on
+   * the till may — that is how a till saved before this setting behaves.
+   */
+  changeMethodIds: z.array(cuid).optional(),
 })
 
 export type PosCheckoutInput = z.infer<typeof posCheckoutSchema>
 export type PosOpenSessionInput = z.infer<typeof posOpenSessionSchema>
+export type PosUnlockInput = z.infer<typeof posUnlockSchema>
 export type PosCloseSessionInput = z.infer<typeof posCloseSessionSchema>
 export type PosCashMoveInput = z.infer<typeof posCashMoveSchema>
 export type PosRefundInput = z.infer<typeof posRefundSchema>

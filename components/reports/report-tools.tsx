@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import { usePathname } from 'next/navigation'
 import { Columns3Icon, SearchIcon } from 'lucide-react'
 
@@ -23,35 +25,38 @@ const TEMPLATES: { id: ReportTemplate; label: string }[] = [
  * Every row of the report can be found, and every column can be hidden or shown.
  * The hidden columns are remembered per report on this browser.
  */
+function parseList(raw: string | null): string[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 export function ReportTools() {
   const pathname = usePathname()
   const [query, setQuery] = useState('')
+  const [path, setPath] = useState(pathname)
+  if (path !== pathname) {
+    setPath(pathname)
+    setQuery('')
+  }
   const [headers, setHeaders] = useState<string[]>([])
   const [splits, setSplits] = useState<string[]>([])
-  const [hidden, setHidden] = useState<string[]>([])
-  const [shownSplits, setShownSplits] = useState<string[] | null>(null)
+  const hiddenRaw = useBrowserStore(storageKey(pathname))
+  const splitRaw = useBrowserStore(splitKey(pathname))
+  const savedTemplate = useBrowserStore(templateKey)
+  const hidden = useMemo(() => parseList(hiddenRaw), [hiddenRaw])
+  // No saved choice means every split account is on. A stored list, even an
+  // empty one, is a choice the person already made.
+  const shownSplits = useMemo(() => (splitRaw === null ? null : parseList(splitRaw)), [splitRaw])
   const [match, setMatch] = useState<{ shown: number; total: number } | null>(null)
-  const [template, setTemplate] = useState<ReportTemplate>('standard')
-
-  useEffect(() => {
-    setQuery('')
-    try {
-      const stored = window.localStorage.getItem(storageKey(pathname))
-      setHidden(stored ? (JSON.parse(stored) as string[]) : [])
-    } catch {
-      setHidden([])
-    }
-    try {
-      const stored = window.localStorage.getItem(splitKey(pathname))
-      // No saved choice means every split account is on. An empty list is a
-      // choice: the person turned them all off.
-      setShownSplits(stored === null ? null : (JSON.parse(stored) as string[]))
-    } catch {
-      setShownSplits(null)
-    }
-    const saved = window.localStorage.getItem(templateKey)
-    setTemplate(saved === 'compact' || saved === 'plain' || saved === 'standard' ? saved : 'standard')
-  }, [pathname])
+  const template: ReportTemplate =
+    savedTemplate === 'compact' || savedTemplate === 'plain' || savedTemplate === 'standard'
+      ? savedTemplate
+      : 'standard'
 
   useEffect(() => {
     const root = document.querySelector('[data-report-root]')
@@ -126,8 +131,8 @@ export function ReportTools() {
         const keep = !needle || text.includes(needle)
         ;(row as HTMLElement).hidden = !keep
         if (band) {
-          const splits = [...band.querySelectorAll<HTMLElement>('[data-split-account]')]
-          const splitsOff = splits.length > 0 && splits.every((item) => item.hidden)
+          const bandSplits = [...band.querySelectorAll<HTMLElement>('[data-split-account]')]
+          const splitsOff = bandSplits.length > 0 && bandSplits.every((item) => item.hidden)
           band.hidden = !keep || splitsOff
         }
         if (keep) shown += 1
@@ -151,22 +156,16 @@ export function ReportTools() {
   if (headers.length === 0 && splits.length === 0) return null
 
   const toggle = (label: string) => {
-    setHidden((current) => {
-      const next = current.includes(label) ? current.filter((item) => item !== label) : [...current, label]
-      const visible = headers.filter((header) => !next.includes(header))
-      const safe = visible.length === 0 ? current : next
-      window.localStorage.setItem(storageKey(pathname), JSON.stringify(safe))
-      return safe
-    })
+    const next = hidden.includes(label) ? hidden.filter((item) => item !== label) : [...hidden, label]
+    const visible = headers.filter((header) => !next.includes(header))
+    const safe = visible.length === 0 ? hidden : next
+    writeBrowserStore(storageKey(pathname), JSON.stringify(safe))
   }
 
   const toggleSplit = (label: string) => {
-    setShownSplits((current) => {
-      const base = current ?? splits
-      const next = base.includes(label) ? base.filter((item) => item !== label) : [...base, label]
-      window.localStorage.setItem(splitKey(pathname), JSON.stringify(next))
-      return next
-    })
+    const base = shownSplits ?? splits
+    const next = base.includes(label) ? base.filter((item) => item !== label) : [...base, label]
+    writeBrowserStore(splitKey(pathname), JSON.stringify(next))
   }
 
   return (
@@ -193,10 +192,7 @@ export function ReportTools() {
             key={item.id}
             type="button"
             aria-pressed={template === item.id}
-            onClick={() => {
-              setTemplate(item.id)
-              window.localStorage.setItem(templateKey, item.id)
-            }}
+            onClick={() => writeBrowserStore(templateKey, item.id)}
             className={`rounded-md px-2.5 py-1 text-sm ${
               template === item.id ? 'bg-secondary font-medium' : 'text-muted-foreground hover:text-foreground'
             }`}

@@ -1223,10 +1223,22 @@ html.odoo-dark .app-glyph-tile,
   word-break: normal;
 }
 
-[data-slot='table'] :is(th, td) :where(a, span, button, label) {
+[data-slot='table'] :is(th, td):not(.numeric) :where(a, span, button, label) {
   max-width: 100%;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* Amounts stay on one line. The column is given enough of the page for that. */
+[data-slot='table'] td.numeric {
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: nowrap;
+}
+
+[data-slot='table'] td.numeric :where(a, span) {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 /* A sheet or report that used to scroll sideways now clips to the page.

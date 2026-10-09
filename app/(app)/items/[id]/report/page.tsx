@@ -83,7 +83,7 @@ export default async function ItemQuickReportPage({
   const canEdit = ctx.permissions.has('item:update')
 
   const columns: ReportColumn[] = [
-    { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+    { key: 'date', label: 'Date', format: 'datetime', width: 'w-44' },
     { key: 'type', label: 'Type', width: 'w-36' },
     { key: 'number', label: 'No.', width: 'w-28' },
     { key: 'ticketNumber', label: 'Ticket', width: 'w-28' },
@@ -106,7 +106,7 @@ export default async function ItemQuickReportPage({
         href: row.href,
         cellHrefs: Object.keys(cellHrefs).length > 0 ? cellHrefs : undefined,
         cells: {
-          date: row.date,
+          date: row.recordedAt ?? row.date,
           type: row.type,
           number: row.number || null,
           ticketNumber: row.ticketNumber || null,
@@ -228,7 +228,12 @@ export default async function ItemQuickReportPage({
         </div>
       </div>
 
-      <ReportTable table={table} currency={currency} />
+      <ReportTable
+        table={table}
+        currency={currency}
+        timeZone={ctx.organization.timeZone}
+        storageKey={`bp-item-activity-${id}`}
+      />
     </>
   )
 }

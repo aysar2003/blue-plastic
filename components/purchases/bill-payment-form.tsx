@@ -1,6 +1,8 @@
 'use client'
 
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+
+import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import { AlertTriangleIcon, TicketPercentIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -90,7 +92,7 @@ export function BillPaymentForm({
   const router = useRouter()
   const [state, formAction] = useActionState(saveBillPaymentForm, idleState)
 
-  const [number, setNumber] = useState(documentNumber)
+  const [number, setNumber] = usePropState(documentNumber)
   const [vendorId, setVendorId] = useState(initialVendorId ?? '')
   const [date, setDate] = useState(today)
   const [method, setMethod] = useState('BANK_TRANSFER')
@@ -104,8 +106,6 @@ export function BillPaymentForm({
   const [isLoading, startLoading] = useTransition()
   const [isApplyingCredit, startCreditApply] = useTransition()
   const handled = useRef(false)
-
-  useEffect(() => setNumber(documentNumber), [documentNumber])
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
