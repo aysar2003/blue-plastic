@@ -28,12 +28,14 @@ import {
 } from 'lucide-react'
 
 import { closePosSession, posCheckout, posRefund, recordPosCashMove } from '@/app/(app)/pos/actions'
+import { PosPaymentForm } from '@/components/pos/payment-dialog'
 import { RegisterLock, useClientReady, useRegisterLocked, writeRegisterLocked } from '@/components/pos/register-lock'
 import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { ODOO } from '@/lib/odoo-brand'
+import { minorUnits, formatMoney } from '@/lib/money'
 import { chooseLineStore } from '@/lib/pos-line-store'
+import { clampPaymentDraft, exactRemainingAmount, settlePosPayments } from '@/lib/pos-payment'
 import { formatStockQty, negativeStockWarning } from '@/lib/store-stock'
-import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
 type Product = {
@@ -118,7 +120,6 @@ export function PosTerminal(props: {
   const [dark, setDark] = useState(true)
   const [payOpen, setPayOpen] = useState(false)
   const [amounts, setAmounts] = useState<Record<string, string>>({})
-  const [cashTendered, setCashTendered] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [lastReceiptId, setLastReceiptId] = useState<string | null>(null)
@@ -265,106 +266,65 @@ export function PosTerminal(props: {
     setToast('Order cancelled')
   }
 
+  const paymentDecimals = minorUnits(props.currency)
+  const settlement = useMemo(
+    () =>
+      settlePosPayments({
+        due: subtotal,
+        methods: props.register.paymentMethods,
+        amounts,
+        decimals: paymentDecimals,
+      }),
+    [amounts, paymentDecimals, props.register.paymentMethods, subtotal],
+  )
+
   function openPay() {
     if (cart.length === 0) return
-    const first = props.register.paymentMethods[0]
-    const defaults: Record<string, string> = {}
-    if (cashMethod) {
-      defaults[cashMethod.id] = subtotal.toFixed(2)
-      setCashTendered(subtotal.toFixed(2))
-    } else if (first) {
-      defaults[first.id] = subtotal.toFixed(2)
-      setCashTendered('')
-    }
-    setAmounts(defaults)
+    // Every method starts blank, cash included. The cashier types what was paid.
+    setAmounts({})
     setError(null)
     setPayOpen(true)
   }
 
-  const nonCashPaid = useMemo(() => {
-    return props.register.paymentMethods
-      .filter((method) => !method.isCash)
-      .reduce((sum, method) => sum + (Number(amounts[method.id]) || 0), 0)
-  }, [amounts, props.register.paymentMethods])
-
-  const cashDue = Math.max(0, subtotal - nonCashPaid)
-  const tendered = Number(cashTendered) || 0
-  const changeDue = cashMethod ? Math.max(0, tendered - cashDue) : 0
-
-  const paymentSum = useMemo(() => {
-    let sum = nonCashPaid
-    if (cashMethod && cashDue > 0) sum += cashDue
-    if (!cashMethod) {
-      sum = Object.values(amounts).reduce((total, value) => total + (Number(value) || 0), 0)
-    }
-    return sum
-  }, [amounts, cashDue, cashMethod, nonCashPaid])
-
-  function fillRemaining(methodId: string) {
-    const others = Object.entries(amounts)
-      .filter(([id]) => id !== methodId)
-      .reduce((sum, [, value]) => sum + (Number(value) || 0), 0)
-    const remaining = Math.max(0, subtotal - others).toFixed(2)
-    setAmounts((prev) => ({ ...prev, [methodId]: remaining }))
-    if (cashMethod && methodId === cashMethod.id) setCashTendered(remaining)
+  function setMethodAmount(method: PaymentMethod, raw: string) {
+    const next = clampPaymentDraft({
+      due: subtotal,
+      method,
+      raw,
+      methods: props.register.paymentMethods,
+      amounts,
+      decimals: paymentDecimals,
+    })
+    if (!next) return
+    setAmounts((prev) => ({ ...prev, [method.id]: next.value }))
+    setError(next.clamped ? 'Non-cash payments cannot exceed the remaining balance.' : null)
   }
 
-  function buildCheckoutPayments():
-    | { ok: true; payments: { paymentMethodId: string; amount: string }[] }
-    | { ok: false; error: string } {
-    if (cashMethod) {
-      const payments = props.register.paymentMethods
-        .filter((method) => !method.isCash)
-        .map((method) => ({
-          paymentMethodId: method.id,
-          amount: amounts[method.id]?.trim() ?? '',
-        }))
-        .filter((payment) => payment.amount && Number(payment.amount) > 0)
-
-      if (cashDue > 0.009) {
-        if (tendered + 0.009 < cashDue) {
-          return { ok: false, error: 'Cash tendered is less than the amount due.' }
-        }
-        payments.push({ paymentMethodId: cashMethod.id, amount: cashDue.toFixed(2) })
-      }
-
-      if (payments.length === 0) {
-        return { ok: false, error: 'Enter at least one payment amount.' }
-      }
-
-      const sum = payments.reduce((total, payment) => total + Number(payment.amount), 0)
-      if (Math.abs(sum - subtotal) > 0.009) {
-        return { ok: false, error: 'Payment amounts must equal the total.' }
-      }
-      return { ok: true, payments }
-    }
-
-    const payments = props.register.paymentMethods
-      .map((method) => ({
-        paymentMethodId: method.id,
-        amount: amounts[method.id]?.trim() ?? '',
-      }))
-      .filter((payment) => payment.amount && Number(payment.amount) > 0)
-
-    if (payments.length === 0) {
-      return { ok: false, error: 'Enter at least one payment amount.' }
-    }
-    if (Math.abs(paymentSum - subtotal) > 0.009) {
-      return { ok: false, error: 'Payment amounts must equal the total.' }
-    }
-    return { ok: true, payments }
+  function fillMethod(methodId: string) {
+    const amount = exactRemainingAmount({
+      due: subtotal,
+      methodId,
+      amounts,
+      decimals: paymentDecimals,
+    })
+    setAmounts((prev) => ({ ...prev, [methodId]: amount }))
+    setError(null)
   }
 
   function completeSale() {
     setError(null)
-    const built = buildCheckoutPayments()
-    if (!built.ok) {
-      setError(built.error)
+    if (!settlement.canValidate) {
+      setError(
+        settlement.nonCashWithinBalance
+          ? 'Enter payments that cover the amount due.'
+          : 'Non-cash payments cannot exceed the remaining balance.',
+      )
       return
     }
 
     // Change is only known here; the receipt shows it on the first print.
-    const changeAtSale = changeDue
+    const changeAtSale = Number(settlement.change)
+    const payments = settlement.payments
     startTransition(async () => {
       const result = await posCheckout({
         registerId: props.register.id,
@@ -376,7 +336,7 @@ export function PosTerminal(props: {
           quantity: String(line.quantity),
           storeId: line.storeId ?? undefined,
         })),
-        payments: built.payments,
+        payments,
       })
       if (!result.ok) {
         setError(result.error.message)
@@ -386,7 +346,6 @@ export function PosTerminal(props: {
       setCart([])
       setNote('')
       setAmounts({})
-      setCashTendered('')
       setLastReceiptId(result.data.id)
       setToast(`Receipt ${result.data.number} · ${formatMoney(result.data.total, props.currency)}`)
       openReceiptPrint(result.data.id, { autoprint: true, change: changeAtSale })
@@ -1224,109 +1183,23 @@ export function PosTerminal(props: {
 
       {payOpen ? (
         <Modal title="Payment" dark={dark} onClose={() => setPayOpen(false)}>
-          <p className="text-2xl font-semibold tabular">{formatMoney(subtotal, props.currency)}</p>
-          <ul className="mt-4 space-y-3">
-            {props.register.paymentMethods.map((method) =>
-              method.isCash ? (
-                <li key={method.id} className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <label className="w-28 shrink-0 text-sm font-medium">{method.name} due</label>
-                    <input
-                      type="number"
-                      readOnly
-                      value={cashDue.toFixed(2)}
-                      className="flex-1 rounded-md border px-2 py-1.5 text-sm outline-none opacity-80"
-                      style={{ background: chip, borderColor: border, color: text }}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="w-28 shrink-0 text-sm font-medium">Tendered</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={cashTendered}
-                      onChange={(event) => {
-                        setCashTendered(event.target.value)
-                        setAmounts((prev) => ({ ...prev, [method.id]: cashDue.toFixed(2) }))
-                      }}
-                      className="flex-1 rounded-md border px-2 py-1.5 text-sm outline-none"
-                      style={{ background: chip, borderColor: border, color: text }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCashTendered(cashDue.toFixed(2))
-                        fillRemaining(method.id)
-                      }}
-                      className="text-xs"
-                      style={{ color: ODOO.teal }}
-                    >
-                      Exact
-                    </button>
-                  </div>
-                </li>
-              ) : (
-                <li key={method.id} className="flex items-center gap-2">
-                  <label className="w-28 shrink-0 text-sm font-medium">{method.name}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={amounts[method.id] ?? ''}
-                    onChange={(event) =>
-                      setAmounts((prev) => ({ ...prev, [method.id]: event.target.value }))
-                    }
-                    className="flex-1 rounded-md border px-2 py-1.5 text-sm outline-none"
-                    style={{ background: chip, borderColor: border, color: text }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fillRemaining(method.id)}
-                    className="text-xs"
-                    style={{ color: ODOO.teal }}
-                  >
-                    Remaining
-                  </button>
-                </li>
-              ),
-            )}
-          </ul>
-          {cashMethod ? (
-            <p className="mt-2 text-sm tabular" style={{ color: changeDue > 0.009 ? ODOO.teal : muted }}>
-              Change due: {formatMoney(changeDue, props.currency)}
-            </p>
-          ) : (
-            <p
-              className={cn(
-                'mt-2 text-sm',
-                Math.abs(paymentSum - subtotal) < 0.01 ? 'text-emerald-400' : 'text-red-400',
-              )}
-            >
-              Paid: {formatMoney(paymentSum, props.currency)}
-            </p>
-          )}
-          {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
-          <div className="mt-5 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setPayOpen(false)}
-              className="rounded-md border px-4 py-2 text-sm"
-              style={{ borderColor: border }}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={completeSale}
-              disabled={pending}
-              className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white"
-              style={{ background: ODOO.purple }}
-            >
-              {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
-              Validate
-            </button>
-          </div>
+          <PosPaymentForm
+            due={subtotal}
+            currency={props.currency}
+            methods={props.register.paymentMethods}
+            amounts={amounts}
+            paid={settlement.paid}
+            remaining={settlement.remaining}
+            change={settlement.change}
+            canValidate={settlement.canValidate}
+            pending={pending}
+            error={error}
+            dark={dark}
+            onAmount={setMethodAmount}
+            onFill={fillMethod}
+            onCancel={() => setPayOpen(false)}
+            onValidate={completeSale}
+          />
         </Modal>
       ) : null}
 

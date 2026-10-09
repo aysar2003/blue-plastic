@@ -41,6 +41,50 @@ describe('receipt helpers', () => {
     expect(paymentRows([], '40', 0)).toEqual({ rows: [], paid: 40, change: 0 })
   })
 
+  it('lists only methods that took money, and does not inflate cash by the whole total', () => {
+    // $54 sale. Wallets took 53 and cash took the last dollar. No change.
+    const payments = [
+      { method: 'EDAHAB 88', amount: '10.00', isCash: false },
+      { method: 'EDAHAB BLUE', amount: '20.00', isCash: false },
+      { method: 'EVC 88', amount: '15.00', isCash: false },
+      { method: 'EVC BLUE PLASTIC', amount: '8.00', isCash: false },
+      { method: 'Cash', amount: '1.00', isCash: true },
+      { method: 'MERCHANT BLUE PLASTIC', amount: '0.00', isCash: false },
+    ]
+    expect(paymentRows(payments, '54.00', 0)).toEqual({
+      rows: [
+        { label: 'EDAHAB 88', amount: 10 },
+        { label: 'EDAHAB BLUE', amount: 20 },
+        { label: 'EVC 88', amount: 15 },
+        { label: 'EVC BLUE PLASTIC', amount: 8 },
+        { label: 'Cash', amount: 1 },
+      ],
+      paid: 54,
+      change: 0,
+    })
+  })
+
+  it('shows the cash that was handed over when the customer overpays in cash', () => {
+    const payments = [
+      { method: 'EDAHAB 88', amount: '10.00', isCash: false },
+      { method: 'EDAHAB BLUE', amount: '20.00', isCash: false },
+      { method: 'EVC 88', amount: '15.00', isCash: false },
+      { method: 'EVC BLUE PLASTIC', amount: '8.00', isCash: false },
+      { method: 'Cash', amount: '1.00', isCash: true },
+    ]
+    expect(paymentRows(payments, '54.00', 4)).toEqual({
+      rows: [
+        { label: 'EDAHAB 88', amount: 10 },
+        { label: 'EDAHAB BLUE', amount: 20 },
+        { label: 'EVC 88', amount: 15 },
+        { label: 'EVC BLUE PLASTIC', amount: 8 },
+        { label: 'Cash', amount: 5 },
+      ],
+      paid: 58,
+      change: 4,
+    })
+  })
+
   it('trims quantities and converts px to mm at 96dpi', () => {
     expect(trimQty('2.0000')).toBe('2')
     expect(trimQty('1.5000')).toBe('1.5')
