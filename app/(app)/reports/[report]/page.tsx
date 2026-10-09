@@ -70,7 +70,12 @@ export default async function TableReportPage({
         controls={{ mode: definition.mode, exportAs: definition.key }}
       />
 
-      <ReportTable table={table} currency={ctx.organization.baseCurrency} />
+      <ReportTable
+        table={table}
+        currency={ctx.organization.baseCurrency}
+        timeZone={ctx.organization.timeZone}
+        storageKey={`bp-report-${definition.key}`}
+      />
     </>
   )
 }

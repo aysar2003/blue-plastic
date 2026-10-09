@@ -10,6 +10,8 @@ export type PriceView = 'both' | 'cost' | 'sales'
 
 export type ItemActivity = {
   date: CalendarDate
+  /** When the document was recorded, if this row came from one. */
+  recordedAt?: string | null
   type: string
   number: string
   /** Store issue ticket (TKT-) — shown on the sale line, not as a duplicate row. */
@@ -175,6 +177,7 @@ export async function itemActivity(
           type: true,
           number: true,
           date: true,
+          createdAt: true,
           customer: { select: { displayName: true } },
         },
       },
@@ -196,6 +199,7 @@ export async function itemActivity(
     rows.push({
       sort: `${toCalendarDate(doc.date)}-${doc.number}-${line.id}`,
       date: toCalendarDate(doc.date),
+      recordedAt: doc.createdAt.toISOString(),
       type: SALES_LABEL[doc.type] ?? doc.type,
       number: doc.number,
       ticketNumber: ticket?.number ?? null,
@@ -236,6 +240,7 @@ export async function itemActivity(
           type: true,
           number: true,
           date: true,
+          createdAt: true,
           vendor: { select: { displayName: true } },
         },
       },
@@ -248,6 +253,7 @@ export async function itemActivity(
     rows.push({
       sort: `${toCalendarDate(doc.date)}-${doc.number}-${line.id}`,
       date: toCalendarDate(doc.date),
+      recordedAt: doc.createdAt.toISOString(),
       type: PURCHASE_LABEL[doc.type] ?? doc.type,
       number: doc.number,
       ticketNumber: null,

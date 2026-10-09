@@ -12,18 +12,15 @@ import {
   isDebitNormalType,
   JOURNAL_SOURCE_LABELS,
 } from '@/lib/accounting-labels'
-import { fiscalYearOf, fiscalYearRange, formatDate, toCalendarDate, today } from '@/lib/date'
+import { fiscalYearOf, fiscalYearRange, formatDate, today } from '@/lib/date'
 import { postedLineParts } from '@/lib/ledger-text'
 import { formatMoney } from '@/lib/money'
-import { readSort } from '@/components/data/sortable-header'
 import { generalLedger } from '@/server/accounting/balances'
 import { requireOrgContext } from '@/server/auth/context'
 import * as accountService from '@/server/services/account.service'
 import { RegisterEntry } from '@/components/accounts/register-entry'
 import { resolveSources, sourceFor } from '@/server/services/journal-sources'
 import type { JournalSourceType } from '@prisma/client'
-
-const SORTABLE = ['date', 'entry', 'description', 'debit', 'credit'] as const
 
 export const metadata: Metadata = { title: 'Account' }
 
@@ -80,30 +77,10 @@ export default async function AccountRegisterPage({
     })),
   )
 
-  // The running balance column only means anything in date order, so it is shown
-  // as computed and never re-derived from a different ordering.
-  const sort = readSort(query, SORTABLE, { sort: 'date', dir: 'asc' })
-  const basePath = `/accounts/${id}`
-  const linkParams = { from, to, sort: sort.sort, dir: sort.dir }
-  const direction = sort.dir === 'asc' ? 1 : -1
-  const entries = [...ledger.entries].sort((a, b) => {
-    switch (sort.sort) {
-      case 'entry':
-        return direction * a.journalNumber.localeCompare(b.journalNumber)
-      case 'description':
-        return direction * (a.description ?? '').localeCompare(b.description ?? '')
-      case 'debit':
-        return direction * a.debit.comparedTo(b.debit)
-      case 'credit':
-        return direction * a.credit.comparedTo(b.credit)
-      default:
-        return direction * (a.date.getTime() - b.date.getTime())
-    }
-  })
+  // The running balance is computed in journal-date order. Sorting on screen
+  // reorders the rows the reader sees; it does not recompute that balance.
   const debitNormal = isDebitNormalType(account.type)
-  const balanceHeader =
-    sort.sort === 'date' && sort.dir === 'asc' ? 'Balance' : 'Balance (in date order)'
-  const registerRows = entries.map((entry) => {
+  const registerRows = ledger.entries.map((entry) => {
     const source = sourceFor(sources, {
       sourceType: entry.sourceType as JournalSourceType,
       sourceId: entry.sourceId,
@@ -120,13 +97,15 @@ export default async function AccountRegisterPage({
       : entry.vendorId
         ? `/vendors?id=${entry.vendorId}`
         : source.partyHref
+    const documentHref = source.href ?? `/journals/${entry.journalId}`
     return {
       lineId: entry.lineId,
-      journalId: entry.journalId,
       journalNumber: entry.journalNumber,
-      dateLabel: formatDate(toCalendarDate(entry.date)),
+      recordedAt: entry.recordedAt.toISOString(),
       status: entry.status,
       sourceLabel,
+      typeHref: documentHref,
+      entryHref: documentHref,
       name: parts.name,
       nameHref: nameHref ?? null,
       note: parts.note ?? null,
@@ -181,12 +160,9 @@ export default async function AccountRegisterPage({
         <RegisterTable
           accountId={account.id}
           currency={currency}
+          timeZone={timeZone}
           rows={registerRows}
           closingBalance={ledger.closing.toString()}
-          sort={sort}
-          basePath={basePath}
-          linkParams={linkParams}
-          balanceHeader={balanceHeader}
         />
       )}
     </>

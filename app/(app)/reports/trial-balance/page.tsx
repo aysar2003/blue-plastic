@@ -1,13 +1,10 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
+import { InteractiveGrid } from '@/components/data/interactive-grid'
 import { PageHeader } from '@/components/data/page-header'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
-import { ClickableRow } from '@/components/reports/clickable-row'
-import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { Card } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableFooter, TableHeader, TableRow } from '@/components/ui/table'
 import { ACCOUNT_TYPE_LABELS } from '@/lib/accounting-labels'
 import { fiscalYearOf, fiscalYearRange, formatDate, today } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
@@ -16,8 +13,6 @@ import { requireOrgContext } from '@/server/auth/context'
 import { DateRangeForm } from './date-range-form'
 
 export const metadata: Metadata = { title: 'Trial Balance' }
-
-const SORTABLE = ['code', 'name', 'type', 'debit', 'credit'] as const
 
 /**
  * The trial balance is the ledger's own self-check: if total debits do not equal
@@ -41,25 +36,6 @@ export default async function TrialBalancePage({
 
   const report = await trialBalance(ctx.orgId, { from, to })
 
-  // Sorted here: a trial balance is read in account order by default, but "which
-  // account carries the biggest balance" is the other question people ask of it.
-  const sort = readSort(query, SORTABLE, { sort: 'code', dir: 'asc' })
-  const linkParams = { from, to, sort: sort.sort, dir: sort.dir }
-  const direction = sort.dir === 'asc' ? 1 : -1
-  const rows = [...report.rows].sort((a, b) => {
-    switch (sort.sort) {
-      case 'name':
-        return direction * a.name.localeCompare(b.name)
-      case 'type':
-        return direction * a.type.localeCompare(b.type) || a.code.localeCompare(b.code)
-      case 'debit':
-        return direction * a.closingDebit.comparedTo(b.closingDebit)
-      case 'credit':
-        return direction * a.closingCredit.comparedTo(b.closingCredit)
-      default:
-        return direction * a.code.localeCompare(b.code)
-    }
-  })
   const currency = ctx.organization.baseCurrency
 
   return (
@@ -81,70 +57,50 @@ export default async function TrialBalancePage({
         <DateRangeForm from={from} to={to} />
       </div>
 
-      <Card className="overflow-hidden p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortableHeader column="code" label="Number" state={sort} basePath="/reports/trial-balance" params={linkParams} className="w-24" />
-              <SortableHeader column="name" label="Account" state={sort} basePath="/reports/trial-balance" params={linkParams} />
-              <SortableHeader column="type" label="Type" state={sort} basePath="/reports/trial-balance" params={linkParams} />
-              <SortableHeader column="debit" label="Debit" state={sort} basePath="/reports/trial-balance" params={linkParams} className="w-36" numeric defaultDirection="desc" />
-              <SortableHeader column="credit" label="Credit" state={sort} basePath="/reports/trial-balance" params={linkParams} className="w-36" numeric defaultDirection="desc" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                  Nothing has been posted in this period.
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((row) => {
-                const href = `/reports/transaction-detail?account=${row.accountId}&period=custom&from=${from}&to=${to}&back=/reports/trial-balance`
-                return (
-                <ClickableRow key={row.accountId} href={href}>
-                  <TableCell className="tabular text-muted-foreground">{row.code}</TableCell>
-                  <TableCell>
-                    <Link href={href} className="font-medium underline-offset-4 hover:underline">
-                      {row.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{ACCOUNT_TYPE_LABELS[row.type]}</TableCell>
-                  <TableCell className="numeric tabular">
-                    {row.closingDebit.isZero() ? '' : (
-                      <Link href={href} className="underline-offset-4 hover:underline">
-                        {formatMoney(row.closingDebit, currency)}
-                      </Link>
-                    )}
-                  </TableCell>
-                  <TableCell className="numeric tabular">
-                    {row.closingCredit.isZero() ? '' : (
-                      <Link href={href} className="underline-offset-4 hover:underline">
-                        {formatMoney(row.closingCredit, currency)}
-                      </Link>
-                    )}
-                  </TableCell>
-                </ClickableRow>
-                )
-              })
-            )}
-          </TableBody>
-          <TableFooter>
-            <TableRow>
-              <TableCell colSpan={3} className="font-semibold">
-                Totals
-              </TableCell>
-              <TableCell className="numeric tabular font-semibold">
-                {formatMoney(report.totalDebit, currency)}
-              </TableCell>
-              <TableCell className="numeric tabular font-semibold">
-                {formatMoney(report.totalCredit, currency)}
-              </TableCell>
-            </TableRow>
-          </TableFooter>
-        </Table>
+      {report.rows.length === 0 ? (
+        <div className="rounded-md border bg-card p-10 text-center text-sm text-muted-foreground">
+          Nothing has been posted in this period.
+        </div>
+      ) : (
+        <InteractiveGrid
+          storageKey="bp-trial-balance"
+          currency={currency}
+          customizable
+          showTotal={false}
+          columns={[
+            { id: 'code', label: 'Number', defaultWidth: 112 },
+            { id: 'name', label: 'Account', defaultWidth: 240 },
+            { id: 'type', label: 'Type', defaultWidth: 160 },
+            { id: 'debit', label: 'Debit', kind: 'money', total: true, defaultWidth: 140 },
+            { id: 'credit', label: 'Credit', kind: 'money', total: true, defaultWidth: 140 },
+          ]}
+          rows={report.rows.map((row) => {
+            const href = `/reports/transaction-detail?account=${row.accountId}&period=custom&from=${from}&to=${to}&back=/reports/trial-balance`
+            return {
+              id: row.accountId,
+              cells: {
+                code: { value: row.code, href },
+                name: { value: row.name, href },
+                type: { value: ACCOUNT_TYPE_LABELS[row.type], href },
+                debit: { value: row.closingDebit.isZero() ? null : row.closingDebit.toString(), href },
+                credit: { value: row.closingCredit.isZero() ? null : row.closingCredit.toString(), href },
+              },
+            }
+          })}
+          footers={[
+            {
+              id: 'totals',
+              label: 'Total',
+              cells: {
+                debit: { value: report.totalDebit.toString() },
+                credit: { value: report.totalCredit.toString() },
+              },
+            },
+          ]}
+        />
+      )}
 
+      <Card className="mt-4 overflow-hidden p-0">
         <div
           className={`flex items-center gap-2 border-t px-3 py-2.5 text-sm ${
             report.balanced ? 'text-success' : 'text-destructive'

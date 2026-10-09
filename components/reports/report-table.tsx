@@ -1,25 +1,30 @@
-import Link from 'next/link'
+'use client'
 
-import { ClickableRow } from '@/components/reports/clickable-row'
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatDate, isCalendarDate } from '@/lib/date'
-import { formatMoney, formatSignedQuantity } from '@/lib/money'
-import { cn } from '@/lib/utils'
+import { InteractiveGrid, type InteractiveColumn, type InteractiveRow } from '@/components/data/interactive-grid'
 import type { ReportColumn, ReportTable as ReportTableData } from '@/server/reports/catalogue'
 
 /**
  * The renderer every table report shares.
  *
- * A server component: there is nothing interactive on a report except the
- * drill-down links, and shipping the figures as HTML rather than as JSON plus a
- * renderer is what makes these pages open at once.
- *
- * Money is right-aligned and tabular, dates are formatted the way the rest of
- * the application formats them, and a row with a `href` is clickable across its
- * whole width — because on a report the question after every number is "what is
- * that made of?".
+ * Columns can be sorted, dragged into a new order, and resized. The layout is
+ * remembered in this browser. A row still drills into the document behind it,
+ * and Type, Entry, and Document open that document directly.
  */
-export function ReportTable({ table, currency }: { table: ReportTableData; currency: string }) {
+const LINK_KEYS = new Set(['type', 'entry', 'document', 'number', 'no', 'source'])
+
+const SKIP_TOTAL = /^(balance|price|cost|salesprice|reorderpoint|rate|percent|share|averagecost)$/i
+
+export function ReportTable({
+  table,
+  currency,
+  timeZone = 'UTC',
+  storageKey,
+}: {
+  table: ReportTableData
+  currency: string
+  timeZone?: string
+  storageKey?: string
+}) {
   if (table.rows.length === 0) {
     return (
       <div className="rounded-md border bg-card p-10 text-center text-sm text-muted-foreground">
@@ -28,97 +33,75 @@ export function ReportTable({ table, currency }: { table: ReportTableData; curre
     )
   }
 
+  const lead = table.columns[0]?.key
+  const columns: InteractiveColumn[] = table.columns.map((column) => ({
+    id: column.key,
+    label: column.label,
+    kind: column.kind ?? kindOf(column),
+    total: column.total ?? (isNumeric(column) && !SKIP_TOTAL.test(column.key)),
+    defaultWidth: widthOf(column),
+  }))
+
+  const rows: InteractiveRow[] = table.rows.map((row, index) => ({
+    id: `${index}`,
+    emphasis: row.emphasis,
+    excludeFromTotal: row.emphasis,
+    className: row.emphasis ? 'bg-muted/40' : undefined,
+    cells: Object.fromEntries(
+      table.columns.map((column) => {
+        const value = row.cells[column.key] ?? null
+        const href =
+          row.cellHrefs?.[column.key] ??
+          (row.href && (column.key === lead || isNumeric(column) || LINK_KEYS.has(column.key)) ? row.href : null)
+        return [column.key, { value, href }]
+      }),
+    ),
+  }))
+
+  const explicit = table.totals
+    ? [
+        {
+          id: 'totals',
+          cells: Object.fromEntries(
+            table.columns.map((column) => [column.key, { value: table.totals?.[column.key] ?? null }]),
+          ),
+        },
+      ]
+    : []
+
+  const grouped = table.rows.some((row) => row.emphasis)
+
   return (
-    <>
-      <div className="overflow-hidden rounded-md border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {table.columns.map((column) => (
-                <TableHead
-                  key={column.key}
-                  className={cn(column.width, isNumeric(column) && 'numeric')}
-                >
-                  {column.label}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-
-          <TableBody>
-            {table.rows.map((row, index) => (
-              <ClickableRow key={index} href={row.href ?? undefined} className={row.emphasis ? 'bg-muted/40' : undefined}>
-                {table.columns.map((column, columnIndex) => {
-                  const value = format(row.cells[column.key] ?? null, column, currency)
-                  const cellHref = row.cellHrefs?.[column.key]
-                  const linked =
-                    Boolean(cellHref) ||
-                    (Boolean(row.href) && (columnIndex === 0 || column.format === 'money'))
-
-                  return (
-                    <TableCell
-                      key={column.key}
-                      className={cn(
-                        isNumeric(column) && 'numeric tabular',
-                        column.format === 'date' && 'tabular whitespace-nowrap',
-                        row.emphasis && 'font-medium',
-                      )}
-                    >
-                      {linked ? (
-                        <Link
-                          href={cellHref ?? row.href!}
-                          className="underline-offset-4 hover:underline"
-                        >
-                          {value}
-                        </Link>
-                      ) : (
-                        value
-                      )}
-                    </TableCell>
-                  )
-                })}
-              </ClickableRow>
-            ))}
-          </TableBody>
-
-          {table.totals ? (
-            <TableFooter>
-              <TableRow>
-                {table.columns.map((column) => (
-                  <TableCell
-                    key={column.key}
-                    className={cn('font-semibold', isNumeric(column) && 'numeric tabular')}
-                  >
-                    {format(table.totals?.[column.key] ?? null, column, currency)}
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableFooter>
-          ) : null}
-        </Table>
-      </div>
-
-      {table.note ? <p className="mt-3 text-xs text-muted-foreground">{table.note}</p> : null}
-    </>
+    <InteractiveGrid
+      storageKey={storageKey ?? `bp-report-${table.columns.map((column) => column.key).join('.')}`}
+      columns={columns}
+      rows={rows}
+      currency={currency}
+      timeZone={timeZone}
+      showTotal={!table.totals && !grouped}
+      customizable
+      footers={explicit}
+      note={table.note}
+    />
   )
 }
 
-const isNumeric = (column: ReportColumn) =>
-  column.format === 'money' || column.format === 'number' || column.format === 'signed'
+function kindOf(column: ReportColumn): InteractiveColumn['kind'] {
+  if (column.format === 'money') return 'money'
+  if (column.format === 'number') return 'number'
+  if (column.format === 'signed') return 'signed'
+  if (column.format === 'datetime') return 'datetime'
+  if (column.format === 'date') return 'date'
+  return 'text'
+}
 
-function format(value: string | null, column: ReportColumn, currency: string): React.ReactNode {
-  if (value === null || value === '') return <span className="text-muted-foreground">—</span>
+function isNumeric(column: ReportColumn) {
+  return column.format === 'money' || column.format === 'number' || column.format === 'signed'
+}
 
-  // A totals row puts a label in the first column, which is not a figure. Only
-  // something that parses as one is formatted as one.
-  if (column.format === 'money' && /^-?\d+(\.\d+)?$/.test(value)) {
-    return formatMoney(value, currency)
-  }
-  if (column.format === 'signed' && /^-?\d+(\.\d+)?$/.test(value)) {
-    return formatSignedQuantity(value)
-  }
-  if (column.format === 'date' && isCalendarDate(value)) {
-    return formatDate(value)
-  }
-  return value
+function widthOf(column: ReportColumn) {
+  if (column.format === 'datetime') return 188
+  const match = column.width?.match(/w-(\d+)/)
+  if (match) return Number(match[1]) * 4
+  return kindOf(column) === 'text' ? 180 : 128
 }
