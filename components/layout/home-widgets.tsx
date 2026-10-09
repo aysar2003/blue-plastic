@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useMemo } from 'react'
+
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import Link from 'next/link'
 
 const KEY = 'bp-home-widgets'
@@ -22,26 +24,22 @@ export function HomeWidgets({
   banks: { id: string; name: string; balance: string }[]
   period: string
 }) {
-  const [shown, setShown] = useState<Key[]>([...ALL])
-
-  useEffect(() => {
-    const stored = window.localStorage.getItem(KEY)
-    if (!stored) return
+  const stored = useBrowserStore(KEY)
+  const shown = useMemo(() => {
+    if (!stored) return [...ALL]
     try {
       const parsed = JSON.parse(stored) as Key[]
-      if (Array.isArray(parsed) && parsed.length > 0) setShown(parsed)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
     } catch {
       /* keep the defaults */
     }
-  }, [])
+    return [...ALL]
+  }, [stored])
 
   function toggle(key: Key) {
-    setShown((current) => {
-      const next = current.includes(key) ? current.filter((item) => item !== key) : [...current, key]
-      const value = next.length === 0 ? [...ALL] : next
-      window.localStorage.setItem(KEY, JSON.stringify(value))
-      return value
-    })
+    const next = shown.includes(key) ? shown.filter((item) => item !== key) : [...shown, key]
+    const value = next.length === 0 ? [...ALL] : next
+    writeBrowserStore(KEY, JSON.stringify(value))
   }
 
   return (

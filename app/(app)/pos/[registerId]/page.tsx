@@ -42,10 +42,13 @@ export default async function PosRegisterPage({ params }: Props) {
       register={{
         id: register.id,
         name: register.name,
+        defaultChangeMethodId: register.defaultChangeMethodId,
+        allowWalletChangeReturn: register.allowWalletChangeReturn,
         paymentMethods: register.paymentMethods.map((method) => ({
           id: method.id,
           name: method.name,
           isCash: method.isCash,
+          allowsChangeReturn: method.allowsChangeReturn,
         })),
       }}
       session={{

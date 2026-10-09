@@ -30,6 +30,7 @@ export default async function PosSessionsPage() {
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Opening</th>
               <th className="px-4 py-3 font-medium">Closing</th>
+              <th className="px-4 py-3 font-medium">Change returned</th>
               <th className="px-4 py-3 font-medium text-right">Orders</th>
             </tr>
           </thead>
@@ -59,12 +60,21 @@ export default async function PosSessionsPage() {
                 </td>
                 <td className="px-4 py-2.5 tabular">{session.openingCash}</td>
                 <td className="px-4 py-2.5 tabular text-white/70">{session.closingCash ?? '—'}</td>
+                <td className="px-4 py-2.5 text-white/65">
+                  {session.changeLabel ?? '—'}
+                  {session.netByAccount.length > 0 ? (
+                    <span className="mt-0.5 block text-xs text-white/40">
+                      Net{' '}
+                      {session.netByAccount.map((account) => `${account.name} ${account.net}`).join(' · ')}
+                    </span>
+                  ) : null}
+                </td>
                 <td className="px-4 py-2.5 text-right tabular">{session.orderCount}</td>
               </tr>
             ))}
             {sessions.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-white/45">
+                <td colSpan={7} className="px-4 py-10 text-center text-white/45">
                   No sessions yet. Open a register from the dashboard.
                 </td>
               </tr>

@@ -21,6 +21,7 @@ export default async function PosOrdersPage({
     <PosOrdersReport
       orders={report.orders}
       summary={report.summary}
+      totals={report.totals}
       registers={report.registers}
       methods={report.methods}
       query={query}

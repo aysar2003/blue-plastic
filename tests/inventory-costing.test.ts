@@ -138,15 +138,24 @@ suite('weighted-average costing', () => {
   it('refuses to sell stock that is not there', async () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)
+      // New organisations allow negative stock. This case is the books that still refuse it.
+      await tx.organization.update({
+        where: { id: fixture.ctx.orgId },
+        data: { allowNegativeStock: false },
+      })
+      const ctx = {
+        ...fixture.ctx,
+        organization: { ...fixture.ctx.organization, allowNegativeStock: false },
+      }
       const item = await makeTrackedItem(tx, fixture)
 
-      await recordMovement(tx, fixture.ctx, {
+      await recordMovement(tx, ctx, {
         itemId: item.id, date: '2026-03-01', type: 'PURCHASE', sourceType: 'BILL',
         quantity: '5', unitCost: '10',
       })
 
       await expect(
-        recordMovement(tx, fixture.ctx, {
+        recordMovement(tx, ctx, {
           itemId: item.id, date: '2026-03-02', type: 'SALE', sourceType: 'INVOICE', quantity: '-6',
         }),
       ).rejects.toThrow(/in stock and this needs/i)

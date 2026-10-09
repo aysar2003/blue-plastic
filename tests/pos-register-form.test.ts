@@ -36,6 +36,9 @@ describe('readRegisterForm', () => {
       paymentMethodIds: [CASH, EVC],
       isActive: false,
       pin: '',
+      allowWalletChangeReturn: false,
+      defaultChangeMethodId: '',
+      changeMethodIds: undefined,
     })
     const parsed = posRegisterSchema.parse(input)
     expect(parsed.id).toBe(REGISTER)
@@ -52,15 +55,23 @@ describe('readRegisterForm', () => {
         ['defaultCustomerId', CUSTOMER],
         ['storeId', ''],
         ['paymentMethodIds', CASH],
+        ['paymentMethodIds', EVC],
         ['isActive', 'true'],
+        ['changeReturnConfigured', 'true'],
+        ['changeMethodIds', CASH],
+        ['allowWalletChangeReturn', 'true'],
+        ['defaultChangeMethodId', CASH],
       ]),
     )
     const parsed = posRegisterSchema.parse(input)
     expect(parsed.id).toBeUndefined()
     expect(parsed.storeId).toBeNull()
     expect(parsed.isActive).toBe(true)
-    expect(parsed.paymentMethodIds).toEqual([CASH])
+    expect(parsed.paymentMethodIds).toEqual([CASH, EVC])
     expect(parsed.pin).toBeUndefined()
+    expect(parsed.allowWalletChangeReturn).toBe(true)
+    expect(parsed.defaultChangeMethodId).toBe(CASH)
+    expect(parsed.changeMethodIds).toEqual([CASH])
   })
 
   it('accepts a letter-and-number PIN, including one longer than 4', () => {

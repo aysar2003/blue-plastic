@@ -2,7 +2,19 @@ import 'server-only'
 
 import { Decimal, formatMoney, toMoneyString, ZERO } from '@/lib/money'
 import { formatDateTime, formatTransactionDate, today, toCalendarDate, toDate } from '@/lib/date'
-import { posOrderListLimit, summarizePosWallets, type PosOrderListFilters } from '@/lib/pos-order-report'
+import {
+  accountTenderTotals,
+  drawerCashMovement,
+  resolvePosTender,
+  type PosSaleTender,
+} from '@/lib/pos-change'
+import { isCashMethodName } from '@/lib/pos-payment'
+import {
+  posOrderListLimit,
+  summarizePosWallets,
+  type PosOrderListFilters,
+  type PosOrderSummaryPayment,
+} from '@/lib/pos-order-report'
 import { chooseLineStore } from '@/lib/pos-line-store'
 import { CASHIER_PIN_REQUIRED, CASHIER_PIN_WRONG } from '@/lib/pos-pin'
 import { receiptCashierName } from '@/lib/pos-receipt'
@@ -200,23 +212,79 @@ export async function listSessions(ctx: OrgContext, limit = 50) {
       closingCash: true,
       register: { select: { id: true, name: true } },
       _count: { select: { orders: true } },
+      orders: {
+        select: {
+          salesDocument: { select: { type: true } },
+          changeAmount: true,
+          changePaymentMethodId: true,
+          changeLedgerAccountId: true,
+          changePaymentMethod: { select: { name: true } },
+          payments: {
+            select: {
+              amount: true,
+              ledgerAccountId: true,
+              paymentMethod: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
     },
     orderBy: { openedAt: 'desc' },
     take: limit,
   })
 
-  return rows.map((row) => ({
-    id: row.id,
-    status: row.status,
-    registerId: row.register.id,
-    registerName: row.register.name,
-    openedAt: row.openedAt,
-    closedAt: row.closedAt,
-    dateLabel: formatDateTime(row.openedAt, ctx.organization.timeZone),
-    openingCash: formatMoney(row.openingCash, currency),
-    closingCash: row.closingCash ? formatMoney(row.closingCash, currency) : null,
-    orderCount: row._count.orders,
-  }))
+  return rows.map((row) => {
+    const totals = accountTenderTotals(
+      row.orders.map((order) => tenderFromOrder(order, order.salesDocument.type === 'REFUND_RECEIPT')),
+    )
+    const changeLabel =
+      totals
+        .filter((total) => Number(total.change) > 0)
+        .map((total) => `${total.methodName} ${formatMoney(total.change, currency)}`)
+        .join(' · ') || null
+    return {
+      id: row.id,
+      status: row.status,
+      registerId: row.register.id,
+      registerName: row.register.name,
+      openedAt: row.openedAt,
+      closedAt: row.closedAt,
+      dateLabel: formatDateTime(row.openedAt, ctx.organization.timeZone),
+      openingCash: formatMoney(row.openingCash, currency),
+      closingCash: row.closingCash ? formatMoney(row.closingCash, currency) : null,
+      orderCount: row._count.orders,
+      changeLabel,
+      netByAccount: totals.map((total) => ({
+        name: total.methodName,
+        net: formatMoney(total.net, currency),
+      })),
+    }
+  })
+}
+
+function tenderFromOrder(
+  order: {
+    payments: { amount: { toString(): string }; ledgerAccountId: string; paymentMethod: { id: string; name: string } }[]
+    changeAmount: { toString(): string }
+    changePaymentMethodId: string | null
+    changeLedgerAccountId: string | null
+    changePaymentMethod: { name: string } | null
+  },
+  refund = false,
+): PosSaleTender {
+  const sign = refund ? -1 : 1
+  return {
+    payments: order.payments.map((payment) => ({
+      methodId: payment.paymentMethod.id,
+      methodName: payment.paymentMethod.name,
+      accountId: payment.ledgerAccountId,
+      amount: new Decimal(payment.amount.toString()).times(sign).toFixed(4),
+    })),
+    changeAmount: refund ? '0' : order.changeAmount.toString(),
+    changeMethodId: refund ? null : order.changePaymentMethodId,
+    changeMethodName: refund ? null : (order.changePaymentMethod?.name ?? null),
+    changeAccountId: refund ? null : order.changeLedgerAccountId,
+  }
 }
 
 export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilters = {}) {
@@ -236,7 +304,12 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
         orgId: ctx.orgId,
         ...(filters.registerId ? { registerId: filters.registerId } : {}),
         ...(filters.paymentMethodId
-          ? { payments: { some: { paymentMethodId: filters.paymentMethodId } } }
+          ? {
+              OR: [
+                { payments: { some: { paymentMethodId: filters.paymentMethodId } } },
+                { changePaymentMethodId: filters.paymentMethodId },
+              ],
+            }
           : {}),
         salesDocument: {
           deletedAt: null,
@@ -246,6 +319,10 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
       select: {
         id: true,
         createdAt: true,
+        changeAmount: true,
+        changePaymentMethodId: true,
+        changeLedgerAccountId: true,
+        changePaymentMethod: { select: { name: true } },
         register: { select: { name: true } },
         session: { select: { id: true } },
         salesDocument: {
@@ -261,6 +338,7 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
         payments: {
           select: {
             amount: true,
+            ledgerAccountId: true,
             paymentMethod: { select: { id: true, name: true, sortOrder: true } },
           },
         },
@@ -282,18 +360,17 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
 
   const truncated = rows.length > limit
   const visible = truncated ? rows.slice(0, limit) : rows
+  const tenders = visible.map((row) => tenderFromOrder(row, row.salesDocument.type === 'REFUND_RECEIPT'))
   const summary = summarizePosWallets(
-    visible.map((row) => ({
-      payments: row.payments.map((payment) => ({
-        methodId: payment.paymentMethod.id,
-        methodName: payment.paymentMethod.name,
-        sortOrder: payment.paymentMethod.sortOrder,
-        amount: payment.amount.toString(),
-        refund: row.salesDocument.type === 'REFUND_RECEIPT',
-      })),
-    })),
+    visible.map((row, index) => ({ payments: netWalletPayments(row, tenders[index]!) })),
     methods,
   )
+  const totals = accountTenderTotals(tenders).map((total) => ({
+    name: total.methodName,
+    tendered: formatMoney(total.tendered, currency),
+    change: formatMoney(total.change, currency),
+    net: formatMoney(total.net, currency),
+  }))
 
   return {
     truncated,
@@ -313,11 +390,14 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
         total: formatMoney(wallet.amount, currency),
       })),
     },
-    orders: visible.map((row) => {
+    totals,
+    orders: visible.map((row, index) => {
       const refund = row.salesDocument.type === 'REFUND_RECEIPT'
       const signedTotal = refund
         ? new Decimal(row.salesDocument.total.toString()).negated()
         : row.salesDocument.total
+      const tender = tenders[index]!
+      const change = new Decimal(tender.changeAmount)
       return {
         id: row.id,
         createdAt: row.createdAt,
@@ -338,13 +418,44 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
             return `${payment.paymentMethod.name} ${formatMoney(amount, currency)}`
           })
           .join(' · '),
+        changeLabel:
+          tender.changeMethodName && change.gt(0)
+            ? `${tender.changeMethodName} ${formatMoney(change, currency)}`
+            : null,
       }
     }),
   }
 }
 
-function isCashMethodName(name: string) {
-  return /\bcash\b/i.test(name.trim())
+function netWalletPayments(
+  row: {
+    payments: { ledgerAccountId: string; paymentMethod: { id: string; name: string; sortOrder: number } }[]
+    changePaymentMethodId: string | null
+    changeLedgerAccountId: string | null
+    changePaymentMethod: { name: string } | null
+  },
+  tender: PosSaleTender,
+): PosOrderSummaryPayment[] {
+  return accountTenderTotals([tender]).flatMap((total) => {
+    const net = new Decimal(total.net)
+    if (net.isZero()) return []
+    const payment = row.payments.find(
+      (item) => item.paymentMethod.name === total.methodName || item.ledgerAccountId === total.accountId,
+    )
+    const methodId =
+      payment?.paymentMethod.id ??
+      (row.changePaymentMethod?.name === total.methodName ? row.changePaymentMethodId : null) ??
+      total.accountId
+    return [
+      {
+        methodId: methodId || total.methodName,
+        methodName: total.methodName,
+        sortOrder: payment?.paymentMethod.sortOrder ?? 0,
+        amount: net.abs().toFixed(4),
+        refund: net.isNegative(),
+      },
+    ]
+  })
 }
 
 export async function registerForTerminal(ctx: OrgContext, registerId: string) {
@@ -355,14 +466,18 @@ export async function registerForTerminal(ctx: OrgContext, registerId: string) {
       name: true,
       storeId: true,
       defaultCustomerId: true,
+      defaultChangeMethodId: true,
+      allowWalletChangeReturn: true,
       methods: {
         select: {
+          allowsChangeReturn: true,
           paymentMethod: {
             select: {
               id: true,
               name: true,
               ledgerAccountId: true,
               sortOrder: true,
+              allowsChangeReturn: true,
             },
           },
         },
@@ -372,8 +487,8 @@ export async function registerForTerminal(ctx: OrgContext, registerId: string) {
   if (!register) throw notFound('Register')
 
   const methods = register.methods
-    .map((row) => row.paymentMethod)
-    .filter((method) => method)
+    .map((row) => ({ ...row.paymentMethod, linkAllowsChange: row.allowsChangeReturn }))
+    .filter((method) => method.id)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
 
   if (methods.length === 0) {
@@ -385,9 +500,15 @@ export async function registerForTerminal(ctx: OrgContext, registerId: string) {
     name: register.name,
     storeId: register.storeId,
     defaultCustomerId: register.defaultCustomerId,
+    defaultChangeMethodId: register.defaultChangeMethodId,
+    allowWalletChangeReturn: register.allowWalletChangeReturn,
     paymentMethods: methods.map((method) => ({
-      ...method,
+      id: method.id,
+      name: method.name,
+      ledgerAccountId: method.ledgerAccountId,
+      sortOrder: method.sortOrder,
       isCash: isCashMethodName(method.name),
+      allowsChangeReturn: method.allowsChangeReturn && method.linkAllowsChange,
     })),
   }
 }
@@ -556,24 +677,6 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
 
   const methodById = new Map(register.paymentMethods.map((method) => [method.id, method]))
 
-  let paymentTotal = ZERO
-  const resolvedPayments: salesService.PosCheckoutMeta['payments'] = []
-
-  for (const payment of input.payments) {
-    const method = methodById.get(payment.paymentMethodId)
-    if (!method) throw validation('One of the payment methods is not allowed on this register.')
-    const amount = new Decimal(payment.amount)
-    if (amount.isZero() || amount.isNegative()) {
-      throw validation('Each payment must be a positive amount.')
-    }
-    paymentTotal = paymentTotal.plus(amount)
-    resolvedPayments.push({
-      paymentMethodId: method.id,
-      ledgerAccountId: method.ledgerAccountId,
-      amount: amount.toFixed(4),
-    })
-  }
-
   const storeOf = await lineStoreResolver(ctx, register.storeId, input.lines)
   const lines = input.lines.map((line) => ({
     itemId: line.itemId,
@@ -585,11 +688,42 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
   }))
 
   const priced = await salesService.quoteLines(ctx, lines)
-  if (!paymentTotal.equals(priced.total)) {
-    throw validation(
-      `Payments (${toMoneyString(paymentTotal, 2)}) must equal the sale total (${toMoneyString(priced.total, 2)}).`,
-    )
+  const resolved = resolvePosTender({
+    due: priced.total.toString(),
+    methods: register.paymentMethods.map((method) => ({
+      id: method.id,
+      name: method.name,
+      isCash: method.isCash,
+      allowsChangeReturn: method.allowsChangeReturn,
+    })),
+    payments: input.payments,
+    changeMethodId: input.changeMethodId,
+    allowWalletChangeReturn: register.allowWalletChangeReturn,
+  })
+  if (!resolved.ok) throw validation(resolved.message)
+
+  const resolvedPayments: salesService.PosCheckoutMeta['payments'] = resolved.tender.tenders.map((tender) => {
+    const method = methodById.get(tender.paymentMethodId)
+    if (!method) throw validation('One of the payment methods is not allowed on this register.')
+    return {
+      paymentMethodId: method.id,
+      ledgerAccountId: method.ledgerAccountId,
+      amount: new Decimal(tender.amount).toFixed(4),
+    }
+  })
+  const changeMethod = resolved.tender.changeMethodId
+    ? methodById.get(resolved.tender.changeMethodId)
+    : null
+  if (resolved.tender.changeMethodId && !changeMethod) {
+    throw validation('Change cannot be returned from that account.')
   }
+  const change = changeMethod
+    ? {
+        paymentMethodId: changeMethod.id,
+        ledgerAccountId: changeMethod.ledgerAccountId,
+        amount: new Decimal(resolved.tender.change).toFixed(4),
+      }
+    : null
 
   const receiptDate = today(ctx.organization.timeZone)
   const primaryDeposit = resolvedPayments[0]!.ledgerAccountId
@@ -612,6 +746,7 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
         registerId: register.id,
         sessionId: session.id,
         payments: resolvedPayments,
+        change,
       },
     },
   )
@@ -659,6 +794,8 @@ export async function sessionCashSummary(ctx: OrgContext, sessionId: string) {
       orders: {
         select: {
           salesDocument: { select: { type: true } },
+          changeAmount: true,
+          changePaymentMethod: { select: { name: true } },
           payments: {
             select: {
               amount: true,
@@ -682,12 +819,21 @@ export async function sessionCashSummary(ctx: OrgContext, sessionId: string) {
   let cashSales = ZERO
   let cashRefunds = ZERO
   for (const order of session.orders) {
-    for (const payment of order.payments) {
-      if (!isCashMethodName(payment.paymentMethod.name)) continue
-      const amount = new Decimal(payment.amount.toString())
-      if (order.salesDocument.type === 'SALES_RECEIPT') cashSales = cashSales.plus(amount)
-      else if (order.salesDocument.type === 'REFUND_RECEIPT') cashRefunds = cashRefunds.plus(amount)
-    }
+    const kind = order.salesDocument.type === 'REFUND_RECEIPT' ? 'REFUND' : 'SALE'
+    if (kind === 'SALE' && order.salesDocument.type !== 'SALES_RECEIPT') continue
+    const movement = drawerCashMovement({
+      kind,
+      payments: order.payments.map((payment) => ({
+        isCash: isCashMethodName(payment.paymentMethod.name),
+        amount: payment.amount.toString(),
+      })),
+      changeAmount: order.changeAmount.toString(),
+      changeIsCash: order.changePaymentMethod
+        ? isCashMethodName(order.changePaymentMethod.name)
+        : false,
+    })
+    cashSales = cashSales.plus(movement.sales)
+    cashRefunds = cashRefunds.plus(movement.refunds)
   }
 
   const opening = new Decimal(session.openingCash.toString())
@@ -900,6 +1046,7 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
         registerId: register.id,
         sessionId: session.id,
         payments: resolvedPayments,
+        change: null,
       },
     },
   )
@@ -931,6 +1078,7 @@ export async function settingsOverview(ctx: OrgContext) {
         name: true,
         isActive: true,
         sortOrder: true,
+        allowsChangeReturn: true,
         account: { select: { id: true, code: true, name: true } },
       },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -944,9 +1092,11 @@ export async function settingsOverview(ctx: OrgContext) {
         pinHash: true,
         storeId: true,
         defaultCustomerId: true,
+        defaultChangeMethodId: true,
+        allowWalletChangeReturn: true,
         store: { select: { name: true } },
         defaultCustomer: { select: { id: true, displayName: true } },
-        methods: { select: { paymentMethodId: true } },
+        methods: { select: { paymentMethodId: true, allowsChangeReturn: true } },
       },
       orderBy: { name: 'asc' },
     }),
@@ -984,6 +1134,7 @@ export async function settingsOverview(ctx: OrgContext) {
       name: method.name,
       isActive: method.isActive,
       sortOrder: method.sortOrder,
+      allowsChangeReturn: method.allowsChangeReturn,
       accountLabel: `${method.account.code} · ${method.account.name}`,
       accountId: method.account.id,
     })),
@@ -997,6 +1148,9 @@ export async function settingsOverview(ctx: OrgContext) {
       defaultCustomerId: register.defaultCustomerId,
       customerName: register.defaultCustomer.displayName,
       paymentMethodIds: register.methods.map((row) => row.paymentMethodId),
+      changeMethodIds: register.methods.filter((row) => row.allowsChangeReturn).map((row) => row.paymentMethodId),
+      defaultChangeMethodId: register.defaultChangeMethodId,
+      allowWalletChangeReturn: register.allowWalletChangeReturn,
     })),
     assetAccounts,
     customers,
@@ -1024,6 +1178,7 @@ export async function upsertPaymentMethod(ctx: OrgContext, input: PosPaymentMeth
         name: input.name,
         ledgerAccountId: input.ledgerAccountId,
         isActive: input.isActive,
+        allowsChangeReturn: input.allowsChangeReturn,
         sortOrder: input.sortOrder,
       },
     })
@@ -1036,6 +1191,7 @@ export async function upsertPaymentMethod(ctx: OrgContext, input: PosPaymentMeth
       name: input.name,
       ledgerAccountId: input.ledgerAccountId,
       isActive: input.isActive,
+      allowsChangeReturn: input.allowsChangeReturn,
       sortOrder: input.sortOrder,
     },
     select: { id: true },
@@ -1071,7 +1227,7 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
 
   const methods = await db.posPaymentMethod.findMany({
     where: { orgId: ctx.orgId, id: { in: input.paymentMethodIds }, isActive: true },
-    select: { id: true },
+    select: { id: true, name: true, allowsChangeReturn: true },
   })
   if (methods.length !== input.paymentMethodIds.length) {
     throw validation('Every payment method on a register must exist and be active.')
@@ -1079,6 +1235,20 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
 
   // A blank PIN leaves the stored hash alone. A new PIN replaces it.
   const pinHash = input.pin ? await hashPassword(input.pin) : null
+  const changeMethodIds = input.changeMethodIds ?? input.paymentMethodIds
+  if (changeMethodIds.some((id) => !input.paymentMethodIds.includes(id))) {
+    throw validation('Change can only be returned from a payment method on this till.')
+  }
+  const defaultChangeMethodId = input.defaultChangeMethodId ?? null
+  if (defaultChangeMethodId) {
+    const method = methods.find((row) => row.id === defaultChangeMethodId)
+    if (!method || !changeMethodIds.includes(defaultChangeMethodId) || !method.allowsChangeReturn) {
+      throw validation('The default change account has to be allowed for change on this till.')
+    }
+    if (!input.allowWalletChangeReturn && !isCashMethodName(method.name)) {
+      throw validation('Pick a cash account as the default while change from wallets is off.')
+    }
+  }
 
   if (input.id) {
     const existing = await db.posRegister.findFirst({
@@ -1099,9 +1269,11 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
           defaultCustomerId: input.defaultCustomerId,
           isActive: input.isActive,
           ...(pinHash ? { pinHash } : {}),
+          defaultChangeMethodId,
+          allowWalletChangeReturn: input.allowWalletChangeReturn,
         },
       })
-      await syncRegisterMethods(tx, input.id!, input.paymentMethodIds)
+      await syncRegisterMethods(tx, input.id!, input.paymentMethodIds, changeMethodIds)
     })
     return { id: input.id }
   }
@@ -1115,20 +1287,32 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
         defaultCustomerId: input.defaultCustomerId,
         isActive: input.isActive,
         pinHash,
+        defaultChangeMethodId,
+        allowWalletChangeReturn: input.allowWalletChangeReturn,
       },
       select: { id: true },
     })
-    await syncRegisterMethods(tx, register.id, input.paymentMethodIds)
+    await syncRegisterMethods(tx, register.id, input.paymentMethodIds, changeMethodIds)
     return register
   })
 
   return created
 }
 
-async function syncRegisterMethods(tx: Tx, registerId: string, paymentMethodIds: string[]) {
+async function syncRegisterMethods(
+  tx: Tx,
+  registerId: string,
+  paymentMethodIds: string[],
+  changeMethodIds: string[],
+) {
+  const change = new Set(changeMethodIds)
   await tx.posRegisterMethod.deleteMany({ where: { registerId } })
   await tx.posRegisterMethod.createMany({
-    data: paymentMethodIds.map((paymentMethodId) => ({ registerId, paymentMethodId })),
+    data: paymentMethodIds.map((paymentMethodId) => ({
+      registerId,
+      paymentMethodId,
+      allowsChangeReturn: change.has(paymentMethodId),
+    })),
   })
 }
 
@@ -1185,6 +1369,8 @@ export async function receipt(ctx: OrgContext, documentId: string) {
       where: { orgId: ctx.orgId, salesDocumentId: document.id },
       select: {
         register: { select: { name: true, defaultCustomerId: true } },
+        changeAmount: true,
+        changePaymentMethod: { select: { name: true } },
         payments: {
           select: { amount: true, paymentMethod: { select: { name: true } } },
           orderBy: { id: 'asc' },
@@ -1227,5 +1413,9 @@ export async function receipt(ctx: OrgContext, documentId: string) {
       amount: payment.amount.toString(),
       isCash: isCashMethodName(payment.paymentMethod.name),
     })),
+    change: order?.changeAmount.toString() ?? '0',
+    changeFrom: order?.changePaymentMethod?.name ?? null,
+    /** Gross tenders were stored once change started being recorded on the order. */
+    tendered: order ? new Decimal(order.changeAmount.toString()).gt(0) : false,
   }
 }

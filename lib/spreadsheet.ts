@@ -62,8 +62,8 @@ export function normaliseDate(raw: string, order: DateOrder): string {
   const parts = text.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/)
   if (!parts) return ''
 
-  let first = Number(parts[1])
-  let second = Number(parts[2])
+  const first = Number(parts[1])
+  const second = Number(parts[2])
   let year = Number(parts[3])
   if (year < 100) year += year >= 70 ? 1900 : 2000
 

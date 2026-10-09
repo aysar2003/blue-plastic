@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import Link from 'next/link'
 import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
 
@@ -34,28 +34,10 @@ export function ContactMoneyBar({
   active?: string
   storageKey: string
 }) {
-  const [open, setOpen] = useState(true)
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(storageKey)
-      if (stored === '0') setOpen(false)
-      if (stored === '1') setOpen(true)
-    } catch {
-      /* keep default */
-    }
-  }, [storageKey])
+  const open = useBrowserStore(storageKey) !== '0'
 
   function toggle() {
-    setOpen((current) => {
-      const next = !current
-      try {
-        window.localStorage.setItem(storageKey, next ? '1' : '0')
-      } catch {
-        /* ignore */
-      }
-      return next
-    })
+    writeBrowserStore(storageKey, open ? '0' : '1')
   }
 
   const total = bands.reduce((sum, band) => sum.plus(new Decimal(band.amount).abs()), new Decimal(0))

@@ -24,6 +24,10 @@ export function PosPaymentForm(props: {
   pending: boolean
   error: string | null
   dark: boolean
+  /** Accounts this till is allowed to hand change back from. */
+  changeMethods: { id: string; name: string }[]
+  changeMethodId: string
+  onChangeMethod: (methodId: string) => void
   onAmount: (method: PosPaymentMethodField, raw: string) => void
   onFill: (methodId: string) => void
   onCancel: () => void
@@ -85,6 +89,23 @@ export function PosPaymentForm(props: {
           <dd>{formatMoney(props.change, props.currency)}</dd>
         </div>
       </dl>
+      <label className="mt-4 block text-sm" htmlFor="pos-change-from">
+        <span className="font-medium">Return change from</span>
+        <select
+          id="pos-change-from"
+          value={props.changeMethodId}
+          onChange={(event) => props.onChangeMethod(event.target.value)}
+          className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm outline-none"
+          style={{ background: chip, borderColor: border, color: text }}
+        >
+          {props.changeMethods.length === 0 ? <option value="">No account</option> : null}
+          {props.changeMethods.map((method) => (
+            <option key={method.id} value={method.id}>
+              {method.name}
+            </option>
+          ))}
+        </select>
+      </label>
       {props.error ? <p className="mt-2 text-sm text-red-400">{props.error}</p> : null}
       <div className="mt-5 flex justify-end gap-2">
         <button
@@ -98,7 +119,7 @@ export function PosPaymentForm(props: {
         <button
           type="button"
           onClick={props.onValidate}
-          disabled={props.pending || !props.canValidate}
+          disabled={props.pending || !props.canValidate || Boolean(props.error)}
           className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
           style={{ background: ODOO.purple }}
         >

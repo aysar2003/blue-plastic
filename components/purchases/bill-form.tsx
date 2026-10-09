@@ -1,6 +1,8 @@
 'use client'
 
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
+
+import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import { ChevronDownIcon, ChevronUpIcon, PlusIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -163,7 +165,7 @@ export function BillForm({
   const router = useRouter()
   const [state, formAction] = useActionState(savePurchaseForm, idleState)
 
-  const [number, setNumber] = useState(documentNumber)
+  const [number, setNumber] = usePropState(documentNumber)
   const [vendorId, setVendorId] = useState(document?.vendorId ?? initialVendorId ?? '')
   const [date, setDate] = useState(document?.date ?? today)
   const [reference, setReference] = useState(document?.reference ?? '')
@@ -207,8 +209,6 @@ export function BillForm({
   const handled = useRef(false)
   const afterSave = useRef<'close' | 'new'>('close')
 
-  useEffect(() => setNumber(documentNumber), [documentNumber])
-
   // Start on the vendor name so Tab walks the form without the mouse.
   useEffect(() => {
     if (vendorId) return
@@ -216,19 +216,21 @@ export function BillForm({
     return () => window.clearTimeout(timer)
   }, [vendorId])
 
-  useEffect(() => {
-    if (document || !initialVendorId) return
+  const seedVendor = !document && Boolean(initialVendorId)
+  const [vendorSeeded, setVendorSeeded] = useState(!seedVendor)
+  if (!vendorSeeded && initialVendorId) {
+    setVendorSeeded(true)
     const chosen = vendors.find((vendor) => vendor.id === initialVendorId)
     if (chosen?.paymentTermId) setPaymentTermId(chosen.paymentTermId)
     const fallback = chosen?.defaultExpenseAccountId ?? ''
-    if (!fallback) return
-    setLines((current) =>
-      current.map((line) =>
-        line.expenseAccountId === '' && line.itemId === '' ? { ...line, expenseAccountId: fallback } : line,
-      ),
-    )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (fallback) {
+      setLines((current) =>
+        current.map((line) =>
+          line.expenseAccountId === '' && line.itemId === '' ? { ...line, expenseAccountId: fallback } : line,
+        ),
+      )
+    }
+  }
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
