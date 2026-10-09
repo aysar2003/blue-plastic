@@ -30,13 +30,16 @@ export default async function PosRegisterPage({ params }: Props) {
   const canCreateQuote = ctx.permissions.has('invoice:create')
   const canReadQuote = ctx.permissions.has('invoice:read')
   const canQuote = canCreateQuote || canReadQuote
-  const [catalog, customers, cashSummary, recentOrders, useCounts, openQuotations] = await Promise.all([
+  const [catalog, customers, cashSummary, recentOrders, useCounts, openQuotations, tillBank, transferDestinations] =
+    await Promise.all([
     posService.catalog(ctx, register.storeId),
     posService.walkInCustomers(ctx),
     posService.sessionCashSummary(ctx, session.id),
     posService.recentSessionOrders(ctx, session.id),
     posService.paymentMethodUseCounts(ctx, registerId),
     canReadQuote ? posService.listOpenQuotations(ctx) : Promise.resolve([]),
+    posService.registerBankSnapshot(ctx, registerId),
+    posService.registerTransferDestinations(ctx),
   ])
   const currency = ctx.organization.baseCurrency
 
@@ -67,6 +70,12 @@ export default async function PosRegisterPage({ params }: Props) {
         cashSales: cashSummary.cashSales,
         cashRefunds: cashSummary.cashRefunds,
       }}
+      tillBalance={
+        tillBank.balance && tillBank.balanceRaw
+          ? { balance: tillBank.balance, balanceRaw: tillBank.balanceRaw }
+          : null
+      }
+      transferDestinations={transferDestinations.filter((account) => account.id !== tillBank.accountId)}
       recentOrders={recentOrders.map((order) => ({
         id: order.id,
         documentId: order.documentId,

@@ -16,6 +16,7 @@ import {
   type PosOrderSummaryPayment,
 } from '@/lib/pos-order-report'
 import { POS_BANKS_DETAIL, POS_REGISTER_DETAIL } from '@/lib/pos-register-account'
+import { canTransferRegister, transferFitsBalance } from '@/lib/pos-register-posting'
 import { chooseLineStore } from '@/lib/pos-line-store'
 import { CASHIER_PIN_REQUIRED, CASHIER_PIN_WRONG } from '@/lib/pos-pin'
 import { receiptCashierName } from '@/lib/pos-receipt'
@@ -30,12 +31,14 @@ import type {
   PosPaymentMethodInput,
   PosRefundInput,
   PosRegisterInput,
+  PosRegisterTransferInput,
 } from '@/lib/validation/pos'
 import type { OrgContext } from '@/server/auth/context'
 import { hashPassword, verifyPassword } from '@/server/auth/password'
 import { db, type Tx } from '@/server/db'
 import { registerUnlockMatches } from '@/server/pos/cashier-unlock'
-import { conflict, notFound, precondition, validation } from '@/server/errors'
+import { conflict, forbidden, notFound, precondition, validation } from '@/server/errors'
+import * as bankingService from '@/server/services/banking.service'
 import { ensurePosRegisterAccounts } from '@/server/services/pos-register-account'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
 import * as salesService from '@/server/services/sales.service'
@@ -64,6 +67,7 @@ export async function dashboardRegisters(ctx: OrgContext) {
       id: true,
       name: true,
       pinHash: true,
+      ledgerAccountId: true,
       store: { select: { id: true, name: true } },
       sessions: {
         where: { status: 'OPEN' },
@@ -90,13 +94,21 @@ export async function dashboardRegisters(ctx: OrgContext) {
   })
 
   const currency = ctx.organization.baseCurrency
+  const balances = await accountBalances(
+    ctx.orgId,
+    visible.map((register) => register.ledgerAccountId).filter((id): id is string => Boolean(id)),
+  )
   return visible.map((register) => {
     const session = register.sessions[0] ?? null
+    const balance = register.ledgerAccountId ? (balances.get(register.ledgerAccountId) ?? ZERO) : null
     return {
       id: register.id,
       name: register.name,
       storeName: register.store?.name ?? null,
       hasPin: Boolean(register.pinHash),
+      bankAccountId: register.ledgerAccountId,
+      bankBalance: balance ? formatMoney(balance, currency) : null,
+      bankBalanceRaw: balance ? balance.toFixed(2) : null,
       session: session
         ? {
             id: session.id,
@@ -172,6 +184,40 @@ async function loadRegisterStaffMap(registerIds: string[]) {
     // Client or table not ready yet — treat every counter as open to all POS users.
   }
   return map
+}
+
+async function accountBalances(orgId: string, accountIds: string[]) {
+  const unique = [...new Set(accountIds)]
+  const balances = new Map<string, Decimal>()
+  if (unique.length === 0) return balances
+  const rows = await db.$queryRaw<{ accountId: string; balance: string }[]>`
+    SELECT l."accountId" AS "accountId",
+           COALESCE(SUM(l.debit - l.credit), 0) AS balance
+      FROM journal_lines l
+      JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
+     WHERE l."orgId" = ${orgId}
+       AND l."accountId" = ANY(${unique})
+     GROUP BY l."accountId"
+  `
+  for (const row of rows) balances.set(row.accountId, new Decimal(row.balance))
+  for (const id of unique) if (!balances.has(id)) balances.set(id, ZERO)
+  return balances
+}
+
+/** Make sure the till has a POS Banks sub-account and return its id. */
+async function registerBankAccountId(ctx: OrgContext, registerId: string) {
+  await db.$transaction(async (tx) => {
+    await ensurePosRegisterAccounts(tx, ctx.orgId)
+  })
+  const register = await db.posRegister.findFirst({
+    where: { id: registerId, orgId: ctx.orgId, isActive: true },
+    select: { id: true, name: true, ledgerAccountId: true },
+  })
+  if (!register) throw notFound('Register')
+  if (!register.ledgerAccountId) {
+    throw precondition(`${register.name} has no bank account under POS Banks.`)
+  }
+  return register.ledgerAccountId
 }
 
 export async function openSession(ctx: OrgContext, input: PosOpenSessionInput) {
@@ -797,7 +843,7 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
   }
 
   const receiptDate = today(ctx.organization.timeZone)
-  const primaryDeposit = resolvedPayments[0]!.ledgerAccountId
+  const tillAccountId = await registerBankAccountId(ctx, register.id)
 
   const document = await salesService.create(
     ctx,
@@ -806,7 +852,7 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
       number: undefined,
       customerId,
       date: receiptDate,
-      depositAccountId: primaryDeposit,
+      depositAccountId: tillAccountId,
       lines,
       saveAsDraft: false,
       discountKind: discountValue ? 'amount' : 'percent',
@@ -819,6 +865,7 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
         sessionId: session.id,
         payments: resolvedPayments,
         change,
+        depositLedgerAccountId: tillAccountId,
       },
     },
   )
@@ -1171,6 +1218,7 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
     },
     select: {
       id: true,
+      depositLedgerAccountId: true,
       salesDocument: {
         select: {
           id: true,
@@ -1236,7 +1284,9 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
   }))
 
   const receiptDate = today(ctx.organization.timeZone)
-  const primaryDeposit = resolvedPayments[0]!.ledgerAccountId
+  // A refund leaves the account the original sale posted to. Older sales
+  // posted to the wallet, so those refunds stay there too.
+  const depositLedgerAccountId = order.depositLedgerAccountId
 
   const document = await salesService.create(
     ctx,
@@ -1245,7 +1295,7 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
       number: undefined,
       customerId: order.salesDocument.customerId,
       date: receiptDate,
-      depositAccountId: primaryDeposit,
+      depositAccountId: depositLedgerAccountId ?? resolvedPayments[0]!.ledgerAccountId,
       lines,
       saveAsDraft: false,
       discountKind: 'percent',
@@ -1258,6 +1308,7 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
         sessionId: session.id,
         payments: resolvedPayments,
         change: null,
+        depositLedgerAccountId,
       },
     },
   )
@@ -1266,6 +1317,108 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
     id: document.id,
     number: document.number,
     total: toMoneyString(docTotal, 2),
+  }
+}
+
+/** Balance sitting in this till's bank account. Null when the account has not been created. */
+export async function registerBankSnapshot(ctx: OrgContext, registerId: string) {
+  const register = await db.posRegister.findFirst({
+    where: { id: registerId, orgId: ctx.orgId },
+    select: { ledgerAccountId: true },
+  })
+  if (!register?.ledgerAccountId) return { accountId: null, balance: null, balanceRaw: null }
+  const balances = await accountBalances(ctx.orgId, [register.ledgerAccountId])
+  const balance = balances.get(register.ledgerAccountId) ?? ZERO
+  const currency = ctx.organization.baseCurrency
+  return {
+    accountId: register.ledgerAccountId,
+    balance: formatMoney(balance, currency),
+    balanceRaw: balance.toFixed(2),
+  }
+}
+
+/** Bank and wallet accounts a till balance can be moved to. The POS Banks heading is not one of them. */
+export async function registerTransferDestinations(ctx: OrgContext) {
+  return db.ledgerAccount.findMany({
+    where: {
+      orgId: ctx.orgId,
+      isActive: true,
+      type: { in: ['ASSET', 'LIABILITY'] },
+      subtype: { in: ['BANK', 'CREDIT_CARD', 'UNDEPOSITED_FUNDS', 'OTHER_CURRENT_ASSET'] },
+      NOT: {
+        OR: [{ detailType: POS_BANKS_DETAIL }, { children: { some: {} } }],
+      },
+    },
+    select: { id: true, code: true, name: true },
+    orderBy: { code: 'asc' },
+  })
+}
+
+/**
+ * Move money from this register's bank account to another bank or wallet account.
+ * An admin can do this for any till. A salesman can do it only for a till they
+ * are allowed to work. Closing a session does not transfer anything.
+ */
+export async function transferFromRegister(ctx: OrgContext, input: PosRegisterTransferInput) {
+  const staffMap = await loadRegisterStaffMap([input.registerId])
+  const allowed = canTransferRegister({
+    canManage: ctx.permissions.has('pos:manage'),
+    canSell: ctx.permissions.has('pos:sell'),
+    staffUserIds: staffMap.get(input.registerId) ?? [],
+    userId: ctx.userId,
+  })
+  if (!allowed) {
+    throw forbidden('You can only transfer money out of your own register.')
+  }
+
+  const register = await db.posRegister.findFirst({
+    where: { id: input.registerId, orgId: ctx.orgId, isActive: true },
+    select: { id: true, name: true },
+  })
+  if (!register) throw notFound('Register')
+
+  const fromAccountId = await registerBankAccountId(ctx, register.id)
+  if (input.toAccountId === fromAccountId) {
+    throw validation('Choose a different account. A transfer to the same till moves nothing.')
+  }
+
+  const destination = await db.ledgerAccount.findFirst({
+    where: {
+      id: input.toAccountId,
+      orgId: ctx.orgId,
+      isActive: true,
+      type: { in: ['ASSET', 'LIABILITY'] },
+      NOT: { OR: [{ detailType: POS_BANKS_DETAIL }, { children: { some: {} } }] },
+    },
+    select: { id: true, name: true },
+  })
+  if (!destination) throw validation('Choose a bank or wallet account to transfer to.')
+
+  const amount = new Decimal(input.amount)
+  const balances = await accountBalances(ctx.orgId, [fromAccountId])
+  const balance = balances.get(fromAccountId) ?? ZERO
+  const fit = transferFitsBalance(amount, balance)
+  if (fit === 'nonpositive') throw validation('Enter an amount greater than zero.')
+  if (fit === 'empty') throw validation('There is no balance in this register to transfer.')
+  if (fit === 'over') {
+    throw validation(
+      `This register has ${toMoneyString(balance, 2)} available. Enter that amount or less.`,
+    )
+  }
+
+  const result = await bankingService.createTransfer(ctx, {
+    number: undefined,
+    date: today(ctx.organization.timeZone),
+    fromAccountId,
+    toAccountId: destination.id,
+    amount: amount.toFixed(4),
+    memo: input.memo?.trim() || `Transfer from ${register.name}`,
+  })
+
+  return {
+    id: result.id,
+    number: result.number,
+    amount: toMoneyString(amount, 2),
   }
 }
 

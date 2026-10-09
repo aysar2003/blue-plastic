@@ -6,9 +6,9 @@
  * detail type, and each register account by the description
  * `POS register <id>`, which stays put when the till is renamed.
  *
- * Wallet payment methods keep their own ledger accounts. These register
- * accounts are the grouped bank destinations; sales receipts still debit the
- * wallet that took the money.
+ * New till sales debit this account. The payment rows still name the wallet,
+ * so the orders report can total by wallet. Older journals are left on the
+ * wallet accounts they were posted to.
  */
 
 export const POS_BANKS_NAME = 'POS Banks'

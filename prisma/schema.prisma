@@ -675,6 +675,7 @@ model LedgerAccount {
   posPaymentMethods PosPaymentMethod[]    @relation("PosPaymentAccount")
   posRegisters      PosRegister[]         @relation("PosRegisterBank")
   posChangeOrders   PosOrder[]            @relation("PosChangeAccount")
+  posOrderDeposits  PosOrder[]            @relation("PosOrderDeposit")
 
   @@unique([orgId, code])
   @@unique([orgId, systemKey])
@@ -1217,8 +1218,9 @@ model Store {
 // Point of sale
 // ---------------------------------------------------------------------------
 
-/// A way to take money at the till — mobile wallet, cash drawer, etc. Each method
-/// posts to its own ledger account so balances can be swept to the bank later.
+/// A way to take money at the till — mobile wallet, cash drawer, etc.
+/// The orders report totals by this method. The money posts to the register's
+/// bank account, not to this method's account.
 model PosPaymentMethod {
   id              String @id @default(cuid())
   orgId           String
@@ -1255,8 +1257,7 @@ model PosRegister {
   storeId           String?
   defaultCustomerId String
   /// BANK sub-account under POS Banks. Nullable until the backfill runs.
-  /// Sales still post to each payment method's wallet; this account is the
-  /// till's place on the chart, ready to receive a later sweep.
+  /// New sales debit this account. It keeps the balance until someone transfers it out.
   ledgerAccountId   String? @unique
   isActive          Boolean @default(true)
   /// Till setting: which method is selected when the Payment dialog opens. Null means cash.
@@ -1370,6 +1371,9 @@ model PosOrder {
   changeAmount            Decimal @default(0) @db.Decimal(19, 4)
   changePaymentMethodId   String?
   changeLedgerAccountId   String?
+  /// Register bank account this order posts to. Null on receipts posted before
+  /// tills had their own bank account; those journals stay on the wallet accounts.
+  depositLedgerAccountId  String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
@@ -1379,11 +1383,13 @@ model PosOrder {
   salesDocument SalesDocument     @relation(fields: [salesDocumentId], references: [id], onDelete: Cascade)
   changePaymentMethod PosPaymentMethod? @relation("PosChangeMethod", fields: [changePaymentMethodId], references: [id], onDelete: Restrict)
   changeAccount       LedgerAccount?    @relation("PosChangeAccount", fields: [changeLedgerAccountId], references: [id], onDelete: Restrict)
+  depositAccount      LedgerAccount?    @relation("PosOrderDeposit", fields: [depositLedgerAccountId], references: [id], onDelete: Restrict)
   payments      PosOrderPayment[]
 
   @@index([orgId, registerId, createdAt(sort: Desc)])
   @@index([sessionId, createdAt(sort: Desc)])
   @@index([changePaymentMethodId])
+  @@index([depositLedgerAccountId])
   @@map("pos_orders")
 }
 
