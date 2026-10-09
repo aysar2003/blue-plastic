@@ -13,6 +13,7 @@ import {
   posPaymentMethodSchema,
   posRefundSchema,
   posRegisterSchema,
+  posRegisterTransferSchema,
   posUnlockSchema,
 } from '@/lib/validation/pos'
 import { readRegisterForm } from '@/lib/pos-register-form'
@@ -29,6 +30,7 @@ function revalidatePos() {
   revalidatePath('/sales/sales-receipts')
   revalidatePath('/sales/estimates')
   revalidatePath('/accounts')
+  revalidatePath('/banking')
 }
 
 export const posCheckout = action
@@ -97,6 +99,15 @@ export const recordPosCashMove = action
     const move = await posService.recordCashMove(ctx, input)
     revalidatePos()
     return move
+  })
+
+export const transferPosRegister = action
+  .requires('pos:read')
+  .input(posRegisterTransferSchema)
+  .handler(async (ctx, input) => {
+    const result = await posService.transferFromRegister(ctx, input)
+    revalidatePos()
+    return result
   })
 
 export const posRefund = action

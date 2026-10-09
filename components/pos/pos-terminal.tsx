@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeftIcon,
+  ArrowRightLeftIcon,
   BanknoteIcon,
   BanIcon,
   BarcodeIcon,
@@ -36,6 +37,7 @@ import {
   recordPosCashMove,
 } from '@/app/(app)/pos/actions'
 import { PosPaymentForm } from '@/components/pos/payment-dialog'
+import { RegisterTransferForm, type TransferDestination } from '@/components/pos/register-transfer-form'
 import { RegisterLock, useClientReady, useRegisterLocked, writeRegisterLocked } from '@/components/pos/register-lock'
 import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
@@ -165,6 +167,8 @@ export function PosTerminal(props: {
     cashSales: string
     cashRefunds: string
   }
+  tillBalance?: { balance: string; balanceRaw: string } | null
+  transferDestinations?: TransferDestination[]
   recentOrders: RecentOrder[]
   openQuotations?: OpenQuote[]
   /** Show quotation tools (invoice:create or invoice:read). */
@@ -213,7 +217,7 @@ export function PosTerminal(props: {
   const [toast, setToast] = useState<string | null>(null)
   const [lastReceiptId, setLastReceiptId] = useState<string | null>(null)
   const [menu, setMenu] = useState<
-    'actions' | 'burger' | 'cash' | 'customer' | 'note' | 'close' | 'refund' | 'quotes' | null
+    'actions' | 'burger' | 'cash' | 'customer' | 'note' | 'close' | 'refund' | 'quotes' | 'transfer' | null
   >(null)
   const [refundOrderId, setRefundOrderId] = useState<string | null>(null)
   const [refundAmounts, setRefundAmounts] = useState<Record<string, string>>({})
@@ -861,6 +865,19 @@ export function PosTerminal(props: {
           >
             {(props.orgName.trim()[0] ?? 'P').toUpperCase()}
           </span>
+          {props.tillBalance ? (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null)
+                setMenu('transfer')
+              }}
+              className="hidden shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold sm:inline"
+              style={{ background: `${ODOO.teal}22`, color: dark ? '#9fe0e3' : ODOO.tealDark }}
+            >
+              Till {props.tillBalance.balance}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setMenu('burger')}
@@ -1229,6 +1246,15 @@ export function PosTerminal(props: {
               dark={dark}
             />
             <ActionTile
+              label="Transfer out"
+              icon={<ArrowRightLeftIcon className="size-6" />}
+              onClick={() => {
+                setError(null)
+                setMenu('transfer')
+              }}
+              dark={dark}
+            />
+            <ActionTile
               label="Cash In/Out"
               icon={<BanknoteIcon className="size-6" />}
               onClick={() => {
@@ -1285,6 +1311,23 @@ export function PosTerminal(props: {
               dark={dark}
             />
           </div>
+        </Modal>
+      ) : null}
+
+      {menu === 'transfer' && props.tillBalance ? (
+        <Modal title="Transfer out" dark={dark} onClose={() => setMenu(null)}>
+          <RegisterTransferForm
+            registerId={props.register.id}
+            balance={props.tillBalance.balance}
+            balanceRaw={props.tillBalance.balanceRaw}
+            currency={props.currency}
+            destinations={props.transferDestinations ?? []}
+            dark={dark}
+            onDone={(message) => {
+              setMenu(null)
+              setToast(message)
+            }}
+          />
         </Modal>
       ) : null}
 

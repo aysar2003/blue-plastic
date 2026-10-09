@@ -68,17 +68,19 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
     <div className="mx-auto max-w-3xl space-y-8 py-2">
       <PageHeader
         title="Configuration"
-        description="Payment methods, counters, staff, and the accounts money posts to. Sweep wallets later via Banking → Transfer."
+        description="Payment methods, counters, and staff. Sales post to each till’s bank account under POS Banks and stay there until someone transfers them out."
         actions={
           <Link href="/pos" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             ← Dashboard
           </Link>
         }
       />
-      <p className="-mt-2 text-sm">
+      <p className="-mt-2 text-sm text-muted-foreground">
+        Transfer a till’s balance from the register. Other account movements stay in{' '}
         <Link href="/banking/transfers/new" className="font-medium text-primary underline">
-          Open Banking → Transfer
+          Banking → Transfer
         </Link>
+        .
       </p>
 
       <Card id="payment-methods" className="scroll-mt-20">
@@ -86,8 +88,8 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
           <div>
             <h2 className="font-semibold text-foreground">Payment methods</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              E.g. Edahab, EVC, Cash — each posts to its own asset account. Click Edit to change the
-              name or linked account.
+              E.g. Edahab, EVC, Cash. The orders report totals by these wallets. The money itself
+              posts to the till’s bank account. Click Edit to change the name or linked account.
             </p>
           </div>
           <ul className="space-y-2 text-sm">

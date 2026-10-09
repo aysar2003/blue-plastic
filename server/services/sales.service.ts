@@ -4,6 +4,7 @@ import type { DocumentType, Prisma, SalesDocumentType } from '@prisma/client'
 import { endOfMonth, isCalendarDate, startOfMonth, toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
 import { Decimal, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
+import { posPostedAccounts } from '@/lib/pos-register-posting'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { SalesDocumentInput } from '@/lib/validation/sales'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
@@ -42,6 +43,11 @@ export type PosCheckoutMeta = {
   payments: { paymentMethodId: string; ledgerAccountId: string; amount: string }[]
   /** Outgoing movement. Null on an exact tender and on sales from before change was recorded. */
   change: { paymentMethodId: string; ledgerAccountId: string; amount: string } | null
+  /**
+   * Register bank account the journal debits. Null keeps the historical
+   * behaviour: each payment posts to its own wallet account.
+   */
+  depositLedgerAccountId?: string | null
 }
 
 async function salesDiscountAccountId(tx: Tx, orgId: string) {
@@ -646,6 +652,7 @@ export async function create(
           changeAmount: options.pos.change?.amount ?? '0',
           changePaymentMethodId: options.pos.change?.paymentMethodId ?? null,
           changeLedgerAccountId: options.pos.change?.ledgerAccountId ?? null,
+          depositLedgerAccountId: options.pos.depositLedgerAccountId ?? null,
           payments: {
             create: options.pos.payments.map((payment) => ({
               paymentMethodId: payment.paymentMethodId,
@@ -870,6 +877,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     select: {
       changeAmount: true,
       changeLedgerAccountId: true,
+      depositLedgerAccountId: true,
       changePaymentMethod: { select: { name: true } },
       payments: {
         select: {
@@ -881,22 +889,29 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     },
   })
   if (posOrder?.payments.length) {
-    input.paymentSplits = posOrder.payments.map((payment) => ({
-      accountId: payment.ledgerAccountId,
-      amount: new Decimal(payment.amount.toString()),
-      description: payment.paymentMethod.name,
-    }))
     const change = new Decimal(posOrder.changeAmount.toString())
-    if (change.gt(0) && posOrder.changeLedgerAccountId) {
-      input.changeReturns = [
-        {
-          accountId: posOrder.changeLedgerAccountId,
-          amount: change,
-          description: posOrder.changePaymentMethod
-            ? `Change · ${posOrder.changePaymentMethod.name}`
-            : 'Change',
-        },
-      ]
+    const posted = posPostedAccounts({
+      depositLedgerAccountId: posOrder.depositLedgerAccountId,
+      payments: posOrder.payments.map((payment) => ({
+        accountId: payment.ledgerAccountId,
+        amount: new Decimal(payment.amount.toString()),
+        description: payment.paymentMethod.name,
+      })),
+      change:
+        change.gt(0) && posOrder.changeLedgerAccountId
+          ? {
+              accountId: posOrder.changeLedgerAccountId,
+              amount: change,
+              description: posOrder.changePaymentMethod
+                ? `Change · ${posOrder.changePaymentMethod.name}`
+                : 'Change',
+            }
+          : null,
+    })
+    input.paymentSplits = posted.payments
+    if (posted.change) input.changeReturns = [posted.change]
+    if (posOrder.depositLedgerAccountId) {
+      input.depositAccountId = posOrder.depositLedgerAccountId
     }
   }
 

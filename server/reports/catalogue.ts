@@ -1585,7 +1585,7 @@ const salesByDeposit: TableReport = {
   key: 'sales-by-deposit',
   title: 'Sales by Deposit Account',
   description:
-    'Cash sales by the account that received them. Till change is taken out of the account it left, so the net is what that account kept.',
+    'Cash sales by the account that received them. New till sales sit in that register’s bank account. Older receipts stay on the wallet account they were posted to. Till change is taken out of the same account, so the net is what that account kept.',
   group: 'Data analysis',
   mode: 'range',
   async build(input) {
@@ -1605,6 +1605,8 @@ const salesByDeposit: TableReport = {
             changeAmount: true,
             changePaymentMethodId: true,
             changeLedgerAccountId: true,
+            depositLedgerAccountId: true,
+            depositAccount: { select: { id: true, code: true, name: true } },
             changePaymentMethod: { select: { name: true } },
             payments: {
               select: {
@@ -1642,6 +1644,21 @@ const salesByDeposit: TableReport = {
 
     for (const receipt of receipts) {
       const order = receipt.posOrder
+      if (order && order.payments.length > 0 && order.depositLedgerAccountId) {
+        const tendered = order.payments.reduce(
+          (sum, payment) => sum.plus(payment.amount.toString()),
+          ZERO,
+        )
+        const label = order.depositAccount
+          ? `${order.depositAccount.code} ${order.depositAccount.name}`
+          : 'Register bank'
+        const row = touch(order.depositLedgerAccountId, label)
+        row.count += 1
+        row.tendered = row.tendered.plus(tendered)
+        row.change = row.change.plus(order.changeAmount.toString())
+        continue
+      }
+
       if (order && order.payments.length > 0) {
         const sale: PosSaleTender = {
           payments: order.payments.map((payment) => ({

@@ -91,6 +91,13 @@ export const posCloseSessionSchema = z.object({
   closingCash: moneyString,
 })
 
+export const posRegisterTransferSchema = z.object({
+  registerId: cuid,
+  toAccountId: cuid,
+  amount: moneyString.refine((value) => Number(value) > 0, 'Enter an amount greater than zero'),
+  memo: optionalText(500),
+})
+
 export const posCashMoveSchema = z.object({
   sessionId: cuid,
   kind: z.enum(['IN', 'OUT']),
@@ -156,6 +163,7 @@ export type PosOpenSessionInput = z.infer<typeof posOpenSessionSchema>
 export type PosUnlockInput = z.infer<typeof posUnlockSchema>
 export type PosCloseSessionInput = z.infer<typeof posCloseSessionSchema>
 export type PosCashMoveInput = z.infer<typeof posCashMoveSchema>
+export type PosRegisterTransferInput = z.infer<typeof posRegisterTransferSchema>
 export type PosRefundInput = z.infer<typeof posRefundSchema>
 export type PosPaymentMethodInput = z.infer<typeof posPaymentMethodSchema>
 export type PosRegisterInput = z.infer<typeof posRegisterSchema>

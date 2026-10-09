@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 
 import { clearPosRegisterUnlock, unlockPosRegister } from '@/app/(app)/pos/actions'
 import { CashierPinPrompt } from '@/components/pos/cashier-pin-prompt'
+import { RegisterTransferForm, type TransferDestination } from '@/components/pos/register-transfer-form'
 import { PageHeader } from '@/components/data/page-header'
 import { SessionOpenForm } from '@/components/pos/session-open-form'
 import { buttonVariants } from '@/components/ui/button'
@@ -18,6 +19,9 @@ export type DashboardRegister = {
   name: string
   storeName: string | null
   hasPin: boolean
+  bankAccountId: string | null
+  bankBalance: string | null
+  bankBalanceRaw: string | null
   session: {
     id: string
     dateLabel: string
@@ -29,17 +33,23 @@ export function PosDashboard({
   registers,
   currency,
   canManage,
+  canTransfer,
+  transferDestinations,
   orgInitial,
   initialOpenRegisterId = null,
 }: {
   registers: DashboardRegister[]
   currency: string
   canManage: boolean
+  canTransfer: boolean
+  transferDestinations: TransferDestination[]
   orgInitial: string
   initialOpenRegisterId?: string | null
 }) {
   const router = useRouter()
   const [openingId, setOpeningId] = useState<string | null>(initialOpenRegisterId)
+  const [transferId, setTransferId] = useState<string | null>(null)
+  const [transferNote, setTransferNote] = useState<string | null>(null)
   const [continuingId, setContinuingId] = useState<string | null>(null)
   const [pinError, setPinError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -114,6 +124,8 @@ export function PosDashboard({
         </div>
       ) : null}
 
+      {transferNote ? <p className="mb-4 text-sm text-emerald-700">{transferNote}</p> : null}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {registers.map((register) => (
           <Card key={register.id} className="relative">
@@ -125,6 +137,11 @@ export function PosDashboard({
                   </h2>
                   {register.storeName ? (
                     <p className="mt-0.5 text-xs text-muted-foreground">{register.storeName}</p>
+                  ) : null}
+                  {register.bankBalance ? (
+                    <p className="mt-1 text-sm tabular-nums text-foreground">
+                      Balance {register.bankBalance}
+                    </p>
                   ) : null}
                 </div>
               </div>
@@ -183,6 +200,46 @@ export function PosDashboard({
                   </button>
                 )}
               </div>
+
+              {canTransfer && register.bankAccountId && register.bankBalance && register.bankBalanceRaw ? (
+                <div className="mt-4">
+                  {transferId === register.id ? (
+                    <RegisterTransferForm
+                      registerId={register.id}
+                      balance={register.bankBalance}
+                      balanceRaw={register.bankBalanceRaw}
+                      currency={currency}
+                      destinations={transferDestinations.filter(
+                        (account) => account.id !== register.bankAccountId,
+                      )}
+                      onDone={(message) => {
+                        setTransferNote(message)
+                        setTransferId(null)
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-sm font-medium text-primary underline"
+                      onClick={() => {
+                        setTransferNote(null)
+                        setTransferId(register.id)
+                      }}
+                    >
+                      Transfer out
+                    </button>
+                  )}
+                  {transferId === register.id ? (
+                    <button
+                      type="button"
+                      className="mt-2 block text-sm text-muted-foreground hover:text-foreground"
+                      onClick={() => setTransferId(null)}
+                    >
+                      Cancel
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div
                 className="mt-5 inline-flex size-8 items-center justify-center rounded-full text-xs font-bold text-white"
