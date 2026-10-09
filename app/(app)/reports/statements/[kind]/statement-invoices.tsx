@@ -11,7 +11,7 @@ import type { SalesDocumentDetail } from '@/server/services/sales.service'
 /**
  * The two invoice papers, kept apart on purpose.
  *
- * "summary" is only the list: date, number, due, total, paid, balance.
+ * "summary" is only the list: date, number, due, debit, credit, balance.
  * "invoices" is each invoice whole, on the same sheet as the single-invoice
  * PDF, one per page. Print → Save as PDF gives one file of whichever paper
  * is on screen.
@@ -122,8 +122,8 @@ export function StatementInvoices({
               <span>Date</span>
               <span>Invoice</span>
               <span>Due</span>
-              <span className="text-right">Total</span>
-              <span className="text-right">Paid</span>
+              <span className="text-right">Debit</span>
+              <span className="text-right">Credit</span>
               <span className="text-right">Balance</span>
             </div>
             {documents.map((document, index) => (
@@ -187,6 +187,7 @@ export function StatementInvoices({
             organization={organization}
             config={config}
             baseCurrency={baseCurrency}
+            ledger
           />
         </section>
         )

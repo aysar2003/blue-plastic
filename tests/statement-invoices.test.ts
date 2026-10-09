@@ -106,11 +106,11 @@ describe('invoice by invoice', () => {
     const customer = renderToStaticMarkup(createElement(StatementFilters, { ...props, invoiceView: true }))
     expect(customer).toContain('Invoice by invoice')
     expect(customer).toContain('Invoice summary')
-    expect(customer).toContain('Transaction detail')
+    expect(customer).toContain('Statement')
     const vendor = renderToStaticMarkup(createElement(StatementFilters, props))
     expect(vendor).not.toContain('Invoice by invoice')
     expect(vendor).not.toContain('Invoice summary')
-    expect(vendor).toContain('Transaction detail')
+    expect(vendor).toContain('Statement')
   })
 
   it('reads the summary paper on its own', () => {
@@ -136,6 +136,10 @@ describe('invoice by invoice', () => {
     )
     expect(html).toContain('data-statement-part="summary"')
     expect(html).toContain('Invoice summary')
+    expect(html).toContain('>Debit<')
+    expect(html).toContain('>Credit<')
+    expect(html).toContain('>Balance<')
+    expect(html).not.toContain('>Paid<')
     expect(html).not.toContain('data-invoice-page')
     expect(html.match(/class="invoice-sheet /g)).toHaveLength(1)
   })
@@ -155,7 +159,9 @@ describe('invoice by invoice', () => {
     expect(html).toContain('INV-0002')
     expect(html).toContain('>Item<')
     expect(html).toContain('>Rate<')
-    expect(html).toContain('Amount due')
+    expect(html).toContain('>Debit<')
+    expect(html).toContain('>Credit<')
+    expect(html).toContain('>Balance<')
 
     // The print stylesheet hides <header> (the app bar); the sheets must not use one.
     expect(html).not.toContain('<header')
@@ -163,7 +169,13 @@ describe('invoice by invoice', () => {
     // Each page is exactly the sheet the single-invoice print page draws.
     for (const document of documents) {
       const sheet = renderToStaticMarkup(
-        createElement(InvoiceSheet, { document, organization, config: byType('INVOICE'), baseCurrency: 'USD' }),
+        createElement(InvoiceSheet, {
+          document,
+          organization,
+          config: byType('INVOICE'),
+          baseCurrency: 'USD',
+          ledger: true,
+        }),
       )
       expect(html).toContain(sheet)
     }

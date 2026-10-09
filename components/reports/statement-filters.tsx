@@ -17,6 +17,7 @@ import {
   type StatementTotals,
   type StatementView,
 } from '@/lib/customer-statement'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 
@@ -60,65 +61,69 @@ export function StatementFilters({
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-end gap-3 print:hidden">
+    <div className="mb-4 space-y-3 print:hidden">
       <Filter label="Statement" pending={pending}>
-        <NativeSelect
-          id="statement-view"
-          className="w-72"
-          value={view}
-          onChange={(event) => set('view', event.target.value)}
-        >
+        <div role="group" aria-label="Statement" className="flex flex-wrap gap-1.5">
           {STATEMENT_VIEWS.filter((key) => invoiceView || (key !== 'invoices' && key !== 'summary')).map((key) => (
-            <option key={key} value={key}>
+            <Button
+              key={key}
+              type="button"
+              size="sm"
+              variant={view === key ? 'default' : 'outline'}
+              aria-pressed={view === key}
+              onClick={() => set('view', key)}
+            >
               {STATEMENT_VIEW_LABELS[key]}
-            </option>
+            </Button>
           ))}
-        </NativeSelect>
+        </div>
       </Filter>
-      <Filter label="Type">
-        <NativeSelect
-          id="statement-type"
-          className="w-44"
-          value={type}
-          onChange={(event) => set('type', event.target.value)}
-        >
-          {(typeOptions ?? STATEMENT_TYPES.map((key) => ({ value: key, label: STATEMENT_TYPE_LABELS[key] }))).map(
-            (option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+      <div className="flex flex-wrap items-end gap-3">
+        <Filter label="Type">
+          <NativeSelect
+            id="statement-type"
+            className="w-44"
+            value={type}
+            onChange={(event) => set('type', event.target.value)}
+          >
+            {(typeOptions ?? STATEMENT_TYPES.map((key) => ({ value: key, label: STATEMENT_TYPE_LABELS[key] }))).map(
+              (option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ),
+            )}
+          </NativeSelect>
+        </Filter>
+        <Filter label="Totals">
+          <NativeSelect
+            id="statement-totals"
+            className="w-40"
+            value={totals}
+            onChange={(event) => set('totals', event.target.value)}
+          >
+            {STATEMENT_TOTALS.map((key) => (
+              <option key={key} value={key}>
+                {STATEMENT_TOTALS_LABELS[key]}
               </option>
-            ),
-          )}
-        </NativeSelect>
-      </Filter>
-      <Filter label="Totals">
-        <NativeSelect
-          id="statement-totals"
-          className="w-40"
-          value={totals}
-          onChange={(event) => set('totals', event.target.value)}
-        >
-          {STATEMENT_TOTALS.map((key) => (
-            <option key={key} value={key}>
-              {STATEMENT_TOTALS_LABELS[key]}
-            </option>
-          ))}
-        </NativeSelect>
-      </Filter>
-      <Filter label="Balance">
-        <NativeSelect
-          id="statement-status"
-          className="w-36"
-          value={status}
-          onChange={(event) => set('status', event.target.value)}
-        >
-          {STATEMENT_STATUSES.map((key) => (
-            <option key={key} value={key}>
-              {STATEMENT_STATUS_LABELS[key]}
-            </option>
-          ))}
-        </NativeSelect>
-      </Filter>
+            ))}
+          </NativeSelect>
+        </Filter>
+        <Filter label="Balance">
+          <NativeSelect
+            id="statement-status"
+            className="w-36"
+            value={status}
+            onChange={(event) => set('status', event.target.value)}
+          >
+            {STATEMENT_STATUSES.map((key) => (
+              <option key={key} value={key}>
+                {STATEMENT_STATUS_LABELS[key]}
+              </option>
+            ))}
+          </NativeSelect>
+        </Filter>
+      </div>
     </div>
   )
 }

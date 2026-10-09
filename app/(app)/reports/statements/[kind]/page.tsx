@@ -1,5 +1,6 @@
 import type { JournalSourceType } from '@prisma/client'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { InteractiveGrid } from '@/components/data/interactive-grid'
@@ -7,7 +8,9 @@ import { PageHeader } from '@/components/data/page-header'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { StatementFilters } from '@/components/reports/statement-filters'
 import { StatementSend } from '@/components/reports/statement-send'
+import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import {
   readStatementFilter,
   statementFilterCaption,
@@ -197,6 +200,7 @@ export default async function StatementPage({
 
   const controls = (
     <>
+      <StatementKindSwitch kind={kind as Kind} query={query} />
       <div className="mb-4 flex flex-wrap items-end gap-3 print:hidden">{picker}</div>
       <div className="print:hidden">
         <ReportControls
@@ -610,6 +614,32 @@ export default async function StatementPage({
         </p>
       ) : null}
     </>
+  )
+}
+
+/** Customer, vendor, or account — the three statement types, picked in place. */
+function StatementKindSwitch({ kind, query }: { kind: Kind; query: SearchParams }) {
+  const params = new URLSearchParams()
+  for (const key of ['period', 'from', 'to', 'asOf', 'basis', 'compare']) {
+    const value = query[key]
+    const text = Array.isArray(value) ? value[0] : value
+    if (text) params.set(key, text)
+  }
+  const suffix = params.toString()
+
+  return (
+    <div role="group" aria-label="Statement type" className="mb-4 flex flex-wrap gap-1.5 print:hidden">
+      {KINDS.map((key) => (
+        <Link
+          key={key}
+          href={suffix ? `/reports/statements/${key}?${suffix}` : `/reports/statements/${key}`}
+          className={cn(buttonVariants({ size: 'sm', variant: kind === key ? 'default' : 'outline' }))}
+          aria-current={kind === key ? 'page' : undefined}
+        >
+          {TITLES[key]}
+        </Link>
+      ))}
+    </div>
   )
 }
 

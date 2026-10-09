@@ -35,12 +35,15 @@ export function InvoiceSheet({
   config,
   baseCurrency,
   className,
+  ledger = false,
 }: {
   document: SalesDocumentDetail
   organization: InvoiceSheetOrganization
   config: SalesTypeConfig
   baseCurrency: string
   className?: string
+  /** Statement papers name the three figures Debit, Credit and Balance. */
+  ledger?: boolean
 }) {
   const currency = document.currencyCode || baseCurrency
   const customer = document.customer
@@ -219,20 +222,20 @@ export function InvoiceSheet({
             className="flex items-baseline justify-between gap-6 pt-2 text-base font-bold"
             style={{ color: brand }}
           >
-            <dt className="uppercase tracking-[0.08em]">Total</dt>
+            <dt className="uppercase tracking-[0.08em]">{ledger ? 'Debit' : 'Total'}</dt>
             <dd className="tabular text-lg">{money(document.total)}</dd>
           </div>
           {showsSettlement ? (
             <>
               <div className="flex justify-between gap-6 pt-1 font-normal text-[#5C6B7A]">
-                <dt>Paid</dt>
+                <dt>{ledger ? 'Credit' : 'Paid'}</dt>
                 <dd className="tabular">{money(document.amountApplied)}</dd>
               </div>
               <div
                 className="flex items-baseline justify-between gap-6 border-t border-[#e0d5dc] pt-2 font-bold"
                 style={{ color: brand }}
               >
-                <dt>Amount due</dt>
+                <dt>{ledger ? 'Balance' : 'Amount due'}</dt>
                 <dd className="tabular">{money(document.balance)}</dd>
               </div>
             </>

@@ -21,9 +21,9 @@ export type FilterableEntry = {
  *
  * The view is the paper, and the three customer papers stay separate:
  * "invoice by invoice" prints each invoice whole, one page each; "invoice
- * summary" is only the list of those invoices; "transaction detail" is the
- * statement with every line written out. The type and the status narrow which
- * rows are on that paper. The amount due stays the full balance either way.
+ * summary" is only the list of those invoices; "statement" writes every line
+ * out. The type and the status narrow which rows are on that paper. The amount
+ * due stays the full balance either way.
  */
 export const STATEMENT_VIEWS = ['invoices', 'summary', 'detail', 'regular', 'arrow'] as const
 export const STATEMENT_TOTALS = ['line', 'cards', 'band', 'stack'] as const
@@ -54,7 +54,7 @@ export type StatementFilter = {
 export const STATEMENT_VIEW_LABELS: Record<StatementView, string> = {
   invoices: 'Invoice by invoice',
   summary: 'Invoice summary',
-  detail: 'Transaction detail',
+  detail: 'Statement',
   regular: 'Grouped — one row',
   arrow: 'Open one by one',
 }
