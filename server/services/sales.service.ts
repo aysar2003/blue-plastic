@@ -76,6 +76,7 @@ const DOCUMENT_SELECT = {
   subtotal: true, discountAmount: true, taxTotal: true, total: true,
   currencyCode: true, depositAccountId: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
+  createdById: true,
   customer: {
     select: {
       id: true,
@@ -83,7 +84,10 @@ const DOCUMENT_SELECT = {
       email: true,
       phone: true,
       billingLine1: true,
+      billingLine2: true,
       billingCity: true,
+      billingRegion: true,
+      salesPerson: true,
     },
   },
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
@@ -446,7 +450,7 @@ const DETAIL_SELECT = {
     select: {
       id: true, lineNumber: true, description: true, quantity: true, unitPrice: true,
       discountPercent: true, amount: true, taxAmount: true, serviceDate: true, storeId: true,
-      item: { select: { id: true, name: true, sku: true } },
+      item: { select: { id: true, name: true, sku: true, unitOfMeasure: true } },
       taxCode: { select: { id: true, name: true } },
       incomeAccount: { select: { id: true, code: true, name: true } },
     },
@@ -498,10 +502,25 @@ export async function get(ctx: OrgContext, id: string) {
 
   if (!document) throw notFound('Document')
 
-  return toDetail(document)
+  const [detail] = await attachCreators([toDetail(document)])
+  return detail
 }
 
-export type SalesDocumentDetail = ReturnType<typeof toDetail>
+/** The user who wrote the document, printed as Sales person. */
+async function attachCreators(rows: ReturnType<typeof toDetail>[]) {
+  const ids = [...new Set(rows.map((row) => row.createdById).filter((id): id is string => Boolean(id)))]
+  const users =
+    ids.length === 0
+      ? []
+      : await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
+  const names = new Map(users.map((user) => [user.id, user.name]))
+  return rows.map((row) => ({
+    ...row,
+    createdByName: row.createdById ? (names.get(row.createdById) ?? null) : null,
+  }))
+}
+
+export type SalesDocumentDetail = Awaited<ReturnType<typeof attachCreators>>[number]
 
 /**
  * Several documents in full, for papers that print many at once (a customer's
@@ -516,10 +535,11 @@ export async function getMany(ctx: OrgContext, ids: string[]): Promise<SalesDocu
     select: DETAIL_SELECT,
   })
   const byId = new Map(rows.map((row) => [row.id, row]))
-  return ids.flatMap((id) => {
+  const ordered = ids.flatMap((id) => {
     const row = byId.get(id)
     return row ? [toDetail(row)] : []
   })
+  return attachCreators(ordered)
 }
 
 /**

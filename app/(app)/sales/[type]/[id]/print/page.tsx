@@ -6,7 +6,8 @@ import { bySlug } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
 import * as organizationService from '@/server/services/organization.service'
 import * as salesService from '@/server/services/sales.service'
-import { InvoiceSheet, longDate } from '@/components/sales/invoice-sheet'
+import { longDate } from '@/components/sales/invoice-sheet'
+import { MerchantInvoice } from '@/components/sales/merchant-invoice'
 import { PrintButton } from './print-button'
 
 export const metadata = { title: 'Print' }
@@ -28,9 +29,10 @@ export default async function PrintDocumentPage({
   if (!config) notFound()
 
   const ctx = await requireOrgContext('invoice:read')
-  const [document, organization] = await Promise.all([
+  const [document, organization, template] = await Promise.all([
     salesService.get(ctx, id).catch(() => null),
     organizationService.get(ctx),
+    organizationService.getDocumentTemplate(ctx),
   ])
   if (!document) notFound()
 
@@ -70,11 +72,13 @@ export default async function PrintDocumentPage({
         />
       </div>
 
-      <InvoiceSheet
+      <MerchantInvoice
         document={document}
         organization={organization}
+        template={template}
         config={config}
         baseCurrency={ctx.organization.baseCurrency}
+        printedBy={ctx.user.name}
       />
     </div>
   )

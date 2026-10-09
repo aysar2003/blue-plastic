@@ -3,6 +3,9 @@ import Link from 'next/link'
 import { ClickableRow } from '@/components/reports/clickable-row'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { JournalSourceType } from '@prisma/client'
+
+import { JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
 import { formatDate, toCalendarDate, type CalendarDate } from '@/lib/date'
 import { EARLIEST_DATE } from '@/lib/report-periods'
 import {
@@ -28,6 +31,8 @@ export type PaperEntry = {
   balance: Decimal
   lines: StatementItem[]
   href: string
+  /** Invoice, payment, sales receipt, and the rest. */
+  kind?: string
 }
 
 export function CustomerStatement({
@@ -39,12 +44,12 @@ export function CustomerStatement({
   ledger,
   caption,
   opening,
-  closing,
   charges,
   credits,
   entries,
   debitLabel = 'Debit',
   creditLabel = 'Credit',
+  books = 'customer',
 }: {
   currency: string
   customer: {
@@ -61,12 +66,13 @@ export function CustomerStatement({
   ledger: boolean
   caption: string
   opening: Decimal
-  closing: Decimal
   charges: Decimal
   credits: Decimal
   entries: PaperEntry[]
   debitLabel?: string
   creditLabel?: string
+  /** Which books these rows belong to. Decides the account type on every line. */
+  books?: 'customer' | 'vendor'
 }) {
   const money = (value: Decimal.Value) => formatMoney(value, currency)
   const shownDebit = entries.reduce((sum, entry) => sum.plus(entry.charge), ZERO)
@@ -74,7 +80,9 @@ export function CustomerStatement({
   const shownOpen = entries.reduce((sum, entry) => sum.plus(entry.openAmount), ZERO)
   const debitTotal = ledger ? charges : shownDebit
   const creditTotal = ledger ? credits : shownCredit
-  const balanceTotal = ledger ? closing : shownOpen
+  const forwarded = forwardBalances(entries, opening)
+  const balanceTotal = ledger ? forwarded.closing : shownOpen
+  const paidTotal = entries.reduce((sum, entry) => sum.plus(paidOf(entry)), ZERO)
   const periodLabel = from <= EARLIEST_DATE ? `All dates through ${formatDate(to)}` : `${formatDate(from)} to ${formatDate(to)}`
 
   return (
@@ -108,10 +116,13 @@ export function CustomerStatement({
             <TableRow>
               <TableHead className="w-28">Date</TableHead>
               <TableHead className="w-36">Document</TableHead>
+              <TableHead className="w-36">Transaction</TableHead>
+              <TableHead className="w-40">Account type</TableHead>
               <TableHead>Description</TableHead>
               <TableHead className="w-28">Due</TableHead>
               <TableHead className="numeric w-32">{debitLabel}</TableHead>
               <TableHead className="numeric w-32">{creditLabel}</TableHead>
+              <TableHead className="numeric w-32">Paid</TableHead>
               <TableHead className="numeric w-32">{ledger ? 'Balance' : 'Balance due'}</TableHead>
             </TableRow>
           </TableHeader>
@@ -122,9 +133,12 @@ export function CustomerStatement({
                   {from <= EARLIEST_DATE ? '—' : formatDate(from)}
                 </TableCell>
                 <TableCell />
+                <TableCell />
+                <TableCell />
                 <TableCell colSpan={2} className="font-medium">
                   Balance brought forward
                 </TableCell>
+                <TableCell />
                 <TableCell />
                 <TableCell />
                 <TableCell className="numeric tabular font-medium">{money(opening)}</TableCell>
@@ -138,13 +152,15 @@ export function CustomerStatement({
                 currency={currency}
                 ledger={ledger}
                 mode={filter.view}
+                books={books}
+                carried={forwarded.byId.get(entry.id)}
               />
             ))}
           </TableBody>
           {filter.totals === 'line' ? (
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={4} className="font-semibold">
+                <TableCell colSpan={6} className="font-semibold">
                   {ledger ? `Balance at ${formatDate(to)}` : 'Rows shown'}
                 </TableCell>
                 <TableCell className="numeric tabular font-semibold">
@@ -154,6 +170,10 @@ export function CustomerStatement({
                 <TableCell className="numeric tabular font-semibold">
                   <span className="block text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground">{creditLabel} total</span>
                   {money(creditTotal)}
+                </TableCell>
+                <TableCell className="numeric tabular font-semibold">
+                  <span className="block text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground">Paid total</span>
+                  {money(paidTotal)}
                 </TableCell>
                 <TableCell className="numeric tabular font-semibold">
                   <span className="block text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground">Balance</span>
@@ -208,17 +228,25 @@ function StatementRows({
   currency,
   ledger,
   mode,
+  books,
+  carried,
 }: {
   entry: PaperEntry
   currency: string
   ledger: boolean
   mode: StatementFilter['view']
+  books: 'customer' | 'vendor'
+  carried?: Decimal
 }) {
   const money = (value: Decimal.Value) => formatMoney(value, currency)
   const lines = <LineGrid entry={entry} money={money} />
+  const tint = kindTint(entry.kind)
   return (
     <>
-      <ClickableRow href={entry.href} className={mode === 'detail' ? 'border-t-4 border-card' : undefined}>
+      <ClickableRow
+        href={entry.href}
+        className={mode === 'detail' ? `border-t-4 border-card ${tint}` : tint}
+      >
         <TableCell className="tabular whitespace-nowrap text-muted-foreground">
           {formatDate(toCalendarDate(entry.date))}
         </TableCell>
@@ -227,6 +255,8 @@ function StatementRows({
             {entry.number}
           </Link>
         </TableCell>
+        <TableCell>{transactionName(entry.kind, books)}</TableCell>
+        <TableCell className="text-muted-foreground">{books === 'vendor' ? 'Accounts payable' : 'Accounts receivable'}</TableCell>
         <TableCell className="text-muted-foreground">
           <Link href={entry.href} className="underline-offset-4 hover:underline">
             {entry.description}
@@ -255,15 +285,18 @@ function StatementRows({
         <TableCell className="numeric tabular">
           {entry.credit.isZero() ? '' : <Link href={entry.href} className="underline-offset-4 hover:underline">{money(entry.credit)}</Link>}
         </TableCell>
+        <TableCell className="numeric tabular">
+          {paidLabel(entry, money)}
+        </TableCell>
         <TableCell className="numeric tabular font-medium">
           <Link href={entry.href} className="underline-offset-4 hover:underline">
-            {money(ledger ? entry.balance : entry.openAmount)}
+            {money(ledger ? (carried ?? entry.balance) : entry.openAmount)}
           </Link>
         </TableCell>
       </ClickableRow>
       {mode === 'detail' && entry.lines.length > 0 ? (
-        <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={7} className="bg-slate-50/80 px-3 py-2">
+        <TableRow className={tint}>
+          <TableCell colSpan={10} className="bg-slate-50/80 px-3 py-2">
             <table className="w-full border-separate border-spacing-0 overflow-hidden rounded-md text-xs">
               <thead>
                 <tr className="ledger-head text-left text-[0.65rem] font-semibold uppercase tracking-wide">
@@ -352,6 +385,85 @@ function TotalLine({ label, value, emphasis }: { label: string; value: string; e
       <span className={`tabular ${emphasis ? 'text-base font-semibold' : 'text-sm'}`}>{value}</span>
     </div>
   )
+}
+
+/** What has been settled on an invoice, bill, or a receipt that was paid at once. */
+function paidOf(entry: PaperEntry): Decimal {
+  const original = new Decimal(entry.original)
+  const open = new Decimal(entry.openAmount)
+  if (entry.kind === 'INVOICE' || entry.kind === 'BILL' || entry.kind === 'CREDIT_MEMO' || entry.kind === 'VENDOR_CREDIT') {
+    const paid = original.minus(open)
+    return paid.greaterThan(0) ? paid : ZERO
+  }
+  if (entry.kind === 'SALES_RECEIPT' || entry.kind === 'REFUND_RECEIPT' || entry.kind === 'EXPENSE' || entry.kind === 'PAYMENT') {
+    return original
+  }
+  return ZERO
+}
+
+type CarryEntry = {
+  id: string
+  kind?: string
+  charge: Decimal
+  credit: Decimal
+  openAmount: Decimal
+}
+
+/**
+ * Previous balance reads what was paid. A fully paid invoice adds nothing.
+ * Every invoice or bill that still has a balance carries that remainder forward.
+ * A journal still moves the balance. A payment does not, because it is already inside the paid amount.
+ */
+export function forwardBalances(entries: CarryEntry[], opening: Decimal) {
+  let running = opening
+  const byId = new Map<string, Decimal>()
+  const accountAt: Record<string, { previous: string; current: string }> = {}
+  for (const entry of entries) {
+    if (entry.kind === 'INVOICE' || entry.kind === 'BILL') {
+      const previous = running
+      const open = new Decimal(entry.openAmount)
+      if (open.greaterThan(0)) running = running.plus(open)
+      accountAt[entry.id] = { previous: previous.toString(), current: running.toString() }
+    } else if (entry.kind === 'JOURNAL') {
+      running = running.plus(entry.charge).minus(entry.credit)
+    }
+    byId.set(entry.id, running)
+  }
+  return { byId, closing: running, accountAt }
+}
+
+function paidLabel(entry: PaperEntry, money: (value: Decimal.Value) => string): string {
+  const paid = paidOf(entry)
+  if (paid.isZero()) return ''
+  return money(paid)
+}
+
+/** A light wash so rows of one transaction type read as the same kind. */
+const KIND_TINT: Record<string, string> = {
+  INVOICE: 'bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/45 dark:hover:bg-sky-900/55',
+  BILL: 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/45 dark:hover:bg-indigo-900/55',
+  PAYMENT: 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50',
+  CREDIT_MEMO: 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50',
+  VENDOR_CREDIT: 'bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/40 dark:hover:bg-orange-900/50',
+  SALES_RECEIPT: 'bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/40 dark:hover:bg-teal-900/50',
+  EXPENSE: 'bg-lime-50 hover:bg-lime-100 dark:bg-lime-950/35 dark:hover:bg-lime-900/45',
+  REFUND_RECEIPT: 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50',
+  JOURNAL: 'bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-900/50',
+  ESTIMATE: 'bg-stone-100/80 hover:bg-stone-200/70 dark:bg-stone-900/40 dark:hover:bg-stone-800/50',
+  PURCHASE_ORDER: 'bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-900/45 dark:hover:bg-slate-800/55',
+}
+
+function kindTint(kind: string | undefined): string {
+  return KIND_TINT[kind ?? ''] ?? 'bg-muted/30 hover:bg-muted/50'
+}
+
+function transactionName(kind: string | undefined, books: 'customer' | 'vendor'): string {
+  if (!kind) return '—'
+  if (kind === 'PAYMENT') return books === 'vendor' ? 'Bill payment' : 'Customer payment'
+  if (kind === 'ESTIMATE') return 'Estimate'
+  if (kind === 'PURCHASE_ORDER') return 'Purchase order'
+  if (kind === 'JOURNAL') return 'Journal'
+  return JOURNAL_SOURCE_LABELS[kind as JournalSourceType] ?? kind
 }
 
 function plainQty(value: string): string {

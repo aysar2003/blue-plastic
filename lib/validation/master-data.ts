@@ -106,6 +106,8 @@ export const customerSchema = z.object({
   shippingPostalCode: optionalText(30),
   shippingCountry: countryCode,
   creditLimit: optionalMoney,
+  /** Printed on the invoice beside Sales person. */
+  salesPerson: optionalText(80),
 
   /**
    * Balance when the books started. Positive = they owe you; negative = a credit

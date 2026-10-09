@@ -395,6 +395,10 @@ model Organization {
   /// Shape: `lib/feature-flags.ts` (`OrgFeatureFlags`). Null means defaults (all on).
   featureFlags Json?
 
+  /// How invoices and statements are drawn. Shape: `lib/document-template.ts`.
+  /// Null means the merchant paper (teal bill) with the classic sheet hidden.
+  documentTemplate Json?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -963,6 +967,8 @@ model Customer {
   creditLimit   Decimal? @db.Decimal(19, 4)
 
   notes    String?
+  /// Printed on the invoice as Sales person. The person who looks after this customer.
+  salesPerson String?
   isActive Boolean @default(true)
 
   /// The day the debt was agreed. The ledger still uses the balance date.

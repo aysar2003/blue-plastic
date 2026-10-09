@@ -21,7 +21,7 @@ export function customerContactMenu(
     links.push({
       type: 'link',
       label: 'QuickReport',
-      href: `/reports/statements/customer?customerId=${id}&view=detail`,
+      href: `/reports/statements/customer?customerId=${id}`,
     })
   }
   if (options.canInvoice) {
@@ -50,7 +50,7 @@ export function customerContactMenu(
 }
 
 export function customerQuickReportHref(customerId: string) {
-  return `/reports/statements/customer?customerId=${encodeURIComponent(customerId)}&view=detail`
+  return `/reports/statements/customer?customerId=${encodeURIComponent(customerId)}`
 }
 
 /**

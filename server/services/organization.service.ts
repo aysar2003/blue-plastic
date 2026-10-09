@@ -1,7 +1,9 @@
 import 'server-only'
 
+import { parseDocumentTemplate, type DocumentTemplate } from '@/lib/document-template'
 import { parseFeatureFlags, type OrgFeatureFlags } from '@/lib/feature-flags'
 import type {
+  DocumentTemplateInput,
   OrganizationAccountingInput,
   OrganizationFeaturesInput,
   OrganizationUpdateInput,
@@ -181,6 +183,55 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       meta,
     )
     return parseFeatureFlags(after.featureFlags)
+  })
+}
+
+export async function getDocumentTemplate(ctx: OrgContext): Promise<DocumentTemplate> {
+  const org = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: { documentTemplate: true },
+  })
+  if (!org) throw notFound('Organisation')
+  return parseDocumentTemplate(org.documentTemplate)
+}
+
+export async function updateDocumentTemplate(ctx: OrgContext, input: DocumentTemplateInput) {
+  const meta = await requestMeta()
+  const template: DocumentTemplate = parseDocumentTemplate({
+    accent: input.accent,
+    terms: input.terms ?? '',
+    showClassicPaper: input.showClassicPaper,
+    banks: input.banks
+      .map((bank) => ({ name: bank.name ?? '', account: bank.account ?? '' }))
+      .filter((bank) => bank.name || bank.account),
+  })
+
+  return db.$transaction(async (tx) => {
+    const before = await tx.organization.findUnique({
+      where: { id: ctx.orgId },
+      select: { documentTemplate: true },
+    })
+    if (!before) throw notFound('Organisation')
+
+    const after = await tx.organization.update({
+      where: { id: ctx.orgId },
+      data: { documentTemplate: template },
+      select: { documentTemplate: true },
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Organization',
+        entityId: ctx.orgId,
+        action: 'UPDATE',
+        before: { documentTemplate: before.documentTemplate },
+        after: { documentTemplate: after.documentTemplate },
+      },
+      meta,
+    )
+    return parseDocumentTemplate(after.documentTemplate)
   })
 }
 

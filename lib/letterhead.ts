@@ -24,7 +24,9 @@ export function letterheadOf(org: LetterheadSource): Letterhead {
   const place = [org.city, org.region, org.postalCode].map(clean).filter(Boolean).join(', ')
   const address = [street, place, clean(org.country)].filter(Boolean).join(', ')
   return {
-    name: clean(org.legalName) || org.name,
+    // Display name is the company on the paper. Legal name is the registered
+    // name kept on the organisation, and only fills in when display name is empty.
+    name: clean(org.name) || clean(org.legalName),
     address,
     phone: clean(org.phone) || null,
     email: clean(org.email) || null,

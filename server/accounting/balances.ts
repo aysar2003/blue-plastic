@@ -224,6 +224,8 @@ export type LedgerEntry = {
   balance: Decimal
   /** The other accounts in the same journal — what a register shows in its "account" column. */
   contraAccounts: string
+  /** Subtypes of those other accounts, comma-separated, so a statement can name the type. */
+  contraSubtypes: string
   /** Those same accounts, one by one, with the amount posted to each. */
   splits: { code: string; name: string; amount: string }[]
   /** The customer or vendor the line was posted against, on a control account. */
@@ -287,6 +289,7 @@ export async function generalLedger(
       debit: string
       credit: string
       contraAccounts: string | null
+      contraSubtypes: string | null
       splits: unknown
       customerId: string | null
       vendorId: string | null
@@ -315,6 +318,13 @@ export async function generalLedger(
               WHERE cl."journalId" = l."journalId"
                 AND cl."accountId" <> l."accountId"
            ) AS "contraAccounts",
+           (
+             SELECT string_agg(DISTINCT ca.subtype::text, ', ' ORDER BY ca.subtype::text)
+               FROM journal_lines cl
+               JOIN ledger_accounts ca ON ca.id = cl."accountId"
+              WHERE cl."journalId" = l."journalId"
+                AND cl."accountId" <> l."accountId"
+           ) AS "contraSubtypes",
            COALESCE((
              SELECT json_agg(
                       json_build_object('code', s.code, 'name', s.name, 'amount', s.amount)
@@ -363,6 +373,7 @@ export async function generalLedger(
       credit,
       balance: running,
       contraAccounts: row.contraAccounts ?? '—',
+      contraSubtypes: row.contraSubtypes ?? '',
       splits: readSplits(row.splits),
       customerId: row.customerId,
       vendorId: row.vendorId,

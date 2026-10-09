@@ -22,7 +22,7 @@ describe('customer statement filters', () => {
     expect(entryVisible(estimate, readStatementFilter({ type: 'estimate' }), '2026-10-03')).toBe(true)
     expect(readStatementFilter({ view: 'arrow' }).view).toBe('arrow')
     expect(readStatementFilter({ view: 'detail' }).view).toBe('detail')
-    expect(readStatementFilter({}).view).toBe('detail')
+    expect(readStatementFilter({}).view).toBe('regular')
   })
 
   it('treats an invoice due yesterday as overdue and a paid one as paid', () => {

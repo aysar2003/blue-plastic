@@ -1,12 +1,15 @@
+import type { PurchaseDocumentType, SalesDocumentType } from '@prisma/client'
 import Link from 'next/link'
 
-import { InvoiceSheet, longDate, type InvoiceSheetOrganization } from '@/components/sales/invoice-sheet'
+import { InvoiceSheet, longDate, type InvoiceSheetOrganization, type SheetDocument } from '@/components/sales/invoice-sheet'
+import { MerchantInvoice } from '@/components/sales/merchant-invoice'
 import { SheetMarks } from '@/components/sales/sheet-marks'
 import { FORM_SHEET } from '@/lib/credit-brand'
+import { type DocumentTemplate } from '@/lib/document-template'
 import { toCalendarDate, type CalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
+import { purchaseByType } from '@/lib/purchase-types'
 import { byType } from '@/lib/sales-types'
-import type { SalesDocumentDetail } from '@/server/services/sales.service'
 
 /**
  * The two invoice papers, kept apart on purpose.
@@ -27,7 +30,13 @@ export function StatementInvoices({
   documents,
   omitted,
   closing,
+  opening,
+  accountAt,
   part,
+  paper = 'merchant',
+  template,
+  printedBy,
+  subject = 'invoice',
 }: {
   organization: InvoiceSheetOrganization
   baseCurrency: string
@@ -36,12 +45,25 @@ export function StatementInvoices({
   to: CalendarDate
   allDates: boolean
   caption: string
-  documents: SalesDocumentDetail[]
+  documents: SheetDocument[]
+  /** Invoice papers, or the same sheets filled with a vendor's bills. */
+  subject?: 'invoice' | 'bill'
   /** Invoices in the period beyond what one paper prints. */
   omitted: number
   closing: Decimal
+  opening?: Decimal
+  /**
+   * Customer account at each invoice: previous is what they owed just before
+   * it was cut, current is what they owed just after. Invoice 2's previous is
+   * invoice 1's current, and each later page adds the ones before it.
+   */
+  accountAt?: Record<string, { previous: string; current: string }>
   /** Which of the two papers this is. They are never drawn together. */
   part: 'summary' | 'invoices'
+  /** Merchant is the bill from Settings. Classic is the older sheet, hidden until turned on. */
+  paper?: 'merchant' | 'classic'
+  template?: DocumentTemplate
+  printedBy?: string
 }) {
   const brand = FORM_SHEET.accent
   const brandSoft = FORM_SHEET.wash
@@ -56,12 +78,16 @@ export function StatementInvoices({
   )
   const period = allDates ? 'All dates' : `${longDate(from)} – ${longDate(to)}`
 
-  const count = `${documents.length} invoice${documents.length === 1 ? '' : 's'}`
+  const noun =
+    subject === 'bill'
+      ? { one: 'bill', many: 'bills', title: 'Bills', summary: 'Bill summary', column: 'Bill', party: 'Vendor', paper: 'Bill by bill' }
+      : { one: 'invoice', many: 'invoices', title: 'Invoices', summary: 'Invoice summary', column: 'Invoice', party: 'Billed to', paper: 'Invoice by invoice' }
+  const count = `${documents.length} ${documents.length === 1 ? noun.one : noun.many}`
   const lead =
     documents.length === 0
-      ? 'No invoices in this period.'
+      ? `No ${noun.many} in this period.`
       : part === 'summary'
-        ? `${count} on this summary only. Invoice by invoice prints each one on its own page.`
+        ? `${count} on this summary only. ${noun.paper} prints each one on its own page.`
         : `${count}, each on its own page. Print, or Save as PDF, for one file with all of them.`
 
   return (
@@ -74,7 +100,7 @@ export function StatementInvoices({
       {part === 'summary' ? (
       <article className="invoice-sheet relative min-h-[920px] overflow-hidden bg-white text-[#1f1f23] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:min-h-0 print:shadow-none">
         <div className="px-8 py-4 text-white sm:px-12" style={{ background: brand }}>
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-white/80">Invoices</p>
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-white/80">{noun.title}</p>
           <h1 className="text-xl font-semibold tracking-wide sm:text-2xl">
             {organization.legalName ?? organization.name}
           </h1>
@@ -85,7 +111,7 @@ export function StatementInvoices({
           <div className="flex justify-end">
             <div className="max-w-md text-right">
               <p className="text-xl font-bold uppercase tracking-[0.18em]" style={{ color: brand }}>
-                Invoice summary
+                {noun.summary}
               </p>
               <p className="mt-1 text-sm text-[#5C6B7A]">{period}</p>
               {caption ? <p className="text-sm text-[#5C6B7A]">{caption}</p> : null}
@@ -94,7 +120,7 @@ export function StatementInvoices({
 
           <dl className="mt-10 grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
             <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
-              Billed to
+              {noun.party}
             </dt>
             <dd className="text-[#5C6B7A]">
               <span className="text-[#3d4c5c]">{customer.displayName}</span>
@@ -109,7 +135,7 @@ export function StatementInvoices({
               {customer.email ? <span className="block">{customer.email}</span> : null}
             </dd>
             <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
-              Invoices
+              {noun.title}
             </dt>
             <dd className="text-[#5C6B7A]">{documents.length}</dd>
           </dl>
@@ -120,7 +146,7 @@ export function StatementInvoices({
               style={{ background: brand }}
             >
               <span>Date</span>
-              <span>Invoice</span>
+              <span>{noun.column}</span>
               <span>Due</span>
               <span className="text-right">Debit</span>
               <span className="text-right">Credit</span>
@@ -169,7 +195,12 @@ export function StatementInvoices({
 
       {part === 'invoices'
         ? documents.map((document, index) => {
-        const config = byType(document.type)
+        const sale = subject === 'invoice' ? byType(document.type as SalesDocumentType) : null
+        const purchase = subject === 'bill' ? purchaseByType(document.type as PurchaseDocumentType) : null
+        const config = sale ?? { type: document.type, singular: purchase?.singular ?? 'Bill' }
+        const href = sale
+          ? `/sales/${sale.slug}/${document.id}`
+          : `/purchases/${purchase?.slug ?? 'bills'}/${document.id}`
         return (
         <section
           key={document.id}
@@ -178,17 +209,42 @@ export function StatementInvoices({
           data-invoice-page
         >
           <p className="mb-2 text-right text-xs print:hidden">
-            <Link href={`/sales/${config.slug}/${document.id}`} className="text-muted-foreground underline-offset-4 hover:underline">
+            <Link href={href} className="text-muted-foreground underline-offset-4 hover:underline">
               Open {document.number}
             </Link>
           </p>
-          <InvoiceSheet
-            document={document}
-            organization={organization}
-            config={config}
-            baseCurrency={baseCurrency}
-            ledger
-          />
+          {paper === 'classic' || !template ? (
+            <InvoiceSheet
+              document={document}
+              organization={organization}
+              config={config}
+              baseCurrency={baseCurrency}
+              ledger
+            />
+          ) : (
+            <MerchantInvoice
+              document={document}
+              organization={organization}
+              template={template}
+              config={config}
+              baseCurrency={baseCurrency}
+              previousBalance={accountAt?.[document.id]?.previous ?? opening?.toString() ?? null}
+              currentBalance={accountAt?.[document.id]?.current ?? closing.toString()}
+              printedBy={printedBy}
+              words={
+                subject === 'bill'
+                  ? {
+                      party: 'Vendor',
+                      account: 'Vendor account',
+                      date: 'Bill date',
+                      person: 'Entered by',
+                      reference: 'Vendor ref',
+                      order: 'Reference',
+                    }
+                  : undefined
+              }
+            />
+          )}
         </section>
         )
       })

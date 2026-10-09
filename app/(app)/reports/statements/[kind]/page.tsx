@@ -1,4 +1,4 @@
-import type { JournalSourceType } from '@prisma/client'
+import type { AccountSubtype, JournalSourceType } from '@prisma/client'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -17,7 +17,8 @@ import {
   statementInvoices,
   visibleEntries,
 } from '@/lib/customer-statement'
-import { readVendorFilter, vendorFilterCaption, vendorTypeOptions, visibleVendorEntries } from '@/lib/vendor-statement'
+import { readVendorFilter, statementBills, vendorFilterCaption, vendorTypeOptions, visibleVendorEntries } from '@/lib/vendor-statement'
+import { ACCOUNT_SUBTYPE_LABELS, JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
 import { accountOptions } from '@/lib/account-options'
 import { formatDate, formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
@@ -30,10 +31,11 @@ import * as payables from '@/server/services/payables.service'
 import * as receivables from '@/server/services/receivables.service'
 import * as accountService from '@/server/services/account.service'
 import * as organizationService from '@/server/services/organization.service'
+import * as purchaseService from '@/server/services/purchase.service'
 import * as salesService from '@/server/services/sales.service'
 import { readSettings, type SearchParams } from '../../params'
 import { ReportControls } from '../../report-controls'
-import { CustomerStatement, statementEmailBody } from './customer-statement'
+import { CustomerStatement, forwardBalances, statementEmailBody } from './customer-statement'
 import { StatementInvoices } from './statement-invoices'
 import { StatementPicker } from './statement-picker'
 
@@ -111,7 +113,7 @@ export default async function StatementPage({
 
   /* --- Who the statement is about --------------------------------------- */
 
-  const [customers, vendors, chart] = await Promise.all([
+  const [customers, vendors, chart, template] = await Promise.all([
     kind === 'customer'
       ? db.customer.findMany({
           where: { orgId: ctx.orgId },
@@ -149,6 +151,7 @@ export default async function StatementPage({
         })
       : [],
     kind === 'account' ? accountService.selectableAccounts(ctx, { withBalances: true }) : [],
+    organizationService.getDocumentTemplate(ctx),
   ])
 
   const subjectId =
@@ -218,8 +221,8 @@ export default async function StatementPage({
             type={customerFilter.type}
             status={customerFilter.status}
             totals={customerFilter.totals}
-            defaultView="detail"
             invoiceView
+            classicPaper={template.showClassicPaper}
           />
         ) : null}
         {vendorFilter ? (
@@ -229,6 +232,9 @@ export default async function StatementPage({
             status={vendorFilter.status}
             totals={vendorFilter.totals}
             typeOptions={vendorTypeOptions()}
+            invoiceView
+            bills
+            classicPaper={template.showClassicPaper}
           />
         ) : null}
       </div>
@@ -264,6 +270,8 @@ export default async function StatementPage({
     credit: Decimal
     balance: Decimal
     href: string
+    transaction: string
+    accountType: string
   }
 
   let subjectName = ''
@@ -284,7 +292,11 @@ export default async function StatementPage({
       [customer.billingLine1, customer.billingLine2].filter(Boolean).join(', '),
       [customer.billingCity, customer.billingRegion, customer.billingPostalCode].filter(Boolean).join(' '),
     ].filter(Boolean)
-    if (customerFilter.view === 'invoices' || customerFilter.view === 'summary') {
+    if (
+      customerFilter.view === 'invoices' ||
+      customerFilter.view === 'summary' ||
+      customerFilter.view === 'classic'
+    ) {
       const invoices = statementInvoices(statement.entries, customerFilter, settings.asOf)
       const [documents, organization] = await Promise.all([
         salesService.getMany(
@@ -313,7 +325,11 @@ export default async function StatementPage({
             className="print:hidden"
             title="Customer statement"
             description={`${customer.displayName} · ${periodText} · ${
-              customerFilter.view === 'summary' ? 'Invoice summary' : 'Invoice by invoice'
+              customerFilter.view === 'summary'
+                ? 'Invoice summary'
+                : customerFilter.view === 'classic'
+                  ? 'Classic paper'
+                  : 'Invoice by invoice'
             }`}
             actions={
               <PrintButton
@@ -348,7 +364,12 @@ export default async function StatementPage({
             documents={documents}
             omitted={Math.max(0, invoices.length - INVOICE_PAPER_LIMIT)}
             closing={statement.closing}
+            opening={statement.opening}
+            accountAt={forwardBalances(statement.entries, statement.opening).accountAt}
             part={customerFilter.view === 'summary' ? 'summary' : 'invoices'}
+            paper={customerFilter.view === 'classic' ? 'classic' : 'merchant'}
+            template={template}
+            printedBy={ctx.user.name}
           />
         </>
       )
@@ -415,10 +436,10 @@ export default async function StatementPage({
           ledger={customerFilter.type === 'all' && customerFilter.status === 'all'}
           caption={statementFilterCaption(customerFilter)}
           opening={statement.opening}
-          closing={statement.closing}
           charges={charges}
           credits={credits}
           entries={entries}
+          books="customer"
         />
       </>
     )
@@ -433,6 +454,89 @@ export default async function StatementPage({
       [vendor.billingLine1, vendor.billingLine2].filter(Boolean).join(', '),
       [vendor.billingCity, vendor.billingRegion, vendor.billingPostalCode].filter(Boolean).join(' '),
     ].filter(Boolean)
+    if (
+      vendorFilter.view === 'invoices' ||
+      vendorFilter.view === 'summary' ||
+      vendorFilter.view === 'classic'
+    ) {
+      const bills = statementBills(statement.entries, vendorFilter, settings.asOf)
+      const [documents, organization] = await Promise.all([
+        purchaseService.getMany(
+          ctx,
+          bills.slice(0, INVOICE_PAPER_LIMIT).map((entry) => entry.id),
+        ),
+        organizationService.get(ctx),
+      ])
+      const periodText =
+        settings.period === 'all-dates'
+          ? 'All dates'
+          : `${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}`
+      const paperName =
+        vendorFilter.view === 'summary'
+          ? 'Bill summary'
+          : vendorFilter.view === 'classic'
+            ? 'Classic paper'
+            : 'Bill by bill'
+      const billsBody = [
+        `Bills — ${vendor.displayName}`,
+        ctx.organization.name,
+        periodText,
+        ...documents.map(
+          (document) =>
+            `${document.number} · ${formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)} · ${formatMoney(document.total, currency)}`,
+        ),
+        `Balance ${formatMoney(statement.closing, currency)}`,
+      ].join('\n')
+      return (
+        <>
+          <PageHeader
+            className="print:hidden"
+            title="Vendor statement"
+            description={`${vendor.displayName} · ${periodText} · ${paperName}`}
+            actions={
+              <PrintButton
+                paper="bills"
+                filename={`bills-${vendor.displayName
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '-')
+                  .replace(/^-|-$/g, '')
+                  .slice(0, 40) || 'vendor'}.pdf`}
+                defaultTo={vendor.email ?? ''}
+                defaultSubject={`Bills from ${ctx.organization.name}`}
+                defaultBody={billsBody}
+                whatsappPhone={vendor.phone}
+                whatsappText={billsBody}
+              />
+            }
+          />
+          {controls}
+          <StatementInvoices
+            organization={organization}
+            baseCurrency={currency}
+            customer={{
+              displayName: vendor.displayName,
+              companyName: vendor.companyName,
+              email: vendor.email,
+              address,
+            }}
+            from={settings.range.from}
+            to={settings.range.to}
+            allDates={settings.period === 'all-dates'}
+            caption={vendorFilterCaption({ ...vendorFilter, type: 'all' })}
+            documents={documents}
+            omitted={Math.max(0, bills.length - INVOICE_PAPER_LIMIT)}
+            closing={statement.closing}
+            opening={statement.opening}
+            accountAt={forwardBalances(statement.entries, statement.opening).accountAt}
+            part={vendorFilter.view === 'summary' ? 'summary' : 'invoices'}
+            paper={vendorFilter.view === 'classic' ? 'classic' : 'merchant'}
+            template={template}
+            printedBy={ctx.user.name}
+            subject="bill"
+          />
+        </>
+      )
+    }
     const vendorBody = [
       `Vendor statement — ${vendor.displayName}`,
       ctx.organization.name,
@@ -478,12 +582,12 @@ export default async function StatementPage({
           ledger={vendorFilter.type === 'all' && vendorFilter.status === 'all'}
           caption={vendorFilterCaption(vendorFilter)}
           opening={statement.opening}
-          closing={statement.closing}
           charges={charges}
           credits={credits}
           entries={entries}
           debitLabel="Bills"
           creditLabel="Paid"
+          books="vendor"
         />
       </>
     )
@@ -491,6 +595,7 @@ export default async function StatementPage({
     const account = chart.find((row) => row.id === subjectId)
     if (!account) notFound()
     subjectName = `${account.code} — ${account.name}`
+    const ownAccountType = ACCOUNT_SUBTYPE_LABELS[account.subtype] ?? account.type
     const ledger = await generalLedger(ctx.orgId, subjectId, settings.range, { limit: 1000 })
     opening = ledger.opening
     closing = ledger.closing
@@ -517,6 +622,8 @@ export default async function StatementPage({
         credit: entry.credit,
         balance: entry.balance,
         href: source.href ?? `/journals/${entry.journalId}`,
+        transaction: JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ?? entry.sourceType,
+        accountType: subtypeLabels(entry.contraSubtypes, ownAccountType),
       }
     })
   }
@@ -571,6 +678,8 @@ export default async function StatementPage({
         columns={[
           { id: 'date', label: 'Date', kind: 'datetime', defaultWidth: 188 },
           { id: 'document', label: 'Document', defaultWidth: 140 },
+          { id: 'transaction', label: 'Transaction', defaultWidth: 150 },
+          { id: 'accountType', label: 'Account type', defaultWidth: 160 },
           { id: 'description', label: 'Description', defaultWidth: 240 },
           { id: 'charge', label: chargeLabel, kind: 'money', total: true, defaultWidth: 128 },
           { id: 'credit', label: creditLabel, kind: 'money', total: true, defaultWidth: 128 },
@@ -592,6 +701,8 @@ export default async function StatementPage({
             cells: {
               date: { value: line.recordedAt },
               document: { value: line.number, href: line.href },
+              transaction: { value: line.transaction, href: line.href },
+              accountType: { value: line.accountType, href: line.href },
               description: { value: line.description, href: line.href },
               charge: { value: line.charge.isZero() ? null : line.charge.toString(), href: line.href },
               credit: { value: line.credit.isZero() ? null : line.credit.toString(), href: line.href },
@@ -641,6 +752,14 @@ function StatementKindSwitch({ kind, query }: { kind: Kind; query: SearchParams 
       ))}
     </div>
   )
+}
+
+function subtypeLabels(raw: string, fallback: string): string {
+  const labels = raw
+    .split(',')
+    .map((part) => ACCOUNT_SUBTYPE_LABELS[part.trim() as AccountSubtype])
+    .filter(Boolean)
+  return labels.length > 0 ? labels.join(', ') : fallback
 }
 
 function Summary({

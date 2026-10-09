@@ -19,13 +19,13 @@ export type FilterableEntry = {
 /**
  * How a customer statement is asked for.
  *
- * The view is the paper, and the three customer papers stay separate:
- * "invoice by invoice" prints each invoice whole, one page each; "invoice
- * summary" is only the list of those invoices; "statement" writes every line
- * out. The type and the status narrow which rows are on that paper. The amount
- * due stays the full balance either way.
+ * The first three papers are the same ones a vendor statement offers, and they
+ * lead the menu: the statement with every line, one row per document, and open
+ * one by one. Invoice by invoice, the invoice summary, and classic paper stay
+ * after those, and only on a customer statement. The type and the status narrow
+ * which rows are on that paper. The amount due stays the full balance either way.
  */
-export const STATEMENT_VIEWS = ['invoices', 'summary', 'detail', 'regular', 'arrow'] as const
+export const STATEMENT_VIEWS = ['detail', 'regular', 'arrow', 'invoices', 'summary', 'classic'] as const
 export const STATEMENT_TOTALS = ['line', 'cards', 'band', 'stack'] as const
 export const STATEMENT_TYPES = [
   'all',
@@ -54,6 +54,7 @@ export type StatementFilter = {
 export const STATEMENT_VIEW_LABELS: Record<StatementView, string> = {
   invoices: 'Invoice by invoice',
   summary: 'Invoice summary',
+  classic: 'Classic paper',
   detail: 'Statement',
   regular: 'Grouped — one row',
   arrow: 'Open one by one',
@@ -104,7 +105,7 @@ export function readStatementFilter(
   const status = one(query.status)
   const totals = one(query.totals)
   return {
-    view: (STATEMENT_VIEWS as readonly string[]).includes(view ?? '') ? (view as StatementView) : 'detail',
+    view: (STATEMENT_VIEWS as readonly string[]).includes(view ?? '') ? (view as StatementView) : 'regular',
     type: (STATEMENT_TYPES as readonly string[]).includes(type ?? '')
       ? (type as StatementType)
       : 'all',

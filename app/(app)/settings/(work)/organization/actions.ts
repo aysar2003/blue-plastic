@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 
 import {
+  documentTemplateSchema,
   organizationAccountingSchema,
   organizationFeaturesSchema,
   organizationUpdateSchema,
@@ -84,4 +85,32 @@ export async function updateFeatureFlagsForm(
   }
   const result = await updateFeatureFlags(values)
   return toFormState(result, 'Configuration saved.')
+}
+
+export const updateDocumentTemplate = action
+  .requires('org:update')
+  .input(documentTemplateSchema)
+  .handler(async (ctx, input) => {
+    const template = await organizationService.updateDocumentTemplate(ctx, input)
+    revalidatePath('/settings/templates')
+    revalidatePath('/reports/statements/customer')
+    revalidatePath('/sales', 'layout')
+    return template
+  })
+
+export async function updateDocumentTemplateForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const banks = [1, 2, 3, 4, 5, 6].map((index) => ({
+    name: String(formData.get(`bank${index}Name`) ?? ''),
+    account: String(formData.get(`bank${index}Account`) ?? ''),
+  }))
+  const result = await updateDocumentTemplate({
+    accent: String(formData.get('accent') ?? ''),
+    terms: String(formData.get('terms') ?? ''),
+    showClassicPaper: formData.get('showClassicPaper') === 'true' ? 'true' : 'false',
+    banks,
+  })
+  return toFormState(result, 'Template saved. Invoices and statements use it now.')
 }

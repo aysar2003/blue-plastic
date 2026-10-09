@@ -14,7 +14,7 @@ export default async function SettingsHubPage() {
     <AppLauncher
       eyebrow={ctx.organization.name}
       title="Settings"
-      subtitle="Organisation, accounts the system posts to, payment terms, tax, users, appearance, your profile, a backup of the books, and the activity log."
+      subtitle="Organisation, the invoice template, accounts the system posts to, payment terms, tax, users, appearance, your profile, a backup of the books, and the activity log."
       apps={apps}
     />
   )

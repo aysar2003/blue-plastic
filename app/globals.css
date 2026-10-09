@@ -1099,6 +1099,11 @@ html.odoo-dark .app-glyph-tile,
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+
+  [data-report-root] tbody tr {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 @page invoice {

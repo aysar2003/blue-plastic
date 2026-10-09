@@ -49,6 +49,7 @@ export type ContactValues = {
   creditLimit?: string | null
   defaultExpenseAccountId?: string | null
   notes?: string | null
+  salesPerson?: string | null
   agreementDate?: string | null
   balanceDate?: string | null
   balanceTime?: string | null
@@ -269,6 +270,16 @@ export function ContactDialog({
               </NativeSelect>
             </Field>
 
+            {side === 'customer' ? (
+              <Field
+                name="salesPerson"
+                label="Sales person"
+                hint="Printed on the invoice next to Sales person."
+                error={e?.salesPerson}
+              >
+                <Input {...fieldProps('salesPerson', e?.salesPerson)} defaultValue={contact?.salesPerson ?? ''} />
+              </Field>
+            ) : null}
             <Field name="taxRegistrationNumber" label="Tax registration number" error={e?.taxRegistrationNumber}>
               <Input
                 {...fieldProps('taxRegistrationNumber', e?.taxRegistrationNumber)}

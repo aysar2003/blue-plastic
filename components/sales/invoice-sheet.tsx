@@ -3,7 +3,48 @@ import { formatMoney } from '@/lib/money'
 import { printSheetLinePad, STATUS_LABELS, type SalesTypeConfig } from '@/lib/sales-types'
 import { CUSTOMER_CREDIT, FORM_SHEET } from '@/lib/credit-brand'
 import { SheetMarks } from '@/components/sales/sheet-marks'
-import type { SalesDocumentDetail } from '@/server/services/sales.service'
+
+/** The fields a printed invoice or bill sheet actually reads. */
+export type SheetDocument = {
+  id: string
+  number: string
+  date: Date
+  dueDate: Date | null
+  expiryDate: Date | null
+  createdAt: Date
+  status: string
+  reference: string | null
+  type: string
+  currencyCode: string
+  subtotal: string
+  discountAmount: string
+  taxTotal: string
+  total: string
+  amountApplied: string
+  balance: string
+  customerMessage: string | null
+  createdByName?: string | null
+  paymentTerm: { name: string } | null
+  customer: {
+    displayName: string
+    email: string | null
+    phone: string | null
+    billingLine1: string | null
+    billingLine2?: string | null
+    billingCity: string | null
+    billingRegion?: string | null
+  }
+  lines: {
+    id: string
+    lineNumber: number
+    description: string | null
+    quantity: string
+    unitPrice: string
+    amount: string
+    discountPercent: string | null
+    item: { name: string; sku: string | null; unitOfMeasure?: string | null } | null
+  }[]
+}
 
 /** What the sheet needs from the business: its name and letterhead lines. */
 export type InvoiceSheetOrganization = {
@@ -37,9 +78,9 @@ export function InvoiceSheet({
   className,
   ledger = false,
 }: {
-  document: SalesDocumentDetail
+  document: SheetDocument
   organization: InvoiceSheetOrganization
-  config: SalesTypeConfig
+  config: Pick<SalesTypeConfig, 'type' | 'singular'> | { type: string; singular: string }
   baseCurrency: string
   className?: string
   /** Statement papers name the three figures Debit, Credit and Balance. */
@@ -50,7 +91,7 @@ export function InvoiceSheet({
   const money = (value: string | number) => formatMoney(value, currency)
   const hasDiscount = Number(document.discountAmount) > 0
   const hasTax = Number(document.taxTotal) > 0
-  const showsSettlement = config.type === 'INVOICE'
+  const showsSettlement = config.type === 'INVOICE' || config.type === 'BILL'
   const isCredit = config.type === 'CREDIT_MEMO'
   const brand = isCredit ? CUSTOMER_CREDIT.accent : FORM_SHEET.accent
   const brandSoft = isCredit ? CUSTOMER_CREDIT.wash : FORM_SHEET.wash
@@ -107,7 +148,7 @@ export function InvoiceSheet({
               {config.singular}
             </p>
             <p className="mt-1 text-lg font-semibold tracking-wide">{document.number}</p>
-            {document.status === 'DRAFT' || config.type === 'INVOICE' ? (
+            {document.status === 'DRAFT' || showsSettlement ? (
               <p
                 className="mt-1 text-xs font-semibold uppercase tracking-[0.16em]"
                 style={{ color: document.status === 'PAID' ? '#017e84' : isCredit ? CUSTOMER_CREDIT.ink : '#9f1239' }}
@@ -181,7 +222,7 @@ export function InvoiceSheet({
             <span className="text-right">Amount</span>
           </div>
           <div>
-            {paddedLines(document.lines, printSheetLinePad(config.type)).map((line, index) => (
+            {paddedLines(document.lines, printSheetLinePad(config.type === 'INVOICE' ? 'INVOICE' : undefined)).map((line, index) => (
               <div
                 key={line.id}
                 className="grid h-8 grid-cols-[2.25rem_minmax(0,1fr)_4.25rem_6rem_6.5rem] items-center px-2 text-[13px] text-[#3d4c5c]"

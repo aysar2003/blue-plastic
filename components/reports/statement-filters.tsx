@@ -35,6 +35,8 @@ export function StatementFilters({
   typeOptions,
   defaultView = 'regular',
   invoiceView = false,
+  classicPaper = false,
+  bills = false,
 }: {
   view: StatementView
   type: string
@@ -44,8 +46,12 @@ export function StatementFilters({
   typeOptions?: { value: string; label: string }[]
   /** The view omitted from the URL, because it is what the page shows anyway. */
   defaultView?: StatementView
-  /** Offer the invoice papers — each invoice, and the summary alone. Customers only. */
+  /** Offer the invoice papers — each document, and the summary alone. */
   invoiceView?: boolean
+  /** The older sheet, renamed Classic paper. Hidden until Settings turns it on. */
+  classicPaper?: boolean
+  /** Vendor papers are bills. The same buttons, with bill names. */
+  bills?: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -60,23 +66,18 @@ export function StatementFilters({
     startTransition(() => router.push(`${pathname}?${params.toString()}`, { scroll: false }))
   }
 
+  const visible = STATEMENT_VIEWS.filter((key) => {
+    if (key === 'classic') return invoiceView && classicPaper
+    if (key === 'invoices' || key === 'summary') return invoiceView
+    return true
+  })
+  const papers = visible.filter((key) => key === 'detail' || key === 'regular' || key === 'arrow')
+  const invoices = visible.filter((key) => key === 'invoices' || key === 'summary' || key === 'classic')
+
   return (
     <div className="mb-4 space-y-3 print:hidden">
       <Filter label="Statement" pending={pending}>
-        <div role="group" aria-label="Statement" className="flex flex-wrap gap-1.5">
-          {STATEMENT_VIEWS.filter((key) => invoiceView || (key !== 'invoices' && key !== 'summary')).map((key) => (
-            <Button
-              key={key}
-              type="button"
-              size="sm"
-              variant={view === key ? 'default' : 'outline'}
-              aria-pressed={view === key}
-              onClick={() => set('view', key)}
-            >
-              {STATEMENT_VIEW_LABELS[key]}
-            </Button>
-          ))}
-        </div>
+        <ViewButtons label="Statement" views={papers} active={view} onSelect={(key) => set('view', key)} />
       </Filter>
       <div className="flex flex-wrap items-end gap-3">
         <Filter label="Type">
@@ -124,6 +125,52 @@ export function StatementFilters({
           </NativeSelect>
         </Filter>
       </div>
+      {invoices.length > 0 ? (
+        <Filter label={bills ? 'Bills' : 'Invoices'}>
+          <ViewButtons
+            label={bills ? 'Bills' : 'Invoices'}
+            views={invoices}
+            active={view}
+            names={
+              bills
+                ? { invoices: 'Bill by bill', summary: 'Bill summary' }
+                : undefined
+            }
+            onSelect={(key) => set('view', key)}
+          />
+        </Filter>
+      ) : null}
+    </div>
+  )
+}
+
+function ViewButtons({
+  label,
+  views,
+  active,
+  names,
+  onSelect,
+}: {
+  label: string
+  views: readonly StatementView[]
+  active: StatementView
+  names?: Partial<Record<StatementView, string>>
+  onSelect: (view: StatementView) => void
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap gap-1.5">
+      {views.map((key) => (
+        <Button
+          key={key}
+          type="button"
+          size="sm"
+          variant={active === key ? 'default' : 'outline'}
+          aria-pressed={active === key}
+          onClick={() => onSelect(key)}
+        >
+          {names?.[key] ?? STATEMENT_VIEW_LABELS[key]}
+        </Button>
+      ))}
     </div>
   )
 }

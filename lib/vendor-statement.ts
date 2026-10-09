@@ -1,5 +1,5 @@
 import { toCalendarDate, type CalendarDate } from '@/lib/date'
-import { STATEMENT_TOTALS, type StatementTotals, type StatementView } from '@/lib/customer-statement'
+import { STATEMENT_TOTALS, STATEMENT_VIEWS, type StatementTotals, type StatementView } from '@/lib/customer-statement'
 import { Decimal } from '@/lib/money'
 
 export type VendorStatementKind = 'BILL' | 'VENDOR_CREDIT' | 'PAYMENT' | 'EXPENSE' | 'JOURNAL' | 'PURCHASE_ORDER'
@@ -66,7 +66,7 @@ export function readVendorFilter(query: Record<string, string | string[] | undef
   const status = one(query.status)
   const totals = one(query.totals)
   return {
-    view: view === 'detail' || view === 'arrow' ? view : 'regular',
+    view: (STATEMENT_VIEWS as readonly string[]).includes(view ?? '') ? (view as StatementView) : 'regular',
     type: (VENDOR_STATEMENT_TYPES as readonly string[]).includes(type ?? '') ? (type as VendorStatementType) : 'all',
     status: (VENDOR_STATEMENT_STATUSES as readonly string[]).includes(status ?? '')
       ? (status as VendorStatementStatus)
@@ -119,6 +119,21 @@ export function vendorEntryVisible(
   if (entry.kind === 'JOURNAL' || entry.kind === 'PURCHASE_ORDER') return false
   if (entry.kind === 'PAYMENT' || entry.kind === 'EXPENSE') return true
   return !entry.openAmount.greaterThan(OPEN)
+}
+
+/**
+ * The bills a vendor "invoice by invoice" paper prints: every bill in the
+ * period, in statement order, still narrowed by the balance filter. The type
+ * menu does not apply — the paper is bills, drawn in the invoice sheet style.
+ */
+export function statementBills<
+  T extends { kind: VendorStatementKind; openAmount: Decimal; dueDate: Date | null },
+>(
+  entries: T[],
+  filter: VendorStatementFilter,
+  asOf: CalendarDate,
+): T[] {
+  return visibleVendorEntries(entries, { ...filter, type: 'bill' }, asOf)
 }
 
 export function visibleVendorEntries<

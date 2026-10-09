@@ -51,3 +51,17 @@ export const organizationFeaturesSchema = z.object({
 })
 
 export type OrganizationFeaturesInput = z.infer<typeof organizationFeaturesSchema>
+
+const bankLine = z.object({
+  name: optionalText(80),
+  account: optionalText(40),
+})
+
+export const documentTemplateSchema = z.object({
+  accent: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Choose a colour'),
+  terms: optionalText(2000),
+  showClassicPaper: boolFlag.default(false),
+  banks: z.array(bankLine).max(6).default([]),
+})
+
+export type DocumentTemplateInput = z.infer<typeof documentTemplateSchema>

@@ -14,6 +14,7 @@ import { StatementFilters } from '@/components/reports/statement-filters'
 import { InvoiceSheet } from '@/components/sales/invoice-sheet'
 import { customerQuickReportHref, vendorQuickReportHref } from '@/lib/contact-menus'
 import { readStatementFilter, statementInvoices, type StatementKind } from '@/lib/customer-statement'
+import { DEFAULT_DOCUMENT_TEMPLATE } from '@/lib/document-template'
 import { Decimal } from '@/lib/money'
 import { byType } from '@/lib/sales-types'
 import type { SalesDocumentDetail } from '@/server/services/sales.service'
@@ -82,14 +83,16 @@ describe('statement opening period', () => {
 
   it('QuickReport links no longer force All dates', () => {
     expect(customerQuickReportHref('c1')).not.toContain('period=')
+    expect(customerQuickReportHref('c1')).not.toContain('view=')
     expect(vendorQuickReportHref('v1')).not.toContain('period=')
+    expect(vendorQuickReportHref('v1')).not.toContain('view=')
   })
 })
 
 describe('invoice by invoice', () => {
-  it('reads the view from the URL and keeps unknown views on the itemised statement', () => {
+  it('reads the view from the URL and keeps unknown views on the grouped statement', () => {
     expect(readStatementFilter({ view: 'invoices' }).view).toBe('invoices')
-    expect(readStatementFilter({ view: 'nonsense' }).view).toBe('detail')
+    expect(readStatementFilter({ view: 'nonsense' }).view).toBe('regular')
   })
 
   it('prints only invoices, still narrowed by the balance filter', () => {
@@ -101,16 +104,28 @@ describe('invoice by invoice', () => {
     expect(statementInvoices(entries, open, '2026-10-08')).toEqual([entries[0]])
   })
 
-  it('offers the three papers separately, and only on a customer statement', () => {
+  it('offers the invoice papers when asked, including on a vendor statement', () => {
     const props = { view: 'detail' as const, type: 'all', status: 'all' as const, totals: 'line' as const }
     const customer = renderToStaticMarkup(createElement(StatementFilters, { ...props, invoiceView: true }))
     expect(customer).toContain('Invoice by invoice')
     expect(customer).toContain('Invoice summary')
     expect(customer).toContain('Statement')
+    const statementAt = customer.indexOf('Grouped — one row')
+    const typeAt = customer.indexOf('statement-type')
+    const invoiceAt = customer.indexOf('Invoice by invoice')
+    expect(statementAt).toBeGreaterThan(-1)
+    expect(statementAt).toBeLessThan(typeAt)
+    expect(typeAt).toBeLessThan(invoiceAt)
     const vendor = renderToStaticMarkup(createElement(StatementFilters, props))
     expect(vendor).not.toContain('Invoice by invoice')
     expect(vendor).not.toContain('Invoice summary')
     expect(vendor).toContain('Statement')
+    expect(vendor.indexOf('Grouped — one row')).toBeLessThan(vendor.indexOf('statement-type'))
+    const vendorPapers = renderToStaticMarkup(createElement(StatementFilters, { ...props, invoiceView: true, bills: true }))
+    expect(vendorPapers).toContain('Bills')
+    expect(vendorPapers).toContain('Bill by bill')
+    expect(vendorPapers).toContain('Bill summary')
+    expect(vendorPapers).not.toContain('Invoice by invoice')
   })
 
   it('reads the summary paper on its own', () => {
@@ -142,6 +157,20 @@ describe('invoice by invoice', () => {
     expect(html).not.toContain('>Paid<')
     expect(html).not.toContain('data-invoice-page')
     expect(html.match(/class="invoice-sheet /g)).toHaveLength(1)
+  })
+
+  it('draws vendor bills in the same invoice colour', () => {
+    const documents = [invoice('a', 'BILL-0001', '125', '25')]
+    const invoiceHtml = renderToStaticMarkup(
+      createElement(StatementInvoices, { ...paper, documents, part: 'summary' }),
+    )
+    const billHtml = renderToStaticMarkup(
+      createElement(StatementInvoices, { ...paper, documents, part: 'summary', subject: 'bill' }),
+    )
+    expect(invoiceHtml).toContain('#714B67')
+    expect(billHtml).toContain('#714B67')
+    expect(billHtml).toContain('Bill summary')
+    expect(invoiceHtml).toContain('Invoice summary')
   })
 
   it('prints every invoice on the single-invoice sheet, each on its own page, with no summary', () => {
@@ -179,5 +208,36 @@ describe('invoice by invoice', () => {
       )
       expect(html).toContain(sheet)
     }
+  })
+
+  it('carries the customer balance from one invoice onto the next', () => {
+    const documents = [
+      { ...invoice('a', 'INV-0001', '100', '0'), createdByName: 'Amina Hassan' },
+      invoice('b', 'INV-0002', '50', '0'),
+    ]
+    const html = renderToStaticMarkup(
+      createElement(StatementInvoices, {
+        ...paper,
+        documents,
+        part: 'invoices',
+        template: DEFAULT_DOCUMENT_TEMPLATE,
+        accountAt: {
+          a: { previous: '0', current: '100' },
+          b: { previous: '100', current: '150' },
+        },
+      }),
+    )
+    expect(html).toContain('Amina Hassan')
+    expect(html).toContain('Previous balance')
+    const previous = html.match(/Previous balance<\/dt><dd class="tabular">([^<]+)/g)
+    expect(previous).toEqual([
+      'Previous balance</dt><dd class="tabular">$0.00',
+      'Previous balance</dt><dd class="tabular">$100.00',
+    ])
+    const current = html.match(/Current balance<\/dt><dd class="tabular">([^<]+)/g)
+    expect(current).toEqual([
+      'Current balance</dt><dd class="tabular">$100.00',
+      'Current balance</dt><dd class="tabular">$150.00',
+    ])
   })
 })

@@ -561,6 +561,16 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     blurb: 'Roles, apps & who can sign in',
   },
   {
+    key: 'templates',
+    label: 'Templates',
+    href: '/settings/templates',
+    icon: 'file',
+    permission: 'org:read',
+    accent: '#0F766E',
+    wash: '#CCFBF1',
+    blurb: 'Invoice paper for the whole system',
+  },
+  {
     key: 'appearance',
     label: 'Appearance',
     href: '/settings/appearance',

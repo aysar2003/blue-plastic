@@ -218,7 +218,7 @@ export default async function CustomersPage({
 
   const reports = customer && canReport
     ? [
-        { label: 'QuickReport', href: `/reports/statements/customer?customerId=${id}&view=detail` },
+        { label: 'QuickReport', href: `/reports/statements/customer?customerId=${id}` },
         { label: 'Open balance', href: `/reports/statements/customer?customerId=${id}&status=open&period=all-dates` },
         { label: 'Show estimates', href: withTx(customerHref(customer.id), 'Quotation') },
         { label: 'Show deliveries', href: withTx(customerHref(customer.id), 'Delivery') },

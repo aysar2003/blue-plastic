@@ -263,6 +263,107 @@ export async function get(ctx: OrgContext, id: string) {
   }
 }
 
+/**
+ * Several bills in full, in the order asked for, for a vendor statement that
+ * prints each bill on the invoice sheet.
+ */
+export async function getMany(ctx: OrgContext, ids: string[]) {
+  if (ids.length === 0) return []
+  const rows = await db.purchaseDocument.findMany({
+    where: { id: { in: ids }, orgId: ctx.orgId },
+    select: {
+      id: true,
+      type: true,
+      number: true,
+      date: true,
+      dueDate: true,
+      expiryDate: true,
+      createdAt: true,
+      status: true,
+      reference: true,
+      subtotal: true,
+      taxTotal: true,
+      total: true,
+      currencyCode: true,
+      createdById: true,
+      vendor: {
+        select: {
+          displayName: true,
+          email: true,
+          phone: true,
+          billingLine1: true,
+          billingLine2: true,
+          billingCity: true,
+          billingRegion: true,
+        },
+      },
+      paymentTerm: { select: { name: true } },
+      lines: {
+        orderBy: { lineNumber: 'asc' },
+        select: {
+          id: true,
+          lineNumber: true,
+          description: true,
+          quantity: true,
+          unitPrice: true,
+          discountPercent: true,
+          amount: true,
+          item: { select: { name: true, sku: true, unitOfMeasure: true } },
+        },
+      },
+      applications: { select: { amount: true } },
+    },
+  })
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  const ordered = ids.flatMap((id) => {
+    const row = byId.get(id)
+    return row ? [row] : []
+  })
+  const userIds = [...new Set(ordered.map((row) => row.createdById).filter((id): id is string => Boolean(id)))]
+  const users =
+    userIds.length === 0
+      ? []
+      : await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } })
+  const names = new Map(users.map((user) => [user.id, user.name]))
+
+  return ordered.map((document) => {
+    const applied = document.applications.reduce((sum, row) => sum.plus(row.amount.toString()), ZERO)
+    const total = new Decimal(document.total.toString())
+    return {
+      id: document.id,
+      type: document.type,
+      number: document.number,
+      date: document.date,
+      dueDate: document.dueDate,
+      expiryDate: document.expiryDate,
+      createdAt: document.createdAt,
+      status: document.status,
+      reference: document.reference,
+      currencyCode: document.currencyCode,
+      subtotal: document.subtotal.toString(),
+      discountAmount: '0',
+      taxTotal: document.taxTotal.toString(),
+      total: total.toString(),
+      amountApplied: toMoneyString(applied, 2),
+      balance: document.type === 'BILL' ? toMoneyString(total.minus(applied), 2) : '0.00',
+      customerMessage: null,
+      createdByName: document.createdById ? (names.get(document.createdById) ?? null) : null,
+      paymentTerm: document.paymentTerm,
+      customer: document.vendor,
+      lines: document.lines.map((line) => ({
+        id: line.id,
+        lineNumber: line.lineNumber,
+        description: line.description,
+        quantity: line.quantity.toString(),
+        unitPrice: line.unitPrice.toString(),
+        amount: line.amount.toString(),
+        discountPercent: line.discountPercent?.toString() ?? null,
+        item: line.item,
+      })),
+    }
+  })
+}
+
 /** What is still owed on each of these bills. Derived, never stored. */
 export async function outstandingBalances(
   client: Tx | typeof db,
