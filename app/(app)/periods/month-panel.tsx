@@ -5,13 +5,6 @@ import type { JournalSourceType } from '@prisma/client'
 import { EmptyState } from '@/components/data/empty-state'
 import { SearchInput } from '@/components/data/search-input'
 import { HoverEntry } from '@/components/periods/hover-entry'
-import {
-  EXPENSE_COLOR,
-  FigureChart,
-  INCOME_COLOR,
-  NET_COLOR,
-  statementPicture,
-} from '@/components/reports/figure-chart'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -25,7 +18,6 @@ import type { ListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
 import * as journalService from '@/server/services/journal.service'
 import * as periodService from '@/server/services/period.service'
-import { profitAndLoss } from '@/server/reports/statements'
 import { PeriodToggle } from './period-actions'
 
 const REPORTS = [
@@ -97,8 +89,6 @@ async function monthBody(
       })
     : null
   const rows = journals?.rows ?? []
-  const analysis = canReadReports ? await profitAndLoss(ctx.orgId, { from, to }) : null
-  const picture = analysis ? statementPicture(analysis.sections, 'total') : null
   const kept = { ...linkParams, q: query.q, source: sourceType }
   const chip = (extra: Record<string, string | undefined>) => `${listHref(basePath, { ...kept, ...extra })}#opened`
   const exportHref = (format: 'pdf' | 'xlsx') => {
@@ -142,18 +132,6 @@ async function monthBody(
             : 'Search the entries, or open a report for these dates.'}
         </p>
       </div>
-
-      {picture ? (
-        <FigureChart
-          caption={`Analysis for ${label}`}
-          currency={currency}
-          bars={[
-            { label: 'Income', value: picture.income, color: INCOME_COLOR },
-            { label: 'Expenses', value: picture.expenses, color: EXPENSE_COLOR },
-            { label: 'Net income', value: picture.net, color: NET_COLOR },
-          ]}
-        />
-      ) : null}
 
       {canReadReports ? (
         <Card className="p-4">

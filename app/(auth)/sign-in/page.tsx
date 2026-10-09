@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { withDatabasePage } from '@/lib/page-guard'
 import { auth } from '@/auth'
 import { CREATOR_BRAND_NAME } from '@/lib/feature-flags'
+import { PRODUCT_NAME } from '@/lib/product-brand'
 import { creatorBrandVisibleBeforeSignIn } from '@/server/services/organization.service'
 import { needsSetup } from '@/server/services/setup.service'
 import { SignInForm } from './sign-in-form'
@@ -39,13 +40,15 @@ export default async function SignInPage() {
           <SignInForm />
         </CardContent>
       </Card>
-      {showBrand ? (
-        <p className="text-center text-[0.6875rem] tracking-wide text-muted-foreground">
-          <span className="font-medium text-foreground/80">{CREATOR_BRAND_NAME}</span>
-          <span className="mx-1.5">·</span>
-          System brand
-        </p>
-      ) : null}
+      <p className="text-center text-[0.6875rem] tracking-wide text-muted-foreground">
+        <span className="font-medium text-foreground/80">{PRODUCT_NAME}</span>
+        {showBrand ? (
+          <>
+            <span className="mx-1.5">·</span>
+            <span>{CREATOR_BRAND_NAME}</span>
+          </>
+        ) : null}
+      </p>
     </div>
     )
   })

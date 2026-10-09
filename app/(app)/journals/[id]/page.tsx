@@ -98,9 +98,12 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
         />
         <Detail
           label="Source"
-          value={JOURNAL_SOURCE_LABELS[journal.sourceType] ?? journal.sourceType}
+          value={
+            journal.source.number
+              ? `${JOURNAL_SOURCE_LABELS[journal.sourceType] ?? journal.sourceType} ${journal.source.number}`
+              : (JOURNAL_SOURCE_LABELS[journal.sourceType] ?? journal.sourceType)
+          }
           href={journal.source.href ?? undefined}
-          extra={journal.source.number ?? undefined}
         />
         <Detail
           label="Period"

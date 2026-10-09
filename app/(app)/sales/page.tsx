@@ -50,7 +50,7 @@ export default async function SalesHubPage() {
     <AppLauncher
       eyebrow={ctx.organization.name}
       title="Sales"
-      subtitle="Invoices, quotations, receipts, customers and the figures that follow them."
+      subtitle="Estimates, invoices, receipts, customers and the figures that follow them."
       apps={apps}
       insights={[
         {
@@ -66,7 +66,7 @@ export default async function SalesHubPage() {
           href: '/sales/invoices?status=open',
         },
         {
-          label: 'Open quotations',
+          label: 'Open estimates',
           value: String(draftQuotes),
           hint: draftQuotes === 1 ? 'waiting on a customer' : 'waiting on customers',
           href: '/sales/estimates',

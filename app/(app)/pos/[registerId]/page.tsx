@@ -27,12 +27,16 @@ export default async function PosRegisterPage({ params }: Props) {
 
   // The register decides which store's stock the cart warns about.
   const register = await posService.registerForTerminal(ctx, registerId)
-  const [catalog, customers, cashSummary, recentOrders, useCounts] = await Promise.all([
+  const canCreateQuote = ctx.permissions.has('invoice:create')
+  const canReadQuote = ctx.permissions.has('invoice:read')
+  const canQuote = canCreateQuote || canReadQuote
+  const [catalog, customers, cashSummary, recentOrders, useCounts, openQuotations] = await Promise.all([
     posService.catalog(ctx, register.storeId),
     posService.walkInCustomers(ctx),
     posService.sessionCashSummary(ctx, session.id),
     posService.recentSessionOrders(ctx, session.id),
     posService.paymentMethodUseCounts(ctx, registerId),
+    canReadQuote ? posService.listOpenQuotations(ctx) : Promise.resolve([]),
   ])
   const currency = ctx.organization.baseCurrency
 
@@ -73,6 +77,9 @@ export default async function PosRegisterPage({ params }: Props) {
         dateLabel: order.dateLabel,
         payments: order.payments,
       }))}
+      openQuotations={openQuotations}
+      canQuote={canQuote}
+      canCreateQuote={canCreateQuote}
       products={catalog.products}
       stockStoreName={catalog.storeName}
       stockStoreId={catalog.storeId}

@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ScrollTextIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
+import { DateRangeForm } from '@/app/(app)/reports/trial-balance/date-range-form'
 import { Card, CardContent } from '@/components/ui/card'
 import { RegisterTable } from '@/components/accounts/register-table'
 import {
@@ -17,6 +19,7 @@ import { postedLineParts } from '@/lib/ledger-text'
 import { formatMoney } from '@/lib/money'
 import { generalLedger } from '@/server/accounting/balances'
 import { requireOrgContext } from '@/server/auth/context'
+import { db } from '@/server/db'
 import * as accountService from '@/server/services/account.service'
 import { RegisterEntry } from '@/components/accounts/register-entry'
 import { resolveSources, sourceFor } from '@/server/services/journal-sources'
@@ -51,6 +54,8 @@ export default async function AccountRegisterPage({
   )
   const from = typeof query.from === 'string' ? query.from : defaults.start
   const to = typeof query.to === 'string' ? query.to : defaults.end
+  const sourceFilter =
+    query.source === 'pos' || query.source === 'other' ? query.source : ''
 
   const ledger = await generalLedger(ctx.orgId, id, { from, to })
   const canType =
@@ -62,13 +67,6 @@ export default async function AccountRegisterPage({
         .map((row) => ({ id: row.id, label: `${row.code} ${row.name}`, type: row.type }))
     : []
 
-  // What produced each line, resolved in one batch per document family.
-  //
-  // This is the hop that makes a report answer its own question. A figure on the
-  // profit and loss led here, and here used to lead only to the journal — so
-  // tracing a number to the invoice that caused it took three screens, and the
-  // middle one was the least informative of the three. The document and the
-  // party it was with now sit on the register row itself.
   const sources = await resolveSources(
     ctx.orgId,
     ledger.entries.map((entry) => ({
@@ -77,57 +75,118 @@ export default async function AccountRegisterPage({
     })),
   )
 
-  // The running balance is computed in journal-date order. Sorting on screen
-  // reorders the rows the reader sees; it does not recompute that balance.
+  const salesDocIds = [
+    ...new Set(
+      ledger.entries
+        .filter(
+          (entry) =>
+            (entry.sourceType === 'SALES_RECEIPT' || entry.sourceType === 'REFUND_RECEIPT') &&
+            entry.sourceId,
+        )
+        .map((entry) => entry.sourceId as string),
+    ),
+  ]
+  const posOrders =
+    salesDocIds.length > 0
+      ? await db.posOrder.findMany({
+          where: { orgId: ctx.orgId, salesDocumentId: { in: salesDocIds } },
+          select: {
+            salesDocumentId: true,
+            register: { select: { name: true } },
+          },
+        })
+      : []
+  const posByDoc = new Map(posOrders.map((order) => [order.salesDocumentId, order.register.name]))
+
+  // The grid sorts for display on its own; the balance column keeps the value
+  // computed in journal-date order no matter how the reader re-sorts the rows.
   const debitNormal = isDebitNormalType(account.type)
-  const registerRows = ledger.entries.map((entry) => {
-    const source = sourceFor(sources, {
-      sourceType: entry.sourceType as JournalSourceType,
-      sourceId: entry.sourceId,
+  const registerRows = ledger.entries
+    .map((entry) => {
+      const source = sourceFor(sources, {
+        sourceType: entry.sourceType as JournalSourceType,
+        sourceId: entry.sourceId,
+      })
+      const posRegister =
+        (entry.sourceType === 'SALES_RECEIPT' || entry.sourceType === 'REFUND_RECEIPT') &&
+        entry.sourceId
+          ? (posByDoc.get(entry.sourceId) ?? null)
+          : null
+      const baseLabel =
+        JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ?? entry.sourceType
+      // Keep the plain journal label for memo parsing; TYPE shows "(POS)" when till-sold.
+      const sourceLabel = posRegister ? `${baseLabel} (POS)` : baseLabel
+      const parts = postedLineParts({
+        sourceLabel: baseLabel,
+        memo: entry.memo,
+        description: entry.description,
+        partyName: entry.partyName ?? source.partyName,
+      })
+      const nameHref = entry.customerId
+        ? `/customers?id=${entry.customerId}`
+        : entry.vendorId
+          ? `/vendors?id=${entry.vendorId}`
+          : source.partyHref
+      const documentHref = source.href ?? `/journals/${entry.journalId}`
+      return {
+        lineId: entry.lineId,
+        journalNumber: entry.journalNumber,
+        recordedAt: entry.recordedAt.toISOString(),
+        status: entry.status,
+        sourceLabel,
+        typeHref: documentHref,
+        entryHref: documentHref,
+        posRegisterName: posRegister,
+        isPos: Boolean(posRegister),
+        name: parts.name,
+        nameHref: nameHref ?? null,
+        note: parts.note ?? null,
+        docNumber: source.number,
+        docHref: source.href,
+        contraAccounts: entry.contraAccounts,
+        splits: entry.splits.map((s) => ({ code: s.code, name: s.name, amount: s.amount })),
+        debit: entry.debit.isZero() ? '' : entry.debit.toString(),
+        credit: entry.credit.isZero() ? '' : entry.credit.toString(),
+        balance: entry.balance.toString(),
+      }
     })
-    const sourceLabel = JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ?? entry.sourceType
-    const parts = postedLineParts({
-      sourceLabel,
-      memo: entry.memo,
-      description: entry.description,
-      partyName: entry.partyName ?? source.partyName,
+    .filter((row) => {
+      if (sourceFilter === 'pos') return row.isPos
+      if (sourceFilter === 'other') return !row.isPos
+      return true
     })
-    const nameHref = entry.customerId
-      ? `/customers?id=${entry.customerId}`
-      : entry.vendorId
-        ? `/vendors?id=${entry.vendorId}`
-        : source.partyHref
-    const documentHref = source.href ?? `/journals/${entry.journalId}`
-    return {
-      lineId: entry.lineId,
-      journalNumber: entry.journalNumber,
-      recordedAt: entry.recordedAt.toISOString(),
-      status: entry.status,
-      sourceLabel,
-      typeHref: documentHref,
-      entryHref: documentHref,
-      name: parts.name,
-      nameHref: nameHref ?? null,
-      note: parts.note ?? null,
-      docNumber: source.number,
-      docHref: source.href,
-      contraAccounts: entry.contraAccounts,
-      splits: entry.splits.map((s) => ({ code: s.code, name: s.name, amount: s.amount })),
-      debit: entry.debit.isZero() ? '' : entry.debit.toString(),
-      credit: entry.credit.isZero() ? '' : entry.credit.toString(),
-      balance: entry.balance.toString(),
-    }
-  })
+
+  function sourceHref(value: '' | 'pos' | 'other') {
+    const search = new URLSearchParams()
+    search.set('from', from)
+    search.set('to', to)
+    if (value) search.set('source', value)
+    return `/accounts/${id}?${search.toString()}`
+  }
 
   return (
     <>
-
       <PageHeader
         title={`${account.code} · ${account.name}`}
         description={`${ACCOUNT_TYPE_LABELS[account.type]} · ${ACCOUNT_SUBTYPE_LABELS[account.subtype]} · ${
           debitNormal ? 'debit' : 'credit'
         } balance`}
       />
+
+      <div className="mb-4 flex flex-wrap items-end gap-4">
+        <DateRangeForm
+          from={from}
+          to={to}
+          extraParams={{
+            source: sourceFilter || undefined,
+          }}
+        />
+        <div className="flex flex-wrap gap-1 pb-0.5">
+          <FilterChip href={sourceHref('')} active={!sourceFilter} label="All sources" />
+          <FilterChip href={sourceHref('pos')} active={sourceFilter === 'pos'} label="POS only" />
+          <FilterChip href={sourceHref('other')} active={sourceFilter === 'other'} label="Not POS" />
+        </div>
+      </div>
 
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <Summary label={`Opening ${formatDate(from)}`} value={formatMoney(ledger.opening, currency)} />
@@ -138,7 +197,7 @@ export default async function AccountRegisterPage({
         <Summary label={`Closing ${formatDate(to)}`} value={formatMoney(ledger.closing, currency)} emphasis />
       </div>
 
-      {account.description ? (
+      {account.description && account.description !== 'pos-parent' && !account.description.startsWith('pos-register:') ? (
         <p className="mb-4 text-sm text-muted-foreground">{account.description}</p>
       ) : null}
 
@@ -150,11 +209,13 @@ export default async function AccountRegisterPage({
         />
       ) : null}
 
-      {ledger.entries.length === 0 ? (
+      {registerRows.length === 0 ? (
         <EmptyState
           icon={ScrollTextIcon}
           title="Nothing posted to this account in this period"
-          description={`Showing ${formatDate(from)} to ${formatDate(to)}.`}
+          description={`Showing ${formatDate(from)} to ${formatDate(to)}${
+            sourceFilter === 'pos' ? ' · POS only' : sourceFilter === 'other' ? ' · not POS' : ''
+          }.`}
         />
       ) : (
         <RegisterTable
@@ -166,6 +227,22 @@ export default async function AccountRegisterPage({
         />
       )}
     </>
+  )
+}
+
+function FilterChip({ href, active, label }: { href: string; active: boolean; label: string }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? 'page' : undefined}
+      className={
+        active
+          ? 'rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground'
+          : 'rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground'
+      }
+    >
+      {label}
+    </Link>
   )
 }
 

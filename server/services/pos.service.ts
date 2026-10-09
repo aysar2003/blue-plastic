@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { Decimal, formatMoney, toMoneyString, ZERO } from '@/lib/money'
-import { formatDateTime, formatTransactionDate, today, toCalendarDate, toDate } from '@/lib/date'
+import { formatDate, formatDateTime, formatTransactionDate, today, toCalendarDate, toDate } from '@/lib/date'
 import {
   accountTenderTotals,
   drawerCashMovement,
@@ -19,11 +19,13 @@ import { POS_BANKS_DETAIL, POS_REGISTER_DETAIL } from '@/lib/pos-register-accoun
 import { chooseLineStore } from '@/lib/pos-line-store'
 import { CASHIER_PIN_REQUIRED, CASHIER_PIN_WRONG } from '@/lib/pos-pin'
 import { receiptCashierName } from '@/lib/pos-receipt'
+import { POS_SHORTFALL_DISCOUNT_MAX } from '@/lib/pos-shortfall'
 import { foldStoreQuantities } from '@/lib/store-stock'
 import type {
   PosCashMoveInput,
   PosCheckoutInput,
   PosCloseSessionInput,
+  PosCreateQuotationInput,
   PosOpenSessionInput,
   PosPaymentMethodInput,
   PosRefundInput,
@@ -37,6 +39,10 @@ import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { ensurePosRegisterAccounts } from '@/server/services/pos-register-account'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
 import * as salesService from '@/server/services/sales.service'
+import {
+  ensureRegisterCashAccount,
+  syncPosChartAccounts,
+} from '@/server/services/pos-chart.service'
 
 export async function listRegisters(ctx: OrgContext) {
   return db.posRegister.findMany({
@@ -72,8 +78,19 @@ export async function dashboardRegisters(ctx: OrgContext) {
     orderBy: { name: 'asc' },
   })
 
+  const staffByRegister = await loadRegisterStaffMap(
+    registers.map((register) => register.id),
+  )
+
+  // Counters with staff lists are only shown to those people (managers still see all).
+  const canManage = ctx.permissions.has('pos:manage')
+  const visible = registers.filter((register) => {
+    const staff = staffByRegister.get(register.id) ?? []
+    return canManage || staff.length === 0 || staff.includes(ctx.userId)
+  })
+
   const currency = ctx.organization.baseCurrency
-  return registers.map((register) => {
+  return visible.map((register) => {
     const session = register.sessions[0] ?? null
     return {
       id: register.id,
@@ -136,12 +153,40 @@ export async function registerPinState(ctx: OrgContext, registerId: string) {
   return { id: register.id, name: register.name, hasPin: Boolean(register.pinHash) }
 }
 
+
+/** Staff user ids per register. Empty map entry / missing table → no restriction. */
+async function loadRegisterStaffMap(registerIds: string[]) {
+  const map = new Map<string, string[]>()
+  if (registerIds.length === 0) return map
+  try {
+    const rows = await db.posRegisterStaff.findMany({
+      where: { registerId: { in: registerIds } },
+      select: { registerId: true, userId: true },
+    })
+    for (const row of rows) {
+      const list = map.get(row.registerId) ?? []
+      list.push(row.userId)
+      map.set(row.registerId, list)
+    }
+  } catch {
+    // Client or table not ready yet — treat every counter as open to all POS users.
+  }
+  return map
+}
+
 export async function openSession(ctx: OrgContext, input: PosOpenSessionInput) {
   const register = await db.posRegister.findFirst({
     where: { id: input.registerId, orgId: ctx.orgId, isActive: true },
     select: { id: true },
   })
   if (!register) throw notFound('Register')
+
+  // When staff are listed on the counter, only those people may open it.
+  const staffMap = await loadRegisterStaffMap([register.id])
+  const staff = staffMap.get(register.id) ?? []
+  if (staff.length > 0 && !staff.includes(ctx.userId)) {
+    throw precondition('You are not assigned to this counter. Ask an admin to add you in POS settings.')
+  }
 
   const opening = new Decimal(input.openingCash)
   if (opening.isNegative()) throw validation('Opening cash cannot be negative.')
@@ -683,15 +728,35 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
   const lines = input.lines.map((line) => ({
     itemId: line.itemId,
     quantity: line.quantity,
-    unitPrice: '',
+    // Blank falls back to the item master price in resolveLines.
+    unitPrice: line.unitPrice ?? '',
     // Always explicit, so the stock movement and the item history show the
     // store (the office when the register says "Office default").
     storeId: storeOf(line),
   }))
 
   const priced = await salesService.quoteLines(ctx, lines)
+
+  // Sum tenders to detect a small shortfall (till rounding discount) before change logic.
+  let paymentTotal = ZERO
+  for (const payment of input.payments) {
+    paymentTotal = paymentTotal.plus(new Decimal(payment.amount))
+  }
+  const shortfall = priced.total.minus(paymentTotal)
+  let discountValue: string | null = null
+  let dueForTender = priced.total
+  if (shortfall.greaterThan(0.009)) {
+    if (shortfall.greaterThan(POS_SHORTFALL_DISCOUNT_MAX + 0.009)) {
+      throw validation(
+        `Payment is short by ${toMoneyString(shortfall, 2)} (max discount ${POS_SHORTFALL_DISCOUNT_MAX.toFixed(2)}).`,
+      )
+    }
+    discountValue = shortfall.toFixed(2)
+    dueForTender = paymentTotal
+  }
+
   const resolved = resolvePosTender({
-    due: priced.total.toString(),
+    due: dueForTender.toString(),
     methods: register.paymentMethods.map((method) => ({
       id: method.id,
       name: method.name,
@@ -727,6 +792,10 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
       }
     : null
 
+  if (input.estimateId) {
+    await assertOpenEstimate(ctx, input.estimateId)
+  }
+
   const receiptDate = today(ctx.organization.timeZone)
   const primaryDeposit = resolvedPayments[0]!.ledgerAccountId
 
@@ -740,7 +809,8 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
       depositAccountId: primaryDeposit,
       lines,
       saveAsDraft: false,
-      discountKind: 'percent',
+      discountKind: discountValue ? 'amount' : 'percent',
+      discountValue,
       customerMessage: input.note ?? undefined,
     },
     {
@@ -753,11 +823,150 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
     },
   )
 
+  if (input.estimateId) {
+    await consumeEstimate(ctx, input.estimateId, document.id)
+  }
+
+  const finalTotal = discountValue ? paymentTotal : priced.total
   return {
     id: document.id,
     number: document.number,
-    total: toMoneyString(priced.total, 2),
+    total: toMoneyString(finalTotal, 2),
   }
+}
+
+/** Save the till cart as an open quotation — customer can pay later. */
+export async function createQuotation(ctx: OrgContext, input: PosCreateQuotationInput) {
+  const register = await registerForTerminal(ctx, input.registerId)
+
+  let customerId = register.defaultCustomerId
+  if (input.customerId) {
+    const customer = await db.customer.findFirst({
+      where: { id: input.customerId, orgId: ctx.orgId, isActive: true },
+      select: { id: true },
+    })
+    if (!customer) throw notFound('Customer')
+    customerId = customer.id
+  }
+
+  const storeOf = await lineStoreResolver(ctx, register.storeId, input.lines)
+  const lines = input.lines.map((line) => ({
+    itemId: line.itemId,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice ?? '',
+    storeId: storeOf(line),
+  }))
+
+  const document = await salesService.create(ctx, 'ESTIMATE', {
+    number: undefined,
+    customerId,
+    date: today(ctx.organization.timeZone),
+    lines,
+    saveAsDraft: false,
+    discountKind: 'percent',
+    customerMessage: input.note ?? undefined,
+  })
+
+  return {
+    id: document.id,
+    number: document.number,
+    total: document.total.toString(),
+  }
+}
+
+/** Open quotations for the till / hub — same set as “from quotation” on invoices. */
+export async function listOpenQuotations(ctx: OrgContext) {
+  const rows = await salesService.listConvertibleEstimates(ctx)
+  return rows.map((row) => ({
+    ...row,
+    totalLabel: formatMoney(row.total, ctx.organization.baseCurrency),
+    dateLabel: formatDate(row.date),
+  }))
+}
+
+/** Load a quotation into the till cart (lines + customer + quoted prices). */
+export async function getEstimateCart(ctx: OrgContext, estimateId: string) {
+  const estimate = await db.salesDocument.findFirst({
+    where: {
+      id: estimateId,
+      orgId: ctx.orgId,
+      type: 'ESTIMATE',
+      status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
+      convertedTo: { is: null },
+    },
+    select: {
+      id: true,
+      number: true,
+      customerId: true,
+      customerMessage: true,
+      customer: { select: { displayName: true } },
+      lines: {
+        orderBy: { lineNumber: 'asc' },
+        select: {
+          itemId: true,
+          quantity: true,
+          unitPrice: true,
+          storeId: true,
+          description: true,
+          item: { select: { name: true } },
+        },
+      },
+    },
+  })
+  if (!estimate) throw notFound('Quotation')
+
+  const lines = estimate.lines
+    .filter((line) => line.itemId)
+    .map((line) => ({
+      itemId: line.itemId!,
+      name: line.item?.name ?? line.description ?? 'Item',
+      price: line.unitPrice.toString(),
+      quantity: Number(line.quantity),
+      storeId: line.storeId,
+    }))
+
+  if (lines.length === 0) {
+    throw precondition('This quotation has no products to load at the till.')
+  }
+
+  return {
+    id: estimate.id,
+    number: estimate.number,
+    customerId: estimate.customerId,
+    customerName: estimate.customer.displayName,
+    note: estimate.customerMessage,
+    lines,
+  }
+}
+
+async function assertOpenEstimate(ctx: OrgContext, estimateId: string) {
+  const estimate = await db.salesDocument.findFirst({
+    where: {
+      id: estimateId,
+      orgId: ctx.orgId,
+      type: 'ESTIMATE',
+      status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
+      convertedTo: { is: null },
+    },
+    select: { id: true, number: true },
+  })
+  if (!estimate) throw notFound('Quotation')
+  return estimate
+}
+
+/** Mark the quotation closed and link it to the POS receipt. */
+async function consumeEstimate(ctx: OrgContext, estimateId: string, salesDocumentId: string) {
+  await assertOpenEstimate(ctx, estimateId)
+  await db.$transaction(async (tx) => {
+    await tx.salesDocument.update({
+      where: { id: salesDocumentId },
+      data: { convertedFromId: estimateId },
+    })
+    await tx.salesDocument.update({
+      where: { id: estimateId },
+      data: { status: 'CLOSED' },
+    })
+  })
 }
 
 export async function recordCashMove(ctx: OrgContext, input: PosCashMoveInput) {
@@ -1075,8 +1284,10 @@ export async function settingsOverview(ctx: OrgContext) {
   await db.$transaction(async (tx) => {
     await ensurePosRegisterAccounts(tx, ctx.orgId)
   })
+  // Keep Point of Sale heading + per-till sub-accounts on the chart.
+  await syncPosChartAccounts(ctx)
 
-  const [methods, registers, assetAccounts] = await Promise.all([
+  const [methods, registers, assetAccounts, members] = await Promise.all([
     db.posPaymentMethod.findMany({
       where: { orgId: ctx.orgId },
       select: {
@@ -1125,6 +1336,13 @@ export async function settingsOverview(ctx: OrgContext) {
       select: { id: true, code: true, name: true },
       orderBy: { code: 'asc' },
     }),
+    db.membership.findMany({
+      where: { orgId: ctx.orgId, status: 'ACTIVE' },
+      select: {
+        user: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { user: { name: 'asc' } },
+    }),
   ])
 
   const customerList = await db.customer.findMany({
@@ -1142,6 +1360,7 @@ export async function settingsOverview(ctx: OrgContext) {
   const customers = [...customerById.values()].sort((a, b) =>
     a.displayName.localeCompare(b.displayName),
   )
+  const staffByRegister = await loadRegisterStaffMap(registers.map((register) => register.id))
 
   return {
     methods: methods.map((method) => ({
@@ -1167,9 +1386,15 @@ export async function settingsOverview(ctx: OrgContext) {
       changeMethodIds: register.methods.filter((row) => row.allowsChangeReturn).map((row) => row.paymentMethodId),
       defaultChangeMethodId: register.defaultChangeMethodId,
       allowWalletChangeReturn: register.allowWalletChangeReturn,
+      staffUserIds: staffByRegister.get(register.id) ?? [],
     })),
     assetAccounts,
     customers,
+    staff: members.map((member) => ({
+      id: member.user.id,
+      name: member.user.name,
+      email: member.user.email,
+    })),
     stores: await db.store.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: { id: true, name: true },
@@ -1266,6 +1491,17 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
     }
   }
 
+  const staffUserIds = [...new Set(input.staffUserIds)]
+  if (staffUserIds.length > 0) {
+    const staff = await db.membership.findMany({
+      where: { orgId: ctx.orgId, status: 'ACTIVE', userId: { in: staffUserIds } },
+      select: { userId: true },
+    })
+    if (staff.length !== staffUserIds.length) {
+      throw validation('Every counter staff member must be an active user in this organisation.')
+    }
+  }
+
   if (input.id) {
     const existing = await db.posRegister.findFirst({
       where: { id: input.id, orgId: ctx.orgId },
@@ -1290,7 +1526,11 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
         },
       })
       await syncRegisterMethods(tx, input.id!, input.paymentMethodIds, changeMethodIds)
+      await syncRegisterStaff(tx, input.id!, staffUserIds)
       await ensurePosRegisterAccounts(tx, ctx.orgId)
+      if (input.isActive) {
+        await ensureRegisterCashAccount(tx, ctx.orgId, input.id!, name)
+      }
     })
     return { id: input.id }
   }
@@ -1310,7 +1550,11 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
       select: { id: true },
     })
     await syncRegisterMethods(tx, register.id, input.paymentMethodIds, changeMethodIds)
+    await syncRegisterStaff(tx, register.id, staffUserIds)
     await ensurePosRegisterAccounts(tx, ctx.orgId)
+    if (input.isActive) {
+      await ensureRegisterCashAccount(tx, ctx.orgId, register.id, name)
+    }
     return register
   })
 
@@ -1331,6 +1575,15 @@ async function syncRegisterMethods(
       paymentMethodId,
       allowsChangeReturn: change.has(paymentMethodId),
     })),
+  })
+}
+
+
+async function syncRegisterStaff(tx: Tx, registerId: string, userIds: string[]) {
+  await tx.posRegisterStaff.deleteMany({ where: { registerId } })
+  if (userIds.length === 0) return
+  await tx.posRegisterStaff.createMany({
+    data: userIds.map((userId) => ({ registerId, userId })),
   })
 }
 
@@ -1424,7 +1677,9 @@ export async function receipt(ctx: OrgContext, documentId: string) {
     tax: document.taxTotal.toString(),
     total: document.total.toString(),
     registerName: order?.register.name ?? null,
-    cashierName: receiptCashierName(order?.register.name ?? null, cashier),
+    // Counter already names the till above, so Salesman names the person
+    // who rang it up rather than repeating the till name.
+    cashierName: receiptCashierName(null, cashier),
     // The register's walk-in customer is not worth printing; a named one is.
     customer:
       order && order.register.defaultCustomerId === document.customerId

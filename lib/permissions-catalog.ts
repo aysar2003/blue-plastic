@@ -112,7 +112,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     permissions: [
       { key: 'pos:read', label: 'Open POS and view registers' },
       { key: 'pos:sell', label: 'Ring up sales at the till' },
-      { key: 'pos:manage', label: 'Configure payment methods and registers' },
+      { key: 'pos:manage', label: 'Configure payment methods and counters' },
     ],
   },
   {

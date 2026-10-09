@@ -24,7 +24,7 @@ import { formatDate, isCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
 import { dueDateFor, type PaymentTermShape } from '@/lib/payment-terms'
 import { FORM_SHEET, VENDOR_CREDIT } from '@/lib/credit-brand'
-import type { PurchaseTypeConfig } from '@/lib/purchase-types'
+import { defaultPurchaseLineRows, type PurchaseTypeConfig } from '@/lib/purchase-types'
 import { cn } from '@/lib/utils'
 import { LineStore } from '@/components/inventory/line-store'
 import { officeStoreId, type StockByStore, type StoreChoice } from '@/lib/store-stock'
@@ -77,8 +77,6 @@ type Line = {
   storeId: string
 }
 
-const ITEM_ROWS = 4
-
 const empty = (key: number, account = '', kind: LineKind = 'category', storeId = ''): Line => ({
   key,
   kind,
@@ -91,10 +89,10 @@ const empty = (key: number, account = '', kind: LineKind = 'category', storeId =
   storeId,
 })
 
-function withItemRows(seeded: Line[], storeId = ''): Line[] {
+function withItemRows(seeded: Line[], storeId = '', minimum = 15): Line[] {
   const rows = [...seeded]
   let key = rows.reduce((max, line) => Math.max(max, line.key), 0)
-  while (rows.filter((line) => line.kind === 'item').length < ITEM_ROWS) {
+  while (rows.filter((line) => line.kind === 'item').length < minimum) {
     key += 1
     rows.push(empty(key, '', 'item', storeId))
   }
@@ -174,6 +172,7 @@ export function BillForm({
   const [paymentAccountId, setPaymentAccountId] = useState(
     document?.paymentAccountId ?? paymentAccounts[0]?.id ?? '',
   )
+  const itemRows = defaultPurchaseLineRows(config.type)
   const [lines, setLines] = useState<Line[]>(() =>
     withItemRows(
       document?.lines.length
@@ -192,6 +191,7 @@ export function BillForm({
           }))
         : [empty(1), empty(2)],
       officeId,
+      defaultPurchaseLineRows(config.type),
     ),
   )
   const [saveAsDraft, setSaveAsDraft] = useState(false)
@@ -243,8 +243,8 @@ export function BillForm({
         setMemo('')
         setPaymentTermId('')
         setPaymentAccountId(paymentAccounts[0]?.id ?? '')
-        setLines(withItemRows([empty(1), empty(2)]))
-        nextKey.current = ITEM_ROWS + 3
+        setLines(withItemRows([empty(1), empty(2)], officeId, itemRows))
+        nextKey.current = itemRows + 3
         router.refresh()
         return
       }
@@ -748,7 +748,7 @@ export function BillForm({
                         onClick={() =>
                           setLines((current) => {
                             const items = current.filter((row) => row.kind === 'item')
-                            if (items.length <= ITEM_ROWS) {
+                            if (items.length <= itemRows) {
                               return current.map((row) =>
                                 row.key === line.key ? empty(row.key, '', 'item', officeId) : row,
                               )

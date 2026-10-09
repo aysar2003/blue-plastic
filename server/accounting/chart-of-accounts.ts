@@ -31,6 +31,13 @@ export const DEFAULT_CHART: SeedAccount[] = [
   { code: '1000', name: 'Cash on Hand', type: 'ASSET', subtype: 'BANK' },
   { code: '1010', name: 'Bank Account', type: 'ASSET', subtype: 'BANK' },
   {
+    code: '1020',
+    name: 'Point of Sale',
+    type: 'ASSET',
+    subtype: 'OTHER_CURRENT_ASSET',
+    description: 'pos-parent',
+  },
+  {
     code: '1050',
     name: 'Undeposited Funds',
     type: 'ASSET',

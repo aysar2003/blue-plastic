@@ -12,7 +12,7 @@ import {
 import { SALES_HUB_APPS, type SalesHubApp } from './sales-apps'
 
 /**
- * What opens under a top Apps chip on hover.
+ * What opens under a top Apps chip on click.
  *
  * Each parent app lists the destinations inside it, so a person can jump
  * straight to Delivery or Invoices without opening the hub first.
@@ -37,8 +37,10 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
   pos: [
     { label: 'Dashboard', href: '/pos', permission: 'pos:read' },
     { label: 'Orders', href: '/pos/orders', permission: 'pos:read' },
+    { label: 'Quotations', href: '/pos/quotations', permission: 'invoice:read' },
     { label: 'Sessions', href: '/pos/sessions', permission: 'pos:read' },
     { label: 'Configuration', href: '/pos/settings', permission: 'pos:manage' },
+    { label: 'Estimates (Sales)', href: '/sales/estimates', permission: 'invoice:read' },
     { label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read' },
     { label: 'Transfer to bank', href: '/banking/transfers/new', permission: 'bank:transact' },
   ],

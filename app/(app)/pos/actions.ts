@@ -7,6 +7,8 @@ import {
   posCashMoveSchema,
   posCheckoutSchema,
   posCloseSessionSchema,
+  posCreateQuotationSchema,
+  posLoadQuotationSchema,
   posOpenSessionSchema,
   posPaymentMethodSchema,
   posRefundSchema,
@@ -21,9 +23,11 @@ import * as posService from '@/server/services/pos.service'
 function revalidatePos() {
   revalidatePath('/pos')
   revalidatePath('/pos/orders')
+  revalidatePath('/pos/quotations')
   revalidatePath('/pos/sessions')
   revalidatePath('/pos/settings')
   revalidatePath('/sales/sales-receipts')
+  revalidatePath('/sales/estimates')
   revalidatePath('/accounts')
 }
 
@@ -35,6 +39,20 @@ export const posCheckout = action
     revalidatePos()
     return result
   })
+
+export const posCreateQuotation = action
+  .requires('invoice:create')
+  .input(posCreateQuotationSchema)
+  .handler(async (ctx, input) => {
+    const result = await posService.createQuotation(ctx, input)
+    revalidatePos()
+    return result
+  })
+
+export const posLoadQuotation = action
+  .requires('invoice:read')
+  .input(posLoadQuotationSchema)
+  .handler(async (ctx, input) => posService.getEstimateCart(ctx, input.estimateId))
 
 export const openPosSession = action
   .requires('pos:sell')
@@ -129,6 +147,6 @@ export async function savePosRegisterForm(_prev: FormState, formData: FormData):
   const input = readRegisterForm(formData)
   return toFormState(
     await savePosRegister(input),
-    input.id ? 'Register updated.' : 'Register added.',
+    input.id ? 'Counter updated.' : 'Counter added.',
   )
 }

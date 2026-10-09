@@ -5,6 +5,10 @@ import { useState, useTransition } from 'react'
 import { Loader2Icon } from 'lucide-react'
 
 import { openPosSession } from '@/app/(app)/pos/actions'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { ODOO } from '@/lib/odoo-brand'
 import { CASHIER_PIN_MAX, CASHIER_PIN_MESSAGE, isCashierPin } from '@/lib/pos-pin'
 
@@ -50,58 +54,57 @@ export function SessionOpenForm({
   }
 
   return (
-    <div
-      className="rounded-xl border border-white/10 p-5"
-      style={{ background: ODOO.surface }}
-    >
-      <h2 className="text-lg font-semibold text-white">Open session · {registerName}</h2>
-      <p className="mt-1 text-sm text-white/60">
-        Enter the cash in the drawer before the first sale ({currency}).
-      </p>
-      <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-white/50">
-        Opening cash
-        <input
-          value={openingCash}
-          onChange={(event) => setOpeningCash(event.target.value)}
-          inputMode="decimal"
-          className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#714B67]"
-        />
-      </label>
-      {hasPin ? (
-        <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-white/50">
-          Cashier PIN
-          <input
-            type="password"
-            value={pin}
-            onChange={(event) => setPin(event.target.value)}
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            required
-            minLength={4}
-            maxLength={CASHIER_PIN_MAX}
-            pattern="[A-Za-z0-9]{4,64}"
-            title="Use at least 4 letters or numbers."
-            className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#714B67]"
-          />
-        </label>
-      ) : null}
-      {error ? (
-        <p role="alert" className="mt-2 text-sm text-red-300">
-          {error}
+    <Card>
+      <CardContent className="p-5">
+        <h2 className="text-lg font-semibold text-foreground">Open session · {registerName}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Enter the cash in the drawer before the first sale ({currency}).
         </p>
-      ) : null}
-      <button
-        type="button"
-        disabled={pending}
-        onClick={submit}
-        className="mt-4 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        style={{ background: ODOO.purple }}
-      >
-        {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
-        Open register
-      </button>
-    </div>
+        <div className="mt-4 space-y-2">
+          <Label htmlFor="opening-cash">Opening cash</Label>
+          <Input
+            id="opening-cash"
+            value={openingCash}
+            onChange={(event) => setOpeningCash(event.target.value)}
+            inputMode="decimal"
+          />
+        </div>
+        {hasPin ? (
+          <div className="mt-4 space-y-2">
+            <Label htmlFor="cashier-pin">Cashier PIN</Label>
+            <Input
+              id="cashier-pin"
+              type="password"
+              value={pin}
+              onChange={(event) => setPin(event.target.value)}
+              autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+              minLength={4}
+              maxLength={CASHIER_PIN_MAX}
+              pattern="[A-Za-z0-9]{4,64}"
+              title="Use at least 4 letters or numbers."
+            />
+          </div>
+        ) : null}
+        {error ? (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <Button
+          type="button"
+          disabled={pending}
+          onClick={submit}
+          className="mt-4 text-white hover:opacity-95"
+          style={{ background: ODOO.purple }}
+        >
+          {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
+          Open register
+        </Button>
+      </CardContent>
+    </Card>
   )
 }

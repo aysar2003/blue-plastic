@@ -102,9 +102,9 @@ function appIsCurrent(pathname: string, href: string, also: string[] = []) {
 /**
  * The apps, in the top bar, so any screen can open one directly.
  *
- * Hovering a chip opens the destinations inside that app — Sales shows invoices
- * and receipts, Purchases shows Delivery — without first opening the hub.
- * Clicking Apps opens the full app list (works on touch where hover does not).
+ * One click on a chip opens its destination list; pick an item from there.
+ * Nothing opens on hover. Apps with no children still go straight to the hub.
+ * The Apps button opens the full app list the same way.
  */
 export function HeaderApps({ permissions, hidden }: { permissions: string[]; hidden?: string[] }) {
   const pathname = usePathname()
@@ -194,21 +194,18 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
         const Icon = ICONS[app.icon]
         const current = appIsCurrent(pathname, app.href, APP_ALSO[app.key])
         const children = menuForApp(app.key, permissions)
-        const open = openKey === app.key && children.length > 0
+        const hasMenu = children.length > 0
+        const open = openKey === app.key && hasMenu
         return (
-          <div
-            key={app.key}
-            className="relative"
-            onMouseEnter={() => {
-              if (children.length > 0) setOpenKey(app.key)
-            }}
-            onMouseLeave={() => setOpenKey((key) => (key === app.key ? null : key))}
-          >
+          <div key={app.key} className="relative">
             <AppChipLink
               app={app}
               current={current}
-              hasMenu={children.length > 0}
+              hasMenu={hasMenu}
               open={open}
+              onToggleMenu={() =>
+                setOpenKey((key) => (key === app.key ? null : app.key))
+              }
               onDone={() => setOpenKey(null)}
             >
               <span
@@ -218,8 +215,14 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
                 <Icon className="size-3" strokeWidth={2} aria-hidden />
               </span>
               {app.label}
+              {hasMenu ? (
+                <ChevronDownIcon
+                  className={cn('size-3 opacity-60 transition-transform', open && 'rotate-180')}
+                  aria-hidden
+                />
+              ) : null}
             </AppChipLink>
-            {children.length > 0 ? (
+            {hasMenu ? (
               <div
                 role="menu"
                 aria-label={`${app.label} apps`}
@@ -268,12 +271,16 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
   )
 }
 
-/** A top-bar app chip: reopens the place left in that app (see lib/app-memory). */
+const chipClass =
+  'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-[#26262d] hover:bg-card hover:text-black dark:text-muted-foreground dark:hover:text-foreground'
+
+/** A top-bar app chip. With a menu: click opens the list. Without: go to the hub. */
 function AppChipLink({
   app,
   current,
   hasMenu,
   open,
+  onToggleMenu,
   onDone,
   children,
 }: {
@@ -281,25 +288,39 @@ function AppChipLink({
   current: boolean
   hasMenu: boolean
   open: boolean
+  onToggleMenu: () => void
   onDone: () => void
   children: ReactNode
 }) {
   const door = useAppDoor(app.key, app.href)
+  const activeClass = (current || open) && 'bg-card text-foreground shadow-sm ring-1 ring-border dark:text-foreground'
+
+  if (hasMenu) {
+    return (
+      <button
+        type="button"
+        aria-current={current ? 'page' : undefined}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={`Open ${app.label} list`}
+        onClick={onToggleMenu}
+        className={cn(chipClass, activeClass)}
+      >
+        {children}
+      </button>
+    )
+  }
+
   return (
     <Link
       href={door.href}
       aria-current={current ? 'page' : undefined}
-      aria-haspopup={hasMenu ? 'menu' : undefined}
-      aria-expanded={hasMenu ? open : undefined}
       title={door.remembered ? `${app.label} \u2014 back to where you left off` : undefined}
       onClick={() => {
         door.onClick()
         onDone()
       }}
-      className={cn(
-        'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-[#26262d] hover:bg-card hover:text-black dark:text-muted-foreground dark:hover:text-foreground',
-        current && 'bg-card text-foreground shadow-sm ring-1 ring-border dark:text-foreground',
-      )}
+      className={cn(chipClass, activeClass)}
     >
       {children}
     </Link>

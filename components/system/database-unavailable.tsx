@@ -1,4 +1,5 @@
 import { databaseProblem, databaseProblemText, type DatabaseProblem } from '@/lib/db-error'
+import { PRODUCT_NAME } from '@/lib/product-brand'
 
 /**
  * Shown instead of a blank server error when Postgres cannot be used.
@@ -9,7 +10,7 @@ export function DatabaseUnavailable({ error }: { error?: unknown }) {
 
   return (
     <main className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-4 px-6 py-16">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Blue Plastic Center</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{PRODUCT_NAME}</p>
       <h1 className="text-2xl font-semibold tracking-tight">The books cannot reach the database</h1>
       <p className="text-sm leading-relaxed text-muted-foreground">{databaseProblemText(problem)}</p>
       <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">

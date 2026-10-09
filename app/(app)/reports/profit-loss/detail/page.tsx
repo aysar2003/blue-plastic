@@ -98,6 +98,7 @@ export default async function ProfitAndLossDetailPage({
         label: string
         party: string | null
         href: string
+        docHref: string | null
         amount: string
       }[]
     }
@@ -131,7 +132,8 @@ export default async function ProfitAndLossDetailPage({
         line.description ??
         'Journal',
       party: line.customer?.displayName ?? line.vendor?.displayName ?? source?.partyName ?? null,
-      href: source?.href ?? `/journals/${line.journal.id}`,
+      href: `/journals/${line.journal.id}`,
+      docHref: source?.href ?? null,
       amount: amount.toString(),
     })
     byAccount.set(line.account.id, existing)
@@ -270,7 +272,8 @@ export default async function ProfitAndLossDetailPage({
                             cells: {
                               date: { value: row.recordedAt },
                               type: { value: row.label, href: row.href },
-                              number: { value: row.number, href: row.href },
+                              // Number opens the source document when there is one; otherwise the journal.
+                              number: { value: row.number, href: row.docHref ?? row.href },
                               name: { value: row.party },
                               amount: { value: row.amount },
                             },

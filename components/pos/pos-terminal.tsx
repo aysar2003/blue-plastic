@@ -27,7 +27,14 @@ import {
   XIcon,
 } from 'lucide-react'
 
-import { closePosSession, posCheckout, posRefund, recordPosCashMove } from '@/app/(app)/pos/actions'
+import {
+  closePosSession,
+  posCheckout,
+  posCreateQuotation,
+  posLoadQuotation,
+  posRefund,
+  recordPosCashMove,
+} from '@/app/(app)/pos/actions'
 import { PosPaymentForm } from '@/components/pos/payment-dialog'
 import { RegisterLock, useClientReady, useRegisterLocked, writeRegisterLocked } from '@/components/pos/register-lock'
 import { StockWarningNote } from '@/components/inventory/stock-warning'
@@ -60,6 +67,7 @@ import {
   prefilledPaymentAmounts,
   settlePosPayments,
 } from '@/lib/pos-payment'
+import { POS_SHORTFALL_DISCOUNT_MAX } from '@/lib/pos-shortfall'
 import { formatStockQty, negativeStockWarning } from '@/lib/store-stock'
 import { cn } from '@/lib/utils'
 
@@ -88,6 +96,16 @@ type RecentOrder = {
   customerName: string
   dateLabel: string
   payments: string
+}
+
+type OpenQuote = {
+  id: string
+  number: string
+  dateLabel: string
+  totalLabel: string
+  customerId: string
+  customerName: string
+  lineCount: number
 }
 
 const THEME_KEY = 'pos-till-theme'
@@ -148,6 +166,11 @@ export function PosTerminal(props: {
     cashRefunds: string
   }
   recentOrders: RecentOrder[]
+  openQuotations?: OpenQuote[]
+  /** Show quotation tools (invoice:create or invoice:read). */
+  canQuote?: boolean
+  /** May save the cart as a quotation. */
+  canCreateQuote?: boolean
   products: Product[]
   /** Store the till sells from (register store, else the office). */
   stockStoreName?: string | null
@@ -180,6 +203,9 @@ export function PosTerminal(props: {
   const bookRef = useRef<PosOrderBook | null>(book)
   const themeStored = useBrowserStore(THEME_KEY)
   const dark = themeStored !== 'light'
+  const [customerQuery, setCustomerQuery] = useState('')
+  /** When the cart was loaded from a quotation, checkout closes that quote. */
+  const [loadedEstimateId, setLoadedEstimateId] = useState<string | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const [amounts, setAmounts] = useState<Record<string, string>>({})
   const [changeMethodId, setChangeMethodId] = useState('')
@@ -187,7 +213,7 @@ export function PosTerminal(props: {
   const [toast, setToast] = useState<string | null>(null)
   const [lastReceiptId, setLastReceiptId] = useState<string | null>(null)
   const [menu, setMenu] = useState<
-    'actions' | 'burger' | 'cash' | 'customer' | 'note' | 'close' | 'refund' | null
+    'actions' | 'burger' | 'cash' | 'customer' | 'note' | 'close' | 'refund' | 'quotes' | null
   >(null)
   const [refundOrderId, setRefundOrderId] = useState<string | null>(null)
   const [refundAmounts, setRefundAmounts] = useState<Record<string, string>>({})
@@ -271,6 +297,13 @@ export function PosTerminal(props: {
     () => props.customers.find((row) => row.id === customerId)?.displayName ?? null,
     [customerId, props.customers],
   )
+  const filteredCustomers = useMemo(() => {
+    const needle = customerQuery.trim().toLowerCase()
+    if (!needle) return props.customers
+    return props.customers.filter((customer) =>
+      customer.displayName.toLowerCase().includes(needle),
+    )
+  }, [customerQuery, props.customers])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -336,9 +369,13 @@ export function PosTerminal(props: {
           line.itemId === product.id ? { ...line, quantity: line.quantity + 1 } : line,
         )
       }
+      const startPrice = (() => {
+        const n = Number(product.price)
+        return Number.isFinite(n) && n >= 0 ? n.toFixed(2) : '0.00'
+      })()
       return [
         ...prev,
-        { itemId: product.id, name: product.name, price: product.price, quantity: 1, storeId: null },
+        { itemId: product.id, name: product.name, price: startPrice, quantity: 1, storeId: null },
       ]
     })
   }
@@ -372,13 +409,92 @@ export function PosTerminal(props: {
     setCart((prev) => prev.map((line) => (line.itemId === itemId ? { ...line, quantity } : line)))
   }
 
+  function setPrice(itemId: string, price: string) {
+    // Allow clearing while typing; only keep digits and one decimal point.
+    const cleaned = price.replace(/[^\d.]/g, '')
+    const parts = cleaned.split('.')
+    const next =
+      parts.length <= 1 ? cleaned : `${parts[0]}.${parts.slice(1).join('').slice(0, 4)}`
+    setCart((prev) => prev.map((line) => (line.itemId === itemId ? { ...line, price: next } : line)))
+  }
+
+  function commitPrice(itemId: string, price: string) {
+    const n = Number(price)
+    const next = Number.isFinite(n) && n >= 0 ? n.toFixed(2) : '0.00'
+    setCart((prev) => prev.map((line) => (line.itemId === itemId ? { ...line, price: next } : line)))
+  }
+
   function cancelOrder() {
     const current = bookRef.current ? activePosOrder(bookRef.current) : null
     if (!current) return
     leavePayment()
+    setLoadedEstimateId(null)
     setMenu(null)
     commitBook((book) => clearPosOrder(book, current.id))
     setToast(current.kind === 'register' ? 'Order cancelled' : `Order ${current.label} cancelled`)
+  }
+
+  function cartLinesPayload() {
+    return cart.map((line) => ({
+      itemId: line.itemId,
+      quantity: String(line.quantity),
+      unitPrice: line.price.trim() || undefined,
+      storeId: line.storeId ?? undefined,
+    }))
+  }
+
+  function saveQuotation() {
+    setError(null)
+    if (cart.length === 0) {
+      setToast('Add products before saving a quotation.')
+      return
+    }
+    startTransition(async () => {
+      const result = await posCreateQuotation({
+        registerId: props.register.id,
+        customerId: customerId ?? undefined,
+        note: note || null,
+        lines: cartLinesPayload(),
+      })
+      if (!result.ok) {
+        setError(result.error.message)
+        setToast(result.error.message)
+        return
+      }
+      setCart([])
+      setNote('')
+      setLoadedEstimateId(null)
+      setMenu(null)
+      setToast(`Quotation ${result.data.number} saved · ${formatMoney(result.data.total, props.currency)}`)
+      router.refresh()
+    })
+  }
+
+  function loadQuotation(estimateId: string) {
+    setError(null)
+    startTransition(async () => {
+      const result = await posLoadQuotation({ estimateId })
+      if (!result.ok) {
+        setError(result.error.message)
+        setToast(result.error.message)
+        return
+      }
+      const quote = result.data
+      setCart(
+        quote.lines.map((line: CartLine) => ({
+          itemId: line.itemId,
+          name: line.name,
+          price: line.price,
+          quantity: line.quantity,
+          storeId: line.storeId,
+        })),
+      )
+      setCustomerId(quote.customerId)
+      setNote(quote.note ?? '')
+      setLoadedEstimateId(quote.id)
+      setMenu(null)
+      setToast(`Loaded ${quote.number} · pay when ready`)
+    })
   }
 
   const paymentDecimals = minorUnits(props.currency)
@@ -406,8 +522,28 @@ export function PosTerminal(props: {
       ? CHANGE_ACCOUNT_MESSAGE
       : null
   const paymentError = error ?? changeAccountError
+
+  /**
+   * Unpaid remainder after what's typed, straight from the settlement. Zero
+   * once covered; otherwise a candidate for the small shortfall discount.
+   */
+  const shortfallPreview = useMemo(() => {
+    const remaining = Number(settlement.remaining)
+    if (remaining <= 0.009) return null
+    if (remaining <= POS_SHORTFALL_DISCOUNT_MAX + 0.009) {
+      return { status: 'discount' as const, amount: remaining }
+    }
+    return { status: 'short' as const, amount: remaining }
+  }, [settlement.remaining])
+
+  /** Settlement requires an exact match; a small shortfall becomes a discount instead. */
+  const canCheckout =
+    settlement.nonCashWithinBalance &&
+    settlement.payments.length > 0 &&
+    (settlement.canValidate || shortfallPreview?.status === 'discount')
+
   const canValidatePayment = paymentCanValidate({
-    canSettle: settlement.canValidate,
+    canSettle: canCheckout,
     blockingError: paymentError,
     change: settlement.change,
     changeMethodId,
@@ -457,9 +593,11 @@ export function PosTerminal(props: {
     if (!canValidatePayment) {
       setError(
         paymentError ??
-          (settlement.nonCashWithinBalance
-            ? 'Enter payments that cover the amount due.'
-            : 'Non-cash payments cannot exceed the remaining balance.'),
+          (!settlement.nonCashWithinBalance
+            ? 'Non-cash payments cannot exceed the remaining balance.'
+            : shortfallPreview?.status === 'short'
+              ? `Payment is short by ${formatMoney(shortfallPreview.amount, props.currency)} (max discount ${formatMoney(POS_SHORTFALL_DISCOUNT_MAX, props.currency)}).`
+              : 'Enter payments that cover the amount due.'),
       )
       return
     }
@@ -470,6 +608,8 @@ export function PosTerminal(props: {
     const payments = settlement.tenders
     const selling = bookRef.current ? activePosOrder(bookRef.current) : null
     if (!selling || selling.cart.length === 0) return
+    const lines = cartLinesPayload()
+    const estimateId = loadedEstimateId ?? undefined
     startTransition(async () => {
       // The signed-in user is whoever the server action sees. The sale is
       // posted on this open session, the same way a single-cart checkout was.
@@ -478,12 +618,9 @@ export function PosTerminal(props: {
         sessionId: props.session.id,
         customerId: selling.customerId ?? undefined,
         note: selling.note || null,
-        lines: selling.cart.map((line) => ({
-          itemId: line.itemId,
-          quantity: String(line.quantity),
-          storeId: line.storeId ?? undefined,
-        })),
+        lines,
         payments,
+        estimateId,
         ...(changeAtSale > 0.004 ? { changeMethodId } : {}),
       })
       if (!result.ok) {
@@ -492,6 +629,7 @@ export function PosTerminal(props: {
       }
       leavePayment()
       commitBook((current) => settlePosOrder(current, selling.id))
+      setLoadedEstimateId(null)
       setLastReceiptId(result.data.id)
       setToast(`Receipt ${result.data.number} · ${formatMoney(result.data.total, props.currency)}`)
       openReceiptPrint(result.data.id, { autoprint: true, change: changeAtSale })
@@ -637,6 +775,19 @@ export function PosTerminal(props: {
           >
             Orders
           </Link>
+          {props.canQuote ? (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null)
+                setMenu('quotes')
+              }}
+              className="rounded-md px-3 py-1.5 text-sm"
+              style={{ border: `1px solid ${border}`, color: text }}
+            >
+              Quotations
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={openNewOrder}
@@ -759,7 +910,10 @@ export function PosTerminal(props: {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setMenu('customer')}
+                onClick={() => {
+                  setCustomerQuery('')
+                  setMenu('customer')
+                }}
                 className="min-w-0 flex-1 truncate rounded-lg px-3 py-2.5 text-sm font-medium"
                 style={{ border: `1px solid ${border}`, background: chip }}
               >
@@ -804,9 +958,33 @@ export function PosTerminal(props: {
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{line.name}</p>
-                  <p className="text-xs" style={{ color: muted }}>
-                    {formatMoney(line.price, props.currency)} · qty {line.quantity}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                    <label className="inline-flex items-center gap-1" style={{ color: muted }}>
+                      <span className="shrink-0">Price</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={line.price}
+                        onChange={(event) => setPrice(line.itemId, event.target.value)}
+                        onFocus={(event) => event.currentTarget.select()}
+                        onBlur={() => commitPrice(line.itemId, line.price)}
+                        className="w-[5.25rem] rounded-md border px-1.5 py-1 text-sm font-semibold tabular outline-none focus:ring-2"
+                        style={{
+                          borderColor: border,
+                          background: dark ? '#1f1f23' : '#ffffff',
+                          color: text,
+                          // Make the editable price obvious on the dark till.
+                          boxShadow: dark ? 'inset 0 0 0 1px rgba(255,255,255,0.06)' : undefined,
+                        }}
+                        aria-label={`Edit price for ${line.name}`}
+                        title="Tap to raise or lower the price for this sale"
+                      />
+                    </label>
+                    <span style={{ color: muted }}>·</span>
+                    <span className="font-medium tabular" style={{ color: text }}>
+                      {formatMoney(Number(line.price) * line.quantity || 0, props.currency)}
+                    </span>
+                  </div>
                   {(() => {
                     const product = productById.get(line.itemId)
                     if (!product?.stock) return null
@@ -856,14 +1034,26 @@ export function PosTerminal(props: {
                     )
                   })()}
                 </div>
-                <input
-                  type="number"
-                  min={1}
-                  value={line.quantity}
-                  onChange={(event) => setQty(line.itemId, Number(event.target.value))}
-                  className="w-14 rounded border bg-transparent px-1 py-0.5 text-center text-sm"
-                  style={{ borderColor: border }}
-                />
+                <label className="flex flex-col items-center gap-0.5">
+                  <span className="text-[0.65rem] uppercase tracking-wide" style={{ color: muted }}>
+                    Qty
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={line.quantity}
+                    onChange={(event) => setQty(line.itemId, Number(event.target.value))}
+                    onFocus={(event) => event.currentTarget.select()}
+                    className="w-14 rounded-md border px-1 py-1 text-center text-sm font-semibold outline-none focus:ring-2"
+                    style={{
+                      borderColor: border,
+                      background: dark ? '#1f1f23' : '#ffffff',
+                      color: text,
+                    }}
+                    aria-label={`Quantity for ${line.name}`}
+                  />
+                </label>
                 <button type="button" onClick={() => setQty(line.itemId, 0)} aria-label="Remove">
                   <Trash2Icon className="size-4 opacity-60" />
                 </button>
@@ -981,20 +1171,30 @@ export function PosTerminal(props: {
               onClick={openRefund}
               dark={dark}
             />
+            {props.canCreateQuote ? (
+              <ActionTile
+                label="Save Quotation"
+                icon={<FileTextIcon className="size-6" />}
+                onClick={saveQuotation}
+                dark={dark}
+              />
+            ) : null}
+            {props.canQuote ? (
+              <ActionTile
+                label="Open Quotations"
+                icon={<Link2Icon className="size-6" />}
+                onClick={() => {
+                  setError(null)
+                  setMenu('quotes')
+                }}
+                dark={dark}
+              />
+            ) : null}
             <ActionTile
-              label="Quotation / Order"
-              icon={<Link2Icon className="size-6" />}
-              onClick={() => {
-                setMenu(null)
-                router.push('/sales/estimates/new')
-              }}
-              dark={dark}
-            />
-            <ActionTile
-              label="Pricelist"
+              label="Edit prices"
               icon={<ListIcon className="size-6" />}
               onClick={() => {
-                setToast('Sales price from product master is used at the till.')
+                setToast('Tap Price on a cart line to raise or lower it for this sale only.')
                 setMenu(null)
               }}
               dark={dark}
@@ -1162,20 +1362,40 @@ export function PosTerminal(props: {
       ) : null}
 
       {menu === 'customer' ? (
-        <Modal title="Customer" dark={dark} onClose={() => setMenu(null)}>
+        <Modal
+          title="Customer"
+          dark={dark}
+          onClose={() => {
+            setCustomerQuery('')
+            setMenu(null)
+          }}
+        >
+          <label className="mb-2 flex items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: border, background: chip }}>
+            <SearchIcon className="size-4 shrink-0 opacity-60" aria-hidden />
+            <input
+              type="search"
+              value={customerQuery}
+              onChange={(event) => setCustomerQuery(event.target.value)}
+              placeholder="Search customer by name…"
+              autoFocus
+              className="w-full bg-transparent text-sm outline-none"
+              style={{ color: text }}
+            />
+          </label>
           <button
             type="button"
             className="mb-2 w-full rounded-lg px-3 py-2 text-left text-sm"
             style={{ background: chip }}
             onClick={() => {
               setCustomerId(null)
+              setCustomerQuery('')
               setMenu(null)
             }}
           >
             Walk-in (register default)
           </button>
           <ul className="max-h-72 space-y-1 overflow-y-auto">
-            {props.customers.map((customer) => (
+            {filteredCustomers.map((customer) => (
               <li key={customer.id}>
                 <button
                   type="button"
@@ -1183,6 +1403,7 @@ export function PosTerminal(props: {
                   style={{ background: customerId === customer.id ? `${ODOO.purple}44` : chip }}
                   onClick={() => {
                     setCustomerId(customer.id)
+                    setCustomerQuery('')
                     setMenu(null)
                   }}
                 >
@@ -1190,6 +1411,9 @@ export function PosTerminal(props: {
                 </button>
               </li>
             ))}
+            {filteredCustomers.length === 0 ? (
+              <li className="px-3 py-4 text-center text-sm opacity-60">No customer matches that name.</li>
+            ) : null}
           </ul>
         </Modal>
       ) : null}
@@ -1275,6 +1499,80 @@ export function PosTerminal(props: {
             {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
             Close Register
           </button>
+        </Modal>
+      ) : null}
+
+      {menu === 'quotes' ? (
+        <Modal title="Quotations" dark={dark} onClose={() => setMenu(null)}>
+          <p className="mb-3 text-sm" style={{ color: muted }}>
+            Save the cart as a quotation, or load one when the customer returns — then Pay to sell.
+          </p>
+          {props.canCreateQuote && cart.length > 0 ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={saveQuotation}
+              className="mb-4 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ background: ODOO.purple }}
+            >
+              {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
+              Save current cart as quotation
+            </button>
+          ) : null}
+          {loadedEstimateId ? (
+            <p className="mb-3 rounded-md px-3 py-2 text-xs" style={{ background: chip, color: muted }}>
+              Cart loaded from a quotation — Pay will close that quotation.
+            </p>
+          ) : null}
+          <ul className="max-h-[50vh] space-y-2 overflow-y-auto">
+            {(props.openQuotations ?? []).map((quote) => (
+              <li
+                key={quote.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm"
+                style={{ background: chip }}
+              >
+                <div className="min-w-0">
+                  <p className="font-medium">{quote.number}</p>
+                  <p className="text-xs" style={{ color: muted }}>
+                    {quote.customerName} · {quote.dateLabel} · {quote.lineCount} line
+                    {quote.lineCount === 1 ? '' : 's'} · {quote.totalLabel}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => loadQuotation(quote.id)}
+                  className="rounded-md px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                  style={{ background: ODOO.teal }}
+                >
+                  Load
+                </button>
+              </li>
+            ))}
+            {(props.openQuotations ?? []).length === 0 ? (
+              <li className="py-8 text-center text-sm" style={{ color: muted }}>
+                No open quotations. Add products and save a quotation from Actions.
+              </li>
+            ) : null}
+          </ul>
+          {error && menu === 'quotes' ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
+          <div className="mt-4 flex justify-end gap-2">
+            <Link
+              href="/pos/quotations"
+              className="rounded-md px-3 py-1.5 text-sm"
+              style={{ border: `1px solid ${border}` }}
+            >
+              All quotations
+            </Link>
+            <button
+              type="button"
+              onClick={() => setMenu(null)}
+              className="rounded-md px-3 py-1.5 text-sm"
+              style={{ border: `1px solid ${border}` }}
+            >
+              Close
+            </button>
+          </div>
         </Modal>
       ) : null}
 
@@ -1388,6 +1686,14 @@ export function PosTerminal(props: {
               setChangeMethodId(methodId)
               setError(null)
             }}
+            note={
+              shortfallPreview?.status === 'discount' ? (
+                <p className="text-sm" style={{ color: ODOO.teal }}>
+                  Shortfall {formatMoney(shortfallPreview.amount, props.currency)} will be a discount
+                  on the receipt (max {formatMoney(POS_SHORTFALL_DISCOUNT_MAX, props.currency)}).
+                </p>
+              ) : null
+            }
             onAmount={setMethodAmount}
             onFill={fillMethod}
             onCancel={() => setPayOpen(false)}

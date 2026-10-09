@@ -34,6 +34,7 @@ describe('readRegisterForm', () => {
       defaultCustomerId: CUSTOMER,
       storeId: STORE,
       paymentMethodIds: [CASH, EVC],
+      staffUserIds: [],
       isActive: false,
       pin: '',
       allowWalletChangeReturn: false,
@@ -45,9 +46,11 @@ describe('readRegisterForm', () => {
     expect(parsed.isActive).toBe(false)
     expect(parsed.storeId).toBe(STORE)
     expect(parsed.pin).toBeUndefined()
+    expect(parsed.staffUserIds).toEqual([])
   })
 
   it('reads an add (no id, office default store, active checked)', () => {
+    const STAFF = 'cmuvddddd000004jskg73qop4'
     const input = readRegisterForm(
       form([
         ['id', ''],
@@ -56,6 +59,7 @@ describe('readRegisterForm', () => {
         ['storeId', ''],
         ['paymentMethodIds', CASH],
         ['paymentMethodIds', EVC],
+        ['staffUserIds', STAFF],
         ['isActive', 'true'],
         ['changeReturnConfigured', 'true'],
         ['changeMethodIds', CASH],
@@ -72,6 +76,7 @@ describe('readRegisterForm', () => {
     expect(parsed.allowWalletChangeReturn).toBe(true)
     expect(parsed.defaultChangeMethodId).toBe(CASH)
     expect(parsed.changeMethodIds).toEqual([CASH])
+    expect(parsed.staffUserIds).toEqual([STAFF])
   })
 
   it('accepts a letter-and-number PIN, including one longer than 4', () => {

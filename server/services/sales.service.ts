@@ -673,7 +673,7 @@ export async function create(
       meta,
     )
 
-    return { id: document.id, number: document.number }
+    return { id: document.id, number: document.number, total: document.total.toString() }
   })
 }
 

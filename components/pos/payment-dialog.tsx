@@ -28,6 +28,8 @@ export function PosPaymentForm(props: {
   changeMethods: { id: string; name: string }[]
   changeMethodId: string
   onChangeMethod: (methodId: string) => void
+  /** Extra note shown under the Paid/Remaining/Change summary — e.g. a shortfall discount. */
+  note?: React.ReactNode
   onAmount: (method: PosPaymentMethodField, raw: string) => void
   onFill: (methodId: string) => void
   onCancel: () => void
@@ -89,6 +91,7 @@ export function PosPaymentForm(props: {
           <dd>{formatMoney(props.change, props.currency)}</dd>
         </div>
       </dl>
+      {props.note ? <div className="mt-2">{props.note}</div> : null}
       <label className="mt-4 block text-sm" htmlFor="pos-change-from">
         <span className="font-medium">Return change from</span>
         <select

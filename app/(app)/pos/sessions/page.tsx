@@ -1,6 +1,10 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
+import { PageHeader } from '@/components/data/page-header'
+import { buttonVariants } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ODOO } from '@/lib/odoo-brand'
 import { requireOrgContext } from '@/server/auth/context'
 import * as posService from '@/server/services/pos.service'
@@ -13,75 +17,78 @@ export default async function PosSessionsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-white">Sessions</h1>
-      <p className="mt-1 text-sm text-white/55">
-        Cash-control periods — opening float, orders, and closing count.
-      </p>
+      <PageHeader
+        title="Sessions"
+        description="Cash-control periods — opening float, orders, and closing count."
+        actions={
+          <Link href="/pos" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            ← Dashboard
+          </Link>
+        }
+      />
 
-      <div
-        className="mt-6 overflow-hidden rounded-xl border border-white/10"
-        style={{ background: ODOO.surface }}
-      >
-        <table className="w-full text-left text-sm">
-          <thead className="bg-black/30 text-xs uppercase tracking-wide text-white/50">
-            <tr>
-              <th className="px-4 py-3 font-medium">Opened</th>
-              <th className="px-4 py-3 font-medium">Register</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Opening</th>
-              <th className="px-4 py-3 font-medium">Closing</th>
-              <th className="px-4 py-3 font-medium">Change returned</th>
-              <th className="px-4 py-3 font-medium text-right">Orders</th>
-            </tr>
-          </thead>
-          <tbody>
+      <Card className="overflow-hidden p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Opened</TableHead>
+              <TableHead>Register</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Opening</TableHead>
+              <TableHead>Closing</TableHead>
+              <TableHead>Change returned</TableHead>
+              <TableHead className="text-right">Orders</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {sessions.map((session) => (
-              <tr key={session.id} className="border-t border-white/8 text-white/90">
-                <td className="px-4 py-2.5 text-white/60">{session.dateLabel}</td>
-                <td className="px-4 py-2.5">
+              <TableRow key={session.id}>
+                <TableCell className="text-muted-foreground">{session.dateLabel}</TableCell>
+                <TableCell>
                   {session.status === 'OPEN' ? (
-                    <Link href={`/pos/${session.registerId}`} className="text-[#8fd4d7] hover:underline">
+                    <Link href={`/pos/${session.registerId}`} className="text-primary hover:underline">
                       {session.registerName}
                     </Link>
                   ) : (
                     session.registerName
                   )}
-                </td>
-                <td className="px-4 py-2.5">
+                </TableCell>
+                <TableCell>
                   <span
-                    className="rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide"
+                    className="rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white"
                     style={{
-                      background: session.status === 'OPEN' ? ODOO.teal : 'rgba(255,255,255,0.1)',
-                      color: '#fff',
+                      background: session.status === 'OPEN' ? ODOO.teal : 'var(--muted-foreground)',
                     }}
                   >
                     {session.status}
                   </span>
-                </td>
-                <td className="px-4 py-2.5 tabular">{session.openingCash}</td>
-                <td className="px-4 py-2.5 tabular text-white/70">{session.closingCash ?? '—'}</td>
-                <td className="px-4 py-2.5 text-white/65">
+                </TableCell>
+                <TableCell className="tabular">{session.openingCash}</TableCell>
+                <TableCell className="tabular text-muted-foreground">
+                  {session.closingCash ?? '—'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
                   {session.changeLabel ?? '—'}
                   {session.netByAccount.length > 0 ? (
-                    <span className="mt-0.5 block text-xs text-white/40">
+                    <span className="mt-0.5 block text-xs text-muted-foreground/80">
                       Net{' '}
                       {session.netByAccount.map((account) => `${account.name} ${account.net}`).join(' · ')}
                     </span>
                   ) : null}
-                </td>
-                <td className="px-4 py-2.5 text-right tabular">{session.orderCount}</td>
-              </tr>
+                </TableCell>
+                <TableCell className="text-right tabular">{session.orderCount}</TableCell>
+              </TableRow>
             ))}
             {sessions.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-white/45">
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                   No sessions yet. Open a register from the dashboard.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : null}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
     </div>
   )
 }

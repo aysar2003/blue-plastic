@@ -464,6 +464,7 @@ model User {
   sessions    Session[]
   auditLogs   AuditLog[]
   bookmarks   WorkspaceBookmark[]
+  posRegisters PosRegisterStaff[]
 
   @@map("users")
 }
@@ -1275,6 +1276,7 @@ model PosRegister {
   account         LedgerAccount? @relation("PosRegisterBank", fields: [ledgerAccountId], references: [id], onDelete: Restrict)
   defaultChangeMethod PosPaymentMethod? @relation("RegisterDefaultChange", fields: [defaultChangeMethodId], references: [id], onDelete: SetNull)
   methods         PosRegisterMethod[]
+  staff           PosRegisterStaff[]
   sessions        PosSession[]
   orders          PosOrder[]
 
@@ -1282,6 +1284,19 @@ model PosRegister {
   @@index([orgId, isActive])
   @@index([defaultChangeMethodId])
   @@map("pos_registers")
+}
+
+/// Who may work this counter. Empty = anyone with POS access.
+model PosRegisterStaff {
+  registerId String
+  userId     String
+
+  register PosRegister @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([registerId, userId])
+  @@index([userId])
+  @@map("pos_register_staff")
 }
 
 /// A cash-control period on one register — open with opening float, close with counted cash.

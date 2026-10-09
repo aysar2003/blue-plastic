@@ -17,6 +17,17 @@ const posLine = z.object({
     (v) => Number(v) > 0,
     'Quantity must be more than zero',
   ),
+  /**
+   * Till price for this line. Blank / omitted = item master sales price.
+   * Cashiers may override while selling or quoting.
+   */
+  unitPrice: z
+    .union([
+      calculatedDecimal(/^\d{1,15}(\.\d{1,4})?$/, 'Enter a price'),
+      z.literal(''),
+    ])
+    .optional()
+    .transform((v) => (v === undefined || v === '' ? undefined : v)),
   /** Store the goods come from, when the cashier picks one. Blank = automatic. */
   storeId: z
     .union([cuid, z.literal('')])
@@ -44,6 +55,19 @@ export const posCheckoutSchema = z.object({
   payments: z.array(posPayment).min(1, 'Choose at least one payment method'),
   /** Required when the tender is more than the sale. Ignored on an exact tender. */
   changeMethodId: optionalMethodId,
+  /** When set, this open quotation is closed and linked after the sale posts. */
+  estimateId: cuid.optional(),
+})
+
+export const posCreateQuotationSchema = z.object({
+  registerId: cuid,
+  customerId: cuid.optional(),
+  note: optionalText(500),
+  lines: z.array(posLine).min(1, 'Add at least one product').max(100),
+})
+
+export const posLoadQuotationSchema = z.object({
+  estimateId: cuid,
 })
 
 export const posOpenSessionSchema = z.object({
@@ -106,7 +130,9 @@ export const posRegisterSchema = z.object({
     .nullable()
     .optional(),
   defaultCustomerId: cuid,
-  paymentMethodIds: z.array(cuid).min(1, 'Pick at least one payment method for this register'),
+  paymentMethodIds: z.array(cuid).min(1, 'Pick at least one payment method for this counter'),
+  /** Staff who work this counter. Empty = anyone with POS access. */
+  staffUserIds: z.array(cuid).default([]),
   isActive: z.coerce.boolean().default(true),
   pin: cashierPin,
   /** Null means the till opens on its cash method. */
@@ -124,6 +150,8 @@ export const posRegisterSchema = z.object({
 })
 
 export type PosCheckoutInput = z.infer<typeof posCheckoutSchema>
+export type PosCreateQuotationInput = z.infer<typeof posCreateQuotationSchema>
+export type PosLoadQuotationInput = z.infer<typeof posLoadQuotationSchema>
 export type PosOpenSessionInput = z.infer<typeof posOpenSessionSchema>
 export type PosUnlockInput = z.infer<typeof posUnlockSchema>
 export type PosCloseSessionInput = z.infer<typeof posCloseSessionSchema>

@@ -7,6 +7,8 @@ import { HeaderApps } from './app-launcher'
 import { AppMemoryProvider } from './app-memory'
 import { AccountantNav } from './accountant-nav'
 import { HistoryBack } from './history-back'
+import { ModuleTabs } from './module-tabs'
+import { NavTrailRecorder } from './nav-trail-recorder'
 import { CommandPalette } from './command-palette'
 import { moduleFor } from './nav-items'
 import { NavigationProgress } from './navigation-progress'
@@ -16,6 +18,7 @@ import { UserMenu } from './user-menu'
 import { CompanyLetterhead } from '@/components/print/company-letterhead'
 import { CREATOR_BRAND_NAME } from '@/lib/feature-flags'
 import type { LetterheadSource } from '@/lib/letterhead'
+import { PRODUCT_MARK, PRODUCT_NAME } from '@/lib/product-brand'
 import { cn } from '@/lib/utils'
 
 type ShellChromeProps = {
@@ -35,6 +38,8 @@ type ShellChromeProps = {
   stockAlertsSlot: React.ReactNode
   /** Streamed server slot; null when the user lacks customer:read. */
   balanceAlertsSlot: React.ReactNode
+  /** This-month P&L chart; null when the user lacks report:read. */
+  monthChartSlot?: React.ReactNode
   children: React.ReactNode
 }
 
@@ -59,6 +64,20 @@ const HUB_PATHS = new Set([
   '/help',
 ])
 
+const POS_HUB_SEGMENTS = new Set(['orders', 'quotations', 'sessions', 'settings'])
+
+/** True for `/pos/[registerId]` and its lock/display children — not hub list pages. */
+function isPosLiveTill(pathname: string) {
+  if (!pathname.startsWith('/pos')) return false
+  if (pathname.includes('/lock') || pathname.includes('/display')) return true
+  const segments = pathname.split('/').filter(Boolean)
+  return (
+    segments.length === 2 &&
+    segments[0] === 'pos' &&
+    !POS_HUB_SEGMENTS.has(segments[1]!)
+  )
+}
+
 /**
  * One surface for the whole system — the light ground, teal mark and open
  * header that Sales already uses. The header names the module you are in and
@@ -75,6 +94,7 @@ export function ShellChrome({
   showCreatorBrand = true,
   stockAlertsSlot,
   balanceAlertsSlot,
+  monthChartSlot,
   children,
 }: ShellChromeProps) {
   const pathname = usePathname()
@@ -82,15 +102,21 @@ export function ShellChrome({
   const isHome = !current || current.key === 'dashboard'
   const isPos = pathname === '/pos' || pathname.startsWith('/pos/')
   const isHub = HUB_PATHS.has(pathname)
+  // Live till (+ lock/display) owns its chrome; hub pages use the normal Back control.
+  const isPosTill = isPosLiveTill(pathname)
   // POS owns its chrome and needs a full-bleed ground (no side padding / atmosphere gaps).
   const fullBleed = isHub || isPos
-  // The left list belongs to the Accounting app only. Sales, reports, and the
-  // other apps keep the header they had before.
-  const showNav = current?.key === 'accounting' && !pathname.endsWith('/print')
+  // Accounting keeps its side list; Sales (and similar) get a tab strip so
+  // Estimates / Invoices stay one click away.
+  const showAccountantNav = current?.key === 'accounting' && !pathname.endsWith('/print')
+  const showModuleTabs =
+    Boolean(current?.tabs?.length) &&
+    current?.key === 'sales' &&
+    !pathname.endsWith('/print')
   const isPrint = pathname.endsWith('/print')
   const working = !isPrint
-  // Print pages still need a way back to the document. POS has its own back/nav.
-  const showBack = pathname !== '/dashboard' && !isPos
+  // Print pages still need a way back. Hide Back only on the live till.
+  const showBack = pathname !== '/dashboard' && !isPosTill
 
   const brandLabel = isHome ? orgName : current.label
   const brandHref = isHome ? '/dashboard' : current.href
@@ -101,6 +127,7 @@ export function ShellChrome({
     // clips instead (same visual result, no scroll container).
     <AppMemoryProvider userId={user.id}>
     <div className={cn('app-surface relative flex min-h-svh', isPos ? 'overflow-x-clip' : 'overflow-x-hidden')}>
+      <NavTrailRecorder />
       <NavigationProgress />
       {isPos ? null : <AppAtmosphere />}
 
@@ -114,9 +141,9 @@ export function ShellChrome({
           register lock) sit higher still and keep covering everything.
         */}
         <header className="shell-topbar relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card/80 px-4 backdrop-blur-md sm:px-6">
-          <Link href={brandHref} className="flex min-w-0 items-center gap-2.5">
+          <Link href={brandHref} className="flex min-w-0 items-center gap-2.5" title={PRODUCT_NAME}>
             <span className="shell-brand-mark grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-[0.7rem] font-bold tracking-wide text-primary-foreground shadow-sm">
-              BP
+              {PRODUCT_MARK}
             </span>
             <span className="shell-brand-label truncate text-sm font-semibold tracking-tight text-foreground">
               {brandLabel}
@@ -139,10 +166,20 @@ export function ShellChrome({
           </div>
         ) : null}
 
-        {showNav ? (
+        {showAccountantNav ? (
           <div className="shell-tabs relative z-[25] border-b border-primary/15 bg-card/80 print:hidden">
             <AccountantNav permissions={permissions} currency={baseCurrency} />
           </div>
+        ) : null}
+
+        {showModuleTabs && current?.tabs ? (
+          <div className="shell-tabs relative z-[25] border-b border-border/70 bg-card/90 print:hidden">
+            <ModuleTabs tabs={current.tabs} permissions={permissions} />
+          </div>
+        ) : null}
+
+        {working && !isPosTill ? (
+          <div className="relative z-[24] print:hidden">{monthChartSlot}</div>
         ) : null}
 
         <div className="company-print-letterhead hidden px-6 pt-4 print:block">
@@ -157,19 +194,31 @@ export function ShellChrome({
           }
         >
           {showBack ? (
-            <div className={fullBleed && !isPos ? 'px-4 pt-4 print:hidden sm:px-6' : 'mb-3 print:hidden'}>
+            <div
+              className={
+                fullBleed && !isPos
+                  ? 'px-4 pt-4 print:hidden sm:px-6'
+                  : isPos
+                    ? 'px-3 pt-3 print:hidden sm:px-6'
+                    : 'mb-3 print:hidden'
+              }
+            >
               <HistoryBack />
             </div>
           ) : null}
           {children}
         </main>
 
-        {showCreatorBrand && !isPrint && !isPos ? (
+        {!isPrint && !isPos ? (
           <footer className="relative z-10 border-t border-border/60 px-4 py-2 text-center print:hidden sm:px-6">
             <p className="text-[0.6875rem] tracking-wide text-muted-foreground">
-              <span className="font-medium text-foreground/80">{CREATOR_BRAND_NAME}</span>
-              <span className="mx-1.5 text-border">·</span>
-              System brand
+              <span className="font-medium text-foreground/80">{PRODUCT_NAME}</span>
+              {showCreatorBrand ? (
+                <>
+                  <span className="mx-1.5 text-border">·</span>
+                  <span>{CREATOR_BRAND_NAME}</span>
+                </>
+              ) : null}
             </p>
           </footer>
         ) : null}

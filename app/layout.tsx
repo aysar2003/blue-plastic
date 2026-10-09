@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono, Inter } from "next/font/google"
 
 import { Providers } from "@/components/providers"
+import { PRODUCT_DESCRIPTION, PRODUCT_NAME } from "@/lib/product-brand"
 import "./globals.css"
 import { Analytics } from "@vercel/analytics/next"
 
@@ -12,10 +13,11 @@ const inter = Inter({ variable: "--font-odoo", subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: {
-    default: "Blue Plastic Center",
-    template: "%s · Blue Plastic Center",
+    default: PRODUCT_NAME,
+    template: `%s · ${PRODUCT_NAME}`,
   },
-  description: "Double-entry accounting for Blue Plastic Center.",
+  applicationName: PRODUCT_NAME,
+  description: PRODUCT_DESCRIPTION,
 }
 
 export default function RootLayout({

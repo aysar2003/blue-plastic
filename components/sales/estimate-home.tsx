@@ -52,13 +52,14 @@ export function EstimateHome({
       <div className="flex flex-wrap items-center justify-between gap-4 bg-primary px-5 py-6 text-primary-foreground sm:px-6">
         <div>
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-primary-foreground/70">
-            Quotations
+            Estimates · Quotations
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-primary-foreground">
             Quotes waiting on customers
           </h1>
           <p className="mt-1 max-w-md text-sm text-primary-foreground/80">
-            Open is still out. Accepted and declined are answers. Invoiced means the quote already became a sale.
+            Create an estimate, send it, then convert to an invoice when they accept. Open is still
+            out; invoiced means it already became a sale.
           </p>
         </div>
         {canCreate ? (
@@ -67,7 +68,7 @@ export function EstimateHome({
             className="inline-flex items-center gap-2 rounded-full bg-card px-5 py-2.5 text-sm font-semibold text-primary shadow-sm transition hover:bg-accent"
           >
             <PlusIcon className="size-4" aria-hidden />
-            New quotation
+            New estimate
           </Link>
         ) : null}
       </div>

@@ -1,7 +1,10 @@
+import { Suspense } from 'react'
+
 import { isModuleEnabled } from '@/lib/feature-flags'
 import { ROLE_LABELS } from '@/lib/roles'
 import type { OrgContext } from '@/server/auth/context'
 import { LAUNCHER_APPS } from './launcher-apps'
+import { MonthChartLoader } from './month-chart-loader'
 import { MODULES } from './nav-items'
 import { ShellChrome } from './shell-chrome'
 
@@ -37,7 +40,7 @@ export async function AppShell({
     (app) => app.key,
   )
 
-    return (
+  return (
     <ShellChrome
       orgName={ctx.organization.name}
       organization={ctx.organization}
@@ -51,6 +54,13 @@ export async function AppShell({
       showCreatorBrand={ctx.features.showCreatorBrand}
       stockAlertsSlot={stockAlertsSlot}
       balanceAlertsSlot={balanceAlertsSlot}
+      monthChartSlot={
+        ctx.permissions.has('report:read') ? (
+          <Suspense fallback={null}>
+            <MonthChartLoader ctx={ctx} />
+          </Suspense>
+        ) : null
+      }
     >
       {children}
     </ShellChrome>

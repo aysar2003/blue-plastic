@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { DownloadIcon, Loader2Icon } from 'lucide-react'
+import { DownloadIcon, FileDownIcon, Loader2Icon, PrinterIcon } from 'lucide-react'
 
 import { Button, buttonVariants } from '@/components/ui/button'
 import { DateField } from '@/components/ui/date-field'
@@ -88,8 +88,13 @@ export function ReportControls({
     ? `/api/reports/${controls.exportAs}?${new URLSearchParams(searchParams).toString()}`
     : null
 
+  const savePdf = () => {
+    // Same path as statements and invoices: browser print → Save as PDF.
+    window.print()
+  }
+
   return (
-    <div className="mb-4 flex flex-wrap items-end gap-3">
+    <div className="mb-4 flex flex-wrap items-end gap-3 print:hidden">
       <div className="space-y-1.5">
         <Label htmlFor="period">Period</Label>
         <NativeSelect
@@ -191,6 +196,18 @@ export function ReportControls({
           <DownloadIcon /> CSV
         </a>
       ) : null}
+
+      <Button type="button" variant="ghost" onClick={savePdf} title="Print or Save as PDF">
+        <PrinterIcon /> Print
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={savePdf}
+        title="Opens print — choose Save as PDF"
+      >
+        <FileDownIcon /> PDF
+      </Button>
     </div>
   )
 }

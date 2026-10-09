@@ -558,7 +558,7 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     permission: 'user:read',
     accent: '#1D4ED8',
     wash: '#DBEAFE',
-    blurb: 'Who can sign in',
+    blurb: 'Roles, apps & who can sign in',
   },
   {
     key: 'appearance',

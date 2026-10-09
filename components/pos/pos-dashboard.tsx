@@ -6,8 +6,12 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 
 import { clearPosRegisterUnlock, unlockPosRegister } from '@/app/(app)/pos/actions'
 import { CashierPinPrompt } from '@/components/pos/cashier-pin-prompt'
+import { PageHeader } from '@/components/data/page-header'
 import { SessionOpenForm } from '@/components/pos/session-open-form'
+import { buttonVariants } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { ODOO } from '@/lib/odoo-brand'
+import { cn } from '@/lib/utils'
 
 export type DashboardRegister = {
   id: string
@@ -51,22 +55,17 @@ export function PosDashboard({
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-white">Point of Sale</h1>
-          <p className="mt-1 text-sm text-white/55">
-            Open a session, then continue selling — same flow as Odoo.
-          </p>
-        </div>
-        {canManage ? (
-          <Link
-            href="/pos/settings"
-            className="rounded-md px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
-          >
-            Configuration
-          </Link>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Point of Sale"
+        description="Open a session, then continue selling — same flow as Odoo."
+        actions={
+          canManage ? (
+            <Link href="/pos/settings" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              Configuration
+            </Link>
+          ) : undefined
+        }
+      />
 
       {continuing ? (
         <div className="mb-6 max-w-md">
@@ -107,7 +106,7 @@ export function PosDashboard({
           />
           <button
             type="button"
-            className="mt-3 text-sm text-white/50 hover:text-white"
+            className="mt-3 text-sm text-muted-foreground hover:text-foreground"
             onClick={() => setOpeningId(null)}
           >
             Cancel
@@ -117,89 +116,98 @@ export function PosDashboard({
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {registers.map((register) => (
-          <article
-            key={register.id}
-            className="relative rounded-xl border border-white/10 p-5 shadow-lg"
-            style={{ background: ODOO.surface }}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h2 className="text-base font-semibold uppercase tracking-wide text-white">
-                  {register.name}
-                </h2>
-                {register.storeName ? (
-                  <p className="mt-0.5 text-xs text-white/45">{register.storeName}</p>
-                ) : null}
+          <Card key={register.id} className="relative">
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-semibold uppercase tracking-wide text-foreground">
+                    {register.name}
+                  </h2>
+                  {register.storeName ? (
+                    <p className="mt-0.5 text-xs text-muted-foreground">{register.storeName}</p>
+                  ) : null}
+                </div>
               </div>
-            </div>
 
-            <div className="mt-5 flex flex-wrap items-center gap-4">
-              {register.session ? (
-                <>
-                  {register.hasPin ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpeningId(null)
-                        setPinError(null)
-                        setContinuingId(register.id)
-                      }}
-                      className="inline-flex rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm"
-                      style={{ background: ODOO.purple }}
-                    >
-                      Continue Selling
-                    </button>
-                  ) : (
-                    <Link
-                      href={`/pos/${register.id}`}
-                      className="inline-flex rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm"
-                      style={{ background: ODOO.purple }}
-                    >
-                      Continue Selling
-                    </Link>
-                  )}
-                  <div className="text-sm text-white/55">
-                    <p>Date: {register.session.dateLabel}</p>
-                    <p>Opening: {register.session.openingCash}</p>
-                  </div>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setContinuingId(null)
-                    setPinError(null)
-                    setOpeningId(register.id)
-                  }}
-                  className="inline-flex rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm"
-                  style={{ background: ODOO.purple }}
-                >
-                  Open Register
-                </button>
-              )}
-            </div>
+              <div className="mt-5 flex flex-wrap items-center gap-4">
+                {register.session ? (
+                  <>
+                    {register.hasPin ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpeningId(null)
+                          setPinError(null)
+                          setContinuingId(register.id)
+                        }}
+                        className={cn(
+                          buttonVariants({ size: 'sm' }),
+                          'text-white shadow-sm hover:opacity-95',
+                        )}
+                        style={{ background: ODOO.purple }}
+                      >
+                        Continue Selling
+                      </button>
+                    ) : (
+                      <Link
+                        href={`/pos/${register.id}`}
+                        className={cn(
+                          buttonVariants({ size: 'sm' }),
+                          'text-white shadow-sm hover:opacity-95',
+                        )}
+                        style={{ background: ODOO.purple }}
+                      >
+                        Continue Selling
+                      </Link>
+                    )}
+                    <div className="text-sm text-muted-foreground">
+                      <p>Date: {register.session.dateLabel}</p>
+                      <p>Opening: {register.session.openingCash}</p>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContinuingId(null)
+                      setPinError(null)
+                      setOpeningId(register.id)
+                    }}
+                    className={cn(
+                      buttonVariants({ size: 'sm' }),
+                      'text-white shadow-sm hover:opacity-95',
+                    )}
+                    style={{ background: ODOO.purple }}
+                  >
+                    Open Register
+                  </button>
+                )}
+              </div>
 
-            <div
-              className="mt-5 inline-flex size-8 items-center justify-center rounded-full text-xs font-bold text-white"
-              style={{ background: ODOO.danger }}
-            >
-              {orgInitial}
-            </div>
-          </article>
+              <div
+                className="mt-5 inline-flex size-8 items-center justify-center rounded-full text-xs font-bold text-white"
+                style={{ background: ODOO.danger }}
+              >
+                {orgInitial}
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       {registers.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-white/20 px-5 py-10 text-center text-sm text-white/50">
-          No active registers.{' '}
-          {canManage ? (
-            <Link href="/pos/settings" className="text-[#8fd4d7] underline">
-              Create one in Configuration
-            </Link>
-          ) : (
-            'Ask an admin to configure POS.'
-          )}
-        </div>
+        <Card className="border-dashed">
+          <CardContent className="px-5 py-10 text-center text-sm text-muted-foreground">
+            No active registers.{' '}
+            {canManage ? (
+              <Link href="/pos/settings" className="font-medium text-primary underline">
+                Create one in Configuration
+              </Link>
+            ) : (
+              'Ask an admin to configure POS.'
+            )}
+          </CardContent>
+        </Card>
       ) : null}
     </div>
   )

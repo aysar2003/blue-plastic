@@ -4,9 +4,13 @@ import Link from 'next/link'
 import { useActionState, useState } from 'react'
 
 import { savePosPaymentMethodForm, savePosRegisterForm } from '@/app/(app)/pos/actions'
-import { isCashMethodName } from '@/lib/pos-payment'
+import { PageHeader } from '@/components/data/page-header'
 import { idleState } from '@/components/forms/action-state'
+import { buttonVariants } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { isCashMethodName } from '@/lib/pos-payment'
 import { ODOO } from '@/lib/odoo-brand'
+import { cn } from '@/lib/utils'
 
 type Overview = {
   methods: {
@@ -28,6 +32,7 @@ type Overview = {
     defaultCustomerId: string
     customerName: string
     paymentMethodIds: string[]
+    staffUserIds: string[]
     accountLabel: string | null
     changeMethodIds: string[]
     defaultChangeMethodId: string | null
@@ -35,12 +40,13 @@ type Overview = {
   }[]
   assetAccounts: { id: string; code: string; name: string }[]
   customers: { id: string; displayName: string }[]
+  staff: { id: string; name: string; email: string }[]
   stores: { id: string; name: string }[]
 }
 
 const fieldClass =
-  'mt-1 w-full rounded-md border border-white/15 bg-[#161618] px-2.5 py-2 text-sm text-white outline-none focus:border-[#017e84]'
-const labelClass = 'block text-sm text-white/70'
+  'mt-1 w-full rounded-md border border-input bg-background px-2.5 py-2 text-sm text-foreground outline-none focus:border-ring'
+const labelClass = 'block text-sm text-muted-foreground'
 
 export function PosSettingsPanel({ data }: { data: Overview }) {
   const [methodState, methodAction, methodPending] = useActionState(
@@ -60,89 +66,161 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 py-2">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-white">Configuration</h1>
-          <p className="mt-1 text-sm text-white/55">
-            Payment methods and registers. Sweep wallets later via{' '}
-            <Link href="/banking/transfers/new" className="underline" style={{ color: '#8fd4d7' }}>
-              Banking → Transfer
-            </Link>
-            .
-          </p>
-        </div>
-        <Link href="/pos" className="rounded-md px-3 py-1.5 text-sm text-white/70 hover:bg-white/10 hover:text-white">
-          ← Dashboard
+      <PageHeader
+        title="Configuration"
+        description="Payment methods, counters, staff, and the accounts money posts to. Sweep wallets later via Banking → Transfer."
+        actions={
+          <Link href="/pos" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            ← Dashboard
+          </Link>
+        }
+      />
+      <p className="-mt-2 text-sm">
+        <Link href="/banking/transfers/new" className="font-medium text-primary underline">
+          Open Banking → Transfer
         </Link>
-      </div>
+      </p>
 
-      <section
-        id="payment-methods"
-        className="scroll-mt-20 rounded-xl border border-white/10 p-5 shadow-lg"
-        style={{ background: ODOO.surface }}
-      >
-        <h2 className="font-semibold text-white">Payment methods</h2>
-        <p className="mt-1 text-sm text-white/50">
-          E.g. Edahab, EVC, Cash — each posts to its own asset account. Click Edit to change the
-          name or linked account.
-        </p>
-        <ul className="mt-4 space-y-2 text-sm">
-          {data.methods.map((method) => (
-            <li
-              key={method.id}
-              className="rounded-lg border border-white/10 px-3 py-2.5"
-              style={{ background: ODOO.surfaceRaised }}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <span className="font-medium text-white">
-                    {method.name}
-                    {!method.isActive ? (
-                      <span className="ml-1 text-white/40">(off)</span>
-                    ) : null}
-                  </span>
-                  <span className="ml-2 text-white/45">{method.accountLabel}</span>
-                  {method.allowsChangeReturn ? (
-                    <span className="ml-2 text-white/35">· change</span>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setEditingMethodId((current) => (current === method.id ? null : method.id))
-                  }
-                  className="rounded-md border border-white/15 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/10"
-                >
-                  {editingMethodId === method.id ? 'Cancel' : 'Edit'}
-                </button>
-              </div>
-            </li>
-          ))}
-          {data.methods.length === 0 ? (
-            <li className="text-white/45">No methods yet — add one below.</li>
-          ) : null}
-        </ul>
-
-        {editingMethod ? (
-          <form
-            key={editingMethod.id}
-            action={methodAction}
-            className="mt-4 grid gap-3 rounded-lg border border-white/15 p-4 sm:grid-cols-2"
-            style={{ background: '#161618' }}
-          >
-            <input type="hidden" name="id" value={editingMethod.id} />
-            <p className="text-sm font-medium sm:col-span-2" style={{ color: '#c9a9c0' }}>
-              Edit · {editingMethod.name}
+      <Card id="payment-methods" className="scroll-mt-20">
+        <CardContent className="space-y-4 p-5">
+          <div>
+            <h2 className="font-semibold text-foreground">Payment methods</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              E.g. Edahab, EVC, Cash — each posts to its own asset account. Click Edit to change the
+              name or linked account.
             </p>
-            {methodState.status !== 'idle' && methodState.message ? (
+          </div>
+          <ul className="space-y-2 text-sm">
+            {data.methods.map((method) => (
+              <li
+                key={method.id}
+                className="rounded-lg border border-border bg-muted/40 px-3 py-2.5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="font-medium text-foreground">
+                      {method.name}
+                      {!method.isActive ? (
+                        <span className="ml-1 text-muted-foreground">(off)</span>
+                      ) : null}
+                    </span>
+                    <span className="ml-2 text-muted-foreground">{method.accountLabel}</span>
+                    {method.allowsChangeReturn ? (
+                      <span className="ml-2 text-muted-foreground">· change</span>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingMethodId((current) => (current === method.id ? null : method.id))
+                    }
+                    className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
+                  >
+                    {editingMethodId === method.id ? 'Cancel' : 'Edit'}
+                  </button>
+                </div>
+              </li>
+            ))}
+            {data.methods.length === 0 ? (
+              <li className="text-muted-foreground">No methods yet — add one below.</li>
+            ) : null}
+          </ul>
+
+          {editingMethod ? (
+            <form
+              key={editingMethod.id}
+              action={methodAction}
+              className="grid gap-3 rounded-lg border border-border bg-background p-4 sm:grid-cols-2"
+            >
+              <input type="hidden" name="id" value={editingMethod.id} />
+              <p className="text-sm font-medium text-foreground sm:col-span-2">
+                Edit · {editingMethod.name}
+              </p>
+              {methodState.status !== 'idle' && methodState.message ? (
+                <p
+                  className="text-sm sm:col-span-2"
+                  style={{
+                    color: methodState.status === 'success' ? ODOO.teal : ODOO.danger,
+                  }}
+                >
+                  {methodState.message}
+                </p>
+              ) : null}
+              <label className={labelClass}>
+                Name
+                <input
+                  name="name"
+                  required
+                  defaultValue={editingMethod.name}
+                  className={fieldClass}
+                />
+              </label>
+              <label className={labelClass}>
+                Ledger account
+                <select
+                  name="ledgerAccountId"
+                  required
+                  defaultValue={editingMethod.accountId}
+                  className={fieldClass}
+                >
+                  <option value="">Choose account…</option>
+                  {data.assetAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.code} · {account.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={labelClass}>
+                Sort order
+                <input
+                  name="sortOrder"
+                  type="number"
+                  defaultValue={editingMethod.sortOrder}
+                  className={fieldClass}
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground sm:self-end">
+                <input
+                  type="checkbox"
+                  name="isActive"
+                  value="true"
+                  defaultChecked={editingMethod.isActive}
+                  className="size-4 rounded border-input"
+                />
+                Active
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground sm:col-span-2">
+                <input
+                  type="checkbox"
+                  name="allowsChangeReturn"
+                  value="true"
+                  defaultChecked={editingMethod.allowsChangeReturn}
+                  className="size-4 rounded border-input"
+                />
+                Allow change return from this account
+              </label>
+              <button
+                type="submit"
+                disabled={methodPending}
+                className="rounded-md px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:opacity-50"
+                style={{ background: ODOO.purple }}
+              >
+                {methodPending ? 'Saving…' : 'Save changes'}
+              </button>
+            </form>
+          ) : null}
+
+          <form
+            action={methodAction}
+            className="grid gap-3 border-t border-border pt-6 sm:grid-cols-2"
+          >
+            <p className="text-sm font-medium text-foreground sm:col-span-2">Add payment method</p>
+            {methodState.status !== 'idle' && methodState.message && !editingMethod ? (
               <p
-                className={
-                  methodState.status === 'success'
-                    ? 'text-sm sm:col-span-2'
-                    : 'text-sm sm:col-span-2'
-                }
+                className="text-sm sm:col-span-2"
                 style={{
-                  color: methodState.status === 'success' ? '#8fd4d7' : ODOO.danger,
+                  color: methodState.status === 'success' ? ODOO.teal : ODOO.danger,
                 }}
               >
                 {methodState.message}
@@ -150,21 +228,11 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
             ) : null}
             <label className={labelClass}>
               Name
-              <input
-                name="name"
-                required
-                defaultValue={editingMethod.name}
-                className={fieldClass}
-              />
+              <input name="name" required className={fieldClass} />
             </label>
             <label className={labelClass}>
               Ledger account
-              <select
-                name="ledgerAccountId"
-                required
-                defaultValue={editingMethod.accountId}
-                className={fieldClass}
-              >
+              <select name="ledgerAccountId" required className={fieldClass}>
                 <option value="">Choose account…</option>
                 {data.assetAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
@@ -175,30 +243,25 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
             </label>
             <label className={labelClass}>
               Sort order
-              <input
-                name="sortOrder"
-                type="number"
-                defaultValue={editingMethod.sortOrder}
-                className={fieldClass}
-              />
+              <input name="sortOrder" type="number" defaultValue={0} className={fieldClass} />
             </label>
-            <label className="flex items-center gap-2 text-sm text-white/70 sm:self-end">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground sm:col-span-2">
               <input
                 type="checkbox"
                 name="isActive"
+                defaultChecked
                 value="true"
-                defaultChecked={editingMethod.isActive}
-                className="size-4 rounded border-white/20"
+                className="size-4 rounded border-input"
               />
               Active
             </label>
-            <label className="flex items-center gap-2 text-sm text-white/70 sm:col-span-2">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground sm:col-span-2">
               <input
                 type="checkbox"
                 name="allowsChangeReturn"
+                defaultChecked
                 value="true"
-                defaultChecked={editingMethod.allowsChangeReturn}
-                className="size-4 rounded border-white/20"
+                className="size-4 rounded border-input"
               />
               Allow change return from this account
             </label>
@@ -208,183 +271,134 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
               className="rounded-md px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:opacity-50"
               style={{ background: ODOO.purple }}
             >
-              {methodPending ? 'Saving…' : 'Save changes'}
+              Add payment method
             </button>
           </form>
-        ) : null}
+        </CardContent>
+      </Card>
 
-        <form
-          action={methodAction}
-          className="mt-6 grid gap-3 border-t border-white/10 pt-6 sm:grid-cols-2"
-        >
-          <p className="text-sm font-medium sm:col-span-2" style={{ color: '#c9a9c0' }}>
-            Add payment method
-          </p>
-          {methodState.status !== 'idle' && methodState.message && !editingMethod ? (
-            <p
-              className="text-sm sm:col-span-2"
-              style={{
-                color: methodState.status === 'success' ? '#8fd4d7' : ODOO.danger,
-              }}
-            >
-              {methodState.message}
+      <Card id="registers" className="scroll-mt-20">
+        <CardContent className="space-y-4 p-5">
+          <div>
+            <h2 className="font-semibold text-foreground">Counters</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Counter name prints on every 80mm / 58mm receipt. Assign staff, payment accounts,
+              cashier PIN, and change-return settings.
             </p>
-          ) : null}
-          <label className={labelClass}>
-            Name
-            <input name="name" required className={fieldClass} />
-          </label>
-          <label className={labelClass}>
-            Ledger account
-            <select name="ledgerAccountId" required className={fieldClass}>
-              <option value="">Choose account…</option>
-              {data.assetAccounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.code} · {account.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={labelClass}>
-            Sort order
-            <input name="sortOrder" type="number" defaultValue={0} className={fieldClass} />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-white/70 sm:col-span-2">
-            <input
-              type="checkbox"
-              name="isActive"
-              defaultChecked
-              value="true"
-              className="size-4 rounded border-white/20"
-            />
-            Active
-          </label>
-          <label className="flex items-center gap-2 text-sm text-white/70 sm:col-span-2">
-            <input
-              type="checkbox"
-              name="allowsChangeReturn"
-              defaultChecked
-              value="true"
-              className="size-4 rounded border-white/20"
-            />
-            Allow change return from this account
-          </label>
-          <button
-            type="submit"
-            disabled={methodPending}
-            className="rounded-md px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:opacity-50"
-            style={{ background: ODOO.purple }}
-          >
-            Add payment method
-          </button>
-        </form>
-      </section>
-
-      <section
-        id="registers"
-        className="scroll-mt-20 rounded-xl border border-white/10 p-5 shadow-lg"
-        style={{ background: ODOO.surface }}
-      >
-        <h2 className="font-semibold text-white">Registers (tills)</h2>
-        <p className="mt-1 text-sm text-white/50">
-          Click Edit to rename a till, set its cashier PIN, or change its walk-in customer, store,
-          payment methods, change-return accounts, or whether it is active. A till with no PIN can
-          be opened by anyone who can sell. Each till has its own bank account under POS Banks on
-          the chart of accounts.
-        </p>
-        <ul className="mt-4 space-y-2 text-sm">
-          {data.registers.map((register) => (
-            <li
-              key={register.id}
-              data-register-row={register.id}
-              className="rounded-lg border border-white/10 px-3 py-2.5"
-              style={{ background: ODOO.surfaceRaised }}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <Link
-                    href={`/pos/${register.id}`}
-                    className="font-medium hover:underline"
-                    style={{ color: '#8fd4d7' }}
-                  >
-                    {register.name}
-                  </Link>
-                  {!register.isActive ? <span className="ml-1 text-white/40">(off)</span> : null}
-                  <span className="text-white/45">
-                    {' '}
-                    · {register.customerName}
-                    {register.storeName ? ` · ${register.storeName}` : ''}
-                  </span>
-                  {register.accountLabel ? (
-                    <p className="text-xs text-white/45">{register.accountLabel}</p>
-                  ) : null}
-                  {register.hasPin ? (
-                    <p className="mt-0.5 text-xs text-white/40">PIN set</p>
-                  ) : (
-                    <p className="mt-0.5 text-xs text-amber-200/90">
-                      No PIN yet — anyone who can sell can use this cashier until an admin sets a
-                      PIN.
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setEditingRegisterId((current) => (current === register.id ? null : register.id))
-                  }
-                  className="rounded-md border border-white/15 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/10"
+          </div>
+          <ul className="space-y-2 text-sm">
+            {data.registers.map((register) => {
+              const methodLabels = register.paymentMethodIds
+                .map((id) => data.methods.find((method) => method.id === id))
+                .filter(Boolean)
+                .map((method) => `${method!.name} → ${method!.accountLabel}`)
+              const staffLabels = register.staffUserIds
+                .map((id) => data.staff.find((person) => person.id === id)?.name)
+                .filter(Boolean)
+              return (
+                <li
+                  key={register.id}
+                  data-register-row={register.id}
+                  className="rounded-lg border border-border bg-muted/40 px-3 py-2.5"
                 >
-                  {editingRegisterId === register.id ? 'Cancel' : 'Edit'}
-                </button>
-              </div>
-            </li>
-          ))}
-          {data.registers.length === 0 ? (
-            <li className="text-white/45">No registers yet — add one below.</li>
-          ) : null}
-        </ul>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <Link
+                        href={`/pos/${register.id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {register.name}
+                      </Link>
+                      {!register.isActive ? (
+                        <span className="ml-1 text-muted-foreground">(off)</span>
+                      ) : null}
+                      <p className="mt-0.5 text-muted-foreground">
+                        {register.customerName}
+                        {register.storeName ? ` · ${register.storeName}` : ''}
+                      </p>
+                      {register.accountLabel ? (
+                        <p className="mt-0.5 text-xs text-muted-foreground">{register.accountLabel}</p>
+                      ) : null}
+                      {methodLabels.length > 0 ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Accounts: {methodLabels.join(' · ')}
+                        </p>
+                      ) : null}
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Staff:{' '}
+                        {staffLabels.length > 0 ? staffLabels.join(', ') : 'Anyone with POS access'}
+                      </p>
+                      {register.hasPin ? (
+                        <p className="mt-0.5 text-xs text-muted-foreground">PIN set</p>
+                      ) : (
+                        <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-200/90">
+                          No PIN yet — anyone who can sell can use this cashier until an admin sets
+                          a PIN.
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingRegisterId((current) =>
+                          current === register.id ? null : register.id,
+                        )
+                      }
+                      className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
+                    >
+                      {editingRegisterId === register.id ? 'Cancel' : 'Edit'}
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+            {data.registers.length === 0 ? (
+              <li className="text-muted-foreground">No counters yet — add one below.</li>
+            ) : null}
+          </ul>
 
-        {editingRegister ? (
+          {editingRegister ? (
+            <form
+              key={editingRegister.id}
+              action={registerAction}
+              data-register-edit={editingRegister.id}
+              className="grid gap-3 rounded-lg border border-border bg-background p-4 sm:grid-cols-2"
+            >
+              <input type="hidden" name="id" value={editingRegister.id} />
+              <p className="text-sm font-medium text-foreground sm:col-span-2">
+                Edit · {editingRegister.name}
+              </p>
+              <FormMessage state={registerState} />
+              <RegisterFields data={data} register={editingRegister} />
+              <button
+                type="submit"
+                disabled={registerPending}
+                className="rounded-md px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:opacity-50"
+                style={{ background: ODOO.teal }}
+              >
+                {registerPending ? 'Saving…' : 'Save changes'}
+              </button>
+            </form>
+          ) : null}
+
           <form
-            key={editingRegister.id}
             action={registerAction}
-            data-register-edit={editingRegister.id}
-            className="mt-4 grid gap-3 rounded-lg border border-white/15 p-4 sm:grid-cols-2"
-            style={{ background: '#161618' }}
+            className="grid gap-3 border-t border-border pt-6 sm:grid-cols-2"
           >
-            <input type="hidden" name="id" value={editingRegister.id} />
-            <p className="text-sm font-medium sm:col-span-2" style={{ color: '#8fd4d7' }}>
-              Edit · {editingRegister.name}
-            </p>
-            <FormMessage state={registerState} />
-            <RegisterFields data={data} register={editingRegister} />
+            <p className="text-sm font-medium text-foreground sm:col-span-2">Add counter</p>
+            {!editingRegister ? <FormMessage state={registerState} /> : null}
+            <RegisterFields data={data} register={null} />
             <button
               type="submit"
               disabled={registerPending}
               className="rounded-md px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:opacity-50"
               style={{ background: ODOO.teal }}
             >
-              {registerPending ? 'Saving…' : 'Save changes'}
+              Add counter
             </button>
           </form>
-        ) : null}
-
-        <form action={registerAction} className="mt-6 grid gap-3 border-t border-white/10 pt-6 sm:grid-cols-2">
-          <p className="text-sm font-medium sm:col-span-2" style={{ color: '#8fd4d7' }}>
-            Add register
-          </p>
-          {!editingRegister ? <FormMessage state={registerState} /> : null}
-          <RegisterFields data={data} register={null} />
-          <button
-            type="submit"
-            disabled={registerPending}
-            className="rounded-md px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:opacity-50"
-            style={{ background: ODOO.teal }}
-          >
-            Add register
-          </button>
-        </form>
-      </section>
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -402,15 +416,18 @@ function FormMessage({
   return (
     <p
       role="status"
-      className="text-sm sm:col-span-2"
-      style={{ color: state.status === 'success' ? '#8fd4d7' : ODOO.danger }}
+      className={cn(
+        'text-sm sm:col-span-2',
+        state.status === 'success' ? 'text-foreground' : 'text-destructive',
+      )}
+      style={state.status === 'success' ? { color: ODOO.teal } : undefined}
     >
       {message}
     </p>
   )
 }
 
-/** Shared fields for the Add and Edit register forms. `register` pre-fills Edit. */
+/** Shared fields for the Add and Edit counter forms. `register` pre-fills Edit. */
 function RegisterFields({
   data,
   register,
@@ -419,6 +436,7 @@ function RegisterFields({
   register: Overview['registers'][number] | null
 }) {
   const linked = new Set(register?.paymentMethodIds ?? [])
+  const linkedStaff = new Set(register?.staffUserIds ?? [])
   // Active methods can be picked; a method that was switched off stays visible
   // (disabled) on a till that still lists it, so saving visibly drops it.
   const methods = data.methods.filter((method) => method.isActive || linked.has(method.id))
@@ -448,21 +466,28 @@ function RegisterFields({
 
   const tillMethods = methods.filter((method) => onTill.includes(method.id) && method.isActive)
   const changeOptions = tillMethods.filter(
-    (method) => method.allowsChangeReturn && changeIds.includes(method.id) && (walletChange || isCashMethodName(method.name)),
+    (method) =>
+      method.allowsChangeReturn &&
+      changeIds.includes(method.id) &&
+      (walletChange || isCashMethodName(method.name)),
   )
 
   return (
     <>
       <input type="hidden" name="changeReturnConfigured" value="true" />
       <label className={`${labelClass} sm:col-span-2`}>
-        Register name
+        Counter name
         <input
           name="name"
           required
           maxLength={80}
           defaultValue={register?.name ?? ''}
+          placeholder="e.g. Counter 1"
           className={fieldClass}
         />
+        <span className="mt-1 block text-xs text-muted-foreground">
+          Printed on every sales receipt (80mm / 58mm).
+        </span>
       </label>
       <label className={`${labelClass} sm:col-span-2`}>
         Cashier PIN
@@ -479,7 +504,7 @@ function RegisterFields({
           title="Use at least 4 letters or numbers."
           className={fieldClass}
         />
-        <span className="mt-1 block text-xs text-white/45">
+        <span className="mt-1 block text-xs text-muted-foreground">
           {register
             ? register.hasPin
               ? 'Leave blank to keep the current PIN. Enter a new one — at least 4 letters or numbers — to replace it.'
@@ -515,12 +540,20 @@ function RegisterFields({
         </select>
       </label>
       <fieldset className="sm:col-span-2">
-        <legend className="text-sm font-medium text-white/80">Payment methods on this till</legend>
-        <div className="mt-2 flex flex-wrap gap-3">
+        <legend className="text-sm font-medium text-foreground">
+          Accounts this counter works with
+        </legend>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Each payment method posts to its ledger account — that account prints on the receipt.
+        </p>
+        <div className="mt-2 space-y-2">
           {methods.map((method) => (
             <label
               key={method.id}
-              className={`flex items-center gap-2 text-sm ${method.isActive ? 'text-white/75' : 'text-white/35'}`}
+              className={cn(
+                'flex items-start gap-2 text-sm',
+                method.isActive ? 'text-foreground' : 'text-muted-foreground',
+              )}
             >
               <input
                 type="checkbox"
@@ -529,26 +562,32 @@ function RegisterFields({
                 disabled={!method.isActive}
                 checked={method.isActive && onTill.includes(method.id)}
                 onChange={(event) => toggleTill(method.id, event.target.checked)}
-                className="size-4 rounded border-white/20"
+                className="mt-0.5 size-4 rounded border-input"
               />
-              {method.name}
-              {!method.isActive ? ' (off)' : ''}
+              <span>
+                <span className="font-medium">
+                  {method.name}
+                  {!method.isActive ? ' (off)' : ''}
+                </span>
+                <span className="block text-xs text-muted-foreground">{method.accountLabel}</span>
+              </span>
             </label>
           ))}
         </div>
         {hasOffMethod ? (
-          <p className="mt-2 text-xs text-white/45">
-            Methods marked (off) are switched off and will be removed from this till when you save.
+          <p className="mt-2 text-xs text-muted-foreground">
+            Methods marked (off) are switched off and will be removed from this counter when you
+            save.
           </p>
         ) : null}
       </fieldset>
-      <fieldset className="sm:col-span-2 rounded-lg border border-white/10 p-3">
-        <legend className="px-1 text-sm font-medium text-white/80">Change</legend>
-        <p className="text-xs text-white/45">
+      <fieldset className="sm:col-span-2 rounded-lg border border-border p-3">
+        <legend className="px-1 text-sm font-medium text-foreground">Change</legend>
+        <p className="text-xs text-muted-foreground">
           Which accounts may hand change back, which one the Payment dialog opens on, and whether a
           wallet can do it.
         </p>
-        <label className="mt-3 flex items-center gap-2 text-sm text-white/75">
+        <label className="mt-3 flex items-center gap-2 text-sm text-foreground">
           <input
             type="checkbox"
             name="allowWalletChangeReturn"
@@ -564,7 +603,7 @@ function RegisterFields({
                 })
               }
             }}
-            className="size-4 rounded border-white/20"
+            className="size-4 rounded border-input"
           />
           Allow change return from wallets
         </label>
@@ -572,7 +611,10 @@ function RegisterFields({
           {tillMethods.map((method) => (
             <label
               key={method.id}
-              className={`flex items-center gap-2 text-sm ${method.allowsChangeReturn ? 'text-white/75' : 'text-white/35'}`}
+              className={cn(
+                'flex items-center gap-2 text-sm',
+                method.allowsChangeReturn ? 'text-foreground' : 'text-muted-foreground',
+              )}
             >
               <input
                 type="checkbox"
@@ -590,14 +632,14 @@ function RegisterFields({
                     setDefaultChangeId((current) => (current === method.id ? '' : current))
                   }
                 }}
-                className="size-4 rounded border-white/20"
+                className="size-4 rounded border-input"
               />
               {method.name}
               {!method.allowsChangeReturn ? ' (off on the method)' : ''}
             </label>
           ))}
           {tillMethods.length === 0 ? (
-            <p className="text-xs text-white/45">Pick the till&apos;s payment methods first.</p>
+            <p className="text-xs text-muted-foreground">Pick the counter&apos;s payment methods first.</p>
           ) : null}
         </div>
         <label className={`${labelClass} mt-3`}>
@@ -617,13 +659,42 @@ function RegisterFields({
           </select>
         </label>
       </fieldset>
-      <label className="flex items-center gap-2 text-sm text-white/70 sm:col-span-2">
+      <fieldset className="sm:col-span-2">
+        <legend className="text-sm font-medium text-foreground">Staff on this counter</legend>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Leave empty to let anyone with POS access open this counter. When people are selected,
+          only they may open a session here.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-3">
+          {data.staff.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No active users yet.</p>
+          ) : (
+            data.staff.map((person) => (
+              <label
+                key={person.id}
+                className="flex items-center gap-2 text-sm text-foreground"
+                title={person.email}
+              >
+                <input
+                  type="checkbox"
+                  name="staffUserIds"
+                  value={person.id}
+                  defaultChecked={linkedStaff.has(person.id)}
+                  className="size-4 rounded border-input"
+                />
+                {person.name}
+              </label>
+            ))
+          )}
+        </div>
+      </fieldset>
+      <label className="flex items-center gap-2 text-sm text-muted-foreground sm:col-span-2">
         <input
           type="checkbox"
           name="isActive"
           value="true"
           defaultChecked={register?.isActive ?? true}
-          className="size-4 rounded border-white/20"
+          className="size-4 rounded border-input"
         />
         Active (shows on the POS dashboard)
       </label>

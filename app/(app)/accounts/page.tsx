@@ -129,13 +129,11 @@ export default async function AccountsPage({
     }
   })
 
-  const total = sorted.length
-  const rows = sorted
-
   // Indentation shows the parent/child structure, which only reads correctly in
-  // the chart's own order. Sorted by balance, a child three rows from its parent
-  // indented under nothing would be misleading rather than helpful.
+  // tree order under each parent — never sorted away from the heading above it.
   const showHierarchy = sort.sort === 'code' && sort.dir === 'asc'
+  const rows = showHierarchy ? nestChartRows(sorted) : sorted
+  const total = rows.length
 
   const linkParams = {
     q,
@@ -324,11 +322,30 @@ export default async function AccountsPage({
                     canTransact={ctx.permissions.has('bank:transact')}
                     today={asOf}
                   >
-                    <TableCell className="tabular text-muted-foreground">{account.code}</TableCell>
+                    <TableCell className="tabular text-muted-foreground">
+                      <span
+                        className="block"
+                        style={
+                          showHierarchy && account.depth > 0
+                            ? { paddingLeft: `calc(0.75in * ${account.depth})` }
+                            : undefined
+                        }
+                      >
+                        {account.code}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <span
-                        className="flex items-center gap-2"
-                        style={showHierarchy ? { paddingLeft: `${account.depth * 1.25}rem` } : undefined}
+                        className={
+                          showHierarchy && account.depth > 0
+                            ? 'relative flex items-center gap-2 border-l-2 border-primary/35 pl-3'
+                            : 'flex items-center gap-2'
+                        }
+                        style={
+                          showHierarchy && account.depth > 0
+                            ? { marginLeft: `calc(0.75in * ${account.depth})` }
+                            : undefined
+                        }
                       >
                         <Link
                           href={`/accounts/${account.id}`}
@@ -389,4 +406,38 @@ function TypeChip({ href, active, label }: { href: string; active: boolean; labe
       {label}
     </Link>
   )
+}
+
+/** Keep every sub-account directly under its parent (DFS), sorted by code within each level. */
+function nestChartRows<T extends { id: string; parentId: string | null; code: string; type: AccountType }>(
+  accounts: T[],
+): T[] {
+  const ids = new Set(accounts.map((account) => account.id))
+  const byParent = new Map<string | null, T[]>()
+  for (const account of accounts) {
+    const key = account.parentId && ids.has(account.parentId) ? account.parentId : null
+    const list = byParent.get(key) ?? []
+    list.push(account)
+    byParent.set(key, list)
+  }
+  for (const list of byParent.values()) {
+    list.sort((a, b) => a.code.localeCompare(b.code))
+  }
+
+  const typeRank = new Map(ACCOUNT_TYPE_ORDER.map((type, index) => [type, index]))
+  const roots = [...(byParent.get(null) ?? [])]
+  roots.sort(
+    (a, b) =>
+      (typeRank.get(a.type) ?? 99) - (typeRank.get(b.type) ?? 99) || a.code.localeCompare(b.code),
+  )
+
+  const ordered: T[] = []
+  function walk(nodes: T[]) {
+    for (const node of nodes) {
+      ordered.push(node)
+      walk(byParent.get(node.id) ?? [])
+    }
+  }
+  walk(roots)
+  return ordered
 }

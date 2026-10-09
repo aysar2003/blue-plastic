@@ -64,9 +64,10 @@ export const MODULES: NavModule[] = [
     owns: ['/sales', '/payments', '/customers'],
     tabs: [
       { label: 'Home', href: '/sales' },
+      { label: 'Estimates', href: '/sales/estimates', permission: 'invoice:read' },
       { label: 'Invoices', href: '/sales/invoices', permission: 'invoice:read' },
-      { label: 'Quotations', href: '/sales/estimates', permission: 'invoice:read' },
       { label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read' },
+      { label: 'Delivery', href: '/sales/delivery', permission: 'invoice:read' },
       { label: 'Credit memos', href: '/sales/credit-memos', permission: 'invoice:read' },
       { label: 'Payments', href: '/payments', permission: 'payment:read' },
       { label: 'Customers', href: '/customers', permission: 'customer:read' },
@@ -185,6 +186,7 @@ export const MODULES: NavModule[] = [
     tabs: [
       { label: 'Home', href: '/settings' },
       { label: 'Organisation', href: '/settings/organization' },
+      { label: 'Configuration', href: '/settings/features', permission: 'org:update' },
       { label: 'Default accounts', href: '/settings/accounts', permission: 'account:read' },
       { label: 'Payment terms', href: '/settings/payment-terms' },
       { label: 'Tax', href: '/settings/tax', permission: 'tax:read' },

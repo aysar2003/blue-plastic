@@ -3,13 +3,7 @@ import Link from 'next/link'
 
 import { AppLauncher } from '@/components/layout/app-launcher'
 import { ACCOUNTING_HUB_APPS, visibleHubApps } from '@/components/layout/module-hubs'
-import {
-  EXPENSE_COLOR,
-  FigureChart,
-  INCOME_COLOR,
-  NET_COLOR,
-  statementPicture,
-} from '@/components/reports/figure-chart'
+import { statementPicture } from '@/components/reports/figure-chart'
 import { formatDate, today } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { resolvePeriod } from '@/lib/report-periods'
@@ -52,7 +46,7 @@ export default async function AccountingHubPage() {
     <AppLauncher
       eyebrow={ctx.organization.name}
       title="Accounting"
-      subtitle="The chart, the journals, the periods — and a picture of what the books earned this month."
+      subtitle="Journals, periods, and the chart of accounts — open a report when you want the picture."
       apps={apps}
       insights={[
         {
@@ -64,7 +58,7 @@ export default async function AccountingHubPage() {
         {
           label: 'Accounts',
           value: String(accounts),
-          hint: 'on the chart',
+          hint: 'on the chart of accounts',
           href: '/accounts',
         },
         {
@@ -75,55 +69,29 @@ export default async function AccountingHubPage() {
         },
       ]}
       banner={
-        <div>
-          <FigureChart
-            caption={`This month · ${formatDate(month.from)} to ${formatDate(month.to)}`}
-            currency={currency}
-            bars={[
-              {
-                label: 'Income',
-                value: picture.income,
-                color: INCOME_COLOR,
-                href: pnlHref,
-              },
-              {
-                label: 'Expenses',
-                value: picture.expenses,
-                color: EXPENSE_COLOR,
-                href: pnlHref,
-              },
-              {
-                label: 'Net income',
-                value: picture.net,
-                color: NET_COLOR,
-                href: detailHref,
-              },
-            ]}
-          />
-          <p className="mt-3 text-center text-sm text-slate-600">
-            <Link href={pnlHref} className="font-medium text-primary underline-offset-4 hover:underline">
-              Open the full profit and loss
-            </Link>
-            <span className="mx-2 text-slate-300">·</span>
-            <Link
-              href="/reports/balance-sheet"
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              Balance sheet
-            </Link>
-            {openInvoices > 0 ? (
-              <>
-                <span className="mx-2 text-slate-300">·</span>
-                <Link
-                  href="/sales/invoices?status=open"
-                  className="font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  {openInvoices} open invoice{openInvoices === 1 ? '' : 's'}
-                </Link>
-              </>
-            ) : null}
-          </p>
-        </div>
+        <p className="text-center text-sm text-slate-600">
+          <Link href={pnlHref} className="font-medium text-primary underline-offset-4 hover:underline">
+            Open the full profit and loss
+          </Link>
+          <span className="mx-2 text-slate-300">·</span>
+          <Link
+            href="/reports/balance-sheet"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Balance sheet
+          </Link>
+          {openInvoices > 0 ? (
+            <>
+              <span className="mx-2 text-slate-300">·</span>
+              <Link
+                href="/sales/invoices?status=open"
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {openInvoices} open invoice{openInvoices === 1 ? '' : 's'}
+              </Link>
+            </>
+          ) : null}
+        </p>
       }
     />
   )

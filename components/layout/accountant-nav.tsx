@@ -24,7 +24,7 @@ type Item = {
 const ITEMS: Item[] = [
   { label: 'All sales', href: '/sales', permission: 'invoice:read' },
   { label: 'Invoices', href: '/sales/invoices', permission: 'invoice:read' },
-  { label: 'Quotations', href: '/sales/estimates', permission: 'invoice:read' },
+  { label: 'Estimates', href: '/sales/estimates', permission: 'invoice:read' },
   { label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read' },
   { label: 'Sales delivery', href: '/sales/delivery', permission: 'invoice:read' },
   { label: 'Credit memos', href: '/sales/credit-memos', permission: 'invoice:read' },

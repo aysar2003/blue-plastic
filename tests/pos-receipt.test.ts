@@ -35,6 +35,17 @@ describe('receipt helpers', () => {
     })
   })
 
+  it('keeps ledger accounts off the slip even when known', () => {
+    const payments = [
+      { method: 'Edahab', amount: '50', isCash: false, account: '1015 Edahab' },
+      { method: 'Cash', amount: '10', isCash: true, account: '1010 Cash' },
+    ]
+    expect(paymentRows(payments, '60', 0).rows).toEqual([
+      { label: 'Edahab', amount: 50 },
+      { label: 'Cash', amount: 10 },
+    ])
+  })
+
   it('drops change when nothing was paid in cash, and reprints show what was recorded', () => {
     const card = [{ method: 'EVC Plus', amount: '40', isCash: false }]
     expect(paymentRows(card, '40', 5)).toEqual({ rows: [{ label: 'EVC Plus', amount: 40 }], paid: 40, change: 0 })
@@ -154,11 +165,12 @@ describe('thermal receipt', () => {
     expect(html).toContain('Tel: +252 61 000 0000')
     expect(html).toContain('SR-1042')
     expect(html).toContain('08/10/2026 17:56') // shop time, not UTC
+    expect(html).toContain('Counter')
+    expect(html).toContain('Main till')
     expect(html).toContain('Salesman')
     expect(html).toContain('Fahad')
     expect(html).not.toContain('Cashier')
     expect(html).not.toContain('Register')
-    expect(html).not.toContain('Main till')
     expect(html).toContain('2 x $20.00')
     expect(html).toContain('$46.00')
     expect(html).toMatch(/Cash<\/span><span[^>]*>\$50\.00/)

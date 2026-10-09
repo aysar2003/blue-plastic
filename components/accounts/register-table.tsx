@@ -19,6 +19,9 @@ export type RegisterTableRow = {
   /** The source document, or the journal when the entry has no document. */
   typeHref: string | null
   entryHref: string
+  /** Till register name when this row came from POS; sourceLabel already says "(POS)". */
+  posRegisterName?: string | null
+  isPos?: boolean
   name: string | null
   nameHref: string | null
   note: string | null

@@ -35,7 +35,7 @@ export function SessionCloseForm({
   }
 
   return (
-    <div className="rounded-lg border border-black/10 bg-[#f8f5f7] p-3">
+    <div className="rounded-lg border border-border bg-muted/40 p-3">
       <p className="text-xs text-muted-foreground">Close session · {registerName}</p>
       <label className="mt-2 block text-xs text-muted-foreground">
         Closing cash ({currency})
@@ -43,7 +43,7 @@ export function SessionCloseForm({
           value={closingCash}
           onChange={(event) => setClosingCash(event.target.value)}
           inputMode="decimal"
-          className="mt-1 w-full rounded-md border bg-white px-2 py-1.5 text-sm outline-none focus:border-[#714B67]"
+          className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-ring"
         />
       </label>
       {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}

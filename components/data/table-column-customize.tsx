@@ -53,7 +53,8 @@ export function TableColumnCustomize({
         <DialogContent
           size="sm"
           className={cn(
-            'left-auto right-0 top-0 h-[100svh] max-h-none w-full max-w-md translate-x-0 translate-y-0 rounded-none border-l sm:top-0',
+            // Sit below the shell chrome and float over the grid, not flush to the viewport top.
+            'left-auto right-3 top-28 max-h-[calc(100svh-8rem)] w-full max-w-md translate-x-0 translate-y-0 rounded-lg border shadow-xl sm:right-4 sm:top-32',
             'data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right',
           )}
         >
@@ -61,6 +62,20 @@ export function TableColumnCustomize({
             <DialogTitle>Customize</DialogTitle>
             <DialogDescription>Drag to change column order. Check columns you want to see.</DialogDescription>
           </DialogHeader>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                for (const col of list) {
+                  if (prefs.hidden.includes(col.id)) onToggle(col.id)
+                }
+              }}
+            >
+              Show all columns
+            </Button>
+          </div>
           <ul className="space-y-1">
             {list.map((col) => {
               const checked = !prefs.hidden.includes(col.id)

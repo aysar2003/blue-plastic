@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 
+import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { InteractiveGrid } from '@/components/data/interactive-grid'
 import { PageHeader } from '@/components/data/page-header'
 import { endOfMonth, today } from '@/lib/date'
@@ -35,8 +36,16 @@ export default async function ProfitAndLossByMonthPage() {
   return (
     <>
       <PageHeader
+        className="print:hidden"
         title="Profit and Loss by Month"
         description={`Accrual basis for ${year}. Each month is read from the ledger on its own.`}
+        actions={
+          <PrintButton
+            paper="profit and loss by month"
+            defaultSubject={`Profit and Loss by Month — ${ctx.organization.name}`}
+            defaultBody={`Profit and Loss by Month\n${ctx.organization.name}\n${year}`}
+          />
+        }
       />
       <InteractiveGrid
         storageKey="bp-pl-by-month"

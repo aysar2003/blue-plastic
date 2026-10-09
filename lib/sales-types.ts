@@ -67,14 +67,15 @@ export const SALES_TYPES: SalesTypeConfig[] = [
   },
 ]
 
-/** Blank item rows a new sales sheet shows. Kept low so the form fits one screen. */
-export function defaultLineRows(_type?: SalesDocumentType): number {
-  return 4
+/** Blank item rows a new sales sheet shows. Invoice gets more room; others stay at 10. */
+export function defaultLineRows(type?: SalesDocumentType): number {
+  if (type === 'INVOICE') return 20
+  return 10
 }
 
 /** Extra blank lines when printing a ruled sheet. */
-export function printSheetLinePad(_type?: SalesDocumentType): number {
-  return 8
+export function printSheetLinePad(type?: SalesDocumentType): number {
+  return defaultLineRows(type)
 }
 
 export const bySlug = (slug: string): SalesTypeConfig | undefined =>

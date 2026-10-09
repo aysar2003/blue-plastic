@@ -65,3 +65,9 @@ export const purchaseBySlug = (slug: string) =>
   PURCHASE_TYPES.find((c) => c.slug === slug || c.aliases?.includes(slug))
 export const purchaseByType = (type: PurchaseDocumentType) =>
   PURCHASE_TYPES.find((c) => c.type === type)!
+
+/** Blank item rows on a new purchase form. Expense is shorter; bills and kin get 15. */
+export function defaultPurchaseLineRows(type?: PurchaseDocumentType): number {
+  if (type === 'EXPENSE') return 10
+  return 15
+}

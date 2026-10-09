@@ -24,12 +24,14 @@ export function readRegisterForm(formData: FormData) {
   // Absent on a caller that predates the setting. Present (even with nothing
   // checked) means the till named exactly which accounts may return change.
   const changeConfigured = formData.get('changeReturnConfigured') === 'true'
+  const staffUserIds = ids('staffUserIds')
   return {
     id: text('id'),
     name: text('name'),
     defaultCustomerId: text('defaultCustomerId'),
     storeId: text('storeId'),
     paymentMethodIds,
+    staffUserIds,
     isActive: formData.get('isActive') === 'true',
     // Blank on edit means "keep the current PIN". Never echo a stored PIN back.
     pin: text('pin'),

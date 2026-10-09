@@ -84,7 +84,7 @@ export function FeaturesForm({ flags }: { flags: OrgFeatureFlags }) {
         <Toggle
           name="showCreatorBrand"
           label="Show Abdisalm Hero"
-          hint="When on, the system brand name appears while the app is open and on sign-in."
+          hint="When on, the creator name appears next to HeroBooks on the shell footer and sign-in."
           defaultChecked={flags.showCreatorBrand}
         />
       </section>

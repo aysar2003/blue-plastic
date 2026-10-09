@@ -20,7 +20,13 @@ export function parseChange(value: unknown): number {
   return Number.isFinite(n) && n > 0.004 ? Math.round(n * 100) / 100 : 0
 }
 
-export type ReceiptPayment = { method: string; amount: string; isCash: boolean }
+export type ReceiptPayment = {
+  method: string
+  amount: string
+  isCash: boolean
+  /** Ledger account the money posted to, e.g. `1015 Edahab`. */
+  account?: string | null
+}
 
 /**
  * Who the slip names as cashier.
@@ -41,7 +47,9 @@ export function receiptCashierName(
  * The payment block under the total. The ledger records what the sale took from
  * each method; cash handed over beyond that came back as change, so the cash line
  * shows what the customer actually handed over. Methods recorded at zero are
- * omitted — a blank tender is not a payment.
+ * omitted — a blank tender is not a payment. The ledger account each method
+ * posted to is tracked for the books but never printed; only the method name
+ * shows on the slip.
  */
 export function paymentRows(
   payments: ReceiptPayment[],
@@ -61,6 +69,7 @@ export function paymentRows(
   const cashIndex = change > 0 ? active.findIndex((payment) => payment.isCash) : -1
   const effectiveChange = cashIndex >= 0 ? change : 0
   const rows = active.map((payment, index) => ({
+    // Method name only on the slip — ledger accounts stay in the books, not the receipt.
     label: payment.method,
     amount: Number(payment.amount) + (index === cashIndex ? effectiveChange : 0),
   }))
