@@ -1,3 +1,4 @@
+import { formatAccessDeniedMessage } from '@/lib/access-denied'
 import type { ActionResult } from '@/server/action'
 
 /**
@@ -8,6 +9,8 @@ import type { ActionResult } from '@/server/action'
 export type FormState = {
   status: 'idle' | 'success' | 'error'
   message?: string
+  /** AppError code, so a forbidden submit can be told apart from a typo. */
+  code?: string
   fieldErrors?: Record<string, string[]>
   /**
    * The record that was created or saved. Carried so a dialog opened from
@@ -28,8 +31,12 @@ export function toFormState(result: ActionResult<unknown>, successMessage: strin
       created: data?.id ? { id: data.id, label: data.displayName ?? data.name } : undefined,
     }
   }
+  if (result.error.code === 'FORBIDDEN') {
+    return { status: 'error', code: 'FORBIDDEN', message: formatAccessDeniedMessage() }
+  }
   return {
     status: 'error',
+    code: result.error.code,
     // Field-level errors are shown against their fields; only show a banner for
     // failures that belong to the form as a whole.
     message: result.error.details ? undefined : result.error.message,

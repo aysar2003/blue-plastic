@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
+import { formatAccessDeniedMessage } from '@/lib/access-denied'
+import { isNavigationError } from '@/lib/db-error'
 import { z } from 'zod'
 import {
   bulkSetActiveSchema,
@@ -174,8 +176,8 @@ export async function createCustomerForm(_prev: FormState, formData: FormData): 
   const result = await createCustomer(formValues(formData))
   if (!result.ok || !result.data.id) return toFormState(result, 'Customer created.')
   const stored = await attachUploads('customer:create', result.data.id, uploads)
-  if (stored) return { status: 'success', message: `Customer created. ${stored}`, created: { id: result.data.id, label: result.data.displayName } }
-  return toFormState(result, 'Customer created.')
+  if (!stored) return toFormState(result, 'Customer created.')
+  return papersState(stored, 'Customer created.', { id: result.data.id, label: result.data.displayName })
 }
 
 export async function updateCustomerForm(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -188,7 +190,14 @@ export async function updateCustomerForm(_prev: FormState, formData: FormData): 
       const problem = uploadProblem(uploads, papers)
       if (problem) return { status: 'error', fieldErrors: problem }
     } catch (error) {
-      if (isAppError(error)) return { status: 'error', message: error.message }
+      if (isNavigationError(error)) throw error
+      if (isAppError(error)) {
+        return {
+          status: 'error',
+          code: error.code,
+          message: error.code === 'FORBIDDEN' ? formatAccessDeniedMessage() : error.message,
+        }
+      }
       throw error
     }
   }
@@ -196,8 +205,16 @@ export async function updateCustomerForm(_prev: FormState, formData: FormData): 
   const result = await updateCustomer(values)
   if (!result.ok || !values.id) return toFormState(result, 'Customer saved.')
   const stored = await attachUploads('customer:update', values.id, uploads)
-  if (stored) return { status: 'success', message: `Customer saved. ${stored}` }
-  return toFormState(result, 'Customer saved.')
+  if (!stored) return toFormState(result, 'Customer saved.')
+  return papersState(stored, 'Customer saved.')
+}
+
+type PaperWarning = { message: string; code?: string }
+
+function papersState(stored: PaperWarning | null, saved: string, created?: FormState['created']): FormState {
+  if (!stored) return { status: 'success', message: saved, created }
+  if (stored.code === 'FORBIDDEN') return { status: 'error', code: 'FORBIDDEN', message: stored.message }
+  return { status: 'success', message: `${saved} ${stored.message}`, created }
 }
 
 /** Stores the photo and papers after the customer row exists. Returns a warning, or null when the files are in. */
@@ -205,7 +222,7 @@ async function attachUploads(
   permission: 'customer:create' | 'customer:update',
   customerId: string,
   uploads: ReturnType<typeof readCustomerUploads>,
-): Promise<string | null> {
+): Promise<PaperWarning | null> {
   if (!uploads.photo && uploads.agreements.length === 0) return null
   try {
     const ctx: OrgContext = await requireOrgContext(permission)
@@ -213,7 +230,14 @@ async function attachUploads(
     revalidateContacts()
     return null
   } catch (error) {
-    return isAppError(error) ? error.message : 'The papers could not be stored. Open the customer and attach them again.'
+    if (isNavigationError(error)) throw error
+    if (!isAppError(error)) {
+      return { message: 'The papers could not be stored. Open the customer and attach them again.' }
+    }
+    return {
+      code: error.code,
+      message: error.code === 'FORBIDDEN' ? formatAccessDeniedMessage() : error.message,
+    }
   }
 }
 

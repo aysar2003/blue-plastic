@@ -2,7 +2,9 @@
 
 import { AlertTriangleIcon } from 'lucide-react'
 
+import { AccessDenied } from '@/components/system/access-denied'
 import { Button } from '@/components/ui/button'
+import { isForbiddenError } from '@/lib/access-denied'
 
 export default function RootError({
   error,
@@ -11,6 +13,8 @@ export default function RootError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  if (isForbiddenError(error)) return <AccessDenied standalone />
+
   return (
     <main className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-4 px-6 py-16">
       <AlertTriangleIcon className="size-8 text-red-600" />

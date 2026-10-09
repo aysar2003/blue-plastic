@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { type OrgContext, requireOrgContext } from '@/server/auth/context'
 import type { Permission } from '@/server/auth/permissions'
+import { isNavigationError } from '@/lib/db-error'
 import { AppError, type AppErrorCode, isAppError } from '@/server/errors'
 
 /**
@@ -24,6 +25,8 @@ export const fail = (
 ): ActionResult<never> => ({ ok: false, error: { code, message, details } })
 
 function toResult(error: unknown): ActionResult<never> {
+  if (isNavigationError(error)) throw error
+
   if (error instanceof z.ZodError) {
     const details: Record<string, string[]> = {}
     for (const issue of error.issues) {
