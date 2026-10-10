@@ -73,7 +73,10 @@ export function customerBands(
   const paid = { amount: ZERO, count: 0, ids: new Set<string>() }
 
   for (const row of documents) {
-    if (row.type === 'ESTIMATE' && (row.status === 'DRAFT' || row.status === 'ACCEPTED')) {
+    if (
+      (row.type === 'ESTIMATE' || row.type === 'QUOTATION') &&
+      (row.status === 'DRAFT' || row.status === 'ACCEPTED' || row.status === 'OPEN')
+    ) {
       estimates.amount = estimates.amount.plus(row.total)
       estimates.count += 1
       push(estimates.ids, row.customerId)

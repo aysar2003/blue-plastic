@@ -28,6 +28,16 @@ export const SALES_TYPES: SalesTypeConfig[] = [
   {
     type: 'ESTIMATE',
     slug: 'estimates',
+    singular: 'Estimate',
+    plural: 'Estimates',
+    effect: 'An estimate. Nothing has happened yet, so nothing is posted to the ledger.',
+    needsDeposit: false,
+    posts: false,
+    createPermission: 'invoice:create',
+  },
+  {
+    type: 'QUOTATION',
+    slug: 'quotations',
     singular: 'Quotation',
     plural: 'Quotations',
     effect: 'A quotation. Nothing has happened yet, so nothing is posted to the ledger.',
@@ -66,6 +76,11 @@ export const SALES_TYPES: SalesTypeConfig[] = [
     createPermission: 'invoice:create',
   },
 ]
+
+/** Estimates and quotations — proposals that do not post until converted. */
+export function isProposal(type: SalesDocumentType | string | undefined | null): boolean {
+  return type === 'ESTIMATE' || type === 'QUOTATION'
+}
 
 /** Blank item rows a new sales sheet shows. Invoice gets more room; others stay at 10. */
 export function defaultLineRows(type?: SalesDocumentType): number {

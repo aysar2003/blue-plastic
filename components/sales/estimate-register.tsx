@@ -37,8 +37,8 @@ export type EstimateRegisterRow = {
 }
 
 /**
- * Quotation list under the dashboard — same register shape as invoices and
- * sales receipts, with Create invoice when a quote can still become a sale.
+ * Estimate / quotation list under the dashboard — same register shape as
+ * invoices and sales receipts, with Invoice when a proposal can still become a sale.
  */
 export function EstimateRegister({
   rows,
@@ -53,6 +53,9 @@ export function EstimateRegister({
   canCreate,
   convertToday,
   total,
+  singular = 'Estimate',
+  plural = 'Estimates',
+  exportSlug = 'estimates',
 }: {
   rows: EstimateRegisterRow[]
   customers: { value: string; label: string }[]
@@ -69,7 +72,13 @@ export function EstimateRegister({
   pageCount?: number
   total: number
   pageSize?: number
+  singular?: string
+  plural?: string
+  exportSlug?: string
 }) {
+  const unit = singular.toLowerCase()
+  const units = plural.toLowerCase()
+
   const [selected, setSelected] = useState<string[]>([])
   const visible = rows.map((row) => row.id)
   const allOn = visible.length > 0 && visible.every((id) => selected.includes(id))
@@ -111,7 +120,7 @@ export function EstimateRegister({
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link
-                href={`/api/exports/estimates?${new URLSearchParams(
+                href={`/api/exports/${exportSlug}?${new URLSearchParams(
                   Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1])),
                 )}`}
               >
@@ -162,16 +171,18 @@ export function EstimateRegister({
 
         {canCreate ? (
           <Link
-            href="/sales/estimates/new"
+            href={`${basePath}/new`}
             className="ml-auto inline-flex items-center rounded-md bg-[#2ca01c] px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-[#248a18]"
           >
-            Create quotation
+            Create {unit}
           </Link>
         ) : null}
       </div>
 
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-muted-foreground">No quotations match that customer, status, or date.</p>
+        <p className="px-4 py-8 text-sm text-muted-foreground">
+          No {units} match that customer, status, or date.
+        </p>
       ) : (
         <ScrollSheet>
           <Table>
@@ -182,7 +193,7 @@ export function EstimateRegister({
                     type="checkbox"
                     checked={allOn}
                     onChange={toggleAll}
-                    aria-label="Select the quotations on this list"
+                    aria-label={`Select the ${units} on this list`}
                     className="size-3.5 accent-[#2ca01c]"
                   />
                 </TableHead>

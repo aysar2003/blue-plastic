@@ -125,7 +125,12 @@ export async function closeChecklist(
 
   const [draftSales, draftPurchases] = await Promise.all([
     client.salesDocument.count({
-      where: { orgId: ctx.orgId, status: 'DRAFT', date: { gte: from, lte: to }, type: { not: 'ESTIMATE' } },
+      where: {
+        orgId: ctx.orgId,
+        status: 'DRAFT',
+        date: { gte: from, lte: to },
+        type: { notIn: ['ESTIMATE', 'QUOTATION'] },
+      },
     }),
     client.purchaseDocument.count({
       where: { orgId: ctx.orgId, status: 'DRAFT', date: { gte: from, lte: to }, type: { not: 'PURCHASE_ORDER' } },

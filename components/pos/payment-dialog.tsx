@@ -99,11 +99,16 @@ export function PosPaymentForm(props: {
           value={props.changeMethodId}
           onChange={(event) => props.onChangeMethod(event.target.value)}
           className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm outline-none"
-          style={{ background: chip, borderColor: border, color: text }}
+          style={{ background: chip, borderColor: border, color: text, colorScheme: props.dark ? 'dark' : 'light' }}
         >
-          {props.changeMethods.length === 0 ? <option value="">No account</option> : null}
+          {/* Native option lists stay light on Windows; force dark ink so names stay readable. */}
+          {props.changeMethods.length === 0 ? (
+            <option value="" style={{ background: '#fff', color: '#1f1f23' }}>
+              No account
+            </option>
+          ) : null}
           {props.changeMethods.map((method) => (
-            <option key={method.id} value={method.id}>
+            <option key={method.id} value={method.id} style={{ background: '#fff', color: '#1f1f23' }}>
               {method.name}
             </option>
           ))}

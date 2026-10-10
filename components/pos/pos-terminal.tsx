@@ -1033,9 +1033,15 @@ export function PosTerminal(props: {
                                 colorScheme: dark ? 'dark' : 'light',
                               }}
                             >
-                              <option value="">Auto · {autoName}</option>
+                              <option value="" style={{ background: '#fff', color: '#1f1f23' }}>
+                                Auto · {autoName}
+                              </option>
                               {stores.map((store) => (
-                                <option key={store.id} value={store.id}>
+                                <option
+                                  key={store.id}
+                                  value={store.id}
+                                  style={{ background: '#fff', color: '#1f1f23' }}
+                                >
                                   {store.name} ({formatStockQty(Number(product.stock?.[store.id] ?? 0))})
                                 </option>
                               ))}

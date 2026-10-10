@@ -12,6 +12,7 @@ import {
   paymentCanValidate,
   resolvePosTender,
   saleChangeLabel,
+  walletTenderTotals,
   type ChangeMethod,
 } from '@/lib/pos-change'
 import { NON_CASH_OVERPAY_MESSAGE } from '@/lib/pos-payment'
@@ -379,6 +380,43 @@ describe('report totals by account', () => {
     ])
     const net = totals.reduce((sum, row) => sum + Number(row.net), 0)
     expect(net).toBe(127)
+  })
+
+  it('lists every wallet even when they share one bank account', () => {
+    const bank = 'acct-bank'
+    const byAccount = accountTenderTotals([
+      {
+        payments: [
+          { methodId: 'edahab', methodName: 'EDAHAB BLUE', accountId: bank, amount: '50.00' },
+          { methodId: 'evc', methodName: 'EVC 88', accountId: bank, amount: '30.00' },
+          { methodId: 'cash', methodName: 'Cash', accountId: 'acct-cash', amount: '20.00' },
+        ],
+        changeAmount: '0',
+        changeMethodId: null,
+        changeMethodName: null,
+        changeAccountId: null,
+      },
+    ])
+    expect(byAccount).toHaveLength(2)
+
+    const byWallet = walletTenderTotals([
+      {
+        payments: [
+          { methodId: 'edahab', methodName: 'EDAHAB BLUE', accountId: bank, amount: '50.00' },
+          { methodId: 'evc', methodName: 'EVC 88', accountId: bank, amount: '30.00' },
+          { methodId: 'cash', methodName: 'Cash', accountId: 'acct-cash', amount: '20.00' },
+        ],
+        changeAmount: '0',
+        changeMethodId: null,
+        changeMethodName: null,
+        changeAccountId: null,
+      },
+    ])
+    expect(byWallet).toEqual([
+      { methodId: 'cash', methodName: 'Cash', tendered: '20.00', change: '0.00', net: '20.00' },
+      { methodId: 'edahab', methodName: 'EDAHAB BLUE', tendered: '50.00', change: '0.00', net: '50.00' },
+      { methodId: 'evc', methodName: 'EVC 88', tendered: '30.00', change: '0.00', net: '30.00' },
+    ])
   })
 })
 

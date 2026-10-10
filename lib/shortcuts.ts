@@ -24,7 +24,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: ['g', 'd'], label: 'Apps', href: '/dashboard', group: 'Go to' },
   { keys: ['g', 'x'], label: 'Sales', href: '/sales', permission: 'invoice:read', group: 'Go to' },
   { keys: ['g', 'i'], label: 'Invoices', href: '/sales/invoices', permission: 'invoice:read', group: 'Go to' },
-  { keys: ['g', 'q'], label: 'Quotations', href: '/sales/estimates', permission: 'invoice:read', group: 'Go to' },
+  { keys: ['g', 'q'], label: 'Quotations', href: '/sales/quotations', permission: 'invoice:read', group: 'Go to' },
   { keys: ['g', 'u'], label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read', group: 'Go to' },
   { keys: ['g', 'm'], label: 'Credit memos', href: '/sales/credit-memos', permission: 'invoice:read', group: 'Go to' },
   { keys: ['g', 'y'], label: 'Payments', href: '/payments', permission: 'payment:read', group: 'Go to' },
@@ -48,7 +48,8 @@ export const SHORTCUTS: Shortcut[] = [
 
   { keys: ['c', 'i'], label: 'New invoice', href: '/sales/invoices/new', permission: 'invoice:create', group: 'Create' },
   { keys: ['c', 'r'], label: 'New sales receipt', href: '/sales/sales-receipts/new', permission: 'invoice:create', group: 'Create' },
-  { keys: ['c', 'q'], label: 'New quotation', href: '/sales/estimates/new', permission: 'invoice:create', group: 'Create' },
+  { keys: ['c', 'q'], label: 'New quotation', href: '/sales/quotations/new', permission: 'invoice:create', group: 'Create' },
+  { keys: ['c', 's'], label: 'New estimate', href: '/sales/estimates/new', permission: 'invoice:create', group: 'Create' },
   { keys: ['c', 'm'], label: 'New credit memo', href: '/sales/credit-memos/new', permission: 'invoice:create', group: 'Create' },
   { keys: ['c', 'f'], label: 'New refund receipt', href: '/sales/refunds/new', permission: 'invoice:create', group: 'Create' },
   { keys: ['c', 'p'], label: 'Receive a payment', href: '/payments/new', permission: 'payment:create', group: 'Create' },

@@ -73,6 +73,7 @@ export async function searchBooks(ctx: OrgContext, query: string): Promise<Searc
 
 function salesPath(type: string) {
   if (type === 'ESTIMATE') return 'estimates'
+  if (type === 'QUOTATION') return 'quotations'
   if (type === 'SALES_RECEIPT') return 'sales-receipts'
   if (type === 'CREDIT_MEMO') return 'credit-memos'
   if (type === 'REFUND_RECEIPT') return 'refunds'

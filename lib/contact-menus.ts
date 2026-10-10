@@ -27,7 +27,8 @@ export function customerContactMenu(
   if (options.canInvoice) {
     links.push(
       { type: 'link', label: 'Create invoice', href: `/sales/invoices/new?customer=${id}` },
-      { type: 'link', label: 'Create quotation', href: `/sales/estimates/new?customer=${id}` },
+      { type: 'link', label: 'Create estimate', href: `/sales/estimates/new?customer=${id}` },
+      { type: 'link', label: 'Create quotation', href: `/sales/quotations/new?customer=${id}` },
       { type: 'link', label: 'Create sales receipt', href: `/sales/sales-receipts/new?customer=${id}` },
       { type: 'link', label: 'Create credit memo', href: `/sales/credit-memos/new?customer=${id}` },
       { type: 'link', label: 'Create refund', href: `/sales/refunds/new?customer=${id}` },

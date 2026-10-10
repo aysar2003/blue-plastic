@@ -69,6 +69,8 @@ enum DocumentType {
   JOURNAL
   INVOICE
   ESTIMATE
+  /// Formal sales quotation — same non-posting shape as an estimate, own number series.
+  QUOTATION
   SALES_RECEIPT
   CREDIT_MEMO
   CUSTOMER_PAYMENT
@@ -195,13 +197,15 @@ enum TaxFilingFrequency {
 /// One table holds every customer-facing document, discriminated by type.
 ///
 /// They share a shape — a customer, a date, lines, tax, a total — and separating
-/// them into five near-identical tables would mean five copies of the totalling
-/// logic and a five-way union every time anyone asks what a customer has been
-/// sent. An estimate is the odd one out: it is a quotation, not a transaction,
-/// and posts no journal.
+/// them into near-identical tables would mean copies of the totalling logic and
+/// a union every time anyone asks what a customer has been sent. Estimates and
+/// quotations are the odd ones out: proposals, not transactions, and they post
+/// no journal. They stay as separate types so each has its own list, form, and
+/// number series.
 enum SalesDocumentType {
   INVOICE
   ESTIMATE
+  QUOTATION
   SALES_RECEIPT
   CREDIT_MEMO
   REFUND_RECEIPT

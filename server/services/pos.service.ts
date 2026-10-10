@@ -6,6 +6,7 @@ import {
   accountTenderTotals,
   drawerCashMovement,
   resolvePosTender,
+  walletTenderTotals,
   type PosSaleTender,
 } from '@/lib/pos-change'
 import { isCashMethodName } from '@/lib/pos-payment'
@@ -458,12 +459,21 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
     visible.map((row, index) => ({ payments: netWalletPayments(row, tenders[index]!) })),
     methods,
   )
-  const totals = accountTenderTotals(tenders).map((total) => ({
+  const walletRows = walletTenderTotals(tenders)
+  const totals = walletRows.map((total) => ({
     name: total.methodName,
     tendered: formatMoney(total.tendered, currency),
     change: formatMoney(total.change, currency),
     net: formatMoney(total.net, currency),
   }))
+  const grand = walletRows.reduce(
+    (sum, row) => ({
+      tendered: sum.tendered.plus(row.tendered),
+      change: sum.change.plus(row.change),
+      net: sum.net.plus(row.net),
+    }),
+    { tendered: ZERO, change: ZERO, net: ZERO },
+  )
 
   return {
     truncated,
@@ -484,6 +494,11 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
       })),
     },
     totals,
+    grand: {
+      tendered: formatMoney(grand.tendered, currency),
+      change: formatMoney(grand.change, currency),
+      net: formatMoney(grand.net, currency),
+    },
     orders: visible.map((row, index) => {
       const refund = row.salesDocument.type === 'REFUND_RECEIPT'
       const signedTotal = refund
@@ -529,19 +544,13 @@ function netWalletPayments(
   },
   tender: PosSaleTender,
 ): PosOrderSummaryPayment[] {
-  return accountTenderTotals([tender]).flatMap((total) => {
+  return walletTenderTotals([tender]).flatMap((total) => {
     const net = new Decimal(total.net)
     if (net.isZero()) return []
-    const payment = row.payments.find(
-      (item) => item.paymentMethod.name === total.methodName || item.ledgerAccountId === total.accountId,
-    )
-    const methodId =
-      payment?.paymentMethod.id ??
-      (row.changePaymentMethod?.name === total.methodName ? row.changePaymentMethodId : null) ??
-      total.accountId
+    const payment = row.payments.find((item) => item.paymentMethod.id === total.methodId)
     return [
       {
-        methodId: methodId || total.methodName,
+        methodId: total.methodId,
         methodName: total.methodName,
         sortOrder: payment?.paymentMethod.sortOrder ?? 0,
         amount: net.abs().toFixed(4),
@@ -904,7 +913,7 @@ export async function createQuotation(ctx: OrgContext, input: PosCreateQuotation
     storeId: storeOf(line),
   }))
 
-  const document = await salesService.create(ctx, 'ESTIMATE', {
+  const document = await salesService.create(ctx, 'QUOTATION', {
     number: undefined,
     customerId,
     date: today(ctx.organization.timeZone),
@@ -931,13 +940,13 @@ export async function listOpenQuotations(ctx: OrgContext) {
   }))
 }
 
-/** Load a quotation into the till cart (lines + customer + quoted prices). */
+/** Load a quotation/estimate into the till cart (lines + customer + quoted prices). */
 export async function getEstimateCart(ctx: OrgContext, estimateId: string) {
   const estimate = await db.salesDocument.findFirst({
     where: {
       id: estimateId,
       orgId: ctx.orgId,
-      type: 'ESTIMATE',
+      type: { in: ['ESTIMATE', 'QUOTATION'] },
       status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
       convertedTo: { is: null },
     },
@@ -991,7 +1000,7 @@ async function assertOpenEstimate(ctx: OrgContext, estimateId: string) {
     where: {
       id: estimateId,
       orgId: ctx.orgId,
-      type: 'ESTIMATE',
+      type: { in: ['ESTIMATE', 'QUOTATION'] },
       status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
       convertedTo: { is: null },
     },

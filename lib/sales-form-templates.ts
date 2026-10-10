@@ -84,6 +84,7 @@ export const SALES_RECEIPT_FORM_TEMPLATE_STORAGE_KEY = 'bpc.salesReceiptFormTemp
 export const PRINT_SHEET_SALES_TYPES = [
   'INVOICE',
   'ESTIMATE',
+  'QUOTATION',
   'SALES_RECEIPT',
   'CREDIT_MEMO',
   'REFUND_RECEIPT',

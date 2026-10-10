@@ -33,6 +33,7 @@ export function DateField({
   min,
   max,
   className,
+  placeholder = 'Choose a date',
   'aria-invalid': invalid,
   'aria-describedby': describedBy,
 }: {
@@ -47,6 +48,7 @@ export function DateField({
   min?: string
   max?: string
   className?: string
+  placeholder?: string
   'aria-invalid'?: boolean
   'aria-describedby'?: string
 }) {
@@ -54,6 +56,7 @@ export function DateField({
   const [typed, setTyped] = React.useState<string | null>(null)
 
   const rootRef = React.useRef<HTMLDivElement>(null)
+  const hiddenRef = React.useRef<HTMLInputElement>(null)
   const panelRef = React.useRef<HTMLDivElement>(null)
   const [anchor, setAnchor] = React.useState<{ top: number; left: number; above: boolean }>()
 
@@ -122,16 +125,29 @@ export function DateField({
 
   function commit() {
     if (typed === null) return
-    const parsed = parse(typed)
+    const text = typed.trim()
     setTyped(null)
-    if (parsed && isCalendarDate(parsed) && !Number.isNaN(Date.parse(parsed))) onChange(parsed)
+    // Write the hidden field now. Apply is a click, and blur runs first — the
+    // submitted value has to be the date just typed, not the one still in React.
+    if (!text) {
+      if (hiddenRef.current) hiddenRef.current.value = ''
+      onChange('')
+      return
+    }
+    const parsed = parse(text)
+    if (parsed && isCalendarDate(parsed) && !Number.isNaN(Date.parse(parsed))) {
+      if (hiddenRef.current) hiddenRef.current.value = parsed
+      onChange(parsed)
+    }
   }
 
   const display = typed ?? (isCalendarDate(value) ? formatDate(value) : '')
 
   return (
     <div ref={rootRef} className={cn('relative', className)}>
-      {name ? <input type="hidden" name={name} value={value} required={required} /> : null}
+      {name ? (
+        <input ref={hiddenRef} type="hidden" name={name} value={value} required={required} />
+      ) : null}
 
       <div
         data-invalid={invalid ? 'true' : undefined}
@@ -150,7 +166,9 @@ export function DateField({
           aria-describedby={describedBy}
           aria-required={required}
           value={display}
+          placeholder={placeholder}
           onChange={(event) => setTyped(event.target.value)}
+          onFocus={(event) => event.currentTarget.select()}
           onBlur={commit}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -162,8 +180,7 @@ export function DateField({
               setOpen(false)
             }
           }}
-          className="h-full min-w-0 flex-1 bg-transparent px-2.5 text-[0.8125rem] outline-none placeholder:text-muted-foreground"
-          placeholder="Choose a date"
+          className="h-full min-w-0 flex-1 bg-transparent px-2.5 text-[0.8125rem] text-foreground outline-none placeholder:text-muted-foreground"
         />
 
         <button
@@ -188,7 +205,7 @@ export function DateField({
                 bottom: anchor.above ? window.innerHeight - anchor.top : undefined,
                 left: anchor.left,
               }}
-              className="pointer-events-auto z-[60] rounded-md border bg-popover shadow-md animate-in fade-in-0 zoom-in-95"
+              className="pointer-events-auto z-[60] rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95"
             >
               <Calendar
                 value={isCalendarDate(value) ? value : null}

@@ -38,7 +38,7 @@ export function CustomerMoneyBar({
   }
 
   return (
-    <div className="mb-3 bg-[#f4f8fb] px-5 py-4">
+    <div className="mb-3 bg-muted/70 px-5 py-4">
       <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
         {bands.map((band) => {
           const look = LOOK[band.key]
@@ -47,10 +47,12 @@ export function CustomerMoneyBar({
             <Link
               key={band.key}
               href={hrefFor(band.key)}
-              className={cn('rounded-md px-1 py-1', selected && 'bg-white shadow-sm ring-1 ring-border')}
+              className={cn('rounded-md px-1 py-1', selected && 'bg-card shadow-sm ring-1 ring-border')}
               aria-current={selected ? 'true' : undefined}
             >
-              <p className="tabular text-2xl font-medium leading-none tracking-tight">{formatMoney(band.amount, currency)}</p>
+              <p className="tabular text-2xl font-medium leading-none tracking-tight text-foreground">
+                {formatMoney(band.amount, currency)}
+              </p>
               <p className="mt-2 text-sm text-muted-foreground">
                 <span className="sr-only">{look.title}. </span>
                 {bandDetail(band)}
@@ -59,7 +61,7 @@ export function CustomerMoneyBar({
           )
         })}
       </div>
-      <div className="mt-4 flex h-2.5 overflow-hidden bg-[#e7edf2]">
+      <div className="mt-4 flex h-2.5 overflow-hidden bg-border/50">
         {bands.map((band) => {
           const amount = new Decimal(band.amount).abs()
           if (amount.isZero()) return null

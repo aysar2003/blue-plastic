@@ -8,7 +8,8 @@ import { STATUS_LABELS } from '@/lib/sales-types'
 const TITLES: Record<string, string> = {
   INVOICE: 'INVOICE',
   CREDIT_MEMO: 'CREDIT NOTE',
-  ESTIMATE: 'QUOTATION',
+  ESTIMATE: 'ESTIMATE',
+  QUOTATION: 'QUOTATION',
   SALES_RECEIPT: 'SALES RECEIPT',
   REFUND_RECEIPT: 'REFUND',
 }

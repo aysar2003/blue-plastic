@@ -189,15 +189,27 @@ export type AccountTenderTotal = {
   net: string
 }
 
-type Bucket = { accountId: string; methodName: string; tendered: Money; change: Money }
+export type WalletTenderTotal = {
+  methodId: string
+  methodName: string
+  tendered: string
+  change: string
+  net: string
+}
+
+type AccountBucket = { accountId: string; methodName: string; tendered: Money; change: Money }
+type WalletBucket = { methodId: string; methodName: string; tendered: Money; change: Money }
 
 /**
  * Tendered in, change out, and the net each account kept.
  * A sale with no change account (older rows) treats each payment as both the
  * tender and the net. Change from an account that took nothing is a negative net.
+ *
+ * Several wallets may post to the same bank account; this rolls them together
+ * for the ledger. Use `walletTenderTotals` when each wallet must stay separate.
  */
 export function accountTenderTotals(sales: PosSaleTender[], decimals = 2): AccountTenderTotal[] {
-  const buckets = new Map<string, Bucket>()
+  const buckets = new Map<string, AccountBucket>()
 
   const bucket = (accountId: string, methodName: string) => {
     const key = accountId || methodName
@@ -225,6 +237,50 @@ export function accountTenderTotals(sales: PosSaleTender[], decimals = 2): Accou
   return [...buckets.values()]
     .map((row) => ({
       accountId: row.accountId,
+      methodName: row.methodName,
+      tendered: toMoneyString(row.tendered, decimals),
+      change: toMoneyString(row.change, decimals),
+      net: toMoneyString(row.tendered.minus(row.change), decimals),
+    }))
+    .sort((a, b) => a.methodName.localeCompare(b.methodName))
+}
+
+/**
+ * Same tendered / change / net figures, one row per payment method (wallet).
+ * Wallets that share a bank account stay on separate lines.
+ */
+export function walletTenderTotals(sales: PosSaleTender[], decimals = 2): WalletTenderTotal[] {
+  const buckets = new Map<string, WalletBucket>()
+
+  const bucket = (methodId: string, methodName: string) => {
+    const key = methodId || methodName
+    const current = buckets.get(key)
+    if (current) return current
+    const created = { methodId: methodId || key, methodName, tendered: ZERO, change: ZERO }
+    buckets.set(key, created)
+    return created
+  }
+
+  for (const sale of sales) {
+    for (const payment of sale.payments) {
+      const amount = round(payment.amount || 0, decimals)
+      if (amount.isZero()) continue
+      const row = bucket(payment.methodId, payment.methodName)
+      row.tendered = row.tendered.plus(amount)
+    }
+    const change = round(sale.changeAmount || 0, decimals)
+    if (change.gt(0) && (sale.changeMethodId || sale.changeMethodName)) {
+      const row = bucket(
+        sale.changeMethodId || sale.changeMethodName || 'change',
+        sale.changeMethodName || 'Change',
+      )
+      row.change = row.change.plus(change)
+    }
+  }
+
+  return [...buckets.values()]
+    .map((row) => ({
+      methodId: row.methodId,
       methodName: row.methodName,
       tendered: toMoneyString(row.tendered, decimals),
       change: toMoneyString(row.change, decimals),

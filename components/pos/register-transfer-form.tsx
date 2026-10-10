@@ -84,10 +84,19 @@ export function RegisterTransferForm({
               onChange={(event) => setToAccountId(event.target.value)}
               required
               className={field}
-              style={dark ? { background: '#161618', borderColor: 'rgba(255,255,255,0.15)', color: '#fff' } : undefined}
+              style={
+                dark
+                  ? {
+                      background: '#161618',
+                      borderColor: 'rgba(255,255,255,0.15)',
+                      color: '#f3f3f3',
+                      colorScheme: 'dark',
+                    }
+                  : undefined
+              }
             >
               {destinations.map((account) => (
-                <option key={account.id} value={account.id}>
+                <option key={account.id} value={account.id} style={{ background: '#fff', color: '#1f1f23' }}>
                   {account.code} · {account.name}
                 </option>
               ))}

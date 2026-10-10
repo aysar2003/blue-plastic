@@ -34,6 +34,7 @@ const key = (sourceType: string, sourceId: string) => `${sourceType}:${sourceId}
 const SALES_SLUG: Record<string, string> = {
   INVOICE: 'invoices',
   ESTIMATE: 'estimates',
+  QUOTATION: 'quotations',
   SALES_RECEIPT: 'sales-receipts',
   CREDIT_MEMO: 'credit-memos',
   REFUND_RECEIPT: 'refunds',

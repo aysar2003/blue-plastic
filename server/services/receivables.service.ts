@@ -196,6 +196,7 @@ export type StatementKind =
   | 'REFUND_RECEIPT'
   | 'JOURNAL'
   | 'ESTIMATE'
+  | 'QUOTATION'
 
 /** One written line of an invoice, credit, receipt or refund. */
 export type StatementItem = {
@@ -442,6 +443,7 @@ function sumAmounts(rows: { amount: { toString(): string } }[]): Decimal {
 const SLUG: Record<string, string> = {
   INVOICE: 'invoices',
   ESTIMATE: 'estimates',
+  QUOTATION: 'quotations',
   CREDIT_MEMO: 'credit-memos',
   SALES_RECEIPT: 'sales-receipts',
   REFUND_RECEIPT: 'refunds',
@@ -453,6 +455,8 @@ function labelFor(type: string): string {
       return 'Invoice'
     case 'ESTIMATE':
       return 'Estimate'
+    case 'QUOTATION':
+      return 'Quotation'
     case 'CREDIT_MEMO':
       return 'Credit memo'
     case 'SALES_RECEIPT':

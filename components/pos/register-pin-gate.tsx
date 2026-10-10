@@ -22,7 +22,7 @@ export function RegisterPinGate({
 
   return (
     <div
-      className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4"
+      className="on-dark flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4"
       style={{ background: ODOO.ink }}
     >
       <div className="w-full max-w-md">

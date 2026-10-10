@@ -20,14 +20,24 @@ export type SalesHubApp = {
 
 export const SALES_HUB_APPS: SalesHubApp[] = [
   {
-    key: 'quotations',
+    key: 'estimates',
     label: 'Estimates',
     href: '/sales/estimates',
     icon: 'book',
     permission: 'invoice:read',
     accent: '#714B67',
     wash: '#F3E8F0',
-    blurb: 'Quotes — create, list, convert',
+    blurb: 'Estimates — create, list, convert',
+  },
+  {
+    key: 'quotations',
+    label: 'Quotations',
+    href: '/sales/quotations',
+    icon: 'notebook',
+    permission: 'invoice:read',
+    accent: '#5B4B8A',
+    wash: '#EDE9FE',
+    blurb: 'Quotations — create, list, convert',
   },
   {
     key: 'invoices',

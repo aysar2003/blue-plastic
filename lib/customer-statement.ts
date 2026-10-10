@@ -9,6 +9,7 @@ export type StatementKind =
   | 'REFUND_RECEIPT'
   | 'JOURNAL'
   | 'ESTIMATE'
+  | 'QUOTATION'
 
 export type FilterableEntry = {
   kind: StatementKind
@@ -36,6 +37,7 @@ export const STATEMENT_TYPES = [
   'refund',
   'journal',
   'estimate',
+  'quotation',
 ] as const
 export const STATEMENT_STATUSES = ['all', 'open', 'overdue', 'paid'] as const
 
@@ -76,6 +78,7 @@ export const STATEMENT_TYPE_LABELS: Record<StatementType, string> = {
   refund: 'Refund',
   journal: 'Journal',
   estimate: 'Estimate',
+  quotation: 'Quotation',
 }
 
 export const STATEMENT_STATUS_LABELS: Record<StatementStatus, string> = {
@@ -93,6 +96,7 @@ const TYPE_KIND: Record<Exclude<StatementType, 'all'>, StatementKind> = {
   refund: 'REFUND_RECEIPT',
   journal: 'JOURNAL',
   estimate: 'ESTIMATE',
+  quotation: 'QUOTATION',
 }
 
 const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value)
@@ -130,6 +134,7 @@ const TYPE_PLURAL: Record<Exclude<StatementType, 'all'>, string> = {
   refund: 'refunds',
   journal: 'journals',
   estimate: 'estimates',
+  quotation: 'quotations',
 }
 
 /** A sentence for the paper, empty when every row is shown. */
@@ -153,7 +158,11 @@ function isOpen(amount: Decimal): boolean {
  * until somebody asks for estimates. A type and a status both have to match.
  */
 export function entryVisible(entry: FilterableEntry, filter: StatementFilter, asOf: CalendarDate): boolean {
-  if (filter.type === 'all' ? entry.kind === 'ESTIMATE' : entry.kind !== TYPE_KIND[filter.type]) {
+  if (
+    filter.type === 'all'
+      ? entry.kind === 'ESTIMATE' || entry.kind === 'QUOTATION'
+      : entry.kind !== TYPE_KIND[filter.type]
+  ) {
     return false
   }
 
@@ -177,7 +186,7 @@ export function entryVisible(entry: FilterableEntry, filter: StatementFilter, as
   }
 
   // Paid: settled documents, and every receipt of money.
-  if (entry.kind === 'JOURNAL' || entry.kind === 'ESTIMATE') return false
+  if (entry.kind === 'JOURNAL' || entry.kind === 'ESTIMATE' || entry.kind === 'QUOTATION') return false
   if (entry.kind === 'PAYMENT' || entry.kind === 'SALES_RECEIPT' || entry.kind === 'REFUND_RECEIPT') {
     return true
   }

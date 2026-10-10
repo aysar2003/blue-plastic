@@ -29,7 +29,7 @@ export function CashierPinPrompt({
 
   return (
     <form
-      className="rounded-xl border border-white/10 p-5"
+      className="on-dark rounded-xl border border-white/10 p-5"
       style={{ background: ODOO.surface }}
       onSubmit={(event) => {
         event.preventDefault()

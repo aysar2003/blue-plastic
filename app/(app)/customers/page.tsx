@@ -204,7 +204,8 @@ export default async function CustomersPage({
         ...(canInvoice
           ? [
               { label: 'Invoice', href: `/sales/invoices/new?customer=${id}` },
-              { label: 'Quotation', href: `/sales/estimates/new?customer=${id}` },
+              { label: 'Estimate', href: `/sales/estimates/new?customer=${id}` },
+              { label: 'Quotation', href: `/sales/quotations/new?customer=${id}` },
               { label: 'Sales receipt', href: `/sales/sales-receipts/new?customer=${id}` },
               { label: 'Credit memo', href: `/sales/credit-memos/new?customer=${id}` },
               { label: 'Refund', href: `/sales/refunds/new?customer=${id}` },

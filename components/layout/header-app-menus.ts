@@ -41,6 +41,7 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
     { label: 'Sessions', href: '/pos/sessions', permission: 'pos:read' },
     { label: 'Configuration', href: '/pos/settings', permission: 'pos:manage' },
     { label: 'Estimates (Sales)', href: '/sales/estimates', permission: 'invoice:read' },
+    { label: 'Quotations (Sales)', href: '/sales/quotations', permission: 'invoice:read' },
     { label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read' },
     { label: 'Transfer to bank', href: '/banking/transfers/new', permission: 'bank:transact' },
   ],

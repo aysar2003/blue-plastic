@@ -29,7 +29,7 @@ import { InvoiceHome } from '@/components/sales/invoice-home'
 import { InvoiceRegister } from '@/components/sales/invoice-register'
 import { ReceiptHome } from '@/components/sales/receipt-home'
 import { ReceiptRegister } from '@/components/sales/receipt-register'
-import { bySlug, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
+import { bySlug, isProposal, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { cn } from '@/lib/utils'
 import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
@@ -106,7 +106,7 @@ export default async function SalesListPage({
       ? INVOICE_FILTERS
       : config.type === 'SALES_RECEIPT'
         ? RECEIPT_FILTERS
-        : config.type === 'ESTIMATE'
+        : isProposal(config.type)
           ? ESTIMATE_FILTERS
           : null
   const statusRaw = typeof search.status === 'string' ? search.status : ''
@@ -114,9 +114,9 @@ export default async function SalesListPage({
   const customerId = typeof search.customer === 'string' && search.customer ? search.customer : undefined
   const rawDate = typeof search.date === 'string' ? search.date : undefined
   const dashboard =
-    config.type === 'INVOICE' || config.type === 'SALES_RECEIPT' || config.type === 'ESTIMATE'
-  // Invoices, sales receipts, and quotations open on the last three months, the
-  // same starting range as the QuickBooks list. "All dates" is an explicit choice.
+    config.type === 'INVOICE' || config.type === 'SALES_RECEIPT' || isProposal(config.type)
+  // Invoices, sales receipts, estimates, and quotations open on the last three
+  // months. "All dates" is an explicit choice.
   const datePreset = dashboard
     ? rawDate === 'all'
       ? ''
@@ -137,7 +137,9 @@ export default async function SalesListPage({
     }),
     config.type === 'SALES_RECEIPT' ? salesService.receiptHome(ctx) : Promise.resolve(null),
     config.type === 'INVOICE' ? salesService.invoiceHome(ctx) : Promise.resolve(null),
-    config.type === 'ESTIMATE' ? salesService.estimateHome(ctx) : Promise.resolve(null),
+    isProposal(config.type)
+      ? salesService.estimateHome(ctx, config.type as 'ESTIMATE' | 'QUOTATION')
+      : Promise.resolve(null),
     dashboard ? salesService.customerChoices(ctx) : Promise.resolve([]),
   ])
   const trails = await trailsFor(ctx, page.rows.map((row) => row.id))
@@ -193,6 +195,9 @@ export default async function SalesListPage({
           active={status ?? ''}
           params={linkParams}
           home={estimateHome}
+          basePath={basePath}
+          singular={config.singular}
+          plural={config.plural}
         />
       ) : (
         <PageHeader title={config.plural} description={config.effect} actions={newButton} />
@@ -326,6 +331,9 @@ export default async function SalesListPage({
           pageCount={page.pageCount}
           total={page.total}
           pageSize={page.pageSize}
+          singular={config.singular}
+          plural={config.plural}
+          exportSlug={config.slug}
         />
       ) : null}
 
@@ -426,7 +434,7 @@ export default async function SalesListPage({
                     <EnteredByCell trail={trails.get(row.id)} />
                     <TableCell className="print:hidden">
                       <div className="flex items-center justify-end gap-1">
-                        {config.type === 'ESTIMATE' &&
+                        {isProposal(config.type) &&
                         canCreateInvoice &&
                         !row.convertedTo &&
                         row.status !== 'VOID' &&

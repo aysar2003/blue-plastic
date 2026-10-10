@@ -23,6 +23,7 @@ function revalidateSales() {
   revalidatePath('/sales/reports')
   revalidatePath('/sales/invoices')
   revalidatePath('/sales/estimates')
+  revalidatePath('/sales/quotations')
   revalidatePath('/sales/sales-receipts')
   revalidatePath('/sales/credit-memos')
   revalidatePath('/payments')
@@ -32,7 +33,14 @@ function revalidateSales() {
   revalidatePath('/accounts')
 }
 
-const documentType = z.enum(['INVOICE', 'ESTIMATE', 'SALES_RECEIPT', 'CREDIT_MEMO', 'REFUND_RECEIPT'])
+const documentType = z.enum([
+  'INVOICE',
+  'ESTIMATE',
+  'QUOTATION',
+  'SALES_RECEIPT',
+  'CREDIT_MEMO',
+  'REFUND_RECEIPT',
+])
 
 const receiptSearch = z.object({
   number: z.string().trim().max(40).optional(),

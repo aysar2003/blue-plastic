@@ -1,7 +1,9 @@
 import Link from 'next/link'
 
+import { OrderDateField } from '@/components/pos/order-date-field'
 import { ODOO } from '@/lib/odoo-brand'
 import { DATE_PRESETS, listHref } from '@/lib/list-filters'
+import type { CalendarDate } from '@/lib/date'
 import { posOrderPresetParams, type PosOrderReportQuery } from '@/lib/pos-order-report'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +25,12 @@ export type PosOrdersAccountTotal = {
   net: string
 }
 
+export type PosOrdersWalletGrand = {
+  tendered: string
+  change: string
+  net: string
+}
+
 export type PosOrdersReportProps = {
   orders: PosOrdersReportOrder[]
   summary: {
@@ -33,13 +41,15 @@ export type PosOrdersReportProps = {
   registers: { id: string; name: string; isActive: boolean }[]
   methods: { id: string; name: string; isActive: boolean }[]
   totals: PosOrdersAccountTotal[]
+  grand: PosOrdersWalletGrand
   query: PosOrderReportQuery
+  today: CalendarDate
   truncated: boolean
   limit: number
 }
 
 const controlClass =
-  'mt-1 h-10 w-full rounded-md border border-white/15 bg-[#161618] px-2.5 text-sm text-white outline-none scheme-dark focus:border-[#017e84]'
+  'mt-1 h-10 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground outline-none focus:border-ring'
 
 export function PosOrdersReport({
   orders,
@@ -47,7 +57,9 @@ export function PosOrdersReport({
   registers,
   methods,
   totals,
+  grand,
   query,
+  today,
   truncated,
   limit,
 }: PosOrdersReportProps) {
@@ -56,14 +68,14 @@ export function PosOrdersReport({
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-white">Orders</h1>
-      <p className="mt-1 text-sm text-white/55">Sales rung up at the till, newest first.</p>
+      <h1 className="text-2xl font-semibold text-foreground">Orders</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Sales rung up at the till, newest first.</p>
 
       <form
         action="/pos/orders"
         method="get"
         aria-label="Filter orders"
-        className="mt-5 rounded-xl border border-white/10 p-4"
+        className="on-dark mt-5 rounded-xl border border-white/10 p-4"
         style={{ background: ODOO.surface }}
       >
         <nav aria-label="Date presets" className="flex flex-wrap gap-1.5">
@@ -89,20 +101,21 @@ export function PosOrdersReport({
         </nav>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="block text-xs font-medium uppercase tracking-wide text-white/50">
-            From
-            <input
-              type="date"
-              name="from"
-              defaultValue={query.from ?? ''}
-              className={controlClass}
-            />
-          </label>
-          <label className="block text-xs font-medium uppercase tracking-wide text-white/50">
-            To
-            <input type="date" name="to" defaultValue={query.to ?? ''} className={controlClass} />
-          </label>
-          <label className="block text-xs font-medium uppercase tracking-wide text-white/50">
+          <OrderDateField
+            id="from"
+            name="from"
+            label="From"
+            defaultValue={query.from ?? ''}
+            today={today}
+          />
+          <OrderDateField
+            id="to"
+            name="to"
+            label="To"
+            defaultValue={query.to ?? ''}
+            today={today}
+          />
+          <label className="block text-xs font-medium uppercase tracking-wide text-white/75">
             Register
             <select name="register" defaultValue={query.registerId ?? ''} className={controlClass}>
               <option value="">All registers</option>
@@ -114,7 +127,7 @@ export function PosOrdersReport({
               ))}
             </select>
           </label>
-          <label className="block text-xs font-medium uppercase tracking-wide text-white/50">
+          <label className="block text-xs font-medium uppercase tracking-wide text-white/75">
             Wallet
             <select name="method" defaultValue={query.paymentMethodId ?? ''} className={controlClass}>
               <option value="">All wallets</option>
@@ -148,11 +161,11 @@ export function PosOrdersReport({
       </form>
 
       <section aria-label="Totals for the orders below" className="mt-5">
-        <p className="text-sm text-white/45">
+        <p className="text-sm text-muted-foreground">
           Wallet totals for the orders below. A split sale is counted in each wallet.
         </p>
         {truncated ? (
-          <p className="mt-1 text-sm text-amber-200/90">
+          <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">
             {recentOnly
               ? `Showing the newest ${limit.toLocaleString('en-US')} orders. Pick a date to total every sale in a day.`
               : `Showing the newest ${limit.toLocaleString('en-US')} matching orders. Narrow the dates to include the rest.`}
@@ -165,7 +178,7 @@ export function PosOrdersReport({
             <p className="mt-1 text-2xl font-semibold tabular tracking-tight text-white sm:text-3xl">{summary.total}</p>
             <p className="mt-1 text-xs text-white/70">Sum of every wallet on these orders</p>
           </article>
-          <article className="rounded-xl border border-white/10 p-4" style={{ background: ODOO.surface }}>
+          <article className="on-dark rounded-xl border border-white/10 p-4" style={{ background: ODOO.surface }}>
             <p className="text-xs font-medium uppercase tracking-wide text-white/50">Orders</p>
             <p className="mt-1 text-2xl font-semibold tabular text-white">{summary.orderCount}</p>
           </article>
@@ -179,7 +192,7 @@ export function PosOrdersReport({
                 <article
                   key={wallet.methodId}
                   className={cn(
-                    'min-w-0 rounded-xl border p-4',
+                    'on-dark min-w-0 rounded-xl border p-4',
                     selected ? 'border-[#8fd4d7]' : 'border-white/10',
                   )}
                   style={{ background: ODOO.surface }}
@@ -196,7 +209,7 @@ export function PosOrdersReport({
       </section>
 
       <div
-        className="mt-5 overflow-x-auto rounded-xl border border-white/10"
+        className="on-dark mt-5 overflow-x-auto rounded-xl border border-white/10"
         style={{ background: ODOO.surface }}
       >
         <table className="w-full min-w-[44rem] text-left text-sm">
@@ -253,15 +266,15 @@ export function PosOrdersReport({
         </table>
       </div>
       {totals.length > 0 ? (
-        <div className="mt-4 overflow-hidden rounded-xl border border-white/10" style={{ background: ODOO.surface }}>
-          <h2 className="px-4 py-3 text-sm font-semibold text-white">Received by account</h2>
+        <div className="on-dark mt-4 overflow-hidden rounded-xl border border-white/10" style={{ background: ODOO.surface }}>
+          <h2 className="px-4 py-3 text-sm font-semibold text-white">Received by wallet</h2>
           <p className="px-4 pb-2 text-xs text-white/45">
-            Tendered is what was handed over. Net is what each account kept after change.
+            Tendered is what was handed over. Net is what each wallet kept after change.
           </p>
           <table className="w-full text-left text-sm">
             <thead className="bg-black/30 text-xs uppercase tracking-wide text-white/50">
               <tr>
-                <th className="px-4 py-2 font-medium">Account</th>
+                <th className="px-4 py-2 font-medium">Wallet</th>
                 <th className="px-4 py-2 text-right font-medium">Tendered</th>
                 <th className="px-4 py-2 text-right font-medium">Change returned</th>
                 <th className="px-4 py-2 text-right font-medium">Net received</th>
@@ -277,6 +290,14 @@ export function PosOrdersReport({
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="border-t border-white/20 bg-black/30 font-semibold text-white">
+                <td className="px-4 py-2">Total</td>
+                <td className="px-4 py-2 text-right tabular">{grand.tendered}</td>
+                <td className="px-4 py-2 text-right tabular">{grand.change}</td>
+                <td className="px-4 py-2 text-right tabular">{grand.net}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       ) : null}

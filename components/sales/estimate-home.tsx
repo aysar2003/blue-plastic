@@ -26,8 +26,8 @@ export type EstimateHomeFigures = {
 }
 
 /**
- * The door of quotations — same shape as the invoice home: a header with New,
- * four clickable status bands that filter the list underneath, and a draft link.
+ * Home for estimates or quotations — header with New, four clickable status
+ * bands that filter the list underneath, and a draft link.
  */
 export function EstimateHome({
   currency,
@@ -35,40 +35,48 @@ export function EstimateHome({
   active,
   params,
   home,
+  basePath,
+  singular,
+  plural,
 }: {
   currency: string
   canCreate: boolean
   active: string
   params: Record<string, string | undefined>
   home: EstimateHomeFigures
+  basePath: string
+  singular: string
+  plural: string
 }) {
   const barTotal = BANDS.reduce(
     (sum, band) => sum.plus(new Decimal(home[band.field]).abs()),
     new Decimal(0),
   )
+  const unit = singular.toLowerCase()
+  const units = plural.toLowerCase()
 
   return (
     <section className="mb-6 overflow-hidden rounded-2xl bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] ring-1 ring-border">
       <div className="flex flex-wrap items-center justify-between gap-4 bg-primary px-5 py-6 text-primary-foreground sm:px-6">
         <div>
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-primary-foreground/70">
-            Estimates · Quotations
+            {plural}
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-primary-foreground">
-            Quotes waiting on customers
+            {plural} waiting on customers
           </h1>
           <p className="mt-1 max-w-md text-sm text-primary-foreground/80">
-            Create an estimate, send it, then convert to an invoice when they accept. Open is still
+            Create a {unit}, send it, then convert to an invoice when they accept. Open is still
             out; invoiced means it already became a sale.
           </p>
         </div>
         {canCreate ? (
           <Link
-            href="/sales/estimates/new"
+            href={`${basePath}/new`}
             className="inline-flex items-center gap-2 rounded-full bg-card px-5 py-2.5 text-sm font-semibold text-primary shadow-sm transition hover:bg-accent"
           >
             <PlusIcon className="size-4" aria-hidden />
-            New estimate
+            New {unit}
           </Link>
         ) : null}
       </div>
@@ -81,7 +89,7 @@ export function EstimateHome({
           return (
             <Link
               key={band.key}
-              href={listHref('/sales/estimates', { ...params, status: on ? undefined : band.key })}
+              href={listHref(basePath, { ...params, status: on ? undefined : band.key })}
               aria-current={on ? 'true' : undefined}
               className={cn(
                 'px-5 py-4 sm:px-6',
@@ -94,7 +102,7 @@ export function EstimateHome({
               <p className="text-[0.7rem] font-semibold uppercase tracking-wider text-muted-foreground">{band.label}</p>
               <p className="mt-1 text-xl font-semibold tabular">{formatMoney(amount, currency)}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {count === 1 ? '1 quotation' : `${count} quotations`}
+                {count === 1 ? `1 ${unit}` : `${count} ${units}`}
               </p>
             </Link>
           )
@@ -118,7 +126,7 @@ export function EstimateHome({
         </div>
         {home.draftCount > 0 ? (
           <Link
-            href={listHref('/sales/estimates', { ...params, status: active === 'draft' ? undefined : 'draft' })}
+            href={listHref(basePath, { ...params, status: active === 'draft' ? undefined : 'draft' })}
             className={cn(
               'mt-3 inline-block text-sm text-muted-foreground underline-offset-4 hover:underline',
               active === 'draft' && 'font-medium text-foreground',

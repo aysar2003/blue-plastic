@@ -34,7 +34,7 @@ export default async function PrintDocumentPage({
     organizationService.get(ctx),
     organizationService.getDocumentTemplate(ctx),
   ])
-  if (!document) notFound()
+  if (!document || document.type !== config.type) notFound()
 
   const currency = document.currencyCode || ctx.organization.baseCurrency
   const customer = document.customer

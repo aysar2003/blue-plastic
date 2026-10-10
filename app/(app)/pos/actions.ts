@@ -29,6 +29,7 @@ function revalidatePos() {
   revalidatePath('/pos/settings')
   revalidatePath('/sales/sales-receipts')
   revalidatePath('/sales/estimates')
+  revalidatePath('/sales/quotations')
   revalidatePath('/accounts')
   revalidatePath('/banking')
 }

@@ -21,7 +21,7 @@ export default async function SalesHubPage() {
   const currency = ctx.organization.baseCurrency
   const now = today(ctx.organization.timeZone)
 
-  const [arAging, openInvoices, draftQuotes] = await Promise.all([
+  const [arAging, openInvoices, openEstimates, openQuotations] = await Promise.all([
     receivables.aging(ctx, now),
     db.salesDocument.count({
       where: {
@@ -39,6 +39,14 @@ export default async function SalesHubPage() {
         deletedAt: null,
       },
     }),
+    db.salesDocument.count({
+      where: {
+        orgId: ctx.orgId,
+        type: 'QUOTATION',
+        status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
+        deletedAt: null,
+      },
+    }),
   ])
 
   const overdue = receivables.OVERDUE_BUCKETS.reduce(
@@ -50,7 +58,7 @@ export default async function SalesHubPage() {
     <AppLauncher
       eyebrow={ctx.organization.name}
       title="Sales"
-      subtitle="Estimates, invoices, receipts, customers and the figures that follow them."
+      subtitle="Estimates, quotations, invoices, receipts, customers and the figures that follow them."
       apps={apps}
       insights={[
         {
@@ -67,8 +75,13 @@ export default async function SalesHubPage() {
         },
         {
           label: 'Open estimates',
-          value: String(draftQuotes),
-          hint: draftQuotes === 1 ? 'waiting on a customer' : 'waiting on customers',
+          value: String(openEstimates),
+          hint:
+            openQuotations === 0
+              ? openEstimates === 1
+                ? 'waiting on a customer'
+                : 'waiting on customers'
+              : `${openQuotations} open quotation${openQuotations === 1 ? '' : 's'} too`,
           href: '/sales/estimates',
         },
       ]}

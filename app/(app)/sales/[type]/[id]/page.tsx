@@ -33,7 +33,7 @@ export default async function SalesDocumentPage({
 
   const ctx = await requireOrgContext('invoice:read')
   const document = await salesService.get(ctx, id).catch(() => null)
-  if (!document) notFound()
+  if (!document || document.type !== config.type) notFound()
   const [trail, deliveryNote] = await Promise.all([
     trailFor(ctx, document.id),
     config.type === 'INVOICE' || config.type === 'SALES_RECEIPT'
@@ -55,7 +55,7 @@ export default async function SalesDocumentPage({
   const applied = document.applications.length > 0
   const canEdit = ctx.permissions.has('invoice:update') && document.status !== 'VOID' && !applied
   const canConvert =
-    config.type === 'ESTIMATE' &&
+    (config.type === 'ESTIMATE' || config.type === 'QUOTATION') &&
     ctx.permissions.has('invoice:create') &&
     !document.convertedTo &&
     document.status !== 'VOID' &&

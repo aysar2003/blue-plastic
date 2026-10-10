@@ -125,11 +125,11 @@ export function ContactMoneyBar({
 
   if (!open) {
     return (
-      <div className="flex items-center justify-end border-b bg-[#f4f8fb] px-3 py-1">
+      <div className="flex items-center justify-end border-b bg-muted/70 px-3 py-1">
         <button
           type="button"
           onClick={toggle}
-          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-white hover:text-foreground"
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-card hover:text-foreground"
           aria-expanded={false}
           aria-label="Show money summary"
         >
@@ -141,7 +141,7 @@ export function ContactMoneyBar({
   }
 
   return (
-    <div className="relative border-b bg-[#f4f8fb]">
+    <div className="relative border-b bg-muted/70">
       <div className="overflow-hidden px-5 pt-3" style={{ height }}>
         <div
           className={cn(
@@ -157,7 +157,7 @@ export function ContactMoneyBar({
                 href={band.href}
                 className={cn(
                   'rounded-md px-1 py-1 transition-colors',
-                  selected && 'bg-white shadow-sm ring-1 ring-border',
+                  selected && 'bg-card shadow-sm ring-1 ring-border',
                 )}
                 aria-current={selected ? 'true' : undefined}
               >
@@ -180,7 +180,7 @@ export function ContactMoneyBar({
           })}
         </div>
         {!compact ? (
-          <div className="mt-3 flex h-2.5 overflow-hidden rounded-sm bg-[#e7edf2]">
+          <div className="mt-3 flex h-2.5 overflow-hidden rounded-sm bg-border/50">
             {bands.map((band) => {
               const amount = new Decimal(band.amount).abs()
               if (amount.isZero()) return null

@@ -1430,6 +1430,7 @@ const ENTITY_LABEL: Record<string, string> = {
 const SALES_SLUG: Record<string, string> = {
   INVOICE: 'invoices',
   ESTIMATE: 'estimates',
+  QUOTATION: 'quotations',
   SALES_RECEIPT: 'sales-receipts',
   CREDIT_MEMO: 'credit-memos',
   REFUND_RECEIPT: 'refunds',

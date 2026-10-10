@@ -167,7 +167,7 @@ export function ReceiptRegister({
                   <Link href="/sales/invoices/new">Invoice</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/sales/estimates/new">Quotation</Link>
+                  <Link href="/sales/quotations/new">Quotation</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/sales/credit-memos/new">Credit memo</Link>

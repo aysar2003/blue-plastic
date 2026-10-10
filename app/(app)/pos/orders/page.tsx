@@ -14,7 +14,8 @@ export default async function PosOrdersPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const ctx = await requireOrgContext('pos:read')
-  const query = readPosOrderReportQuery(await searchParams, today(ctx.organization.timeZone))
+  const asOf = today(ctx.organization.timeZone)
+  const query = readPosOrderReportQuery(await searchParams, asOf)
   const report = await posService.listPosOrders(ctx, query)
 
   return (
@@ -22,9 +23,11 @@ export default async function PosOrdersPage({
       orders={report.orders}
       summary={report.summary}
       totals={report.totals}
+      grand={report.grand}
       registers={report.registers}
       methods={report.methods}
       query={query}
+      today={asOf}
       truncated={report.truncated}
       limit={report.limit}
     />

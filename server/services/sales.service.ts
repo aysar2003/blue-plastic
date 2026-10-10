@@ -65,6 +65,7 @@ async function salesDiscountAccountId(tx: Tx, orgId: string) {
 const SEQUENCE_FOR: Record<SalesDocumentType, DocumentType> = {
   INVOICE: 'INVOICE',
   ESTIMATE: 'ESTIMATE',
+  QUOTATION: 'QUOTATION',
   SALES_RECEIPT: 'SALES_RECEIPT',
   CREDIT_MEMO: 'CREDIT_MEMO',
   REFUND_RECEIPT: 'REFUND_RECEIPT',
@@ -260,12 +261,15 @@ export async function invoiceHome(ctx: OrgContext) {
 }
 
 /**
- * Figures for the quotation home. Open is still waiting; accepted and declined
- * are the customer's answer; invoiced means the quote already became a sale.
+ * Figures for the estimate / quotation home. Open is still waiting; accepted and
+ * declined are the customer's answer; invoiced means it already became a sale.
  */
-export async function estimateHome(ctx: OrgContext) {
+export async function estimateHome(
+  ctx: OrgContext,
+  type: Extract<SalesDocumentType, 'ESTIMATE' | 'QUOTATION'> = 'ESTIMATE',
+) {
   const rows = await db.salesDocument.findMany({
-    where: { orgId: ctx.orgId, type: 'ESTIMATE', deletedAt: null, status: { not: 'VOID' } },
+    where: { orgId: ctx.orgId, type, deletedAt: null, status: { not: 'VOID' } },
     select: { id: true, status: true, total: true },
   })
 
@@ -598,7 +602,7 @@ export async function create(
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency, documentDiscount(input))
 
-    if (priced.total.isZero() && type !== 'ESTIMATE') {
+    if (priced.total.isZero() && type !== 'ESTIMATE' && type !== 'QUOTATION') {
       throw validation('A document with no value has nothing to record.')
     }
 
@@ -626,9 +630,12 @@ export async function create(
         date: toDate(input.date),
         dueDate:
           type === 'INVOICE' ? toDate(dueDateFor(input.date, term ?? null)) : null,
-        expiryDate: type === 'ESTIMATE' && input.expiryDate ? toDate(input.expiryDate) : null,
+        expiryDate:
+          (type === 'ESTIMATE' || type === 'QUOTATION') && input.expiryDate
+            ? toDate(input.expiryDate)
+            : null,
         paymentTermId: term?.id ?? null,
-        status: isDraft ? 'DRAFT' : type === 'ESTIMATE' ? 'OPEN' : 'OPEN',
+        status: isDraft ? 'DRAFT' : 'OPEN',
         reference: input.reference ?? null,
         memo: input.memo ?? null,
         customerMessage: input.customerMessage ?? null,
@@ -778,7 +785,10 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
         customerId: customer.id,
         date: toDate(input.date),
         dueDate: existing.type === 'INVOICE' ? toDate(dueDateFor(input.date, term ?? null)) : null,
-        expiryDate: existing.type === 'ESTIMATE' && input.expiryDate ? toDate(input.expiryDate) : null,
+        expiryDate:
+          (existing.type === 'ESTIMATE' || existing.type === 'QUOTATION') && input.expiryDate
+            ? toDate(input.expiryDate)
+            : null,
         paymentTermId: term?.id ?? null,
         reference: input.reference ?? null,
         memo: input.memo ?? null,
@@ -1122,21 +1132,22 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
 }
 
 /**
- * Open quotations that can still become an invoice — not voided, declined, or
- * already converted. Used on the new-invoice form so a customer's quote can be
- * picked up without retyping lines and prices.
+ * Open estimates and quotations that can still become an invoice — not voided,
+ * declined, or already converted. Used on the new-invoice form and the till so
+ * a customer's proposal can be picked up without retyping lines and prices.
  */
 export async function listConvertibleEstimates(ctx: OrgContext) {
   const rows = await db.salesDocument.findMany({
     where: {
       orgId: ctx.orgId,
-      type: 'ESTIMATE',
+      type: { in: ['ESTIMATE', 'QUOTATION'] },
       status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
       convertedTo: { is: null },
     },
     orderBy: [{ date: 'desc' }, { number: 'desc' }],
     select: {
       id: true,
+      type: true,
       number: true,
       date: true,
       total: true,
@@ -1148,6 +1159,7 @@ export async function listConvertibleEstimates(ctx: OrgContext) {
 
   return rows.map((row) => ({
     id: row.id,
+    type: row.type,
     number: row.number,
     date: toCalendarDate(row.date),
     total: row.total.toString(),
@@ -1158,19 +1170,23 @@ export async function listConvertibleEstimates(ctx: OrgContext) {
 }
 
 /**
- * Turn an accepted estimate into an invoice.
+ * Turn an accepted estimate or quotation into an invoice.
  *
- * The estimate is kept and closed rather than transformed, so the quotation that
- * was sent stays readable exactly as it was sent.
+ * The proposal is kept and closed rather than transformed, so what was sent
+ * stays readable exactly as it was sent.
  */
 export async function convertEstimate(ctx: OrgContext, estimateId: string, date: CalendarDate) {
   const meta = await requestMeta()
 
   return db.$transaction(async (tx) => {
     const estimate = await tx.salesDocument.findFirst({
-      where: { id: estimateId, orgId: ctx.orgId, type: 'ESTIMATE' },
+      where: {
+        id: estimateId,
+        orgId: ctx.orgId,
+        type: { in: ['ESTIMATE', 'QUOTATION'] },
+      },
       select: {
-        id: true, number: true, status: true, customerId: true, reference: true,
+        id: true, number: true, type: true, status: true, customerId: true, reference: true,
         memo: true, customerMessage: true, paymentTermId: true, convertedTo: { select: { number: true } },
         lines: {
           orderBy: { lineNumber: 'asc' },
@@ -1181,7 +1197,7 @@ export async function convertEstimate(ctx: OrgContext, estimateId: string, date:
         },
       },
     })
-    if (!estimate) throw notFound('Estimate')
+    if (!estimate) throw notFound('Estimate or quotation')
     if (estimate.convertedTo) {
       throw conflict(`${estimate.number} has already become invoice ${estimate.convertedTo.number}.`)
     }

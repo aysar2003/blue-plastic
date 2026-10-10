@@ -50,7 +50,7 @@ html.odoo {
   --secondary: #e9e4e8;
   --secondary-foreground: #4a3144;
   --muted: #ebe8ea;
-  --muted-foreground: #5c5c5c;
+  --muted-foreground: #4a4a4f;
   --accent: #dfeef0;
   --accent-foreground: #01666b;
   --destructive: #d23f3f;
@@ -85,7 +85,7 @@ html.odoo-dark {
   --secondary: #3a3a40;
   --secondary-foreground: #f3f3f3;
   --muted: #3a3a40;
-  --muted-foreground: #a8a8ad;
+  --muted-foreground: #c2c2c7;
   --accent: #1a3d40;
   --accent-foreground: #8fd4d7;
   --destructive: #d23f3f;
@@ -638,6 +638,13 @@ html.odoo-dark .shell-topbar input::placeholder {
   color: rgb(255 255 255 / 55%);
 }
 
+/* Initials sit on muted (light) — not on the purple bar. Keep ink dark. */
+html.odoo .shell-topbar [data-slot='avatar-fallback'],
+html.odoo-dark .shell-topbar [data-slot='avatar-fallback'] {
+  background: #5c3d55 !important;
+  color: #ffffff !important;
+}
+
 html.odoo .shell-apps {
   background: #ffffff !important;
   border-bottom-color: #d4d0d2 !important;
@@ -863,20 +870,92 @@ html.ink .sales-surface [data-slot='card'][data-tone] {
   color: #ededed;
 }
 
-.app-surface input,
-.app-surface textarea,
-.app-surface select,
+/*
+ * Form controls: fill and ink always travel together. Without this, a utility
+ * like `text-white` on a theme-forced white card (or dark ink on a dark night
+ * field) leaves labels and typed values invisible.
+ */
+.app-surface :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='file']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']):not([type='image']),
 .app-surface [data-slot='input'],
 .app-surface [data-slot='native-select'],
-.sales-surface input,
-.sales-surface textarea,
-.sales-surface select,
+.sales-surface :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='file']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']):not([type='image']),
 .sales-surface [data-slot='input'],
 .sales-surface [data-slot='native-select'] {
   border-radius: 0.65rem;
-  background: var(--card);
+  background-color: var(--card);
   color: var(--foreground);
   border-color: var(--input);
+  caret-color: var(--foreground);
+}
+
+.app-surface :is(input, textarea)::placeholder,
+.sales-surface :is(input, textarea)::placeholder {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+
+/* Menus, calendars, and floating panels keep their own ink. */
+.app-surface :is([data-slot='popover'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], .bg-popover),
+.sales-surface :is([data-slot='popover'], [data-slot='dropdown-menu-content'], [data-slot='select-content'], .bg-popover) {
+  background-color: var(--popover);
+  color: var(--popover-foreground);
+}
+
+/*
+ * Native <select> option lists (especially on Windows) keep a light panel while
+ * inheriting the select's ink. Dark themes set light ink on the closed control,
+ * so every open option goes white-on-white. Force readable option colours
+ * everywhere — closed selects still use their own color.
+ */
+option {
+  background-color: #ffffff !important;
+  color: #1f1f23 !important;
+}
+
+/*
+ * Dark branded islands (POS filter panels, purple till chrome) live inside a
+ * light page. Reset local tokens so every label, field, and link stays light
+ * on the dark fill — and so the surface form rule above pairs correctly.
+ */
+.on-dark {
+  color-scheme: dark;
+  --background: #1f1f23;
+  --foreground: #f3f3f3;
+  --card: #161618;
+  --card-foreground: #f3f3f3;
+  --popover: #2a2a2e;
+  --popover-foreground: #f3f3f3;
+  --muted: #3a3a40;
+  --muted-foreground: #d0d0d4;
+  --border: rgb(255 255 255 / 14%);
+  --input: rgb(255 255 255 / 22%);
+  --ring: #017e84;
+  --accent: #1a3d40;
+  --accent-foreground: #8fd4d7;
+  color: #f3f3f3;
+}
+
+.on-dark :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='file']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']):not([type='image']),
+.on-dark [data-slot='input'],
+.on-dark [data-slot='native-select'] {
+  background-color: var(--card) !important;
+  color: var(--foreground) !important;
+  border-color: var(--input) !important;
+  caret-color: var(--foreground);
+}
+
+.on-dark :is(input, textarea)::placeholder {
+  color: var(--muted-foreground) !important;
+  opacity: 1;
+}
+
+/* Only bare links — do not override `text-white` chips or tinted receipts. */
+.on-dark a:not([class*='text-']) {
+  color: #8fd4d7;
+}
+
+.on-dark a:not([class*='text-']):hover {
+  color: #b8e8ea;
 }
 
 .app-surface button[data-slot='button'],
@@ -949,86 +1028,58 @@ html.ink .sales-surface [data-slot='card'][data-tone] {
 }
 
 /*
- * Legacy hard-coded light stripes break under Dark: theme ink is light, so
- * numbers vanish on white / #c5dff3 rows. Remap those classes to tokens.
+ * Legacy hard-coded light stripes break under night themes: ink is light, so
+ * numbers vanish on white / #c5dff3 rows. Remap those classes to tokens on
+ * every dark skin — including Odoo Dark, which used to be left out.
  */
-html.dark .app-surface [class*='c5dff3'],
-html.dark .sales-surface [class*='c5dff3'],
-html.dark .app-surface [class*='b3d0ec'],
-html.dark .sales-surface [class*='b3d0ec'],
-html.dark .app-surface [class*='e7f3fb'],
-html.dark .sales-surface [class*='e7f3fb'],
-html.ink .app-surface [class*='c5dff3'],
-html.ink .sales-surface [class*='c5dff3'],
-html.ink .app-surface [class*='b3d0ec'],
-html.ink .sales-surface [class*='b3d0ec'],
-html.ink .app-surface [class*='e7f3fb'],
-html.ink .sales-surface [class*='e7f3fb'],
-.dark .app-surface [class*='c5dff3'],
-.dark .sales-surface [class*='c5dff3'],
-.dark .app-surface [class*='b3d0ec'],
-.dark .sales-surface [class*='b3d0ec'],
-.dark .app-surface [class*='e7f3fb'],
-.dark .sales-surface [class*='e7f3fb'] {
+html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is([class*='c5dff3'], [class*='b3d0ec'], [class*='e7f3fb']) {
   background-color: var(--stripe) !important;
   color: var(--foreground) !important;
 }
 
-html.dark .app-surface [class*='d5dde6'],
-html.dark .sales-surface [class*='d5dde6'],
-html.dark .app-surface [class*='c8d3df'],
-html.dark .sales-surface [class*='c8d3df'],
-html.ink .app-surface [class*='d5dde6'],
-html.ink .sales-surface [class*='d5dde6'],
-html.ink .app-surface [class*='c8d3df'],
-html.ink .sales-surface [class*='c8d3df'],
-.dark .app-surface [class*='d5dde6'],
-.dark .sales-surface [class*='d5dde6'] {
+html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is([class*='d5dde6'], [class*='c8d3df']) {
   background-color: var(--band) !important;
   color: var(--foreground) !important;
 }
 
-html.dark .app-surface [class*='b7e1a1'],
-html.dark .sales-surface [class*='b7e1a1'],
-.dark .app-surface [class*='b7e1a1'],
-.dark .sales-surface [class*='b7e1a1'] {
+html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) [class*='b7e1a1'] {
   background-color: color-mix(in srgb, var(--primary) 28%, var(--card)) !important;
   color: var(--foreground) !important;
 }
 
-html.dark .app-surface [class*='bg-white'],
-html.dark .sales-surface [class*='bg-white'],
-html.dark .app-surface [class*='bg-sky-50'],
-html.dark .sales-surface [class*='bg-sky-50'],
-html.ink .app-surface [class*='bg-white'],
-html.ink .sales-surface [class*='bg-white'],
-html.ink .app-surface [class*='bg-sky-50'],
-html.ink .sales-surface [class*='bg-sky-50'],
-.dark .app-surface [class*='bg-white'],
-.dark .sales-surface [class*='bg-white'],
-.dark .app-surface [class*='bg-sky-50'],
-.dark .sales-surface [class*='bg-sky-50'] {
+html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is([class*='bg-white'], [class*='bg-sky-50'], [class*='bg-slate-50'], [class*='bg-gray-50']) {
   background-color: var(--card) !important;
   color: var(--foreground) !important;
 }
 
-html.dark .app-surface .text-slate-700,
-html.dark .sales-surface .text-slate-700,
-html.dark .app-surface .text-slate-800,
-html.dark .sales-surface .text-slate-800,
-html.dark .app-surface .text-slate-600,
-html.dark .sales-surface .text-slate-600,
-html.ink .app-surface .text-slate-700,
-html.ink .sales-surface .text-slate-700,
-html.ink .app-surface .text-slate-800,
-html.ink .sales-surface .text-slate-800,
-html.ink .app-surface .text-slate-600,
-html.ink .sales-surface .text-slate-600,
-.dark .app-surface .text-slate-700,
-.dark .sales-surface .text-slate-700,
-.dark .app-surface .text-slate-800,
-.dark .sales-surface .text-slate-800 {
+/*
+ * Paper-tint arbitrary fills stay light on night themes and erase light ink.
+ * Match the hex fragment so we do not trip CSS attribute-selector parsing on `#`.
+ */
+html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is(
+  [class*='f4f8fb'],
+  [class*='e7edf2'],
+  [class*='fbfcfd'],
+  [class*='f4f5f6'],
+  [class*='f7f8f4'],
+  [class*='f4f9fc'],
+  [class*='fff1f2']
+) {
+  background-color: var(--muted) !important;
   color: var(--foreground) !important;
+}
+
+html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is(.text-slate-500, .text-slate-600, .text-slate-700, .text-slate-800, .text-slate-900, .text-gray-500, .text-gray-600, .text-gray-700, .text-gray-800, .text-gray-900, .text-black, .text-\[\#141418\], .text-\[\#26262d\], .text-\[\#4a4a54\]) {
+  color: var(--foreground) !important;
+}
+
+html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is(.text-slate-400, .text-gray-400) {
+  color: var(--muted-foreground) !important;
+}
+
+/* Soft labels that were tuned for paper stay readable on night fills. */
+html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) .text-muted-foreground {
+  color: var(--muted-foreground) !important;
 }
 
 /*

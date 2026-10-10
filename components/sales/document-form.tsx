@@ -68,7 +68,7 @@ import {
 import { formatDate, isCalendarDate } from '@/lib/date'
 import { dueDateFor } from '@/lib/payment-terms'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
-import { defaultLineRows, type SalesTypeConfig } from '@/lib/sales-types'
+import { defaultLineRows, isProposal, type SalesTypeConfig } from '@/lib/sales-types'
 import { cn } from '@/lib/utils'
 import { LineStore } from '@/components/inventory/line-store'
 import { StockWarningNote } from '@/components/inventory/stock-warning'
@@ -228,7 +228,7 @@ export function DocumentForm({
   // Invoice, quotation, sales receipt, credit, and refund share the print sheet —
   // the same paper POS and the counter print. No template picker on those.
   const usesPrintSheet = (PRINT_SHEET_SALES_TYPES as readonly string[]).includes(config.type)
-  const usesInvoiceSheet = config.type === 'INVOICE' || config.type === 'ESTIMATE'
+  const usesInvoiceSheet = config.type === 'INVOICE' || isProposal(config.type)
   const templateKey = usesInvoiceSheet
     ? INVOICE_FORM_TEMPLATE_STORAGE_KEY
     : config.type === 'SALES_RECEIPT'
@@ -822,8 +822,8 @@ function HeaderFields({
       ? dueDateFor(props.date, term ? { type: term.type, dueDays: term.dueDays } : null)
       : props.date
   const showDue =
-    config.type === 'INVOICE' || config.type === 'CREDIT_MEMO' || config.type === 'ESTIMATE'
-  const dueLabel = config.type === 'ESTIMATE' ? 'Valid until' : 'Due date'
+    config.type === 'INVOICE' || config.type === 'CREDIT_MEMO' || isProposal(config.type)
+  const dueLabel = isProposal(config.type) ? 'Valid until' : 'Due date'
 
   return (
     <div className="space-y-2.5">
@@ -1059,7 +1059,7 @@ function InvoiceLayout(props: LayoutProps) {
             <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
               {props.config.needsDeposit
                 ? 'Amount received'
-                : props.config.type === 'ESTIMATE'
+                : isProposal(props.config.type)
                   ? 'Total'
                   : 'Balance due'}
             </p>
@@ -1095,7 +1095,7 @@ function InvoiceLayout(props: LayoutProps) {
             recordId={props.recordId}
           />
           {props.config.needsDeposit ? null : (
-            <Field name="dueDate" label={props.config.type === 'ESTIMATE' ? 'Valid until' : 'Due date'}>
+            <Field name="dueDate" label={isProposal(props.config.type) ? 'Valid until' : 'Due date'}>
               <Input id="dueDate" value={isCalendarDate(due) ? formatDate(due) : ''} readOnly />
             </Field>
           )}
@@ -1192,7 +1192,7 @@ function InvoiceLayout(props: LayoutProps) {
               <dt>
                 {props.config.needsDeposit
                   ? 'Amount received'
-                  : props.config.type === 'ESTIMATE'
+                  : isProposal(props.config.type)
                     ? 'Total'
                     : 'Balance due'}
               </dt>

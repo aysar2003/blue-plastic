@@ -1,6 +1,6 @@
 import { calendarDateInZone, toCalendarDate, toDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
-import { printSheetLinePad, STATUS_LABELS, type SalesTypeConfig } from '@/lib/sales-types'
+import { isProposal, printSheetLinePad, STATUS_LABELS, type SalesTypeConfig } from '@/lib/sales-types'
 import { CUSTOMER_CREDIT, FORM_SHEET } from '@/lib/credit-brand'
 import { SheetMarks } from '@/components/sales/sheet-marks'
 
@@ -184,7 +184,7 @@ export function InvoiceSheet({
               <dd className="text-[#5C6B7A]">{longDate(toCalendarDate(document.dueDate))}</dd>
             </>
           ) : null}
-          {document.expiryDate && config.type === 'ESTIMATE' ? (
+          {document.expiryDate && isProposal(config.type) ? (
             <>
               <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
                 Valid until

@@ -8,6 +8,7 @@ const DEFAULT_PREFIX: Record<DocumentType, string> = {
   JOURNAL: 'JE-',
   INVOICE: 'INV-',
   ESTIMATE: 'EST-',
+  QUOTATION: 'QUO-',
   SALES_RECEIPT: 'SR-',
   CREDIT_MEMO: 'CM-',
   CUSTOMER_PAYMENT: 'PMT-',

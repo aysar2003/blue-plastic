@@ -48,7 +48,7 @@ export async function customerMoneyBar(ctx: OrgContext, asOf: CalendarDate) {
         FROM sales_documents d
        WHERE d."orgId" = ${ctx.orgId}
          AND d."deletedAt" IS NULL
-         AND d.type::text IN ('INVOICE', 'ESTIMATE', 'CREDIT_MEMO')
+         AND d.type::text IN ('INVOICE', 'ESTIMATE', 'QUOTATION', 'CREDIT_MEMO')
          AND d.status::text NOT IN ('VOID', 'DECLINED')
     `,
     db.$queryRaw<{ customerId: string; status: string; amount: string; date: Date }[]>`

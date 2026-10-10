@@ -65,6 +65,7 @@ export const MODULES: NavModule[] = [
     tabs: [
       { label: 'Home', href: '/sales' },
       { label: 'Estimates', href: '/sales/estimates', permission: 'invoice:read' },
+      { label: 'Quotations', href: '/sales/quotations', permission: 'invoice:read' },
       { label: 'Invoices', href: '/sales/invoices', permission: 'invoice:read' },
       { label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read' },
       { label: 'Delivery', href: '/sales/delivery', permission: 'invoice:read' },

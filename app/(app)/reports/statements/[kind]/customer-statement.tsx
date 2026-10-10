@@ -450,6 +450,7 @@ const KIND_TINT: Record<string, string> = {
   REFUND_RECEIPT: 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50',
   JOURNAL: 'bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-900/50',
   ESTIMATE: 'bg-stone-100/80 hover:bg-stone-200/70 dark:bg-stone-900/40 dark:hover:bg-stone-800/50',
+  QUOTATION: 'bg-violet-100/80 hover:bg-violet-200/70 dark:bg-violet-900/40 dark:hover:bg-violet-800/50',
   PURCHASE_ORDER: 'bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-900/45 dark:hover:bg-slate-800/55',
 }
 
@@ -461,6 +462,7 @@ function transactionName(kind: string | undefined, books: 'customer' | 'vendor')
   if (!kind) return '—'
   if (kind === 'PAYMENT') return books === 'vendor' ? 'Bill payment' : 'Customer payment'
   if (kind === 'ESTIMATE') return 'Estimate'
+  if (kind === 'QUOTATION') return 'Quotation'
   if (kind === 'PURCHASE_ORDER') return 'Purchase order'
   if (kind === 'JOURNAL') return 'Journal'
   return JOURNAL_SOURCE_LABELS[kind as JournalSourceType] ?? kind
