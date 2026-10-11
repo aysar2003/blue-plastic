@@ -67,8 +67,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
       </div>
 
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <Table>
+        <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Movement</TableHead>
@@ -107,7 +106,6 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
               </TableRow>
             </TableBody>
           </Table>
-        </div>
 
         <div
           className={`flex items-center gap-2 border-t px-3 py-2.5 text-sm ${

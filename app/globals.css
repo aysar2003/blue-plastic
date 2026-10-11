@@ -2070,7 +2070,12 @@ a.report-drill-link:hover {
   .overflow-auto,
   .overflow-hidden,
   .overflow-x-hidden,
-  .overflow-y-hidden {
+  .overflow-y-hidden,
+  .overflow-x-clip,
+  .overflow-y-clip,
+  [data-table-scroll],
+  [data-grid-scroll] {
+    position: static !important;
     overflow: visible !important;
     max-height: none !important;
   }
@@ -2118,9 +2123,16 @@ a.report-drill-link:hover {
  * - Interactive grids (`data-layout="grid"`): fixed column widths, ellipsis —
  *   registers and reports must not let Contra bleed into Debit/Credit.
  */
+/*
+ * List sheets (`data-table-scroll`) own both axes of scroll so sticky column
+ * names pin to this box. Non-list embeds still scroll sideways only.
+ */
 [data-slot='table-container'] {
   width: 100%;
   max-width: 100%;
+}
+
+[data-slot='table-container']:not([data-table-scroll]) {
   overflow-x: auto;
 }
 

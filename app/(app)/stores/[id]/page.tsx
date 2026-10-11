@@ -541,7 +541,6 @@ export default async function StoreDashboardPage({
       </div>
 
       <Card className="overflow-hidden p-0">
-        <div className="max-h-[70vh] overflow-x-auto overflow-y-auto">
           <Table>
             <TableHeader>
               <TableRow className="ledger-head hover:bg-[var(--band)]">
@@ -698,7 +697,6 @@ export default async function StoreDashboardPage({
               </TableFooter>
             ) : null}
           </Table>
-        </div>
       </Card>
     </>
   )

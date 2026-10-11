@@ -42,8 +42,7 @@ export default async function SalesByItemPage({ searchParams }: { searchParams: 
       />
 
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <RankedTable
+        <RankedTable
             sort={sort}
             basePath="/reports/sales-by-item"
             linkParams={linkParams}
@@ -56,7 +55,6 @@ export default async function SalesByItemPage({ searchParams }: { searchParams: 
             quantities
             empty="Nothing was sold in this period."
           />
-        </div>
       </Card>
     </>
   )

@@ -14,6 +14,13 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: Request) {
   try {
     const ctx = await requireOrgContext('org:update')
+    // Mirror the service gate at the route so a missed check cannot wipe a company.
+    if (!ctx.isSystemOwner) {
+      return NextResponse.json(
+        { error: 'Only the system owner can restore a company from backup.' },
+        { status: 403 },
+      )
+    }
     const form = await request.formData()
     const file = form.get('file')
     const targetOrgId = typeof form.get('targetOrgId') === 'string' ? String(form.get('targetOrgId')) : ''

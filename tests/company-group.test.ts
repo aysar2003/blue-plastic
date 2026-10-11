@@ -17,6 +17,6 @@ describe('company group', () => {
     expect(companyGroupKind({ parentOrgId: 'main-1', childCount: 0 })).toBe('sub')
     expect(companyGroupLabel('main')).toBe('Main')
     expect(companyGroupLabel('sub')).toBe('Sub')
-    expect(companyGroupLabel('standalone')).toBeNull()
+    expect(companyGroupLabel('standalone')).toBe('Solo')
   })
 })

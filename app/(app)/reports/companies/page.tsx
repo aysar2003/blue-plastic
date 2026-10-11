@@ -51,7 +51,6 @@ export default async function CompanyReportsPage({
         controls={{ mode: 'range' }}
       />
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -178,7 +177,6 @@ export default async function CompanyReportsPage({
             </TableFooter>
           ) : null}
         </Table>
-        </div>
       </Card>
     </>
   )

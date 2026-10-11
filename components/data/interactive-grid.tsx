@@ -280,7 +280,7 @@ export function InteractiveGrid({
   )
 
   return (
-    <div>
+    <>
       {customizable ? (
         <div className="mb-2 flex justify-end print:hidden">
           <TableColumnCustomize
@@ -292,8 +292,11 @@ export function InteractiveGrid({
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-md border bg-card">
-        <Table data-layout="grid" style={{ width: '100%', minWidth: mainMinWidth, tableLayout: 'fixed' }}>
+      <Table
+        data-layout="grid"
+        containerClassName="rounded-md border bg-card"
+        style={{ width: '100%', minWidth: mainMinWidth, tableLayout: 'fixed' }}
+      >
           <colgroup>
             {main.map((column) => (
               <col
@@ -314,7 +317,7 @@ export function InteractiveGrid({
                   <TableHead
                     key={column.id}
                     className={cn(
-                      'relative overflow-visible',
+                      'overflow-visible',
                       numeric && 'numeric',
                       dragId === column.id && 'bg-primary/10',
                     )}
@@ -368,7 +371,10 @@ export function InteractiveGrid({
             </TableRow>
             {extra.length > 0 ? (
               <TableRow data-column-band="" className="hover:bg-transparent">
-                <TableHead colSpan={main.length} className="h-auto bg-[var(--band)] py-2 normal-case tracking-normal">
+                <TableHead
+                  colSpan={main.length}
+                  className="static top-auto z-auto h-auto bg-[var(--band)] py-2 normal-case tracking-normal shadow-none"
+                >
                   <ColumnBand>
                     {extra.map((column) => {
                       const numeric = isFigure(column.kind)
@@ -510,10 +516,9 @@ export function InteractiveGrid({
               })}
             </TableFooter>
           ) : null}
-        </Table>
-      </div>
+      </Table>
       {note ? <p className="mt-3 text-xs text-muted-foreground">{note}</p> : null}
-    </div>
+    </>
   )
 }
 

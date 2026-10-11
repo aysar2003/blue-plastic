@@ -93,7 +93,7 @@ export async function storeTrashFiles(ctx: OrgContext, auditLogId: string, files
     if (!sniffed) throw validation('Attach a PDF, JPEG, PNG, or WebP.')
 
     const storageKey = `${ctx.orgId}/${auditLogId}/${randomBytes(16).toString('hex')}.${sniffed.extension}`
-    const destination = path.join(/*turbopackIgnore: true*/ ROOT, storageKey)
+    const destination = absolutePath(storageKey)
     await mkdir(path.dirname(destination), { recursive: true })
     await writeFile(destination, bytes)
 
@@ -125,7 +125,7 @@ export async function readTrashFile(ctx: OrgContext, auditLogId: string, fileId:
     where: { id: fileId, auditLogId, orgId: ctx.orgId },
   })
   if (!file) throw notFound('File')
-  const bytes = await readFile(path.join(/*turbopackIgnore: true*/ ROOT, file.storageKey))
+  const bytes = await readFile(absolutePath(file.storageKey))
   return { file, bytes }
 }
 
@@ -136,7 +136,17 @@ export async function removeTrashFile(ctx: OrgContext, auditLogId: string, fileI
   })
   if (!file) throw notFound('File')
   await db.trashFile.delete({ where: { id: file.id } })
-  await unlink(path.join(/*turbopackIgnore: true*/ ROOT, file.storageKey)).catch(() => undefined)
+  await unlink(absolutePath(file.storageKey)).catch(() => undefined)
+}
+
+/** Refuse path traversal even if a storage key in the DB is ever corrupted. */
+function absolutePath(storageKey: string) {
+  const full = path.resolve(/*turbopackIgnore: true*/ ROOT, storageKey)
+  const relative = path.relative(/*turbopackIgnore: true*/ ROOT, full)
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw validation('That file could not be read.')
+  }
+  return full
 }
 
 function safeName(name: string) {

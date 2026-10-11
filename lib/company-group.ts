@@ -19,8 +19,8 @@ export function companyGroupKind(input: {
   return 'standalone'
 }
 
-export function companyGroupLabel(kind: CompanyGroupKind): string | null {
+export function companyGroupLabel(kind: CompanyGroupKind): string {
   if (kind === 'main') return 'Main'
   if (kind === 'sub') return 'Sub'
-  return null
+  return 'Solo'
 }

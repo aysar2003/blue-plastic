@@ -87,8 +87,18 @@ export async function readLedgerFile(ctx: OrgContext, id: string) {
     where: { id, orgId: ctx.orgId },
   })
   if (!file) throw notFound('File')
-  const bytes = await readFile(path.join(/*turbopackIgnore: true*/ ROOT, file.storageKey))
+  const bytes = await readFile(absolutePath(file.storageKey))
   return { file, bytes }
+}
+
+/** Refuse path traversal even if a storage key in the DB is ever corrupted. */
+function absolutePath(storageKey: string) {
+  const full = path.resolve(/*turbopackIgnore: true*/ ROOT, storageKey)
+  const relative = path.relative(/*turbopackIgnore: true*/ ROOT, full)
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw validation('That file could not be read.')
+  }
+  return full
 }
 
 export async function listForPurchase(ctx: OrgContext, purchaseDocumentId: string) {

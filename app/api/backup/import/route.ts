@@ -10,6 +10,12 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: Request) {
   try {
     const ctx = await requireOrgContext('org:update')
+    if (!ctx.isSystemOwner) {
+      return NextResponse.json(
+        { error: 'Only the system owner can import a company.' },
+        { status: 403 },
+      )
+    }
     const form = await request.formData()
     const files = form.getAll('files').filter((entry): entry is File => entry instanceof File)
     const keysRaw = form.get('keys')

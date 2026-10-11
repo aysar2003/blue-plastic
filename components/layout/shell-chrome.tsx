@@ -146,12 +146,11 @@ export function ShellChrome({
   const brandSubtitle = isHome ? PRODUCT_NAME : current.label
   const brandHref = isHome ? '/dashboard' : current.href
 
+  // clip (not hidden) cuts sideways overflow without becoming a scroll container.
+  // hidden would trap sticky column names in a box that grows with the page.
   return (
-    // overflow-x-hidden turns this into a scroll container, which stops sticky children
-    // from pinning to the window. POS needs the till's cart/payment panel to stick, so it
-    // clips instead (same visual result, no scroll container).
     <AppMemoryProvider userId={user.id}>
-    <div className={cn('app-surface relative flex min-h-svh', isPos ? 'overflow-x-clip' : 'overflow-x-hidden')}>
+    <div className="app-surface relative flex min-h-svh overflow-x-clip">
       <NavTrailRecorder />
       <NavigationProgress />
       {isPos ? null : <AppAtmosphere />}

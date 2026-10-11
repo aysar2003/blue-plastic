@@ -141,8 +141,7 @@ export default async function ProfitAndLossPage({
       </div>
 
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <StatementTable
+        <StatementTable
             sections={report.sections}
             currency={currency}
             drillTo={drill}
@@ -157,7 +156,6 @@ export default async function ProfitAndLossPage({
               otherExpense: [line('Net income', report.netIncome, comparedNet, true)],
             }}
           />
-        </div>
 
         <div className="border-t px-3 py-2.5 text-sm text-muted-foreground">
           {report.totalIncome.isZero() && !previous ? (

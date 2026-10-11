@@ -46,8 +46,7 @@ export default async function ExpensesByCategoryPage({
       />
 
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <RankedTable
+        <RankedTable
             sort={sort}
             basePath="/reports/expenses-by-category"
             linkParams={linkParams}
@@ -61,7 +60,6 @@ export default async function ExpensesByCategoryPage({
             }
             empty="No expenses were recorded in this period."
           />
-        </div>
       </Card>
     </>
   )

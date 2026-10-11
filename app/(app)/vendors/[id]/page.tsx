@@ -133,9 +133,9 @@ export default async function VendorPage({
             params={activityParams}
           />
         </div>
-        <div className="overflow-x-auto">
+        <div className="sticky top-0 z-20 max-h-dvh overflow-auto overscroll-contain">
           <div className="min-w-[40rem]">
-            <div className="band-head grid grid-cols-[7.5rem_6.5rem_7.5rem_minmax(0,1fr)_8rem] px-3 py-2 text-xs font-medium uppercase tracking-wide">
+            <div className="band-head sticky top-0 z-30 grid grid-cols-[7.5rem_6.5rem_7.5rem_minmax(0,1fr)_8rem] px-3 py-2 text-xs font-medium uppercase tracking-wide shadow-[0_1px_0_var(--border)]">
               <span>Type</span>
               <span>Num</span>
               <span>Date</span>

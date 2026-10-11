@@ -42,8 +42,7 @@ export default async function ProfitAndLossByCustomerPage({
         controls={{ mode: 'range', exportAs: 'sales-by-customer' }}
       />
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <RankedTable
+        <RankedTable
             sort={sort}
             basePath="/reports/profit-loss/by-customer"
             linkParams={{ ...settingsToQueryObject(settings), sort: sort.sort, dir: sort.dir }}
@@ -57,7 +56,6 @@ export default async function ProfitAndLossByCustomerPage({
             }
             empty="No sales were recorded in this period."
           />
-        </div>
       </Card>
     </>
   )

@@ -125,7 +125,7 @@ export default async function BankingPage({
         />
       ) : (
         <Card className="mb-6 overflow-hidden p-0" data-report-root data-template="standard">
-          <Table className="min-w-[56rem]" containerClassName="overflow-x-auto">
+          <Table className="min-w-[56rem]">
             <TableHeader>
               <TableRow className="ledger-head hover:bg-[var(--band)]">
                 <TableHead className="w-12 bg-[var(--band)] print:hidden" aria-label="Type" />

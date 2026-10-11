@@ -46,8 +46,7 @@ export default async function SalesByCustomerPage({
       />
 
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <RankedTable
+        <RankedTable
             sort={sort}
             basePath="/reports/sales-by-customer"
             linkParams={linkParams}
@@ -61,7 +60,6 @@ export default async function SalesByCustomerPage({
             }
             empty="No sales were recorded in this period."
           />
-        </div>
       </Card>
     </>
   )

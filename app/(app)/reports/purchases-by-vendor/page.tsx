@@ -46,8 +46,7 @@ export default async function PurchasesByVendorPage({
       />
 
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <RankedTable
+        <RankedTable
             sort={sort}
             basePath="/reports/purchases-by-vendor"
             linkParams={linkParams}
@@ -61,7 +60,6 @@ export default async function PurchasesByVendorPage({
             }
             empty="Nothing was bought in this period."
           />
-        </div>
       </Card>
     </>
   )

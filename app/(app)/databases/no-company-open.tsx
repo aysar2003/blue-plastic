@@ -99,6 +99,29 @@ function cardMeta(row: CompanyOpenRow) {
   return parts.join(' · ')
 }
 
+/** Bright mark — solid colours so Main / Sub / Solo stay readable on dark desks. */
+function groupMark(kind: CompanyGroupKind) {
+  if (kind === 'main') {
+    return {
+      stripe: 'border-l-[3px] border-l-teal-400',
+      badge: 'bg-teal-400/25 text-teal-300 ring-1 ring-inset ring-teal-400/50',
+      swatch: 'bg-teal-400',
+    }
+  }
+  if (kind === 'sub') {
+    return {
+      stripe: 'border-l-[3px] border-l-amber-400',
+      badge: 'bg-amber-400/25 text-amber-300 ring-1 ring-inset ring-amber-400/50',
+      swatch: 'bg-amber-400',
+    }
+  }
+  return {
+    stripe: 'border-l-[3px] border-l-sky-400',
+    badge: 'bg-sky-400/25 text-sky-300 ring-1 ring-inset ring-sky-400/50',
+    swatch: 'bg-sky-400',
+  }
+}
+
 /**
  * Databases home: every company on this system as a connectable card, plus a
  * map of how main and sub companies are linked.
@@ -133,6 +156,25 @@ export function NoCompanyOpen({
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
             Every company on this system. Connect opens its books. Staff never see this list.
           </p>
+          {databases.length > 0 ? (
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              {(['main', 'sub', 'standalone'] as const).map((kind) => {
+                const mark = groupMark(kind)
+                return (
+                  <span
+                    key={kind}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-wide',
+                      mark.badge,
+                    )}
+                  >
+                    <span className={cn('size-2 rounded-full', mark.swatch)} />
+                    {companyGroupLabel(kind)}
+                  </span>
+                )
+              })}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canCreate ? (
@@ -186,16 +228,19 @@ export function NoCompanyOpen({
             const canOpen = row.isCurrent || canConnect
             const selected = row.id === selectedId
             const group = companyGroupLabel(row.groupKind)
+            const mark = groupMark(row.groupKind)
 
             return (
               <li key={row.id}>
                 <article
                   className={cn(
-                    'relative flex h-full min-h-[8.5rem] flex-col rounded-lg border bg-card p-4 transition',
+                    'relative flex h-full min-h-[8.5rem] flex-col rounded-lg border bg-card p-4 pl-[1.05rem] transition',
                     row.isCurrent && 'border-primary/30 bg-muted/50',
                     selected && !row.isCurrent && 'ring-1 ring-border',
                     canOpen && 'cursor-pointer hover:border-primary/35 hover:bg-muted/30',
                     !canOpen && 'opacity-80',
+                    // Last so Main / Sub / Solo left colour is never overridden.
+                    mark.stripe,
                   )}
                   onClick={() => setSelectedId(row.id)}
                   onDoubleClick={() => {
@@ -244,14 +289,17 @@ export function NoCompanyOpen({
                       {row.name}
                     </h2>
                     <p className="mt-1 truncate text-xs text-muted-foreground">{cardMeta(row)}</p>
-                    {group ? (
-                      <p className="mt-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground">
-                        {group}
-                        {row.groupKind === 'main' && row.childCount > 0
-                          ? ` · ${row.childCount}`
-                          : null}
-                      </p>
-                    ) : null}
+                    <span
+                      className={cn(
+                        'mt-2 inline-flex items-center rounded-md px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide',
+                        mark.badge,
+                      )}
+                    >
+                      {group}
+                      {row.groupKind === 'main' && row.childCount > 0
+                        ? ` · ${row.childCount}`
+                        : null}
+                    </span>
                   </div>
 
                   {editList ? (
@@ -312,7 +360,7 @@ export function NoCompanyOpen({
               <div
                 key={root.id}
                 className={cn(
-                  'rounded-lg border bg-card px-4 py-3',
+                  'relative rounded-lg border border-l-[3px] border-l-teal-400 bg-card px-4 py-3 pl-[1.05rem]',
                   root.isCurrent || children.some((c) => c.isCurrent)
                     ? 'border-primary/25'
                     : null,
@@ -323,10 +371,10 @@ export function NoCompanyOpen({
                     <p className="truncate text-sm font-semibold uppercase tracking-wide">
                       {root.name}
                     </p>
-                    <p className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
+                    <span className="mt-1 inline-flex items-center rounded-md bg-teal-400/25 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-teal-300 ring-1 ring-inset ring-teal-400/50">
                       Main · {children.length} sub{children.length === 1 ? '' : 's'}
                       {root.isCurrent ? ' · Current' : ''}
-                    </p>
+                    </span>
                   </div>
                   {(root.isCurrent || canConnect) && !root.isCurrent ? (
                     <button
@@ -340,7 +388,7 @@ export function NoCompanyOpen({
                   ) : null}
                 </div>
                 {children.length > 0 ? (
-                  <ul className="mt-3 space-y-1.5 border-l-2 border-muted pl-3">
+                  <ul className="mt-3 space-y-1.5 border-l-[3px] border-l-amber-400 pl-3">
                     {children.map((child) => (
                       <li
                         key={child.id}
@@ -348,7 +396,7 @@ export function NoCompanyOpen({
                       >
                         <span className="min-w-0">
                           <span className="font-medium uppercase tracking-wide">{child.name}</span>
-                          <span className="ml-2 text-xs text-muted-foreground">
+                          <span className="ml-2 inline-flex items-center rounded-md bg-amber-400/25 px-1.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-300 ring-1 ring-inset ring-amber-400/50">
                             Sub · {child.baseCurrency}
                             {child.isCurrent ? ' · Current' : ''}
                           </span>
@@ -377,9 +425,9 @@ export function NoCompanyOpen({
             ))}
 
             {standalone.length > 0 ? (
-              <div className="rounded-lg border bg-card px-4 py-3 lg:col-span-2">
-                <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Standalone companies
+              <div className="relative rounded-lg border border-l-[3px] border-l-sky-400 bg-card px-4 py-3 pl-[1.05rem] lg:col-span-2">
+                <p className="inline-flex items-center rounded-md bg-sky-400/25 px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-wide text-sky-300 ring-1 ring-inset ring-sky-400/50">
+                  Solo companies
                 </p>
                 <ul className="mt-2 flex flex-wrap gap-2">
                   {standalone.map((row) => (
