@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { Landing } from '@/components/marketing/landing'
 import { withDatabasePage } from '@/lib/page-guard'
 import { auth } from '@/auth'
+import { getMarketingContact } from '@/server/services/marketing.service'
 import { needsSetup } from '@/server/services/setup.service'
 
 /**
@@ -18,7 +19,7 @@ export default async function RootPage() {
 
     // Signed in or not, `/` is the company's public front page — the session only
     // decides whether the header offers the books or the sign-in screen.
-    const session = await auth()
-    return <Landing signedIn={Boolean(session?.user)} />
+    const [session, contact] = await Promise.all([auth(), getMarketingContact()])
+    return <Landing signedIn={Boolean(session?.user)} contact={contact} />
   })
 }

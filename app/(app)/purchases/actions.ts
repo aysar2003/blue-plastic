@@ -25,7 +25,9 @@ function revalidatePurchases() {
   }
   revalidatePath('/bill-payments')
   revalidatePath('/vendors')
+  revalidatePath('/customers')
   revalidatePath('/reports/ap-aging')
+  revalidatePath('/reports/ar-aging')
   revalidatePath('/reports/trial-balance')
   revalidatePath('/accounts')
 }

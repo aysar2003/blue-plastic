@@ -63,22 +63,28 @@ export default async function PurchaseDocumentPage({
       <PageHeader
         className="print:hidden"
         title={`${config.singular} ${document.number}`}
-        description={document.vendor.displayName}
+        description={
+          document.offsetCustomer
+            ? `${document.offsetCustomer.displayName} (customer balance)`
+            : document.vendor.displayName
+        }
         actions={
           <>
             <DocumentActions
               paper={config.singular.toLowerCase()}
-              defaultTo={document.vendor.email ?? ''}
+              defaultTo={document.offsetCustomer?.email ?? document.vendor.email ?? ''}
               defaultSubject={`${config.singular} ${document.number} — ${ctx.organization.name}`}
               defaultBody={[
                 `${config.singular} ${document.number}`,
-                `Vendor: ${document.vendor.displayName}`,
+                document.offsetCustomer
+                  ? `Customer: ${document.offsetCustomer.displayName}`
+                  : `Vendor: ${document.vendor.displayName}`,
                 `Date: ${formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)}`,
                 `Total: ${formatMoney(document.total, currency)}`,
                 '',
                 `From ${ctx.organization.name}`,
               ].join('\n')}
-              whatsappPhone={document.vendor.phone}
+              whatsappPhone={document.offsetCustomer?.phone ?? document.vendor.phone}
             />
             {canReceive ? (
               <Link
@@ -153,8 +159,19 @@ export default async function PurchaseDocumentPage({
           entered, so the account it left is the most useful thing on the
           document after the total — and it was not shown anywhere.
         */}
-        {document.paymentAccount ? (
+        {document.offsetCustomer ? (
           <Detail label="Paid from">
+            <Link
+              href={`/customers/${document.offsetCustomer.id}`}
+              className="underline-offset-4 hover:underline"
+            >
+              {document.offsetCustomer.displayName}
+            </Link>
+            <span className="block text-xs text-muted-foreground">Customer balance</span>
+          </Detail>
+        ) : null}
+        {document.paymentAccount ? (
+          <Detail label={document.offsetCustomer ? 'Also paid from' : 'Paid from'}>
             <Link
               href={`/accounts/${document.paymentAccount.id}`}
               className="underline-offset-4 hover:underline"

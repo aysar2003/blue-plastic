@@ -9,6 +9,8 @@ import { cuid, deleteRecordSchema } from '@/lib/validation/common'
 import {
   applyCreditSchema,
   convertEstimateSchema,
+  convertSalesDocumentSchema,
+  convertSalesOrderSchema,
   paymentSchema,
   paymentUpdateSchema,
   salesDocumentSchema,
@@ -24,6 +26,7 @@ function revalidateSales() {
   revalidatePath('/sales/invoices')
   revalidatePath('/sales/estimates')
   revalidatePath('/sales/quotations')
+  revalidatePath('/sales/sales-orders')
   revalidatePath('/sales/sales-receipts')
   revalidatePath('/sales/credit-memos')
   revalidatePath('/payments')
@@ -37,6 +40,7 @@ const documentType = z.enum([
   'INVOICE',
   'ESTIMATE',
   'QUOTATION',
+  'SALES_ORDER',
   'SALES_RECEIPT',
   'CREDIT_MEMO',
   'REFUND_RECEIPT',
@@ -52,6 +56,11 @@ export const findSalesReceipts = action
   .requires('invoice:read')
   .input(receiptSearch)
   .handler((ctx, input) => salesService.findReceipts(ctx, input))
+
+export const getConvertibleSource = action
+  .requires('invoice:read')
+  .input(z.object({ id: cuid }))
+  .handler((ctx, input) => salesService.getConvertibleSource(ctx, input.id))
 
 export const createDocument = action
   .requires('invoice:create')
@@ -97,6 +106,36 @@ export const convertEstimate = action
     const invoice = await salesService.convertEstimate(ctx, input.id, input.date)
     revalidateSales()
     return invoice
+  })
+
+export const convertSalesDocument = action
+  .requires('invoice:create')
+  .input(convertSalesDocumentSchema)
+  .handler(async (ctx, input) => {
+    const document = await salesService.convertSalesDocument(
+      ctx,
+      input.id,
+      input.date,
+      input.target,
+      input.depositAccountId,
+    )
+    revalidateSales()
+    return document
+  })
+
+export const convertSalesOrder = action
+  .requires('invoice:create')
+  .input(convertSalesOrderSchema)
+  .handler(async (ctx, input) => {
+    const document = await salesService.convertSalesDocument(
+      ctx,
+      input.id,
+      input.date,
+      input.target,
+      input.depositAccountId,
+    )
+    revalidateSales()
+    return document
   })
 
 export const createPayment = action

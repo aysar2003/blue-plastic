@@ -6,6 +6,7 @@ import { positionsOf } from '@/server/accounting/inventory'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { selectableAccounts } from '@/server/services/account.service'
+import { subledgerBalances } from '@/server/services/contact.service'
 import { ITEM_GROUPS } from '@/server/services/sales-options'
 
 function mailingAddress(vendor: {
@@ -28,7 +29,7 @@ function mailingAddress(vendor: {
 
 /** Everything the bill form needs, in one round trip. */
 export async function loadPurchaseOptions(ctx: OrgContext) {
-  const [vendors, items, taxCodes, chart, terms] = await Promise.all([
+  const [vendors, customers, items, taxCodes, chart, terms] = await Promise.all([
     db.vendor.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: {
@@ -44,6 +45,11 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
         billingPostalCode: true,
         billingCountry: true,
       },
+      orderBy: { displayName: 'asc' },
+    }),
+    db.customer.findMany({
+      where: { orgId: ctx.orgId, isActive: true },
+      select: { id: true, displayName: true, email: true },
       orderBy: { displayName: 'asc' },
     }),
     // Tracked stock is the main thing a purchase document buys, so it has to be
@@ -74,7 +80,15 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
   ])
 
   const trackedIds = items.filter((item) => item.type === 'INVENTORY').map((item) => item.id)
-  const positions = await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
+  const [positions, customerBalances] = await Promise.all([
+    positionsOf(db as unknown as Tx, ctx.orgId, trackedIds),
+    subledgerBalances(
+      db,
+      ctx,
+      'customer',
+      customers.map((customer) => customer.id),
+    ),
+  ])
 
   return {
     vendors: vendors.map((vendor) => ({
@@ -85,6 +99,20 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
       mailingAddress: mailingAddress(vendor),
       defaultExpenseAccountId: vendor.defaultExpenseAccountId,
     })),
+    customers: customers.map((customer) => {
+      const balance = customerBalances.get(customer.id) ?? new Decimal(0)
+      return {
+        id: customer.id,
+        label: customer.displayName,
+        email: customer.email,
+        balance: balance.toFixed(4),
+        hint: balance.isZero()
+          ? 'No balance'
+          : balance.isPositive()
+            ? `Owes you ${balance.toFixed(2)}`
+            : `You owe ${balance.abs().toFixed(2)}`,
+      }
+    }),
     items: items.map((item) => ({
       id: item.id,
       label: item.sku ? `${item.sku} — ${item.name}` : item.name,

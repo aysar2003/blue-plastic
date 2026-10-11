@@ -3,6 +3,7 @@ export const ITEM_TABLE_STORAGE_KEY = 'bp-item-table-columns-v1'
 export const ITEM_FIXED_COLUMN_IDS = [
   'name',
   'sku',
+  'barcode',
   'category',
   'salesDescription',
   'type',
@@ -30,6 +31,7 @@ export type ItemColumnDef = {
 export const ITEM_COLUMN_LABELS: Record<ItemFixedColumnId, string> = {
   name: 'Item',
   sku: 'SKU',
+  barcode: 'Barcode',
   category: 'Category',
   salesDescription: 'Sales description',
   type: 'Type',
@@ -84,6 +86,7 @@ export function buildItemTableColumns(stores: { id: string; name: string }[]): I
   const afterStores: ItemFixedColumnId[] = ['price', 'stockValue', 'cost']
   const optional: ItemFixedColumnId[] = [
     'sku',
+    'barcode',
     'category',
     'salesDescription',
     'purchaseDescription',

@@ -35,6 +35,7 @@ const SALES_SLUG: Record<string, string> = {
   INVOICE: 'invoices',
   ESTIMATE: 'estimates',
   QUOTATION: 'quotations',
+  SALES_ORDER: 'sales-orders',
   SALES_RECEIPT: 'sales-receipts',
   CREDIT_MEMO: 'credit-memos',
   REFUND_RECEIPT: 'refunds',
@@ -77,6 +78,8 @@ export async function resolveSources(
   const depositIds = idsFor(['DEPOSIT'])
   const adjustmentIds = idsFor(['INVENTORY_ADJUSTMENT'])
   const openingIds = idsFor(['OPENING_BALANCE'])
+  const posCashMoveIds = idsFor(['POS_CASH_MOVE'])
+  const posSessionCloseIds = idsFor(['POS_SESSION_CLOSE'])
 
   const [
     salesDocuments,
@@ -90,6 +93,8 @@ export async function resolveSources(
     openingItems,
     openingCustomers,
     openingVendors,
+    posCashMoves,
+    posSessionCloses,
   ] = await Promise.all([
     salesIds.length
       ? db.salesDocument.findMany({
@@ -165,6 +170,22 @@ export async function resolveSources(
           select: { id: true, displayName: true },
         })
       : [],
+    posCashMoveIds.length
+      ? db.posCashMovement.findMany({
+          where: { orgId, id: { in: posCashMoveIds } },
+          select: {
+            id: true,
+            kind: true,
+            session: { select: { register: { select: { name: true } } } },
+          },
+        })
+      : [],
+    posSessionCloseIds.length
+      ? db.posSession.findMany({
+          where: { orgId, id: { in: posSessionCloseIds } },
+          select: { id: true, register: { select: { name: true } } },
+        })
+      : [],
   ])
 
   for (const document of salesDocuments) {
@@ -228,6 +249,24 @@ export async function resolveSources(
       number: adjustment.number,
       href: '/inventory#adjustments',
       partyName: null,
+      partyHref: null,
+    })
+  }
+
+  for (const move of posCashMoves) {
+    resolved.set(key('POS_CASH_MOVE', move.id), {
+      number: move.kind === 'IN' ? 'Cash in' : 'Cash out',
+      href: '/pos/sessions',
+      partyName: move.session.register.name,
+      partyHref: null,
+    })
+  }
+
+  for (const session of posSessionCloses) {
+    resolved.set(key('POS_SESSION_CLOSE', session.id), {
+      number: 'Close',
+      href: '/pos/sessions',
+      partyName: session.register.name,
       partyHref: null,
     })
   }

@@ -46,9 +46,10 @@ export async function makeOrg(tx: Tx, options: { fiscalYearStartMonth?: number }
     },
     select: {
       id: true, name: true, legalName: true, baseCurrency: true, fiscalYearStartMonth: true,
-      timeZone: true, allowNegativeStock: true,
+      timeZone: true, allowNegativeStock: true, posTillLedgerMode: true,
       addressLine1: true, addressLine2: true, city: true, region: true,
       postalCode: true, country: true, phone: true, email: true,
+      brandMark: true, logoStorageKey: true, updatedAt: true,
     },
   })
 
@@ -71,14 +72,21 @@ export async function makeOrg(tx: Tx, options: { fiscalYearStartMonth?: number }
   const accounts: Record<string, string> = {}
   for (const row of rows) accounts[row.code] = row.id
 
+  const { logoStorageKey, ...orgFields } = organization
+
   return {
     ctx: {
       orgId: organization.id,
       userId: user.id,
       role: 'OWNER',
       permissions: permissionsFor('OWNER'),
+      isSystemOwner: false,
+      canConnect: false,
       features: DEFAULT_FEATURE_FLAGS,
-      organization,
+      organization: {
+        ...orgFields,
+        hasLogo: Boolean(logoStorageKey),
+      },
       user,
     },
     accounts,

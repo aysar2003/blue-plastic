@@ -36,9 +36,16 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local tooling downloads (ffmpeg etc.)
+.tools/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
 # customer photos and agreement papers
 /uploads
+
+# local backup / seed scratch files
+.tmp*
+.tmp-*/

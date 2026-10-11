@@ -2,8 +2,10 @@
 
 import * as React from 'react'
 import { createPortal } from 'react-dom'
+import type { AccountType } from '@prisma/client'
 import { CheckIcon, ChevronDownIcon, PlusIcon } from 'lucide-react'
 
+import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { focusNextField } from '@/lib/keyboard'
 import { cn } from '@/lib/utils'
 
@@ -34,6 +36,8 @@ export type ComboboxOption = {
   hint?: string
   disabled?: boolean
   group?: string
+  /** Chart-of-accounts type mark, when the option is an account. */
+  accountType?: AccountType
 }
 
 export type ComboboxProps = {
@@ -181,7 +185,9 @@ export function Combobox({
 
   function close(refocus = true) {
     setOpen(false)
-    setQuery('')
+    // Keep typed text when nothing is chosen yet, so a second click does not
+    // wipe what they wrote. A chosen name resets to the label on the next open.
+    if (selected) setQuery('')
     if (refocus) {
       // Keep focus on this control after the list closes — never drop to <body>,
       // or the next Tab starts again at the top of the form.
@@ -262,7 +268,9 @@ export function Combobox({
 
   function openList() {
     if (disabled || open) return
-    setQuery('')
+    // Seed with the chosen name (or leave what they already typed). Never clear
+    // on focus — they delete characters themselves when they want a new search.
+    setQuery((current) => (current.trim() ? current : (selected?.label ?? '')))
     setOpen(true)
   }
 
@@ -321,7 +329,7 @@ export function Combobox({
       }
       event.preventDefault()
       setOpen(false)
-      setQuery('')
+      if (selected) setQuery('')
       queueMicrotask(() => {
         if (inputRef.current) focusNextField(inputRef.current, direction)
       })
@@ -356,6 +364,11 @@ export function Combobox({
           disabled && 'cursor-not-allowed opacity-50',
         )}
       >
+        {selected?.accountType && !open ? (
+          <span className="grid place-items-center pl-1.5">
+            <AccountTypeIcon type={selected.accountType} size="sm" />
+          </span>
+        ) : null}
         {/* Always an input — swapping to a button after pick drops focus and
             sends the next Tab back to the top of the form. */}
         <input
@@ -370,11 +383,14 @@ export function Combobox({
           disabled={disabled}
           autoComplete="off"
           title={selected && !open ? selected.label : undefined}
-          value={open ? query : (selected?.label ?? '')}
+          value={open || !selected ? query : selected.label}
           placeholder={placeholder}
           onChange={(event) => {
             if (!open) setOpen(true)
             setQuery(event.target.value)
+            // Typing over a chosen name starts a new search — clear the pick so
+            // the box shows what they type rather than snapping back to the label.
+            if (selected && event.target.value !== selected.label) onChange(null)
           }}
           onFocus={openList}
           onClick={openList}
@@ -477,6 +493,9 @@ export function Combobox({
                             option.value === value ? 'opacity-100' : 'opacity-0',
                           )}
                         />
+                        {option.accountType ? (
+                          <AccountTypeIcon type={option.accountType} size="sm" />
+                        ) : null}
                         <span className="min-w-0 flex-1 truncate">{option.label}</span>
                         {option.hint ? (
                           <span className="shrink-0 text-xs tabular text-muted-foreground">

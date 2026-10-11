@@ -471,7 +471,7 @@ export function JournalEntryForm({
             />
           </Field>
 
-          <p className="rounded-md bg-[#eef6f4] px-3 py-2 text-xs text-slate-600">
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
             To move money from <strong>Opening Balance Equity</strong> into{' '}
             <strong>Share Al Furaat</strong> (or any equity): debit Opening Balance Equity and credit
             the share account here. Bank Transfer only moves between bank and liability accounts —
@@ -653,7 +653,7 @@ export function JournalEntryForm({
 
       {listOpen ? (
         <Card className="overflow-hidden p-0 print:hidden">
-          <div className="flex flex-wrap items-center gap-3 border-b bg-[#f7f8f4] px-3 py-2">
+          <div className="flex flex-wrap items-center gap-3 border-b bg-muted/60 px-3 py-2">
             <p className="text-sm font-medium">List of journal entries</p>
             <select
               aria-label="Which entries"
@@ -668,7 +668,7 @@ export function JournalEntryForm({
           </div>
           <div className="max-h-56 overflow-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-[#dcecc8] text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+              <thead className="sticky top-0 bg-secondary text-[11px] font-semibold uppercase tracking-wide text-secondary-foreground">
                 <tr>
                   <th className="px-3 py-1.5 text-left">Date</th>
                   <th className="px-3 py-1.5 text-left">Entry no.</th>
@@ -779,7 +779,7 @@ function JournalFinder({ currency }: { currency: string }) {
             />
           </Field>
           <Field name="findDate" label="Date">
-            <Input id="findDate" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            <DateField id="findDate" value={date} onChange={setDate} />
           </Field>
           <Field name="findAmount" label="Amount">
             <Input

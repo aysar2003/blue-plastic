@@ -244,9 +244,27 @@ function readSplits(value: unknown): { code: string; name: string; amount: strin
   })
 }
 
+/** Self plus every descendant under `accountId` (breadth-first, capped). */
+async function accountFamilyIds(client: Tx | typeof db, orgId: string, accountId: string) {
+  const ids = [accountId]
+  let frontier = [accountId]
+  for (let depth = 0; depth < 8 && frontier.length > 0; depth += 1) {
+    const children = await client.ledgerAccount.findMany({
+      where: { orgId, parentId: { in: frontier } },
+      select: { id: true },
+    })
+    frontier = children.map((child) => child.id)
+    ids.push(...frontier)
+  }
+  return ids
+}
+
 /**
  * The general ledger for one account: every posted line, in date order, with a
  * running balance. This is the drill-down behind every figure on every report.
+ *
+ * When the account has sub-accounts (e.g. POS Banks → tills), lines on those
+ * children are included so the parent report rolls the family together.
  */
 export async function generalLedger(
   orgId: string,
@@ -263,12 +281,14 @@ export async function generalLedger(
     return { opening: ZERO, entries: [], closing: ZERO, type: 'ASSET' }
   }
 
+  const familyIds = await accountFamilyIds(client, orgId, accountId)
+
   const [openingRow] = await client.$queryRaw<{ debit: string; credit: string }[]>`
     SELECT COALESCE(SUM(l.debit), 0) AS debit, COALESCE(SUM(l.credit), 0) AS credit
       FROM journal_lines l
       JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
      WHERE l."orgId" = ${orgId}
-       AND l."accountId" = ${accountId}
+       AND l."accountId" = ANY(${familyIds})
        AND l."journalDate" < ${toDate(range.from)}
   `
 
@@ -346,7 +366,7 @@ export async function generalLedger(
       LEFT JOIN customers cu ON cu.id = l."customerId"
       LEFT JOIN vendors   ve ON ve.id = l."vendorId"
      WHERE l."orgId" = ${orgId}
-       AND l."accountId" = ${accountId}
+       AND l."accountId" = ANY(${familyIds})
        AND l."journalDate" >= ${toDate(range.from)}
        AND l."journalDate" <= ${toDate(range.to)}
      ORDER BY j.date ASC, j."journalNumber" ASC, l."lineNumber" ASC

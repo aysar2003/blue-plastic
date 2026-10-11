@@ -36,7 +36,7 @@ export default async function ProfitAndLossByMonthPage() {
   return (
     <>
       <PageHeader
-        className="print:hidden"
+        organization={ctx.organization}
         title="Profit and Loss by Month"
         description={`Accrual basis for ${year}. Each month is read from the ledger on its own.`}
         actions={

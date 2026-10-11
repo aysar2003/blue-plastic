@@ -143,6 +143,7 @@ export const itemSchema = z
   .object({
     id: optionalId,
     sku: optionalText(60),
+    barcode: optionalText(64),
     name: requiredText('Name', 160),
     description: optionalText(1000),
     type: z.enum(['SERVICE', 'NON_INVENTORY', 'INVENTORY']),

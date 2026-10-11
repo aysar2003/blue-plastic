@@ -37,7 +37,7 @@ export const PURCHASE_TYPES: PurchaseTypeConfig[] = [
     singular: 'Expense',
     plural: 'Expenses',
     effect:
-      'A purchase receipt: bought and paid at once. The money leaves the account you name, the cost is recognised, and any tracked stock on it is received — it never becomes a payable, so it is settled the moment it is entered.',
+      'A purchase receipt: bought and paid at once — from a bank account, or by deducting a customer balance (buy items from their shop / settle a cost they charged you). The cost is recognised, tracked stock is received, and it never becomes a payable.',
     needsPaymentAccount: true,
     posts: true,
   },

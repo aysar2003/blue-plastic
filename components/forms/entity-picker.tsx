@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import type { AccountType } from '@prisma/client'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -19,7 +20,14 @@ const ItemDialog = React.lazy(() =>
   import('@/components/master-data/item-dialog').then((m) => ({ default: m.ItemDialog })),
 )
 
-export type PickerOption = { id: string; label: string; hint?: string; group?: string }
+export type PickerOption = {
+  id: string
+  label: string
+  hint?: string
+  group?: string
+  /** When the option is a ledger account, show its statement-type mark. */
+  accountType?: AccountType
+}
 
 export type CreatableKind = 'customer' | 'vendor' | 'item'
 
@@ -106,6 +114,7 @@ export function EntityPicker({
           label: option.label,
           hint: option.hint,
           group: option.group,
+          accountType: option.accountType,
         })),
     [options, extra],
   )

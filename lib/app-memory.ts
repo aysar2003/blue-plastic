@@ -37,9 +37,20 @@ export function memoryKey(userId: string) {
   return `${APP_MEMORY_PREFIX}${userId}`
 }
 
-function samePathOrBelow(pathname: string, prefix: string) {
-  return pathname === prefix || pathname.startsWith(`${prefix}/`)
+function pathOnly(href: string) {
+  return href.split(/[?#]/)[0] || '/'
 }
+
+function samePathOrBelow(pathname: string, prefix: string) {
+  const base = pathOnly(prefix)
+  return pathname === base || pathname.startsWith(`${base}/`)
+}
+
+/**
+ * These apps reopen on their own screens. A journal line inside a month can be a
+ * bill, and remembering that bill would make "open Periods" land in Purchases.
+ */
+const STAY_INSIDE = new Set(['periods'])
 
 /** The app whose own path this is, by longest prefix. Home is not an app. */
 export function appForPath(pathname: string, roots: AppRoot[]): string | null {
@@ -168,8 +179,11 @@ export function doorHref(input: {
   const { memory, key, root, currentHref, now } = input
   const place = memory[key]
   if (!place || now - place.at > PLACE_TTL_MS) return root
+  const stayInside = STAY_INSIDE.has(key)
   for (const candidate of [place.href, place.home]) {
-    if (candidate && isSafeHref(candidate) && candidate !== currentHref) return candidate
+    if (!candidate || !isSafeHref(candidate) || candidate === currentHref) continue
+    if (stayInside && !samePathOrBelow(pathOnly(candidate), root)) continue
+    return candidate
   }
   return root
 }

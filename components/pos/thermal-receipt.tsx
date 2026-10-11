@@ -269,7 +269,9 @@ export function ThermalReceipt({
         <div className="text-center">
           <p style={{ fontWeight: 700 }}>Mahadsanid!</p>
           <p>Thank you for shopping with us</p>
-          {creatorBrand ? <p style={{ fontSize: '0.8em', marginTop: '0.5em' }}>System: {creatorBrand}</p> : null}
+          {creatorBrand ? (
+            <p style={{ fontSize: '0.8em', marginTop: '0.5em' }}>Developed by {creatorBrand}</p>
+          ) : null}
         </div>
       </div>
     </div>

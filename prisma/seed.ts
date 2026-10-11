@@ -25,6 +25,7 @@ const DEFAULT_PREFIX: Record<DocumentType, string> = {
   INVOICE: 'INV-',
   ESTIMATE: 'EST-',
   QUOTATION: 'QUO-',
+  SALES_ORDER: 'SO-',
   SALES_RECEIPT: 'SR-',
   CREDIT_MEMO: 'CM-',
   CUSTOMER_PAYMENT: 'PMT-',
@@ -83,7 +84,14 @@ async function main() {
     })
 
     const user = await tx.user.create({
-      data: { email: ownerEmail, name: ownerName, passwordHash, emailVerified: new Date() },
+      data: {
+        email: ownerEmail,
+        name: ownerName,
+        passwordHash,
+        emailVerified: new Date(),
+        isSystemOwner: true,
+        homeOrgId: organization.id,
+      },
       select: { id: true, email: true },
     })
 

@@ -9,11 +9,12 @@ import { requireOrgContext } from '@/server/auth/context'
 export const metadata: Metadata = { title: 'Performance centre' }
 
 export default async function PerformanceReportsPage() {
-  await requireOrgContext('report:read')
+  const ctx = await requireOrgContext('report:read')
   return (
     <>
       <ReportCentreTabs active="performance" />
       <PageHeader
+        organization={ctx.organization}
         title="Performance centre"
         description="Who did the work, and which customers, vendors, and products moved the numbers."
       />

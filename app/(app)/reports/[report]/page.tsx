@@ -50,6 +50,7 @@ export default async function TableReportPage({
   return (
     <>
       <PageHeader
+        organization={ctx.organization}
         title={definition.title}
         description={
           definition.mode === 'asOf'

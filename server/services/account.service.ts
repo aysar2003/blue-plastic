@@ -2,8 +2,10 @@ import 'server-only'
 import type { AccountType, Prisma } from '@prisma/client'
 
 import type { AccountChoice } from '@/lib/account-options'
-import { Decimal, toMoneyString } from '@/lib/money'
+import { Decimal, ZERO, toMoneyString } from '@/lib/money'
 import { today } from '@/lib/date'
+import { linkColonParents } from '@/lib/chart-tree'
+import { rollupParentBalances } from '@/lib/pos-till-ledger'
 import type { AccountCreateInput, AccountUpdateInput } from '@/lib/validation/accounting'
 import { balancesAsOf } from '@/server/accounting/balances'
 import { seedChartOfAccounts, systemAccountId } from '@/server/accounting/chart-of-accounts'
@@ -65,13 +67,16 @@ export async function list(
   })
 
   const balances = await balancesAsOf(ctx.orgId, today(ctx.organization.timeZone))
+  // Imported QBO charts often use "Parent:Child" names without parentId — link
+  // them for nesting on the chart (display only; the row is not written back).
+  const linked = linkColonParents(accounts)
   const childCount = new Map<string, number>()
-  for (const account of accounts) {
+  for (const account of linked) {
     if (account.parentId) childCount.set(account.parentId, (childCount.get(account.parentId) ?? 0) + 1)
   }
 
-  const byId = new Map(accounts.map((account) => [account.id, account]))
-  const depthOf = (account: (typeof accounts)[number]): number => {
+  const byId = new Map(linked.map((account) => [account.id, account]))
+  const depthOf = (account: (typeof linked)[number]): number => {
     let depth = 0
     let current = account.parentId
     while (current && depth < 8) {
@@ -81,9 +86,15 @@ export async function list(
     return depth
   }
 
-  return accounts.map((account) => ({
+  const withBalances = linked.map((account) => ({
     ...account,
-    balance: toMoneyString(balances.get(account.id)?.natural ?? 0, 2),
+    balance: new Decimal(balances.get(account.id)?.natural ?? 0),
+  }))
+  const rolled = rollupParentBalances(withBalances)
+
+  return withBalances.map((account) => ({
+    ...account,
+    balance: toMoneyString(rolled.get(account.id) ?? account.balance ?? ZERO, 2),
     hasChildren: (childCount.get(account.id) ?? 0) > 0,
     depth: depthOf(account),
   }))

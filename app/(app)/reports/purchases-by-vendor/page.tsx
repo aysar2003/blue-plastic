@@ -30,6 +30,7 @@ export default async function PurchasesByVendorPage({
   return (
     <>
       <PageHeader
+        organization={ctx.organization}
         title="Purchases by Vendor Summary"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · net of tax`}
       />

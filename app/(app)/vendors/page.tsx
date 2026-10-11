@@ -61,6 +61,7 @@ export default async function VendorsPage({
   const bandValue = typeof params.band === 'string' ? params.band : undefined
   const band = isVendorBandKey(bandValue) ? bandValue : undefined
   const requestedId = typeof params.id === 'string' ? params.id : undefined
+  const openEdit = params.edit === '1' || (typeof params.edit === 'string' && params.edit === requestedId)
   const tabValue = typeof params.tab === 'string' ? params.tab : undefined
   const tab: CenterTab = isTab(tabValue) ? tabValue : 'transactions'
   const asOf = today(ctx.organization.timeZone)
@@ -112,6 +113,7 @@ export default async function VendorsPage({
   const canReport = ctx.permissions.has('report:read')
   const canEdit = ctx.permissions.has('vendor:update')
   const canArchive = ctx.permissions.has('vendor:archive')
+  const canDelete = ctx.permissions.has('vendor:delete') && ctx.features.allowVendorDelete
   const termOptions = terms.map((term) => ({ id: term.id, label: `${term.name} — ${describeTerm(term)}` }))
   const expenseOptions = accountOptions(accounts, {
     prefer: ['OPERATING_EXPENSE', 'COST_OF_GOODS_SOLD', 'OTHER_EXPENSE'],
@@ -283,7 +285,7 @@ export default async function VendorsPage({
       title="Vendor information"
       moneyBar={
         <ContactMoneyBar
-          storageKey="bp-vendor-money-bar"
+          storageKey="bp-vendor-money-bar-v2"
           currency={currency}
           active={band}
           bands={[
@@ -322,6 +324,9 @@ export default async function VendorsPage({
       people={page.rows.map((row) => ({
         id: row.id,
         name: row.displayName,
+        company: row.companyName,
+        phone: row.phone,
+        email: row.email,
         balance: row.balance,
         active: row.isActive,
       }))}
@@ -384,8 +389,10 @@ export default async function VendorsPage({
             canReport={canReport}
             canEdit={canEdit}
             canArchive={canArchive}
-            canDelete={canArchive && ctx.features.allowContactDelete}
+            canDelete={canDelete}
             isActive={vendor.isActive}
+            startEditing={canEdit && openEdit}
+            clearEditHref={openEdit ? vendorHref(vendor.id) : undefined}
           />
         ) : null
       }
@@ -402,6 +409,7 @@ export default async function VendorsPage({
       canPay={canPay}
       canReport={canReport}
       canArchive={canArchive}
+      canEdit={canEdit}
     />
   )
 }

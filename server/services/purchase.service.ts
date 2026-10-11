@@ -39,9 +39,10 @@ const DOCUMENT_SELECT = {
   id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true,
   status: true, reference: true, memo: true,
   subtotal: true, taxTotal: true, total: true,
-  currencyCode: true, paymentAccountId: true, journalId: true, version: true,
+  currencyCode: true, paymentAccountId: true, offsetCustomerId: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
   vendor: { select: { id: true, displayName: true, email: true, phone: true } },
+  offsetCustomer: { select: { id: true, displayName: true, email: true, phone: true } },
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
   paymentAccount: { select: { id: true, code: true, name: true } },
   convertedTo: { select: { id: true, number: true, type: true } },
@@ -409,12 +410,13 @@ async function createWithin(
   meta: Awaited<ReturnType<typeof requestMeta>>,
 ) {
   {
-    const vendor = await requireVendor(tx, ctx, input.vendorId)
+    const { vendor, offsetCustomerId } = await resolvePurchaseParty(tx, ctx, type, input)
     const lines = await resolveLines(tx, ctx, input.lines, vendor.defaultExpenseAccountId)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency)
 
-    if (priced.total.isZero() && type !== 'PURCHASE_ORDER') {
+    const isDraft = input.saveAsDraft === true
+    if (priced.total.isZero() && !isDraft && type !== 'PURCHASE_ORDER') {
       throw validation('A document with no value has nothing to record.')
     }
 
@@ -425,12 +427,9 @@ async function createWithin(
         })
       : vendor.paymentTerm
 
-    const isDraft = input.saveAsDraft === true
-
-    // An expense is paid at once, so it has to say from where — checked before
-    // anything is written rather than by the journal builder throwing later.
+    // An expense is paid at once — from a money account, or against a customer.
     if (type === 'EXPENSE' && !isDraft) {
-      await requirePaymentAccount(tx, ctx, input.paymentAccountId)
+      await requireExpenseSettlement(tx, ctx, input.paymentAccountId, offsetCustomerId)
     }
 
     const number = await assignDocumentNumber(tx, ctx.orgId, SEQUENCE_FOR[type], input.number)
@@ -459,6 +458,7 @@ async function createWithin(
         total: priced.total.toFixed(4),
         currencyCode: ctx.organization.baseCurrency,
         paymentAccountId: input.paymentAccountId ?? null,
+        offsetCustomerId,
         createdById: ctx.userId,
         lines: {
           create: priced.lines.map((line) => ({
@@ -523,11 +523,12 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
       )
     }
 
+    const { vendor, offsetCustomerId } = await resolvePurchaseParty(tx, ctx, existing.type, input)
+
     if (existing.type === 'EXPENSE' && !input.saveAsDraft) {
-      await requirePaymentAccount(tx, ctx, input.paymentAccountId)
+      await requireExpenseSettlement(tx, ctx, input.paymentAccountId, offsetCustomerId)
     }
 
-    const vendor = await requireVendor(tx, ctx, input.vendorId)
     const lines = await resolveLines(tx, ctx, input.lines, vendor.defaultExpenseAccountId)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency)
@@ -581,6 +582,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
         taxTotal: priced.taxTotal.toFixed(4),
         total: priced.total.toFixed(4),
         paymentAccountId: input.paymentAccountId ?? null,
+        offsetCustomerId,
         journalId: null,
         version: { increment: 1 },
         status: input.saveAsDraft ? 'DRAFT' : 'OPEN',
@@ -631,7 +633,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     where: { id, orgId: ctx.orgId },
     select: {
       id: true, type: true, number: true, date: true, memo: true, vendorId: true,
-      paymentAccountId: true, journalId: true,
+      paymentAccountId: true, offsetCustomerId: true, journalId: true,
       lines: {
         orderBy: { lineNumber: 'asc' },
         select: {
@@ -677,6 +679,10 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     priced,
     payableAccountId: await systemAccountId(tx, ctx.orgId, 'ACCOUNTS_PAYABLE'),
     paymentAccountId: document.paymentAccountId,
+    offsetCustomerId: document.offsetCustomerId,
+    receivableAccountId: document.offsetCustomerId
+      ? await systemAccountId(tx, ctx.orgId, 'ACCOUNTS_RECEIVABLE')
+      : null,
     fallbackExpenseAccountId: await systemAccountId(tx, ctx.orgId, 'UNCATEGORISED_EXPENSE'),
     memo: document.memo,
   }
@@ -1243,12 +1249,10 @@ async function appliedTotal(tx: Tx, documentId: string): Promise<Decimal> {
 /**
  * The account an expense was paid from.
  *
- * Required, because an expense that does not say where the money came from
- * cannot be posted — and the failure used to surface as a bare `Error` from the
- * journal builder, with no field to point at. Any balance-sheet account is
- * allowed: a business pays for things out of petty cash and director's loans as
- * well as out of the bank. Income and expense accounts are refused, since money
- * cannot leave one.
+ * Required when the expense is not settled on a customer balance. Any
+ * balance-sheet account is allowed: a business pays for things out of petty
+ * cash and director's loans as well as out of the bank. Income and expense
+ * accounts are refused, since money cannot leave one.
  */
 async function requirePaymentAccount(tx: Tx, ctx: OrgContext, accountId: string | null | undefined) {
   if (!accountId) {
@@ -1279,6 +1283,19 @@ async function requirePaymentAccount(tx: Tx, ctx: OrgContext, accountId: string 
   return account
 }
 
+async function requireExpenseSettlement(
+  tx: Tx,
+  ctx: OrgContext,
+  paymentAccountId: string | null | undefined,
+  offsetCustomerId: string | null,
+) {
+  if (offsetCustomerId) {
+    if (paymentAccountId) await requirePaymentAccount(tx, ctx, paymentAccountId)
+    return
+  }
+  await requirePaymentAccount(tx, ctx, paymentAccountId)
+}
+
 async function requireVendor(tx: Tx, ctx: OrgContext, vendorId: string) {
   const vendor = await tx.vendor.findFirst({
     where: { id: vendorId, orgId: ctx.orgId },
@@ -1295,6 +1312,125 @@ async function requireVendor(tx: Tx, ctx: OrgContext, vendorId: string) {
     throw precondition(`${vendor.displayName} is archived. Restore them before entering a bill.`)
   }
   return vendor
+}
+
+async function requireCustomer(tx: Tx, ctx: OrgContext, customerId: string) {
+  const customer = await tx.customer.findFirst({
+    where: { id: customerId, orgId: ctx.orgId },
+    select: {
+      id: true,
+      isActive: true,
+      displayName: true,
+      companyName: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      mobile: true,
+      taxRegistrationNumber: true,
+      billingLine1: true,
+      billingLine2: true,
+      billingCity: true,
+      billingRegion: true,
+      billingPostalCode: true,
+      billingCountry: true,
+      paymentTermId: true,
+    },
+  })
+  if (!customer) throw notFound('Customer')
+  if (!customer.isActive) {
+    throw precondition(`${customer.displayName} is archived. Restore them before settling an expense.`)
+  }
+  return customer
+}
+
+/**
+ * Who the purchase is with.
+ *
+ * Bills and orders need a vendor. An expense settled on a customer balance may
+ * omit the vendor: a matching vendor row is found or created from that customer
+ * so lists and printouts still have a name, while the journal credits AR.
+ */
+async function resolvePurchaseParty(
+  tx: Tx,
+  ctx: OrgContext,
+  type: PurchaseDocumentType,
+  input: PurchaseDocumentInput,
+) {
+  const offsetCustomerId =
+    type === 'EXPENSE' && input.offsetCustomerId ? input.offsetCustomerId : null
+
+  if (offsetCustomerId) {
+    await requireCustomer(tx, ctx, offsetCustomerId)
+    if (input.vendorId) {
+      return { vendor: await requireVendor(tx, ctx, input.vendorId), offsetCustomerId }
+    }
+    return {
+      vendor: await ensureVendorForCustomer(tx, ctx, offsetCustomerId),
+      offsetCustomerId,
+    }
+  }
+
+  if (!input.vendorId) {
+    throw validation('Choose a vendor.', { vendorId: ['Choose a vendor'] })
+  }
+  return { vendor: await requireVendor(tx, ctx, input.vendorId), offsetCustomerId: null }
+}
+
+/**
+ * Reuse a vendor with the same display name as the customer, or create one.
+ * Keeps the purchase document's required vendor link without forcing a second
+ * contact to be typed when buying from a customer's shop.
+ */
+async function ensureVendorForCustomer(tx: Tx, ctx: OrgContext, customerId: string) {
+  const customer = await requireCustomer(tx, ctx, customerId)
+
+  const existing = await tx.vendor.findFirst({
+    where: { orgId: ctx.orgId, displayName: customer.displayName },
+    select: {
+      id: true,
+      isActive: true,
+      displayName: true,
+      defaultExpenseAccountId: true,
+      paymentTerm: { select: { id: true, type: true, dueDays: true } },
+    },
+  })
+  if (existing) {
+    if (!existing.isActive) {
+      throw precondition(
+        `${existing.displayName} exists as an archived vendor. Restore the vendor before settling against this customer.`,
+      )
+    }
+    return existing
+  }
+
+  return tx.vendor.create({
+    data: {
+      orgId: ctx.orgId,
+      displayName: customer.displayName,
+      companyName: customer.companyName,
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      email: customer.email,
+      phone: customer.phone,
+      mobile: customer.mobile,
+      taxRegistrationNumber: customer.taxRegistrationNumber,
+      billingLine1: customer.billingLine1,
+      billingLine2: customer.billingLine2,
+      billingCity: customer.billingCity,
+      billingRegion: customer.billingRegion,
+      billingPostalCode: customer.billingPostalCode,
+      billingCountry: customer.billingCountry,
+      paymentTermId: customer.paymentTermId,
+    },
+    select: {
+      id: true,
+      isActive: true,
+      displayName: true,
+      defaultExpenseAccountId: true,
+      paymentTerm: { select: { id: true, type: true, dueDays: true } },
+    },
+  })
 }
 
 /**

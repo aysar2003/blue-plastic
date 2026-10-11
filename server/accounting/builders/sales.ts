@@ -342,7 +342,8 @@ export const POSTS_A_JOURNAL: Record<SalesDocumentType, boolean> = {
   SALES_RECEIPT: true,
   CREDIT_MEMO: true,
   REFUND_RECEIPT: true,
-  /// Proposals — nothing has happened yet, so nothing is posted.
+  /// Proposals and orders — nothing has been collected yet, so nothing is posted.
   ESTIMATE: false,
   QUOTATION: false,
+  SALES_ORDER: false,
 }

@@ -30,6 +30,7 @@ export default async function ExpensesByCategoryPage({
   return (
     <>
       <PageHeader
+        organization={ctx.organization}
         title="Expenses by Account"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · from the ledger, however it was entered`}
       />

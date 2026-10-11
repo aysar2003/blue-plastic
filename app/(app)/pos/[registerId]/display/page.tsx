@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 
 import { ODOO } from '@/lib/odoo-brand'
+import { PRODUCT_NAME } from '@/lib/product-brand'
 
 type DisplayState = {
   orgName: string
@@ -49,7 +50,7 @@ export default function PosCustomerDisplayPage() {
           </div>
           <p className="mt-4 text-lg font-semibold">{state.orgName}</p>
         </div>
-        <p className="rounded-full bg-[#2c2c2c] px-4 py-1.5 text-xs text-white/80">Powered by Blue Plastic</p>
+        <p className="rounded-full bg-[#2c2c2c] px-4 py-1.5 text-xs text-white/80">Powered by {PRODUCT_NAME}</p>
       </aside>
       <main className="flex flex-1 flex-col p-8">
         {empty ? (

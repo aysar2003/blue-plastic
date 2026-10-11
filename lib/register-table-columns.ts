@@ -42,7 +42,7 @@ export type RegisterColumnPrefs = {
 }
 
 export function storageKeyForRegister(accountId: string) {
-  return `bp-register-columns-v1-${accountId}`
+  return `bp-register-columns-v2-${accountId}`
 }
 
 export function splitColumnId(code: string): RegisterColumnId {
@@ -76,9 +76,13 @@ export function buildRegisterColumns(
 }
 
 export function defaultRegisterPrefs(allIds: RegisterColumnId[]): RegisterColumnPrefs {
+  // Per-account split columns drop into a band under every row and look like
+  // misaligned Debit/Credit. Keep Contra on the main line (truncated); splits
+  // stay available under Customize.
+  const hidden = allIds.filter((id) => id.startsWith('split:'))
   return {
     order: [...allIds],
-    hidden: [],
+    hidden,
   }
 }
 

@@ -2,15 +2,16 @@
 
 import { Fragment, useMemo, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
+import type { AccountType } from '@prisma/client'
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon, GripVerticalIcon } from 'lucide-react'
 
+import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { ColumnBand } from '@/components/data/column-band'
 import { TableColumnCustomize } from '@/components/data/table-column-customize'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate, formatDateTime, isCalendarDate } from '@/lib/date'
 import {
-  columnShareWeights,
   columnsForViewport,
   compareSortValues,
   defaultColumnWidth,
@@ -22,6 +23,7 @@ import {
   type GridSort,
 } from '@/lib/interactive-grid'
 import { formatMoney, formatSignedQuantity } from '@/lib/money'
+import { REPORT_DRILL_LINK } from '@/lib/report-drill'
 import { cn } from '@/lib/utils'
 
 export type InteractiveColumn = {
@@ -39,6 +41,8 @@ export type InteractiveCell = {
   value: string | null
   href?: string | null
   badge?: string | null
+  /** Chart-of-accounts type mark shown before the text. */
+  accountType?: AccountType
   /** Used instead of `value` when the column should sort on something else. */
   sort?: string | null
 }
@@ -59,7 +63,7 @@ export type InteractiveFooter = {
   cells: Record<string, InteractiveCell | null | undefined>
 }
 
-const LINK = 'underline-offset-4 hover:underline'
+const LINK = REPORT_DRILL_LINK
 
 const layoutListeners = new Set<() => void>()
 const layoutCache = new Map<string, string>()
@@ -270,8 +274,10 @@ export function InteractiveGrid({
   const placed = columnsForViewport(visible, preferred)
   const main = placed.main.length > 0 ? placed.main : visible
   const extra = placed.main.length > 0 ? placed.extra : []
-  const weights = columnShareWeights(main, preferred)
-  const weightSum = weights.reduce((sum, weight) => sum + weight, 0) || 1
+  const mainMinWidth = main.reduce(
+    (sum, column) => sum + (preferred[column.id] ?? column.defaultWidth ?? defaultColumnWidth(column.kind)),
+    0,
+  )
 
   return (
     <div>
@@ -286,11 +292,16 @@ export function InteractiveGrid({
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-md border bg-card">
-        <Table style={{ width: '100%', tableLayout: 'fixed' }}>
+      <div className="overflow-x-auto rounded-md border bg-card">
+        <Table data-layout="grid" style={{ width: '100%', minWidth: mainMinWidth, tableLayout: 'fixed' }}>
           <colgroup>
-            {main.map((column, index) => (
-              <col key={column.id} style={{ width: `${((weights[index] ?? 1) / weightSum) * 100}%` }} />
+            {main.map((column) => (
+              <col
+                key={column.id}
+                style={{
+                  width: preferred[column.id] ?? column.defaultWidth ?? defaultColumnWidth(column.kind),
+                }}
+              />
             ))}
           </colgroup>
           <TableHeader>
@@ -302,7 +313,11 @@ export function InteractiveGrid({
                 return (
                   <TableHead
                     key={column.id}
-                    className={cn('relative', numeric && 'numeric', dragId === column.id && 'bg-primary/10')}
+                    className={cn(
+                      'relative overflow-visible',
+                      numeric && 'numeric',
+                      dragId === column.id && 'bg-primary/10',
+                    )}
                     aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => {
@@ -321,7 +336,7 @@ export function InteractiveGrid({
                           setDragId(column.id)
                         }}
                         onDragEnd={() => setDragId(null)}
-                        className="print:hidden inline-flex shrink-0 cursor-grab text-foreground/55 active:cursor-grabbing"
+                        className="print:hidden inline-flex shrink-0 cursor-grab text-inherit opacity-55 active:cursor-grabbing"
                         aria-label={`Drag to move ${column.label}`}
                         title="Drag to move this column"
                       >
@@ -331,9 +346,9 @@ export function InteractiveGrid({
                         type="button"
                         onClick={() => toggleSort(column)}
                         className={cn(
-                          'inline-flex min-w-0 flex-1 items-start gap-1 rounded-sm text-left transition-colors hover:text-foreground',
+                          'inline-flex min-w-0 flex-1 items-start gap-1 rounded-sm text-left text-inherit transition-opacity hover:opacity-100',
                           numeric && 'flex-row-reverse text-right',
-                          active ? 'text-foreground' : 'text-foreground/80',
+                          active ? 'opacity-100' : 'opacity-80',
                         )}
                       >
                         <span className="min-w-0 flex-1 whitespace-normal break-words leading-tight">{column.label}</span>
@@ -365,9 +380,9 @@ export function InteractiveGrid({
                             type="button"
                             onClick={() => toggleSort(column)}
                             className={cn(
-                              'flex w-full min-w-0 items-start gap-1 text-[0.65rem] font-semibold uppercase leading-tight tracking-wide',
+                              'flex w-full min-w-0 items-start gap-1 text-[0.65rem] font-semibold uppercase leading-tight tracking-wide text-inherit',
                               numeric && 'flex-row-reverse text-right',
-                              active ? 'text-foreground' : 'text-foreground/80',
+                              active ? 'opacity-100' : 'opacity-80',
                             )}
                           >
                             <span className="min-w-0 flex-1 whitespace-normal break-words">{column.label}</span>
@@ -412,10 +427,19 @@ export function InteractiveGrid({
                             data-split-account={column.id.startsWith('split:') ? column.label : undefined}
                             className={cn(
                               'min-w-0 break-words text-[0.8125rem]',
-                              isFigure(column.kind) && 'text-right tabular',
+                              isFigure(column.kind) && 'tabular',
                             )}
                           >
-                            {text}
+                            {column.id.startsWith('split:') || isFigure(column.kind) ? (
+                              <div className="flex min-w-0 items-baseline justify-between gap-2">
+                                <span className="min-w-0 truncate text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                                  {column.label}
+                                </span>
+                                <span className="shrink-0 tabular">{text}</span>
+                              </div>
+                            ) : (
+                              text
+                            )}
                           </div>
                         ))}
                       </ColumnBand>
@@ -520,29 +544,30 @@ function GridCellView({
   )
   if (!text) {
     return (
-      <TableCell className={className}>
+      <TableCell className={cn('max-w-0 overflow-hidden', className)}>
         {numeric ? '' : <span className="text-muted-foreground">—</span>}
       </TableCell>
     )
   }
   const body = (
     <>
-      {text}
+      {cell?.accountType ? <AccountTypeIcon type={cell.accountType} size="sm" /> : null}
+      <span className="min-w-0 truncate">{text}</span>
       {cell?.badge ? (
-        <Badge variant="outline" className="ml-1.5">
+        <Badge variant="outline" className="ml-1.5 shrink-0">
           {cell.badge}
         </Badge>
       ) : null}
     </>
   )
   return (
-    <TableCell className={className} title={text}>
+    <TableCell className={cn('max-w-0 overflow-hidden', className)} title={text}>
       {cell?.href ? (
-        <Link href={cell.href} className={cn(LINK, 'inline-flex max-w-full items-center')}>
-          <span className="min-w-0">{body}</span>
+        <Link href={cell.href} className={cn(LINK, 'inline-flex max-w-full min-w-0 items-center gap-1.5')}>
+          {body}
         </Link>
       ) : (
-        body
+        <span className="inline-flex max-w-full min-w-0 items-center gap-1.5">{body}</span>
       )}
     </TableCell>
   )

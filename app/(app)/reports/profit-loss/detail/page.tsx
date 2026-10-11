@@ -155,6 +155,7 @@ export default async function ProfitAndLossDetailPage({
   return (
     <>
       <PageHeader
+        organization={ctx.organization}
         title="Net income detail"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · every income and expense that built the profit`}
       />

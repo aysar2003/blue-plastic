@@ -35,6 +35,8 @@ export type AppGlyphName =
   | 'reports'
   | 'bill-payments'
   | 'periods'
+  | 'calendar'
+  | 'databases'
   | 'settings'
   | 'help'
   | 'items'
@@ -183,6 +185,33 @@ const GLYPHS: Record<AppGlyphName, ReactNode> = {
       <rect x="31" y="23" width="6" height="5" rx="1.2" fill={C.orange} />
       <rect x="11" y="32" width="6" height="5" rx="1.2" fill={C.paper} opacity="0.85" />
       <rect x="21" y="32" width="6" height="5" rx="1.2" fill={C.paper} opacity="0.85" />
+    </>
+  ),
+  // A wall calendar with a teal day mark.
+  calendar: (
+    <>
+      <rect x="7" y="10" width="34" height="30" rx="4" fill={C.paper} />
+      <rect x="7" y="10" width="34" height="9" rx="4" fill={C.plum} />
+      <rect x="7" y="15" width="34" height="4" fill={C.plum} />
+      <rect x="14" y="6" width="4" height="10" rx="2" fill={C.amber} />
+      <rect x="30" y="6" width="4" height="10" rx="2" fill={C.amber} />
+      <rect x="12" y="24" width="7" height="6" rx="1.5" fill={C.teal} />
+      <rect x="21" y="24" width="7" height="6" rx="1.5" fill={C.blue} opacity="0.85" />
+      <rect x="30" y="24" width="7" height="6" rx="1.5" fill={C.orange} opacity="0.9" />
+      <rect x="12" y="32" width="7" height="5" rx="1.5" fill={C.plum} opacity="0.35" />
+      <rect x="21" y="32" width="7" height="5" rx="1.5" fill={C.plum} opacity="0.35" />
+    </>
+  ),
+  // Stacked cylinders: separate company databases.
+  databases: (
+    <>
+      <ellipse cx="24" cy="12" rx="14" ry="5" fill={C.teal} />
+      <path d="M10 12v8c0 2.8 6.3 5 14 5s14-2.2 14-5v-8" fill={C.tealDeep} />
+      <ellipse cx="24" cy="20" rx="14" ry="5" fill={C.teal} opacity="0.85" />
+      <path d="M10 20v8c0 2.8 6.3 5 14 5s14-2.2 14-5v-8" fill={C.plum} />
+      <ellipse cx="24" cy="28" rx="14" ry="5" fill={C.plum} />
+      <path d="M10 28v8c0 2.8 6.3 5 14 5s14-2.2 14-5v-8" fill={C.plumDeep} />
+      <ellipse cx="24" cy="36" rx="14" ry="5" fill={C.amber} />
     </>
   ),
   // Three sliders with round knobs.

@@ -227,7 +227,7 @@ export async function vendorStatement(
   const from = toDate(range.from)
   const to = toDate(range.to)
 
-  const [documents, payments, journals] = await Promise.all([
+  const [documents, payments] = await Promise.all([
     client.purchaseDocument.findMany({
       where: {
         orgId: ctx.orgId,
@@ -238,6 +238,7 @@ export async function vendorStatement(
       },
       select: {
         id: true,
+        journalId: true,
         type: true,
         number: true,
         date: true,
@@ -269,6 +270,7 @@ export async function vendorStatement(
       },
       select: {
         id: true,
+        journalId: true,
         number: true,
         date: true,
         amount: true,
@@ -277,28 +279,84 @@ export async function vendorStatement(
         applications: { select: { amount: true } },
       },
     }),
-    client.journalLine.findMany({
+  ])
+
+  const [allDocumentLinks, allPaymentLinks] = await Promise.all([
+    client.purchaseDocument.findMany({
       where: {
         orgId: ctx.orgId,
         vendorId,
-        journalDate: { gte: from, lte: to },
-        account: { subtype: 'ACCOUNTS_PAYABLE' },
-        journal: {
-          status: { notIn: ['DRAFT', 'DELETED'] },
-          purchaseDocuments: { none: {} },
-          billPayments: { none: {} },
-        },
+        type: { in: ['BILL', 'VENDOR_CREDIT', 'EXPENSE', 'PURCHASE_ORDER'] },
       },
-      select: {
-        id: true,
-        debit: true,
-        credit: true,
-        description: true,
-        journalDate: true,
-        journal: { select: { id: true, journalNumber: true, memo: true } },
-      },
+      select: { id: true, journalId: true },
+    }),
+    client.billPayment.findMany({
+      where: { orgId: ctx.orgId, vendorId },
+      select: { id: true, journalId: true },
     }),
   ])
+
+  const coveredJournalIds = [
+    ...allDocumentLinks.map((row) => row.journalId).filter((id): id is string => Boolean(id)),
+    ...allPaymentLinks.map((row) => row.journalId).filter((id): id is string => Boolean(id)),
+  ]
+  const coveredSourceIds = [
+    ...allDocumentLinks.map((row) => row.id),
+    ...allPaymentLinks.map((row) => row.id),
+  ]
+
+  // Prefer posted AP amounts over document/payment totals (same reason as AR).
+  const apByJournalId = new Map<string, Decimal>()
+  if (coveredJournalIds.length > 0) {
+    const apLines = await client.journalLine.findMany({
+      where: {
+        orgId: ctx.orgId,
+        vendorId,
+        journalId: { in: coveredJournalIds },
+        account: { subtype: 'ACCOUNTS_PAYABLE' },
+      },
+      select: { journalId: true, debit: true, credit: true },
+    })
+    for (const line of apLines) {
+      // Natural AP sign: credit increases what we owe.
+      const delta = new Decimal(line.credit.toString()).minus(line.debit.toString())
+      apByJournalId.set(
+        line.journalId,
+        (apByJournalId.get(line.journalId) ?? ZERO).plus(delta),
+      )
+    }
+  }
+
+  const journals = await client.journalLine.findMany({
+    where: {
+      orgId: ctx.orgId,
+      vendorId,
+      journalDate: { gte: from, lte: to },
+      account: { subtype: 'ACCOUNTS_PAYABLE' },
+      journal: {
+        status: { notIn: ['DRAFT', 'DELETED'] },
+        purchaseDocuments: { none: {} },
+        billPayments: { none: {} },
+        ...(coveredJournalIds.length > 0 ? { id: { notIn: coveredJournalIds } } : {}),
+        ...(coveredSourceIds.length > 0
+          ? {
+              OR: [{ sourceId: null }, { sourceId: { notIn: coveredSourceIds } }],
+            }
+          : {}),
+        sourceType: {
+          notIn: ['BILL', 'VENDOR_CREDIT', 'EXPENSE', 'BILL_PAYMENT'],
+        },
+      },
+    },
+    select: {
+      id: true,
+      debit: true,
+      credit: true,
+      description: true,
+      journalDate: true,
+      journal: { select: { id: true, journalNumber: true, memo: true } },
+    },
+  })
 
   const slug: Record<string, string> = {
     BILL: 'bills',
@@ -314,6 +372,11 @@ export async function vendorStatement(
       const creditUsed = sumAmounts(document.creditsApplied)
       const isBill = document.type === 'BILL'
       const isCredit = document.type === 'VENDOR_CREDIT'
+      const posted = postedChargeCredit(
+        document.journalId ? apByJournalId.get(document.journalId) : undefined,
+        isBill ? total : ZERO,
+        isCredit ? total : ZERO,
+      )
       const items: StatementItem[] = document.lines.map((line) => {
         const name = line.item?.name
         const note = line.description
@@ -336,8 +399,8 @@ export async function vendorStatement(
         date: document.date,
         dueDate: document.dueDate,
         description: document.memo ?? document.reference ?? labelFor(document.type),
-        charge: isBill ? total : ZERO,
-        credit: isCredit ? total : ZERO,
+        charge: posted.charge,
+        credit: posted.credit,
         openAmount: isBill ? total.minus(applied) : isCredit ? total.minus(creditUsed) : ZERO,
         original: total,
         lines: items,
@@ -346,6 +409,11 @@ export async function vendorStatement(
     }),
     ...payments.map((payment) => {
       const amount = new Decimal(payment.amount.toString())
+      const posted = postedChargeCredit(
+        payment.journalId ? apByJournalId.get(payment.journalId) : undefined,
+        ZERO,
+        amount,
+      )
       return {
         id: payment.id,
         kind: 'PAYMENT' as const,
@@ -353,8 +421,8 @@ export async function vendorStatement(
         date: payment.date,
         dueDate: null,
         description: payment.memo ?? payment.reference ?? 'Payment made',
-        charge: ZERO,
-        credit: amount,
+        charge: posted.charge,
+        credit: posted.credit,
         openAmount: amount.minus(sumAmounts(payment.applications)),
         original: amount,
         lines: [],
@@ -392,6 +460,17 @@ export async function vendorStatement(
 
 function sumAmounts(rows: { amount: { toString(): string } }[]): Decimal {
   return rows.reduce((sum, row) => sum.plus(row.amount.toString()), ZERO)
+}
+
+function postedChargeCredit(
+  posted: Decimal | undefined,
+  fallbackCharge: Decimal,
+  fallbackCredit: Decimal,
+): { charge: Decimal; credit: Decimal } {
+  if (posted === undefined) return { charge: fallbackCharge, credit: fallbackCredit }
+  if (posted.greaterThan(0)) return { charge: posted, credit: ZERO }
+  if (posted.lessThan(0)) return { charge: ZERO, credit: posted.abs() }
+  return { charge: ZERO, credit: ZERO }
 }
 
 function labelFor(type: string): string {

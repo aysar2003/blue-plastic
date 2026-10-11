@@ -65,7 +65,7 @@ export function DateField({
     if (!rect) return
 
     const below = window.innerHeight - rect.bottom
-    const above = below < 340 && rect.top > below
+    const above = below < 380 && rect.top > below
     setAnchor({ top: above ? rect.top - 4 : rect.bottom + 4, left: rect.left, above })
   }, [])
 
@@ -168,7 +168,6 @@ export function DateField({
           value={display}
           placeholder={placeholder}
           onChange={(event) => setTyped(event.target.value)}
-          onFocus={(event) => event.currentTarget.select()}
           onBlur={commit}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -205,7 +204,7 @@ export function DateField({
                 bottom: anchor.above ? window.innerHeight - anchor.top : undefined,
                 left: anchor.left,
               }}
-              className="pointer-events-auto z-[60] rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95"
+              className="pointer-events-auto z-[60] overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-[0_8px_28px_-12px_rgba(15,23,42,0.28)] animate-in fade-in-0 zoom-in-95"
             >
               <Calendar
                 value={isCalendarDate(value) ? value : null}

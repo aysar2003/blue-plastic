@@ -2,7 +2,9 @@ import type { LucideIcon } from 'lucide-react'
 import {
   BanknoteIcon,
   BookOpenIcon,
+  CalendarRangeIcon,
   CircleHelpIcon,
+  DatabaseIcon,
   LayoutGridIcon,
   PackageIcon,
   ReceiptIcon,
@@ -40,12 +42,11 @@ export type NavModule = {
 }
 
 /**
- * Nine modules, and everything else is a tab inside one of them.
+ * Top-level modules; everything else is a tab inside one of them.
  *
- * The sidebar used to list twenty-two destinations under five headings, which is
- * a table of contents rather than a navigation. A person doing the books thinks
- * in terms of *sales* or *purchases*; which document they need is the second
- * question, and the second question belongs on the page, not in the chrome.
+ * A person doing the books thinks in terms of *sales* or *purchases*; which
+ * document they need is the second question, and belongs on the page, not in
+ * the chrome.
  */
 export const MODULES: NavModule[] = [
   {
@@ -58,7 +59,7 @@ export const MODULES: NavModule[] = [
   {
     key: 'sales',
     label: 'Sales',
-    href: '/sales',
+    href: '/sales/invoices?status=open',
     icon: ReceiptIcon,
     permission: 'invoice:read',
     owns: ['/sales', '/payments', '/customers'],
@@ -66,7 +67,8 @@ export const MODULES: NavModule[] = [
       { label: 'Home', href: '/sales' },
       { label: 'Estimates', href: '/sales/estimates', permission: 'invoice:read' },
       { label: 'Quotations', href: '/sales/quotations', permission: 'invoice:read' },
-      { label: 'Invoices', href: '/sales/invoices', permission: 'invoice:read' },
+      { label: 'Sales orders', href: '/sales/sales-orders', permission: 'invoice:read' },
+      { label: 'Invoices', href: '/sales/invoices?status=open', permission: 'invoice:read' },
       { label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read' },
       { label: 'Delivery', href: '/sales/delivery', permission: 'invoice:read' },
       { label: 'Credit memos', href: '/sales/credit-memos', permission: 'invoice:read' },
@@ -178,6 +180,22 @@ export const MODULES: NavModule[] = [
     ],
   },
   {
+    key: 'calendar',
+    label: 'Calendar',
+    href: '/calendar',
+    icon: CalendarRangeIcon,
+    permission: 'calendar:read',
+    owns: ['/calendar'],
+  },
+  {
+    key: 'databases',
+    label: 'Databases',
+    href: '/databases',
+    icon: DatabaseIcon,
+    permission: 'org:update',
+    owns: ['/databases', '/settings/backup'],
+  },
+  {
     key: 'settings',
     label: 'Settings',
     href: '/settings',
@@ -195,8 +213,7 @@ export const MODULES: NavModule[] = [
       { label: 'Templates', href: '/settings/templates', permission: 'org:read' },
       { label: 'Appearance', href: '/settings/appearance' },
       { label: 'Your profile', href: '/settings/profile' },
-      { label: 'Backup', href: '/settings/backup', permission: 'org:update' },
-      { label: 'Activity log', href: '/settings/activity', permission: 'audit:read' },
+      { label: 'Trash', href: '/settings/activity', permission: 'audit:read' },
     ],
   },
   {
@@ -231,11 +248,14 @@ export function moduleFor(pathname: string): NavModule | undefined {
 
 /** The tab a path belongs to, by longest matching prefix. */
 export function tabFor(section: NavModule, pathname: string): NavTab | undefined {
+  const path = pathname.split(/[?#]/)[0] || pathname
   let best: { tab: NavTab; length: number } | undefined
 
   for (const tab of section.tabs ?? []) {
-    for (const prefix of [tab.href, ...(tab.also ?? [])]) {
-      if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
+    for (const raw of [tab.href, ...(tab.also ?? [])]) {
+      // Tab hrefs may carry a default query (`?status=open`); match on the path only.
+      const prefix = raw.split(/[?#]/)[0] || raw
+      if (path === prefix || path.startsWith(`${prefix}/`)) {
         if (!best || prefix.length > best.length) best = { tab, length: prefix.length }
       }
     }

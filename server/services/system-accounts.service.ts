@@ -121,14 +121,39 @@ export const SYSTEM_ACCOUNT_ROLES: SystemAccountRole[] = [
     types: ['EXPENSE', 'REVENUE'],
     subtypes: ['OTHER_EXPENSE', 'OTHER_INCOME'],
   },
+  {
+    key: 'POS_CASH_SHORT',
+    label: 'POS cash short',
+    used: 'When a till is closed with less cash than expected, the shortfall posts here.',
+    types: ['EXPENSE'],
+    subtypes: ['OPERATING_EXPENSE', 'OTHER_EXPENSE'],
+  },
+  {
+    key: 'POS_CASH_OVER',
+    label: 'POS cash over',
+    used: 'When a till is closed with more cash than expected, the surplus posts here.',
+    types: ['REVENUE'],
+    subtypes: ['OTHER_INCOME', 'INCOME'],
+  },
 ]
 
 export type SystemAccountBinding = {
   role: SystemAccountRole
-  account: { id: string; code: string; name: string; isActive: boolean } | null
+  account: {
+    id: string
+    code: string
+    name: string
+    type: AccountType
+    isActive: boolean
+  } | null
   /** Postings already sitting in the bound account. */
   entries: number
-  candidates: { id: string; code: string; name: string }[]
+  candidates: {
+    id: string
+    code: string
+    name: string
+    type: AccountType
+  }[]
 }
 
 export async function list(ctx: OrgContext): Promise<SystemAccountBinding[]> {
@@ -155,7 +180,13 @@ export async function list(ctx: OrgContext): Promise<SystemAccountBinding[]> {
     return {
       role,
       account: account
-        ? { id: account.id, code: account.code, name: account.name, isActive: account.isActive }
+        ? {
+            id: account.id,
+            code: account.code,
+            name: account.name,
+            type: account.type,
+            isActive: account.isActive,
+          }
         : null,
       entries: account?._count.journalLines ?? 0,
       candidates: accounts
@@ -167,7 +198,12 @@ export async function list(ctx: OrgContext): Promise<SystemAccountBinding[]> {
             role.types.includes(candidate.type) &&
             role.subtypes.includes(candidate.subtype),
         )
-        .map((candidate) => ({ id: candidate.id, code: candidate.code, name: candidate.name })),
+        .map((candidate) => ({
+          id: candidate.id,
+          code: candidate.code,
+          name: candidate.name,
+          type: candidate.type,
+        })),
     }
   })
 }

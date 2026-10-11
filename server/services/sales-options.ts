@@ -123,6 +123,15 @@ export async function loadFormOptions(ctx: OrgContext) {
   }
 }
 
+/** Accounts a sales receipt can deposit into, bank and cash first. */
+export async function depositAccountChoices(ctx: OrgContext) {
+  const chart = await selectableAccounts(ctx, { withBalances: true })
+  return accountOptions(chart, {
+    prefer: ['BANK', 'UNDEPOSITED_FUNDS', 'CREDIT_CARD', 'OTHER_CURRENT_ASSET'],
+    showBalance: true,
+  })
+}
+
 function postalAddress(
   line1: string | null,
   line2: string | null,
@@ -133,6 +142,15 @@ function postalAddress(
 ) {
   const place = [city, region, postalCode].map((part) => part?.trim()).filter(Boolean).join(', ')
   return [line1, line2, place, country].map((part) => part?.trim()).filter(Boolean).join('\n')
+}
+
+/** Bank / undeposited accounts for a sales receipt — including when fulfilling an order. */
+export async function loadDepositAccounts(ctx: OrgContext) {
+  const chart = await selectableAccounts(ctx, { withBalances: true })
+  return accountOptions(chart, {
+    prefer: ['BANK', 'UNDEPOSITED_FUNDS', 'CREDIT_CARD', 'OTHER_CURRENT_ASSET'],
+    showBalance: true,
+  })
 }
 
 export const ITEM_GROUPS: Record<string, string> = {

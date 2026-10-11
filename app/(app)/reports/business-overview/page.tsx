@@ -74,6 +74,7 @@ export default async function BusinessOverviewPage() {
       </nav>
 
       <PageHeader
+        organization={ctx.organization}
         title="Business overview"
         description={`${ctx.organization.name} · figures from the ledger as at ${formatDate(overview.now)}.`}
       />

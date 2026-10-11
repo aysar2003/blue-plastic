@@ -6,9 +6,9 @@
  * detail type, and each register account by the description
  * `POS register <id>`, which stays put when the till is renamed.
  *
- * New till sales debit this account. The payment rows still name the wallet,
- * so the orders report can total by wallet. Older journals are left on the
- * wallet accounts they were posted to.
+ * New till sales debit this account (every tender). Payment rows still name
+ * the wallet so the orders report can total by method. Older journals are left
+ * on the wallet accounts they were posted to.
  */
 
 export const POS_BANKS_NAME = 'POS Banks'

@@ -45,6 +45,7 @@ export default async function EditPurchasePage({
       <BillForm
         config={config}
         vendors={options.vendors}
+        customers={options.customers}
         items={options.items}
         taxCodes={options.taxCodes}
         paymentAccounts={options.paymentAccounts}
@@ -66,6 +67,7 @@ export default async function EditPurchasePage({
           memo: document.memo,
           paymentTermId: document.paymentTerm?.id ?? null,
           paymentAccountId: document.paymentAccount?.id ?? null,
+          offsetCustomerId: document.offsetCustomer?.id ?? null,
           lines: document.lines.map((line) => ({
             itemId: line.item?.id ?? null,
             expenseAccountId: line.expenseAccount?.id ?? null,

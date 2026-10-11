@@ -1431,6 +1431,7 @@ const SALES_SLUG: Record<string, string> = {
   INVOICE: 'invoices',
   ESTIMATE: 'estimates',
   QUOTATION: 'quotations',
+  SALES_ORDER: 'sales-orders',
   SALES_RECEIPT: 'sales-receipts',
   CREDIT_MEMO: 'credit-memos',
   REFUND_RECEIPT: 'refunds',
@@ -1507,7 +1508,7 @@ const userActivity: TableReport = {
         { key: 'detail', label: 'Detail' },
       ],
       rows: logs.map((log) => ({
-        href: activityHref(log.entity, log.entityId, log.after),
+        href: log.action === 'DELETE' ? null : activityHref(log.entity, log.entityId, log.after),
         cells: {
           when: formatDateTime(log.at, ctx.organization.timeZone),
           user: log.actor?.name ?? 'System',
@@ -1517,7 +1518,10 @@ const userActivity: TableReport = {
         },
       })),
       empty: 'No one recorded anything in this period.',
-      note: logs.length === 1000 ? 'Showing the latest 1,000 actions in this period.' : 'Click a row to open the record, when it still has a page.',
+      note:
+        logs.length === 1000
+          ? 'Showing the latest 1,000 actions in this period. A deleted record stays in Trash and does not open here.'
+          : 'Click a row to open the record. A deleted record stays in Trash and does not open here.',
     }
   },
 }

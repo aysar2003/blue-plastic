@@ -53,16 +53,19 @@ export function TableColumnCustomize({
         <DialogContent
           size="sm"
           className={cn(
-            // Sit below the shell chrome and float over the grid, not flush to the viewport top.
-            'left-auto right-3 top-28 max-h-[calc(100svh-8rem)] w-full max-w-md translate-x-0 translate-y-0 rounded-lg border shadow-xl sm:right-4 sm:top-32',
+            // The shared dialog centers itself with sm:-translate-y-1/2. A plain
+            // translate-y-0 does not cancel that breakpoint, so the title slides
+            // off the top of the screen. Pin it under the shell on every page.
+            'left-auto right-3 top-28 flex w-full max-w-md translate-x-0 translate-y-0 flex-col overflow-hidden rounded-lg border shadow-xl',
+            'max-h-[calc(100svh-8rem)] sm:left-auto sm:right-4 sm:top-32 sm:max-h-[calc(100svh-9rem)] sm:translate-x-0 sm:translate-y-0',
             'data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right',
           )}
         >
-          <DialogHeader>
+          <DialogHeader className="shrink-0">
             <DialogTitle>Customize</DialogTitle>
             <DialogDescription>Drag to change column order. Check columns you want to see.</DialogDescription>
           </DialogHeader>
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className="mb-3 flex shrink-0 flex-wrap gap-2">
             <Button
               type="button"
               size="sm"
@@ -76,7 +79,7 @@ export function TableColumnCustomize({
               Show all columns
             </Button>
           </div>
-          <ul className="space-y-1">
+          <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
             {list.map((col) => {
               const checked = !prefs.hidden.includes(col.id)
               return (

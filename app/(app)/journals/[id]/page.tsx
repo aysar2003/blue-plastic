@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { DeleteButton } from '@/components/data/delete-record'
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
@@ -122,18 +123,6 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
         </p>
       ) : null}
 
-      {journal.status === 'DELETED' ? (
-        <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2 text-sm text-destructive">
-          This entry was deleted
-          {journal.deletedAt
-            ? ` on ${formatDateTime(journal.deletedAt, ctx.organization.timeZone)}`
-            : ''}
-          {journal.deleteReason ? ` — ${journal.deleteReason}` : ''}. It is excluded from every
-          balance and every report. The entry is kept, exactly as it was posted, so what was once in
-          the books can still be read.
-        </div>
-      ) : null}
-
       {journal.status === 'REVERSED' && journal.reversedBy ? (
         <Notice>
           This entry was reversed by{' '}
@@ -171,10 +160,13 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
                 <TableCell>
                   <Link
                     href={`/accounts/${line.account.id}`}
-                    className="underline-offset-4 hover:underline"
+                    className="inline-flex items-center gap-1.5 underline-offset-4 hover:underline"
                   >
-                    <span className="tabular text-muted-foreground">{line.account.code}</span>{' '}
-                    {line.account.name}
+                    <AccountTypeIcon type={line.account.type} size="sm" />
+                    <span>
+                      <span className="tabular text-muted-foreground">{line.account.code}</span>{' '}
+                      {line.account.name}
+                    </span>
                   </Link>
                 </TableCell>
                 <TableCell className="numeric tabular">

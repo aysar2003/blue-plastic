@@ -5,11 +5,15 @@ import { buildRegisterColumns, defaultRegisterPrefs } from '@/lib/register-table
 import { partitionColumns } from '@/lib/table-fit'
 
 describe('table columns', () => {
-  it('shows every register column by default, including the contra account', () => {
-    const ids = buildRegisterColumns([{ code: '4000', name: 'Sales' }]).map((column) => column.id)
-    expect(defaultRegisterPrefs(ids).hidden).toEqual([])
-    expect(ids).toContain('contra')
-    expect(ids).toContain('split:4000')
+  it('hides split account columns by default so the register stays on one clean row', () => {
+    const withSplits = buildRegisterColumns([{ code: '4000', name: 'Sales' }]).map((column) => column.id)
+    expect(defaultRegisterPrefs(withSplits).hidden).toEqual(['split:4000'])
+    expect(withSplits).toContain('contra')
+    expect(withSplits).toContain('split:4000')
+
+    const plain = buildRegisterColumns([]).map((column) => column.id)
+    expect(defaultRegisterPrefs(plain).hidden).toEqual([])
+    expect(plain).toContain('contra')
   })
 
   it('shows every item column by default', () => {

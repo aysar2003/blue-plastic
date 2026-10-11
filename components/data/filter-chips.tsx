@@ -27,8 +27,8 @@ export function FilterChips({
             aria-current={on ? 'page' : undefined}
             className={
               on
-                ? 'rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground'
-                : 'rounded-full bg-card px-3 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border hover:bg-accent'
+                ? 'rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground'
+                : 'rounded-md bg-card px-3 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border hover:bg-accent'
             }
           >
             {option.label}

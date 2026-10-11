@@ -326,19 +326,29 @@ export async function overview(ctx: OrgContext) {
   }
 }
 
+export type DeliveryListScope = 'open' | 'today' | 'recent'
+
 export async function list(
   ctx: OrgContext,
-  options: { customerId?: string; status?: 'POSTED' | 'VOID' | 'all' } = {},
+  options: {
+    customerId?: string
+    status?: 'POSTED' | 'VOID' | 'all'
+    scope?: DeliveryListScope
+  } = {},
 ): Promise<DeliveryNoteListRow[]> {
   const status = options.status ?? 'POSTED'
+  const scope = options.scope ?? 'open'
+  const today = toDate(toCalendarDate(new Date()))
+
   const rows = await db.deliveryNote.findMany({
     where: {
       orgId: ctx.orgId,
       ...(options.customerId ? { customerId: options.customerId } : {}),
       ...(status === 'all' ? {} : { status }),
+      ...(scope === 'today' ? { date: today } : {}),
     },
     orderBy: [{ date: 'desc' }, { issuedAt: 'desc' }],
-    take: 500,
+    take: scope === 'recent' ? 8 : 500,
     select: {
       id: true,
       number: true,

@@ -24,7 +24,7 @@ export default async function SetupPage() {
     if (!(await needsSetup())) redirect('/sign-in')
 
     return (
-    <Card className="w-full max-w-lg">
+    <Card className="w-full max-w-lg border-border bg-card text-card-foreground shadow-sm">
       <CardHeader>
         <CardTitle>Set up your books</CardTitle>
         <CardDescription>

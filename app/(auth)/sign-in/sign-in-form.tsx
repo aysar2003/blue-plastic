@@ -46,7 +46,7 @@ export function SignInForm() {
       </Field>
 
       <SubmitButton className="w-full" pendingLabel="Signing in…">
-        Sign in
+        Sign in to SOM ERP
       </SubmitButton>
     </form>
   )

@@ -15,6 +15,7 @@ export default async function ManagementReportsPage() {
     <>
       <ReportCentreTabs active="management" />
       <PageHeader
+        organization={ctx.organization}
         title="Management reports"
         description="The statements used to run the business. Each figure is read from the ledger."
       />

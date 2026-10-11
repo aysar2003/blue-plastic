@@ -3,6 +3,8 @@ import { Suspense } from 'react'
 import { isModuleEnabled } from '@/lib/feature-flags'
 import { ROLE_LABELS } from '@/lib/roles'
 import type { OrgContext } from '@/server/auth/context'
+import { listUserDatabases } from '@/server/services/backup-import.service'
+import { canViewGroupReports } from '@/server/services/company-group.service'
 import { LAUNCHER_APPS } from './launcher-apps'
 import { MonthChartLoader } from './month-chart-loader'
 import { MODULES } from './nav-items'
@@ -21,11 +23,13 @@ export async function AppShell({
   children,
   stockAlertsSlot = null,
   balanceAlertsSlot = null,
+  calendarAlertsSlot = null,
 }: {
   ctx: OrgContext
   children: React.ReactNode
   stockAlertsSlot?: React.ReactNode
   balanceAlertsSlot?: React.ReactNode
+  calendarAlertsSlot?: React.ReactNode
 }) {
   const modules = MODULES.filter(
     (entry) =>
@@ -39,21 +43,39 @@ export async function AppShell({
   const hiddenApps = LAUNCHER_APPS.filter((app) => !isModuleEnabled(ctx.features, app.key)).map(
     (app) => app.key,
   )
+  const canSwitch = ctx.isSystemOwner || ctx.canConnect
+  const [showCompanyReports, databases] = await Promise.all([
+    canViewGroupReports(ctx),
+    canSwitch ? listUserDatabases(ctx) : Promise.resolve([]),
+  ])
+  const companies = databases.map((row) => ({
+    id: row.id,
+    name: row.name,
+    isCurrent: row.isCurrent,
+  }))
 
   return (
     <ShellChrome
       orgName={ctx.organization.name}
       organization={ctx.organization}
+      brandMark={ctx.organization.brandMark}
+      hasLogo={ctx.organization.hasLogo}
+      logoVersion={ctx.organization.updatedAt}
       baseCurrency={ctx.organization.baseCurrency}
       fiscalYearStartMonth={ctx.organization.fiscalYearStartMonth}
       roleLabel={ROLE_LABELS[ctx.role]}
       user={ctx.user}
       moduleKeys={moduleKeys}
       permissions={permissions}
+      companies={companies}
+      allowCreateCompany={ctx.isSystemOwner}
+      showDatabases={canSwitch}
+      showCompanyReports={showCompanyReports}
       hiddenApps={hiddenApps}
       showCreatorBrand={ctx.features.showCreatorBrand}
       stockAlertsSlot={stockAlertsSlot}
       balanceAlertsSlot={balanceAlertsSlot}
+      calendarAlertsSlot={calendarAlertsSlot}
       monthChartSlot={
         ctx.permissions.has('report:read') ? (
           <Suspense fallback={null}>

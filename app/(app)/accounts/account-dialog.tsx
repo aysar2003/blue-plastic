@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { idleState } from '@/components/forms/action-state'
 import { Field, fieldProps } from '@/components/forms/field'
 import { FormStatus } from '@/components/forms/form-status'
@@ -155,17 +156,21 @@ function AccountDialog({
           {mode === 'create' ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field name="type" label="Type" required error={e?.type}>
-                <NativeSelect
-                  {...fieldProps('type', e?.type)}
-                  value={type}
-                  onChange={(event) => setType(event.target.value as AccountType)}
-                >
-                  {ACCOUNT_TYPE_ORDER.map((value) => (
-                    <option key={value} value={value}>
-                      {ACCOUNT_TYPE_LABELS[value]}
-                    </option>
-                  ))}
-                </NativeSelect>
+                <div className="flex items-center gap-2">
+                  <AccountTypeIcon type={type} size="sm" />
+                  <NativeSelect
+                    {...fieldProps('type', e?.type)}
+                    value={type}
+                    onChange={(event) => setType(event.target.value as AccountType)}
+                    className="flex-1"
+                  >
+                    {ACCOUNT_TYPE_ORDER.map((value) => (
+                      <option key={value} value={value}>
+                        {ACCOUNT_TYPE_LABELS[value]}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
               </Field>
 
               <Field name="subtype" label="Detail type" required error={e?.subtype}>

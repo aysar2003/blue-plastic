@@ -50,6 +50,8 @@ export async function runSetup(input: SetupInput) {
         name: input.name,
         passwordHash,
         emailVerified: new Date(),
+        isSystemOwner: true,
+        homeOrgId: organization.id,
       },
       select: { id: true, email: true },
     })

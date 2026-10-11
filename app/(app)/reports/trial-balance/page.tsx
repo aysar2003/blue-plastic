@@ -41,7 +41,7 @@ export default async function TrialBalancePage({
   return (
     <>
       <PageHeader
-        className="print:hidden"
+        organization={ctx.organization}
         title="Trial Balance"
         description={`Every account with a balance or movement between ${formatDate(from)} and ${formatDate(to)}.`}
         actions={
@@ -81,7 +81,11 @@ export default async function TrialBalancePage({
               cells: {
                 code: { value: row.code, href },
                 name: { value: row.name, href },
-                type: { value: ACCOUNT_TYPE_LABELS[row.type], href },
+                type: {
+                  value: ACCOUNT_TYPE_LABELS[row.type],
+                  href,
+                  accountType: row.type,
+                },
                 debit: { value: row.closingDebit.isZero() ? null : row.closingDebit.toString(), href },
                 credit: { value: row.closingCredit.isZero() ? null : row.closingCredit.toString(), href },
               },

@@ -5,6 +5,7 @@ import { parseFeatureFlags, type OrgFeatureFlags } from '@/lib/feature-flags'
 import type {
   DocumentTemplateInput,
   OrganizationAccountingInput,
+  OrganizationBrandingInput,
   OrganizationFeaturesInput,
   OrganizationUpdateInput,
 } from '@/lib/validation/organization'
@@ -30,7 +31,11 @@ const PROFILE_SELECT = {
   email: true,
   website: true,
   timeZone: true,
+  brandMark: true,
+  logoStorageKey: true,
+  logoContentType: true,
   createdAt: true,
+  updatedAt: true,
 } as const
 
 export async function get(ctx: OrgContext) {
@@ -62,6 +67,38 @@ export async function update(ctx: OrgContext, input: OrganizationUpdateInput) {
       tx,
       ctx,
       { entity: 'Organization', entityId: ctx.orgId, action: 'UPDATE', before, after },
+      meta,
+    )
+    return after
+  })
+}
+
+export async function updateBranding(ctx: OrgContext, input: OrganizationBrandingInput) {
+  const meta = await requestMeta()
+
+  return db.$transaction(async (tx) => {
+    const before = await tx.organization.findUnique({
+      where: { id: ctx.orgId },
+      select: { brandMark: true, logoStorageKey: true },
+    })
+    if (!before) throw notFound('Organisation')
+
+    const after = await tx.organization.update({
+      where: { id: ctx.orgId },
+      data: { brandMark: input.brandMark },
+      select: PROFILE_SELECT,
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Organization',
+        entityId: ctx.orgId,
+        action: 'UPDATE',
+        before: { brandMark: before.brandMark },
+        after: { brandMark: after.brandMark },
+      },
       meta,
     )
     return after
@@ -143,7 +180,10 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
   const meta = await requestMeta()
   const flags: OrgFeatureFlags = {
     allowJournalDelete: input.allowJournalDelete,
-    allowContactDelete: input.allowContactDelete,
+    allowCustomerDelete: input.allowCustomerDelete,
+    allowVendorDelete: input.allowVendorDelete,
+    allowItemDelete: input.allowItemDelete,
+    allowAccountDelete: input.allowAccountDelete,
     allowDocumentDelete: input.allowDocumentDelete,
     showCreatorBrand: input.showCreatorBrand,
     modules: {

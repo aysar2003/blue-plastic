@@ -6,9 +6,9 @@ import { isAppError } from '@/server/errors'
 import * as auditService from '@/server/services/audit.service'
 
 /**
- * One of the few route handlers in the application. The activity log is an
- * infinite list the user scrolls without navigating, which is precisely the case
- * a Server Component cannot serve (ADR-0004).
+ * Trash. An infinite list of deletions, with no link back into the books.
+ * A Server Component cannot serve a list the user scrolls without navigating
+ * (ADR-0004), so this is one of the few route handlers.
  */
 export async function GET(request: Request) {
   try {

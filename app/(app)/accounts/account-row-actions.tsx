@@ -11,12 +11,13 @@ import { StartReconciliationButton } from '@/components/banking/start-reconcilia
 import { Button } from '@/components/ui/button'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import { setAccountActive } from '@/app/(app)/accounts/actions'
+import { deleteAccount, setAccountActive } from '@/app/(app)/accounts/actions'
 import {
   EditAccountDialog,
   type AccountFormValues,
   type ParentOption,
 } from '@/app/(app)/accounts/account-dialog'
+import { MergeIntoDialog } from '@/components/master-data/merge-into-dialog'
 
 type AccountRow = AccountFormValues & { isActive: boolean; subtype: AccountSubtype }
 
@@ -32,6 +33,7 @@ export function AccountTableRow({
   parents,
   canEdit,
   canArchive,
+  canDelete = false,
   canReport,
   canReconcile,
   canTransact,
@@ -43,6 +45,8 @@ export function AccountTableRow({
   parents: ParentOption[]
   canEdit: boolean
   canArchive: boolean
+  /** Delete / merge — owner by default; grant account:delete in Settings → Users. */
+  canDelete?: boolean
   canReport: boolean
   canReconcile: boolean
   canTransact?: boolean
@@ -53,6 +57,7 @@ export function AccountTableRow({
   const router = useRouter()
   const [point, setPoint] = useState<{ x: number; y: number } | null>(null)
   const [editing, setEditing] = useState(false)
+  const [merging, setMerging] = useState(false)
   const [reconciling, setReconciling] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -99,9 +104,31 @@ export function AccountTableRow({
     })
   }
 
+  const remove = () => {
+    setPoint(null)
+    if (
+      !window.confirm(
+        'Delete this account? Only works when it has no transactions or links. Otherwise merge it into another account.',
+      )
+    ) {
+      return
+    }
+    startTransition(async () => {
+      const result = await deleteAccount({ id: account.id })
+      if (result.ok) {
+        toast.success('Account deleted.')
+        router.refresh()
+      } else {
+        toast.error(result.error.message)
+      }
+    })
+  }
+
   const isMoney = MONEY.has(account.subtype)
   const showReconcile = canReconcile && RECONCILABLE.has(account.subtype) && account.isActive
   const showInactive = canArchive && !account.isSystem
+  const showMerge = canDelete && !account.isSystem
+  const showDelete = canDelete && !account.isSystem
   const showTransfer = Boolean(canTransact) && isMoney && account.isActive
   const showDeposit =
     Boolean(canTransact) &&
@@ -111,7 +138,8 @@ export function AccountTableRow({
   return (
     <TableRow
       title={`Open ${account.name}`}
-      className={cn('cursor-pointer hover:bg-muted/50', className)}
+      data-state={point ? 'selected' : undefined}
+      className={cn('cursor-pointer', className)}
       onContextMenu={(event) => {
         event.preventDefault()
         openAt(event.clientX, event.clientY)
@@ -181,7 +209,9 @@ export function AccountTableRow({
                   Reconcile
                 </MenuItem>
               ) : null}
-              {canEdit || showInactive ? <div className="my-1 h-px bg-border" /> : null}
+              {canEdit || showInactive || showMerge || showDelete ? (
+                <div className="my-1 h-px bg-border" />
+              ) : null}
               {canEdit ? (
                 <MenuItem
                   onSelect={() => {
@@ -197,10 +227,35 @@ export function AccountTableRow({
                   {account.isActive ? 'Make inactive' : 'Make active'}
                 </MenuItem>
               ) : null}
+              {showMerge ? (
+                <MenuItem
+                  onSelect={() => {
+                    setPoint(null)
+                    setMerging(true)
+                  }}
+                >
+                  Merge into…
+                </MenuItem>
+              ) : null}
+              {showDelete ? (
+                <MenuItem tone="danger" onSelect={remove}>
+                  Delete
+                </MenuItem>
+              ) : null}
             </div>,
             document.body,
           )
         : null}
+
+      {merging ? (
+        <MergeIntoDialog
+          open={merging}
+          onClose={() => setMerging(false)}
+          kind="account"
+          absorbId={account.id}
+          absorbLabel={`${account.code} ${account.name}`}
+        />
+      ) : null}
 
       {editing ? (
         <EditAccountDialog account={account} parents={parents} onClose={() => setEditing(false)} />

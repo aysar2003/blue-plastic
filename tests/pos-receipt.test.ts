@@ -184,10 +184,10 @@ describe('thermal receipt', () => {
   })
 
   it('honours the 58mm roll and the creator-brand switch', () => {
-    const html = render({ initialPaper: '58', creatorBrand: 'Abdisalm Hero' })
+    const html = render({ initialPaper: '58', creatorBrand: 'Abdisalam Abdullahi Mohamed' })
     expect(html).toContain('width:58mm')
-    expect(html).toContain('System: Abdisalm Hero')
-    expect(render()).not.toContain('System:')
+    expect(html).toContain('Developed by Abdisalam Abdullahi Mohamed')
+    expect(render()).not.toContain('Developed by')
   })
 
   it('names a real customer and marks a void sale', () => {

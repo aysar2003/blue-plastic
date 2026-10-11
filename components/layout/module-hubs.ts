@@ -509,7 +509,7 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     icon: 'building',
     accent: '#0B4F6C',
     wash: '#E0F2FE',
-    blurb: 'Name and year',
+    blurb: 'Name, logo, and mark',
   },
   {
     key: 'features',
@@ -589,24 +589,14 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     blurb: 'Name and password',
   },
   {
-    key: 'backup',
-    label: 'Backup',
-    href: '/settings/backup',
-    icon: 'file',
-    permission: 'org:update',
-    accent: '#0F766E',
-    wash: '#CCFBF1',
-    blurb: 'A copy of the books',
-  },
-  {
     key: 'activity',
-    label: 'Activity',
+    label: 'Trash',
     href: '/settings/activity',
     icon: 'scroll',
     permission: 'audit:read',
     accent: '#334155',
     wash: '#F1F5F9',
-    blurb: 'What changed',
+    blurb: 'What was deleted',
   },
 ]
 

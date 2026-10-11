@@ -40,6 +40,16 @@ export const SALES_HUB_APPS: SalesHubApp[] = [
     blurb: 'Quotations — create, list, convert',
   },
   {
+    key: 'sales-orders',
+    label: 'Sales orders',
+    href: '/sales/sales-orders',
+    icon: 'clipboard',
+    permission: 'invoice:read',
+    accent: '#C2410C',
+    wash: '#FFEDD5',
+    blurb: 'Order now — invoice or receipt when collected',
+  },
+  {
     key: 'invoices',
     label: 'Invoices',
     href: '/sales/invoices',

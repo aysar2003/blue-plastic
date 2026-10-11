@@ -3,35 +3,54 @@ import { Decimal } from '@/lib/money'
 /**
  * Where a POS receipt's money is posted.
  *
- * `depositLedgerAccountId` is the register's bank account, stored on the order
- * when the sale is rung up. Payment rows keep the wallet account so the orders
- * report can still total by wallet. Older orders leave this null and keep
- * posting to those wallet accounts — their journals are not rewritten.
+ * When the till has a register bank account under POS Banks, every tender and
+ * change line posts there — cash, EVC, Edahab, the lot. Payment rows still keep
+ * the method wallet id for the orders report. Older orders with a null deposit
+ * account stay on the wallet accounts they were posted to.
  */
-export function posPostedAccounts<T extends { accountId: string }>(input: {
+export function posPostedAccounts<T extends { accountId: string; isCash?: boolean }>(input: {
   depositLedgerAccountId: string | null
   payments: T[]
   change: T | null
 }): { payments: T[]; change: T | null } {
   const till = input.depositLedgerAccountId
   if (!till) return { payments: input.payments, change: input.change }
+
+  const toAccount = <R extends { accountId: string }>(row: R): R => ({ ...row, accountId: till })
+
   return {
-    payments: input.payments.map((payment) => ({ ...payment, accountId: till })),
-    change: input.change ? { ...input.change, accountId: till } : null,
+    payments: input.payments.map(toAccount),
+    change: input.change ? toAccount(input.change) : null,
   }
 }
 
-/** Who may move money out of one register. Nothing moves on its own. */
+/**
+ * Who may open, sell on, or close a counter.
+ * Managers may use any till. Cashiers may only use counters they are assigned to.
+ * An empty staff list means managers only — assign staff in POS settings.
+ */
+export function canUseRegister(input: {
+  canManage: boolean
+  staffUserIds: string[]
+  userId: string
+}): boolean {
+  if (input.canManage) return true
+  return input.staffUserIds.includes(input.userId)
+}
+
+/** Who may move money out of one register. Same staff rule as selling. */
 export function canTransferRegister(input: {
   canManage: boolean
   canSell: boolean
   staffUserIds: string[]
   userId: string
 }): boolean {
-  if (input.canManage) return true
-  if (!input.canSell) return false
-  if (input.staffUserIds.length === 0) return true
-  return input.staffUserIds.includes(input.userId)
+  if (!input.canSell && !input.canManage) return false
+  return canUseRegister({
+    canManage: input.canManage,
+    staffUserIds: input.staffUserIds,
+    userId: input.userId,
+  })
 }
 
 export function transferFitsBalance(amount: Decimal, balance: Decimal): 'ok' | 'empty' | 'over' | 'nonpositive' {

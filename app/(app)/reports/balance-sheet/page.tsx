@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
+import { readSort } from '@/components/data/sortable-header'
 import { PageHeader } from '@/components/data/page-header'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
-import { StatementTable } from '@/components/reports/statement-table'
+import { STATEMENT_SORT_COLUMNS, StatementTable } from '@/components/reports/statement-table'
 import { Card } from '@/components/ui/card'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
@@ -23,6 +24,14 @@ export default async function BalanceSheetPage({
   const query = await searchParams
   const settings = readSettings(query, ctx.organization)
   const currency = ctx.organization.baseCurrency
+  const sort = readSort(query, STATEMENT_SORT_COLUMNS, { sort: 'detail', dir: 'asc' })
+  const linkParams = {
+    period: settings.period,
+    from: settings.range.from,
+    to: settings.range.to,
+    asOf: settings.asOf,
+    basis: settings.basis,
+  }
 
   const sheet = await balanceSheet(ctx.orgId, settings.asOf, { basis: settings.basis })
 
@@ -35,7 +44,7 @@ export default async function BalanceSheetPage({
   return (
     <>
       <PageHeader
-        className="print:hidden"
+        organization={ctx.organization}
         title="Balance Sheet"
         description={`As at ${formatDate(settings.asOf)}`}
         actions={
@@ -63,6 +72,9 @@ export default async function BalanceSheetPage({
             sections={sheet.sections}
             currency={currency}
             drillTo={drill}
+            sort={sort}
+            basePath="/reports/balance-sheet"
+            linkParams={linkParams}
             subtotals={{
               fixedAssets: [{ label: 'Total assets', amount: sheet.totalAssets, emphasis: true }],
               longTermLiabilities: [{ label: 'Total liabilities', amount: sheet.totalLiabilities }],

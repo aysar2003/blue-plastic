@@ -39,13 +39,20 @@ export const purchaseLineSchema = z.object({
 
 export const purchaseDocumentSchema = z.object({
   number: chosenNumber,
-  vendorId: cuid,
+  /**
+   * Required for bills, credits and orders. On an expense settled against a
+   * customer, the server may create or reuse a vendor from that customer when
+   * this is left blank.
+   */
+  vendorId: optionalId,
   date: calendarDate,
   paymentTermId: optionalId,
   expiryDate: optionalDate,
   reference: optionalText(60),
   memo: optionalText(1000),
   paymentAccountId: optionalId,
+  /** Settle an expense by crediting this customer's receivable. */
+  offsetCustomerId: optionalId,
   saveAsDraft: z.coerce.boolean().default(false),
   lines: z.array(purchaseLineSchema).min(1, 'Add at least one line').max(200),
 })

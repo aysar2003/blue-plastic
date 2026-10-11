@@ -3,6 +3,7 @@ import 'server-only'
 import { formatDate, toCalendarDate } from '@/lib/date'
 import {
   STATEMENT_VIEW_LABELS,
+  signedOpen,
   statementFilterCaption,
   type StatementFilter,
 } from '@/lib/customer-statement'
@@ -94,7 +95,7 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
       due,
       entry.charge.isZero() ? '' : money(entry.charge),
       entry.credit.isZero() ? '' : money(entry.credit),
-      money(input.ledger ? entry.balance : entry.openAmount),
+      money(input.ledger ? entry.balance : signedOpen(entry)),
     ]
     rows.push(amountRow(cells, xs, false))
 

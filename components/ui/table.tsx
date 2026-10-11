@@ -10,11 +10,11 @@ function Table({
   return (
     <div
       data-slot="table-container"
-      className={cn('relative w-full max-w-full overflow-x-clip', containerClassName)}
+      className={cn('relative w-full max-w-full overflow-x-auto', containerClassName)}
     >
       <table
         data-slot="table"
-        className={cn('w-full max-w-full table-fixed caption-bottom text-[0.8125rem]', className)}
+        className={cn('w-full max-w-full caption-bottom text-[0.8125rem]', className)}
         {...props}
       />
     </div>
@@ -30,8 +30,9 @@ function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
     <thead
       data-slot="table-header"
       className={cn(
-        'sticky top-0 z-20 bg-[var(--band)] shadow-[inset_0_-1px_0_0_var(--border)]',
-        '[&_tr]:border-b [&_th]:bg-[var(--band)]',
+        /* --report-head-* when inside a report; otherwise the theme band. */
+        'sticky top-0 z-20 bg-[var(--report-head-bg,var(--band))] text-[var(--report-head-fg,var(--foreground))] shadow-[inset_0_-1px_0_0_var(--border)]',
+        '[&_tr]:border-b [&_th]:bg-[var(--report-head-bg,var(--band))] [&_th]:text-[var(--report-head-fg,var(--foreground))]',
         className,
       )}
       {...props}
@@ -71,7 +72,8 @@ function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
     <th
       data-slot="table-head"
       className={cn(
-        'h-auto min-h-8 px-2 py-1.5 text-left align-top text-[0.6875rem] font-semibold uppercase tracking-wide text-foreground whitespace-normal break-words',
+        /* text-inherit: follow thead / --report-head-fg, never fight a dark bar. */
+        'h-auto min-h-8 px-2 py-1.5 text-left align-middle text-[0.6875rem] font-semibold uppercase tracking-wide text-inherit whitespace-nowrap',
         '[&:has([role=checkbox])]:pr-0 [&.numeric]:text-right',
         className,
       )}
@@ -85,7 +87,7 @@ function TableCell({ className, ...props }: React.ComponentProps<'td'>) {
     <td
       data-slot="table-cell"
       className={cn(
-        'px-2 py-1.5 align-top break-words text-foreground [&:has([role=checkbox])]:pr-0 [&.numeric]:text-right',
+        'px-2 py-1.5 align-middle whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0 [&.numeric]:text-right',
         className,
       )}
       {...props}

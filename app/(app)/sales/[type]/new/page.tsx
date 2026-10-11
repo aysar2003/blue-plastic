@@ -32,13 +32,14 @@ export default async function NewSalesDocumentPage({
   if (!config) notFound()
 
   const ctx = await requireOrgContext(config.createPermission)
-  const [options, query, documentNumber, neighbors, shelf, openQuotations] = await Promise.all([
+  const loadsSources = config.type === 'INVOICE' || config.type === 'SALES_RECEIPT'
+  const [options, query, documentNumber, neighbors, shelf, openSources] = await Promise.all([
     loadFormOptions(ctx),
     searchParams,
     peekDocumentNumber(db, ctx.orgId, config.type),
     config.type === 'SALES_RECEIPT' ? salesService.neighbors(ctx, config.type, null) : Promise.resolve(undefined),
     storeService.quantities(ctx),
-    config.type === 'INVOICE' ? salesService.listConvertibleEstimates(ctx) : Promise.resolve([]),
+    loadsSources ? salesService.listConvertibleSources(ctx) : Promise.resolve([]),
   ])
   const requested = typeof query.customer === 'string' ? query.customer : undefined
   const initialCustomerId = options.customers.some((customer) => customer.id === requested)
@@ -75,7 +76,7 @@ export default async function NewSalesDocumentPage({
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}
-        openQuotations={openQuotations}
+        openSources={openSources}
       />
     </>
   )

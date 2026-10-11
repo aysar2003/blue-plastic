@@ -4,6 +4,7 @@ import type { DocumentType, Prisma, SalesDocumentType } from '@prisma/client'
 import { endOfMonth, isCalendarDate, startOfMonth, toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
 import { Decimal, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
+import { isCashMethodName } from '@/lib/pos-payment'
 import { posPostedAccounts } from '@/lib/pos-register-posting'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { SalesDocumentInput } from '@/lib/validation/sales'
@@ -66,6 +67,7 @@ const SEQUENCE_FOR: Record<SalesDocumentType, DocumentType> = {
   INVOICE: 'INVOICE',
   ESTIMATE: 'ESTIMATE',
   QUOTATION: 'QUOTATION',
+  SALES_ORDER: 'SALES_ORDER',
   SALES_RECEIPT: 'SALES_RECEIPT',
   CREDIT_MEMO: 'CREDIT_MEMO',
   REFUND_RECEIPT: 'REFUND_RECEIPT',
@@ -94,6 +96,7 @@ const DOCUMENT_SELECT = {
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
   depositAccount: { select: { id: true, code: true, name: true } },
   convertedTo: { select: { id: true, number: true, type: true } },
+  convertedFrom: { select: { id: true, number: true, type: true } },
 } satisfies Prisma.SalesDocumentSelect
 
 /* --- Reading -------------------------------------------------------------- */
@@ -146,7 +149,14 @@ export async function list(
     ...(options.status === 'paid' ? { status: 'PAID' } : {}),
     ...(options.status === 'accepted' ? { status: 'ACCEPTED' } : {}),
     ...(options.status === 'declined' ? { status: 'DECLINED' } : {}),
-    ...(options.status === 'invoiced' ? { status: 'CLOSED' } : {}),
+    ...(options.status === 'invoiced'
+      ? type === 'SALES_ORDER'
+        ? { status: 'CLOSED' as const, convertedTo: { is: { type: 'INVOICE' as const } } }
+        : { status: 'CLOSED' as const }
+      : {}),
+    ...(options.status === 'receipt' && type === 'SALES_ORDER'
+      ? { status: 'CLOSED' as const, convertedTo: { is: { type: 'SALES_RECEIPT' as const } } }
+      : {}),
     ...(options.from || options.to
       ? {
           date: {
@@ -321,6 +331,60 @@ export async function estimateHome(
     declinedCount,
     invoiced: toMoneyString(invoiced, 2),
     invoicedCount,
+    draftTotal: toMoneyString(draftTotal, 2),
+    draftCount,
+  }
+}
+
+/**
+ * Figures for the sales-order home. Open is waiting for the customer to
+ * collect. Invoiced and receipt are the two ways that collection was recorded.
+ */
+export async function salesOrderHome(ctx: OrgContext) {
+  const rows = await db.salesDocument.findMany({
+    where: { orgId: ctx.orgId, type: 'SALES_ORDER', deletedAt: null, status: { not: 'VOID' } },
+    select: { status: true, total: true, convertedTo: { select: { type: true } } },
+  })
+
+  let open = ZERO
+  let invoiced = ZERO
+  let receipt = ZERO
+  let draftTotal = ZERO
+  let openCount = 0
+  let invoicedCount = 0
+  let receiptCount = 0
+  let draftCount = 0
+
+  for (const row of rows) {
+    const amount = new Decimal(row.total.toString())
+    if (row.status === 'DRAFT') {
+      draftCount += 1
+      draftTotal = draftTotal.plus(amount)
+      continue
+    }
+    if (row.status === 'CLOSED' && row.convertedTo?.type === 'SALES_RECEIPT') {
+      receiptCount += 1
+      receipt = receipt.plus(amount)
+      continue
+    }
+    if (row.status === 'CLOSED') {
+      invoicedCount += 1
+      invoiced = invoiced.plus(amount)
+      continue
+    }
+    if (row.status === 'OPEN') {
+      openCount += 1
+      open = open.plus(amount)
+    }
+  }
+
+  return {
+    open: toMoneyString(open, 2),
+    openCount,
+    invoiced: toMoneyString(invoiced, 2),
+    invoicedCount,
+    receipt: toMoneyString(receipt, 2),
+    receiptCount,
     draftTotal: toMoneyString(draftTotal, 2),
     draftCount,
   }
@@ -602,7 +666,14 @@ export async function create(
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency, documentDiscount(input))
 
-    if (priced.total.isZero() && type !== 'ESTIMATE' && type !== 'QUOTATION') {
+    const isDraft = input.saveAsDraft === true
+    if (
+      priced.total.isZero() &&
+      !isDraft &&
+      type !== 'ESTIMATE' &&
+      type !== 'QUOTATION' &&
+      type !== 'SALES_ORDER'
+    ) {
       throw validation('A document with no value has nothing to record.')
     }
 
@@ -619,7 +690,6 @@ export async function create(
       select: { id: true },
     })
     if (clash) throw numberTaken()
-    const isDraft = input.saveAsDraft === true
 
     const document = await tx.salesDocument.create({
       data: {
@@ -695,6 +765,15 @@ export async function create(
       await postDocument(tx, ctx, document.id)
     }
 
+    if (input.convertedFromId) {
+      await closeConvertedSource(tx, ctx, {
+        sourceId: input.convertedFromId,
+        createdId: document.id,
+        createdNumber: document.number,
+        createdType: type,
+      })
+    }
+
     await writeAudit(
       tx,
       ctx,
@@ -708,6 +787,53 @@ export async function create(
     )
 
     return { id: document.id, number: document.number, total: document.total.toString() }
+  })
+}
+
+/** Link a new invoice/receipt to the proposal or order it came from, and close that source. */
+async function closeConvertedSource(
+  tx: Tx,
+  ctx: OrgContext,
+  input: {
+    sourceId: string
+    createdId: string
+    createdNumber: string
+    createdType: SalesDocumentType
+  },
+) {
+  const source = await tx.salesDocument.findFirst({
+    where: {
+      id: input.sourceId,
+      orgId: ctx.orgId,
+      type: { in: CONVERTIBLE_SOURCES },
+    },
+    select: {
+      id: true,
+      number: true,
+      type: true,
+      status: true,
+      customerId: true,
+      convertedTo: { select: { number: true } },
+    },
+  })
+  if (!source) throw notFound('Document')
+  if (source.convertedTo) {
+    throw conflict(`${source.number} has already become ${source.convertedTo.number}.`)
+  }
+  if (source.status === 'VOID' || source.status === 'DECLINED' || source.status === 'CLOSED') {
+    throw precondition(`${source.number} is ${source.status.toLowerCase()} and cannot be converted.`)
+  }
+  if (input.createdType === 'SALES_ORDER' && source.type === 'SALES_ORDER') {
+    throw precondition('A sales order cannot become another sales order.')
+  }
+
+  await tx.salesDocument.update({
+    where: { id: input.createdId },
+    data: { convertedFromId: source.id },
+  })
+  await tx.salesDocument.update({
+    where: { id: source.id },
+    data: { status: 'CLOSED' },
   })
 }
 
@@ -731,6 +857,11 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
 
     if (existing.status === 'VOID') {
       throw precondition('A voided document cannot be edited. Create a new one.')
+    }
+    if (existing.status === 'CLOSED') {
+      throw precondition(
+        `${existing.number} has already been fulfilled. Change the invoice or sales receipt it became.`,
+      )
     }
 
     const applied = await appliedTotal(tx, id)
@@ -926,6 +1057,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         accountId: payment.ledgerAccountId,
         amount: new Decimal(payment.amount.toString()),
         description: payment.paymentMethod.name,
+        isCash: isCashMethodName(payment.paymentMethod.name),
       })),
       change:
         change.gt(0) && posOrder.changeLedgerAccountId
@@ -935,6 +1067,9 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
               description: posOrder.changePaymentMethod
                 ? `Change · ${posOrder.changePaymentMethod.name}`
                 : 'Change',
+              isCash: posOrder.changePaymentMethod
+                ? isCashMethodName(posOrder.changePaymentMethod.name)
+                : true,
             }
           : null,
     })
@@ -1131,16 +1266,24 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
   })
 }
 
+const CONVERTIBLE_SOURCES: SalesDocumentType[] = ['ESTIMATE', 'QUOTATION', 'SALES_ORDER']
+const CONVERT_TARGETS = ['INVOICE', 'SALES_RECEIPT', 'SALES_ORDER'] as const
+export type ConvertTarget = (typeof CONVERT_TARGETS)[number]
+
 /**
- * Open estimates and quotations that can still become an invoice — not voided,
- * declined, or already converted. Used on the new-invoice form and the till so
- * a customer's proposal can be picked up without retyping lines and prices.
+ * Open estimates, quotations, and sales orders that can still become a sale —
+ * not voided, declined, or already converted. Used on new invoice / sales
+ * receipt forms and the till (QuickBooks “Available estimates / orders”).
  */
-export async function listConvertibleEstimates(ctx: OrgContext) {
+export async function listConvertibleSources(
+  ctx: OrgContext,
+  options: { types?: SalesDocumentType[] } = {},
+) {
+  const types = options.types?.length ? options.types : CONVERTIBLE_SOURCES
   const rows = await db.salesDocument.findMany({
     where: {
       orgId: ctx.orgId,
-      type: { in: ['ESTIMATE', 'QUOTATION'] },
+      type: { in: types },
       status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
       convertedTo: { is: null },
     },
@@ -1169,50 +1312,180 @@ export async function listConvertibleEstimates(ctx: OrgContext) {
   }))
 }
 
+/** Estimates and quotations only — the till still picks from proposals. */
+export async function listConvertibleEstimates(ctx: OrgContext) {
+  return listConvertibleSources(ctx, { types: ['ESTIMATE', 'QUOTATION'] })
+}
+
 /**
- * Turn an accepted estimate or quotation into an invoice.
- *
- * The proposal is kept and closed rather than transformed, so what was sent
- * stays readable exactly as it was sent.
+ * One open estimate, quotation, or sales order with its lines — for the
+ * QuickBooks-style “pick which items to invoice” dialog.
  */
-export async function convertEstimate(ctx: OrgContext, estimateId: string, date: CalendarDate) {
+export async function getConvertibleSource(ctx: OrgContext, id: string) {
+  const row = await db.salesDocument.findFirst({
+    where: {
+      id,
+      orgId: ctx.orgId,
+      type: { in: CONVERTIBLE_SOURCES },
+      status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
+      convertedTo: { is: null },
+    },
+    select: {
+      id: true,
+      type: true,
+      number: true,
+      date: true,
+      total: true,
+      customerId: true,
+      reference: true,
+      memo: true,
+      customerMessage: true,
+      paymentTermId: true,
+      discountAmount: true,
+      customer: { select: { displayName: true } },
+      lines: {
+        orderBy: { lineNumber: 'asc' },
+        select: {
+          id: true,
+          itemId: true,
+          description: true,
+          quantity: true,
+          unitPrice: true,
+          discountPercent: true,
+          taxCodeId: true,
+          storeId: true,
+          amount: true,
+          item: { select: { name: true, sku: true } },
+        },
+      },
+    },
+  })
+  if (!row) throw notFound('Document')
+
+  return {
+    id: row.id,
+    type: row.type,
+    number: row.number,
+    date: toCalendarDate(row.date),
+    total: row.total.toString(),
+    customerId: row.customerId,
+    customerName: row.customer.displayName,
+    reference: row.reference,
+    memo: row.memo,
+    customerMessage: row.customerMessage,
+    paymentTermId: row.paymentTermId,
+    discountAmount: row.discountAmount.toString(),
+    lines: row.lines.map((line) => ({
+      id: line.id,
+      itemId: line.itemId,
+      itemName: line.item?.name ?? null,
+      itemSku: line.item?.sku ?? null,
+      description: line.description,
+      quantity: line.quantity.toString(),
+      unitPrice: line.unitPrice.toString(),
+      discountPercent: line.discountPercent?.toString() ?? null,
+      taxCodeId: line.taxCodeId,
+      storeId: line.storeId,
+      amount: line.amount.toString(),
+    })),
+  }
+}
+
+/**
+ * Turn an estimate, quotation, or sales order into the next paper.
+ *
+ * Paths match QuickBooks Online + Desktop:
+ * - Proposal → invoice (bill later)
+ * - Proposal → sales receipt (paid now)
+ * - Proposal → sales order (Desktop: accept, fulfill later)
+ * - Sales order → invoice or sales receipt (collect)
+ *
+ * The source is kept and closed so what was sent stays readable.
+ */
+export async function convertSalesDocument(
+  ctx: OrgContext,
+  sourceId: string,
+  date: CalendarDate,
+  target: ConvertTarget,
+  depositAccountId?: string | null,
+) {
   const meta = await requestMeta()
 
+  if (target === 'SALES_RECEIPT') {
+    if (!depositAccountId) {
+      throw validation('Choose the account the money was received into.', {
+        depositAccountId: ['Choose an account.'],
+      })
+    }
+    const account = await db.ledgerAccount.findFirst({
+      where: { id: depositAccountId, orgId: ctx.orgId, isActive: true },
+      select: { id: true },
+    })
+    if (!account) {
+      throw validation('That account cannot receive this sale.', {
+        depositAccountId: ['Choose an account.'],
+      })
+    }
+  }
+
   return db.$transaction(async (tx) => {
-    const estimate = await tx.salesDocument.findFirst({
-      where: {
-        id: estimateId,
-        orgId: ctx.orgId,
-        type: { in: ['ESTIMATE', 'QUOTATION'] },
-      },
+    const source = await tx.salesDocument.findFirst({
+      where: { id: sourceId, orgId: ctx.orgId, type: { in: CONVERTIBLE_SOURCES } },
       select: {
-        id: true, number: true, type: true, status: true, customerId: true, reference: true,
-        memo: true, customerMessage: true, paymentTermId: true, convertedTo: { select: { number: true } },
+        id: true,
+        number: true,
+        type: true,
+        status: true,
+        customerId: true,
+        reference: true,
+        memo: true,
+        customerMessage: true,
+        paymentTermId: true,
+        discountAmount: true,
+        convertedTo: { select: { number: true, type: true } },
         lines: {
           orderBy: { lineNumber: 'asc' },
           select: {
-            itemId: true, description: true, quantity: true, unitPrice: true,
-            discountPercent: true, taxCodeId: true, incomeAccountId: true, storeId: true,
+            itemId: true,
+            description: true,
+            quantity: true,
+            unitPrice: true,
+            discountPercent: true,
+            taxCodeId: true,
+            incomeAccountId: true,
+            storeId: true,
           },
         },
       },
     })
-    if (!estimate) throw notFound('Estimate or quotation')
-    if (estimate.convertedTo) {
-      throw conflict(`${estimate.number} has already become invoice ${estimate.convertedTo.number}.`)
+    if (!source) throw notFound('Document')
+    if (source.convertedTo) {
+      throw conflict(`${source.number} has already become ${source.convertedTo.number}.`)
     }
-    if (estimate.status === 'VOID' || estimate.status === 'DECLINED') {
-      throw precondition(`${estimate.number} is ${estimate.status.toLowerCase()} and cannot be invoiced.`)
+    if (source.status === 'VOID' || source.status === 'DECLINED' || source.status === 'CLOSED') {
+      throw precondition(
+        `${source.number} is ${source.status.toLowerCase()} and cannot be converted.`,
+      )
+    }
+    if (source.type === 'SALES_ORDER' && target === 'SALES_ORDER') {
+      throw precondition('A sales order cannot become another sales order.')
+    }
+    if (source.type === target) {
+      throw precondition(`${source.number} is already that kind of document.`)
     }
 
-    const invoice = await create(ctx, 'INVOICE', {
-      customerId: estimate.customerId,
+    const discount = new Decimal(source.discountAmount.toString())
+    const created = await create(ctx, target, {
+      customerId: source.customerId,
       date,
-      reference: estimate.reference,
-      memo: estimate.memo,
-      customerMessage: estimate.customerMessage,
-      paymentTermId: estimate.paymentTermId,
-      lines: estimate.lines.map((line) => ({
+      reference: source.reference,
+      memo: source.memo,
+      customerMessage: source.customerMessage,
+      paymentTermId: target === 'INVOICE' || target === 'SALES_ORDER' ? source.paymentTermId : null,
+      depositAccountId: target === 'SALES_RECEIPT' ? depositAccountId : null,
+      discountKind: 'amount',
+      discountValue: discount.greaterThan(0) ? discount.toString() : null,
+      lines: source.lines.map((line) => ({
         itemId: line.itemId,
         storeId: line.storeId,
         description: line.description,
@@ -1224,11 +1497,11 @@ export async function convertEstimate(ctx: OrgContext, estimateId: string, date:
     } as SalesDocumentInput)
 
     await tx.salesDocument.update({
-      where: { id: invoice.id },
-      data: { convertedFromId: estimateId },
+      where: { id: created.id },
+      data: { convertedFromId: sourceId },
     })
     await tx.salesDocument.update({
-      where: { id: estimateId },
+      where: { id: sourceId },
       data: { status: 'CLOSED' },
     })
 
@@ -1237,15 +1510,31 @@ export async function convertEstimate(ctx: OrgContext, estimateId: string, date:
       ctx,
       {
         entity: 'SalesDocument',
-        entityId: estimateId,
+        entityId: sourceId,
         action: 'UPDATE',
-        after: { convertedTo: invoice.number },
+        after: { convertedTo: created.number, fulfilledAs: target },
       },
       meta,
     )
 
-    return invoice
+    return { ...created, type: target }
   })
+}
+
+/** Proposal → invoice. Kept for the till and older call sites. */
+export async function convertEstimate(ctx: OrgContext, estimateId: string, date: CalendarDate) {
+  return convertSalesDocument(ctx, estimateId, date, 'INVOICE')
+}
+
+/** Sales order → invoice or sales receipt. */
+export async function convertSalesOrder(
+  ctx: OrgContext,
+  orderId: string,
+  date: CalendarDate,
+  target: 'INVOICE' | 'SALES_RECEIPT',
+  depositAccountId?: string | null,
+) {
+  return convertSalesDocument(ctx, orderId, date, target, depositAccountId)
 }
 
 /** Recompute OPEN / PARTIAL / PAID from what has actually been applied. */

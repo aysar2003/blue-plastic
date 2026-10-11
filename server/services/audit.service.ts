@@ -1,6 +1,7 @@
 import 'server-only'
 import type { Prisma } from '@prisma/client'
 
+import { presentTrashEntry } from '@/lib/trash-log'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -75,16 +76,33 @@ export async function trailFor(ctx: OrgContext, entityId: string): Promise<Trail
   return map.get(entityId) ?? { entered: null, changed: null }
 }
 
+/**
+ * Trash: every deletion, and nothing else.
+ *
+ * The working books no longer contain these records. This list is the log of
+ * the fact that they were deleted — who, what, and why — with no id and no
+ * path back to a page that would open them.
+ */
 export async function list(ctx: OrgContext, query: ListQuery) {
+  const q = query.q?.trim()
+  const needle = q ? [q, q.toUpperCase()].filter((value, index, all) => all.indexOf(value) === index) : []
+
   const where: Prisma.AuditLogWhereInput = {
     orgId: ctx.orgId,
-    ...(query.q
+    action: 'DELETE',
+    ...(needle.length
       ? {
-          OR: [
-            { entity: { contains: query.q, mode: 'insensitive' } },
-            { actor: { name: { contains: query.q, mode: 'insensitive' } } },
-            { actor: { email: { contains: query.q, mode: 'insensitive' } } },
-          ],
+          OR: needle.flatMap((value) => [
+            { actor: { name: { contains: value, mode: 'insensitive' as const } } },
+            { actor: { email: { contains: value, mode: 'insensitive' as const } } },
+            { entity: { contains: value, mode: 'insensitive' as const } },
+            { before: { path: ['number'], string_contains: value } },
+            { before: { path: ['displayName'], string_contains: value } },
+            { before: { path: ['name'], string_contains: value } },
+            { before: { path: ['email'], string_contains: value } },
+            { before: { path: ['sku'], string_contains: value } },
+            { after: { path: ['reason'], string_contains: value } },
+          ]),
         }
       : {}),
   }
@@ -95,11 +113,10 @@ export async function list(ctx: OrgContext, query: ListQuery) {
       select: {
         id: true,
         entity: true,
-        entityId: true,
-        action: true,
         at: true,
-        ipAddress: true,
-        actor: { select: { id: true, name: true, email: true } },
+        before: true,
+        after: true,
+        actor: { select: { name: true, email: true } },
       },
       orderBy: { at: 'desc' },
       ...paginate(query),
@@ -107,5 +124,9 @@ export async function list(ctx: OrgContext, query: ListQuery) {
     db.auditLog.count({ where }),
   ])
 
-  return paged(rows, total, query)
+  return paged(
+    rows.map((row) => presentTrashEntry(row)),
+    total,
+    query,
+  )
 }

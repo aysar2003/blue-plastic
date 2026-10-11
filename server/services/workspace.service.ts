@@ -49,7 +49,7 @@ export async function removeBookmark(ctx: OrgContext, id: string) {
 
 export async function feed(ctx: OrgContext) {
   const rows = await db.auditLog.findMany({
-    where: { orgId: ctx.orgId },
+    where: { orgId: ctx.orgId, action: { not: 'DELETE' } },
     select: {
       id: true,
       entity: true,

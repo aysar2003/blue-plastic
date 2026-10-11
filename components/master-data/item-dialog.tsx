@@ -25,6 +25,7 @@ import type { ItemType } from '@prisma/client'
 export type ItemValues = {
   id?: string
   sku?: string | null
+  barcode?: string | null
   name?: string | null
   description?: string | null
   type?: ItemType
@@ -253,6 +254,22 @@ export function ItemDialog({
               <Input {...fieldProps('sku', e?.sku)} defaultValue={item?.sku ?? ''} />
             </Field>
           </div>
+
+          <Field
+            name="barcode"
+            label="Barcode"
+            hint="Scan the package here, or type the code. The till adds this item when that code is scanned. A SKU scan still works."
+            error={e?.barcode}
+          >
+            <Input
+              {...fieldProps('barcode', e?.barcode)}
+              defaultValue={item?.barcode ?? ''}
+              autoComplete="off"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.preventDefault()
+              }}
+            />
+          </Field>
 
           <Field name="type" label="Type" hint={TYPE_HELP[type]} required error={e?.type}>
             {mode === 'create' ? (

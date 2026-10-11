@@ -43,7 +43,7 @@ const props = {
   recentOrders: [],
   products: [
     { id: 'a4', name: 'A4', sku: null, category: null, price: '6', onHand: '10' },
-    { id: 'bbb', name: '9BBB item', sku: null, category: null, price: '12', onHand: '4' },
+    { id: 'bbb', name: '9BBB item', sku: 'BBB-1', barcode: '12345678', category: null, price: '12', onHand: '4' },
   ],
   customers: [{ id: 'cust-1', displayName: 'Amina' }],
   currency: 'USD',
@@ -174,7 +174,8 @@ describe('POS till tabs', () => {
         sessionId: 'sess-1',
         customerId: 'cust-1',
         note: null,
-        lines: [{ itemId: 'bbb', quantity: '1', storeId: undefined }],
+        estimateId: undefined,
+        lines: [{ itemId: 'bbb', quantity: '1', unitPrice: '12.00', storeId: undefined }],
         payments: [{ paymentMethodId: 'cash', amount: '12.00' }],
       },
     ])
@@ -214,5 +215,51 @@ describe('POS till tabs', () => {
     expect(cartText()).toContain('9BBB item')
     expect(cartText()).toContain('$12.00')
     expect(cartText()).not.toContain('A4')
+  })
+
+  it('opens the orders list, keeps an empty ticket on the scan prompt, and continues a ticket that has lines', async () => {
+    await renderTill()
+    await click(document.querySelector('[aria-label="New order"]')!)
+    await click(buttonByText('Orders'))
+
+    expect(document.querySelector('[data-pos-view="orders"]')).toBeTruthy()
+    expect(document.querySelector('[aria-label="Search orders"]')).toBeTruthy()
+    expect(document.body.textContent).toContain('0001')
+    expect(document.body.textContent).toContain('Ongoing')
+    expect(document.body.textContent).toContain('Select an order or scan QR code')
+
+    await click(buttonByText('Register'))
+    expect(document.querySelector('[data-pos-view="orders"]')).toBeNull()
+    expect(activeOrder()).toBe('0001')
+
+    await click(buttonIncluding('9BBB item'))
+    await click(buttonByText('Customer'))
+    await click(buttonByText('Amina'))
+    await click(buttonByText('Orders'))
+
+    expect(document.body.textContent).toContain('Amina')
+    expect(document.body.textContent).toContain('9BBB item')
+    expect(document.body.textContent).toContain('$12.00')
+    await click(buttonByText('Continue'))
+    expect(activeOrder()).toBe('0001')
+    expect(cartText()).toContain('9BBB item')
+    expect(cartText()).toContain('Order 0001 · Amina')
+  })
+
+  it('adds the item when its barcode is entered in the till search', async () => {
+    await renderTill()
+    const search = document.querySelector('[data-pos-barcode-search]')
+    if (!(search instanceof HTMLInputElement)) throw new Error('barcode search missing')
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(search, '12345678')
+      search.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => {
+      search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+    expect(cartText()).toContain('9BBB item')
+    expect(cartText()).toContain('$12.00')
+    expect(document.body.textContent).toContain('Added 9BBB item')
   })
 })

@@ -66,8 +66,8 @@ export function EstimateHome({
             {plural} waiting on customers
           </h1>
           <p className="mt-1 max-w-md text-sm text-primary-foreground/80">
-            Create a {unit}, send it, then convert to an invoice when they accept. Open is still
-            out; invoiced means it already became a sale.
+            Create a {unit}, send it, then turn it into an invoice, sales receipt, or sales order
+            when they accept. Open is still out; invoiced means it already became a sale.
           </p>
         </div>
         {canCreate ? (

@@ -17,7 +17,11 @@ import {
   type PosOrderSummaryPayment,
 } from '@/lib/pos-order-report'
 import { POS_BANKS_DETAIL, POS_REGISTER_DETAIL } from '@/lib/pos-register-account'
-import { canTransferRegister, transferFitsBalance } from '@/lib/pos-register-posting'
+import {
+  canTransferRegister,
+  canUseRegister,
+  transferFitsBalance,
+} from '@/lib/pos-register-posting'
 import { chooseLineStore } from '@/lib/pos-line-store'
 import { CASHIER_PIN_REQUIRED, CASHIER_PIN_WRONG } from '@/lib/pos-pin'
 import { receiptCashierName } from '@/lib/pos-receipt'
@@ -34,6 +38,12 @@ import type {
   PosRegisterInput,
   PosRegisterTransferInput,
 } from '@/lib/validation/pos'
+import {
+  buildPosCashMoveJournal,
+  buildPosSessionCloseJournal,
+} from '@/server/accounting/builders/pos'
+import { seedChartOfAccounts, systemAccountId } from '@/server/accounting/chart-of-accounts'
+import { postJournal } from '@/server/accounting/posting'
 import type { OrgContext } from '@/server/auth/context'
 import { hashPassword, verifyPassword } from '@/server/auth/password'
 import { db, type Tx } from '@/server/db'
@@ -43,10 +53,6 @@ import * as bankingService from '@/server/services/banking.service'
 import { ensurePosRegisterAccounts } from '@/server/services/pos-register-account'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
 import * as salesService from '@/server/services/sales.service'
-import {
-  ensureRegisterCashAccount,
-  syncPosChartAccounts,
-} from '@/server/services/pos-chart.service'
 
 export async function listRegisters(ctx: OrgContext) {
   return db.posRegister.findMany({
@@ -87,12 +93,15 @@ export async function dashboardRegisters(ctx: OrgContext) {
     registers.map((register) => register.id),
   )
 
-  // Counters with staff lists are only shown to those people (managers still see all).
+  // Cashiers only see counters they are assigned to. Managers still see all.
   const canManage = ctx.permissions.has('pos:manage')
-  const visible = registers.filter((register) => {
-    const staff = staffByRegister.get(register.id) ?? []
-    return canManage || staff.length === 0 || staff.includes(ctx.userId)
-  })
+  const visible = registers.filter((register) =>
+    canUseRegister({
+      canManage,
+      staffUserIds: staffByRegister.get(register.id) ?? [],
+      userId: ctx.userId,
+    }),
+  )
 
   const currency = ctx.organization.baseCurrency
   const balances = await accountBalances(
@@ -132,6 +141,7 @@ export async function assertCashierPin(
   registerId: string,
   pin: string | undefined,
 ): Promise<{ required: boolean }> {
+  await assertMayUseRegister(ctx, registerId)
   const register = await db.posRegister.findFirst({
     where: { id: registerId, orgId: ctx.orgId, isActive: true },
     select: { pinHash: true },
@@ -146,6 +156,7 @@ export async function assertCashierPin(
 
 /** Blocks a sale or refund until this browser has entered this register's PIN. */
 export async function requireCashierUnlock(ctx: OrgContext, registerId: string) {
+  await assertMayUseRegister(ctx, registerId)
   const register = await db.posRegister.findFirst({
     where: { id: registerId, orgId: ctx.orgId, isActive: true },
     select: { pinHash: true },
@@ -158,6 +169,7 @@ export async function requireCashierUnlock(ctx: OrgContext, registerId: string) 
 
 /** Name and whether a PIN is set. The hash never leaves the server. */
 export async function registerPinState(ctx: OrgContext, registerId: string) {
+  await assertMayUseRegister(ctx, registerId)
   const register = await db.posRegister.findFirst({
     where: { id: registerId, orgId: ctx.orgId, isActive: true },
     select: { id: true, name: true, pinHash: true },
@@ -167,7 +179,7 @@ export async function registerPinState(ctx: OrgContext, registerId: string) {
 }
 
 
-/** Staff user ids per register. Empty map entry / missing table → no restriction. */
+/** Staff user ids per register. Empty list = managers only. */
 async function loadRegisterStaffMap(registerIds: string[]) {
   const map = new Map<string, string[]>()
   if (registerIds.length === 0) return map
@@ -182,9 +194,33 @@ async function loadRegisterStaffMap(registerIds: string[]) {
       map.set(row.registerId, list)
     }
   } catch {
-    // Client or table not ready yet — treat every counter as open to all POS users.
+    // Client or table not ready yet — treat every counter as unassigned (managers only).
   }
   return map
+}
+
+const REGISTER_STAFF_DENIED =
+  'You are not assigned to this counter. Ask an admin to add you in POS settings.'
+
+/** Cashiers may only work counters they are assigned to. Managers may use any till. */
+export async function assertMayUseRegister(ctx: OrgContext, registerId: string) {
+  const staffMap = await loadRegisterStaffMap([registerId])
+  const allowed = canUseRegister({
+    canManage: ctx.permissions.has('pos:manage'),
+    staffUserIds: staffMap.get(registerId) ?? [],
+    userId: ctx.userId,
+  })
+  if (!allowed) throw forbidden(REGISTER_STAFF_DENIED)
+}
+
+/** Soft check for page redirects (no throw). */
+export async function mayUseRegister(ctx: OrgContext, registerId: string) {
+  const staffMap = await loadRegisterStaffMap([registerId])
+  return canUseRegister({
+    canManage: ctx.permissions.has('pos:manage'),
+    staffUserIds: staffMap.get(registerId) ?? [],
+    userId: ctx.userId,
+  })
 }
 
 async function accountBalances(orgId: string, accountIds: string[]) {
@@ -227,13 +263,7 @@ export async function openSession(ctx: OrgContext, input: PosOpenSessionInput) {
     select: { id: true },
   })
   if (!register) throw notFound('Register')
-
-  // When staff are listed on the counter, only those people may open it.
-  const staffMap = await loadRegisterStaffMap([register.id])
-  const staff = staffMap.get(register.id) ?? []
-  if (staff.length > 0 && !staff.includes(ctx.userId)) {
-    throw precondition('You are not assigned to this counter. Ask an admin to add you in POS settings.')
-  }
+  await assertMayUseRegister(ctx, register.id)
 
   const opening = new Decimal(input.openingCash)
   if (opening.isNegative()) throw validation('Opening cash cannot be negative.')
@@ -261,21 +291,65 @@ export async function openSession(ctx: OrgContext, input: PosOpenSessionInput) {
 export async function closeSession(ctx: OrgContext, input: PosCloseSessionInput) {
   const session = await db.posSession.findFirst({
     where: { id: input.sessionId, orgId: ctx.orgId, status: 'OPEN' },
-    select: { id: true, registerId: true },
+    select: { id: true, registerId: true, closingJournalId: true },
   })
   if (!session) throw notFound('Session')
+  await assertMayUseRegister(ctx, session.registerId)
+  if (session.closingJournalId) {
+    throw precondition('This session is already closed on the ledger.')
+  }
 
   const closing = new Decimal(input.closingCash)
   if (closing.isNegative()) throw validation('Closing cash cannot be negative.')
 
-  await db.posSession.update({
-    where: { id: session.id },
-    data: {
-      status: 'CLOSED',
-      closedAt: new Date(),
-      closingCash: closing.toFixed(4),
-      closedByUserId: ctx.userId,
-    },
+  const expected = await computeSessionExpectedCash(ctx, session.id)
+  const difference = closing.minus(expected)
+  const register = await db.posRegister.findFirst({
+    where: { id: session.registerId, orgId: ctx.orgId },
+    select: { id: true, name: true },
+  })
+  if (!register) throw notFound('Register')
+
+  const tillAccountId = await registerBankAccountId(ctx, register.id)
+  const receiptDate = today(ctx.organization.timeZone)
+
+  await db.$transaction(async (tx) => {
+    await seedChartOfAccounts(tx, ctx.orgId)
+
+    let closingJournalId: string | null = null
+    if (!difference.isZero()) {
+      const differenceAccountId = await systemAccountId(
+        tx,
+        ctx.orgId,
+        difference.isPositive() ? 'POS_CASH_OVER' : 'POS_CASH_SHORT',
+      )
+      const draft = buildPosSessionCloseJournal({
+        date: receiptDate,
+        sessionId: session.id,
+        registerAccountId: tillAccountId,
+        differenceAccountId,
+        amount: difference,
+        registerName: register.name,
+        over: difference.isPositive(),
+      })
+      if (draft) {
+        const journal = await postJournal(tx, ctx, draft)
+        closingJournalId = journal.id
+      }
+    }
+
+    await tx.posSession.update({
+      where: { id: session.id },
+      data: {
+        status: 'CLOSED',
+        closedAt: new Date(),
+        closingCash: closing.toFixed(4),
+        expectedCashAtClose: expected.toFixed(4),
+        cashDifference: difference.toFixed(4),
+        closingJournalId,
+        closedByUserId: ctx.userId,
+      },
+    })
   })
 
   return { id: session.id, registerId: session.registerId }
@@ -295,8 +369,23 @@ export async function openSessionForRegister(ctx: OrgContext, registerId: string
 
 export async function listSessions(ctx: OrgContext, limit = 50) {
   const currency = ctx.organization.baseCurrency
+  const canManage = ctx.permissions.has('pos:manage')
+  let registerFilter: { registerId: { in: string[] } } | undefined
+  if (!canManage) {
+    const staffRows = await db.posRegisterStaff.findMany({
+      where: { userId: ctx.userId, register: { orgId: ctx.orgId } },
+      select: { registerId: true },
+    })
+    const allowedRegisterIds = staffRows.map((row) => row.registerId)
+    if (allowedRegisterIds.length === 0) return []
+    registerFilter = { registerId: { in: allowedRegisterIds } }
+  }
+
   const rows = await db.posSession.findMany({
-    where: { orgId: ctx.orgId },
+    where: {
+      orgId: ctx.orgId,
+      ...registerFilter,
+    },
     select: {
       id: true,
       status: true,
@@ -417,7 +506,9 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
         changePaymentMethodId: true,
         changeLedgerAccountId: true,
         changePaymentMethod: { select: { name: true } },
-        register: { select: { name: true } },
+        depositLedgerAccountId: true,
+        depositAccount: { select: { id: true, code: true, name: true } },
+        register: { select: { name: true, account: { select: { id: true, code: true, name: true } } } },
         session: { select: { id: true } },
         salesDocument: {
           select: {
@@ -506,6 +597,7 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
         : row.salesDocument.total
       const tender = tenders[index]!
       const change = new Decimal(tender.changeAmount)
+      const posBank = row.depositAccount ?? row.register.account
       return {
         id: row.id,
         createdAt: row.createdAt,
@@ -514,12 +606,16 @@ export async function listPosOrders(ctx: OrgContext, filters: PosOrderListFilter
           row.createdAt,
           ctx.organization.timeZone,
         ),
+        date: toCalendarDate(row.salesDocument.date),
         registerName: row.register.name,
+        posBankLabel: posBank ? `${posBank.code} · ${posBank.name}` : '—',
+        posBankAccountId: posBank?.id ?? null,
         sessionId: row.session?.id ?? null,
         documentId: row.salesDocument.id,
         number: row.salesDocument.number,
         status: row.salesDocument.status,
         total: formatMoney(signedTotal, currency),
+        totalRaw: signedTotal.toString(),
         payments: row.payments
           .map((payment) => {
             const amount = refund ? new Decimal(payment.amount.toString()).negated() : payment.amount
@@ -561,6 +657,7 @@ function netWalletPayments(
 }
 
 export async function registerForTerminal(ctx: OrgContext, registerId: string) {
+  await assertMayUseRegister(ctx, registerId)
   const register = await db.posRegister.findFirst({
     where: { id: registerId, orgId: ctx.orgId, isActive: true },
     select: {
@@ -634,6 +731,7 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
         id: true,
         name: true,
         sku: true,
+        barcode: true,
         type: true,
         salesPrice: true,
         category: { select: { name: true } },
@@ -679,6 +777,7 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
       id: item.id,
       name: item.name,
       sku: item.sku,
+      barcode: item.barcode,
       category: item.category?.name ?? null,
       price: item.salesPrice?.toString() ?? '0',
       /** Null for services and non-stock items: no warning for those. */
@@ -1028,30 +1127,85 @@ async function consumeEstimate(ctx: OrgContext, estimateId: string, salesDocumen
 export async function recordCashMove(ctx: OrgContext, input: PosCashMoveInput) {
   const session = await db.posSession.findFirst({
     where: { id: input.sessionId, orgId: ctx.orgId, status: 'OPEN' },
-    select: { id: true },
+    select: { id: true, registerId: true, register: { select: { name: true } } },
   })
   if (!session) throw precondition('Open a session before recording cash in/out.')
+  await assertMayUseRegister(ctx, session.registerId)
 
   const amount = new Decimal(input.amount)
   if (amount.isZero() || amount.isNegative()) {
     throw validation('Enter a positive cash amount.')
   }
 
-  return db.posCashMovement.create({
-    data: {
+  const tillAccountId = await registerBankAccountId(ctx, session.registerId)
+  if (input.counterpartyAccountId === tillAccountId) {
+    throw validation('Choose a different account. Cash in/out cannot use the same till account.')
+  }
+
+  const counterparty = await db.ledgerAccount.findFirst({
+    where: {
+      id: input.counterpartyAccountId,
       orgId: ctx.orgId,
-      sessionId: session.id,
-      kind: input.kind,
-      amount: amount.toFixed(4),
-      reason: input.reason ?? null,
-      createdByUserId: ctx.userId,
+      isActive: true,
+      type: { in: ['ASSET', 'LIABILITY'] },
+      NOT: { OR: [{ detailType: POS_BANKS_DETAIL }, { children: { some: {} } }] },
     },
-    select: { id: true, kind: true, amount: true },
+    select: { id: true, name: true },
+  })
+  if (!counterparty) {
+    throw validation('Choose a bank or wallet account for this cash in/out.')
+  }
+
+  const receiptDate = today(ctx.organization.timeZone)
+
+  return db.$transaction(async (tx) => {
+    const movement = await tx.posCashMovement.create({
+      data: {
+        orgId: ctx.orgId,
+        sessionId: session.id,
+        kind: input.kind,
+        amount: amount.toFixed(4),
+        reason: input.reason ?? null,
+        counterpartyAccountId: counterparty.id,
+        createdByUserId: ctx.userId,
+      },
+      select: { id: true, kind: true, amount: true },
+    })
+
+    const journal = await postJournal(
+      tx,
+      ctx,
+      buildPosCashMoveJournal({
+        date: receiptDate,
+        kind: input.kind,
+        movementId: movement.id,
+        registerAccountId: tillAccountId,
+        counterpartyAccountId: counterparty.id,
+        amount,
+        registerName: session.register.name,
+        reason: input.reason,
+      }),
+    )
+
+    await tx.posCashMovement.update({
+      where: { id: movement.id },
+      data: { journalId: journal.id },
+    })
+
+    return movement
   })
 }
 
-/** Expected drawer cash for close-register variance. */
-export async function sessionCashSummary(ctx: OrgContext, sessionId: string) {
+type SessionCashParts = {
+  opening: Decimal
+  cashIn: Decimal
+  cashOut: Decimal
+  cashSales: Decimal
+  cashRefunds: Decimal
+  expected: Decimal
+}
+
+async function loadSessionCashParts(ctx: OrgContext, sessionId: string): Promise<SessionCashParts> {
   const session = await db.posSession.findFirst({
     where: { id: sessionId, orgId: ctx.orgId },
     select: {
@@ -1105,16 +1259,27 @@ export async function sessionCashSummary(ctx: OrgContext, sessionId: string) {
 
   const opening = new Decimal(session.openingCash.toString())
   const expected = opening.plus(cashIn).minus(cashOut).plus(cashSales).minus(cashRefunds)
+  return { opening, cashIn, cashOut, cashSales, cashRefunds, expected }
+}
+
+async function computeSessionExpectedCash(ctx: OrgContext, sessionId: string) {
+  const parts = await loadSessionCashParts(ctx, sessionId)
+  return parts.expected
+}
+
+/** Expected drawer cash for close-register variance. */
+export async function sessionCashSummary(ctx: OrgContext, sessionId: string) {
+  const parts = await loadSessionCashParts(ctx, sessionId)
   const currency = ctx.organization.baseCurrency
 
   return {
-    openingCash: toMoneyString(opening, 2),
-    cashIn: toMoneyString(cashIn, 2),
-    cashOut: toMoneyString(cashOut, 2),
-    cashSales: toMoneyString(cashSales, 2),
-    cashRefunds: toMoneyString(cashRefunds, 2),
-    expectedCash: toMoneyString(expected, 2),
-    expectedCashRaw: expected.toFixed(4),
+    openingCash: toMoneyString(parts.opening, 2),
+    cashIn: toMoneyString(parts.cashIn, 2),
+    cashOut: toMoneyString(parts.cashOut, 2),
+    cashSales: toMoneyString(parts.cashSales, 2),
+    cashRefunds: toMoneyString(parts.cashRefunds, 2),
+    expectedCash: toMoneyString(parts.expected, 2),
+    expectedCashRaw: parts.expected.toFixed(4),
     currency,
   }
 }
@@ -1331,6 +1496,7 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
 
 /** Balance sitting in this till's bank account. Null when the account has not been created. */
 export async function registerBankSnapshot(ctx: OrgContext, registerId: string) {
+  await assertMayUseRegister(ctx, registerId)
   const register = await db.posRegister.findFirst({
     where: { id: registerId, orgId: ctx.orgId },
     select: { ledgerAccountId: true },
@@ -1377,7 +1543,7 @@ export async function transferFromRegister(ctx: OrgContext, input: PosRegisterTr
     userId: ctx.userId,
   })
   if (!allowed) {
-    throw forbidden('You can only transfer money out of your own register.')
+    throw forbidden(REGISTER_STAFF_DENIED)
   }
 
   const register = await db.posRegister.findFirst({
@@ -1444,10 +1610,9 @@ export async function walkInCustomers(ctx: OrgContext) {
 
 export async function settingsOverview(ctx: OrgContext) {
   await db.$transaction(async (tx) => {
+    await seedChartOfAccounts(tx, ctx.orgId)
     await ensurePosRegisterAccounts(tx, ctx.orgId)
   })
-  // Keep Point of Sale heading + per-till sub-accounts on the chart.
-  await syncPosChartAccounts(ctx)
 
   const [methods, registers, assetAccounts, members] = await Promise.all([
     db.posPaymentMethod.findMany({
@@ -1690,9 +1855,6 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
       await syncRegisterMethods(tx, input.id!, input.paymentMethodIds, changeMethodIds)
       await syncRegisterStaff(tx, input.id!, staffUserIds)
       await ensurePosRegisterAccounts(tx, ctx.orgId)
-      if (input.isActive) {
-        await ensureRegisterCashAccount(tx, ctx.orgId, input.id!, name)
-      }
     })
     return { id: input.id }
   }
@@ -1714,9 +1876,6 @@ export async function upsertRegister(ctx: OrgContext, input: PosRegisterInput) {
     await syncRegisterMethods(tx, register.id, input.paymentMethodIds, changeMethodIds)
     await syncRegisterStaff(tx, register.id, staffUserIds)
     await ensurePosRegisterAccounts(tx, ctx.orgId)
-    if (input.isActive) {
-      await ensureRegisterCashAccount(tx, ctx.orgId, register.id, name)
-    }
     return register
   })
 

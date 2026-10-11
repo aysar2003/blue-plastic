@@ -245,6 +245,7 @@ export default async function StatementPage({
     return (
       <>
         <PageHeader
+          organization={ctx.organization}
           title={TITLES[kind as Kind]}
           description="Choose who — or which account — the statement is for."
         />
@@ -322,7 +323,7 @@ export default async function StatementPage({
       return (
         <>
           <PageHeader
-            className="print:hidden"
+            organization={ctx.organization}
             title="Customer statement"
             description={`${customer.displayName} · ${periodText} · ${
               customerFilter.view === 'summary'
@@ -402,7 +403,7 @@ export default async function StatementPage({
     return (
       <>
         <PageHeader
-          className="print:hidden"
+          organization={ctx.organization}
           title="Customer statement"
           description={`${customer.displayName} · ${
             settings.period === 'all-dates'
@@ -490,7 +491,7 @@ export default async function StatementPage({
       return (
         <>
           <PageHeader
-            className="print:hidden"
+            organization={ctx.organization}
             title="Vendor statement"
             description={`${vendor.displayName} · ${periodText} · ${paperName}`}
             actions={
@@ -548,7 +549,7 @@ export default async function StatementPage({
     return (
       <>
         <PageHeader
-          className="print:hidden"
+          organization={ctx.organization}
           title="Vendor statement"
           description={`${vendor.displayName} · ${
             settings.period === 'all-dates'
@@ -634,7 +635,7 @@ export default async function StatementPage({
   return (
     <>
       <PageHeader
-        className="print:hidden"
+        organization={ctx.organization}
         title={TITLES[kind as Kind]}
         description={`${subjectName} · ${formatDate(settings.range.from)} to ${formatDate(
           settings.range.to,

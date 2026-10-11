@@ -2,10 +2,10 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { afterSignInPath } from '@/lib/after-sign-in'
 import { withDatabasePage } from '@/lib/page-guard'
 import { auth } from '@/auth'
-import { CREATOR_BRAND_NAME } from '@/lib/feature-flags'
-import { PRODUCT_NAME } from '@/lib/product-brand'
+import { PRODUCT_CREDIT, PRODUCT_NAME } from '@/lib/product-brand'
 import { creatorBrandVisibleBeforeSignIn } from '@/server/services/organization.service'
 import { needsSetup } from '@/server/services/setup.service'
 import { SignInForm } from './sign-in-form'
@@ -25,27 +25,29 @@ export default async function SignInPage() {
     if (await needsSetup()) redirect('/setup')
 
     const session = await auth()
-    if (session?.user) redirect('/dashboard')
+    if (session?.user?.id) redirect(await afterSignInPath(session.user.id))
 
     const showBrand = await creatorBrandVisibleBeforeSignIn()
 
     return (
     <div className="flex w-full max-w-sm flex-col gap-4">
-      <Card className="w-full">
+      <Card className="w-full border-border bg-card text-card-foreground shadow-sm">
         <CardHeader>
-          <CardTitle>Sign in</CardTitle>
-          <CardDescription>Enter your credentials to reach the books.</CardDescription>
+          <CardTitle>Company login</CardTitle>
+          <CardDescription>
+            Enter your email and password to open the books.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <SignInForm />
         </CardContent>
       </Card>
       <p className="text-center text-[0.6875rem] tracking-wide text-muted-foreground">
-        <span className="font-medium text-foreground/80">{PRODUCT_NAME}</span>
+        <span className="font-medium text-foreground">{PRODUCT_NAME}</span>
         {showBrand ? (
           <>
             <span className="mx-1.5">·</span>
-            <span>{CREATOR_BRAND_NAME}</span>
+            <span>{PRODUCT_CREDIT}</span>
           </>
         ) : null}
       </p>

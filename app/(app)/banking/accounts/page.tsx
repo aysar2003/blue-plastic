@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowLeftRightIcon, BanknoteIcon, UploadIcon } from 'lucide-react'
 
+import { AccountTypeIcon, AccountTypeMark } from '@/components/accounts/account-type-icon'
 import { BooksTabs } from '@/components/accounts/books-tabs'
 import { ClickableRow } from '@/components/data/clickable-row'
 import { EmptyState } from '@/components/data/empty-state'
@@ -12,13 +13,11 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DeleteButton } from '@/components/data/delete-record'
-import {
-  ACCOUNT_SUBTYPE_LABELS,
-  ACCOUNT_TYPE_LABELS,
-  ACCOUNT_TYPE_ORDER,
-} from '@/lib/accounting-labels'
+import { ACCOUNT_SUBTYPE_LABELS, ACCOUNT_TYPE_LABELS } from '@/lib/accounting-labels'
+import { chartSubIndentStyle, nestChartRows } from '@/lib/chart-tree'
 import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { Decimal, formatMoney } from '@/lib/money'
+import { cn } from '@/lib/utils'
 import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { requireOrgContext } from '@/server/auth/context'
 import * as accountService from '@/server/services/account.service'
@@ -29,34 +28,6 @@ const SORTABLE = ['name', 'type', 'books', 'bank', 'pending'] as const
 
 /** Money accounts QuickBooks lists as Bank / Credit Card / Undeposited Funds. */
 const MONEY_SUBTYPES = new Set(['BANK', 'CREDIT_CARD', 'UNDEPOSITED_FUNDS'])
-
-/** Subtype order within Assets — bank first, like a standard chart. */
-const SUBTYPE_RANK: Record<string, number> = {
-  BANK: 0,
-  UNDEPOSITED_FUNDS: 1,
-  CREDIT_CARD: 2,
-  ACCOUNTS_RECEIVABLE: 10,
-  INVENTORY: 11,
-  OTHER_CURRENT_ASSET: 12,
-  FIXED_ASSET: 13,
-  ACCUMULATED_DEPRECIATION: 14,
-  OTHER_ASSET: 15,
-  ACCOUNTS_PAYABLE: 20,
-  SALES_TAX_PAYABLE: 21,
-  OTHER_CURRENT_LIABILITY: 22,
-  LONG_TERM_LIABILITY: 23,
-  OWNERS_EQUITY: 30,
-  RETAINED_EARNINGS: 31,
-  OPENING_BALANCE_EQUITY: 32,
-  DRAWINGS: 33,
-  INCOME: 40,
-  OTHER_INCOME: 41,
-  SALES_DISCOUNTS: 42,
-  COST_OF_GOODS_SOLD: 50,
-  OPERATING_EXPENSE: 51,
-  OTHER_EXPENSE: 52,
-  DEPRECIATION: 53,
-}
 
 export const metadata: Metadata = { title: 'Accounts' }
 
@@ -77,22 +48,13 @@ export default async function BankingPage({
   ])
 
   const bankById = new Map(bankRows.map((row) => [row.id, row]))
-  const typeRank = new Map(ACCOUNT_TYPE_ORDER.map((type, index) => [type, index]))
 
-  function chartOrder(a: { type: string; subtype: string; code: string }, b: typeof a) {
-    return (
-      (typeRank.get(a.type as never) ?? 99) - (typeRank.get(b.type as never) ?? 99) ||
-      (SUBTYPE_RANK[a.subtype] ?? 99) - (SUBTYPE_RANK[b.subtype] ?? 99) ||
-      a.code.localeCompare(b.code)
-    )
-  }
-
-  const direction = sort.dir === 'asc' ? 1 : -1
-  const accounts = chart
+  const mapped = chart
     .filter((account) => account.isActive)
     .map((account) => {
       const bank = bankById.get(account.id)
-      const books = bank?.balance ?? new Decimal(account.balance)
+      // Headings (e.g. POS Banks) are not in bankAccounts — use the chart roll-up.
+      const books = bank?.balance ?? new Decimal(account.balance || 0)
       return {
         ...account,
         books,
@@ -103,24 +65,9 @@ export default async function BankingPage({
         categoryLabel: ACCOUNT_TYPE_LABELS[account.type],
       }
     })
-    .sort((a, b) => {
-      switch (sort.sort) {
-        case 'name':
-          return direction * a.code.localeCompare(b.code)
-        case 'type':
-          return direction * chartOrder(a, b)
-        case 'books':
-          return direction * a.books.comparedTo(b.books)
-        case 'bank':
-          return direction * (a.cleared ?? new Decimal(0)).comparedTo(b.cleared ?? new Decimal(0))
-        case 'pending':
-          return (
-            direction * (a.uncleared ?? new Decimal(0)).comparedTo(b.uncleared ?? new Decimal(0))
-          )
-        default:
-          return chartOrder(a, b)
-      }
-    })
+
+  // Always nest — sub-accounts stay under their parent for every sort.
+  const accounts = nestChartRows(mapped)
 
   const currency = ctx.organization.baseCurrency
   const asOf = today(ctx.organization.timeZone)
@@ -128,6 +75,7 @@ export default async function BankingPage({
   const canReconcile = ctx.permissions.has('bank:reconcile')
   const canEdit = ctx.permissions.has('account:update')
   const canArchive = ctx.permissions.has('account:archive')
+  const canDelete = ctx.permissions.has('account:delete') && ctx.features.allowAccountDelete
   const canReport = ctx.permissions.has('report:read')
   const parents = chart.map((account) => ({
     id: account.id,
@@ -140,6 +88,7 @@ export default async function BankingPage({
     <>
       <BooksTabs active="bank" />
       <PageHeader
+        organization={ctx.organization}
         title="Accounts"
         description="Full chart in QuickBooks order — Bank and cash (money in hand), then receivables, inventory, liabilities, equity, income and expenses. Balance as of today."
         actions={
@@ -175,18 +124,32 @@ export default async function BankingPage({
           description="Install or add accounts on the chart of accounts, and they will appear here."
         />
       ) : (
-        <Card className="mb-6 overflow-hidden p-0">
-          <Table>
+        <Card className="mb-6 overflow-hidden p-0" data-report-root data-template="standard">
+          <Table className="min-w-[56rem]" containerClassName="overflow-x-auto">
             <TableHeader>
-              <TableRow>
-                <SortableHeader column="name" label="Account" state={sort} basePath="/banking/accounts" />
-                <SortableHeader column="type" label="Type" state={sort} basePath="/banking/accounts" className="w-44" />
+              <TableRow className="ledger-head hover:bg-[var(--band)]">
+                <TableHead className="w-12 bg-[var(--band)] print:hidden" aria-label="Type" />
+                <SortableHeader
+                  column="name"
+                  label="Account"
+                  state={sort}
+                  basePath="/banking/accounts"
+                  className="min-w-[16rem]"
+                />
+                <SortableHeader
+                  column="type"
+                  label="Type"
+                  state={sort}
+                  basePath="/banking/accounts"
+                  className="w-36 whitespace-nowrap"
+                />
+                <TableHead className="w-44 whitespace-nowrap">Detail type</TableHead>
                 <SortableHeader
                   column="books"
                   label="In the books"
                   state={sort}
                   basePath="/banking/accounts"
-                  className="w-36"
+                  className="w-36 whitespace-nowrap"
                   numeric
                   defaultDirection="desc"
                 />
@@ -195,7 +158,7 @@ export default async function BankingPage({
                   label="Confirmed by the bank"
                   state={sort}
                   basePath="/banking/accounts"
-                  className="w-40"
+                  className="w-40 whitespace-nowrap"
                   numeric
                   defaultDirection="desc"
                 />
@@ -204,7 +167,7 @@ export default async function BankingPage({
                   label="Not yet confirmed"
                   state={sort}
                   basePath="/banking/accounts"
-                  className="w-40"
+                  className="w-40 whitespace-nowrap"
                   numeric
                   defaultDirection="desc"
                 />
@@ -212,56 +175,135 @@ export default async function BankingPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {accounts.map((account) => (
-                <AccountTableRow
-                  key={account.id}
-                  account={{
-                    id: account.id,
-                    code: account.code,
-                    name: account.name,
-                    description: account.description,
-                    detailType: account.detailType,
-                    type: account.type,
-                    subtype: account.subtype,
-                    parentId: account.parentId,
-                    isSystem: account.isSystem,
-                    isActive: account.isActive,
-                  }}
-                  parents={parents}
-                  canEdit={canEdit}
-                  canArchive={canArchive}
-                  canReport={canReport}
-                  canReconcile={canReconcile}
-                  canTransact={canTransact}
-                  today={asOf}
-                >
-                  <TableCell>
-                    <span className="font-medium">
-                      <span className="tabular text-muted-foreground">{account.code}</span>{' '}
-                      {account.name}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="block font-medium">{account.typeLabel}</span>
-                    <span className="block text-xs text-muted-foreground">
+              {accounts.flatMap((account, index) => {
+                const previous = accounts[index - 1]
+                const openSection = !previous || previous.type !== account.type
+                const depth = account.treeDepth
+                const nodes = []
+
+                if (openSection) {
+                  nodes.push(
+                    <TableRow
+                      key={`section-${account.type}`}
+                      className="ledger-head pointer-events-none"
+                    >
+                      <TableCell
+                        colSpan={8}
+                        className="py-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-foreground"
+                      >
+                        <AccountTypeMark type={account.type} className="uppercase" />
+                      </TableCell>
+                    </TableRow>,
+                  )
+                }
+
+                nodes.push(
+                  <AccountTableRow
+                    key={account.id}
+                    className={cn(
+                      index % 2 === 1 ? 'ledger-row-alt' : 'ledger-row',
+                      account.hasChildren && 'font-medium',
+                    )}
+                    account={{
+                      id: account.id,
+                      code: account.code,
+                      name: account.name,
+                      description: account.description,
+                      detailType: account.detailType,
+                      type: account.type,
+                      subtype: account.subtype,
+                      parentId: account.parentId,
+                      isSystem: account.isSystem,
+                      isActive: account.isActive,
+                    }}
+                    parents={parents}
+                    canEdit={canEdit}
+                    canArchive={canArchive}
+                    canDelete={canDelete}
+                    canReport={canReport}
+                    canReconcile={canReconcile}
+                    canTransact={canTransact}
+                    today={asOf}
+                  >
+                    <TableCell className="w-12 print:hidden">
+                      <AccountTypeIcon type={account.type} size="sm" />
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-2 whitespace-nowrap',
+                          depth > 0 && 'border-l-2 border-sky-400/60 pl-3',
+                          account.hasChildren ? 'font-semibold' : 'font-medium',
+                        )}
+                        style={chartSubIndentStyle(depth)}
+                      >
+                        {depth > 0 ? (
+                          <span className="shrink-0 text-muted-foreground" aria-hidden>
+                            └
+                          </span>
+                        ) : null}
+                        <span className="whitespace-nowrap">
+                          <span className="tabular text-muted-foreground">{account.code}</span>{' '}
+                          {account.name}
+                        </span>
+                        {account.hasChildren ? (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0"
+                            title="A grouping heading; postings go to its sub-accounts."
+                          >
+                            heading
+                          </Badge>
+                        ) : null}
+                        {depth > 0 ? (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0"
+                            title="Sub-account under a heading above."
+                          >
+                            sub
+                          </Badge>
+                        ) : null}
+                      </span>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
                       {account.categoryLabel}
-                    </span>
-                  </TableCell>
-                  <TableCell className="numeric tabular font-medium">
-                    {formatMoney(account.books, currency)}
-                  </TableCell>
-                  <TableCell className="numeric tabular text-muted-foreground">
-                    {account.isMoney && account.cleared != null
-                      ? formatMoney(account.cleared, currency)
-                      : '—'}
-                  </TableCell>
-                  <TableCell className="numeric tabular text-muted-foreground">
-                    {account.isMoney && account.uncleared != null && !account.uncleared.isZero()
-                      ? formatMoney(account.uncleared, currency)
-                      : '—'}
-                  </TableCell>
-                </AccountTableRow>
-              ))}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{account.typeLabel}</TableCell>
+                    <TableCell
+                      className={cn(
+                        'numeric whitespace-nowrap tabular font-medium',
+                        account.hasChildren && 'font-semibold',
+                      )}
+                      title={
+                        account.hasChildren
+                          ? 'Total of this account and every sub-account under it'
+                          : undefined
+                      }
+                    >
+                      {formatMoney(account.books, currency)}
+                    </TableCell>
+                    <TableCell className="numeric whitespace-nowrap tabular text-muted-foreground">
+                      {account.hasChildren
+                        ? '—'
+                        : account.isMoney && account.cleared != null
+                          ? formatMoney(account.cleared, currency)
+                          : '—'}
+                    </TableCell>
+                    <TableCell className="numeric whitespace-nowrap tabular text-muted-foreground">
+                      {account.hasChildren
+                        ? '—'
+                        : account.isMoney &&
+                            account.uncleared != null &&
+                            !account.uncleared.isZero()
+                          ? formatMoney(account.uncleared, currency)
+                          : '—'}
+                    </TableCell>
+                  </AccountTableRow>,
+                )
+
+                return nodes
+              })}
             </TableBody>
           </Table>
         </Card>

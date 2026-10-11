@@ -37,6 +37,9 @@ const SALES: Permission[] = [
   'pos:read',
   'pos:sell',
   'report:read',
+  'calendar:create',
+  'calendar:update',
+  'calendar:delete',
 ]
 
 /** BOOKKEEPER enters day-to-day transactions but cannot close periods or manage users. */
@@ -72,6 +75,9 @@ const BOOKKEEPER: Permission[] = [
   'pos:sell',
   'report:read',
   'report:export',
+  'calendar:create',
+  'calendar:update',
+  'calendar:delete',
 ]
 
 /**
@@ -116,6 +122,10 @@ const STORE_KEEPER: Permission[] = [
   'inventory:read',
   'inventory:adjust',
   'report:read',
+  'calendar:read',
+  'calendar:create',
+  'calendar:update',
+  'calendar:delete',
 ]
 
 /**

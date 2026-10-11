@@ -120,4 +120,17 @@ export async function ensurePosRegisterAccounts(tx: Tx, orgId: string) {
       data: { parentId },
     })
   }
+
+  // Older builds nested "till cash" OTHER_CURRENT_ASSET rows under a random
+  // 1020 bank. Those are not POS Banks sub-accounts — archive them so the
+  // chart only shows the real register bank accounts under POS Banks.
+  await tx.ledgerAccount.updateMany({
+    where: {
+      orgId,
+      isActive: true,
+      description: { startsWith: 'pos-register:' },
+      NOT: { detailType: POS_REGISTER_DETAIL },
+    },
+    data: { isActive: false, parentId: null },
+  })
 }

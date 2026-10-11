@@ -20,9 +20,10 @@ export type MoneyBarBand = {
 }
 
 const MIN_HEIGHT = 56
-const MAX_HEIGHT = 220
-const COLLAPSE_BELOW = 40
-const DEFAULT_HEIGHT = 132
+const MAX_HEIGHT = 160
+const COLLAPSE_BELOW = 36
+/** Compact strip — roughly 3/5 of the previous default height. */
+const DEFAULT_HEIGHT = 88
 
 /**
  * QuickBooks-style money strip above the customer / vendor list.
@@ -121,7 +122,8 @@ export function ContactMoneyBar({
   }
 
   const total = bands.reduce((sum, band) => sum.plus(new Decimal(band.amount).abs()), new Decimal(0))
-  const compact = height < 96
+  const compact = height < 78
+  const showBar = height >= 100
 
   if (!open) {
     return (
@@ -142,10 +144,10 @@ export function ContactMoneyBar({
 
   return (
     <div className="relative border-b bg-muted/70">
-      <div className="overflow-hidden px-5 pt-3" style={{ height }}>
+      <div className="overflow-hidden px-4 pt-2" style={{ height }}>
         <div
           className={cn(
-            'grid gap-3',
+            'grid gap-1.5 sm:gap-2',
             bands.length >= 5 ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-4',
           )}
         >
@@ -156,21 +158,24 @@ export function ContactMoneyBar({
                 key={band.key}
                 href={band.href}
                 className={cn(
-                  'rounded-md px-1 py-1 transition-colors',
-                  selected && 'bg-card shadow-sm ring-1 ring-border',
+                  // ~3/5 of the old tile size: tighter padding and type.
+                  'rounded-lg border border-border/80 bg-card px-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors',
+                  compact ? 'py-1.5' : 'py-2',
+                  'hover:border-border hover:bg-accent/40',
+                  selected && 'border-border bg-accent shadow-sm ring-1 ring-border',
                 )}
                 aria-current={selected ? 'true' : undefined}
               >
                 <p
                   className={cn(
-                    'tabular font-medium leading-none tracking-tight',
-                    compact ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl',
+                    'tabular font-semibold leading-none tracking-tight',
+                    compact ? 'text-sm sm:text-base' : 'text-base sm:text-lg',
                     band.accent && selected ? band.accent : 'text-foreground',
                   )}
                 >
                   {formatMoney(band.amount, currency)}
                 </p>
-                <p className={cn('text-sm text-muted-foreground', compact ? 'mt-1' : 'mt-1.5')}>
+                <p className={cn('text-xs text-muted-foreground', compact ? 'mt-0.5' : 'mt-1')}>
                   <span className={cn('font-medium', band.key === 'overdue' && 'text-[#d4652f]')}>
                     {band.detail}
                   </span>
@@ -179,18 +184,26 @@ export function ContactMoneyBar({
             )
           })}
         </div>
-        {!compact ? (
-          <div className="mt-3 flex h-2.5 overflow-hidden rounded-sm bg-border/50">
+        {showBar ? (
+          <div className="mt-2 flex h-3 gap-0.5 overflow-hidden rounded-full bg-border/40 p-0.5">
             {bands.map((band) => {
               const amount = new Decimal(band.amount).abs()
               if (amount.isZero()) return null
               const share = total.isZero() ? 0 : amount.dividedBy(total).times(100).toNumber()
+              const selected = active === band.key
               return (
-                <span
+                <Link
                   key={band.key}
-                  className={band.bar}
-                  style={{ width: `${Math.max(share, 1.5)}%` }}
+                  href={band.href}
+                  className={cn(
+                    'h-full min-w-1 rounded-full transition-opacity hover:opacity-90',
+                    band.bar,
+                    active && !selected && 'opacity-35',
+                  )}
+                  style={{ flexGrow: Math.max(share, 1.5), flexBasis: 0 }}
                   title={`${band.detail}: ${formatMoney(band.amount, currency)}`}
+                  aria-current={selected ? 'page' : undefined}
+                  aria-label={`${band.detail}: ${formatMoney(band.amount, currency)}. Filter the list.`}
                 />
               )
             })}

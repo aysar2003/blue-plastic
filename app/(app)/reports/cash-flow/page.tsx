@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate } from '@/lib/date'
 import { formatMoney, type Money } from '@/lib/money'
+import { REPORT_DRILL_LINK } from '@/lib/report-drill'
 import { requireOrgContext } from '@/server/auth/context'
 import { FigureChart, INCOME_COLOR, NET_COLOR } from '@/components/reports/figure-chart'
 import { cashFlow, type CashFlowLine } from '@/server/reports/statements'
@@ -31,7 +32,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader
-        className="print:hidden"
+        organization={ctx.organization}
         title="Statement of Cash Flows"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · indirect method`}
         actions={
@@ -192,12 +193,24 @@ function Row({
 }) {
   const figure = formatMoney(amount, currency)
   return (
-    <ClickableRow href={href}>
+    <ClickableRow href={href} title={href ? 'Open transactions for this account' : undefined}>
       <TableCell className={indent ? 'pl-6' : ''}>
-        {href ? <Link href={href} className="underline-offset-4 hover:underline">{label}</Link> : label}
+        {href ? (
+          <Link href={href} className={REPORT_DRILL_LINK}>
+            {label}
+          </Link>
+        ) : (
+          label
+        )}
       </TableCell>
       <TableCell className="numeric tabular">
-        {href ? <Link href={href} className="underline-offset-4 hover:underline">{figure}</Link> : figure}
+        {href ? (
+          <Link href={href} className={REPORT_DRILL_LINK}>
+            {figure}
+          </Link>
+        ) : (
+          figure
+        )}
       </TableCell>
     </ClickableRow>
   )

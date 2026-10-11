@@ -23,9 +23,13 @@ import {
   storeCustomerUploads,
   uploadProblem,
 } from '@/server/files/customer-files'
-import { assertContactDeleteAllowed } from '@/server/feature-guards'
+import {
+  assertCustomerDeleteAllowed,
+  assertVendorDeleteAllowed,
+} from '@/server/feature-guards'
 import * as contactService from '@/server/services/contact.service'
 import { importContacts } from '@/server/services/import.service'
+import * as lifecycle from '@/server/services/master-data-lifecycle'
 
 function revalidateContacts() {
   revalidatePath('/customers')
@@ -76,17 +80,28 @@ export const setCustomersActive = action
   })
 
 /**
- * Delete a customer (Settings → Configuration → Delete customers and vendors).
- * Archives rather than erases, so posted history stays reconstructible; an open
- * balance blocks it exactly as Make inactive does.
+ * Hard-delete a customer with no transactions. If they have history, merge them
+ * into another customer instead.
  */
 export const deleteCustomer = action
-  .requires('customer:archive')
+  .requires('customer:delete')
   .input(z.object({ id: cuid }))
   .handler(async (ctx, input) => {
-    assertContactDeleteAllowed(ctx)
-    const result = await contactService.setActive(ctx, 'customer', [input.id], false)
+    assertCustomerDeleteAllowed(ctx)
+    const result = await lifecycle.purgeCustomer(ctx, input.id)
     revalidateContacts()
+    return result
+  })
+
+/** Fold every transaction from absorbId into keepId; absorb is removed. */
+export const mergeCustomers = action
+  .requires('customer:delete')
+  .input(z.object({ keepId: cuid, absorbId: cuid }))
+  .handler(async (ctx, input) => {
+    assertCustomerDeleteAllowed(ctx)
+    const result = await lifecycle.mergeCustomers(ctx, input)
+    revalidateContacts()
+    revalidatePath(`/customers/${input.keepId}`)
     return result
   })
 
@@ -121,17 +136,27 @@ export const setVendorsActive = action
   })
 
 /**
- * Delete a vendor (Settings → Configuration → Delete customers and vendors).
- * Archives rather than erases, so posted history stays reconstructible; an open
- * balance blocks it exactly as Make inactive does.
+ * Hard-delete a vendor with no transactions. If they have history, merge them
+ * into another vendor instead.
  */
 export const deleteVendor = action
-  .requires('vendor:archive')
+  .requires('vendor:delete')
   .input(z.object({ id: cuid }))
   .handler(async (ctx, input) => {
-    assertContactDeleteAllowed(ctx)
-    const result = await contactService.setActive(ctx, 'vendor', [input.id], false)
+    assertVendorDeleteAllowed(ctx)
+    const result = await lifecycle.purgeVendor(ctx, input.id)
     revalidateContacts()
+    return result
+  })
+
+export const mergeVendors = action
+  .requires('vendor:delete')
+  .input(z.object({ keepId: cuid, absorbId: cuid }))
+  .handler(async (ctx, input) => {
+    assertVendorDeleteAllowed(ctx)
+    const result = await lifecycle.mergeVendors(ctx, input)
+    revalidateContacts()
+    revalidatePath(`/vendors/${input.keepId}`)
     return result
   })
 

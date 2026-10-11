@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { MoreHorizontalIcon } from 'lucide-react'
@@ -29,6 +29,8 @@ export function ContactPersonRow({
   href,
   selected,
   name,
+  company,
+  phone,
   balance,
   currency,
   active,
@@ -38,6 +40,8 @@ export function ContactPersonRow({
   href: string
   selected: boolean
   name: string
+  company?: string | null
+  phone?: string | null
   balance: string
   currency: string
   active: boolean
@@ -45,11 +49,16 @@ export function ContactPersonRow({
   menu: ContactMenuItem[]
 }) {
   const router = useRouter()
+  const openReport = (event: MouseEvent) => {
+    if (!doubleClickHref) return
+    event.preventDefault()
+    router.push(doubleClickHref)
+  }
 
   return (
     <div
       className={cn(
-        'group grid h-[2.2rem] grid-cols-[minmax(0,1fr)_5.5rem_1.75rem] items-center px-1 text-sm',
+        'group grid h-[2.2rem] grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_4.25rem_5.25rem_1.75rem] items-center px-1 text-sm',
         selected
           ? 'bg-primary/25 font-medium text-foreground'
           : 'text-foreground hover:bg-accent',
@@ -61,23 +70,31 @@ export function ContactPersonRow({
         aria-current={selected ? 'true' : undefined}
         title={doubleClickHref ? 'Double-click for QuickReport' : undefined}
         className="flex h-full min-w-0 items-center truncate px-1 uppercase"
-        onDoubleClick={(event) => {
-          if (!doubleClickHref) return
-          event.preventDefault()
-          router.push(doubleClickHref)
-        }}
+        onDoubleClick={openReport}
       >
         {name}
       </Link>
       <Link
         href={href}
         tabIndex={-1}
+        className="flex h-full min-w-0 items-center truncate px-1 text-xs text-muted-foreground"
+        onDoubleClick={openReport}
+      >
+        {company?.trim() || '—'}
+      </Link>
+      <Link
+        href={href}
+        tabIndex={-1}
+        className="flex h-full min-w-0 items-center truncate px-1 text-xs tabular-nums text-muted-foreground"
+        onDoubleClick={openReport}
+      >
+        {phone?.trim() || '—'}
+      </Link>
+      <Link
+        href={href}
+        tabIndex={-1}
         className="tabular flex h-full items-center justify-end px-1 text-right text-xs"
-        onDoubleClick={(event) => {
-          if (!doubleClickHref) return
-          event.preventDefault()
-          router.push(doubleClickHref)
-        }}
+        onDoubleClick={openReport}
       >
         {formatMoney(balance, currency)}
       </Link>

@@ -71,6 +71,9 @@ enum DocumentType {
   ESTIMATE
   /// Formal sales quotation — same non-posting shape as an estimate, own number series.
   QUOTATION
+  /// A customer's order, waiting to be collected. Nothing is owed and no cash
+  /// has moved until it becomes an invoice or a sales receipt.
+  SALES_ORDER
   SALES_RECEIPT
   CREDIT_MEMO
   CUSTOMER_PAYMENT
@@ -99,6 +102,13 @@ enum AccountType {
   EQUITY
   REVENUE
   EXPENSE
+}
+
+/// POS till money on the chart: hold off the chart until transfer, or show each
+/// till as a POS Banks sub-account.
+enum PosTillLedgerMode {
+  HOLD_OFF_CHART
+  REGISTER_IN_CHART
 }
 
 /// Detail classification. Drives report grouping and app behaviour (a BANK
@@ -158,6 +168,10 @@ enum SystemAccountKey {
   INVENTORY_SHRINKAGE
   UNCATEGORISED_INCOME
   UNCATEGORISED_EXPENSE
+  /// Counted drawer cash below expected at session close.
+  POS_CASH_SHORT
+  /// Counted drawer cash above expected at session close.
+  POS_CASH_OVER
 }
 
 /// How an item behaves. The distinction drives which accounts it must map to and
@@ -206,6 +220,8 @@ enum SalesDocumentType {
   INVOICE
   ESTIMATE
   QUOTATION
+  /// Placed, not yet collected. Closed when it becomes an invoice or a sales receipt.
+  SALES_ORDER
   SALES_RECEIPT
   CREDIT_MEMO
   REFUND_RECEIPT
@@ -225,7 +241,7 @@ enum SalesDocumentStatus {
   /// Estimates only.
   ACCEPTED
   DECLINED
-  /// An estimate that became an invoice, or a credit fully applied.
+  /// An estimate or sales order that became a sale, or a credit fully applied.
   CLOSED
 }
 
@@ -354,6 +370,8 @@ enum JournalSourceType {
   TRANSFER
   DEPOSIT
   INVENTORY_ADJUSTMENT
+  POS_CASH_MOVE
+  POS_SESSION_CLOSE
 }
 
 // ---------------------------------------------------------------------------
@@ -395,6 +413,11 @@ model Organization {
   /// business must refuse sales that would leave a shelf short.
   allowNegativeStock Boolean @default(true)
 
+  /// How POS till money appears on the chart of accounts.
+  /// HOLD_OFF_CHART = till holds sales until transfer; till banks stay off the chart.
+  /// REGISTER_IN_CHART = each till is a POS Banks sub-account (default).
+  posTillLedgerMode PosTillLedgerMode @default(REGISTER_IN_CHART)
+
   /// Odoo-style Configuration switches: which deletes are offered, which apps are on.
   /// Shape: `lib/feature-flags.ts` (`OrgFeatureFlags`). Null means defaults (all on).
   featureFlags Json?
@@ -402,6 +425,19 @@ model Organization {
   /// How invoices and statements are drawn. Shape: `lib/document-template.ts`.
   /// Null means the merchant paper (teal bill) with the classic sheet hidden.
   documentTemplate Json?
+
+  /// Short mark shown in the shell when no logo is set (e.g. "AF"). Null → initials from name.
+  brandMark String?
+
+  /// Relative path under uploads/branding for the company logo image.
+  logoStorageKey String?
+  logoContentType String?
+
+  /// Main company this database belongs to. Null = standalone or a main (holding) company.
+  /// One level only — a sub-company cannot have children. Cap is enforced in the service layer.
+  parentOrgId String?
+  parent      Organization?  @relation("OrgGroup", fields: [parentOrgId], references: [id], onDelete: Restrict)
+  children    Organization[] @relation("OrgGroup")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -440,11 +476,14 @@ model Organization {
   bookmarks      WorkspaceBookmark[]
   reportNotes    ReportNote[]
   ledgerFiles    LedgerFile[]
+  trashFiles     TrashFile[]
+  calendarEvents CalendarEvent[]
   posPaymentMethods PosPaymentMethod[]
   posRegisters      PosRegister[]
   posSessions       PosSession[]
   posOrders         PosOrder[]
 
+  @@index([parentOrgId])
   @@map("organizations")
 }
 
@@ -464,6 +503,14 @@ model User {
 
   lastLoginAt DateTime? @db.Timestamptz(6)
 
+  /// Owns this installation. Sees every company database and the consolidated
+  /// reports. Everyone else is sent to `homeOrgId` and does not see the others.
+  isSystemOwner Boolean @default(false)
+
+  /// Company opened at sign-in. Set when the person is first added, and kept
+  /// so a later invite into another company does not move them.
+  homeOrgId String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -472,6 +519,7 @@ model User {
   sessions    Session[]
   auditLogs   AuditLog[]
   bookmarks   WorkspaceBookmark[]
+  calendarEvents CalendarEvent[]
   posRegisters PosRegisterStaff[]
 
   @@map("users")
@@ -489,6 +537,10 @@ model Membership {
   /// a label / starting template). Empty means use ROLE_PERMISSIONS[role].
   /// Required in practice when role is CUSTOM.
   permissionsOverride String[] @default([])
+
+  /// Switch company databases (Connect). Only an admin may hold this, and only
+  /// the system owner may turn it on. Staff never receive it.
+  canConnect Boolean @default(false)
 
   /// Incremented on every role or status change. The JWT carries the value it was
   /// issued with; a mismatch invalidates the session on the next request, which
@@ -580,11 +632,34 @@ model AuditLog {
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   actor        User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  trashFiles   TrashFile[]
 
   @@index([orgId, at(sort: Desc)])
   @@index([orgId, entity, entityId])
   @@index([orgId, actorId, at(sort: Desc)])
   @@map("audit_logs")
+}
+
+/// A paper kept against a trash (deletion) log line — the form PDF, a scan, or a note.
+model TrashFile {
+  id         String @id @default(cuid())
+  orgId      String
+  auditLogId String
+
+  originalName String
+  contentType  String
+  byteSize     Int
+  /// Path under uploads/trash. Never a public URL.
+  storageKey   String
+
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  createdById String?
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  auditLog     AuditLog     @relation(fields: [auditLogId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, auditLogId])
+  @@map("trash_files")
 }
 
 model DocumentSequence {
@@ -684,6 +759,7 @@ model LedgerAccount {
   posRegisters      PosRegister[]         @relation("PosRegisterBank")
   posChangeOrders   PosOrder[]            @relation("PosChangeAccount")
   posOrderDeposits  PosOrder[]            @relation("PosOrderDeposit")
+  posCashMoveCounterparties PosCashMovement[] @relation("PosCashMoveCounterparty")
 
   @@unique([orgId, code])
   @@unique([orgId, systemKey])
@@ -812,6 +888,8 @@ model Journal {
   inventoryAdjustments InventoryAdjustment[]
   storeTransfers StoreTransfer[]
   files LedgerFile[]
+  posCashMovements PosCashMovement[]
+  posSessionCloses PosSession[] @relation("PosSessionCloseJournal")
 
   reversalOf Journal? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedBy Journal? @relation("JournalReversal")
@@ -996,7 +1074,10 @@ model Customer {
   files        CustomerFile[]
   importedLines ImportedTransaction[]
   bankRules     BankRule[]
+  calendarEvents CalendarEvent[]
   posRegisters  PosRegister[]
+  /// Expenses settled by reducing what this customer owes (or building a credit).
+  offsetPurchases PurchaseDocument[] @relation("PurchaseOffsetCustomer")
 
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
@@ -1073,6 +1154,7 @@ model Vendor {
   payments              BillPayment[]
   importedLines         ImportedTransaction[]
   bankRules             BankRule[]
+  calendarEvents        CalendarEvent[]
 
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
@@ -1115,6 +1197,8 @@ model Item {
   orgId String
 
   sku         String?
+  /// Package code a scanner reads at the till. Empty means the till still sells by SKU.
+  barcode     String?
   name        String
   description String?
   type        ItemType @default(NON_INVENTORY)
@@ -1174,6 +1258,7 @@ model Item {
 
   @@unique([orgId, name])
   @@unique([orgId, sku])
+  @@unique([orgId, barcode])
   @@index([orgId, isActive, name])
   @@index([orgId, type])
   @@index([orgId, deletedAt])
@@ -1297,7 +1382,7 @@ model PosRegister {
   @@map("pos_registers")
 }
 
-/// Who may work this counter. Empty = anyone with POS access.
+/// Who may work this counter. Empty = managers only; cashiers must be listed.
 model PosRegisterStaff {
   registerId String
   userId     String
@@ -1321,6 +1406,11 @@ model PosSession {
   closedAt       DateTime? @db.Timestamptz(6)
   openingCash    Decimal  @default(0) @db.Decimal(19, 4)
   closingCash    Decimal? @db.Decimal(19, 4)
+  /// Expected drawer cash at close (opening + cash sales − refunds ± moves).
+  expectedCashAtClose Decimal? @db.Decimal(19, 4)
+  /// counted − expected. Positive = over, negative = short.
+  cashDifference      Decimal? @db.Decimal(19, 4)
+  closingJournalId    String?  @unique
 
   openedByUserId String
   closedByUserId String?
@@ -1328,10 +1418,11 @@ model PosSession {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  register     PosRegister  @relation(fields: [registerId], references: [id], onDelete: Restrict)
-  orders       PosOrder[]
-  cashMoves    PosCashMovement[]
+  organization   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  register       PosRegister  @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  closingJournal Journal?     @relation("PosSessionCloseJournal", fields: [closingJournalId], references: [id], onDelete: Restrict)
+  orders         PosOrder[]
+  cashMoves      PosCashMovement[]
 
   @@index([orgId, status, openedAt(sort: Desc)])
   @@index([registerId, status])
@@ -1340,16 +1431,21 @@ model PosSession {
 
 /// Manual cash put into / taken from the drawer during an open session.
 model PosCashMovement {
-  id             String          @id @default(cuid())
-  orgId          String
-  sessionId      String
-  kind           PosCashMoveKind
-  amount         Decimal         @db.Decimal(19, 4)
-  reason         String?
-  createdByUserId String
-  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+  id                    String          @id @default(cuid())
+  orgId                 String
+  sessionId             String
+  kind                  PosCashMoveKind
+  amount                Decimal         @db.Decimal(19, 4)
+  reason                String?
+  /// Bank / wallet the cash came from (IN) or went to (OUT). Null on older drawer-only rows.
+  counterpartyAccountId String?
+  journalId             String?         @unique
+  createdByUserId       String
+  createdAt             DateTime        @default(now()) @db.Timestamptz(6)
 
-  session PosSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session      PosSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  counterparty LedgerAccount? @relation("PosCashMoveCounterparty", fields: [counterpartyAccountId], references: [id], onDelete: Restrict)
+  journal      Journal?       @relation(fields: [journalId], references: [id], onDelete: Restrict)
 
   @@index([sessionId, createdAt(sort: Desc)])
   @@index([orgId, createdAt(sort: Desc)])
@@ -1578,7 +1674,7 @@ model SalesDocument {
   /// Bumped on every re-post, so the audit trail can be read in order.
   version   Int    @default(1)
 
-  /// Set on the invoice an estimate became.
+  /// Set on the invoice or sales receipt an estimate, quotation, or sales order became.
   convertedFromId String? @unique
 
   voidedAt   DateTime? @db.Timestamptz(6)
@@ -1789,8 +1885,14 @@ model PurchaseDocument {
   currencyCode String  @db.Char(3)
   exchangeRate Decimal @default(1) @db.Decimal(19, 9)
 
-  /// Where the money came from. Required for EXPENSE, unused otherwise.
+  /// Where the money came from. Required for EXPENSE unless settled on a customer.
   paymentAccountId String?
+
+  /// When set on an EXPENSE, the cost is credited to this customer's receivable
+  /// instead of (or as well as) a bank account — buy from their shop or pay an
+  /// expense by deducting the balance they owe you. A credit above their balance
+  /// leaves a credit on their account to pay later.
+  offsetCustomerId String?
 
   journalId String?
   version   Int    @default(1)
@@ -1821,6 +1923,7 @@ model PurchaseDocument {
   vendor         Vendor                 @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   paymentTerm    PaymentTerm?           @relation(fields: [paymentTermId], references: [id], onDelete: SetNull)
   paymentAccount LedgerAccount?         @relation("PurchasePaymentAccount", fields: [paymentAccountId], references: [id], onDelete: Restrict)
+  offsetCustomer Customer?              @relation("PurchaseOffsetCustomer", fields: [offsetCustomerId], references: [id], onDelete: Restrict)
   journal        Journal?               @relation(fields: [journalId], references: [id], onDelete: Restrict)
   lines          PurchaseDocumentLine[]
 
@@ -1835,6 +1938,7 @@ model PurchaseDocument {
   @@unique([id, orgId])
   @@index([orgId, type, status, date(sort: Desc)])
   @@index([orgId, vendorId, date(sort: Desc)])
+  @@index([orgId, offsetCustomerId, date(sort: Desc)])
   @@index([orgId, dueDate])
   @@index([convertedFromId])
   @@index([orgId, deletedAt])
@@ -2514,6 +2618,44 @@ model DeliveryNoteLine {
 // ---------------------------------------------------------------------------
 // Workspace, bank rules, report notes, and papers on a transaction
 // ---------------------------------------------------------------------------
+
+/// A meeting, appointment, or reminder on the organisation calendar (Odoo-style).
+model CalendarEvent {
+  id    String @id @default(cuid())
+  orgId String
+
+  title       String
+  description String?
+  location    String?
+  /// meeting | appointment | reminder
+  kind        String  @default("meeting")
+
+  startsAt DateTime @db.Timestamptz(6)
+  endsAt   DateTime @db.Timestamptz(6)
+  allDay   Boolean  @default(false)
+
+  /// Minutes before start when the shell reminder appears. Null = no reminder.
+  reminderMinutes     Int?
+  /// Set when someone dismisses the reminder from the shell.
+  reminderDismissedAt DateTime? @db.Timestamptz(6)
+
+  createdById String
+  customerId  String?
+  vendorId    String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  vendor       Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, startsAt])
+  @@index([orgId, endsAt])
+  @@index([orgId, reminderDismissedAt, startsAt])
+  @@map("calendar_events")
+}
 
 /// A saved link (shortcut) or a pinned app, for one person in one organisation.
 model WorkspaceBookmark {

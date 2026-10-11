@@ -39,6 +39,15 @@ export const setMemberStatus = action
     return { id: input.membershipId }
   })
 
+export const setMemberConnect = action
+  .requires('user:update')
+  .input(z.object({ membershipId: cuid, canConnect: z.boolean() }))
+  .handler(async (ctx, input) => {
+    await membershipService.setCanConnect(ctx, input.membershipId, input.canConnect)
+    revalidatePath('/settings/users')
+    return { id: input.membershipId }
+  })
+
 export const removeMember = action
   .requires('user:remove')
   .input(z.object({ membershipId: cuid }))

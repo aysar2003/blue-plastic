@@ -16,6 +16,7 @@ const MEMBER_SELECT = {
   status: true,
   version: true,
   permissionsOverride: true,
+  canConnect: true,
   createdAt: true,
   acceptedAt: true,
   user: { select: { id: true, name: true, email: true, image: true, lastLoginAt: true } },
@@ -70,7 +71,7 @@ export async function invite(ctx: OrgContext, input: InviteUserInput) {
   return db.$transaction(async (tx) => {
     const existingUser = await tx.user.findUnique({
       where: { email: input.email },
-      select: { id: true, passwordHash: true },
+      select: { id: true, passwordHash: true, homeOrgId: true },
     })
 
     if (existingUser) {
@@ -86,9 +87,21 @@ export async function invite(ctx: OrgContext, input: InviteUserInput) {
     const user =
       existingUser ??
       (await tx.user.create({
-        data: { email: input.email, name: input.name, passwordHash },
-        select: { id: true, passwordHash: true },
+        data: {
+          email: input.email,
+          name: input.name,
+          passwordHash,
+          homeOrgId: ctx.orgId,
+        },
+        select: { id: true, passwordHash: true, homeOrgId: true },
       }))
+
+    if (existingUser && !existingUser.homeOrgId) {
+      await tx.user.update({
+        where: { id: existingUser.id },
+        data: { homeOrgId: ctx.orgId },
+      })
+    }
 
     const membership = await tx.membership.create({
       data: {
@@ -147,6 +160,7 @@ export async function updateAccess(ctx: OrgContext, input: UpdateMemberRoleInput
         role: access.role,
         permissionsOverride: access.permissionsOverride,
         version: { increment: 1 },
+        ...(access.role === 'ADMIN' ? {} : { canConnect: false }),
       },
       select: MEMBER_SELECT,
     })
@@ -264,6 +278,53 @@ export async function remove(ctx: OrgContext, membershipId: string) {
     // The user row itself is kept: audit rows reference it, and an accounting
     // system must be able to say who entered a transaction years later.
     return { id: membershipId }
+  })
+}
+
+/**
+ * Connect is the switch between company databases. It can be given only to an
+ * admin, and only by the system owner. Other people stay in their own company.
+ */
+export async function setCanConnect(ctx: OrgContext, membershipId: string, canConnect: boolean) {
+  if (!ctx.isSystemOwner) {
+    throw forbidden('Only the system owner can allow Connect.')
+  }
+
+  const meta = await requestMeta()
+
+  return db.$transaction(async (tx) => {
+    const before = await tx.membership.findFirst({
+      where: { id: membershipId, orgId: ctx.orgId },
+      select: MEMBER_SELECT,
+    })
+    if (!before) throw notFound('Member')
+    if (before.user.id === ctx.userId) {
+      throw precondition('You already open every company.')
+    }
+    if (before.role !== 'ADMIN') {
+      throw validation('Connect can only be given to an admin.')
+    }
+
+    const after = await tx.membership.update({
+      where: { id: membershipId },
+      data: { canConnect },
+      select: MEMBER_SELECT,
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Membership',
+        entityId: membershipId,
+        action: 'UPDATE',
+        before: { canConnect: before.canConnect },
+        after: { canConnect: after.canConnect, email: after.user.email },
+      },
+      meta,
+    )
+
+    return after
   })
 }
 

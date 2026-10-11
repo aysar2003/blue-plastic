@@ -1,3 +1,10 @@
+/** Append or replace `edit=1` on a contact list URL so the edit dialog opens. */
+export function contactEditHref(href: string) {
+  const url = new URL(href, 'http://local')
+  url.searchParams.set('edit', '1')
+  return `${url.pathname}?${url.searchParams.toString()}`
+}
+
 /**
  * Menu links for one customer — sales, payments, reports, and the item list.
  * Used by the left-list … menu and the information-panel actions.
@@ -9,6 +16,8 @@ export function customerContactMenu(
     canPay: boolean
     canReport: boolean
     selectHref?: string
+    /** When set, an Edit link appears right after Open. */
+    editHref?: string
   },
 ): { type: 'link'; label: string; href: string }[] {
   const id = encodeURIComponent(customerId)
@@ -16,6 +25,9 @@ export function customerContactMenu(
 
   if (options.selectHref) {
     links.push({ type: 'link', label: 'Open', href: options.selectHref })
+  }
+  if (options.editHref) {
+    links.push({ type: 'link', label: 'Edit', href: options.editHref })
   }
   if (options.canReport) {
     links.push({
@@ -29,6 +41,7 @@ export function customerContactMenu(
       { type: 'link', label: 'Create invoice', href: `/sales/invoices/new?customer=${id}` },
       { type: 'link', label: 'Create estimate', href: `/sales/estimates/new?customer=${id}` },
       { type: 'link', label: 'Create quotation', href: `/sales/quotations/new?customer=${id}` },
+      { type: 'link', label: 'Create sales order', href: `/sales/sales-orders/new?customer=${id}` },
       { type: 'link', label: 'Create sales receipt', href: `/sales/sales-receipts/new?customer=${id}` },
       { type: 'link', label: 'Create credit memo', href: `/sales/credit-memos/new?customer=${id}` },
       { type: 'link', label: 'Create refund', href: `/sales/refunds/new?customer=${id}` },
@@ -64,6 +77,8 @@ export function vendorContactMenu(
     canPay: boolean
     canReport: boolean
     selectHref?: string
+    /** When set, an Edit link appears right after Open. */
+    editHref?: string
   },
 ): { type: 'link'; label: string; href: string }[] {
   const id = encodeURIComponent(vendorId)
@@ -71,6 +86,9 @@ export function vendorContactMenu(
 
   if (options.selectHref) {
     links.push({ type: 'link', label: 'Open', href: options.selectHref })
+  }
+  if (options.editHref) {
+    links.push({ type: 'link', label: 'Edit', href: options.editHref })
   }
   if (options.canReport) {
     links.push({

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AlertTriangleIcon, CheckIcon, Loader2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { Button } from '@/components/ui/button'
 import type { SystemAccountBinding } from '@/server/services/system-accounts.service'
@@ -38,17 +39,20 @@ export function SystemAccountRow({
         <p className="text-sm font-medium">{binding.role.label}</p>
         <p className="mt-0.5 text-sm text-muted-foreground">{binding.role.used}</p>
         {binding.account ? (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Currently <span className="tabular">{binding.account.code}</span> {binding.account.name}
-            {hasHistory ? (
-              <>
-                {' · '}
-                <span className="tabular">{binding.entries}</span>{' '}
-                {binding.entries === 1 ? 'entry' : 'entries'} posted
-              </>
-            ) : (
-              ' · nothing posted yet'
-            )}
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <AccountTypeIcon type={binding.account.type} size="sm" />
+            <span>
+              Currently <span className="tabular">{binding.account.code}</span> {binding.account.name}
+              {hasHistory ? (
+                <>
+                  {' · '}
+                  <span className="tabular">{binding.entries}</span>{' '}
+                  {binding.entries === 1 ? 'entry' : 'entries'} posted
+                </>
+              ) : (
+                ' · nothing posted yet'
+              )}
+            </span>
           </p>
         ) : (
           <p className="mt-1 text-xs text-destructive">
@@ -63,6 +67,7 @@ export function SystemAccountRow({
             id: account.id,
             label: account.name,
             hint: account.code,
+            accountType: account.type,
           }))}
           value={selected}
           onChange={setSelected}

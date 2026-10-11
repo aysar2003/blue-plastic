@@ -20,6 +20,18 @@ export const organizationUpdateSchema = z.object({
 
 export type OrganizationUpdateInput = z.infer<typeof organizationUpdateSchema>
 
+/** Shell mark (1–4 letters/digits). Empty clears the override so initials are used. */
+export const organizationBrandingSchema = z.object({
+  brandMark: z
+    .string()
+    .trim()
+    .max(4, 'Use at most 4 characters')
+    .regex(/^[A-Za-z0-9]*$/, 'Letters and numbers only')
+    .transform((v) => (v ? v.toUpperCase() : null)),
+})
+
+export type OrganizationBrandingInput = z.infer<typeof organizationBrandingSchema>
+
 /**
  * Currency and fiscal year are separated from the profile form on purpose: they
  * are ledger-defining settings, and Phase 2 will refuse to change them once a
@@ -38,7 +50,10 @@ const boolFlag = z
 
 export const organizationFeaturesSchema = z.object({
   allowJournalDelete: boolFlag.default(true),
-  allowContactDelete: boolFlag.default(true),
+  allowCustomerDelete: boolFlag.default(true),
+  allowVendorDelete: boolFlag.default(true),
+  allowItemDelete: boolFlag.default(true),
+  allowAccountDelete: boolFlag.default(true),
   allowDocumentDelete: boolFlag.default(true),
   showCreatorBrand: boolFlag.default(true),
   moduleSales: boolFlag.default(true),

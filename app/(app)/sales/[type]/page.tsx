@@ -22,18 +22,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatDate, formatTransactionDate, toCalendarDate, toDate, today } from '@/lib/date'
 import { DATE_PRESETS, isDatePreset, presetRange, readDatePreset } from '@/lib/list-filters'
 import { formatMoney } from '@/lib/money'
-import { ConvertEstimateButton } from '@/components/sales/document-actions'
+import { ConvertSalesDocumentActions } from '@/components/sales/document-actions'
 import { EstimateHome } from '@/components/sales/estimate-home'
 import { EstimateRegister } from '@/components/sales/estimate-register'
 import { InvoiceHome } from '@/components/sales/invoice-home'
 import { InvoiceRegister } from '@/components/sales/invoice-register'
 import { ReceiptHome } from '@/components/sales/receipt-home'
 import { ReceiptRegister } from '@/components/sales/receipt-register'
-import { bySlug, isProposal, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
+import { SalesOrderHome } from '@/components/sales/sales-order-home'
+import { SalesOrderRegister } from '@/components/sales/sales-order-register'
+import { bySlug, isProposal, isSalesOrder, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { cn } from '@/lib/utils'
 import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
 import { trailsFor } from '@/server/services/audit.service'
+import { loadDepositAccounts } from '@/server/services/sales-options'
 import * as salesService from '@/server/services/sales.service'
 
 export async function generateMetadata({
@@ -79,6 +82,14 @@ const ESTIMATE_FILTERS = [
   { value: 'draft', label: 'Drafts' },
 ]
 
+const SALES_ORDER_FILTERS = [
+  { value: '', label: 'All' },
+  { value: 'open', label: 'Open' },
+  { value: 'invoiced', label: 'Invoiced' },
+  { value: 'receipt', label: 'Receipt' },
+  { value: 'draft', label: 'Drafts' },
+]
+
 const ESTIMATE_DATES = [
   { value: 'all', label: 'All dates' },
   { value: 'today', label: 'Today' },
@@ -108,15 +119,20 @@ export default async function SalesListPage({
         ? RECEIPT_FILTERS
         : isProposal(config.type)
           ? ESTIMATE_FILTERS
-          : null
+          : isSalesOrder(config.type)
+            ? SALES_ORDER_FILTERS
+            : null
   const statusRaw = typeof search.status === 'string' ? search.status : ''
   const status = statusOptions?.some((option) => option.value === statusRaw) ? statusRaw : undefined
   const customerId = typeof search.customer === 'string' && search.customer ? search.customer : undefined
   const rawDate = typeof search.date === 'string' ? search.date : undefined
   const dashboard =
-    config.type === 'INVOICE' || config.type === 'SALES_RECEIPT' || isProposal(config.type)
-  // Invoices, sales receipts, estimates, and quotations open on the last three
-  // months. "All dates" is an explicit choice.
+    config.type === 'INVOICE' ||
+    config.type === 'SALES_RECEIPT' ||
+    isProposal(config.type) ||
+    isSalesOrder(config.type)
+  // Invoices, sales receipts, estimates, quotations, and sales orders open on the
+  // last three months. "All dates" is an explicit choice.
   const datePreset = dashboard
     ? rawDate === 'all'
       ? ''
@@ -127,21 +143,27 @@ export default async function SalesListPage({
   const range = presetRange(datePreset, today(ctx.organization.timeZone))
   const sort = readSort(search, SORTABLE, { sort: 'date', dir: 'desc' })
 
-  const [page, receiptHome, invoiceHome, estimateHome, choices] = await Promise.all([
-    salesService.list(ctx, config.type, query, {
-      status,
-      customerId,
-      ...sort,
-      from: range?.from,
-      to: range?.to,
-    }),
-    config.type === 'SALES_RECEIPT' ? salesService.receiptHome(ctx) : Promise.resolve(null),
-    config.type === 'INVOICE' ? salesService.invoiceHome(ctx) : Promise.resolve(null),
-    isProposal(config.type)
-      ? salesService.estimateHome(ctx, config.type as 'ESTIMATE' | 'QUOTATION')
-      : Promise.resolve(null),
-    dashboard ? salesService.customerChoices(ctx) : Promise.resolve([]),
-  ])
+  const [page, receiptHome, invoiceHome, estimateHome, orderHome, choices, depositAccounts] =
+    await Promise.all([
+      salesService.list(ctx, config.type, query, {
+        status,
+        customerId,
+        ...sort,
+        from: range?.from,
+        to: range?.to,
+      }),
+      config.type === 'SALES_RECEIPT' ? salesService.receiptHome(ctx) : Promise.resolve(null),
+      config.type === 'INVOICE' ? salesService.invoiceHome(ctx) : Promise.resolve(null),
+      isProposal(config.type)
+        ? salesService.estimateHome(ctx, config.type as 'ESTIMATE' | 'QUOTATION')
+        : Promise.resolve(null),
+      isSalesOrder(config.type) ? salesService.salesOrderHome(ctx) : Promise.resolve(null),
+      dashboard ? salesService.customerChoices(ctx) : Promise.resolve([]),
+      (isSalesOrder(config.type) || isProposal(config.type)) &&
+      ctx.permissions.has('invoice:create')
+        ? loadDepositAccounts(ctx)
+        : Promise.resolve([]),
+    ])
   const trails = await trailsFor(ctx, page.rows.map((row) => row.id))
   const currency = ctx.organization.baseCurrency
   const timeZone = ctx.organization.timeZone
@@ -198,6 +220,14 @@ export default async function SalesListPage({
           basePath={basePath}
           singular={config.singular}
           plural={config.plural}
+        />
+      ) : orderHome ? (
+        <SalesOrderHome
+          currency={currency}
+          canCreate={canCreate}
+          active={status ?? ''}
+          params={linkParams}
+          home={orderHome}
         />
       ) : (
         <PageHeader title={config.plural} description={config.effect} actions={newButton} />
@@ -327,6 +357,8 @@ export default async function SalesListPage({
           date={datePreset || 'all'}
           canCreate={canCreate}
           convertToday={convertToday}
+          depositAccounts={depositAccounts}
+          sourceType={config.type as 'ESTIMATE' | 'QUOTATION'}
           page={page.page}
           pageCount={page.pageCount}
           total={page.total}
@@ -337,14 +369,66 @@ export default async function SalesListPage({
         />
       ) : null}
 
-      {invoiceHome || receiptHome || estimateHome ? null : <div className="mb-3 flex flex-col gap-2">
+      {orderHome ? (
+        <SalesOrderRegister
+          customers={customers}
+          rows={page.rows.map((row) => {
+            const trail = trails.get(row.id)
+            const later = trail?.changed && trail.changed.name !== trail.entered?.name
+            const canFulfill =
+              canCreateInvoice &&
+              !row.convertedTo &&
+              row.status !== 'VOID' &&
+              row.status !== 'CLOSED'
+            const statusText =
+              row.status === 'CLOSED'
+                ? row.convertedTo?.type === 'SALES_RECEIPT'
+                  ? 'Receipt'
+                  : 'Invoiced'
+                : (STATUS_LABELS[row.status] ?? row.status)
+            return {
+              id: row.id,
+              number: row.number,
+              date: formatTransactionDate(toCalendarDate(row.date), row.createdAt, timeZone),
+              customer: row.customer.displayName,
+              amount: formatMoney(row.total, currency),
+              statusText,
+              href: `${basePath}/${row.id}`,
+              editHref:
+                canEditDocuments && row.status !== 'VOID' && row.status !== 'CLOSED'
+                  ? `${basePath}/${row.id}/edit`
+                  : null,
+              printHref: `${basePath}/${row.id}/print`,
+              recorded: trail?.entered
+                ? later
+                  ? `${trail.entered.name} · ${trail.changed?.name}`
+                  : trail.entered.name
+                : null,
+              canDelete,
+              canFulfill,
+            }
+          })}
+          params={linkParams}
+          sort={sort}
+          statusOptions={SALES_ORDER_FILTERS}
+          dateOptions={ESTIMATE_DATES}
+          status={status ?? ''}
+          date={datePreset || 'all'}
+          canCreate={canCreate}
+          convertToday={convertToday}
+          depositAccounts={depositAccounts}
+          total={page.total}
+        />
+      ) : null}
+
+      {invoiceHome || receiptHome || estimateHome || orderHome ? null : <div className="mb-3 flex flex-col gap-2">
         <FilterChips options={[...DATE_PRESETS]} active={datePreset} path={basePath} param="date" params={linkParams} />
         {statusOptions ? (
           <FilterChips options={statusOptions} active={status ?? ''} path={basePath} param="status" params={linkParams} />
         ) : null}
       </div>}
 
-      {invoiceHome || receiptHome || estimateHome ? null : <>
+      {invoiceHome || receiptHome || estimateHome || orderHome ? null : <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <SearchInput placeholder="Search number, reference or customer" />
         <EnteredByToggle />
@@ -440,12 +524,14 @@ export default async function SalesListPage({
                         row.status !== 'VOID' &&
                         row.status !== 'DECLINED' &&
                         row.status !== 'CLOSED' ? (
-                          <ConvertEstimateButton
+                          <ConvertSalesDocumentActions
                             id={row.id}
                             number={row.number}
+                            sourceType={config.type as 'ESTIMATE' | 'QUOTATION'}
                             today={convertToday}
+                            depositAccounts={depositAccounts}
                             variant="outline"
-                            label="Invoice"
+                            compact
                           />
                         ) : null}
                         <RowActions

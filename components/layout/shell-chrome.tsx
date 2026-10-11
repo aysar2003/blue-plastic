@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { HeaderApps } from './app-launcher'
 import { AppMemoryProvider } from './app-memory'
 import { AccountantNav } from './accountant-nav'
+import { CompanySwitcher, type CompanyOption } from './company-switcher'
 import { HistoryBack } from './history-back'
 import { ModuleTabs } from './module-tabs'
 import { NavTrailRecorder } from './nav-trail-recorder'
@@ -16,28 +17,42 @@ import { QuickCreate } from './quick-create'
 import { ShellMenus } from './shell-menus'
 import { UserMenu } from './user-menu'
 import { CompanyLetterhead } from '@/components/print/company-letterhead'
-import { CREATOR_BRAND_NAME } from '@/lib/feature-flags'
 import type { LetterheadSource } from '@/lib/letterhead'
-import { PRODUCT_MARK, PRODUCT_NAME } from '@/lib/product-brand'
+import { orgLogoUrl, resolveBrandMark } from '@/lib/org-brand'
+import { PRODUCT_CREDIT, PRODUCT_NAME } from '@/lib/product-brand'
 import { cn } from '@/lib/utils'
 
 type ShellChromeProps = {
   orgName: string
   organization: LetterheadSource
+  /** Explicit mark override from Settings → Organisation. */
+  brandMark?: string | null
+  hasLogo?: boolean
+  logoVersion?: Date | string | number | null
   baseCurrency: string
   fiscalYearStartMonth: number
   roleLabel: string
   user: { id: string; name: string; email: string; image: string | null }
   moduleKeys: string[]
   permissions: string[]
+  /** Other companies this user can open. Empty unless they may switch. */
+  companies?: CompanyOption[]
+  /** System owner may create another company from the switcher. */
+  allowCreateCompany?: boolean
+  /** Databases app link in the account menu. */
+  showDatabases?: boolean
+  /** Consolidated company reports in the account menu. */
+  showCompanyReports?: boolean
   /** Launcher app keys switched off in Settings → Configuration. */
   hiddenApps?: string[]
-  /** Creator credit (Abdisalm Hero) — off via Settings → Features. */
+  /** Creator credit — off via Settings → Features. */
   showCreatorBrand?: boolean
   /** Streamed server slot; null when the user lacks inventory:read. */
   stockAlertsSlot: React.ReactNode
   /** Streamed server slot; null when the user lacks customer:read. */
   balanceAlertsSlot: React.ReactNode
+  /** Streamed server slot; null when the user lacks calendar:read. */
+  calendarAlertsSlot?: React.ReactNode
   /** This-month P&L chart; null when the user lacks report:read. */
   monthChartSlot?: React.ReactNode
   children: React.ReactNode
@@ -86,14 +101,22 @@ function isPosLiveTill(pathname: string) {
 export function ShellChrome({
   orgName,
   organization,
+  brandMark = null,
+  hasLogo = false,
+  logoVersion = null,
   baseCurrency,
   roleLabel,
   user,
   permissions,
+  companies = [],
+  allowCreateCompany = false,
+  showDatabases = false,
+  showCompanyReports = false,
   hiddenApps,
   showCreatorBrand = true,
   stockAlertsSlot,
   balanceAlertsSlot,
+  calendarAlertsSlot = null,
   monthChartSlot,
   children,
 }: ShellChromeProps) {
@@ -118,7 +141,9 @@ export function ShellChrome({
   // Print pages still need a way back. Hide Back only on the live till.
   const showBack = pathname !== '/dashboard' && !isPosTill
 
-  const brandLabel = isHome ? orgName : current.label
+  const companyMark = resolveBrandMark(brandMark, orgName)
+  const logoSrc = orgLogoUrl(hasLogo, logoVersion)
+  const brandSubtitle = isHome ? PRODUCT_NAME : current.label
   const brandHref = isHome ? '/dashboard' : current.href
 
   return (
@@ -141,14 +166,38 @@ export function ShellChrome({
           register lock) sit higher still and keep covering everything.
         */}
         <header className="shell-topbar relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card/80 px-4 backdrop-blur-md sm:px-6">
-          <Link href={brandHref} className="flex min-w-0 items-center gap-2.5" title={PRODUCT_NAME}>
-            <span className="shell-brand-mark grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-[0.7rem] font-bold tracking-wide text-primary-foreground shadow-sm">
-              {PRODUCT_MARK}
-            </span>
-            <span className="shell-brand-label truncate text-sm font-semibold tracking-tight text-foreground">
-              {brandLabel}
+          <Link
+            href={brandHref}
+            className="flex min-w-0 items-center gap-2.5"
+            title={`${orgName}. Change logo and mark in Settings → Organisation. ${PRODUCT_CREDIT}`}
+          >
+            {logoSrc ? (
+              <span className="relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-background shadow-sm ring-1 ring-border/60">
+                {/* eslint-disable-next-line @next/next/no-img-element -- authenticated org logo API */}
+                <img src={logoSrc} alt="" className="size-full object-contain p-0.5" />
+              </span>
+            ) : (
+              <span className="shell-brand-mark grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-[0.7rem] font-bold tracking-wide text-primary-foreground shadow-sm">
+                {companyMark}
+              </span>
+            )}
+            <span className="min-w-0 leading-tight">
+              <span className="shell-brand-label block truncate text-sm font-semibold tracking-tight text-foreground">
+                {orgName}
+              </span>
+              <span className="block truncate text-[0.65rem] leading-tight text-muted-foreground">
+                {brandSubtitle}
+              </span>
             </span>
           </Link>
+
+          {showDatabases || companies.length > 1 ? (
+            <CompanySwitcher
+              companies={companies}
+              allowCreate={allowCreateCompany}
+              allowClose={showDatabases}
+            />
+          ) : null}
 
           <div className="ml-auto flex items-center gap-1.5">
             {working ? <QuickCreate permissions={permissions} currency={baseCurrency} /> : null}
@@ -156,7 +205,13 @@ export function ShellChrome({
             {working ? <ShellMenus /> : null}
             {stockAlertsSlot}
             {balanceAlertsSlot}
-            <UserMenu user={user} roleLabel={roleLabel} />
+            {calendarAlertsSlot}
+            <UserMenu
+              user={user}
+              roleLabel={roleLabel}
+              showDatabases={showDatabases}
+              showCompanyReports={showCompanyReports}
+            />
           </div>
         </header>
 
@@ -215,8 +270,8 @@ export function ShellChrome({
               <span className="font-medium text-foreground/80">{PRODUCT_NAME}</span>
               {showCreatorBrand ? (
                 <>
-                  <span className="mx-1.5 text-border">·</span>
-                  <span>{CREATOR_BRAND_NAME}</span>
+                  <span className="mx-1.5 text-muted-foreground/55">·</span>
+                  <span>{PRODUCT_CREDIT}</span>
                 </>
               ) : null}
             </p>

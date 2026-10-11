@@ -29,7 +29,7 @@ import { IMPORT_COLUMNS } from '@/server/services/import.service'
 
 export const metadata: Metadata = { title: 'Customers' }
 
-const SORTABLE = ['name', 'company', 'phone', 'balance'] as const
+const SORTABLE = ['name', 'company', 'phone', 'email', 'balance'] as const
 const TABS = ['transactions', 'contacts', 'tasks', 'notes', 'mail'] as const
 
 function listed(parts: Array<string | null | undefined>) {
@@ -53,6 +53,7 @@ export default async function CustomersPage({
   const bandValue = typeof params.band === 'string' ? params.band : undefined
   const band = isBandKey(bandValue) ? bandValue : undefined
   const requestedId = typeof params.id === 'string' ? params.id : undefined
+  const openEdit = params.edit === '1' || (typeof params.edit === 'string' && params.edit === requestedId)
   const tabValue = typeof params.tab === 'string' ? params.tab : undefined
   const tab: CenterTab = isTab(tabValue) ? tabValue : 'transactions'
   const asOf = today(ctx.organization.timeZone)
@@ -107,6 +108,8 @@ export default async function CustomersPage({
   const canReport = ctx.permissions.has('report:read')
   const canEdit = ctx.permissions.has('customer:update')
   const canArchive = ctx.permissions.has('customer:archive')
+  const canDelete =
+    ctx.permissions.has('customer:delete') && ctx.features.allowCustomerDelete
   const termOptions = terms.map((term) => ({ id: term.id, label: `${term.name} — ${describeTerm(term)}` }))
   const currency = ctx.organization.baseCurrency
 
@@ -276,7 +279,7 @@ export default async function CustomersPage({
       title="Customer information"
       moneyBar={
         <ContactMoneyBar
-          storageKey="bp-customer-money-bar"
+          storageKey="bp-customer-money-bar-v2"
           currency={currency}
           active={band}
           bands={[
@@ -315,6 +318,9 @@ export default async function CustomersPage({
       people={page.rows.map((row) => ({
         id: row.id,
         name: row.displayName,
+        company: row.companyName,
+        phone: row.phone,
+        email: row.email,
         balance: row.balance,
         active: row.isActive,
       }))}
@@ -375,8 +381,10 @@ export default async function CustomersPage({
             canReport={canReport}
             canEdit={canEdit}
             canArchive={canArchive}
-            canDelete={canArchive && ctx.features.allowContactDelete}
+            canDelete={canDelete}
             isActive={customer.isActive}
+            startEditing={canEdit && openEdit}
+            clearEditHref={openEdit ? customerHref(customer.id) : undefined}
           />
         ) : null
       }
@@ -393,6 +401,7 @@ export default async function CustomersPage({
       canPay={canPay}
       canReport={canReport}
       canArchive={canArchive}
+      canEdit={canEdit}
       profileExtra={
         customer ? (
           <CustomerPapers

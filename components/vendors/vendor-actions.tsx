@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ChevronDownIcon, MoreHorizontalIcon } from 'lucide-react'
@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 
 import { deleteVendor, setVendorsActive } from '@/app/(app)/customers/actions'
 import { ContactDialog, type ContactValues, type Option } from '@/components/master-data/contact-dialog'
+import { MergeIntoDialog } from '@/components/master-data/merge-into-dialog'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -40,6 +41,8 @@ export function VendorActions({
   canDelete = false,
   isActive,
   layout = 'menu',
+  startEditing = false,
+  clearEditHref,
 }: {
   vendorId: string
   contact?: ContactValues
@@ -52,13 +55,27 @@ export function VendorActions({
   canReport: boolean
   canEdit: boolean
   canArchive: boolean
-  /** Settings → Configuration allows contact delete (archives the contact). */
+  /** Hard-delete when unused; otherwise use Merge. */
   canDelete?: boolean
   isActive: boolean
   layout?: 'menu' | 'panel'
+  /** Open the edit dialog on mount (left-list … → Edit). */
+  startEditing?: boolean
+  /** Drop `edit=` from the URL when the dialog closes. */
+  clearEditHref?: string
 }) {
   const router = useRouter()
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState(startEditing && Boolean(contact))
+  const [merging, setMerging] = useState(false)
+
+  useEffect(() => {
+    if (startEditing && contact) setEditing(true)
+  }, [startEditing, contact, vendorId])
+
+  const closeEdit = () => {
+    setEditing(false)
+    if (clearEditHref) router.replace(clearEditHref)
+  }
   const [isPending, startTransition] = useTransition()
   const links = useMemo(
     () => vendorContactMenu(vendorId, { canBill, canPay, canReport }),
@@ -79,10 +96,17 @@ export function VendorActions({
     })
   }
 
-  const showDelete = canDelete && isActive
+  const showDelete = canDelete
+  const showMerge = canDelete
 
   const remove = () => {
-    if (!window.confirm('Delete this vendor? They leave your active lists; posted history is kept.')) return
+    if (
+      !window.confirm(
+        'Delete this vendor? Only works when they have no transactions. Otherwise merge them into another vendor.',
+      )
+    ) {
+      return
+    }
     startTransition(async () => {
       const result = await deleteVendor({ id: vendorId })
       if (result.ok) {
@@ -96,7 +120,9 @@ export function VendorActions({
 
   const editArchiveItems = (
     <>
-      {(canEdit || canArchive || showDelete) && rest.length > 0 ? <DropdownMenuSeparator /> : null}
+      {(canEdit || canArchive || showDelete || showMerge) && rest.length > 0 ? (
+        <DropdownMenuSeparator />
+      ) : null}
       {canEdit && contact ? (
         <DropdownMenuItem onSelect={() => setEditing(true)}>Edit</DropdownMenuItem>
       ) : null}
@@ -104,6 +130,9 @@ export function VendorActions({
         <DropdownMenuItem variant={isActive ? 'destructive' : 'default'} onSelect={archive}>
           {isActive ? 'Make inactive' : 'Make active'}
         </DropdownMenuItem>
+      ) : null}
+      {showMerge ? (
+        <DropdownMenuItem onSelect={() => setMerging(true)}>Merge into…</DropdownMenuItem>
       ) : null}
       {showDelete ? (
         <DropdownMenuItem variant="destructive" onSelect={remove}>
@@ -211,6 +240,16 @@ export function VendorActions({
         </div>
       ) : null}
 
+      {merging ? (
+        <MergeIntoDialog
+          open={merging}
+          onClose={() => setMerging(false)}
+          kind="vendor"
+          absorbId={vendorId}
+          absorbLabel={contact?.displayName ?? 'Vendor'}
+        />
+      ) : null}
+
       {editing && contact ? (
         <ContactDialog
           side="vendor"
@@ -220,7 +259,7 @@ export function VendorActions({
           expenseAccounts={expenseAccounts}
           today={today}
           currency={currency}
-          onClose={() => setEditing(false)}
+          onClose={closeEdit}
         />
       ) : null}
     </>

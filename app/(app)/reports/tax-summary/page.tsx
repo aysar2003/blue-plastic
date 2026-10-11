@@ -22,6 +22,7 @@ export default async function TaxSummaryPage({ searchParams }: { searchParams: P
   return (
     <>
       <PageHeader
+        organization={ctx.organization}
         title="Sales Tax Liability"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · what is owed to each agency`}
       />

@@ -73,6 +73,7 @@ export async function deleteJournals(
   ctx: OrgContext,
   journalIds: (string | null | undefined)[],
   reason?: string | null,
+  options?: { audit?: boolean },
 ): Promise<number> {
   const ids = [...new Set(journalIds.filter(Boolean) as string[])]
   if (ids.length === 0) return 0
@@ -101,13 +102,18 @@ export async function deleteJournals(
     })
   }
 
-  await writeAudit(tx, ctx, {
-    entity: 'Journal',
-    entityId: related[0].id,
-    action: 'DELETE',
-    before: { entries: related.map((journal) => journal.journalNumber) },
-    after: { status: 'DELETED', reason: stamp.deleteReason },
-  })
+  // A document delete writes its own trash line. A second line for the journal
+  // it carried would show one act as two, and would point at a ledger row the
+  // working books no longer open.
+  if (options?.audit !== false) {
+    await writeAudit(tx, ctx, {
+      entity: 'Journal',
+      entityId: related[0].id,
+      action: 'DELETE',
+      before: { entries: related.map((journal) => journal.journalNumber) },
+      after: { status: 'DELETED', reason: stamp.deleteReason },
+    })
+  }
 
   return related.length
 }
@@ -142,7 +148,7 @@ export async function softDeleteDocument(
   const meta = await requestMeta()
   const stamp = deletionStamp(ctx, input.reason)
 
-  await deleteJournals(tx, ctx, input.journalIds ?? [], input.reason)
+  await deleteJournals(tx, ctx, input.journalIds ?? [], input.reason, { audit: false })
 
   await input.mark(stamp)
 

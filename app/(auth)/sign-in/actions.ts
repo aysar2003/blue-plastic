@@ -3,7 +3,9 @@
 import { AuthError } from 'next-auth'
 
 import { signIn } from '@/auth'
+import { afterSignInPath } from '@/lib/after-sign-in'
 import { signInSchema } from '@/lib/validation/auth'
+import { db } from '@/server/db'
 
 export type SignInState = {
   error?: string
@@ -31,10 +33,17 @@ export async function signInAction(_prev: SignInState, formData: FormData): Prom
   }
 
   try {
+    const email = parsed.data.email.trim().toLowerCase()
+    const user = await db.user.findUnique({
+      where: { email },
+      select: { id: true },
+    })
+    const redirectTo = user ? await afterSignInPath(user.id) : '/dashboard'
+
     await signIn('credentials', {
       email: parsed.data.email,
       password: parsed.data.password,
-      redirectTo: '/dashboard',
+      redirectTo,
     })
     return {}
   } catch (error) {

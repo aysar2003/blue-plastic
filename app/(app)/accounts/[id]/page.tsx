@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ScrollTextIcon } from 'lucide-react'
 
+import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { DateRangeForm } from '@/app/(app)/reports/trial-balance/date-range-form'
@@ -167,7 +168,14 @@ export default async function AccountRegisterPage({
   return (
     <>
       <PageHeader
-        title={`${account.code} · ${account.name}`}
+        title={
+          <span className="inline-flex items-center gap-2">
+            <AccountTypeIcon type={account.type} />
+            <span>
+              {account.code} · {account.name}
+            </span>
+          </span>
+        }
         description={`${ACCOUNT_TYPE_LABELS[account.type]} · ${ACCOUNT_SUBTYPE_LABELS[account.subtype]} · ${
           debitNormal ? 'debit' : 'credit'
         } balance`}

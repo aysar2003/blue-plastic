@@ -73,6 +73,11 @@ export const SUBTYPES_BY_TYPE: Record<AccountType, AccountSubtype[]> = {
   EXPENSE: ['COST_OF_GOODS_SOLD', 'OPERATING_EXPENSE', 'OTHER_EXPENSE', 'DEPRECIATION'],
 }
 
+/** Detail-type order inside Assets / Liabilities / … — Bank together, then AR, … */
+export const ACCOUNT_SUBTYPE_ORDER: AccountSubtype[] = ACCOUNT_TYPE_ORDER.flatMap(
+  (type) => SUBTYPES_BY_TYPE[type],
+)
+
 export const JOURNAL_SOURCE_LABELS: Record<JournalSourceType, string> = {
   MANUAL: 'Manual journal',
   OPENING_BALANCE: 'Opening balance',
@@ -90,6 +95,8 @@ export const JOURNAL_SOURCE_LABELS: Record<JournalSourceType, string> = {
   TRANSFER: 'Transfer',
   DEPOSIT: 'Deposit',
   INVENTORY_ADJUSTMENT: 'Inventory adjustment',
+  POS_CASH_MOVE: 'POS cash in/out',
+  POS_SESSION_CLOSE: 'POS session close',
 }
 
 export const PERIOD_STATUS_LABELS: Record<PeriodStatus, string> = {

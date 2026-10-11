@@ -7,10 +7,14 @@ import { formValues, toFormState, type FormState } from '@/components/forms/acti
 import {
   documentTemplateSchema,
   organizationAccountingSchema,
+  organizationBrandingSchema,
   organizationFeaturesSchema,
   organizationUpdateSchema,
 } from '@/lib/validation/organization'
-import { action } from '@/server/action'
+import { action, fail, ok } from '@/server/action'
+import { isAppError } from '@/server/errors'
+import { clearOrgLogo, storeOrgLogo } from '@/server/files/org-logo'
+import { requireOrgContext } from '@/server/auth/context'
 import * as organizationService from '@/server/services/organization.service'
 
 export const updateOrganization = action
@@ -43,6 +47,68 @@ export async function updateOrganizationForm(
   return toFormState(result, 'Organisation details saved.')
 }
 
+export const updateOrganizationBranding = action
+  .requires('org:update')
+  .input(organizationBrandingSchema)
+  .handler(async (ctx, input) => {
+    const org = await organizationService.updateBranding(ctx, input)
+    revalidatePath('/settings/organization')
+    revalidatePath('/', 'layout')
+    return org
+  })
+
+export async function updateOrganizationBrandingForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const result = await updateOrganizationBranding(formValues(formData))
+  return toFormState(result, 'Company mark saved.')
+}
+
+export async function uploadOrganizationLogoForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  try {
+    const ctx = await requireOrgContext('org:update')
+    const file = formData.get('logo')
+    if (!(file instanceof File) || file.size === 0) {
+      return toFormState(
+        fail('VALIDATION', 'Choose a logo image.', { logo: ['Choose a logo image.'] }),
+        '',
+      )
+    }
+    await storeOrgLogo(ctx, file)
+    revalidatePath('/settings/organization')
+    revalidatePath('/', 'layout')
+    return toFormState(ok({ uploaded: true }), 'Logo uploaded.')
+  } catch (error) {
+    if (isAppError(error)) {
+      return toFormState(fail(error.code, error.message, error.details), '')
+    }
+    return toFormState(fail('INTERNAL', 'Could not upload the logo.'), '')
+  }
+}
+
+export async function clearOrganizationLogoForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  void formData
+  try {
+    const ctx = await requireOrgContext('org:update')
+    await clearOrgLogo(ctx)
+    revalidatePath('/settings/organization')
+    revalidatePath('/', 'layout')
+    return toFormState(ok({ cleared: true }), 'Logo removed.')
+  } catch (error) {
+    if (isAppError(error)) {
+      return toFormState(fail(error.code, error.message, error.details), '')
+    }
+    return toFormState(fail('INTERNAL', 'Could not remove the logo.'), '')
+  }
+}
+
 export async function updateAccountingSettingsForm(
   _prev: FormState,
   formData: FormData,
@@ -68,7 +134,10 @@ export async function updateFeatureFlagsForm(
   // Unchecked boxes are omitted — treat missing as off.
   const keys = [
     'allowJournalDelete',
-    'allowContactDelete',
+    'allowCustomerDelete',
+    'allowVendorDelete',
+    'allowItemDelete',
+    'allowAccountDelete',
     'allowDocumentDelete',
     'showCreatorBrand',
     'moduleSales',

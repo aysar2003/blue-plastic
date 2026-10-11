@@ -2,18 +2,19 @@
  * Odoo sheet chrome — purple primary used on sales/purchase forms and print.
  * Matches the community Odoo enterprise skin (#714B67 / #017E84).
  */
+/** Live Odoo Enterprise form sheet (emaar-building Quotation / Invoice). */
 export const FORM_SHEET = {
-  ink: '#3F2C38',
+  ink: '#212529',
   accent: '#714B67',
-  accentDeep: '#5A3B52',
+  accentDeep: '#624159',
   accentSoft: '#9B738F',
-  wash: '#F3EEF2',
-  rowAlt: '#F7F2F5',
-  border: '#D4C4CE',
-  markA: '#3F2C38',
+  wash: '#F8F9FA',
+  rowAlt: '#F8F9FA',
+  border: '#DEE2E6',
+  markA: '#212529',
   markB: '#714B67',
-  markC: '#9B738F',
-  markD: '#D4C4CE',
+  markC: '#017E84',
+  markD: '#DEE2E6',
 } as const
 
 /**

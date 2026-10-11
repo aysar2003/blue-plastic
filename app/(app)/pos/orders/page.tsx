@@ -30,6 +30,8 @@ export default async function PosOrdersPage({
       today={asOf}
       truncated={report.truncated}
       limit={report.limit}
+      currency={ctx.organization.baseCurrency}
+      timeZone={ctx.organization.timeZone}
     />
   )
 }

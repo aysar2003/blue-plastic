@@ -100,6 +100,10 @@ CREATE CONSTRAINT TRIGGER trg_journal_balanced
 CREATE OR REPLACE FUNCTION forbid_posted_journal_mutation() RETURNS trigger AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
+    -- Company wipe / restore: the whole organisation is being removed.
+    IF current_setting('app.allow_company_wipe', true) = 'on' THEN
+      RETURN OLD;
+    END IF;
     IF OLD.status <> 'DRAFT' THEN
       RAISE EXCEPTION
         'Journal % is posted and cannot be deleted. Post a reversal instead.', OLD."journalNumber"
@@ -167,6 +171,10 @@ CREATE OR REPLACE FUNCTION forbid_posted_line_mutation() RETURNS trigger AS $$
 DECLARE
   v_status text;
 BEGIN
+  IF TG_OP = 'DELETE' AND current_setting('app.allow_company_wipe', true) = 'on' THEN
+    RETURN OLD;
+  END IF;
+
   SELECT status::text INTO v_status
     FROM journals WHERE id = COALESCE(OLD."journalId", NEW."journalId");
 
@@ -300,6 +308,10 @@ CREATE TRIGGER trg_journal_line_dimensions
 CREATE OR REPLACE FUNCTION protect_system_accounts() RETURNS trigger AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
+    -- Company wipe / restore: the whole organisation is being removed.
+    IF current_setting('app.allow_company_wipe', true) = 'on' THEN
+      RETURN OLD;
+    END IF;
     IF OLD."isSystem" THEN
       RAISE EXCEPTION
         'Account % (%) is a system account and cannot be deleted. Rename it if the wording does not suit you.',

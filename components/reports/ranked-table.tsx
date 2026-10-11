@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/data/empty-state'
 import { SortableHeader, type SortState } from '@/components/data/sortable-header'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Decimal, formatMoney } from '@/lib/money'
+import { REPORT_DRILL_LINK } from '@/lib/report-drill'
 import type { RankedRow } from '@/server/reports/business'
 
 /**
@@ -76,7 +77,7 @@ export function RankedTable({
           <ClickableRow key={row.id} href={linkTo?.(row.id)}>
             <TableCell className="font-medium">
               {linkTo ? (
-                <Link href={linkTo(row.id)} className="underline-offset-4 hover:underline">
+                <Link href={linkTo(row.id)} className={REPORT_DRILL_LINK} title="Open detail">
                   {row.name}
                 </Link>
               ) : (
@@ -91,7 +92,7 @@ export function RankedTable({
             ) : null}
             <TableCell className="numeric tabular">
               {linkTo ? (
-                <Link href={linkTo(row.id)} className="underline-offset-4 hover:underline">
+                <Link href={linkTo(row.id)} className={REPORT_DRILL_LINK} title="Open detail">
                   {formatMoney(row.amount, currency)}
                 </Link>
               ) : (

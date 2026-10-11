@@ -129,7 +129,7 @@ export async function closeChecklist(
         orgId: ctx.orgId,
         status: 'DRAFT',
         date: { gte: from, lte: to },
-        type: { notIn: ['ESTIMATE', 'QUOTATION'] },
+        type: { notIn: ['ESTIMATE', 'QUOTATION', 'SALES_ORDER'] },
       },
     }),
     client.purchaseDocument.count({
@@ -168,7 +168,7 @@ export async function closeChecklist(
     detail: unapplied.isZero()
       ? 'Every payment received has been matched to an invoice.'
       : `${unappliedPayments?.count ?? 0} payment(s) hold ${unapplied.toFixed(2)} ${currency} not applied to any invoice. ` +
-        `The cash is banked either way; the customer's balance is what is wrong.`,
+        `Cash is banked and the customer's balance is already reduced — apply the payment to invoices when you know which ones.`,
     severity: unapplied.isZero() ? 'ok' : 'warning',
     href: '/payments',
     amount: unapplied,

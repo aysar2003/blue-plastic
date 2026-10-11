@@ -4,6 +4,31 @@ import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 
 /**
+ * Run jobs a few at a time. A full company backup needs dozens of reads; firing
+ * them all at once exhausts the small Postgres pool (5 in dev, 1 in production
+ * behind PgBouncer) and surfaces as "timeout exceeded when trying to connect".
+ */
+async function runInBatches<const T extends readonly (() => Promise<unknown>)[]>(
+  jobs: T,
+  concurrency: number,
+): Promise<{ -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> }> {
+  const results = new Array<unknown>(jobs.length)
+  let next = 0
+
+  async function worker() {
+    while (next < jobs.length) {
+      const index = next
+      next += 1
+      results[index] = await jobs[index]!()
+    }
+  }
+
+  const workers = Math.min(Math.max(concurrency, 1), jobs.length)
+  await Promise.all(Array.from({ length: workers }, () => worker()))
+  return results as { -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> }
+}
+
+/**
  * A copy of one company's books, ready to download.
  *
  * Memberships carry the person's name and email. Passwords, sessions, and
@@ -53,61 +78,88 @@ export async function companyBackup(ctx: OrgContext) {
     reportNotes,
     ledgerFiles,
     auditLogs,
-  ] = await Promise.all([
-    db.organization.findUniqueOrThrow({ where: { id: ctx.orgId } }),
-    db.membership.findMany({
-      where,
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        role: true,
-        status: true,
-        invitedAt: true,
-        acceptedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        user: { select: { id: true, name: true, email: true } },
-      },
-    }),
-    db.documentSequence.findMany({ where, orderBy: { docType: 'asc' } }),
-    db.ledgerAccount.findMany({ where, orderBy: { code: 'asc' } }),
-    db.fiscalYear.findMany({ where, orderBy: { year: 'asc' } }),
-    db.accountingPeriod.findMany({ where, orderBy: { startDate: 'asc' } }),
-    db.journal.findMany({ where, orderBy: { date: 'asc' } }),
-    db.journalLine.findMany({ where, orderBy: [{ journalDate: 'asc' }, { id: 'asc' }] }),
-    db.paymentTerm.findMany({ where, orderBy: { name: 'asc' } }),
-    db.customer.findMany({ where, orderBy: { displayName: 'asc' } }),
-    db.customerFile.findMany({ where, orderBy: { createdAt: 'asc' } }),
-    db.vendor.findMany({ where, orderBy: { displayName: 'asc' } }),
-    db.itemCategory.findMany({ where, orderBy: { name: 'asc' } }),
-    db.item.findMany({ where, orderBy: { name: 'asc' } }),
-    db.taxAgency.findMany({ where, orderBy: { name: 'asc' } }),
-    db.taxRate.findMany({ where, orderBy: { name: 'asc' } }),
-    db.taxCode.findMany({ where, orderBy: { name: 'asc' } }),
-    db.taxCodeRate.findMany({ where }),
-    db.salesDocument.findMany({ where, orderBy: { date: 'asc' } }),
-    db.salesDocumentLine.findMany({ where, orderBy: [{ documentId: 'asc' }, { lineNumber: 'asc' }] }),
-    db.customerPayment.findMany({ where, orderBy: { date: 'asc' } }),
-    db.salesApplication.findMany({ where }),
-    db.purchaseDocument.findMany({ where, orderBy: { date: 'asc' } }),
-    db.purchaseDocumentLine.findMany({ where, orderBy: [{ documentId: 'asc' }, { lineNumber: 'asc' }] }),
-    db.billPayment.findMany({ where, orderBy: { date: 'asc' } }),
-    db.purchaseApplication.findMany({ where }),
-    db.bankTransfer.findMany({ where, orderBy: { date: 'asc' } }),
-    db.deposit.findMany({ where, orderBy: { date: 'asc' } }),
-    db.depositLine.findMany({ where, orderBy: [{ depositId: 'asc' }, { lineNumber: 'asc' }] }),
-    db.importedTransaction.findMany({ where, orderBy: { date: 'asc' } }),
-    db.bankReconciliation.findMany({ where, orderBy: { statementDate: 'asc' } }),
-    db.reconciliationEntry.findMany({ where }),
-    db.inventoryTransaction.findMany({ where, orderBy: { createdAt: 'asc' } }),
-    db.inventoryAdjustment.findMany({ where, orderBy: { date: 'asc' } }),
-    db.inventoryAdjustmentLine.findMany({ where, orderBy: [{ adjustmentId: 'asc' }, { lineNumber: 'asc' }] }),
-    db.workspaceBookmark.findMany({ where, orderBy: { createdAt: 'asc' } }),
-    db.bankRule.findMany({ where, orderBy: { name: 'asc' } }),
-    db.reportNote.findMany({ where }),
-    db.ledgerFile.findMany({ where, orderBy: { createdAt: 'asc' } }),
-    db.auditLog.findMany({ where, orderBy: { at: 'asc' } }),
-  ])
+    stores,
+    posRegisters,
+    posPaymentMethods,
+  ] = await runInBatches(
+    [
+      () => db.organization.findUniqueOrThrow({ where: { id: ctx.orgId } }),
+      () =>
+        db.membership.findMany({
+          where,
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            role: true,
+            status: true,
+            invitedAt: true,
+            acceptedAt: true,
+            createdAt: true,
+            updatedAt: true,
+            user: { select: { id: true, name: true, email: true } },
+          },
+        }),
+      () => db.documentSequence.findMany({ where, orderBy: { docType: 'asc' } }),
+      () => db.ledgerAccount.findMany({ where, orderBy: { code: 'asc' } }),
+      () => db.fiscalYear.findMany({ where, orderBy: { year: 'asc' } }),
+      () => db.accountingPeriod.findMany({ where, orderBy: { startDate: 'asc' } }),
+      () => db.journal.findMany({ where, orderBy: { date: 'asc' } }),
+      () => db.journalLine.findMany({ where, orderBy: [{ journalDate: 'asc' }, { id: 'asc' }] }),
+      () => db.paymentTerm.findMany({ where, orderBy: { name: 'asc' } }),
+      () => db.customer.findMany({ where, orderBy: { displayName: 'asc' } }),
+      () => db.customerFile.findMany({ where, orderBy: { createdAt: 'asc' } }),
+      () => db.vendor.findMany({ where, orderBy: { displayName: 'asc' } }),
+      () => db.itemCategory.findMany({ where, orderBy: { name: 'asc' } }),
+      () => db.item.findMany({ where, orderBy: { name: 'asc' } }),
+      () => db.taxAgency.findMany({ where, orderBy: { name: 'asc' } }),
+      () => db.taxRate.findMany({ where, orderBy: { name: 'asc' } }),
+      () => db.taxCode.findMany({ where, orderBy: { name: 'asc' } }),
+      () => db.taxCodeRate.findMany({ where }),
+      () => db.salesDocument.findMany({ where, orderBy: { date: 'asc' } }),
+      () =>
+        db.salesDocumentLine.findMany({
+          where,
+          orderBy: [{ documentId: 'asc' }, { lineNumber: 'asc' }],
+        }),
+      () => db.customerPayment.findMany({ where, orderBy: { date: 'asc' } }),
+      () => db.salesApplication.findMany({ where }),
+      () => db.purchaseDocument.findMany({ where, orderBy: { date: 'asc' } }),
+      () =>
+        db.purchaseDocumentLine.findMany({
+          where,
+          orderBy: [{ documentId: 'asc' }, { lineNumber: 'asc' }],
+        }),
+      () => db.billPayment.findMany({ where, orderBy: { date: 'asc' } }),
+      () => db.purchaseApplication.findMany({ where }),
+      () => db.bankTransfer.findMany({ where, orderBy: { date: 'asc' } }),
+      () => db.deposit.findMany({ where, orderBy: { date: 'asc' } }),
+      () =>
+        db.depositLine.findMany({
+          where,
+          orderBy: [{ depositId: 'asc' }, { lineNumber: 'asc' }],
+        }),
+      () => db.importedTransaction.findMany({ where, orderBy: { date: 'asc' } }),
+      () => db.bankReconciliation.findMany({ where, orderBy: { statementDate: 'asc' } }),
+      () => db.reconciliationEntry.findMany({ where }),
+      () => db.inventoryTransaction.findMany({ where, orderBy: { createdAt: 'asc' } }),
+      () => db.inventoryAdjustment.findMany({ where, orderBy: { date: 'asc' } }),
+      () =>
+        db.inventoryAdjustmentLine.findMany({
+          where,
+          orderBy: [{ adjustmentId: 'asc' }, { lineNumber: 'asc' }],
+        }),
+      () => db.workspaceBookmark.findMany({ where, orderBy: { createdAt: 'asc' } }),
+      () => db.bankRule.findMany({ where, orderBy: { name: 'asc' } }),
+      () => db.reportNote.findMany({ where }),
+      () => db.ledgerFile.findMany({ where, orderBy: { createdAt: 'asc' } }),
+      () => db.auditLog.findMany({ where, orderBy: { at: 'asc' } }),
+      () => db.store.findMany({ where, orderBy: { name: 'asc' } }),
+      () => db.posRegister.findMany({ where, orderBy: { name: 'asc' } }),
+      () => db.posPaymentMethod.findMany({ where, orderBy: { sortOrder: 'asc' } }),
+    ],
+    // Stay under the PrismaPg pool size (5 in development, 1 in production).
+    process.env.NODE_ENV === 'production' ? 1 : 3,
+  )
 
   return {
     version: 1,
@@ -152,6 +204,10 @@ export async function companyBackup(ctx: OrgContext) {
     reportNotes,
     ledgerFiles,
     auditLogs,
+    /** Store layouts and till definitions. Open POS sessions/orders stay out. */
+    stores,
+    posRegisters,
+    posPaymentMethods,
   }
 }
 

@@ -75,7 +75,7 @@ const CONSEQUENCE: Record<DeletableKind, string> = {
   journal:
     'Its entry comes out of the ledger. If a document produced it, that document is deleted too — they are one transaction.',
   item:
-    'It leaves every list and every picker. Documents that already name it still read correctly. Any stock still on hand is written off.',
+    'It is removed only when nothing names it. If it sits on documents or stock movements, merge it into another item instead.',
 }
 
 type Result = { ok: true } | { ok: false; error: { message: string } }

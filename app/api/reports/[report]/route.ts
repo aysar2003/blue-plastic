@@ -137,6 +137,7 @@ async function build(
         'Code',
         'Account',
         'Type',
+        'Detail type',
         'Amount',
         ...(compare ? ['Comparison'] : []),
         '% of income',
@@ -148,7 +149,8 @@ async function build(
             section.label,
             row.code,
             row.name,
-            `${ACCOUNT_TYPE_LABELS[row.type]} · ${ACCOUNT_SUBTYPE_LABELS[row.subtype]}`,
+            ACCOUNT_TYPE_LABELS[row.type],
+            ACCOUNT_SUBTYPE_LABELS[row.subtype],
             row.amount,
             ...(compare ? [row.comparison ?? null] : []),
             row.percentOfIncome ?? null,
@@ -167,7 +169,7 @@ async function build(
     case 'balance-sheet': {
       const data = await balanceSheet(orgId, settings.asOf, { basis: settings.basis })
       const rows: CsvCell[][] = heading('Balance sheet')
-      rows.push(['Section', 'Code', 'Account', 'Type', 'Amount'])
+      rows.push(['Section', 'Code', 'Account', 'Type', 'Detail type', 'Amount'])
 
       for (const section of data.sections) {
         for (const row of section.rows) {
@@ -175,7 +177,8 @@ async function build(
             section.label,
             row.code,
             row.name,
-            `${ACCOUNT_TYPE_LABELS[row.type]} · ${ACCOUNT_SUBTYPE_LABELS[row.subtype]}`,
+            ACCOUNT_TYPE_LABELS[row.type],
+            ACCOUNT_SUBTYPE_LABELS[row.subtype],
             row.amount,
           ])
         }

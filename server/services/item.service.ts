@@ -2,7 +2,7 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 
 import { today } from '@/lib/date'
-import { Decimal, parseMoneyInput } from '@/lib/money'
+import { Decimal, parseMoneyInput, ZERO } from '@/lib/money'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { ItemInput } from '@/lib/validation/master-data'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
@@ -15,7 +15,7 @@ import { db, type Tx } from '@/server/db'
 import { conflict, notFound, validation } from '@/server/errors'
 
 const ITEM_SELECT = {
-  id: true, sku: true, name: true, description: true, type: true, categoryId: true,
+  id: true, sku: true, barcode: true, name: true, description: true, type: true, categoryId: true,
   unitOfMeasure: true,
   salesDescription: true, salesPrice: true, incomeAccountId: true, isTaxable: true, salesTaxCodeId: true,
   purchaseDescription: true, purchaseCost: true, expenseAccountId: true, purchaseTaxCodeId: true,
@@ -47,7 +47,20 @@ const ITEM_ORDER: Record<string, (dir: 'asc' | 'desc') => Prisma.ItemOrderByWith
   price: (dir) => [{ salesPrice: dir }, { name: 'asc' }],
   cost: (dir) => [{ purchaseCost: dir }, { name: 'asc' }],
   sku: (dir) => [{ sku: dir }, { name: 'asc' }],
+  barcode: (dir) => [{ barcode: dir }, { name: 'asc' }],
+  category: (dir) => [{ category: { name: dir } }, { name: 'asc' }],
+  salesDescription: (dir) => [{ salesDescription: dir }, { name: 'asc' }],
+  purchaseDescription: (dir) => [{ purchaseDescription: dir }, { name: 'asc' }],
+  reorderPoint: (dir) => [{ reorderPoint: dir }, { name: 'asc' }],
+  unitOfMeasure: (dir) => [{ unitOfMeasure: dir }, { name: 'asc' }],
+  store: (dir) => [{ store: { name: dir } }, { name: 'asc' }],
+  incomeAccount: (dir) => [{ incomeAccount: { code: dir } }, { name: 'asc' }],
+  inventoryAccount: (dir) => [{ inventoryAccount: { code: dir } }, { name: 'asc' }],
+  cogsExpense: (dir) => [{ cogsAccount: { code: dir } }, { expenseAccount: { code: dir } }, { name: 'asc' }],
 }
+
+/** Sort keys that need stock figures first (then page). */
+const STOCK_SORTS = new Set(['onHand', 'stockValue'])
 
 export async function list(
   ctx: OrgContext,
@@ -74,23 +87,65 @@ export async function list(
           OR: [
             { name: { contains: query.q, mode: 'insensitive' } },
             { sku: { contains: query.q, mode: 'insensitive' } },
+            { barcode: { contains: query.q, mode: 'insensitive' } },
             { description: { contains: query.q, mode: 'insensitive' } },
           ],
         }
       : {}),
   }
 
-  const [rows, total] = await Promise.all([
-    db.item.findMany({
+  const total = await db.item.count({ where })
+  const dir = options.dir ?? 'asc'
+  const sortKey = options.sort && (ITEM_ORDER[options.sort] || STOCK_SORTS.has(options.sort))
+    ? options.sort
+    : undefined
+
+  // On hand / stock value live in the inventory ledger, not on the item row —
+  // same idea as sorting customers by open balance.
+  if (sortKey && STOCK_SORTS.has(sortKey)) {
+    const people = await db.item.findMany({
       where,
-      select: ITEM_SELECT,
-      orderBy: (options.sort ? ITEM_ORDER[options.sort]?.(options.dir ?? 'asc') : undefined) ?? [
-        { name: 'asc' },
-      ],
-      ...paginate(query),
-    }),
-    db.item.count({ where }),
-  ])
+      select: { id: true, type: true },
+    })
+    const trackedIds = people.filter((row) => row.type === 'INVENTORY').map((row) => row.id)
+    const positions = await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
+    const direction = dir === 'desc' ? -1 : 1
+    const ordered = people
+      .map((row) => {
+        const position = positions.get(row.id)
+        const value =
+          sortKey === 'stockValue' ? (position?.value ?? ZERO) : (position?.quantity ?? ZERO)
+        return { id: row.id, value }
+      })
+      .sort((a, b) => a.value.comparedTo(b.value) * direction)
+    const { skip, take } = paginate(query)
+    const slice = ordered.slice(skip, skip + take)
+    const found = slice.length
+      ? await db.item.findMany({
+          where: { id: { in: slice.map((row) => row.id) } },
+          select: ITEM_SELECT,
+        })
+      : []
+    const byId = new Map(found.map((row) => [row.id, row]))
+    const rows = slice.map((entry) => byId.get(entry.id)!).filter(Boolean)
+    const pagePositions = await positionsOf(
+      db as unknown as Tx,
+      ctx.orgId,
+      rows.filter((row) => row.type === 'INVENTORY').map((row) => row.id),
+    )
+    return paged(
+      rows.map((row) => attachStock(row, pagePositions.get(row.id))),
+      total,
+      query,
+    )
+  }
+
+  const rows = await db.item.findMany({
+    where,
+    select: ITEM_SELECT,
+    orderBy: (sortKey ? ITEM_ORDER[sortKey]?.(dir) : undefined) ?? [{ name: 'asc' }],
+    ...paginate(query),
+  })
 
   // Stock travels with the item, because stock *is* a property of the item —
   // not a separate register kept somewhere else. The products list shows what
@@ -100,22 +155,35 @@ export async function list(
   const positions = await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
 
   return paged(
-    rows.map((row) => {
-      const position = positions.get(row.id)
-      return {
-        ...serialise(row),
-        onHand: position ? position.quantity.toFixed(2) : null,
-        stockValue: position ? position.value.toFixed(2) : null,
-        averageCost: position ? position.averageCost.toFixed(4) : null,
-        belowReorder:
-          position && row.reorderPoint
-            ? position.quantity.lessThanOrEqualTo(row.reorderPoint.toString())
-            : false,
-      }
-    }),
+    rows.map((row) => attachStock(row, positions.get(row.id))),
     total,
     query,
   )
+}
+
+function attachStock<
+  T extends {
+    type: string
+    reorderPoint: unknown
+    salesPrice: unknown
+    purchaseCost: unknown
+  },
+>(
+  row: T,
+  position:
+    | { quantity: Decimal; value: Decimal; averageCost: Decimal }
+    | undefined,
+) {
+  return {
+    ...serialise(row),
+    onHand: position ? position.quantity.toFixed(2) : null,
+    stockValue: position ? position.value.toFixed(2) : null,
+    averageCost: position ? position.averageCost.toFixed(4) : null,
+    belowReorder:
+      position && row.reorderPoint
+        ? position.quantity.lessThanOrEqualTo(String(row.reorderPoint))
+        : false,
+  }
 }
 
 export async function get(ctx: OrgContext, id: string) {
@@ -126,7 +194,7 @@ export async function get(ctx: OrgContext, id: string) {
 
 export async function create(ctx: OrgContext, input: ItemInput) {
   input = await accountForStore(ctx, input)
-  await assertNameAndSkuFree(ctx, input.name, input.sku ?? null)
+  await assertNameAndSkuFree(ctx, input.name, input.sku ?? null, input.barcode ?? null)
   await assertAccountsSuitable(ctx, input)
   const meta = await requestMeta()
 
@@ -194,7 +262,7 @@ export async function update(ctx: OrgContext, input: ItemInput & { id: string })
   const before = await db.item.findFirst({ where: { id: input.id, orgId: ctx.orgId }, select: ITEM_SELECT })
   if (!before) throw notFound('Item')
 
-  await assertNameAndSkuFree(ctx, input.name, input.sku ?? null, input.id)
+  await assertNameAndSkuFree(ctx, input.name, input.sku ?? null, input.barcode ?? null, input.id)
   await assertAccountsSuitable(ctx, input)
 
   // Changing what an item *is* would reclassify everything already sold through
@@ -476,6 +544,7 @@ export async function createCategory(ctx: OrgContext, name: string) {
 function toData(input: ItemInput) {
   return {
     sku: input.sku ?? null,
+    barcode: input.barcode ?? null,
     name: input.name,
     description: input.description ?? null,
     type: input.type,
@@ -517,7 +586,13 @@ async function accountForStore(ctx: OrgContext, input: ItemInput, itemId?: strin
   return { ...input, inventoryAccountId: store.inventoryAccountId }
 }
 
-async function assertNameAndSkuFree(ctx: OrgContext, name: string, sku: string | null, selfId?: string) {
+async function assertNameAndSkuFree(
+  ctx: OrgContext,
+  name: string,
+  sku: string | null,
+  barcode: string | null,
+  selfId?: string,
+) {
   const byName = await db.item.findUnique({
     where: { orgId_name: { orgId: ctx.orgId, name } },
     select: { id: true },
@@ -534,6 +609,22 @@ async function assertNameAndSkuFree(ctx: OrgContext, name: string, sku: string |
     if (bySku && bySku.id !== selfId) {
       throw validation(`SKU "${sku}" already belongs to "${bySku.name}".`, {
         sku: [`Already used by "${bySku.name}"`],
+      })
+    }
+  }
+
+  if (barcode) {
+    const byBarcode = await db.item.findFirst({
+      where: {
+        orgId: ctx.orgId,
+        barcode: { equals: barcode, mode: 'insensitive' },
+        ...(selfId ? { NOT: { id: selfId } } : {}),
+      },
+      select: { id: true, name: true },
+    })
+    if (byBarcode) {
+      throw validation(`Barcode "${barcode}" already belongs to "${byBarcode.name}".`, {
+        barcode: [`Already used by "${byBarcode.name}"`],
       })
     }
   }

@@ -30,9 +30,13 @@ export const authConfig = {
       // callers a document where they asked for data.
       if (pathname.startsWith('/api/')) return true
 
-      // `/` only decides where to send the caller, and `/setup` and `/sign-in`
-      // are reachable precisely because there is no session yet.
-      const isPublic = pathname === '/' || pathname === '/sign-in' || pathname === '/setup'
+      // `/` only decides where to send the caller. `/setup`, `/sign-in`, and the
+      // short `/login` alias are reachable precisely because there is no session yet.
+      const isPublic =
+        pathname === '/' ||
+        pathname === '/sign-in' ||
+        pathname === '/login' ||
+        pathname === '/setup'
       if (isPublic) return true
 
       return Boolean(auth?.user)

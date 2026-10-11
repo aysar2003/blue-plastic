@@ -22,7 +22,7 @@ type Item = {
  * Only routes that exist are listed.
  */
 const ITEMS: Item[] = [
-  { label: 'All sales', href: '/sales', permission: 'invoice:read' },
+  { label: 'Open invoices', href: '/sales/invoices?status=open', permission: 'invoice:read' },
   { label: 'Invoices', href: '/sales/invoices', permission: 'invoice:read' },
   { label: 'Estimates', href: '/sales/estimates', permission: 'invoice:read' },
   { label: 'Quotations', href: '/sales/quotations', permission: 'invoice:read' },

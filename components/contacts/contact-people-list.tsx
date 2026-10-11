@@ -16,6 +16,8 @@ const SHEET =
 export type PeopleListRow = {
   id: string
   name: string
+  company?: string | null
+  phone?: string | null
   balance: string
   active: boolean
   href: string
@@ -83,6 +85,8 @@ export function ContactPeopleList({
             href={person.href}
             selected={person.id === selectedId}
             name={person.name}
+            company={person.company}
+            phone={person.phone}
             balance={person.balance}
             currency={currency}
             active={person.active}

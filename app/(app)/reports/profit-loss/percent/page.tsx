@@ -1,14 +1,17 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { PageHeader } from '@/components/data/page-header'
-import { ReportControls } from '../../report-controls'
-import { readSettings, type SearchParams } from '../../params'
+import { ClickableRow } from '@/components/reports/clickable-row'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
+import { REPORT_DRILL_LINK } from '@/lib/report-drill'
 import { requireOrgContext } from '@/server/auth/context'
 import { profitAndLoss } from '@/server/reports/statements'
+import { ReportControls } from '../../report-controls'
+import { readSettings, type SearchParams } from '../../params'
 
 export const metadata: Metadata = { title: 'Profit and Loss as % of income' }
 
@@ -27,12 +30,15 @@ export default async function ProfitAndLossPercentPage({
   const report = await profitAndLoss(ctx.orgId, { ...settings.range, basis: settings.basis })
   const currency = ctx.organization.baseCurrency
   const income = report.totalIncome
+  const drill = (accountId: string) =>
+    `/reports/transaction-detail?account=${accountId}&period=custom&from=${settings.range.from}&to=${settings.range.to}&back=/reports/profit-loss/percent`
 
   return (
     <>
       <PageHeader
+        organization={ctx.organization}
         title="Profit and Loss as % of total income"
-        description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}. Each line is its share of income.`}
+        description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}. Each line is its share of income. Open a name or amount for that account's transactions.`}
       />
       <ReportControls
         period={settings.period}
@@ -59,20 +65,35 @@ export default async function ProfitAndLossPercentPage({
                 <TableCell className="numeric tabular font-medium">{formatMoney(section.total, currency)}</TableCell>
                 <TableCell className="numeric tabular">{percent(section.total, income)}</TableCell>
               </TableRow>,
-              ...section.rows.map((row) => (
-                <TableRow key={row.accountId}>
-                  <TableCell className="pl-8">
-                    {row.code} {row.name}
-                  </TableCell>
-                  <TableCell className="numeric tabular">{formatMoney(row.amount, currency)}</TableCell>
-                  <TableCell className="numeric tabular">{percent(row.amount, income)}</TableCell>
-                </TableRow>
-              )),
+              ...section.rows.map((row) => {
+                const href = drill(row.accountId)
+                return (
+                  <ClickableRow key={row.accountId} href={href} title="Open transactions for this account">
+                    <TableCell className="pl-8">
+                      <Link href={href} className={REPORT_DRILL_LINK}>
+                        <span className="tabular opacity-70">{row.code}</span> {row.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="numeric tabular">
+                      <Link href={href} className={REPORT_DRILL_LINK}>
+                        {formatMoney(row.amount, currency)}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="numeric tabular">
+                      <Link href={href} className={REPORT_DRILL_LINK}>
+                        {percent(row.amount, income)}
+                      </Link>
+                    </TableCell>
+                  </ClickableRow>
+                )
+              }),
             ])}
             <TableRow>
               <TableCell className="font-semibold">Net income</TableCell>
               <TableCell className="numeric tabular font-semibold">{formatMoney(report.netIncome, currency)}</TableCell>
-              <TableCell className="numeric tabular font-semibold">{percent(report.netIncome, income.isZero() ? ZERO : income)}</TableCell>
+              <TableCell className="numeric tabular font-semibold">
+                {percent(report.netIncome, income.isZero() ? ZERO : income)}
+              </TableCell>
             </TableRow>
           </TableBody>
         </Table>

@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 
+import { readSort } from '@/components/data/sortable-header'
 import { PageHeader } from '@/components/data/page-header'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
-import { StatementTable } from '@/components/reports/statement-table'
+import { STATEMENT_SORT_COLUMNS, StatementTable } from '@/components/reports/statement-table'
 import { Card } from '@/components/ui/card'
 import { formatDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
@@ -31,6 +32,15 @@ export default async function ProfitAndLossPage({
   const query = await searchParams
   const settings = readSettings(query, ctx.organization)
   const currency = ctx.organization.baseCurrency
+  const sort = readSort(query, STATEMENT_SORT_COLUMNS, { sort: 'detail', dir: 'asc' })
+  const linkParams = {
+    period: settings.period,
+    from: settings.range.from,
+    to: settings.range.to,
+    asOf: settings.asOf,
+    basis: settings.basis,
+    compare: settings.comparison === 'none' ? undefined : settings.comparison,
+  }
 
   const [report, note] = await Promise.all([
     profitAndLoss(ctx.orgId, { ...settings.range, basis: settings.basis }, {
@@ -67,7 +77,7 @@ export default async function ProfitAndLossPage({
   return (
     <>
       <PageHeader
-        className="print:hidden"
+        organization={ctx.organization}
         title="Profit and Loss"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · ${
           settings.basis === 'cash' ? 'cash basis' : 'accrual basis'
@@ -138,6 +148,9 @@ export default async function ProfitAndLossPage({
             drillTo={drill}
             showPercent
             comparisonLabel={comparisonLabel}
+            sort={sort}
+            basePath="/reports/profit-loss"
+            linkParams={linkParams}
             subtotals={{
               cogs: [line('Gross profit', report.grossProfit, comparedGross)],
               expenses: [line('Operating profit', report.operatingProfit, comparedOperating)],

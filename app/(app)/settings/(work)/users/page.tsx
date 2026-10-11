@@ -18,6 +18,7 @@ import { requireOrgContext } from '@/server/auth/context'
 import { ASSIGNABLE_ROLES, ROLE_LABELS } from '@/lib/roles'
 import { effectivePermissions, permissionsFor } from '@/server/auth/permissions'
 import * as membershipService from '@/server/services/membership.service'
+import { ConnectToggle } from './connect-toggle'
 import { InviteUserDialog } from './invite-user-dialog'
 import { MemberActions } from './member-actions'
 import { ManageAccessButton } from './manage-access-button'
@@ -68,7 +69,11 @@ export default async function UsersPage({
     <div className="space-y-4">
       <PageHeader
         title="Users"
-        description="Add people, assign a ready-made role, or tick which apps each person may open — the same apps on the home screen."
+        description={
+          ctx.isSystemOwner
+            ? 'Add people and choose their apps. Connect can be given only to an admin. Everyone else signs in straight to this company.'
+            : 'Add people, assign a ready-made role, or tick which apps each person may open — the same apps on the home screen.'
+        }
         actions={
           canInvite ? (
             <InviteUserDialog roles={[...ASSIGNABLE_ROLES]} roleTemplates={ROLE_TEMPLATES} />
@@ -175,6 +180,9 @@ export default async function UsersPage({
                             {member.permissionsOverride.length === 1 ? '' : 's'}
                           </span>
                         ) : null}
+                        {member.canConnect && member.role === 'ADMIN' ? (
+                          <span className="block text-xs text-muted-foreground">Can connect</span>
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         {apps.length === 0 ? (
@@ -214,7 +222,10 @@ export default async function UsersPage({
                       </TableCell>
                       <TableCell className="text-right">
                         {canManageRow ? (
-                          <div className="inline-flex items-center justify-end gap-1">
+                          <div className="inline-flex flex-wrap items-center justify-end gap-1">
+                            {ctx.isSystemOwner && member.role === 'ADMIN' ? (
+                              <ConnectToggle membershipId={member.id} enabled={member.canConnect} />
+                            ) : null}
                             {canUpdate ? (
                               <ManageAccessButton
                                 membershipId={member.id}

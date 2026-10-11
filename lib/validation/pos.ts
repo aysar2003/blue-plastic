@@ -102,6 +102,8 @@ export const posCashMoveSchema = z.object({
   sessionId: cuid,
   kind: z.enum(['IN', 'OUT']),
   amount: moneyString,
+  /** Bank / wallet cash came from (IN) or went to (OUT). */
+  counterpartyAccountId: cuid,
   reason: optionalText(500),
 })
 
@@ -138,7 +140,7 @@ export const posRegisterSchema = z.object({
     .optional(),
   defaultCustomerId: cuid,
   paymentMethodIds: z.array(cuid).min(1, 'Pick at least one payment method for this counter'),
-  /** Staff who work this counter. Empty = anyone with POS access. */
+  /** Staff who work this counter. Empty = managers only. */
   staffUserIds: z.array(cuid).default([]),
   isActive: z.coerce.boolean().default(true),
   pin: cashierPin,

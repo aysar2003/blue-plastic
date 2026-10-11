@@ -5,6 +5,7 @@ import { useMemo } from 'react'
 import { InteractiveGrid, type InteractiveColumn, type InteractiveRow } from '@/components/data/interactive-grid'
 import {
   buildRegisterColumns,
+  defaultRegisterPrefs,
   storageKeyForRegister,
   type RegisterColumnDef,
 } from '@/lib/register-table-columns'
@@ -43,16 +44,16 @@ type Props = {
 }
 
 const WIDTHS: Record<string, number> = {
-  date: 188,
-  entry: 128,
+  date: 168,
+  entry: 118,
   type: 148,
-  name: 168,
-  description: 240,
-  document: 128,
-  contra: 180,
-  debit: 120,
-  credit: 120,
-  balance: 136,
+  name: 140,
+  description: 160,
+  document: 110,
+  contra: 220,
+  debit: 112,
+  credit: 112,
+  balance: 120,
 }
 
 function collectSplits(rows: RegisterTableRow[]) {
@@ -78,7 +79,12 @@ function columnOf(col: RegisterColumnDef): InteractiveColumn {
 
 export function RegisterTable({ accountId, currency, timeZone, rows, closingBalance }: Props) {
   const splits = useMemo(() => collectSplits(rows), [rows])
-  const columns = useMemo(() => buildRegisterColumns(splits).map(columnOf), [splits])
+  const registerColumns = useMemo(() => buildRegisterColumns(splits), [splits])
+  const columns = useMemo(() => registerColumns.map(columnOf), [registerColumns])
+  const defaultHidden = useMemo(
+    () => defaultRegisterPrefs(registerColumns.map((column) => column.id)).hidden,
+    [registerColumns],
+  )
 
   const gridRows = useMemo<InteractiveRow[]>(
     () =>
@@ -114,6 +120,7 @@ export function RegisterTable({ accountId, currency, timeZone, rows, closingBala
       rows={gridRows}
       currency={currency}
       timeZone={timeZone}
+      defaultHidden={defaultHidden}
       customizable
       totalLabel="Total"
       footers={[

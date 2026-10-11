@@ -18,7 +18,11 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { FromQuotationPicker, type OpenQuotationOption } from '@/components/sales/from-quotation'
+import {
+  FromSourcePicker,
+  type AppliedSource,
+  type OpenSourceOption,
+} from '@/components/sales/from-source'
 import { idleState, type FormState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { EntityPicker } from '@/components/forms/entity-picker'
@@ -68,7 +72,14 @@ import {
 import { formatDate, isCalendarDate } from '@/lib/date'
 import { dueDateFor } from '@/lib/payment-terms'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
-import { defaultLineRows, isProposal, type SalesTypeConfig } from '@/lib/sales-types'
+import {
+  byType,
+  customerPaperTotalLabel,
+  defaultLineRows,
+  isProposal,
+  isSalesOrder,
+  type SalesTypeConfig,
+} from '@/lib/sales-types'
 import { cn } from '@/lib/utils'
 import { LineStore } from '@/components/inventory/line-store'
 import { StockWarningNote } from '@/components/inventory/stock-warning'
@@ -190,7 +201,7 @@ export function DocumentForm({
   neighbors,
   stores = [],
   stock = {},
-  openQuotations = [],
+  openSources = [],
 }: {
   config: SalesTypeConfig
   customers: CustomerOption[]
@@ -217,8 +228,8 @@ export function DocumentForm({
   stores?: StoreChoice[]
   /** Quantity of each tracked item in each store. */
   stock?: StockByStore
-  /** Open quotations a new invoice can be created from. */
-  openQuotations?: OpenQuotationOption[]
+  /** Open estimates, quotations, and sales orders a new invoice or receipt can use. */
+  openSources?: OpenSourceOption[]
 }) {
   const officeId = officeStoreId(stores)
   const defaultStoreId =
@@ -228,7 +239,8 @@ export function DocumentForm({
   // Invoice, quotation, sales receipt, credit, and refund share the print sheet —
   // the same paper POS and the counter print. No template picker on those.
   const usesPrintSheet = (PRINT_SHEET_SALES_TYPES as readonly string[]).includes(config.type)
-  const usesInvoiceSheet = config.type === 'INVOICE' || isProposal(config.type)
+  const usesInvoiceSheet =
+    config.type === 'INVOICE' || isProposal(config.type) || isSalesOrder(config.type)
   const templateKey = usesInvoiceSheet
     ? INVOICE_FORM_TEMPLATE_STORAGE_KEY
     : config.type === 'SALES_RECEIPT'
@@ -268,6 +280,9 @@ export function DocumentForm({
   const [depositAccountId, setDepositAccountId] = useState(
     document?.depositAccountId ?? depositAccounts[0]?.id ?? '',
   )
+  /** Estimate / quotation / order the lines were brought from — closed on save. */
+  const [convertedFromId, setConvertedFromId] = useState<string | null>(null)
+  const [convertedFromLabel, setConvertedFromLabel] = useState<string | null>(null)
   const minimumLines = defaultLineRows(config.type)
   const [lines, setLines] = useState<Line[]>(() =>
     withMinimumLines(
@@ -301,7 +316,9 @@ export function DocumentForm({
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
       handled.current = true
-      toast.success(state.message ?? 'Saved.')
+      toast.success(
+        saveAsDraft.current ? 'Saved as draft.' : (state.message ?? 'Saved.'),
+      )
       if (afterSave.current === 'new' && !document?.id) {
         setCustomerId(initialCustomerId ?? '')
         setDate(today)
@@ -312,6 +329,8 @@ export function DocumentForm({
         setDepositAccountId(depositAccounts[0]?.id ?? '')
         setDiscountKind('percent')
         setDiscountValue('')
+        setConvertedFromId(null)
+        setConvertedFromLabel(null)
         setLines(Array.from({ length: minimumLines }, (_, index) => empty(index + 1, defaultStoreId)))
         nextKey.current = minimumLines + 1
         router.refresh()
@@ -382,7 +401,8 @@ export function DocumentForm({
   const taxById = useMemo(() => new Map(taxCodes.map((code) => [code.id, code])), [taxCodes])
   const showTax = taxCodes.length > 0
 
-  const offersDocumentDiscount = config.type === 'INVOICE' || config.type === 'SALES_RECEIPT'
+  const offersDocumentDiscount =
+    config.type === 'INVOICE' || config.type === 'SALES_RECEIPT' || isSalesOrder(config.type)
 
   const totals = useMemo(() => {
     let netSubtotal = ZERO
@@ -476,7 +496,39 @@ export function DocumentForm({
     (line) => line.itemId || line.description || parseMoneyInput(line.unitPrice)?.greaterThan(0),
   )
 
-  const payloadFor = (saveAsDraft: boolean) =>
+  const applyFromSource = (applied: AppliedSource) => {
+    const seeded = applied.lines.map((line, index) => ({
+      key: index + 1,
+      itemId: line.itemId,
+      description: line.description,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      discountPercent: line.discountPercent,
+      taxCodeId: line.taxCodeId,
+      storeId: line.storeId || defaultStoreId,
+    }))
+    setLines(withMinimumLines(seeded, minimumLines, defaultStoreId))
+    nextKey.current = Math.max(seeded.length, minimumLines) + 1
+    setConvertedFromId(applied.sourceId)
+    setConvertedFromLabel(`${byType(applied.sourceType).singular} ${applied.sourceNumber}`)
+    if (applied.reference && !reference) setReference(applied.reference)
+    if (applied.memo && !memo) setMemo(applied.memo)
+    if (applied.customerMessage && !customerMessage) setCustomerMessage(applied.customerMessage)
+    if (applied.paymentTermId) setPaymentTermId(applied.paymentTermId)
+  }
+
+  const changeCustomer = (id: string) => {
+    setCustomerId(id)
+    if (convertedFromId) {
+      setConvertedFromId(null)
+      setConvertedFromLabel(null)
+    }
+  }
+
+  /** Set in the button click; read when the form builds the payload on submit. */
+  const saveAsDraft = useRef(false)
+  const payloadInput = useRef<HTMLInputElement>(null)
+  const payloadFor = () =>
     JSON.stringify({
       ...(document?.id ? { id: document.id } : { type: config.type }),
       number,
@@ -487,7 +539,8 @@ export function DocumentForm({
       customerMessage,
       paymentTermId,
       depositAccountId: config.needsDeposit ? depositAccountId : '',
-      saveAsDraft,
+      saveAsDraft: saveAsDraft.current,
+      ...(convertedFromId && !document?.id ? { convertedFromId } : {}),
       ...(offersDocumentDiscount ? { discountKind, discountValue } : {}),
       lines: filled.map((line) => ({
         itemId: line.itemId,
@@ -500,8 +553,9 @@ export function DocumentForm({
       })),
     })
 
-  const [saveAsDraft, setSaveAsDraft] = useState(false)
   const canSave = customerId !== '' && filled.length > 0 && totals.total.greaterThan(0)
+  /** A draft can be unfinished — customer and at least one line are enough. */
+  const canDraft = customerId !== '' && filled.length > 0
 
   const shared = {
     config,
@@ -520,7 +574,7 @@ export function DocumentForm({
     recordId: document?.id,
     showTax,
     customerId,
-    setCustomerId,
+    setCustomerId: changeCustomer,
     date,
     setDate,
     reference,
@@ -549,18 +603,27 @@ export function DocumentForm({
     setDiscountKind,
     discountValue,
     setDiscountValue,
-    openQuotations:
-      config.type === 'INVOICE' && !document?.id ? openQuotations : [],
+    openSources:
+      (config.type === 'INVOICE' || config.type === 'SALES_RECEIPT') && !document?.id
+        ? openSources
+        : [],
+    convertTarget:
+      config.type === 'SALES_RECEIPT' ? ('SALES_RECEIPT' as const) : ('INVOICE' as const),
+    convertedFromLabel,
+    applyFromSource,
   }
 
   return (
     <form
       action={formAction}
+      onSubmit={() => {
+        if (payloadInput.current) payloadInput.current.value = payloadFor()
+      }}
       className={
         config.type === 'SALES_RECEIPT' ? 'mx-auto w-full max-w-5xl space-y-2' : 'space-y-2'
       }
     >
-      <input type="hidden" name="payload" value={payloadFor(saveAsDraft)} />
+      <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor()} />
 
       {config.type === 'SALES_RECEIPT' ? (
         <SalesReceiptToolbar
@@ -570,7 +633,7 @@ export function DocumentForm({
           canSave={canSave}
           onSave={() => {
             afterSave.current = 'close'
-            setSaveAsDraft(false)
+            saveAsDraft.current = false
           }}
         />
       ) : null}
@@ -594,11 +657,23 @@ export function DocumentForm({
         </Button>
         <SubmitButton
           variant="outline"
+          disabled={!canDraft}
+          pendingLabel="Saving draft…"
+          title="Save without posting — finish and post later from Drafts"
+          onClick={() => {
+            afterSave.current = 'close'
+            saveAsDraft.current = true
+          }}
+        >
+          Save as draft
+        </SubmitButton>
+        <SubmitButton
+          variant="outline"
           disabled={!canSave}
           pendingLabel="Saving…"
           onClick={() => {
             afterSave.current = 'close'
-            setSaveAsDraft(false)
+            saveAsDraft.current = false
           }}
         >
           Save and close
@@ -608,7 +683,7 @@ export function DocumentForm({
           pendingLabel="Saving…"
           onClick={() => {
             afterSave.current = 'new'
-            setSaveAsDraft(false)
+            saveAsDraft.current = false
           }}
         >
           Save and new
@@ -802,7 +877,10 @@ type LayoutProps = {
   setDiscountKind: (value: 'amount' | 'percent') => void
   discountValue: string
   setDiscountValue: (value: string) => void
-  openQuotations: OpenQuotationOption[]
+  openSources: OpenSourceOption[]
+  convertTarget: 'INVOICE' | 'SALES_RECEIPT'
+  convertedFromLabel: string | null
+  applyFromSource: (applied: AppliedSource) => void
 }
 
 function HeaderFields({
@@ -822,8 +900,11 @@ function HeaderFields({
       ? dueDateFor(props.date, term ? { type: term.type, dueDays: term.dueDays } : null)
       : props.date
   const showDue =
-    config.type === 'INVOICE' || config.type === 'CREDIT_MEMO' || isProposal(config.type)
-  const dueLabel = isProposal(config.type) ? 'Valid until' : 'Due date'
+    config.type === 'INVOICE' ||
+    config.type === 'CREDIT_MEMO' ||
+    isProposal(config.type) ||
+    isSalesOrder(config.type)
+  const dueLabel = isProposal(config.type) || isSalesOrder(config.type) ? 'Valid until' : 'Due date'
 
   return (
     <div className="space-y-2.5">
@@ -1057,23 +1138,29 @@ function InvoiceLayout(props: LayoutProps) {
           </PartyInfo>
           <div className="text-right">
             <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
-              {props.config.needsDeposit
-                ? 'Amount received'
-                : isProposal(props.config.type)
-                  ? 'Total'
-                  : 'Balance due'}
+              {customerPaperTotalLabel(props.config.type, props.config.needsDeposit)}
             </p>
             <p className="text-xl font-semibold tabular text-primary">{formatMoney(props.totals.total, props.currency)}</p>
           </div>
         </div>
 
-        {props.config.type === 'INVOICE' && !props.recordId ? (
-          <FromQuotationPicker
+        {(props.config.type === 'INVOICE' || props.config.type === 'SALES_RECEIPT') &&
+        !props.recordId ? (
+          <FromSourcePicker
             customerId={props.customerId}
-            quotations={props.openQuotations}
+            sources={props.openSources}
             today={today}
             currency={props.currency}
+            target={props.convertTarget}
+            onApply={props.applyFromSource}
           />
+        ) : null}
+        {props.convertedFromLabel && !props.recordId ? (
+          <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+            Lines from{' '}
+            <span className="font-medium text-foreground">{props.convertedFromLabel}</span>. That
+            document closes when you save this one.
+          </p>
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -1095,7 +1182,14 @@ function InvoiceLayout(props: LayoutProps) {
             recordId={props.recordId}
           />
           {props.config.needsDeposit ? null : (
-            <Field name="dueDate" label={isProposal(props.config.type) ? 'Valid until' : 'Due date'}>
+            <Field
+              name="dueDate"
+              label={
+                isProposal(props.config.type) || isSalesOrder(props.config.type)
+                  ? 'Valid until'
+                  : 'Due date'
+              }
+            >
               <Input id="dueDate" value={isCalendarDate(due) ? formatDate(due) : ''} readOnly />
             </Field>
           )}
@@ -1189,13 +1283,7 @@ function InvoiceLayout(props: LayoutProps) {
               <dd className="tabular">{formatMoney(props.totals.total, props.currency)}</dd>
             </div>
             <div className="flex justify-between gap-6 text-base font-semibold">
-              <dt>
-                {props.config.needsDeposit
-                  ? 'Amount received'
-                  : isProposal(props.config.type)
-                    ? 'Total'
-                    : 'Balance due'}
-              </dt>
+              <dt>{customerPaperTotalLabel(props.config.type, props.config.needsDeposit)}</dt>
               <dd className="tabular text-primary">{formatMoney(props.totals.total, props.currency)}</dd>
             </div>
           </dl>
@@ -1372,13 +1460,23 @@ function SheetLayout(props: LayoutProps) {
           </div>
         </div>
 
-        {props.config.type === 'INVOICE' && !props.recordId ? (
-          <FromQuotationPicker
+        {(props.config.type === 'INVOICE' || props.config.type === 'SALES_RECEIPT') &&
+        !props.recordId ? (
+          <FromSourcePicker
             customerId={props.customerId}
-            quotations={props.openQuotations}
+            sources={props.openSources}
             today={props.today}
             currency={props.currency}
+            target={props.convertTarget}
+            onApply={props.applyFromSource}
           />
+        ) : null}
+        {props.convertedFromLabel && !props.recordId ? (
+          <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+            Lines from{' '}
+            <span className="font-medium text-foreground">{props.convertedFromLabel}</span>. That
+            document closes when you save this one.
+          </p>
         ) : null}
 
         <StripedLines props={props} />
@@ -1497,7 +1595,7 @@ function ReceiptFinder({ slug }: { slug: string }) {
             />
           </Field>
           <Field name="findDate" label="Date">
-            <Input id="findDate" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            <DateField id="findDate" value={date} onChange={setDate} />
           </Field>
           <Field name="findAmount" label="Amount">
             <Input

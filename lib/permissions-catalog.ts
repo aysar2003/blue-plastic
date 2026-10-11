@@ -22,6 +22,7 @@ export const PERMISSIONS = [
   'account:create',
   'account:update',
   'account:archive',
+  'account:delete',
   'journal:read',
   'journal:create',
   'journal:post',
@@ -35,14 +36,17 @@ export const PERMISSIONS = [
   'customer:create',
   'customer:update',
   'customer:archive',
+  'customer:delete',
   'vendor:read',
   'vendor:create',
   'vendor:update',
   'vendor:archive',
+  'vendor:delete',
   'item:read',
   'item:create',
   'item:update',
   'item:archive',
+  'item:delete',
   'tax:read',
   'tax:manage',
 
@@ -86,6 +90,12 @@ export const PERMISSIONS = [
   'report:read',
   'report:overview',
   'report:export',
+
+  // Calendar — meetings, appointments, reminders
+  'calendar:read',
+  'calendar:create',
+  'calendar:update',
+  'calendar:delete',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -137,6 +147,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'customer:create', label: 'Create customers' },
       { key: 'customer:update', label: 'Edit customers' },
       { key: 'customer:archive', label: 'Archive customers' },
+      {
+        key: 'customer:delete',
+        label: 'Delete / merge customers',
+        hint: 'Only the owner has this by default — grant it here for other users',
+      },
     ],
   },
   {
@@ -159,6 +174,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'vendor:create', label: 'Create vendors' },
       { key: 'vendor:update', label: 'Edit vendors' },
       { key: 'vendor:archive', label: 'Archive vendors' },
+      {
+        key: 'vendor:delete',
+        label: 'Delete / merge vendors',
+        hint: 'Only the owner has this by default — grant it here for other users',
+      },
     ],
   },
   {
@@ -192,6 +212,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'item:create', label: 'Create items' },
       { key: 'item:update', label: 'Edit items' },
       { key: 'item:archive', label: 'Archive items' },
+      {
+        key: 'item:delete',
+        label: 'Delete / merge items',
+        hint: 'Only the owner has this by default — grant it here for other users',
+      },
     ],
   },
   {
@@ -212,6 +237,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'account:create', label: 'Create accounts' },
       { key: 'account:update', label: 'Edit accounts' },
       { key: 'account:archive', label: 'Archive accounts' },
+      {
+        key: 'account:delete',
+        label: 'Delete / merge accounts',
+        hint: 'Only the owner has this by default — grant it here for other users',
+      },
     ],
   },
   {
@@ -258,6 +288,17 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'period:read', label: 'View periods' },
       { key: 'period:close', label: 'Close periods' },
       { key: 'period:reopen', label: 'Reopen periods' },
+    ],
+  },
+  {
+    id: 'calendar',
+    label: 'Calendar',
+    description: 'Meetings, appointments, and reminders.',
+    permissions: [
+      { key: 'calendar:read', label: 'View the calendar' },
+      { key: 'calendar:create', label: 'Schedule meetings and appointments' },
+      { key: 'calendar:update', label: 'Edit calendar events' },
+      { key: 'calendar:delete', label: 'Delete calendar events' },
     ],
   },
   {

@@ -49,6 +49,7 @@ export default async function NewPurchasePage({
       <BillForm
         config={config}
         vendors={options.vendors}
+        customers={options.customers}
         items={options.items}
         taxCodes={options.taxCodes}
         paymentAccounts={options.paymentAccounts}

@@ -4,8 +4,17 @@ import { useSyncExternalStore } from 'react'
 import { CheckIcon } from 'lucide-react'
 import { useTheme } from 'next-themes'
 
+import { writeBrowserStore } from '@/lib/browser-store'
+import { REPORT_STYLE_KEY, type ReportStyleId } from '@/lib/report-styles'
 import { THEME_GROUPS, THEMES, type ThemeId } from '@/lib/themes'
 import { cn } from '@/lib/utils'
+
+/** Full brand skins also set the matching report paper. */
+function reportStyleForTheme(id: ThemeId): ReportStyleId | null {
+  if (id === 'quick' || id === 'quick-dark') return 'quickbooks'
+  if (id === 'odoo' || id === 'odoo-dark') return 'odoo'
+  return null
+}
 
 export function ThemePicker() {
   const { theme, setTheme } = useTheme()
@@ -15,7 +24,13 @@ export function ThemePicker() {
     () => false,
   )
 
-  const current = (mounted ? (theme ?? 'odoo') : 'odoo') as ThemeId
+  const current = (mounted ? (theme ?? 'som') : 'som') as ThemeId
+
+  const pick = (id: ThemeId) => {
+    setTheme(id)
+    const reportStyle = reportStyleForTheme(id)
+    if (reportStyle) writeBrowserStore(REPORT_STYLE_KEY, reportStyle)
+  }
 
   return (
     <div className="space-y-8">
@@ -36,7 +51,7 @@ export function ThemePicker() {
                     key={option.id}
                     type="button"
                     aria-pressed={active}
-                    onClick={() => setTheme(option.id)}
+                    onClick={() => pick(option.id)}
                     className={cn(
                       'rounded-xl border bg-card p-3 text-left transition-colors',
                       active ? 'border-primary ring-2 ring-primary/30' : 'hover:border-primary/40',

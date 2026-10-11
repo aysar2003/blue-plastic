@@ -55,7 +55,10 @@ export function sectionLabel(pathname: string): string | null {
   const mod = moduleFor(path)
   if (!mod) return null
   const tab = tabFor(mod, path)
-  if (tab && tab.href !== mod.href) return tab.label
+  // Module entry hrefs often include a default query; compare path only.
+  const modPath = (mod.href.split(/[?#]/)[0] || mod.href)
+  const tabPath = tab ? tab.href.split(/[?#]/)[0] || tab.href : null
+  if (tab && tabPath !== modPath) return tab.label
   return mod.label
 }
 

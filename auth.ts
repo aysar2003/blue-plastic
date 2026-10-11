@@ -4,7 +4,9 @@ import { PrismaAdapter } from '@auth/prisma-adapter'
 import { z } from 'zod'
 
 import { authConfig } from '@/auth.config'
+import { homeCompanyId, sessionCompanyId } from '@/lib/company-access'
 import { db } from '@/server/db'
+import { loadCompanyAccess } from '@/server/auth/company-access'
 import { fakeVerify, verifyPassword } from '@/server/auth/password'
 import { recordEvent } from '@/server/audit'
 
@@ -35,11 +37,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: true,
             image: true,
             passwordHash: true,
+            homeOrgId: true,
             memberships: {
               where: { status: 'ACTIVE' },
               select: { orgId: true, role: true, version: true },
               orderBy: { createdAt: 'asc' },
-              take: 1,
             },
           },
         })
@@ -65,8 +67,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null
         }
 
-        // A user with no active membership has no organisation to sign in to.
-        const membership = user.memberships[0]
+        // Staff land in the company they work for. The system owner does too,
+        // and opens the others afterwards from the Databases app.
+        const homeId = homeCompanyId(user.homeOrgId, user.memberships)
+        const membership = user.memberships.find((row) => row.orgId === homeId)
         if (!membership) return null
 
         await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
@@ -92,7 +96,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.sub = user.id
         token.orgId = user.orgId
@@ -101,15 +105,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       // Refresh the claims when the client calls `useSession().update()` — used
-      // after a role change so the user does not have to sign out and back in.
-      if (trigger === 'update' && token.sub && token.orgId) {
-        const membership = await db.membership.findUnique({
-          where: { orgId_userId: { orgId: token.orgId as string, userId: token.sub } },
-          select: { role: true, version: true, status: true },
-        })
-        if (membership && membership.status === 'ACTIVE') {
-          token.role = membership.role
-          token.membershipVersion = membership.version
+      // after a role change or switching organisation so they need not sign out.
+      if (trigger === 'update' && token.sub) {
+        const access = await loadCompanyAccess(token.sub)
+        if (access) {
+          const requested =
+            session && typeof session === 'object' && 'orgId' in session && typeof session.orgId === 'string'
+              ? session.orgId
+              : (token.orgId as string)
+          const nextOrgId = sessionCompanyId({
+            isSystemOwner: access.isSystemOwner,
+            maySwitch: access.maySwitch,
+            sessionOrgId: requested,
+            homeOrgId: access.homeOrgId,
+            memberships: access.memberships,
+          })
+          const membership = nextOrgId
+            ? access.memberships.find((row) => row.orgId === nextOrgId)
+            : undefined
+          if (membership) {
+            token.orgId = membership.orgId
+            token.role = membership.role
+            token.membershipVersion = membership.version
+          } else if (access.isSystemOwner && nextOrgId) {
+            const org = await db.organization.findUnique({
+              where: { id: nextOrgId },
+              select: { id: true },
+            })
+            if (org) {
+              token.orgId = org.id
+              token.role = 'OWNER'
+              token.membershipVersion = 0
+            }
+          }
         }
       }
 

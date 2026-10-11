@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     '*': ['./uploads/**'],
   },
+  async redirects() {
+    // Short staff URL advertised on the public product page.
+    return [{ source: '/login', destination: '/sign-in', permanent: false }]
+  },
   experimental: {
     // `forbidden()` renders app/forbidden.tsx instead of the generic error page.
     authInterrupts: true,

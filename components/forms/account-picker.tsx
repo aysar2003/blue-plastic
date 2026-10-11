@@ -49,6 +49,7 @@ export function AccountPicker({
         label: option.label,
         hint: option.hint,
         group: option.group,
+        accountType: option.type,
       })),
     [options],
   )

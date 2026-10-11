@@ -356,7 +356,7 @@ export async function get(ctx: OrgContext, id: string) {
     },
   })
 
-  if (!journal) throw notFound('Journal')
+  if (!journal || journal.status === 'DELETED') throw notFound('Journal')
 
   const sources = await resolveSources(ctx.orgId, [
     { sourceType: journal.sourceType, sourceId: journal.sourceId },

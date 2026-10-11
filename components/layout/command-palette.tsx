@@ -345,7 +345,7 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
               return (
                 <React.Fragment key={command.id}>
                   {heading ? (
-                    <p className="px-2 pb-1 pt-2 text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    <p className="px-2 pb-1 pt-2 text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground">
                       {heading}
                     </p>
                   ) : null}

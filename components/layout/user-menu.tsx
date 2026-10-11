@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { signOut } from 'next-auth/react'
-import { LogOutIcon, PaletteIcon, UserIcon } from 'lucide-react'
+import { DatabaseIcon, LogOutIcon, PaletteIcon, PieChartIcon, UserIcon } from 'lucide-react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -18,9 +18,15 @@ import {
 export function UserMenu({
   user,
   roleLabel,
+  showDatabases = false,
+  showCompanyReports = false,
 }: {
   user: { name: string; email: string; image: string | null }
   roleLabel: string
+  /** Databases app — system owner, or an admin who was given Connect. */
+  showDatabases?: boolean
+  /** Consolidated figures for the company group (or all companies for system owner). */
+  showCompanyReports?: boolean
 }) {
   const initials = user.name
     .split(' ')
@@ -59,6 +65,22 @@ export function UserMenu({
             Appearance
           </Link>
         </DropdownMenuItem>
+        {showDatabases ? (
+          <DropdownMenuItem asChild>
+            <Link href="/databases">
+              <DatabaseIcon />
+              Close company
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
+        {showCompanyReports ? (
+          <DropdownMenuItem asChild>
+            <Link href="/reports/companies">
+              <PieChartIcon />
+              Company reports
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={() => signOut({ callbackUrl: '/sign-in' })}>
           <LogOutIcon />

@@ -29,7 +29,7 @@ function Input({ className, type, inputMode, onBlur, readOnly, disabled, ...prop
         onBlur?.(event)
       }}
       className={cn(
-        'flex h-8 w-full min-w-0 rounded-md border border-input bg-card px-2.5 py-1 text-[0.8125rem] transition-[color,box-shadow] outline-none',
+        'flex h-8 w-full min-w-0 rounded-md border border-input bg-card px-2.5 py-1 text-[0.8125rem] text-foreground transition-[color,box-shadow] outline-none',
         'file:inline-flex file:border-0 file:bg-transparent file:text-sm file:font-medium',
         'placeholder:text-muted-foreground caret-foreground',
         'focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25',

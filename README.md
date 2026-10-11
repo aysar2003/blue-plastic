@@ -64,6 +64,8 @@ This project's production aliases are `https://blue-plastic-orpin.vercel.app` an
 is not an alias of this project; a request there can return a server error
 (digest `1226442282`) from a different deployment.
 
+Public product page: `/` (SOM ERP). Company login: `/login` or `/sign-in`.
+
 `GET /api/health` answers `{ ok, database }` and, when Postgres is down, a
 `problem` name. It never includes a connection string. Supabase URLs need
 `sslmode=require`. Use the pooler host on `DATABASE_URL` and the direct host on

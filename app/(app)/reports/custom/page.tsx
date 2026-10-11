@@ -15,6 +15,7 @@ export default async function CustomReportsPage() {
     <>
       <ReportCentreTabs active="custom" />
       <PageHeader
+        organization={ctx.organization}
         title="Custom reports"
         description="Star a standard report to keep it here. This is a saved favourite, not a second report engine."
       />

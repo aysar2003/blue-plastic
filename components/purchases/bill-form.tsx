@@ -38,6 +38,13 @@ export type VendorOption = {
   paymentTermId: string | null
   defaultExpenseAccountId: string | null
 }
+export type CustomerOffsetOption = {
+  id: string
+  label: string
+  email: string | null
+  balance: string
+  hint?: string
+}
 export type PurchaseItemOption = {
   id: string
   label: string
@@ -110,6 +117,7 @@ function withItemRows(seeded: Line[], storeId = '', minimum = 15): Line[] {
 export function BillForm({
   config,
   vendors,
+  customers = [],
   items,
   taxCodes,
   paymentAccounts,
@@ -125,6 +133,8 @@ export function BillForm({
 }: {
   config: PurchaseTypeConfig
   vendors: VendorOption[]
+  /** Customers whose balance can settle an expense (buy from shop / offset cost). */
+  customers?: CustomerOffsetOption[]
   items: PurchaseItemOption[]
   taxCodes: TaxOption[]
   paymentAccounts: AccountPickerOption[]
@@ -145,6 +155,7 @@ export function BillForm({
     memo: string | null
     paymentTermId: string | null
     paymentAccountId: string | null
+    offsetCustomerId?: string | null
     lines: {
       itemId: string | null
       expenseAccountId: string | null
@@ -162,6 +173,7 @@ export function BillForm({
   const officeId = officeStoreId(stores)
   const router = useRouter()
   const [state, formAction] = useActionState(savePurchaseForm, idleState)
+  const isExpense = config.type === 'EXPENSE'
 
   const [number, setNumber] = usePropState(documentNumber)
   const [vendorId, setVendorId] = useState(document?.vendorId ?? initialVendorId ?? '')
@@ -169,6 +181,10 @@ export function BillForm({
   const [reference, setReference] = useState(document?.reference ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
   const [paymentTermId, setPaymentTermId] = useState(document?.paymentTermId ?? '')
+  const [paymentSource, setPaymentSource] = useState<'bank' | 'customer'>(() =>
+    document?.offsetCustomerId ? 'customer' : 'bank',
+  )
+  const [offsetCustomerId, setOffsetCustomerId] = useState(document?.offsetCustomerId ?? '')
   const [paymentAccountId, setPaymentAccountId] = useState(
     document?.paymentAccountId ?? paymentAccounts[0]?.id ?? '',
   )
@@ -194,7 +210,8 @@ export function BillForm({
       defaultPurchaseLineRows(config.type),
     ),
   )
-  const [saveAsDraft, setSaveAsDraft] = useState(false)
+  /** Ref so the click that chooses draft/post is what the payload reads on submit. */
+  const saveAsDraft = useRef(false)
   /** Category lines stay hidden until asked for — most bills are item-only. */
   const [showCategories, setShowCategories] = useState(() =>
     Boolean(
@@ -209,12 +226,17 @@ export function BillForm({
   const handled = useRef(false)
   const afterSave = useRef<'close' | 'new'>('close')
 
-  // Start on the vendor name so Tab walks the form without the mouse.
+  // Start on the party name so Tab walks the form without the mouse.
   useEffect(() => {
+    if (isExpense && paymentSource === 'customer') {
+      if (offsetCustomerId) return
+      const timer = window.setTimeout(() => window.document.getElementById('offsetCustomerId')?.focus(), 0)
+      return () => window.clearTimeout(timer)
+    }
     if (vendorId) return
     const timer = window.setTimeout(() => window.document.getElementById('vendorId')?.focus(), 0)
     return () => window.clearTimeout(timer)
-  }, [vendorId])
+  }, [vendorId, offsetCustomerId, isExpense, paymentSource])
 
   const seedVendor = !document && Boolean(initialVendorId)
   const [vendorSeeded, setVendorSeeded] = useState(!seedVendor)
@@ -235,9 +257,11 @@ export function BillForm({
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
       handled.current = true
-      toast.success(state.message ?? 'Saved.')
+      toast.success(saveAsDraft.current ? 'Saved as draft.' : (state.message ?? 'Saved.'))
       if (afterSave.current === 'new' && !document?.id) {
         setVendorId('')
+        setOffsetCustomerId('')
+        setPaymentSource('bank')
         setDate(today)
         setReference('')
         setMemo('')
@@ -371,30 +395,39 @@ export function BillForm({
       : line.itemId || line.description || parseMoneyInput(line.unitPrice)?.greaterThan(0),
   )
 
-  const payload = JSON.stringify({
-    ...(document?.id ? { id: document.id } : { type: config.type }),
-    number,
-    vendorId,
-    date,
-    reference,
-    memo,
-    paymentTermId,
-    paymentAccountId: config.needsPaymentAccount ? paymentAccountId : '',
-    saveAsDraft,
-    lines: filled.map((line) => ({
-      // A category line has no item and always a quantity of one; an item line
-      // takes its account from the item, not from this form.
-      itemId: line.kind === 'item' ? line.itemId : '',
-      expenseAccountId: line.kind === 'category' ? line.expenseAccountId : '',
-      description: line.description,
-      quantity: line.kind === 'category' ? '1' : line.quantity || '1',
-      unitPrice: line.unitPrice,
-      taxCodeId: line.taxCodeId,
-      storeId: line.kind === 'item' ? line.storeId : '',
-    })),
-  })
+  const payFromCustomer = isExpense && paymentSource === 'customer'
+  const selectedCustomer = customers.find((customer) => customer.id === offsetCustomerId)
+  const customerBalance = selectedCustomer ? new Decimal(selectedCustomer.balance || 0) : null
 
-  const canSave = vendorId !== '' && filled.length > 0 && totals.total.greaterThan(0)
+  const payloadInput = useRef<HTMLInputElement>(null)
+  const payloadFor = () =>
+    JSON.stringify({
+      ...(document?.id ? { id: document.id } : { type: config.type }),
+      number,
+      vendorId: payFromCustomer ? '' : vendorId,
+      date,
+      reference,
+      memo,
+      paymentTermId,
+      paymentAccountId: config.needsPaymentAccount && !payFromCustomer ? paymentAccountId : '',
+      offsetCustomerId: payFromCustomer ? offsetCustomerId : '',
+      saveAsDraft: saveAsDraft.current,
+      lines: filled.map((line) => ({
+        // A category line has no item and always a quantity of one; an item line
+        // takes its account from the item, not from this form.
+        itemId: line.kind === 'item' ? line.itemId : '',
+        expenseAccountId: line.kind === 'category' ? line.expenseAccountId : '',
+        description: line.description,
+        quantity: line.kind === 'category' ? '1' : line.quantity || '1',
+        unitPrice: line.unitPrice,
+        taxCodeId: line.taxCodeId,
+        storeId: line.kind === 'item' ? line.storeId : '',
+      })),
+    })
+
+  const hasParty = payFromCustomer ? offsetCustomerId !== '' : vendorId !== ''
+  const canSave = hasParty && filled.length > 0 && totals.total.greaterThan(0)
+  const canDraft = hasParty && filled.length > 0
   const term = terms.find((row) => row.id === paymentTermId)
   const due =
     isCalendarDate(date) && term?.type
@@ -406,8 +439,14 @@ export function BillForm({
   const isVendorCredit = config.type === 'VENDOR_CREDIT'
 
   return (
-    <form action={formAction} className="space-y-2">
-      <input type="hidden" name="payload" value={payload} />
+    <form
+      action={formAction}
+      onSubmit={() => {
+        if (payloadInput.current) payloadInput.current.value = payloadFor()
+      }}
+      className="space-y-2"
+    >
+      <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor()} />
 
       <Card className="overflow-hidden bg-white p-0">
         {isVendorCredit ? (
@@ -424,18 +463,54 @@ export function BillForm({
 
           {/* Name → Date → Number → Due → PO */}
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.35fr)_repeat(4,minmax(0,1fr))]">
-            <Field name="vendorId" label="Vendor name" required error={state.fieldErrors?.vendorId}>
-              <EntityPicker
-                id="vendorId"
-                kind="vendor"
-                options={vendors}
-                value={vendorId || null}
-                onChange={(next) => chooseVendor(next ?? '')}
-                placeholder="Choose a vendor"
+            {payFromCustomer ? (
+              <Field
+                name="offsetCustomerId"
+                label="Customer"
                 required
-                error={state.fieldErrors?.vendorId}
-              />
-            </Field>
+                error={state.fieldErrors?.offsetCustomerId}
+              >
+                <EntityPicker
+                  id="offsetCustomerId"
+                  kind="customer"
+                  options={customers}
+                  value={offsetCustomerId || null}
+                  onChange={(next) => setOffsetCustomerId(next ?? '')}
+                  placeholder="Choose a customer"
+                  required
+                  error={state.fieldErrors?.offsetCustomerId}
+                />
+                {selectedCustomer ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {customerBalance?.isPositive()
+                      ? `They owe you ${formatMoney(customerBalance, currency)} — this purchase deducts from that.`
+                      : customerBalance?.isNegative()
+                        ? `You already owe them ${formatMoney(customerBalance.abs(), currency)} — this adds to it.`
+                        : 'No balance yet — the full amount will sit on their account for you to pay later.'}
+                    {customerBalance && totals.total.greaterThan(customerBalance) && customerBalance.isPositive()
+                      ? ` Remainder ${formatMoney(totals.total.minus(customerBalance), currency)} stays as credit on their account.`
+                      : null}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Buy items from their shop or settle a cost against what they owe you. Pay any leftover later from the bank or with a journal.
+                  </p>
+                )}
+              </Field>
+            ) : (
+              <Field name="vendorId" label="Vendor name" required error={state.fieldErrors?.vendorId}>
+                <EntityPicker
+                  id="vendorId"
+                  kind="vendor"
+                  options={vendors}
+                  value={vendorId || null}
+                  onChange={(next) => chooseVendor(next ?? '')}
+                  placeholder="Choose a vendor"
+                  required
+                  error={state.fieldErrors?.vendorId}
+                />
+              </Field>
+            )}
             <Field
               name="date"
               label={config.needsPaymentAccount ? 'Payment date' : 'Date'}
@@ -492,7 +567,24 @@ export function BillForm({
                 </NativeSelect>
               </Field>
             ) : null}
-            {config.needsPaymentAccount ? (
+            {isExpense ? (
+              <Field name="paymentSource" label="Paid from" required>
+                <NativeSelect
+                  id="paymentSource"
+                  value={paymentSource}
+                  onChange={(event) => {
+                    const next = event.target.value === 'customer' ? 'customer' : 'bank'
+                    setPaymentSource(next)
+                    if (next === 'bank') setOffsetCustomerId('')
+                    else setPaymentAccountId('')
+                  }}
+                >
+                  <option value="bank">Bank / cash</option>
+                  <option value="customer">Customer balance</option>
+                </NativeSelect>
+              </Field>
+            ) : null}
+            {config.needsPaymentAccount && !payFromCustomer ? (
               <Field
                 name="paymentAccountId"
                 label="Payment account"
@@ -807,11 +899,23 @@ export function BillForm({
         </Button>
         <SubmitButton
           variant="outline"
+          disabled={!canDraft}
+          pendingLabel="Saving draft…"
+          title="Save without posting — finish and post later from Drafts"
+          onClick={() => {
+            afterSave.current = 'close'
+            saveAsDraft.current = true
+          }}
+        >
+          Save as draft
+        </SubmitButton>
+        <SubmitButton
+          variant="outline"
           disabled={!canSave}
           pendingLabel="Saving…"
           onClick={() => {
             afterSave.current = 'close'
-            setSaveAsDraft(false)
+            saveAsDraft.current = false
           }}
         >
           Save and close
@@ -821,7 +925,7 @@ export function BillForm({
           pendingLabel="Saving…"
           onClick={() => {
             afterSave.current = 'new'
-            setSaveAsDraft(false)
+            saveAsDraft.current = false
           }}
         >
           Save and new

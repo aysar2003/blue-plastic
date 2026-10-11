@@ -78,6 +78,14 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
   periods: [
     { label: 'Periods', href: '/periods', permission: 'period:read' },
   ],
+  calendar: [
+    { label: 'Month view', href: '/calendar', permission: 'calendar:read' },
+  ],
+  databases: [
+    { label: 'All databases', href: '/databases', permission: 'org:update' },
+    { label: 'Create company', href: '/databases?create=1', permission: 'org:update' },
+    { label: 'Import backup', href: '/databases?import=1', permission: 'org:update' },
+  ],
   stores: [
     { label: 'Office · stores', href: '/stores', permission: 'inventory:read' },
     { label: 'Stock on hand', href: '/inventory/stock', permission: 'inventory:read' },

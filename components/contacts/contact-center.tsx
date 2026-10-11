@@ -12,6 +12,7 @@ import { WordFile } from '@/components/contacts/word-file'
 import { FilterChips } from '@/components/data/filter-chips'
 import { SearchInput } from '@/components/data/search-input'
 import {
+  contactEditHref,
   customerContactMenu,
   customerQuickReportHref,
   vendorContactMenu,
@@ -34,6 +35,9 @@ const SHEET =
 export type CenterPerson = {
   id: string
   name: string
+  company?: string | null
+  phone?: string | null
+  email?: string | null
   balance: string
   active: boolean
 }
@@ -69,14 +73,27 @@ const ACTIVITY_COLUMNS = [
 
 export type ActivitySortKey = (typeof ACTIVITY_COLUMNS)[number]['key']
 
-export type PeopleSortKey = 'name' | 'balance'
+export type PeopleSortKey = 'name' | 'company' | 'phone' | 'email' | 'balance'
+
+const PEOPLE_COLUMNS: { key: PeopleSortKey; label: string; align?: 'end' }[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'company', label: 'Company' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'balance', label: 'Balance', align: 'end' },
+]
 
 export function isActivitySort(value: string | undefined): value is ActivitySortKey {
   return ACTIVITY_COLUMNS.some((column) => column.key === value)
 }
 
 export function isPeopleSort(value: string | undefined): value is PeopleSortKey {
-  return value === 'name' || value === 'balance'
+  return (
+    value === 'name' ||
+    value === 'company' ||
+    value === 'phone' ||
+    value === 'email' ||
+    value === 'balance'
+  )
 }
 
 /** Orders the rows on screen. Amounts compare as money, so 10 comes after 4. */
@@ -163,6 +180,7 @@ export function ContactCenter({
   canPay = false,
   canReport = false,
   canArchive = false,
+  canEdit = false,
 }: {
   title: string
   people: CenterPerson[]
@@ -201,6 +219,8 @@ export function ContactCenter({
   canPay?: boolean
   canReport?: boolean
   canArchive?: boolean
+  /** Left-list … menu Edit (opens the contact dialog). */
+  canEdit?: boolean
 }) {
   const ordered = activitySort ? sortCenterRows(rows, activitySort.sort, activitySort.dir) : rows
 
@@ -210,7 +230,15 @@ export function ContactCenter({
       if (value && key !== 'txSort' && key !== 'txDir') next.set(key, value)
     }
     next.set('txSort', column)
-    next.set('txDir', activitySort?.sort === column && activitySort.dir === 'asc' ? 'desc' : 'asc')
+    const first = column === 'amount' || column === 'date' ? 'desc' : 'asc'
+    next.set(
+      'txDir',
+      activitySort?.sort === column
+        ? activitySort.dir === 'asc'
+          ? 'desc'
+          : 'asc'
+        : first,
+    )
     return `${filterPath}?${next.toString()}`
   }
 
@@ -220,7 +248,11 @@ export function ContactCenter({
       if (value && key !== 'sort' && key !== 'dir') next.set(key, value)
     }
     next.set('sort', column)
-    next.set('dir', peopleSort?.sort === column && peopleSort.dir === 'asc' ? 'desc' : 'asc')
+    const first = column === 'balance' ? 'desc' : 'asc'
+    next.set(
+      'dir',
+      peopleSort?.sort === column ? (peopleSort.dir === 'asc' ? 'desc' : 'asc') : first,
+    )
     return `${filterPath}?${next.toString()}`
   }
 
@@ -229,6 +261,7 @@ export function ContactCenter({
 
   const peopleRows = people.map((person) => {
     const href = personHref(person.id)
+    const editHref = canEdit ? contactEditHref(href) : undefined
     const menuLinks =
       contactSide === 'customer'
         ? customerContactMenu(person.id, {
@@ -236,16 +269,20 @@ export function ContactCenter({
             canPay,
             canReport,
             selectHref: href,
+            editHref,
           })
         : vendorContactMenu(person.id, {
             canBill: canCreateDocs,
             canPay,
             canReport,
             selectHref: href,
+            editHref,
           })
     return {
       id: person.id,
       name: person.name,
+      company: person.company ?? null,
+      phone: person.phone ?? null,
       balance: person.balance,
       active: person.active,
       href,
@@ -302,27 +339,24 @@ export function ContactCenter({
         }
         left={
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex items-center gap-2 border-b px-2 py-1.5">
-              <div className="min-w-0 flex-1">
-                <SearchInput placeholder="Find a name" />
+            <div className="space-y-1.5 border-b px-2 py-1.5">
+              <SearchInput placeholder="Find a name" className="max-w-none" />
+              <div className="flex items-center justify-between gap-2">
+                {archivedHref ? (
+                  <Link
+                    href={archivedHref}
+                    className="shrink-0 text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  >
+                    {archivedLabel}
+                  </Link>
+                ) : (
+                  <span />
+                )}
+                <ContactDetailReopen />
               </div>
-              {archivedHref ? (
-                <Link
-                  href={archivedHref}
-                  className="shrink-0 text-xs text-muted-foreground underline-offset-4 hover:underline"
-                >
-                  {archivedLabel}
-                </Link>
-              ) : null}
-              <ContactDetailReopen />
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_1.75rem] border-b px-2 py-1 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
-              {(
-                [
-                  { key: 'name' as const, label: 'Name', align: 'start' as const },
-                  { key: 'balance' as const, label: 'Balance', align: 'end' as const },
-                ] as const
-              ).map((column) => {
+            <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_4.25rem_5.25rem_1.75rem] border-b px-2 py-1 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
+              {PEOPLE_COLUMNS.map((column) => {
                 const active = peopleSort?.sort === column.key
                 const Icon = active
                   ? peopleSort.dir === 'asc'
@@ -334,16 +368,29 @@ export function ContactCenter({
                     key={column.key}
                     href={peopleColumnHref(column.key)}
                     scroll={false}
+                    title={
+                      active
+                        ? peopleSort.dir === 'asc'
+                          ? 'Sorted A→Z / small→large. Click to reverse.'
+                          : 'Sorted Z→A / large→small. Click to reverse.'
+                        : `Sort by ${column.label}`
+                    }
                     aria-sort={
                       active ? (peopleSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
                     }
                     className={cn(
-                      'inline-flex items-center gap-0.5 hover:text-foreground',
+                      'inline-flex min-w-0 items-center gap-0.5 hover:text-foreground',
                       column.align === 'end' && 'justify-end',
+                      active && 'font-semibold text-foreground',
                     )}
                   >
-                    {column.label}
-                    <Icon className={cn('size-3 shrink-0', active ? 'opacity-80' : 'opacity-35')} />
+                    <span className="truncate">{column.label}</span>
+                    <Icon
+                      className={cn(
+                        'size-3.5 shrink-0',
+                        active ? 'text-foreground' : 'text-muted-foreground',
+                      )}
+                    />
                   </Link>
                 )
               })}
@@ -471,14 +518,27 @@ export function ContactCenter({
                         key={column.key}
                         href={columnHref(column.key)}
                         scroll={false}
+                        title={
+                          active
+                            ? activitySort.dir === 'asc'
+                              ? 'Sorted small → large. Click to reverse.'
+                              : 'Sorted large → small. Click to reverse.'
+                            : `Sort by ${column.label}`
+                        }
                         aria-sort={active ? (activitySort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
                         className={cn(
                           'inline-flex items-center gap-0.5 hover:text-foreground',
                           column.key === 'amount' && 'justify-end',
+                          active && 'font-semibold text-foreground',
                         )}
                       >
                         {column.label}
-                        <Icon className={cn('size-3 shrink-0', active ? 'opacity-80' : 'opacity-35')} />
+                        <Icon
+                          className={cn(
+                            'size-3.5 shrink-0',
+                            active ? 'text-foreground' : 'text-muted-foreground',
+                          )}
+                        />
                       </Link>
                     )
                   })}

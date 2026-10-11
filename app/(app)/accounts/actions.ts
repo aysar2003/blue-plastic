@@ -10,8 +10,11 @@ import {
   accountCreateSchema,
   accountUpdateSchema,
 } from '@/lib/validation/accounting'
+import { cuid } from '@/lib/validation/common'
 import { action } from '@/server/action'
+import { assertAccountDeleteAllowed } from '@/server/feature-guards'
 import * as accountService from '@/server/services/account.service'
+import * as lifecycle from '@/server/services/master-data-lifecycle'
 
 function revalidateChart() {
   revalidatePath('/accounts')
@@ -53,6 +56,27 @@ export const setAccountActive = action
     await accountService.setActive(ctx, input.id, input.isActive)
     revalidateChart()
     return { id: input.id }
+  })
+
+/** Hard-delete an unused chart account. Linked accounts must be merged instead. */
+export const deleteAccount = action
+  .requires('account:delete')
+  .input(z.object({ id: cuid }))
+  .handler(async (ctx, input) => {
+    assertAccountDeleteAllowed(ctx)
+    const result = await lifecycle.purgeAccount(ctx, input.id)
+    revalidateChart()
+    return result
+  })
+
+export const mergeAccounts = action
+  .requires('account:delete')
+  .input(z.object({ keepId: cuid, absorbId: cuid }))
+  .handler(async (ctx, input) => {
+    assertAccountDeleteAllowed(ctx)
+    const result = await lifecycle.mergeAccounts(ctx, input)
+    revalidateChart()
+    return result
   })
 
 export const installDefaultChart = action

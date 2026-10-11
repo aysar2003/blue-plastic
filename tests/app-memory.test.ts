@@ -130,6 +130,24 @@ describe('app memory', () => {
     expect(doorHref({ memory: next, key: 'payments', root: '/payments', currentHref: null, now: NOW })).toBe('/payments')
   })
 
+  it('reopening Periods stays on the month, not a purchase opened from its entries', () => {
+    const memory: AppMemory = {
+      periods: { href: '/purchases/expenses/abc', home: '/periods?month=p1', at: NOW },
+    }
+    expect(doorHref({ memory, key: 'periods', root: '/periods', currentHref: '/dashboard', now: NOW })).toBe(
+      '/periods?month=p1',
+    )
+    expect(
+      doorHref({ memory, key: 'periods', root: '/periods', currentHref: '/periods?month=p1', now: NOW }),
+    ).toBe('/periods')
+    const stolen: AppMemory = {
+      periods: { href: '/purchases/bills/1', home: '/purchases/bills/1', at: NOW },
+    }
+    expect(doorHref({ memory: stolen, key: 'periods', root: '/periods', currentHref: null, now: NOW })).toBe(
+      '/periods',
+    )
+  })
+
   it('expires old places and survives junk in storage', () => {
     expect(parseMemory('not json', NOW)).toEqual({})
     expect(parseMemory('[1,2]', NOW)).toEqual({})

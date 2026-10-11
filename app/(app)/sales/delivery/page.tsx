@@ -19,10 +19,47 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatDate, formatDateTime } from '@/lib/date'
+import { cn } from '@/lib/utils'
 import { requireOrgContext } from '@/server/auth/context'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
+import type { DeliveryListScope } from '@/server/services/sales-delivery.service'
 
 export const metadata: Metadata = { title: 'Sales delivery' }
+
+const SCOPES: {
+  value: DeliveryListScope
+  label: string
+  hint: string
+  tone: 'stock' | 'info' | 'ledger'
+  icon: ReactNode
+}[] = [
+  {
+    value: 'open',
+    label: 'Open notes',
+    hint: 'ready to print or hand over',
+    tone: 'stock',
+    icon: <PackageCheckIcon className="size-4" />,
+  },
+  {
+    value: 'today',
+    label: 'Issued today',
+    hint: 'same calendar day',
+    tone: 'info',
+    icon: <TruckIcon className="size-4" />,
+  },
+  {
+    value: 'recent',
+    label: 'Recent',
+    hint: 'latest on the list',
+    tone: 'ledger',
+    icon: <PackageIcon className="size-4" />,
+  },
+]
+
+function readScope(value: string | string[] | undefined): DeliveryListScope {
+  if (value === 'today' || value === 'recent' || value === 'open') return value
+  return 'open'
+}
 
 /**
  * Dispatch dashboard for customer delivery notes.
@@ -40,14 +77,53 @@ export default async function SalesDeliveryHubPage({
   const search = await searchParams
   const customerId = typeof search.customerId === 'string' ? search.customerId : undefined
   const showVoid = search.status === 'void'
+  const scope = readScope(search.scope)
 
   const [summary, rows] = await Promise.all([
     salesDelivery.overview(ctx),
     salesDelivery.list(ctx, {
       customerId,
       status: showVoid ? 'VOID' : 'POSTED',
+      scope,
     }),
   ])
+
+  const hrefFor = (next: {
+    scope?: DeliveryListScope
+    status?: 'active' | 'void'
+    customerId?: string | null
+  }) => {
+    const params = new URLSearchParams()
+    const nextCustomer =
+      next.customerId === null ? undefined : (next.customerId ?? customerId)
+    if (nextCustomer) params.set('customerId', nextCustomer)
+    const nextScope = next.scope ?? scope
+    if (nextScope !== 'open') params.set('scope', nextScope)
+    const nextStatus = next.status ?? (showVoid ? 'void' : 'active')
+    if (nextStatus === 'void') params.set('status', 'void')
+    const q = params.toString()
+    return q ? `/sales/delivery?${q}` : '/sales/delivery'
+  }
+
+  const emptyTitle = showVoid
+    ? scope === 'today'
+      ? 'No voided notes today'
+      : scope === 'recent'
+        ? 'No recent voided notes'
+        : 'No voided delivery notes'
+    : scope === 'today'
+      ? 'No notes issued today'
+      : scope === 'recent'
+        ? 'No recent delivery notes'
+        : 'No delivery notes yet'
+
+  const emptyDescription = showVoid
+    ? 'Voided notes appear here when a sale that had shipped goods is withdrawn.'
+    : scope === 'today'
+      ? 'Notes raised on today’s calendar date will show in this sheet.'
+      : scope === 'recent'
+        ? 'The eight newest posted notes will appear here as soon as goods ship.'
+        : 'Post an invoice or sales receipt with products — a delivery note (DN-) and store tickets are created automatically for the load.'
 
   return (
     <div className="space-y-6">
@@ -62,43 +138,36 @@ export default async function SalesDeliveryHubPage({
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Insight
-          label="Open notes"
-          value={String(summary.posted)}
-          hint="ready to print or hand over"
-          icon={<PackageCheckIcon className="size-4" />}
-          tone="stock"
-        />
-        <Insight
-          label="Issued today"
-          value={String(summary.today)}
-          hint="same calendar day"
-          icon={<TruckIcon className="size-4" />}
-          tone="info"
-        />
-        <Insight
-          label="Recent"
-          value={String(summary.recent.length)}
-          hint="latest on the list"
-          icon={<PackageIcon className="size-4" />}
-          tone="ledger"
-        />
+        {SCOPES.map((item) => (
+          <Insight
+            key={item.value}
+            label={item.label}
+            value={
+              item.value === 'open'
+                ? String(summary.posted)
+                : item.value === 'today'
+                  ? String(summary.today)
+                  : String(summary.recent.length)
+            }
+            hint={item.hint}
+            icon={item.icon}
+            tone={item.tone}
+            href={hrefFor({ scope: item.value })}
+            selected={scope === item.value}
+          />
+        ))}
       </div>
 
       <div className="flex flex-wrap gap-2 text-sm">
         <Link
-          href={customerId ? `/sales/delivery?customerId=${customerId}` : '/sales/delivery'}
+          href={hrefFor({ status: 'active' })}
           className={!showVoid ? 'font-medium text-foreground' : 'text-muted-foreground hover:text-foreground'}
         >
           Active
         </Link>
         <span className="text-muted-foreground">·</span>
         <Link
-          href={
-            customerId
-              ? `/sales/delivery?customerId=${customerId}&status=void`
-              : '/sales/delivery?status=void'
-          }
+          href={hrefFor({ status: 'void' })}
           className={showVoid ? 'font-medium text-foreground' : 'text-muted-foreground hover:text-foreground'}
         >
           Voided
@@ -106,7 +175,10 @@ export default async function SalesDeliveryHubPage({
         {customerId ? (
           <>
             <span className="text-muted-foreground">·</span>
-            <Link href="/sales/delivery" className="text-muted-foreground hover:text-foreground">
+            <Link
+              href={hrefFor({ customerId: null })}
+              className="text-muted-foreground hover:text-foreground"
+            >
               Clear customer filter
             </Link>
           </>
@@ -114,15 +186,7 @@ export default async function SalesDeliveryHubPage({
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState
-          icon={TruckIcon}
-          title={showVoid ? 'No voided delivery notes' : 'No delivery notes yet'}
-          description={
-            showVoid
-              ? 'Voided notes appear here when a sale that had shipped goods is withdrawn.'
-              : 'Post an invoice or sales receipt with products — a delivery note (DN-) and store tickets are created automatically for the load.'
-          }
-        />
+        <EmptyState icon={TruckIcon} title={emptyTitle} description={emptyDescription} />
       ) : (
         <Card className="overflow-hidden p-0">
           <ScrollSheet>
@@ -199,23 +263,36 @@ function Insight({
   hint,
   icon,
   tone,
+  href,
+  selected,
 }: {
   label: string
   value: string
   hint: string
   icon: ReactNode
   tone: 'stock' | 'info' | 'ledger'
+  href: string
+  selected: boolean
 }) {
   return (
-    <Card tone={tone}>
-      <CardContent className="flex items-start gap-3 p-4">
-        <span className="mt-0.5 rounded-md bg-black/5 p-2 dark:bg-white/10">{icon}</span>
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-          <p className="mt-0.5 text-2xl font-semibold tabular">{value}</p>
-          <p className="text-xs text-muted-foreground">{hint}</p>
-        </div>
-      </CardContent>
-    </Card>
+    <Link
+      href={href}
+      aria-current={selected ? 'page' : undefined}
+      className={cn(
+        'block rounded-xl transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        selected && 'ring-2 ring-foreground/25',
+      )}
+    >
+      <Card tone={tone}>
+        <CardContent className="flex items-start gap-3 p-4">
+          <span className="mt-0.5 rounded-md bg-black/5 p-2 dark:bg-white/10">{icon}</span>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+            <p className="mt-0.5 text-2xl font-semibold tabular">{value}</p>
+            <p className="text-xs text-muted-foreground">{hint}</p>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   )
 }

@@ -1,8 +1,12 @@
 'use client'
 
+import { SessionProvider } from 'next-auth/react'
 import { ThemeProvider } from 'next-themes'
 import { Toaster } from 'sonner'
 
+import { UiFontProvider } from '@/components/appearance/ui-font-provider'
+import { WebsiteLookProvider } from '@/components/appearance/website-look-provider'
+import { ReportStyleProvider } from '@/components/reports/report-style-provider'
 import { ForbiddenWatcher } from '@/components/system/forbidden-watcher'
 import { THEME_IDS } from '@/lib/themes'
 
@@ -16,16 +20,21 @@ import { THEME_IDS } from '@/lib/themes'
  */
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="odoo"
-      enableSystem={false}
-      themes={[...THEME_IDS]}
-      disableTransitionOnChange
-    >
-      {children}
-      <ForbiddenWatcher />
-      <Toaster richColors closeButton position="bottom-right" />
-    </ThemeProvider>
+    <SessionProvider>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="som"
+        enableSystem={false}
+        themes={[...THEME_IDS]}
+        disableTransitionOnChange
+      >
+        <ReportStyleProvider />
+        <WebsiteLookProvider />
+        <UiFontProvider />
+        {children}
+        <ForbiddenWatcher />
+        <Toaster richColors closeButton position="bottom-right" />
+      </ThemeProvider>
+    </SessionProvider>
   )
 }

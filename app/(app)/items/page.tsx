@@ -24,7 +24,25 @@ import * as taxService from '@/server/services/tax.service'
 import { whoText } from '@/components/data/recorded-by'
 import { ItemTable } from './item-table'
 
-const SORTABLE = ['name', 'type', 'price', 'cost', 'sku'] as const
+const SORTABLE = [
+  'name',
+  'type',
+  'price',
+  'cost',
+  'sku',
+  'barcode',
+  'category',
+  'salesDescription',
+  'purchaseDescription',
+  'reorderPoint',
+  'unitOfMeasure',
+  'store',
+  'incomeAccount',
+  'inventoryAccount',
+  'cogsExpense',
+  'onHand',
+  'stockValue',
+] as const
 
 export const metadata: Metadata = { title: 'Products and services' }
 
@@ -112,7 +130,10 @@ export default async function ItemsPage({
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <SearchInput placeholder="Search name, SKU or description" />
+        <SearchInput
+          placeholder="Search name, SKU, barcode or description"
+          className="max-w-2xl"
+        />
         <div className="flex gap-1">
           {TYPE_FILTERS.map((filter) => {
             const active = (type ?? '') === filter.value
@@ -209,6 +230,9 @@ export default async function ItemsPage({
               currency={ctx.organization.baseCurrency}
               canEdit={ctx.permissions.has('item:update')}
               canArchive={ctx.permissions.has('item:archive')}
+              canDelete={
+                ctx.permissions.has('item:delete') && ctx.features.allowItemDelete
+              }
               canAdjust={ctx.permissions.has('inventory:adjust')}
               startEditingId={editId}
               extraEdit={

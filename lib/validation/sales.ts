@@ -52,6 +52,11 @@ export const salesDocumentSchema = z.object({
   customerMessage: optionalText(1000),
   depositAccountId: optionalId,
   saveAsDraft: z.coerce.boolean().default(false),
+  /**
+   * Estimate, quotation, or sales order this sale was built from. Closing the
+   * source on save matches QuickBooks linking the two papers.
+   */
+  convertedFromId: optionalId,
   /** Whole-document discount on an invoice or a sales receipt. Blank means none. */
   discountKind: z.enum(['amount', 'percent']).default('percent'),
   discountValue: z
@@ -79,6 +84,31 @@ export const convertEstimateSchema = z.object({
   id: cuid,
   date: calendarDate,
 })
+
+/**
+ * Turn an estimate, quotation, or sales order into the next document —
+ * invoice, sales receipt, or (from a proposal) a sales order. Same link
+ * QuickBooks keeps between the papers.
+ */
+export const convertSalesDocumentSchema = z
+  .object({
+    id: cuid,
+    date: calendarDate,
+    target: z.enum(['INVOICE', 'SALES_RECEIPT', 'SALES_ORDER']),
+    depositAccountId: optionalId,
+  })
+  .superRefine((value, ctx) => {
+    if (value.target === 'SALES_RECEIPT' && !value.depositAccountId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['depositAccountId'],
+        message: 'Choose the account the money was received into.',
+      })
+    }
+  })
+
+/** @deprecated Prefer convertSalesDocumentSchema — kept for older call sites. */
+export const convertSalesOrderSchema = convertSalesDocumentSchema
 
 /* --- Payments ------------------------------------------------------------- */
 

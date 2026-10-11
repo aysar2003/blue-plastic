@@ -21,6 +21,7 @@ import {
 import { ColumnBand } from '@/components/data/column-band'
 import { ClickableRow } from '@/components/data/clickable-row'
 import { DeleteMenuItem } from '@/components/data/delete-record'
+import { MergeIntoDialog } from '@/components/master-data/merge-into-dialog'
 import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { TableColumnCustomize } from '@/components/data/table-column-customize'
 import { Badge } from '@/components/ui/badge'
@@ -91,6 +92,7 @@ export function ItemTable({
   currency,
   canEdit,
   canArchive,
+  canDelete = false,
   canAdjust,
   sort,
   linkParams,
@@ -107,6 +109,7 @@ export function ItemTable({
   currency: string
   canEdit: boolean
   canArchive: boolean
+  canDelete?: boolean
   canAdjust: boolean
   startEditingId?: string
   /** Used when Edit is opened for an item that is not on this page of the list. */
@@ -120,6 +123,7 @@ export function ItemTable({
   const [editing, setEditing] = useState<ItemRow | null>(
     () => rows.find((row) => row.id === startEditingId) ?? extraEdit ?? null,
   )
+  const [merging, setMerging] = useState<ItemRow | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const catalog = useMemo(() => buildItemTableColumns(storeColumns), [storeColumns])
@@ -161,79 +165,44 @@ export function ItemTable({
     })
 
   function renderHeader(col: ItemColumnDef) {
-    switch (col.id) {
-      case 'name':
-        return (
-          <SortableHeader
-            key={col.id}
-            column="name"
-            label={col.label}
-            state={sort}
-            basePath="/items"
-            params={linkParams}
-          />
-        )
-      case 'type':
-        return (
-          <SortableHeader
-            key={col.id}
-            column="type"
-            label={col.label}
-            state={sort}
-            basePath="/items"
-            params={linkParams}
-            className="w-32"
-          />
-        )
-      case 'price':
-        return (
-          <SortableHeader
-            key={col.id}
-            column="price"
-            label={col.label}
-            state={sort}
-            basePath="/items"
-            params={linkParams}
-            className="w-28"
-            numeric
-            defaultDirection="desc"
-          />
-        )
-      case 'cost':
-        return (
-          <SortableHeader
-            key={col.id}
-            column="cost"
-            label={col.label}
-            state={sort}
-            basePath="/items"
-            params={linkParams}
-            className="w-28"
-            numeric
-            defaultDirection="desc"
-          />
-        )
-      case 'onHand':
-      case 'stockValue':
-        return (
-          <TableHead key={col.id} className="numeric w-28 bg-[var(--band)]">
-            {col.label}
-          </TableHead>
-        )
-      default:
-        return (
-          <TableHead
-            key={col.id}
-            className={cn(
-              'bg-[var(--band)]',
-              isStoreColumnId(col.id) && 'numeric w-28',
-              (col.id === 'sku' || col.id === 'category') && 'w-32',
-            )}
-          >
-            {col.label}
-          </TableHead>
-        )
+    if (isStoreColumnId(col.id)) {
+      return (
+        <TableHead key={col.id} className="numeric w-28 bg-[var(--band)]">
+          {col.label}
+        </TableHead>
+      )
     }
+
+    const numeric =
+      col.id === 'price' ||
+      col.id === 'cost' ||
+      col.id === 'onHand' ||
+      col.id === 'stockValue' ||
+      col.id === 'reorderPoint'
+    const moneyFirst =
+      col.id === 'price' ||
+      col.id === 'cost' ||
+      col.id === 'onHand' ||
+      col.id === 'stockValue' ||
+      col.id === 'reorderPoint'
+
+    return (
+      <SortableHeader
+        key={col.id}
+        column={col.id}
+        label={col.label}
+        state={sort}
+        basePath="/items"
+        params={linkParams}
+        className={cn(
+          'bg-[var(--band)]',
+          (col.id === 'sku' || col.id === 'category' || col.id === 'type') && 'w-32',
+          numeric && 'w-28',
+        )}
+        numeric={numeric}
+        defaultDirection={moneyFirst ? 'desc' : 'asc'}
+      />
+    )
   }
 
   function renderCell(row: ItemRow, col: ItemColumnDef) {
@@ -266,6 +235,12 @@ export function ItemTable({
         return (
           <TableCell key={col.id} className="text-sm tabular">
             {row.sku ?? '—'}
+          </TableCell>
+        )
+      case 'barcode':
+        return (
+          <TableCell key={col.id} className="font-mono text-sm">
+            {row.barcode ?? '—'}
           </TableCell>
         )
       case 'category':
@@ -508,7 +483,7 @@ export function ItemTable({
                         <PencilIcon />
                       </Button>
                     ) : null}
-                    {canArchive ? (
+                    {canEdit || canArchive || canDelete || canAdjust ? (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${row.name}`}>
@@ -529,22 +504,33 @@ export function ItemTable({
                               <Link href={`/inventory/adjustments/new?item=${row.id}`}>Adjustment</Link>
                             </DropdownMenuItem>
                           ) : null}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onSelect={(event) => {
-                              event.preventDefault()
-                              single(row.id, !row.isActive)
-                            }}
-                          >
-                            {row.isActive ? (
-                              <ArchiveIcon className="size-4" />
-                            ) : (
-                              <ArchiveRestoreIcon className="size-4" />
-                            )}
-                            {row.isActive ? 'Archive' : 'Restore'}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DeleteMenuItem kind="item" id={row.id} number={row.name} />
+                          {canArchive || canDelete ? <DropdownMenuSeparator /> : null}
+                          {canArchive ? (
+                            <DropdownMenuItem
+                              onSelect={(event) => {
+                                event.preventDefault()
+                                single(row.id, !row.isActive)
+                              }}
+                            >
+                              {row.isActive ? (
+                                <ArchiveIcon className="size-4" />
+                              ) : (
+                                <ArchiveRestoreIcon className="size-4" />
+                              )}
+                              {row.isActive ? 'Archive' : 'Restore'}
+                            </DropdownMenuItem>
+                          ) : null}
+                          {canDelete ? (
+                            <DropdownMenuItem onSelect={() => setMerging(row)}>
+                              Merge into…
+                            </DropdownMenuItem>
+                          ) : null}
+                          {canDelete ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DeleteMenuItem kind="item" id={row.id} number={row.name} />
+                            </>
+                          ) : null}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     ) : null}
@@ -572,6 +558,16 @@ export function ItemTable({
           </TableBody>
         </Table>
       </ScrollSheet>
+
+      {merging ? (
+        <MergeIntoDialog
+          open={Boolean(merging)}
+          onClose={() => setMerging(null)}
+          kind="item"
+          absorbId={merging.id}
+          absorbLabel={merging.name}
+        />
+      ) : null}
 
       {editing ? (
         <ItemDialog

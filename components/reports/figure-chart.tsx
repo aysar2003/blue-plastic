@@ -1,12 +1,13 @@
 import Link from 'next/link'
 
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
+import { cn } from '@/lib/utils'
 import type { StatementSection } from '@/server/reports/statements'
 
-/** The same three colours the rest of the books already use. */
-export const INCOME_COLOR = '#0F766E'
-export const EXPENSE_COLOR = '#C2410C'
-export const NET_COLOR = '#0369A1'
+/** Theme-aware chart colours (overridden on html.odoo / html.quick). */
+export const INCOME_COLOR = 'var(--chart-income, #0F766E)'
+export const EXPENSE_COLOR = 'var(--chart-expense, #C2410C)'
+export const NET_COLOR = 'var(--chart-net, #0369A1)'
 
 export type ChartBar = {
   label: string
@@ -59,7 +60,7 @@ export function FigureChart({
     .join(', ')
 
   return (
-    <figure className="rounded-xl bg-[#e4ebf2] px-4 py-4 ring-1 ring-slate-300/70">
+    <figure className="figure-chart rounded-xl bg-[#e4ebf2] px-4 py-4 ring-1 ring-slate-300/70">
       <figcaption className="text-sm font-medium text-slate-800">{caption}</figcaption>
       <svg
         viewBox={`0 0 ${width} 168`}
@@ -108,15 +109,15 @@ export function FigureChart({
         {bars.map((bar) => {
           const body = (
             <>
-              <p className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-                <span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: bar.color }} />
+              <p className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                <Swatch color={bar.color} selected={false} />
                 {bar.label}
               </p>
-              <p className="mt-0.5 text-sm font-semibold tabular text-slate-900">
+              <p className="mt-1 text-base font-semibold tabular text-slate-950">
                 {formatMoney(bar.value, currency)}
               </p>
               {comparisonLabel && bar.comparison ? (
-                <p className="text-xs tabular text-slate-500">
+                <p className="text-sm tabular text-slate-500">
                   {comparisonLabel}: {formatMoney(bar.comparison, currency)}
                 </p>
               ) : null}
@@ -127,12 +128,12 @@ export function FigureChart({
               {bar.href ? (
                 <Link
                   href={bar.href}
-                  className="block rounded-lg px-1 py-0.5 transition-colors hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="block rounded-full px-2.5 py-1.5 transition-colors hover:bg-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   {body}
                 </Link>
               ) : (
-                body
+                <div className="px-1 py-0.5">{body}</div>
               )}
             </li>
           )
@@ -150,18 +151,31 @@ export function statementPicture(sections: StatementSection[], field: 'total' | 
   return { income, expenses, net: income.minus(expenses) }
 }
 
+export type ShareSegment = {
+  /** Stable id so a click can pick this slice out of the report below. */
+  id?: string
+  label: string
+  value: Decimal
+  color: string
+  /** URL filter for this age — same idea as the chart-of-accounts chips. */
+  href?: string
+}
+
 /**
  * One bar split by how long money has been outstanding.
  * Empty slices are left out so a current balance reads as one colour.
+ * When a slice carries an `href`, the bar and its key open that filter.
  */
 export function ShareBar({
   caption,
   segments,
   currency,
+  activeId = null,
 }: {
   caption: string
-  segments: { label: string; value: Decimal; color: string }[]
+  segments: ShareSegment[]
   currency: string
+  activeId?: string | null
 }) {
   const shown = segments.filter((segment) => !segment.value.isZero())
   const total = shown.reduce((sum, segment) => sum.plus(segment.value.abs()), ZERO)
@@ -169,28 +183,86 @@ export function ShareBar({
 
   return (
     <figure className="rounded-xl bg-[#e4ebf2] px-4 py-4 ring-1 ring-slate-300/70">
-      <figcaption className="text-sm font-medium text-slate-800">{caption}</figcaption>
-      <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-white ring-1 ring-slate-300/70">
-        {shown.map((segment) => (
-          <div
-            key={segment.label}
-            style={{
-              width: `${segment.value.abs().dividedBy(total).times(100).toNumber()}%`,
-              backgroundColor: segment.color,
-            }}
-            title={`${segment.label}: ${formatMoney(segment.value, currency)}`}
-          />
-        ))}
+      <figcaption className="text-base font-medium text-slate-800">{caption}</figcaption>
+      <div className="mt-3 flex h-4 gap-0.5 overflow-hidden rounded-full bg-white p-1 ring-1 ring-slate-300/70">
+        {shown.map((segment) => {
+          const amount = formatMoney(segment.value, currency)
+          const share = segment.value.abs().dividedBy(total).times(100).toNumber()
+          const selected = Boolean(segment.id && activeId === segment.id)
+          const dimmed = Boolean(activeId && segment.id && !selected)
+          const className = cn(
+            'h-full min-w-1 rounded-full transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-700/50',
+            dimmed && 'opacity-35',
+            segment.href && 'hover:opacity-90',
+          )
+          const style = { flexGrow: share, flexBasis: 0, backgroundColor: segment.color }
+          const label = `${segment.label}: ${amount}`
+          if (segment.href) {
+            return (
+              <Link
+                key={segment.label}
+                href={segment.href}
+                className={className}
+                style={style}
+                title={label}
+                aria-current={selected ? 'page' : undefined}
+                aria-label={`${label}. Show this in the report below.`}
+                scroll={false}
+              />
+            )
+          }
+          return <div key={segment.label} className={className} style={style} title={label} />
+        })}
       </div>
-      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
-        {shown.map((segment) => (
-          <li key={segment.label} className="text-xs text-slate-600">
-            <span className="mr-1.5 inline-block size-2.5 rounded-sm align-middle" style={{ backgroundColor: segment.color }} />
-            {segment.label}{' '}
-            <span className="font-semibold tabular text-slate-900">{formatMoney(segment.value, currency)}</span>
-          </li>
-        ))}
+      <ul className="mt-3.5 flex flex-wrap gap-2">
+        {shown.map((segment) => {
+          const amount = formatMoney(segment.value, currency)
+          const selected = Boolean(segment.id && activeId === segment.id)
+          const body = (
+            <>
+              <Swatch color={segment.color} selected={selected} />
+              <span className="text-slate-700">{segment.label}</span>
+              <span className="font-semibold tabular text-slate-950">{amount}</span>
+            </>
+          )
+          return (
+            <li key={segment.label}>
+              {segment.href ? (
+                <Link
+                  href={segment.href}
+                  aria-current={selected ? 'page' : undefined}
+                  scroll={false}
+                  className={cn(
+                    'inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-700/40',
+                    selected ? 'bg-white text-slate-900' : 'text-slate-700 hover:bg-white/80',
+                  )}
+                  style={selected ? { boxShadow: `0 0 0 1.5px ${segment.color}` } : undefined}
+                >
+                  {body}
+                </Link>
+              ) : (
+                <span className="inline-flex items-center gap-2 px-1 py-1 text-sm text-slate-700">{body}</span>
+              )}
+            </li>
+          )
+        })}
       </ul>
     </figure>
+  )
+}
+
+/** A soft halo around a solid centre, so each age reads as its own mark. */
+function Swatch({ color, selected }: { color: string; selected: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className="relative inline-flex size-4 shrink-0 items-center justify-center rounded-full"
+      style={{ backgroundColor: `${color}2e` }}
+    >
+      <span
+        className={cn('rounded-full shadow-[0_0_0_1.5px_white]', selected ? 'size-2.5' : 'size-2')}
+        style={{ backgroundColor: color }}
+      />
+    </span>
   )
 }

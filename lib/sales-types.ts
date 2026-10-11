@@ -46,6 +46,16 @@ export const SALES_TYPES: SalesTypeConfig[] = [
     createPermission: 'invoice:create',
   },
   {
+    type: 'SALES_ORDER',
+    slug: 'sales-orders',
+    singular: 'Sales order',
+    plural: 'Sales orders',
+    effect: 'The customer has ordered. Nothing is owed until they collect, when this becomes an invoice or a sales receipt.',
+    needsDeposit: false,
+    posts: false,
+    createPermission: 'invoice:create',
+  },
+  {
     type: 'SALES_RECEIPT',
     slug: 'sales-receipts',
     singular: 'Sales receipt',
@@ -80,6 +90,19 @@ export const SALES_TYPES: SalesTypeConfig[] = [
 /** Estimates and quotations — proposals that do not post until converted. */
 export function isProposal(type: SalesDocumentType | string | undefined | null): boolean {
   return type === 'ESTIMATE' || type === 'QUOTATION'
+}
+
+/** A placed order. It does not post until the customer collects it. */
+export function isSalesOrder(type: SalesDocumentType | string | undefined | null): boolean {
+  return type === 'SALES_ORDER'
+}
+
+/** The figure printed under the lines. An order is not yet money owed. */
+export function customerPaperTotalLabel(type: SalesDocumentType, needsDeposit: boolean): string {
+  if (needsDeposit) return 'Amount received'
+  if (type === 'SALES_ORDER') return 'Order total'
+  if (isProposal(type)) return 'Total'
+  return 'Balance due'
 }
 
 /** Blank item rows a new sales sheet shows. Invoice gets more room; others stay at 10. */

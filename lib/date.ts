@@ -110,6 +110,51 @@ export function calendarDateInZone(value: Date, timeZone = 'UTC'): CalendarDate 
 }
 
 /**
+ * Build a real instant from a calendar date and HH:mm clock in `timeZone`.
+ * Used for meetings and appointments that people enter in local wall time.
+ */
+export function zonedInstant(date: CalendarDate, time: string, timeZone: string): Date {
+  if (!isCalendarDate(date)) throw new Error(`Invalid calendar date: ${date}`)
+  const clock = /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : '00:00'
+  const [year, month, day] = date.split('-').map(Number)
+  const [hour, minute] = clock.split(':').map(Number)
+  const guess = new Date(Date.UTC(year!, (month ?? 1) - 1, day, hour, minute, 0))
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(guess)
+  const read = (type: string) => Number(parts.find((part) => part.type === type)?.value)
+  const asUtc = Date.UTC(
+    read('year'),
+    read('month') - 1,
+    read('day'),
+    read('hour') % 24,
+    read('minute'),
+    read('second'),
+  )
+  return new Date(guess.getTime() - (asUtc - guess.getTime()))
+}
+
+/** HH:mm of an instant in `timeZone`. */
+export function clockInZone(value: Date, timeZone = 'UTC'): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(value)
+  const hour = parts.find((part) => part.type === 'hour')?.value ?? '00'
+  const minute = parts.find((part) => part.type === 'minute')?.value ?? '00'
+  return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
+}
+
+/**
  * Date and clock time of a real instant, in the reader's timezone.
  * "Oct 9, 2026, 11:05 AM" for en-US in Africa/Mogadishu (UTC+3).
  */

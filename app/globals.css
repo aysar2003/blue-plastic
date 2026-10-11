@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *, .ink *, .odoo-dark *));
+@custom-variant dark (&:is(.dark *, .ink *, .som *, .odoo-dark *, .quick-dark *));
 
 /*
  * The visual system.
@@ -37,43 +37,53 @@
  * Primary plum #714B67 · Secondary teal #017E84 · Gray #8F8F8F
  */
 :root,
+/* Live Odoo Enterprise (emaar-building) — light shell, plum CTAs, teal links. */
 html.odoo {
-  --radius: 0.25rem;
-  --background: #f0eeee;
-  --foreground: #1f1f23;
+  --radius: 0.375rem;
+  --background: #f8f9fa;
+  --foreground: #212529;
   --card: #ffffff;
-  --card-foreground: #1f1f23;
+  --card-foreground: #212529;
   --popover: #ffffff;
-  --popover-foreground: #1f1f23;
+  --popover-foreground: #212529;
   --primary: #714b67;
   --primary-foreground: #ffffff;
-  --secondary: #e9e4e8;
-  --secondary-foreground: #4a3144;
-  --muted: #ebe8ea;
-  --muted-foreground: #4a4a4f;
-  --accent: #dfeef0;
-  --accent-foreground: #01666b;
-  --destructive: #d23f3f;
-  --destructive-foreground: #fff7f8;
+  --secondary: #e7ebed;
+  --secondary-foreground: #495057;
+  --muted: #e7ebed;
+  /* #495057 ≈ 7:1 on white — labels must stay readable, not faint grey. */
+  --muted-foreground: #495057;
+  --accent: #e6f2f3;
+  --accent-foreground: #01585c;
+  --destructive: #dc3545;
+  --destructive-foreground: #ffffff;
   --success: #017e84;
   --success-foreground: #f0fdfa;
   --warning: #b45309;
   --warning-foreground: #fffbeb;
-  --border: #d4d0d2;
-  --input: #c4c0c2;
+  --border: #dee2e6;
+  --input: #ced4da;
   --ring: #714b67;
   --sidebar: #ffffff;
-  --sidebar-foreground: #1f1f23;
-  --sidebar-accent: #ebe4e9;
-  --sidebar-accent-foreground: #714b67;
-  --sidebar-border: #d4d0d2;
-  --glow: rgba(113, 75, 103, 0.22);
-  --stripe: #f5f3f4;
-  --band: #e4dce2;
+  --sidebar-foreground: #212529;
+  --sidebar-accent: #e6f2f3;
+  --sidebar-accent-foreground: #017e84;
+  --sidebar-border: #dee2e6;
+  --glow: rgba(113, 75, 103, 0.18);
+  /* Live Odoo P&L/BS section bars + list paper. */
+  --stripe: #ffffff;
+  --band: #dee2e6;
+  /* Live Odoo graph / figure bars (Invoices Analysis). */
+  --chart-income: #714b67;
+  --chart-expense: #dc3545;
+  --chart-net: #017e84;
 }
 
 html.odoo-dark {
-  --radius: 0.25rem;
+  --radius: 0.375rem;
+  --chart-income: #c9a9c0;
+  --chart-expense: #f87171;
+  --chart-net: #8fd4d7;
   --background: #1f1f23;
   --foreground: #f3f3f3;
   --card: #2a2a2e;
@@ -105,6 +115,83 @@ html.odoo-dark {
   --glow: rgba(1, 126, 132, 0.2);
   --stripe: #252528;
   --band: #3a3a40;
+}
+
+/*
+ * QuickBooks-style brand (green #2CA01C). Lists, money bars, and CTAs already
+ * use this green in the markup — this theme keeps it and paints the shell.
+ */
+html.quick {
+  --radius: 0.25rem;
+  --chart-income: #2ca01c;
+  --chart-expense: #d4652f;
+  --chart-net: #393a3d;
+  --background: #eceef1;
+  --foreground: #393a3d;
+  --card: #ffffff;
+  --card-foreground: #393a3d;
+  --popover: #ffffff;
+  --popover-foreground: #393a3d;
+  --primary: #2ca01c;
+  --primary-foreground: #ffffff;
+  --secondary: #e3e8ee;
+  --secondary-foreground: #393a3d;
+  --muted: #e3e8ee;
+  --muted-foreground: #4a4b52;
+  --accent: #d4f0d0;
+  --accent-foreground: #0f5c0a;
+  --destructive: #d23f3f;
+  --destructive-foreground: #fff7f8;
+  --success: #2ca01c;
+  --success-foreground: #ffffff;
+  --warning: #d4652f;
+  --warning-foreground: #fff7ed;
+  --border: #c7c7c7;
+  --input: #bdbdbd;
+  --ring: #2ca01c;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #393a3d;
+  --sidebar-accent: #e8f6e6;
+  --sidebar-accent-foreground: #1f7a14;
+  --sidebar-border: #c7c7c7;
+  --glow: rgba(44, 160, 28, 0.22);
+  --stripe: #f4f5f6;
+  --band: #e3e8ee;
+}
+
+html.quick-dark {
+  --radius: 0.25rem;
+  --background: #1a1f1a;
+  --foreground: #e8f5e9;
+  --card: #242a24;
+  --card-foreground: #e8f5e9;
+  --popover: #242a24;
+  --popover-foreground: #e8f5e9;
+  --primary: #2ca01c;
+  --primary-foreground: #ffffff;
+  --secondary: #2f362f;
+  --secondary-foreground: #e8f5e9;
+  --muted: #2f362f;
+  --muted-foreground: #a8b5a9;
+  --accent: #1e3a1c;
+  --accent-foreground: #8fd98a;
+  --destructive: #d23f3f;
+  --destructive-foreground: #ffffff;
+  --success: #2ca01c;
+  --success-foreground: #ffffff;
+  --warning: #fb923c;
+  --warning-foreground: #451a03;
+  --border: rgb(232 245 233 / 12%);
+  --input: rgb(232 245 233 / 18%);
+  --ring: #3dcf2e;
+  --sidebar: #141914;
+  --sidebar-foreground: #e8f5e9;
+  --sidebar-accent: #2f362f;
+  --sidebar-accent-foreground: #8fd98a;
+  --sidebar-border: rgb(232 245 233 / 10%);
+  --glow: rgba(44, 160, 28, 0.28);
+  --stripe: #1f261f;
+  --band: #2f362f;
 }
 
 html.ocean {
@@ -338,6 +425,48 @@ html.sand {
   --band: #e6cbb0;
 }
 
+/*
+ * SOM ERP — product night desk (login / marketing cyan on navy).
+ * Same palette as Appearance → Website look → Product website.
+ */
+html.som {
+  --radius: 0.5rem;
+  --background: #070b14;
+  --foreground: #e2e8f0;
+  --card: #0d1524;
+  --card-foreground: #f8fafc;
+  --popover: #0d1524;
+  --popover-foreground: #f8fafc;
+  --primary: #22d3ee;
+  --primary-foreground: #070b14;
+  --secondary: #141c2c;
+  --secondary-foreground: #e2e8f0;
+  --muted: #141c2c;
+  --muted-foreground: #94a3b8;
+  --accent: #123044;
+  --accent-foreground: #67e8f9;
+  --destructive: #fb7185;
+  --destructive-foreground: #fff1f2;
+  --success: #22d3ee;
+  --success-foreground: #070b14;
+  --warning: #fbbf24;
+  --warning-foreground: #422006;
+  --border: rgb(255 255 255 / 10%);
+  --input: rgb(255 255 255 / 14%);
+  --ring: #22d3ee;
+  --sidebar: #05080f;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-accent: #123044;
+  --sidebar-accent-foreground: #67e8f9;
+  --sidebar-border: rgb(255 255 255 / 8%);
+  --glow: rgba(34, 211, 238, 0.45);
+  --stripe: #0b1220;
+  --band: #141c2c;
+  --chart-income: #22d3ee;
+  --chart-expense: #fb7185;
+  --chart-net: #67e8f9;
+}
+
 html.dark,
 .dark {
   --background: #12202b;
@@ -458,11 +587,19 @@ html.ink {
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground;
     font-feature-settings: "cv11", "ss01";
     /* 13px base. Business software is read, not admired. */
     font-size: 0.8125rem;
     line-height: 1.45;
+  }
+
+  /*
+   * Secondary copy must stay solid. Opacity modifiers on muted text
+   * ( /50 /60 /70 /80 ) made labels disappear on light and dark shells.
+   */
+  :where(.text-muted-foreground\/50, .text-muted-foreground\/60, .text-muted-foreground\/70, .text-muted-foreground\/80) {
+    color: var(--muted-foreground) !important;
   }
 
   /*
@@ -534,9 +671,35 @@ html:has(.app-surface) {
   font-size: clamp(12.5px, 0.35vw + 10.5px, 18px);
 }
 
+/* System-wide type size (Settings → Appearance, and report / chart toolbars). */
+html[data-font-size='sm']:has(.app-surface) {
+  font-size: clamp(11px, 0.28vw + 9.5px, 15px);
+}
+html[data-font-size='md']:has(.app-surface) {
+  font-size: clamp(12.5px, 0.35vw + 10.5px, 18px);
+}
+html[data-font-size='lg']:has(.app-surface) {
+  font-size: clamp(14px, 0.4vw + 11.5px, 20px);
+}
+html[data-font-size='xl']:has(.app-surface) {
+  font-size: clamp(15.5px, 0.45vw + 12.5px, 22px);
+}
+
 @media print {
   html:has(.app-surface) {
     font-size: 11pt;
+  }
+  html[data-font-size='sm']:has(.app-surface) {
+    font-size: 10pt;
+  }
+  html[data-font-size='md']:has(.app-surface) {
+    font-size: 11pt;
+  }
+  html[data-font-size='lg']:has(.app-surface) {
+    font-size: 12pt;
+  }
+  html[data-font-size='xl']:has(.app-surface) {
+    font-size: 13pt;
   }
 }
 
@@ -552,102 +715,320 @@ html.odoo .app-surface,
 html.odoo .sales-surface,
 html.odoo-dark .app-surface,
 html.odoo-dark .sales-surface {
-  /* Odoo: tight corners, flat panels — not soft “card” chrome. */
-  --radius: 0.25rem;
-  font-family: var(--font-odoo), Inter, ui-sans-serif, system-ui, sans-serif;
+  /* Live Odoo: system stack / Inter, 14px body, 6px radius. */
+  --radius: 0.375rem;
+  font-family:
+    var(--font-odoo),
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Ubuntu,
+    'Noto Sans',
+    Arial,
+    sans-serif;
+  font-size: 0.875rem;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+html.quick .app-surface,
+html.quick .sales-surface,
+html.quick-dark .app-surface,
+html.quick-dark .sales-surface {
+  /* QuickBooks Online: Source Sans, soft grey desk, green actions. */
+  --radius: 0.375rem;
+  font-family: var(--font-quickbooks), Arial, Helvetica, sans-serif;
+  font-size: 0.875rem;
+  letter-spacing: 0;
+}
+
+/*
+ * Explicit typeface choice (Settings → Appearance). Wins over theme fonts when
+ * not left on "Theme default". Report sheets are covered later (after report-style).
+ */
+html[data-font-style='geist'] .app-surface,
+html[data-font-style='geist'] .sales-surface {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+html[data-font-style='inter'] .app-surface,
+html[data-font-style='inter'] .sales-surface {
+  font-family:
+    var(--font-odoo),
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Ubuntu,
+    Arial,
+    sans-serif;
+}
+html[data-font-style='source-sans'] .app-surface,
+html[data-font-style='source-sans'] .sales-surface {
+  font-family: var(--font-quickbooks), Arial, Helvetica, sans-serif;
+}
+html[data-font-style='system'] .app-surface,
+html[data-font-style='system'] .sales-surface {
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
 }
 
 html.dark .app-surface,
 html.dark .sales-surface,
 html.ink .app-surface,
 html.ink .sales-surface,
+html.som .app-surface,
+html.som .sales-surface,
 html.odoo-dark .app-surface,
 html.odoo-dark .sales-surface,
+html.quick-dark .app-surface,
+html.quick-dark .sales-surface,
 .dark .app-surface,
 .dark .sales-surface {
   color-scheme: dark;
 }
 
-/*
- * Full Odoo skin — when Appearance → Odoo / Odoo Dark is selected, the shell,
- * actions, and legacy QuickBooks greens follow the official brand palette.
- * Primary #714B67 · Secondary #017E84 · Gray #8F8F8F
- */
-html.odoo .app-atmosphere,
-html.odoo-dark .app-atmosphere {
+html.som .app-atmosphere {
   display: none !important;
 }
 
-html.odoo .shell-topbar,
+html.som .shell-topbar {
+  background: #0b1220 !important;
+  border-bottom: 1px solid rgb(255 255 255 / 10%) !important;
+  color: #e2e8f0;
+  backdrop-filter: none;
+  min-height: 46px;
+}
+
+html.som .shell-topbar .shell-brand-label,
+html.som .shell-topbar .shell-brand-mark {
+  color: #f8fafc;
+}
+
+html.som .shell-topbar .shell-brand-mark {
+  background: #22d3ee !important;
+  color: #070b14 !important;
+}
+
+/*
+ * Brand skins — Odoo (plum) and Quick (QuickBooks green). Each paints the
+ * shell top bar and keeps legacy action greens on-brand for that skin.
+ */
+html.odoo .app-atmosphere,
+html.odoo-dark .app-atmosphere,
+html.quick .app-atmosphere,
+html.quick-dark .app-atmosphere {
+  display: none !important;
+}
+
+/*
+ * Live Odoo: light 46px navbar (not plum). Plum is for primary buttons only.
+ * QuickBooks keeps the green brand bar.
+ */
+html.odoo .shell-topbar {
+  background: #ffffff !important;
+  border-bottom: 1px solid #dee2e6 !important;
+  color: #212529;
+  backdrop-filter: none;
+  min-height: 46px;
+}
+
 html.odoo-dark .shell-topbar {
-  background: #714b67 !important;
-  border-bottom-color: #5c3d55 !important;
+  background: #2a2a2e !important;
+  border-bottom-color: rgb(243 243 243 / 12%) !important;
+  color: #f3f3f3;
+  backdrop-filter: none;
+  min-height: 46px;
+}
+
+html.quick .shell-topbar,
+html.quick-dark .shell-topbar {
+  background: #2ca01c !important;
+  border-bottom-color: #248a18 !important;
   color: #ffffff;
   backdrop-filter: none;
 }
 
 html.odoo .shell-topbar .shell-brand-label,
+html.odoo .shell-topbar .shell-brand-mark {
+  color: #212529 !important;
+}
+
 html.odoo-dark .shell-topbar .shell-brand-label,
-html.odoo .shell-topbar .shell-brand-mark,
 html.odoo-dark .shell-topbar .shell-brand-mark {
+  color: #f3f3f3 !important;
+}
+
+html.quick .shell-topbar .shell-brand-label,
+html.quick-dark .shell-topbar .shell-brand-label,
+html.quick .shell-topbar .shell-brand-mark,
+html.quick-dark .shell-topbar .shell-brand-mark {
   color: #ffffff !important;
 }
 
-html.odoo .shell-topbar .shell-brand-mark,
+html.odoo .shell-topbar .shell-brand-mark {
+  background: #714b67 !important;
+  color: #ffffff !important;
+  box-shadow: none;
+}
+
 html.odoo-dark .shell-topbar .shell-brand-mark {
   background: #5c3d55 !important;
   color: #ffffff !important;
   box-shadow: none;
 }
 
-html.odoo .shell-topbar,
+html.quick .shell-topbar .shell-brand-mark,
+html.quick-dark .shell-topbar .shell-brand-mark {
+  background: #248a18 !important;
+  color: #ffffff !important;
+  box-shadow: none;
+}
+
+html.odoo .shell-topbar {
+  --foreground: #212529;
+  --muted-foreground: #495057;
+  --border: #dee2e6;
+  --input: #ced4da;
+  --accent: #e7ebed;
+  --accent-foreground: #212529;
+  --card: #ffffff;
+}
+
 html.odoo-dark .shell-topbar {
+  --foreground: #f3f3f3;
+  --muted-foreground: #c2c2c7;
+  --border: rgb(243 243 243 / 12%);
+  --input: rgb(243 243 243 / 18%);
+  --accent: #3a3a40;
+  --accent-foreground: #f3f3f3;
+  --card: #2a2a2e;
+}
+
+html.quick .shell-topbar,
+html.quick-dark .shell-topbar {
   --foreground: #ffffff;
   --muted-foreground: rgb(255 255 255 / 75%);
   --border: rgb(255 255 255 / 20%);
   --input: rgb(255 255 255 / 25%);
-  --card: #5c3d55;
   --accent: rgb(255 255 255 / 12%);
   --accent-foreground: #ffffff;
+  --card: #248a18;
 }
 
 html.odoo .shell-topbar button,
-html.odoo .shell-topbar a,
-html.odoo-dark .shell-topbar button,
-html.odoo-dark .shell-topbar a {
-  color: rgb(255 255 255 / 92%);
+html.odoo .shell-topbar a {
+  color: #212529;
 }
 
 html.odoo .shell-topbar button:hover,
-html.odoo .shell-topbar a:hover,
+html.odoo .shell-topbar a:hover {
+  background: #e7ebed;
+  color: #212529;
+}
+
+html.odoo-dark .shell-topbar button,
+html.odoo-dark .shell-topbar a {
+  color: #f3f3f3;
+}
+
 html.odoo-dark .shell-topbar button:hover,
 html.odoo-dark .shell-topbar a:hover {
+  background: #3a3a40;
+  color: #f3f3f3;
+}
+
+html.quick .shell-topbar button,
+html.quick .shell-topbar a,
+html.quick-dark .shell-topbar button,
+html.quick-dark .shell-topbar a {
+  color: rgb(255 255 255 / 92%);
+}
+
+html.quick .shell-topbar button:hover,
+html.quick .shell-topbar a:hover,
+html.quick-dark .shell-topbar button:hover,
+html.quick-dark .shell-topbar a:hover {
   background: rgb(255 255 255 / 12%);
   color: #ffffff;
 }
 
-html.odoo .shell-topbar input,
+html.odoo .shell-topbar input {
+  background: #ffffff;
+  border-color: #ced4da;
+  color: #212529;
+}
+
+html.odoo .shell-topbar input::placeholder {
+  color: #6c757d;
+}
+
 html.odoo-dark .shell-topbar input {
+  background: rgb(0 0 0 / 18%);
+  border-color: rgb(243 243 243 / 18%);
+  color: #f3f3f3;
+}
+
+html.quick .shell-topbar input,
+html.quick-dark .shell-topbar input {
   background: rgb(0 0 0 / 18%);
   border-color: rgb(255 255 255 / 25%);
   color: #ffffff;
 }
 
-html.odoo .shell-topbar input::placeholder,
-html.odoo-dark .shell-topbar input::placeholder {
+html.quick .shell-topbar input::placeholder,
+html.quick-dark .shell-topbar input::placeholder {
   color: rgb(255 255 255 / 55%);
 }
 
-/* Initials sit on muted (light) — not on the purple bar. Keep ink dark. */
-html.odoo .shell-topbar [data-slot='avatar-fallback'],
+html.odoo .shell-topbar kbd {
+  background: #e7ebed !important;
+  border-color: #ced4da !important;
+  color: #495057 !important;
+}
+
+html.odoo-dark .shell-topbar kbd,
+html.quick .shell-topbar kbd,
+html.quick-dark .shell-topbar kbd {
+  background: rgb(0 0 0 / 22%) !important;
+  border-color: rgb(255 255 255 / 28%) !important;
+  color: #ffffff !important;
+}
+
+html.odoo .shell-topbar [data-slot='avatar-fallback'] {
+  background: #714b67 !important;
+  color: #ffffff !important;
+}
+
 html.odoo-dark .shell-topbar [data-slot='avatar-fallback'] {
   background: #5c3d55 !important;
   color: #ffffff !important;
 }
 
+html.quick .shell-topbar [data-slot='avatar-fallback'],
+html.quick-dark .shell-topbar [data-slot='avatar-fallback'] {
+  background: #248a18 !important;
+  color: #ffffff !important;
+}
+
 html.odoo .shell-apps {
   background: #ffffff !important;
-  border-bottom-color: #d4d0d2 !important;
+  border-bottom-color: #dee2e6 !important;
+}
+
+html.quick .shell-apps {
+  /* QBO control strip under the green bar. */
+  background: #f4f5f8 !important;
+  border-bottom-color: #d5d8dc !important;
 }
 
 html.odoo-dark .shell-apps {
@@ -655,11 +1036,73 @@ html.odoo-dark .shell-apps {
   border-bottom-color: rgb(243 243 243 / 12%) !important;
 }
 
+html.quick-dark .shell-apps {
+  background: #242a24 !important;
+  border-bottom-color: rgb(232 245 233 / 12%) !important;
+}
+
+/*
+ * Soft colour / night shells: keep chrome on page tokens. Do not paint every
+ * button --foreground — primary actions (Create) need primary-foreground.
+ */
+html:not(.odoo):not(.odoo-dark):not(.quick):not(.quick-dark) .shell-topbar {
+  color: var(--foreground);
+}
+
+/* Topbar muted labels (Search) — use the bar's scoped tokens on every skin. */
+.shell-topbar .text-muted-foreground {
+  color: var(--muted-foreground) !important;
+}
+
+html:not(.odoo):not(.odoo-dark):not(.quick):not(.quick-dark) .shell-topbar .text-foreground {
+  color: var(--foreground) !important;
+}
+
+html:not(.odoo):not(.odoo-dark):not(.quick):not(.quick-dark) .shell-topbar .text-primary-foreground {
+  color: var(--primary-foreground) !important;
+}
+
+html:not(.odoo):not(.odoo-dark):not(.quick):not(.quick-dark) .shell-topbar [data-slot='avatar-fallback'] {
+  background: var(--muted) !important;
+  color: var(--foreground) !important;
+}
+
+/* Module tabs + apps strip: muted / active labels follow the active theme. */
+.shell-tabs .text-muted-foreground,
+.shell-apps .text-muted-foreground {
+  color: var(--muted-foreground) !important;
+}
+
+.shell-tabs a.text-primary,
+.shell-tabs a[class*='text-primary'] {
+  color: var(--primary) !important;
+}
+
+/* Dark brand tabs sit on the page ground — muted / active must stay readable. */
+html.odoo-dark .shell-tabs {
+  --muted-foreground: #c2c2c7;
+  --primary: #c9a9c0;
+}
+
+html.quick-dark .shell-tabs {
+  --muted-foreground: #a8b5a9;
+  --primary: #8fd98a;
+}
+
 html.odoo .app-surface [data-slot='card'],
 html.odoo .sales-surface [data-slot='card'],
 html.odoo-dark .app-surface [data-slot='card'],
 html.odoo-dark .sales-surface [data-slot='card'] {
-  border-radius: 0.25rem;
+  border-radius: 8px;
+  border-color: #dee2e6;
+  box-shadow: none;
+}
+
+html.quick .app-surface [data-slot='card'],
+html.quick .sales-surface [data-slot='card'],
+html.quick-dark .app-surface [data-slot='card'],
+html.quick-dark .sales-surface [data-slot='card'] {
+  border-radius: 0.375rem;
   box-shadow: none;
 }
 
@@ -671,14 +1114,223 @@ html.odoo .app-surface .rounded-2xl,
 html.odoo .sales-surface .rounded-2xl,
 html.odoo-dark .app-surface .rounded-2xl,
 html.odoo-dark .sales-surface .rounded-2xl {
-  border-radius: 0.25rem;
+  border-radius: 0.5rem;
+}
+
+html.quick .app-surface .rounded-xl,
+html.quick .sales-surface .rounded-xl,
+html.quick-dark .app-surface .rounded-xl,
+html.quick-dark .sales-surface .rounded-xl,
+html.quick .app-surface .rounded-2xl,
+html.quick .sales-surface .rounded-2xl,
+html.quick-dark .app-surface .rounded-2xl,
+html.quick-dark .sales-surface .rounded-2xl {
+  border-radius: 0.375rem;
 }
 
 html.odoo .app-surface .rounded-lg,
 html.odoo .sales-surface .rounded-lg,
 html.odoo-dark .app-surface .rounded-lg,
 html.odoo-dark .sales-surface .rounded-lg {
-  border-radius: 0.25rem;
+  border-radius: 0.375rem;
+}
+
+html.quick .app-surface .rounded-lg,
+html.quick .sales-surface .rounded-lg,
+html.quick-dark .app-surface .rounded-lg,
+html.quick-dark .sales-surface .rounded-lg {
+  border-radius: 0.375rem;
+}
+
+/* Primary buttons — solid brand fill, no soft “pill” look. */
+html.odoo .app-surface button[data-slot='button'],
+html.odoo .sales-surface button[data-slot='button'],
+html.odoo-dark .app-surface button[data-slot='button'],
+html.odoo-dark .sales-surface button[data-slot='button'] {
+  border-radius: 0.375rem;
+  font-weight: 500;
+}
+
+/* Primary CTA hover matches live Odoo (#624159). */
+html.odoo .app-surface button[data-slot='button'].bg-primary:hover,
+html.odoo .sales-surface button[data-slot='button'].bg-primary:hover {
+  background-color: #624159 !important;
+}
+
+html.quick .app-surface button[data-slot='button'],
+html.quick .sales-surface button[data-slot='button'],
+html.quick-dark .app-surface button[data-slot='button'],
+html.quick-dark .sales-surface button[data-slot='button'] {
+  border-radius: 0.375rem;
+  font-weight: 600;
+}
+
+/* Ledger / list tables — denser Odoo control panel vs QBO modern list. */
+html.odoo .app-surface [data-slot='table'] :is(th, td),
+html.odoo .sales-surface [data-slot='table'] :is(th, td),
+html.odoo-dark .app-surface [data-slot='table'] :is(th, td),
+html.odoo-dark .sales-surface [data-slot='table'] :is(th, td) {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+html.quick .app-surface [data-slot='table'] thead th,
+html.quick .sales-surface [data-slot='table'] thead th,
+html.quick-dark .app-surface [data-slot='table'] thead th,
+html.quick-dark .sales-surface [data-slot='table'] thead th {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  /* Theme ink — hard-coded grey vanished on dark Appearance bands. */
+  color: var(--muted-foreground);
+}
+
+html.odoo .app-surface [data-slot='table'] thead th,
+html.odoo .sales-surface [data-slot='table'] thead th,
+html.odoo-dark .app-surface [data-slot='table'] thead th,
+html.odoo-dark .sales-surface [data-slot='table'] thead th {
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted-foreground);
+}
+
+html.odoo .app-surface [data-slot='table'] tbody td,
+html.odoo .sales-surface [data-slot='table'] tbody td {
+  font-size: 0.875rem;
+  border-bottom-color: #dee2e6;
+}
+
+/* Text links only — leave plum primary buttons / filled anchors alone. */
+html.odoo .app-surface a:not([class*='bg-']):not([data-slot='button']),
+html.odoo .sales-surface a:not([class*='bg-']):not([data-slot='button']) {
+  color: #017e84;
+}
+
+html.odoo .app-surface a:not([class*='bg-']):not([data-slot='button']):hover,
+html.odoo .sales-surface a:not([class*='bg-']):not([data-slot='button']):hover {
+  color: #01585c;
+}
+
+html.quick .app-surface [data-slot='input'],
+html.quick .sales-surface [data-slot='input'],
+html.quick-dark .app-surface [data-slot='input'],
+html.quick-dark .sales-surface [data-slot='input'] {
+  border-radius: 0.375rem;
+  min-height: 2.25rem;
+}
+
+html.odoo .app-surface [data-slot='input'],
+html.odoo .sales-surface [data-slot='input'],
+html.odoo-dark .app-surface [data-slot='input'],
+html.odoo-dark .sales-surface [data-slot='input'] {
+  border-radius: 0.375rem;
+  min-height: 2.05rem;
+}
+
+html.odoo .shell-tabs {
+  background: #ffffff;
+  border-bottom-color: #dee2e6;
+}
+
+html.odoo-dark .shell-tabs {
+  background: #2a2a2e;
+  border-bottom-color: rgb(243 243 243 / 12%);
+}
+
+html.quick .shell-tabs {
+  background: #ffffff;
+  border-bottom-color: #d5d8dc;
+}
+
+html.quick-dark .shell-tabs {
+  background: #242a24;
+}
+
+/* App strip + module tabs — square chips (not soft pills). */
+html.odoo .shell-apps :is(a, button),
+html.odoo-dark .shell-apps :is(a, button),
+html.odoo .shell-tabs :is(a, button),
+html.odoo-dark .shell-tabs :is(a, button) {
+  border-radius: 0.375rem;
+}
+
+html.quick .shell-apps :is(a, button),
+html.quick-dark .shell-apps :is(a, button),
+html.quick .shell-tabs :is(a, button),
+html.quick-dark .shell-tabs :is(a, button) {
+  border-radius: 0.375rem;
+}
+
+/* Live Odoo nav active: teal wash + teal underline feel. */
+html.odoo .shell-apps :is(a, button)[aria-current='page'],
+html.odoo .shell-tabs :is(a, button)[aria-current='page'] {
+  background: #e6f2f3 !important;
+  color: #000000 !important;
+  font-weight: 500;
+  box-shadow: inset 0 -2px 0 #017e84;
+}
+
+html.odoo-dark .shell-apps :is(a, button)[aria-current='page'],
+html.odoo-dark .shell-tabs :is(a, button)[aria-current='page'] {
+  background: color-mix(in srgb, #017e84 22%, transparent) !important;
+  color: #c9a9c0 !important;
+  font-weight: 500;
+  box-shadow: inset 0 -2px 0 #017e84;
+}
+
+html.quick .shell-apps :is(a, button)[aria-current='page'],
+html.quick .shell-tabs :is(a, button)[aria-current='page'],
+html.quick-dark .shell-apps :is(a, button)[aria-current='page'],
+html.quick-dark .shell-tabs :is(a, button)[aria-current='page'] {
+  background: color-mix(in srgb, #2ca01c 12%, transparent) !important;
+  color: #1f7a14 !important;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+html.quick-dark .shell-apps :is(a, button)[aria-current='page'],
+html.quick-dark .shell-tabs :is(a, button)[aria-current='page'] {
+  color: #8fd98a !important;
+}
+
+/* Page titles — Odoo control-panel weight vs QBO list header. */
+html.odoo .app-surface h1,
+html.odoo .sales-surface h1,
+html.odoo-dark .app-surface h1,
+html.odoo-dark .sales-surface h1 {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* Figure / month charts — match live Odoo analysis colours. */
+html.odoo .figure-chart,
+html.odoo-dark .figure-chart {
+  background: #f8f9fa !important;
+  --tw-ring-color: #dee2e6;
+  box-shadow: none;
+  border-radius: 8px;
+}
+
+html.odoo .figure-chart figcaption,
+html.odoo-dark .figure-chart figcaption {
+  color: #212529;
+  font-weight: 500;
+}
+
+html.quick .figure-chart,
+html.quick-dark .figure-chart {
+  background: #eef6eb !important;
+}
+
+html.quick .app-surface h1,
+html.quick .sales-surface h1,
+html.quick-dark .app-surface h1,
+html.quick-dark .sales-surface h1 {
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 /* Remap legacy QuickBooks greens → Odoo plum / teal when an Odoo theme is on. */
@@ -707,6 +1359,177 @@ html.odoo-dark [class*='accent-[#2ca01c]'] {
 html.odoo [class*='border-[#2ca01c]'],
 html.odoo-dark [class*='border-[#2ca01c]'] {
   border-color: #714b67 !important;
+}
+
+/*
+ * Unified Odoo skin — same tokens on every module sheet (Sales, Purchase,
+ * Inventory, Banking, Journals, Reports, POS, Settings). Remap leftover
+ * QuickBooks / slate hexes so lists, money bars, and forms match live Odoo.
+ */
+html.odoo [class*='bg-[#dcecc8]'],
+html.odoo [class*='bg-[#eef6f4]'],
+html.odoo [class*='bg-[#f7f8f4]'],
+html.odoo [class*='bg-[#e4ebf2]'],
+html.odoo [class*='bg-[#eef3f7]'],
+html.odoo [class*='bg-[#3DDC97]'],
+html.odoo [class*='bg-[#3ddc97]'] {
+  background-color: #e7ebed !important;
+}
+
+html.odoo [class*='bg-[#5b6b82]'],
+html.odoo [class*='bg-[#0b4f6c]'],
+html.odoo [class*='bg-[#1d4ed8]'],
+html.odoo [class*='bg-[#0369a1]'],
+html.odoo [class*='bg-[#0e7490]'] {
+  background-color: #714b67 !important;
+}
+
+html.odoo [class*='bg-[#2f9e57]'],
+html.odoo [class*='bg-[#0f766e]'],
+html.odoo [class*='bg-[#047857]'] {
+  background-color: #017e84 !important;
+}
+
+html.odoo [class*='bg-[#e07a3d]'],
+html.odoo [class*='bg-[#c47a2c]'],
+html.odoo [class*='bg-[#d4652f]'],
+html.odoo [class*='bg-[#c2410c]'],
+html.odoo [class*='bg-[#b45309]'],
+html.odoo [class*='bg-[#a16207]'] {
+  background-color: #dc3545 !important;
+}
+
+html.odoo [class*='bg-[#8eb4d4]'],
+html.odoo [class*='bg-[#5ec8e5]'],
+html.odoo [class*='bg-[#c5c9ce]'],
+html.odoo [class*='bg-[#c5d0da]'] {
+  background-color: #ced4da !important;
+}
+
+html.odoo [class*='text-[#0b4f6c]'],
+html.odoo [class*='text-[#0369a1]'],
+html.odoo [class*='text-[#0e7490]'],
+html.odoo [class*='text-[#1d4ed8]'] {
+  color: #017e84 !important;
+}
+
+html.odoo [class*='text-[#c2410c]'],
+html.odoo [class*='text-[#d4652f]'],
+html.odoo [class*='text-[#9f1239]'],
+html.odoo [class*='text-[#be123c]'] {
+  color: #dc3545 !important;
+}
+
+html.odoo [class*='text-[#5C6B7A]'],
+html.odoo [class*='text-[#5c6b7a]'],
+html.odoo [class*='text-[#3d4c5c]'] {
+  color: #495057 !important;
+}
+
+/* Form sheets — white card on grey desk, 8px corners (live Quotation form). */
+html.odoo .app-surface [data-slot='card'],
+html.odoo .sales-surface [data-slot='card'] {
+  border-radius: 8px !important;
+  border-color: #dee2e6 !important;
+  box-shadow: none !important;
+  background: #ffffff;
+}
+
+html.odoo .app-surface main,
+html.odoo .sales-surface main {
+  background-color: transparent;
+}
+
+/* Badges — compact tags like Odoo list status chips. */
+html.odoo .app-surface [data-slot='badge'],
+html.odoo .sales-surface [data-slot='badge'] {
+  border-radius: 0.375rem;
+  font-weight: 500;
+  font-size: 0.7rem;
+}
+
+/* Filter / money-bar pills → Odoo square chips. */
+html.odoo .app-surface a.rounded-full,
+html.odoo .sales-surface a.rounded-full,
+html.odoo .app-surface button.rounded-full:not([data-slot='avatar-fallback']),
+html.odoo .sales-surface button.rounded-full:not([data-slot='avatar-fallback']) {
+  border-radius: 0.375rem;
+}
+
+/* Page headers denser, control-panel feel (live Odoo .o_control_panel). */
+html.odoo .app-surface .page-header {
+  background: #f8f9fa;
+  border-bottom-color: #dee2e6;
+  margin-left: -0.5rem;
+  margin-right: -0.5rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+  border-radius: 0.375rem;
+}
+
+html.odoo .app-surface .page-header h1 {
+  font-size: 1.05rem;
+  font-weight: 400;
+}
+
+/* Register / list toolbars flat white. */
+html.odoo .app-surface .rounded-xl.border.bg-card,
+html.odoo .sales-surface .rounded-xl.border.bg-card {
+  border-radius: 8px;
+  border-color: #dee2e6;
+  box-shadow: none;
+}
+
+/* Document form labels — live Odoo form label weight. */
+html.odoo .app-surface label,
+html.odoo .sales-surface label {
+  font-weight: 500;
+  color: #212529;
+}
+
+html.odoo .app-surface [role='tab'][aria-selected='true'],
+html.odoo .sales-surface [role='tab'][aria-selected='true'],
+html.odoo .app-surface [data-state='active'][role='tab'],
+html.odoo .sales-surface [data-state='active'][role='tab'] {
+  color: #714b67;
+  box-shadow: inset 0 -2px 0 #714b67;
+}
+
+/* Launcher / home search — Odoo grey desk, not slate card. */
+html.odoo .app-surface input[class*='border-slate'],
+html.odoo .app-surface [class*='bg-white'][class*='ring-slate'] {
+  border-color: #ced4da !important;
+  --tw-ring-color: #017e84;
+}
+
+html.odoo .app-glyph-tile {
+  background: #ffffff !important;
+  box-shadow: 0 0 0 1px #dee2e6;
+  border-radius: 0.75rem;
+}
+
+/*
+ * Legacy QB green / orange accents: bump contrast on colour shells and night
+ * skins. Quick keeps the authentic #2CA01C brand green.
+ */
+html:not(.odoo):not(.odoo-dark):not(.quick):not(.quick-dark) [class*='bg-[#2ca01c]'] {
+  background-color: #187a12 !important;
+}
+
+html:not(.odoo):not(.odoo-dark):not(.quick):not(.quick-dark) [class*='hover:bg-[#248a18]']:hover {
+  background-color: #14640f !important;
+}
+
+html:not(.dark):not(.ink):not(.odoo-dark):not(.quick-dark) [class*='text-[#d4652f]'] {
+  color: #9a3412 !important;
+}
+
+html:is(.dark, .ink, .odoo-dark, .quick-dark) [class*='text-[#d4652f]'] {
+  color: #fb923c !important;
+}
+
+/* Quick light keeps the familiar overdue orange. */
+html.quick [class*='text-[#d4652f]'] {
+  color: #d4652f !important;
 }
 
 .app-surface [data-slot='card'],
@@ -1023,7 +1846,9 @@ option {
 }
 
 .ledger-row:hover,
-.ledger-row-alt:hover {
+.ledger-row-alt:hover,
+.ledger-row[data-state='selected'],
+.ledger-row-alt[data-state='selected'] {
   background: var(--band) !important;
 }
 
@@ -1032,22 +1857,22 @@ option {
  * numbers vanish on white / #c5dff3 rows. Remap those classes to tokens on
  * every dark skin — including Odoo Dark, which used to be left out.
  */
-html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is([class*='c5dff3'], [class*='b3d0ec'], [class*='e7f3fb']) {
+html:is(.dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='c5dff3'], [class*='b3d0ec'], [class*='e7f3fb']) {
   background-color: var(--stripe) !important;
   color: var(--foreground) !important;
 }
 
-html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is([class*='d5dde6'], [class*='c8d3df']) {
+html:is(.dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='d5dde6'], [class*='c8d3df']) {
   background-color: var(--band) !important;
   color: var(--foreground) !important;
 }
 
-html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) [class*='b7e1a1'] {
+html:is(.dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [class*='b7e1a1'] {
   background-color: color-mix(in srgb, var(--primary) 28%, var(--card)) !important;
   color: var(--foreground) !important;
 }
 
-html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is([class*='bg-white'], [class*='bg-sky-50'], [class*='bg-slate-50'], [class*='bg-gray-50']) {
+html:is(.dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='bg-white'], [class*='bg-sky-50'], [class*='bg-slate-50'], [class*='bg-gray-50']) {
   background-color: var(--card) !important;
   color: var(--foreground) !important;
 }
@@ -1056,7 +1881,7 @@ html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is([class*='
  * Paper-tint arbitrary fills stay light on night themes and erase light ink.
  * Match the hex fragment so we do not trip CSS attribute-selector parsing on `#`.
  */
-html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is(
+html:is(.dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is(
   [class*='f4f8fb'],
   [class*='e7edf2'],
   [class*='fbfcfd'],
@@ -1069,16 +1894,16 @@ html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is(
   color: var(--foreground) !important;
 }
 
-html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is(.text-slate-500, .text-slate-600, .text-slate-700, .text-slate-800, .text-slate-900, .text-gray-500, .text-gray-600, .text-gray-700, .text-gray-800, .text-gray-900, .text-black, .text-\[\#141418\], .text-\[\#26262d\], .text-\[\#4a4a54\]) {
+html:is(.dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is(.text-slate-500, .text-slate-600, .text-slate-700, .text-slate-800, .text-slate-900, .text-gray-500, .text-gray-600, .text-gray-700, .text-gray-800, .text-gray-900, .text-black, .text-\[\#141418\], .text-\[\#26262d\], .text-\[\#4a4a54\]) {
   color: var(--foreground) !important;
 }
 
-html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) :is(.text-slate-400, .text-gray-400) {
+html:is(.dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is(.text-slate-400, .text-gray-400) {
   color: var(--muted-foreground) !important;
 }
 
 /* Soft labels that were tuned for paper stay readable on night fills. */
-html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) .text-muted-foreground {
+html:is(.dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) .text-muted-foreground {
   color: var(--muted-foreground) !important;
 }
 
@@ -1106,11 +1931,16 @@ html:is(.dark, .ink, .odoo-dark) :is(.app-surface, .sales-surface) .text-muted-f
 html.dark .app-glyph-tile,
 html.ink .app-glyph-tile,
 html.odoo-dark .app-glyph-tile,
+html.quick-dark .app-glyph-tile,
 .dark .app-glyph-tile {
   background: linear-gradient(180deg, #3d4050 0%, #30333f 100%);
   box-shadow:
     inset 0 0 0 1px rgb(255 255 255 / 0.08),
     0 10px 22px -12px rgb(0 0 0 / 0.7);
+}
+
+html.quick .app-glyph-tile {
+  background: linear-gradient(180deg, #34b022 0%, #248a18 100%);
 }
 
 .app-glyph-tile svg {
@@ -1137,16 +1967,49 @@ html.odoo-dark .app-glyph-tile,
   page: invoice;
 }
 
-/* Screen reports that print via the browser share the same purple accent. */
+/*
+ * Report column headers: one token pair for the bar and its ink.
+ * Never paint --primary under --foreground — that is the Appearance clash
+ * (dark Ocean/Lagoon bar + dark body text). Print still uses the brand bar.
+ */
+[data-report-root] {
+  --report-head-bg: var(--band);
+  --report-head-fg: var(--foreground);
+  --report-section-bg: var(--band);
+  --report-section-fg: var(--foreground);
+  --report-accent: var(--primary);
+}
+
+[data-report-root] [data-slot='table-header'],
 [data-report-root] thead th {
-  background: #714b67;
-  color: #fff;
+  background: var(--report-head-bg);
+  color: var(--report-head-fg);
+}
+
+/* Sort links / grip / icons must follow the bar, not body --foreground. */
+[data-report-root] thead th :is(a, button, span, svg) {
+  color: inherit;
+}
+
+/* Name / amount drills into transaction detail — always look openable. */
+a.report-drill-link {
+  color: var(--report-accent, var(--primary));
+  cursor: pointer;
+}
+a.report-drill-link:hover {
+  color: color-mix(in srgb, var(--report-accent, var(--primary)) 82%, var(--foreground));
+}
+@media print {
+  a.report-drill-link {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
 }
 
 @media print {
   [data-report-root] thead th {
-    background: #714b67 !important;
-    color: #fff !important;
+    background: var(--primary) !important;
+    color: var(--primary-foreground) !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -1179,7 +2042,8 @@ html.odoo-dark .app-glyph-tile,
 
   /* Invoice sheets carry their own letterhead; a report that prints them
    * (a customer's invoices, invoice by invoice) drops the report's one. */
-  [data-report-root]:has(.invoice-sheet) .report-letterhead {
+  [data-report-root]:has(.invoice-sheet) .report-letterhead,
+  [data-report-root]:has(.invoice-sheet) [data-report-sheet-header] {
     display: none !important;
   }
 
@@ -1248,59 +2112,111 @@ html.odoo-dark .app-glyph-tile,
  * These rules are unlayered on purpose: they have to beat the width and
  * nowrap utilities pages put on individual cells.
  */
+/*
+ * Two table layouts:
+ * - Chart / lists (default): one line per cell, grow wide, scroll sideways.
+ * - Interactive grids (`data-layout="grid"`): fixed column widths, ellipsis —
+ *   registers and reports must not let Contra bleed into Debit/Credit.
+ */
 [data-slot='table-container'] {
   width: 100%;
   max-width: 100%;
-  overflow-x: clip;
+  overflow-x: auto;
 }
 
-[data-slot='table'] {
-  width: 100%;
-  max-width: 100%;
-  table-layout: fixed;
+[data-slot='table']:not([data-layout='grid']) {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  table-layout: auto;
 }
 
-[data-slot='table'] :is(th, td) {
+[data-slot='table']:not([data-layout='grid']) :is(th, td) {
   width: auto;
   min-width: 0;
   max-width: none;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  vertical-align: top;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  vertical-align: middle;
   overflow: visible;
   text-overflow: unset;
 }
 
-[data-slot='table'] :is(th, td):has(> input[type='checkbox']:only-child) {
+[data-slot='table']:not([data-layout='grid']) :is(th, td):has(> input[type='checkbox']:only-child) {
   width: 2.25rem;
   max-width: 2.5rem;
-  overflow-wrap: normal;
-  word-break: normal;
 }
 
-[data-slot='table'] :is(th, td):not(.numeric) :where(a, span, button, label) {
+[data-slot='table']:not([data-layout='grid']) :is(th, td):not(.numeric) :where(a, span, button, label) {
+  max-width: none;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+[data-slot='table'][data-layout='grid'] {
+  width: 100%;
+  max-width: none;
+  table-layout: fixed;
+}
+
+[data-slot='table'][data-layout='grid'] :is(th, td) {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+  word-break: normal;
+  vertical-align: middle;
+}
+
+[data-slot='table'][data-layout='grid'] :is(th, td) :where(a, span, button, label, div) {
   max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Amounts stay on one line. The column is given enough of the page for that. */
+/*
+ * Grid headers hold a grip + label + sort + resize handle. Clipping them
+ * stacks the chrome on top of the name (the "scrambled columns" look).
+ */
+[data-slot='table'][data-layout='grid'] thead :is(th, td) {
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+  max-width: none;
+  vertical-align: bottom;
+}
+
+[data-slot='table'][data-layout='grid'] thead :is(th, td) :where(a, span, button, label, div) {
+  max-width: none;
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+}
+
+/* Overflow / split column bands need room to lay out chips — do not clip them. */
+[data-slot='table'][data-layout='grid'] tr[data-column-band] :is(th, td) {
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+}
+
+[data-slot='table'][data-layout='grid'] tr[data-column-band] :is(th, td) :where(a, span, button, label, div) {
+  max-width: none;
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+}
+
 [data-slot='table'] td.numeric {
-  overflow-wrap: normal;
-  word-break: normal;
   white-space: nowrap;
 }
 
 [data-slot='table'] td.numeric :where(a, span) {
   white-space: nowrap;
-  overflow-wrap: normal;
-}
-
-/* A sheet or report that used to scroll sideways now clips to the page.
- * The table inside wraps, so the clip does not cut a column off. */
-main .overflow-x-auto:has([data-slot='table']) {
-  overflow-x: clip;
 }
 
 /* The row the keyboard is on. Arrow keys and J / K set this; Enter opens it. */
@@ -1308,4 +2224,519 @@ main .overflow-x-auto:has([data-slot='table']) {
   outline: 2px solid var(--primary);
   outline-offset: -2px;
   background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+ * Report styles (Settings → Appearance). Applied via html[data-report-style].
+ * Density (Standard / Compact / Plain) still comes from data-template.
+ * --------------------------------------------------------------------------- */
+
+html[data-report-style='herobooks'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: var(--band);
+  --report-head-fg: var(--foreground);
+  --report-section-bg: var(--band);
+  --report-section-fg: var(--foreground);
+  --report-row-odd: var(--card);
+  --report-row-even: var(--stripe);
+  --report-border: color-mix(in srgb, var(--border) 80%, transparent);
+  --report-row-pad-y: 0.45rem;
+  --report-head-tracking: 0.04em;
+  --report-head-transform: none;
+  --report-head-weight: 600;
+  --report-accent: var(--primary);
+}
+
+html[data-report-style='quickbooks'] [data-report-root] {
+  --report-font: var(--font-quickbooks), Arial, Helvetica, sans-serif;
+  --report-head-bg: #e8eef4;
+  --report-head-fg: #393a3d;
+  --report-section-bg: #dfe8f0;
+  --report-section-fg: #1f2a30;
+  --report-row-odd: #ffffff;
+  --report-row-even: #f4f7fa;
+  --report-border: #c9d3dc;
+  --report-row-pad-y: 0.4rem;
+  --report-head-tracking: 0.06em;
+  --report-head-transform: uppercase;
+  --report-head-weight: 700;
+  --report-accent: #2ca01c;
+}
+
+/* Live Odoo P&L / Balance Sheet paper (emaar-building). */
+html[data-report-style='odoo'] [data-report-root] {
+  --report-font:
+    var(--font-odoo),
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Ubuntu,
+    Arial,
+    sans-serif;
+  --report-head-bg: #ffffff;
+  --report-head-fg: #212529;
+  --report-section-bg: #dee2e6;
+  --report-section-fg: #495057;
+  --report-row-odd: #ffffff;
+  --report-row-even: #ffffff;
+  --report-border: #dee2e6;
+  --report-row-pad-y: 0.28rem;
+  --report-head-tracking: 0;
+  --report-head-transform: none;
+  --report-head-weight: 500;
+  --report-accent: #714b67;
+  font-size: 0.8rem;
+  color: #212529;
+  background: #ffffff;
+}
+
+html[data-report-style] [data-report-root] {
+  font-family: var(--report-font);
+}
+
+html[data-report-style] [data-report-root] table > thead {
+  background: var(--report-head-bg);
+  color: var(--report-head-fg);
+}
+
+html[data-report-style] [data-report-root] table > thead th {
+  background: var(--report-head-bg);
+  color: var(--report-head-fg);
+  font-weight: var(--report-head-weight);
+  letter-spacing: var(--report-head-tracking);
+  text-transform: var(--report-head-transform);
+  border-bottom: 1px solid var(--report-border);
+}
+
+html[data-report-style] [data-report-root] table > thead th :is(a, button, span, svg) {
+  color: inherit;
+}
+
+html[data-report-style] [data-report-root][data-template='standard'] table > tbody > tr:nth-child(odd) {
+  background-color: var(--report-row-odd);
+}
+
+html[data-report-style] [data-report-root][data-template='standard'] table > tbody > tr:nth-child(even) {
+  background-color: var(--report-row-even);
+}
+
+html[data-report-style] [data-report-root] table > tbody > tr[class*='bg-muted'],
+html[data-report-style] [data-report-root] table > tbody > tr.ledger-head,
+html[data-report-style] [data-report-root] table > tbody > tr.pointer-events-none {
+  background-color: var(--report-section-bg) !important;
+  color: var(--report-section-fg);
+}
+
+html[data-report-style='quickbooks'] [data-report-root] table > tbody > tr.pointer-events-none td {
+  border-left: 3px solid var(--report-accent);
+  font-weight: 700;
+}
+
+/* Live Odoo totals: flat grey band (#dee2e6), bold — no accent strip. */
+html[data-report-style='odoo'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='odoo'] [data-report-root] table > tbody > tr[class*='bg-muted'] td,
+html[data-report-style='odoo'] [data-report-root] table > tbody > tr.ledger-head td {
+  background: #dee2e6 !important;
+  color: #495057 !important;
+  font-weight: 700;
+  border-left: none;
+}
+
+html[data-report-style='odoo'] [data-report-root] table > thead th {
+  font-size: 0.8rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+html[data-report-style='odoo'] [data-report-root] table > tbody > tr:not(.pointer-events-none):not([class*='bg-muted']):not(.ledger-head) td {
+  font-weight: 400;
+  color: #212529;
+}
+
+html[data-report-style] [data-report-root][data-template='standard'] :is(th, td),
+html[data-report-style] [data-report-root][data-template='plain'] :is(th, td) {
+  padding-top: var(--report-row-pad-y);
+  padding-bottom: var(--report-row-pad-y);
+}
+
+html[data-report-style='odoo'] [data-report-root][data-template='compact'] :is(th, td) {
+  padding-top: 0.12rem;
+  padding-bottom: 0.12rem;
+}
+
+html[data-report-style='quickbooks'] [data-report-root] .numeric,
+html[data-report-style='odoo'] [data-report-root] .numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-report-style='quickbooks'] [data-report-root] a:hover {
+  color: #2ca01c;
+}
+
+html[data-report-style='odoo'] [data-report-root] a {
+  color: #017e84;
+}
+
+html[data-report-style='odoo'] [data-report-root] a:hover {
+  color: #714b67;
+}
+
+/* Report sheet masthead — company name + report title on every sheet / print. */
+.report-sheet-header {
+  --rsh-accent: var(--report-accent, var(--primary));
+  --rsh-fg: var(--foreground);
+  --rsh-muted: var(--muted-foreground);
+  position: relative;
+  margin-bottom: 0.25rem;
+  padding: 1.1rem 1.25rem 1rem;
+  text-align: center;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--rsh-accent) 18%, var(--border));
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--rsh-accent) 12%, var(--card)) 0%,
+      var(--card) 48%,
+      color-mix(in srgb, var(--rsh-accent) 5%, var(--card)) 100%
+    );
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--rsh-accent) 10%, transparent);
+}
+
+.report-sheet-header::after {
+  content: '';
+  display: block;
+  width: min(12rem, 40%);
+  height: 3px;
+  margin: 0.85rem auto 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--rsh-accent),
+    transparent
+  );
+}
+
+.report-sheet-header__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.report-sheet-header__logo {
+  width: 3rem;
+  height: 3rem;
+  object-fit: contain;
+  border-radius: 0.65rem;
+  background: var(--background);
+  padding: 0.2rem;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.report-sheet-header__mark {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.65rem;
+  background: var(--rsh-accent);
+  color: var(--primary-foreground);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--rsh-accent) 28%, transparent);
+}
+
+.report-sheet-header__names {
+  min-width: 0;
+  max-width: 46rem;
+}
+
+.report-sheet-header__company {
+  margin: 0;
+  font-size: clamp(1.05rem, 2.2vw, 1.45rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  color: var(--rsh-fg);
+}
+
+.report-sheet-header__title {
+  margin: 0.35rem 0 0;
+  font-size: clamp(1.15rem, 2.4vw, 1.55rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--rsh-accent);
+}
+
+.report-sheet-header__subtitle {
+  margin: 0.3rem 0 0;
+  font-size: 0.875rem;
+  color: var(--rsh-muted);
+}
+
+.report-sheet-header__contact {
+  margin: 0.55rem 0 0;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--rsh-muted);
+}
+
+html[data-report-style='quickbooks'] .report-sheet-header {
+  --rsh-accent: #2ca01c;
+  border-radius: 0;
+  border-color: #c9d3dc;
+  background: #f7fafc;
+  box-shadow: none;
+  font-family: var(--font-quickbooks), Arial, Helvetica, sans-serif;
+}
+
+html[data-report-style='quickbooks'] .report-sheet-header__mark {
+  color: #fff;
+}
+
+html[data-report-style='odoo'] .report-sheet-header {
+  --rsh-accent: #714b67;
+  --rsh-fg: #fff;
+  --rsh-muted: rgba(255, 255, 255, 0.82);
+  border: none;
+  border-radius: 0;
+  background: #714b67;
+  box-shadow: none;
+  color: #fff;
+  font-family: var(--font-odoo), system-ui, sans-serif;
+}
+
+html[data-report-style='odoo'] .report-sheet-header__mark {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  box-shadow: none;
+}
+
+html[data-report-style='odoo'] .report-sheet-header__logo {
+  background: #fff;
+}
+
+html[data-report-style='odoo'] .report-sheet-header__title {
+  color: #fff;
+}
+
+html[data-report-style='odoo'] .report-sheet-header::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+}
+
+html.odoo .report-sheet-header,
+html.odoo-dark .report-sheet-header {
+  --rsh-accent: #714b67;
+  --rsh-fg: #fff;
+  --rsh-muted: rgba(255, 255, 255, 0.82);
+  border: none;
+  border-radius: 0;
+  background: #714b67;
+  box-shadow: none;
+  color: #fff;
+}
+
+html.odoo .report-sheet-header__title,
+html.odoo-dark .report-sheet-header__title {
+  color: #fff;
+}
+
+html.odoo .report-sheet-header__mark,
+html.odoo-dark .report-sheet-header__mark {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  box-shadow: none;
+}
+
+html.odoo .report-sheet-header::after,
+html.odoo-dark .report-sheet-header::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+}
+
+@media print {
+  .report-sheet-header {
+    break-inside: avoid;
+    border-color: #d0d5dd !important;
+    background: #f8fafc !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .report-sheet-header__company {
+    color: #111827 !important;
+  }
+
+  .report-sheet-header__title {
+    color: var(--rsh-accent) !important;
+  }
+
+  html[data-report-style='odoo'] .report-sheet-header,
+  html.odoo .report-sheet-header,
+  html.odoo-dark .report-sheet-header {
+    background: #714b67 !important;
+    border: none !important;
+  }
+
+  html[data-report-style='odoo'] .report-sheet-header__company,
+  html[data-report-style='odoo'] .report-sheet-header__title,
+  html[data-report-style='odoo'] .report-sheet-header__subtitle,
+  html[data-report-style='odoo'] .report-sheet-header__contact,
+  html.odoo .report-sheet-header__company,
+  html.odoo .report-sheet-header__title,
+  html.odoo .report-sheet-header__subtitle,
+  html.odoo .report-sheet-header__contact,
+  html.odoo-dark .report-sheet-header__company,
+  html.odoo-dark .report-sheet-header__title,
+  html.odoo-dark .report-sheet-header__subtitle,
+  html.odoo-dark .report-sheet-header__contact {
+    color: #fff !important;
+  }
+}
+
+/*
+ * When the Odoo system theme is on, every sheet (lists, COA, P&L, BS, periods)
+ * uses the same live Odoo paper — even before report-style storage syncs.
+ */
+html.odoo [data-report-root],
+html.odoo-dark [data-report-root] {
+  --report-head-bg: #ffffff;
+  --report-head-fg: #212529;
+  --report-section-bg: #dee2e6;
+  --report-section-fg: #495057;
+  font-family:
+    var(--font-odoo),
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Ubuntu,
+    Arial,
+    sans-serif;
+  font-size: 0.8rem;
+  color: #212529;
+  background: #ffffff;
+}
+
+html.odoo [data-report-root] table > thead th,
+html.odoo-dark [data-report-root] table > thead th {
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--report-head-fg);
+  background: var(--report-head-bg);
+  border-bottom: 1px solid #dee2e6;
+}
+
+html.odoo [data-report-root] table > tbody > tr.ledger-head td,
+html.odoo [data-report-root] table > tbody > tr[class*='bg-muted'] td,
+html.odoo [data-report-root] table > tbody > tr.pointer-events-none td,
+html.odoo-dark [data-report-root] table > tbody > tr.ledger-head td,
+html.odoo-dark [data-report-root] table > tbody > tr[class*='bg-muted'] td,
+html.odoo-dark [data-report-root] table > tbody > tr.pointer-events-none td {
+  background: #dee2e6 !important;
+  color: #495057 !important;
+  font-weight: 700;
+  border-left: none;
+}
+
+html.odoo [data-report-root][data-template='standard'] table > tbody > tr:nth-child(odd),
+html.odoo [data-report-root][data-template='standard'] table > tbody > tr:nth-child(even) {
+  background-color: #ffffff;
+}
+
+html.odoo [data-report-root] a {
+  color: #017e84;
+}
+
+html.odoo .ledger-head,
+html.odoo-dark .ledger-head {
+  background: #dee2e6 !important;
+  color: #495057 !important;
+  font-weight: 700;
+}
+
+html.odoo .ledger-row,
+html.odoo .ledger-row-alt {
+  background: #ffffff !important;
+  color: #212529;
+}
+
+html.odoo .ledger-row:hover,
+html.odoo .ledger-row-alt:hover {
+  background: #f8f9fa !important;
+}
+
+/* List / COA / invoices control strip — live Odoo grey desk. */
+html.odoo .app-surface main > .space-y-4 > .flex:first-child,
+html.odoo .app-surface [data-report-toolbar],
+html.odoo .sales-surface [data-report-toolbar] {
+  background: transparent;
+}
+
+html.odoo .app-surface [data-slot='table'] tbody tr {
+  border-bottom: 1px solid #e7ebed;
+}
+
+html.odoo .app-surface [data-slot='badge'],
+html.odoo .sales-surface [data-slot='badge'] {
+  border-radius: 0.375rem;
+  font-weight: 500;
+}
+
+/* Live Odoo: negative balances in reports are red. */
+html.odoo [data-report-root] .numeric.text-destructive,
+html.odoo [data-report-root] .text-destructive,
+html[data-report-style='odoo'] [data-report-root] .numeric.text-destructive,
+html[data-report-style='odoo'] [data-report-root] .text-destructive {
+  color: #dc3545 !important;
+}
+
+/* Zero / muted amounts — pale like live Odoo P&L. */
+html.odoo [data-report-root] .text-muted-foreground.numeric,
+html[data-report-style='odoo'] [data-report-root] .text-muted-foreground.numeric {
+  color: #ced4da !important;
+}
+
+/* Explicit system typeface also wins on report paper (after report-style rules). */
+html[data-font-style='geist'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--report-font);
+}
+html[data-font-style='inter'] [data-report-root] {
+  --report-font:
+    var(--font-odoo),
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Ubuntu,
+    Arial,
+    sans-serif;
+  font-family: var(--report-font);
+}
+html[data-font-style='source-sans'] [data-report-root] {
+  --report-font: var(--font-quickbooks), Arial, Helvetica, sans-serif;
+  font-family: var(--report-font);
+}
+html[data-font-style='system'] [data-report-root] {
+  --report-font:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  font-family: var(--report-font);
 }

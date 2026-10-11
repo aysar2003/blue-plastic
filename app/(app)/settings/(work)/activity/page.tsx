@@ -4,7 +4,7 @@ import { QueryProvider } from '@/components/providers/query-provider'
 import { requireOrgContext } from '@/server/auth/context'
 import { ActivityList } from './activity-list'
 
-export const metadata: Metadata = { title: 'Activity log' }
+export const metadata: Metadata = { title: 'Trash' }
 
 export default async function ActivityPage() {
   const ctx = await requireOrgContext('audit:read')
@@ -12,8 +12,9 @@ export default async function ActivityPage() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Every change made in this organisation, with who made it and when. Entries are written inside the
-        same transaction as the change, so this list cannot fall behind the data.
+        Every deleted transaction — invoices, sales papers, bills, expenses, payments, transfers, and
+        more. Download the PDF, then open the row to upload scans or supporting files. Nothing here
+        goes back into the company books.
       </p>
       <QueryProvider>
         <ActivityList timeZone={ctx.organization.timeZone} />

@@ -44,7 +44,10 @@ describe('section names', () => {
     expect(sectionLabel('/reports/profit-loss')).toBe('Profit and Loss')
     expect(sectionLabel('/reports/business-overview?period=this-month')).toBe('Business overview')
     expect(sectionLabel('/customers')).toBe('Customers')
-    expect(sectionLabel('/sales')).toBe('Sales')
+    // /sales is the Sales "Home" tab; invoices is the module entry → "Sales".
+    expect(sectionLabel('/sales')).toBe('Home')
+    expect(sectionLabel('/sales/invoices')).toBe('Sales')
+    expect(sectionLabel('/sales/quotations')).toBe('Quotations')
     expect(sectionLabel('/dashboard')).toBe('Dashboard')
     expect(sectionLabel('/pos')).toBe('Point of Sale')
     expect(sectionLabel('/pos/settings')).toBe('Point of Sale settings')

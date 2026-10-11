@@ -28,6 +28,7 @@ export default async function ProfitAndLossByCustomerPage({
   return (
     <>
       <PageHeader
+        organization={ctx.organization}
         title="Profit and Loss by Customer"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}. Income net of tax, by customer. Cost of goods is not kept per customer, so this is the income side of the profit and loss.`}
       />

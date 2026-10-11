@@ -16,6 +16,9 @@ export type SortState = { sort: string; dir: SortDirection }
  * also keeps the table a Server Component — the sort happens in the database,
  * over every row, not in the browser over the page you happen to be on. Sorting
  * only the visible page is the bug this avoids.
+ *
+ * Click once for the default direction (asc for text, usually desc for money),
+ * click again to flip small↔large / A↔Z.
  */
 export function SortableHeader({
   column,
@@ -48,22 +51,38 @@ export function SortableHeader({
   search.set('dir', next)
 
   const Icon = active ? (state.dir === 'asc' ? ArrowUpIcon : ArrowDownIcon) : ChevronsUpDownIcon
+  const tip = active
+    ? state.dir === 'asc'
+      ? 'Sorted small → large. Click for large → small.'
+      : 'Sorted large → small. Click for small → large.'
+    : `Sort by ${label}`
 
   return (
-    <TableHead className={cn(numeric && 'numeric', className)} aria-sort={active ? (state.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+    <TableHead
+      className={cn(numeric && 'numeric', className)}
+      aria-sort={active ? (state.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
       <Link
         href={`${basePath}?${search.toString()}`}
         // Changing the sort returns to the first page: page 3 of a different
         // ordering is not the same rows, and landing there is disorienting.
         scroll={false}
+        title={tip}
         className={cn(
-          'flex w-full min-w-0 items-start gap-1 whitespace-normal rounded-sm transition-colors hover:text-foreground',
+          /* Inherit thead ink so Appearance themes never put body text on a dark bar. */
+          'group/sort flex w-full min-w-0 items-center gap-1 whitespace-nowrap rounded-sm text-inherit transition-colors hover:text-foreground',
           numeric && 'flex-row-reverse',
-          active ? 'text-foreground' : 'text-foreground/80',
+          active ? 'font-semibold text-foreground' : 'text-muted-foreground',
         )}
       >
-        <span className="min-w-0">{label}</span>
-        <Icon className={cn('mt-0.5 size-3.5 shrink-0', !active && 'opacity-55')} />
+        <span className="min-w-0 whitespace-nowrap">{label}</span>
+        <Icon
+          className={cn(
+            'mt-0.5 size-3.5 shrink-0',
+            active ? 'text-foreground' : 'text-muted-foreground group-hover/sort:text-foreground',
+          )}
+          aria-hidden
+        />
       </Link>
     </TableHead>
   )

@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
 
 import {
   closeYearSchema,
@@ -10,6 +11,7 @@ import {
 } from '@/lib/validation/accounting'
 import { action } from '@/server/action'
 import * as closeService from '@/server/services/close.service'
+import * as equityOwnersService from '@/server/services/equity-owners.service'
 import * as periodService from '@/server/services/period.service'
 
 export const setPeriodStatus = action
@@ -62,5 +64,24 @@ export const reopenFiscalYear = action
     revalidatePath('/periods')
     revalidatePath('/journals')
     revalidatePath('/reports/balance-sheet')
+    return result
+  })
+
+/** Import filled owners-equity.xlsx and post Dr RE / Cr owners. */
+export const importOwnersEquityAllocation = action
+  .requires('journal:post')
+  .input(
+    z.object({
+      csv: z.string().optional(),
+      workbook: z.string().optional(),
+    }),
+  )
+  .handler(async (ctx, input) => {
+    const result = await equityOwnersService.importOwnersAllocation(ctx, input)
+    revalidatePath('/periods')
+    revalidatePath('/journals')
+    revalidatePath('/accounts')
+    revalidatePath('/reports/balance-sheet')
+    revalidatePath('/reports/trial-balance')
     return result
   })

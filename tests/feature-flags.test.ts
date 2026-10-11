@@ -12,6 +12,12 @@ describe('feature flags', () => {
     expect(parsed.showCreatorBrand).toBe(true)
   })
 
+  it('maps the legacy contact delete switch onto customer and vendor', () => {
+    const parsed = parseFeatureFlags({ allowContactDelete: false })
+    expect(parsed.allowCustomerDelete).toBe(false)
+    expect(parsed.allowVendorDelete).toBe(false)
+  })
+
   it('hides every launcher app that belongs to a switched-off module', () => {
     const flags = parseFeatureFlags({ modules: { sales: false, inventory: false } })
     const hidden = LAUNCHER_APPS.filter((app) => !isModuleEnabled(flags, app.key)).map((app) => app.key)

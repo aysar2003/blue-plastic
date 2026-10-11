@@ -11,6 +11,7 @@ import {
   BarcodeIcon,
   FileTextIcon,
   KeyRoundIcon,
+  LayoutGridIcon,
   Link2Icon,
   ListIcon,
   Loader2Icon,
@@ -36,6 +37,7 @@ import {
   posRefund,
   recordPosCashMove,
 } from '@/app/(app)/pos/actions'
+import { PosOrdersBoard, type PosOrderListRow } from '@/components/pos/pos-orders-board'
 import { PosPaymentForm } from '@/components/pos/payment-dialog'
 import { RegisterTransferForm, type TransferDestination } from '@/components/pos/register-transfer-form'
 import { RegisterLock, useClientReady, useRegisterLocked, writeRegisterLocked } from '@/components/pos/register-lock'
@@ -45,6 +47,14 @@ import { ODOO } from '@/lib/odoo-brand'
 import { usePropState } from '@/lib/use-prop-state'
 import { minorUnits, formatMoney } from '@/lib/money'
 import { chooseLineStore } from '@/lib/pos-line-store'
+import {
+  EMPTY_SCAN,
+  matchPosBarcode,
+  normalizeBarcode,
+  noteScanKey,
+  SCAN_MIN_LENGTH,
+  type ScanBuffer,
+} from '@/lib/pos-barcode'
 import { CHANGE_ACCOUNT_MESSAGE, changeReturnChoices, paymentCanValidate } from '@/lib/pos-change'
 import {
   activePosOrder,
@@ -55,7 +65,10 @@ import {
   loadPosOrderBook,
   patchPosOrder,
   POS_OPEN_ORDER_LIMIT,
+  posOrderAmount,
   posOrderIsEmpty,
+  posOrderReference,
+  posOrderWhen,
   type PosOpenCartLine,
   type PosOrderBook,
   savePosOrderBook,
@@ -77,6 +90,7 @@ type Product = {
   id: string
   name: string
   sku: string | null
+  barcode?: string | null
   category: string | null
   price: string
   /** On hand in this register's store; null for services / non-stock items. */
@@ -122,6 +136,22 @@ function orderTabStyle(selected: boolean, dark: boolean, border: string, text: s
     border: `1px solid ${ODOO.teal}`,
     color: dark ? '#ffffff' : ODOO.tealDark,
   }
+}
+
+/** Take scanner characters back out of a price or note field. The search box clears itself. */
+function peelLeakedScan(count: number) {
+  if (count <= 0 || typeof document === 'undefined') return
+  const el = document.activeElement
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return
+  if (el.dataset.posBarcodeSearch === 'true') return
+  if (el.value.length < count) return
+  const next = el.value.slice(0, -count)
+  const proto = Object.getOwnPropertyDescriptor(
+    el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+    'value',
+  )
+  proto?.set?.call(el, next)
+  el.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
 function broadcastCart(payload: {
@@ -224,8 +254,12 @@ export function PosTerminal(props: {
   const [cashKind, setCashKind] = useState<'IN' | 'OUT'>('OUT')
   const [cashAmount, setCashAmount] = useState('')
   const [cashReason, setCashReason] = useState('')
+  const [cashAccountId, setCashAccountId] = useState(
+    () => props.transferDestinations?.[0]?.id ?? '',
+  )
   const [closingCash, setClosingCash] = usePropState(props.cashSummary.expectedCash)
   const [pending, startTransition] = useTransition()
+  const [tillView, setTillView] = useState<'sell' | 'orders'>('sell')
   const ready = useClientReady()
   const locked = useRegisterLocked(props.register.id)
 
@@ -283,6 +317,7 @@ export function PosTerminal(props: {
     if (pending) return
     leavePayment()
     setToast(null)
+    setTillView('sell')
     commitBook((current) => addPosOrder(current))
   }
 
@@ -316,6 +351,7 @@ export function PosTerminal(props: {
       (p) =>
         p.name.toLowerCase().includes(q) ||
         (p.sku?.toLowerCase().includes(q) ?? false) ||
+        (p.barcode?.toLowerCase().includes(q) ?? false) ||
         (p.category?.toLowerCase().includes(q) ?? false),
     )
   }, [props.products, query])
@@ -348,6 +384,66 @@ export function PosTerminal(props: {
     () => cart.reduce((sum, line) => sum + Number(line.price) * line.quantity, 0),
     [cart],
   )
+
+  const listedOrders = useMemo((): PosOrderListRow[] => {
+    const now = new Date()
+    const ongoing = (book?.orders ?? [])
+      .filter((order) => order.kind === 'order')
+      .map((order) => {
+        const when = posOrderWhen(order.openedAt, now)
+        const customer = props.customers.find((row) => row.id === order.customerId)?.displayName ?? null
+        return {
+          id: order.id,
+          label: order.label,
+          reference: posOrderReference(props.session.id, order.label),
+          customerName: customer,
+          total: formatMoney(posOrderAmount(order), props.currency),
+          day: when.day,
+          time: when.time,
+          status: 'ongoing' as const,
+          note: order.note,
+          lines: order.cart.map((line) => ({
+            name: line.name,
+            quantity: line.quantity,
+            amount: formatMoney((Number(line.price) || 0) * line.quantity, props.currency),
+          })),
+          canDelete: true,
+          receiptHref: null,
+        }
+      })
+    const paid = props.recentOrders.map((order) => ({
+      id: `paid:${order.id}`,
+      label: order.number,
+      reference: order.number,
+      customerName: order.customerName,
+      total: order.total,
+      day: order.dateLabel,
+      time: '',
+      status: 'paid' as const,
+      note: order.payments,
+      lines: [],
+      canDelete: false,
+      receiptHref: `/pos-receipt/${order.documentId}`,
+    }))
+    return [...ongoing, ...paid]
+  }, [book, props.currency, props.customers, props.recentOrders, props.session.id])
+
+  function selectListedOrder(id: string) {
+    if (!book?.orders.some((order) => order.id === id)) return
+    focusOrder(id)
+  }
+
+  function openListedOrder(id: string) {
+    if (!book?.orders.some((order) => order.id === id)) return
+    focusOrder(id)
+    setTillView('sell')
+  }
+
+  function deleteListedOrder(id: string) {
+    if (pending) return
+    leavePayment()
+    commitBook((current) => clearPosOrder(current, id))
+  }
 
   useEffect(() => {
     if (!book) return
@@ -384,24 +480,31 @@ export function PosTerminal(props: {
     })
   }
 
+  function sellByCode(raw: string) {
+    const hit = matchPosBarcode(props.products, raw)
+    if (!hit) {
+      setQuery('')
+      setToast(`No item for barcode ${raw.trim()}`)
+      return false
+    }
+    setQuery('')
+    setTillView('sell')
+    addProduct(hit)
+    setToast(`Added ${hit.name}`)
+    return true
+  }
+
   function tryBarcodeAdd() {
     const q = query.trim()
     if (!q) return false
-    const exactSku = props.products.find(
-      (product) => product.sku && product.sku.toLowerCase() === q.toLowerCase(),
-    )
-    if (exactSku) {
-      addProduct(exactSku)
-      setQuery('')
-      setToast(`Added ${exactSku.name}`)
-      return true
-    }
+    if (matchPosBarcode(props.products, q)) return sellByCode(q)
     if (filtered.length === 1) {
       addProduct(filtered[0]!)
       setQuery('')
       setToast(`Added ${filtered[0]!.name}`)
       return true
     }
+    if (normalizeBarcode(q).length >= SCAN_MIN_LENGTH) setToast(`No item for barcode ${q}`)
     return false
   }
 
@@ -643,11 +746,16 @@ export function PosTerminal(props: {
 
   function submitCashMove() {
     setError(null)
+    if (!cashAccountId) {
+      setError('Choose the bank or wallet account for this cash move.')
+      return
+    }
     startTransition(async () => {
       const result = await recordPosCashMove({
         sessionId: props.session.id,
         kind: cashKind,
         amount: cashAmount,
+        counterpartyAccountId: cashAccountId,
         reason: cashReason || null,
       })
       if (!result.ok) {
@@ -741,6 +849,36 @@ export function PosTerminal(props: {
     setMenu(null)
   }
 
+  const sellByCodeRef = useRef(sellByCode)
+  const scanBlocked = useRef(false)
+  useEffect(() => {
+    sellByCodeRef.current = sellByCode
+    scanBlocked.current = payOpen || menu !== null
+  })
+
+  useEffect(() => {
+    let buffer: ScanBuffer = EMPTY_SCAN
+    function onKey(event: KeyboardEvent) {
+      if (event.repeat || scanBlocked.current) return
+      const result = noteScanKey(
+        buffer,
+        event.key,
+        performance.now(),
+        event.ctrlKey || event.metaKey || event.altKey,
+      )
+      buffer = result.state
+      if (result.swallow) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      if (!result.code) return
+      peelLeakedScan(result.peel)
+      sellByCodeRef.current(result.code)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+
   const closeVariance = useMemo(() => {
     const expected = Number(props.cashSummary.expectedCash) || 0
     const counted = Number(closingCash) || 0
@@ -765,20 +903,36 @@ export function PosTerminal(props: {
         <div className="flex max-w-full items-center gap-1 overflow-x-auto">
           <button
             type="button"
-            onClick={() => focusOrder((book.orders.find((order) => order.kind === 'register') ?? book.orders[0]!).id)}
-            aria-pressed={active.kind === 'register'}
+            onClick={() => {
+              if (tillView === 'orders') {
+                setTillView('sell')
+                return
+              }
+              focusOrder((book.orders.find((order) => order.kind === 'register') ?? book.orders[0]!).id)
+            }}
+            aria-pressed={tillView === 'sell' && active.kind === 'register'}
             className="rounded-md px-3 py-1.5 text-sm font-medium"
-            style={orderTabStyle(active.kind === 'register', dark, border, text)}
+            style={orderTabStyle(tillView === 'sell' && active.kind === 'register', dark, border, text)}
           >
             Register
           </button>
-          <Link
-            href="/pos/orders"
-            className="rounded-md px-3 py-1.5 text-sm"
-            style={{ border: `1px solid ${border}`, color: text }}
+          <button
+            type="button"
+            onClick={() => {
+              if (pending) return
+              leavePayment()
+              setTillView('orders')
+            }}
+            aria-pressed={tillView === 'orders'}
+            className="rounded-md px-3 py-1.5 text-sm font-medium"
+            style={
+              tillView === 'orders'
+                ? { background: ODOO.teal, border: `1px solid ${ODOO.teal}`, color: '#ffffff' }
+                : { border: `1px solid ${border}`, color: text, background: 'transparent' }
+            }
           >
             Orders
-          </Link>
+          </button>
           {props.canQuote ? (
             <button
               type="button"
@@ -840,25 +994,39 @@ export function PosTerminal(props: {
         </div>
 
         <div className="ml-auto flex flex-1 items-center justify-end gap-2 sm:max-w-xl">
-          <div className="relative min-w-0 flex-1">
-            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 opacity-50" />
-            <input
-              type="search"
-              placeholder="Search products..."
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  tryBarcodeAdd()
-                }
-              }}
-              className="w-full rounded-full border py-2 pl-9 pr-10 text-sm outline-none"
-              style={{ background: chip, borderColor: border, color: text }}
-              autoComplete="off"
-            />
-            <BarcodeIcon className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 opacity-50" />
-          </div>
+          {tillView === 'orders' ? (
+            <button
+              type="button"
+              onClick={() => setTillView('sell')}
+              className="inline-flex size-9 items-center justify-center rounded-md"
+              style={{ border: `1px solid ${border}` }}
+              aria-label="Product grid"
+              title="Back to products"
+            >
+              <LayoutGridIcon className="size-4" />
+            </button>
+          ) : (
+            <div className="relative min-w-0 flex-1">
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 opacity-50" />
+              <input
+                type="search"
+                placeholder="Search or scan a barcode..."
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    tryBarcodeAdd()
+                  }
+                }}
+                className="w-full rounded-full border py-2 pl-9 pr-10 text-sm outline-none"
+                style={{ background: chip, borderColor: border, color: text }}
+                autoComplete="off"
+                data-pos-barcode-search="true"
+              />
+              <BarcodeIcon className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 opacity-50" />
+            </div>
+          )}
           <span
             className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
             style={{ background: ODOO.danger }}
@@ -908,6 +1076,16 @@ export function PosTerminal(props: {
         </div>
       ) : null}
 
+      {tillView === 'orders' ? (
+        <PosOrdersBoard
+          orders={listedOrders}
+          selectedId={active.id}
+          dark={dark}
+          onSelect={selectListedOrder}
+          onOpen={openListedOrder}
+          onDelete={deleteListedOrder}
+        />
+      ) : (
       <div className="grid min-h-0 flex-1 lg:grid-cols-[22rem_1fr]">
         {/* Total and Payment sit at the top of the cart and the panel stays pinned while the
             product grid scrolls, so paying never needs a scroll (laptops at ~1024x576). */}
@@ -1097,8 +1275,8 @@ export function PosTerminal(props: {
               <FileTextIcon className="size-16 opacity-30" />
               <h2 className="text-xl font-semibold">No Product Yet?</h2>
               <p className="max-w-sm text-sm" style={{ color: muted }}>
-                Mark items as available in POS, or create a product in the backend. Scanning a known
-                SKU adds it when the catalogue is loaded.
+                Mark items as available in POS, or create a product in the backend. Scanning its
+                barcode or SKU adds it when the catalogue is loaded.
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 <Link
@@ -1137,6 +1315,11 @@ export function PosTerminal(props: {
                   }
                 >
                   <span className="line-clamp-2 text-sm font-medium">{product.name}</span>
+                  {product.barcode ? (
+                    <span className="mt-1 font-mono text-xs" style={{ color: muted }}>
+                      {product.barcode}
+                    </span>
+                  ) : null}
                   {product.sku ? (
                     <span className="mt-1 font-mono text-xs" style={{ color: muted }}>
                       {product.sku}
@@ -1171,13 +1354,14 @@ export function PosTerminal(props: {
               ))}
               {filtered.length === 0 ? (
                 <p className="col-span-full text-sm" style={{ color: muted }}>
-                  No products match that search. Press Enter only adds an exact SKU match.
+                  No products match that search. Enter adds an exact barcode or SKU.
                 </p>
               ) : null}
             </div>
           )}
         </section>
       </div>
+      )}
 
       {menu === 'actions' ? (
         <Modal title="Actions" dark={dark} onClose={() => setMenu(null)}>
@@ -1377,11 +1561,30 @@ export function PosTerminal(props: {
             </label>
           </div>
           <label className="mt-4 block text-sm" style={{ color: muted }}>
+            {cashKind === 'IN' ? 'From account' : 'To account'}
+            <select
+              value={cashAccountId}
+              onChange={(event) => setCashAccountId(event.target.value)}
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ background: chip, borderColor: border, color: text }}
+            >
+              {(props.transferDestinations ?? []).length === 0 ? (
+                <option value="">No bank accounts available</option>
+              ) : (
+                (props.transferDestinations ?? []).map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.code} {account.name}
+                  </option>
+                ))
+              )}
+            </select>
+          </label>
+          <label className="mt-4 block text-sm" style={{ color: muted }}>
             Reason
             <textarea
               value={cashReason}
               onChange={(event) => setCashReason(event.target.value)}
-              rows={4}
+              rows={3}
               className="mt-1 w-full rounded-lg border p-3 text-sm outline-none"
               style={{ background: chip, borderColor: border, color: text }}
             />
@@ -1537,6 +1740,11 @@ export function PosTerminal(props: {
             {formatMoney(closeVariance, props.currency)}
             {Math.abs(closeVariance) < 0.01 ? ' (balanced)' : closeVariance < 0 ? ' (short)' : ' (over)'}
           </p>
+          {Math.abs(closeVariance) >= 0.01 ? (
+            <p className="mt-1 text-xs" style={{ color: muted }}>
+              This difference posts to the cash over/short account on the ledger.
+            </p>
+          ) : null}
           {error && menu === 'close' ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
           <button
             type="button"

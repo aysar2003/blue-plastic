@@ -1,5 +1,5 @@
 import { toCalendarDate, type CalendarDate } from '@/lib/date'
-import { Decimal } from '@/lib/money'
+import { Decimal, ZERO } from '@/lib/money'
 
 export type StatementKind =
   | 'INVOICE'
@@ -213,4 +213,49 @@ export function statementInvoices<T extends FilterableEntry>(
   asOf: CalendarDate,
 ): T[] {
   return visibleEntries(entries, { ...filter, type: 'invoice' }, asOf)
+}
+
+export type StatementCarryEntry = {
+  id: string
+  kind?: string
+  charge: Decimal
+  credit: Decimal
+  openAmount: Decimal
+}
+
+/**
+ * Running balance on statement paper — same rule as the ledger service:
+ * charges raise what is owed; credits (payments, credit memos) lower it.
+ * Unapplied payments must move the column; they already credit AR in the books.
+ */
+export function forwardBalances(entries: StatementCarryEntry[], opening: Decimal) {
+  let running = new Decimal(opening)
+  const byId = new Map<string, Decimal>()
+  const accountAt: Record<string, { previous: string; current: string }> = {}
+  for (const entry of entries) {
+    const previous = running
+    const charge = new Decimal(entry.charge)
+    const credit = new Decimal(entry.credit)
+    if (!charge.isZero() || !credit.isZero()) {
+      running = running.plus(charge).minus(credit)
+    }
+    if (entry.kind === 'INVOICE' || entry.kind === 'BILL') {
+      accountAt[entry.id] = { previous: previous.toString(), current: running.toString() }
+    }
+    byId.set(entry.id, running)
+  }
+  return { byId, closing: running, accountAt }
+}
+
+/** Open invoice/bill amounts add; unapplied payment/credit remainders subtract. */
+export function signedOpen(entry: Pick<StatementCarryEntry, 'kind' | 'openAmount'>): Decimal {
+  const open = new Decimal(entry.openAmount ?? ZERO)
+  if (
+    entry.kind === 'PAYMENT' ||
+    entry.kind === 'CREDIT_MEMO' ||
+    entry.kind === 'VENDOR_CREDIT'
+  ) {
+    return open.negated()
+  }
+  return open
 }

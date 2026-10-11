@@ -13,8 +13,10 @@ import { formatMoney } from '@/lib/money'
 import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
 import * as closeService from '@/server/services/close.service'
+import * as equityOwnersService from '@/server/services/equity-owners.service'
 import * as periodService from '@/server/services/period.service'
 import { MonthPanel, monthLabel } from './month-panel'
+import { OwnersEquityTools } from './owners-equity-tools'
 import { OpenMonthButton, PeriodToggle } from './period-actions'
 import { CloseYearButton, ReopenYearButton } from './year-end-actions'
 
@@ -38,6 +40,7 @@ export default async function PeriodsPage({
 
   const canClose = ctx.permissions.has('period:close')
   const canReopen = ctx.permissions.has('period:reopen')
+  const canPostJournal = ctx.permissions.has('journal:post')
 
   // The checklist is run for the period that is actually next in line, because
   // periods close in order and any other one is not a decision the user can make.
@@ -53,12 +56,50 @@ export default async function PeriodsPage({
   const closingPreview =
     closable && canClose ? await closeService.previewClose(ctx, closable.id).catch(() => null) : null
 
+  const ownersSnap = canPostJournal
+    ? await equityOwnersService.ownersEquitySnapshot(ctx).catch(() => null)
+    : null
+
   return (
     <>
       <PageHeader
         title="Accounting periods"
-        description="Closing a period stops anything else being posted into it. Periods close in order and reopen in reverse, so a closed month cannot change through an open earlier one."
+        description="Close a month to stop posting into it. Close the fiscal year to zero Profit & Loss and move net income into Retained Earnings — then distribute to owners from the card below."
       />
+
+      <Card className="mb-6 p-4">
+        <p className="text-sm font-medium">How closing works</p>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+          <li>
+            <span className="font-medium text-foreground">Month close</span> — locks that month so
+            nothing else posts into it. Does not clear Profit &amp; Loss.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Fiscal year close</span> — zeros every
+            income and expense account and puts the full net income into Retained Earnings, then
+            locks the year.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Owners distribution</span> — export the
+            owners list, fill amounts in Excel, import once to move Retained Earnings into each
+            Owner&apos;s equity account.
+          </li>
+        </ol>
+      </Card>
+
+      {ownersSnap ? (
+        <Card className="mb-6 p-4">
+          <OwnersEquityTools
+            retainedBalance={formatMoney(
+              ownersSnap.retainedEarnings.balance,
+              ctx.organization.baseCurrency,
+            )}
+            retainedLabel={`${ownersSnap.retainedEarnings.code} ${ownersSnap.retainedEarnings.name}`}
+            ownerCount={ownersSnap.owners.length}
+            canImport={canPostJournal}
+          />
+        </Card>
+      ) : null}
 
       <Card className="mb-6 p-4">
         <p className="text-sm font-medium">Adjust inventory before the year is closed</p>

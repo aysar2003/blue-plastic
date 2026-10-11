@@ -1,5 +1,12 @@
+'use client'
+
 import Link from 'next/link'
 
+import {
+  InteractiveGrid,
+  type InteractiveColumn,
+  type InteractiveRow,
+} from '@/components/data/interactive-grid'
 import { OrderDateField } from '@/components/pos/order-date-field'
 import { ODOO } from '@/lib/odoo-brand'
 import { DATE_PRESETS, listHref } from '@/lib/list-filters'
@@ -10,12 +17,16 @@ import { cn } from '@/lib/utils'
 export type PosOrdersReportOrder = {
   id: string
   dateLabel: string
+  date: CalendarDate
   registerName: string
+  posBankLabel: string
+  posBankAccountId: string | null
   documentId: string
   number: string
   payments: string
   changeLabel: string | null
   total: string
+  totalRaw: string
 }
 
 export type PosOrdersAccountTotal = {
@@ -46,10 +57,23 @@ export type PosOrdersReportProps = {
   today: CalendarDate
   truncated: boolean
   limit: number
+  currency: string
+  timeZone: string
 }
 
 const controlClass =
   'mt-1 h-10 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground outline-none focus:border-ring'
+
+const ORDER_COLUMNS: InteractiveColumn[] = [
+  { id: 'date', label: 'Date', kind: 'date', defaultWidth: 120 },
+  { id: 'receipt', label: 'Receipt', defaultWidth: 120 },
+  { id: 'register', label: 'Register', defaultWidth: 140 },
+  { id: 'posBank', label: 'POS bank', defaultWidth: 200 },
+  { id: 'payments', label: 'Payments', defaultWidth: 220 },
+  { id: 'change', label: 'Change', defaultWidth: 140 },
+  { id: 'total', label: 'Total', kind: 'money', total: true, defaultWidth: 120 },
+  { id: 'print', label: 'Print', defaultWidth: 80, total: false },
+]
 
 export function PosOrdersReport({
   orders,
@@ -62,14 +86,44 @@ export function PosOrdersReport({
   today,
   truncated,
   limit,
+  currency,
+  timeZone,
 }: PosOrdersReportProps) {
   const filtered = query.preset !== '' || Boolean(query.registerId || query.paymentMethodId)
   const recentOnly = !query.from && !query.to && !query.registerId && !query.paymentMethodId
 
+  const rows: InteractiveRow[] = orders.map((order) => ({
+    id: order.id,
+    cells: {
+      date: { value: order.date, sort: order.date },
+      receipt: {
+        value: order.number,
+        href: `/sales/sales-receipts/${order.documentId}`,
+      },
+      register: { value: order.registerName },
+      posBank: {
+        value: order.posBankLabel,
+        href: order.posBankAccountId
+          ? `/reports/transaction-detail?account=${order.posBankAccountId}`
+          : null,
+      },
+      payments: { value: order.payments || '—' },
+      change: { value: order.changeLabel ?? '—' },
+      total: { value: order.totalRaw, sort: order.totalRaw },
+      print: {
+        value: 'Print',
+        href: `/pos-receipt/${order.documentId}`,
+      },
+    },
+  }))
+
   return (
     <div>
       <h1 className="text-2xl font-semibold text-foreground">Orders</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Sales rung up at the till, newest first.</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Sales rung up at the till, posted to each register’s POS bank. Customize columns on the
+        table below.
+      </p>
 
       <form
         action="/pos/orders"
@@ -208,63 +262,26 @@ export function PosOrdersReport({
         ) : null}
       </section>
 
-      <div
-        className="on-dark mt-5 overflow-x-auto rounded-xl border border-white/10"
-        style={{ background: ODOO.surface }}
-      >
-        <table className="w-full min-w-[44rem] text-left text-sm">
-          <thead className="bg-black/30 text-xs uppercase tracking-wide text-white/50">
-            <tr>
-              <th className="px-4 py-3 font-medium">Date</th>
-              <th className="px-4 py-3 font-medium">Receipt</th>
-              <th className="px-4 py-3 font-medium">Register</th>
-              <th className="px-4 py-3 font-medium">Payments</th>
-              <th className="px-4 py-3 font-medium">Change</th>
-              <th className="px-4 py-3 font-medium text-right">Total</th>
-              <th className="px-4 py-3 font-medium text-right">
-                <span className="sr-only">Print</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((order) => (
-              <tr key={order.id} className="border-t border-white/8 text-white/90">
-                <td className="px-4 py-2.5 whitespace-nowrap text-white/60">{order.dateLabel}</td>
-                <td className="px-4 py-2.5 whitespace-nowrap">
-                  <Link
-                    href={`/sales/sales-receipts/${order.documentId}`}
-                    className="font-medium text-[#8fd4d7] hover:underline"
-                  >
-                    {order.number}
-                  </Link>
-                </td>
-                <td className="px-4 py-2.5 whitespace-nowrap">{order.registerName}</td>
-                <td className="px-4 py-2.5 text-white/65">{order.payments || '—'}</td>
-                <td className="px-4 py-2.5 text-white/65">{order.changeLabel ?? '—'}</td>
-                <td className="px-4 py-2.5 text-right font-medium tabular whitespace-nowrap">{order.total}</td>
-                <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                  <Link
-                    href={`/pos-receipt/${order.documentId}`}
-                    className="text-[#8fd4d7] hover:underline"
-                    aria-label={`Print receipt ${order.number}`}
-                  >
-                    Print
-                  </Link>
-                </td>
-              </tr>
-            ))}
-            {orders.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-white/45">
-                  {filtered
-                    ? 'No orders match these filters.'
-                    : 'No POS orders yet. Open a session and continue selling.'}
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+      <div className="mt-5">
+        {orders.length === 0 ? (
+          <div className="rounded-md border bg-card p-10 text-center text-sm text-muted-foreground">
+            {filtered
+              ? 'No orders match these filters.'
+              : 'No POS orders yet. Open a session and continue selling.'}
+          </div>
+        ) : (
+          <InteractiveGrid
+            storageKey="bp-pos-orders"
+            columns={ORDER_COLUMNS}
+            rows={rows}
+            currency={currency}
+            timeZone={timeZone}
+            customizable
+            showTotal
+          />
+        )}
       </div>
+
       {totals.length > 0 ? (
         <div className="on-dark mt-4 overflow-hidden rounded-xl border border-white/10" style={{ background: ODOO.surface }}>
           <h2 className="px-4 py-3 text-sm font-semibold text-white">Received by wallet</h2>

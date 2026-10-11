@@ -21,7 +21,7 @@ export default async function SalesHubPage() {
   const currency = ctx.organization.baseCurrency
   const now = today(ctx.organization.timeZone)
 
-  const [arAging, openInvoices, openEstimates, openQuotations] = await Promise.all([
+  const [arAging, openInvoices, openOrders] = await Promise.all([
     receivables.aging(ctx, now),
     db.salesDocument.count({
       where: {
@@ -34,16 +34,8 @@ export default async function SalesHubPage() {
     db.salesDocument.count({
       where: {
         orgId: ctx.orgId,
-        type: 'ESTIMATE',
-        status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
-        deletedAt: null,
-      },
-    }),
-    db.salesDocument.count({
-      where: {
-        orgId: ctx.orgId,
-        type: 'QUOTATION',
-        status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
+        type: 'SALES_ORDER',
+        status: { notIn: ['VOID', 'CLOSED'] },
         deletedAt: null,
       },
     }),
@@ -58,7 +50,7 @@ export default async function SalesHubPage() {
     <AppLauncher
       eyebrow={ctx.organization.name}
       title="Sales"
-      subtitle="Estimates, quotations, invoices, receipts, customers and the figures that follow them."
+      subtitle="Orders, invoices, receipts, customers and the figures that follow them."
       apps={apps}
       insights={[
         {
@@ -74,15 +66,10 @@ export default async function SalesHubPage() {
           href: '/sales/invoices?status=open',
         },
         {
-          label: 'Open estimates',
-          value: String(openEstimates),
-          hint:
-            openQuotations === 0
-              ? openEstimates === 1
-                ? 'waiting on a customer'
-                : 'waiting on customers'
-              : `${openQuotations} open quotation${openQuotations === 1 ? '' : 's'} too`,
-          href: '/sales/estimates',
+          label: 'Open sales orders',
+          value: String(openOrders),
+          hint: openOrders === 1 ? 'waiting to collect' : 'waiting to collect',
+          href: '/sales/sales-orders?status=open',
         },
       ]}
     />

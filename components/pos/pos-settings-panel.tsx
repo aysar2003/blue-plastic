@@ -68,7 +68,7 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
     <div className="mx-auto max-w-3xl space-y-8 py-2">
       <PageHeader
         title="Configuration"
-        description="Payment methods, counters, and staff. Sales post to each till’s bank account under POS Banks and stay there until someone transfers them out."
+        description="Payment methods, counters, and staff. Sales post to each till’s POS bank under POS Banks on the chart until you transfer the balance."
         actions={
           <Link href="/pos" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             ← Dashboard
@@ -664,8 +664,9 @@ function RegisterFields({
       <fieldset className="sm:col-span-2">
         <legend className="text-sm font-medium text-foreground">Staff on this counter</legend>
         <p className="mt-1 text-xs text-muted-foreground">
-          Leave empty to let anyone with POS access open this counter. When people are selected,
-          only they may open a session here.
+          Assign every cashier who may use this till. Sales post to this register&apos;s POS bank
+          ledger. Unassigned cashiers cannot open or sell here — only managers can when the list is
+          empty.
         </p>
         <div className="mt-2 flex flex-wrap gap-3">
           {data.staff.length === 0 ? (

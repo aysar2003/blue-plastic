@@ -9,11 +9,12 @@ import { requireOrgContext } from '@/server/auth/context'
 export const metadata: Metadata = { title: 'Spreadsheet sync' }
 
 export default async function SpreadsheetReportsPage() {
-  await requireOrgContext('report:read')
+  const ctx = await requireOrgContext('report:read')
   return (
     <>
       <ReportCentreTabs active="spreadsheet" />
       <PageHeader
+        organization={ctx.organization}
         title="Spreadsheet sync"
         description="Download a CSV of a report that already exists, then open it in a spreadsheet."
       />

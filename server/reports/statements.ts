@@ -1,9 +1,11 @@
 import 'server-only'
 import type { AccountSubtype, AccountType } from '@prisma/client'
 
+import { ACCOUNT_SUBTYPE_LABELS } from '@/lib/accounting-labels'
+import { keepChartFamily, linkColonParents, nestChartRows } from '@/lib/chart-tree'
 import type { CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
-import { db, type Tx } from '@/server/db'
+import type { Tx } from '@/server/db'
 import {
   accountFigures,
   CASH_SUBTYPES,
@@ -27,6 +29,9 @@ export type StatementRow = {
   comparison?: Decimal
   /** A heading such as a parent account or a further detail, so the section can fold. */
   group?: string | null
+  parentId?: string | null
+  /** Nesting depth under the main account (0 = top of the section tree). */
+  depth?: number
 }
 
 export type StatementSection = {
@@ -93,23 +98,18 @@ export async function profitAndLoss(
   )
 
   const sections = INCOME_GROUPS.map((group) => {
-    const rows: StatementRow[] = figures
-      .filter((row) => group.subtypes.includes(row.subtype))
-      .map((row) => ({
-        accountId: row.accountId,
-        code: row.code,
-        name: row.name,
-        type: row.type,
-        subtype: row.subtype,
-        amount: present(row.type, row.movement),
-        comparison: comparisonById.get(row.accountId),
-      }))
-      .filter((row) => !row.amount.isZero() || !(row.comparison ?? ZERO).isZero())
+    const rows = nestStatementRows(
+      figures.filter((row) => group.subtypes.includes(row.subtype)),
+      (row) => present(row.type, row.movement),
+      (row) => comparisonById.get(row.accountId),
+    )
 
     return {
       key: group.key,
       label: group.label,
       rows,
+      // Own posted amounts only (parents are often zero) — never roll up, or the
+      // section total would count each child twice.
       total: sumBy(rows, (row) => row.amount),
       comparisonTotal: comparisonFigures ? sumBy(rows, (row) => row.comparison ?? ZERO) : undefined,
     }
@@ -124,22 +124,13 @@ export async function profitAndLoss(
   const operatingProfit = grossProfit.minus(totalOperatingExpenses)
   const netIncome = operatingProfit.plus(totalOf('otherIncome')).minus(totalOf('otherExpense'))
 
-  // Every line as a share of income, which is how a profit and loss is read once
-  // the absolute numbers stop being surprising.
-  const meta = await (options.client ?? db).ledgerAccount.findMany({
-    where: { orgId },
-    select: { id: true, name: true, detailType: true, parentId: true },
-  })
-  const byId = new Map(meta.map((account) => [account.id, account]))
-
   for (const section of sections) {
     for (const row of section.rows) {
       row.percentOfIncome = totalIncome.isZero()
         ? ZERO
         : row.amount.dividedBy(totalIncome).times(100).toDecimalPlaces(1)
-      const account = byId.get(row.accountId)
-      const parent = account?.parentId ? byId.get(account.parentId) : undefined
-      row.group = account?.detailType || parent?.name || null
+      // Detail-type bands — Bank with Bank, Operating expense with Operating expense.
+      row.group = ACCOUNT_SUBTYPE_LABELS[row.subtype]
     }
   }
 
@@ -169,6 +160,48 @@ function netIncomeOf(figures: AccountFigures[]): Decimal {
     figures.filter((row) => row.type === 'REVENUE' || row.type === 'EXPENSE'),
     (row) => (row.type === 'REVENUE' ? present(row.type, row.movement) : present(row.type, row.movement).negated()),
   )
+}
+
+/**
+ * Nest sub-accounts under their main account (parentId, or QBO `Parent:Child`
+ * names), keep zero-balance parents that still have children on the sheet, and
+ * order each section as a tree.
+ */
+function nestStatementRows(
+  figures: AccountFigures[],
+  amountOf: (row: AccountFigures) => Decimal,
+  comparisonOf?: (row: AccountFigures) => Decimal | undefined,
+): StatementRow[] {
+  const linked = linkColonParents(
+    figures.map((row) => ({
+      id: row.accountId,
+      parentId: row.parentId,
+      code: row.code,
+      name: row.name,
+      type: row.type,
+      subtype: row.subtype,
+      amount: amountOf(row),
+      comparison: comparisonOf?.(row),
+    })),
+  )
+
+  const active = linked.filter(
+    (row) => !row.amount.isZero() || !(row.comparison ?? ZERO).isZero(),
+  )
+  const family = keepChartFamily(linked, active)
+  const nested = nestChartRows(family)
+
+  return nested.map(({ id, treeDepth, parentId, code, name, type, subtype, amount, comparison }) => ({
+    accountId: id,
+    parentId,
+    depth: treeDepth,
+    code,
+    name,
+    type,
+    subtype,
+    amount,
+    comparison,
+  }))
 }
 
 /* --- Balance sheet -------------------------------------------------------- */
@@ -241,17 +274,13 @@ export async function balanceSheet(
   )
 
   const sections = BALANCE_GROUPS.map((group) => {
-    const rows = figures
-      .filter((row) => group.subtypes.includes(row.subtype))
-      .map((row) => ({
-        accountId: row.accountId,
-        code: row.code,
-        name: row.name,
-        type: row.type,
-        subtype: row.subtype,
-        amount: present(row.type, row.closing),
-      }))
-      .filter((row) => !row.amount.isZero())
+    const rows = nestStatementRows(
+      figures.filter((row) => group.subtypes.includes(row.subtype)),
+      (row) => present(row.type, row.closing),
+    )
+    for (const row of rows) {
+      row.group = ACCOUNT_SUBTYPE_LABELS[row.subtype]
+    }
 
     return { key: group.key, label: group.label, rows, total: sumBy(rows, (row) => row.amount) }
   })

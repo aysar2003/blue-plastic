@@ -10,7 +10,9 @@ import {
   patchPosOrder,
   POS_OPEN_ORDER_LIMIT,
   posOrderIsEmpty,
+  posOrderReference,
   posOrderStorageKey,
+  posOrderWhen,
   savePosOrderBook,
   selectPosOrder,
   settlePosOrder,
@@ -176,6 +178,40 @@ describe('POS open orders', () => {
 
     const loaded = loadPosOrderBook(store, 'user-a', 'sess-1', () => 'clean')
     expect(loaded.orders.map((order) => order.id)).toEqual(['clean'])
+  })
+
+  it('remembers when a ticket was opened, and still reads tickets saved without that time', () => {
+    const make = ids()
+    const book = addPosOrder(createPosOrderBook(make), make)
+    const openedAt = book.orders[1]?.openedAt
+    expect(openedAt).toEqual(expect.any(String))
+
+    const store = memory()
+    savePosOrderBook(store, 'user-a', 'sess-1', book)
+    expect(loadPosOrderBook(store, 'user-a', 'sess-1', ids()).orders[1]?.openedAt).toBe(openedAt)
+
+    const key = posOrderStorageKey('user-a', 'sess-1')
+    const raw = JSON.parse(store.getItem(key)!) as { book: { orders: Record<string, unknown>[] } }
+    delete raw.book.orders[1]!.openedAt
+    store.setItem(key, JSON.stringify(raw))
+    const legacy = loadPosOrderBook(store, 'user-a', 'sess-1', ids())
+    expect(legacy.orders[1]).toMatchObject({ label: '0001' })
+    expect(legacy.orders[1]?.openedAt).toBeUndefined()
+  })
+
+  it('labels an order for the list: today, an older day, and a stable reference', () => {
+    const now = new Date(2026, 9, 10, 19, 40)
+    const older = new Date(2026, 9, 7, 19, 39)
+    expect(posOrderWhen(older.toISOString(), now)).toEqual({ day: '10/07/2026', time: '7:39pm' })
+    expect(posOrderWhen(new Date(2026, 9, 10, 19, 39).toISOString(), now)).toEqual({
+      day: 'Today',
+      time: '7:39pm',
+    })
+    expect(posOrderWhen(undefined, now)).toEqual({ day: 'Today', time: '' })
+
+    expect(posOrderReference('sess-1', '0001')).toMatch(/^\d{3}-1-000001$/)
+    expect(posOrderReference('sess-1', '0001')).toBe(posOrderReference('sess-1', '0001'))
+    expect(posOrderReference('sess-2', '0001')).not.toBe(posOrderReference('sess-1', '0001'))
   })
 
   it('starts clean when stored tickets are unreadable', () => {

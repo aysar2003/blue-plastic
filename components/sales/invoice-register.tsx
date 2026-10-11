@@ -201,6 +201,9 @@ export function InvoiceRegister({
                   <Link href="/sales/quotations/new">Quotation</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
+                  <Link href="/sales/sales-orders/new">Sales order</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
                   <Link href="/sales/credit-memos/new">Credit memo</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>

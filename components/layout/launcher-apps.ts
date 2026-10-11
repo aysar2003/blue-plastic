@@ -33,6 +33,7 @@ export type LauncherIcon =
   | 'file'
   | 'transfer'
   | 'monitor'
+  | 'database'
 
 export type LauncherApp = {
   key: string
@@ -65,13 +66,13 @@ export const LAUNCHER_APPS: LauncherApp[] = [
   {
     key: 'sales',
     label: 'Sales',
-    href: '/sales',
+    href: '/sales/invoices?status=open',
     icon: 'receipt',
     glyph: 'sales',
     permission: 'invoice:read',
     accent: '#0F766E',
     wash: '#CCFBF1',
-    blurb: 'Invoices and receipts',
+    blurb: 'Open invoices',
   },
   {
     key: 'customers',
@@ -206,6 +207,28 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     blurb: 'Close the books',
   },
   {
+    key: 'calendar',
+    label: 'Calendar',
+    href: '/calendar',
+    icon: 'calendar',
+    glyph: 'calendar',
+    permission: 'calendar:read',
+    accent: '#0369A1',
+    wash: '#E0F2FE',
+    blurb: 'Meetings and reminders',
+  },
+  {
+    key: 'databases',
+    label: 'Databases',
+    href: '/databases',
+    icon: 'database',
+    glyph: 'databases',
+    permission: 'org:update',
+    accent: '#0F766E',
+    wash: '#CCFBF1',
+    blurb: 'Companies and backups',
+  },
+  {
     key: 'settings',
     label: 'Settings',
     href: '/settings',
@@ -232,6 +255,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
 export const APP_ALSO: Record<string, string[]> = {
   inventory: ['/items'],
   accounting: ['/accounts'],
+  databases: ['/settings/backup'],
 }
 
 export function appsForPermissions(permissions: ReadonlySet<string> | Iterable<string>): LauncherApp[] {

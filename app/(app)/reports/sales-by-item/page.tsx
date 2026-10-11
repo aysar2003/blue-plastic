@@ -26,6 +26,7 @@ export default async function SalesByItemPage({ searchParams }: { searchParams: 
   return (
     <>
       <PageHeader
+        organization={ctx.organization}
         title="Sales by Product/Service Summary"
         description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)} · net of tax`}
       />

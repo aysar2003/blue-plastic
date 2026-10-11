@@ -113,7 +113,33 @@ describe('expense', () => {
   })
 
   it('refuses to build without saying what it was paid from', () => {
-    expect(() => buildExpenseJournal(base)).toThrow(/which account it was paid from/i)
+    expect(() => buildExpenseJournal(base)).toThrow(/paid from|customer balance/i)
+  })
+
+  it('can settle the whole cost against a customer receivable', () => {
+    const settled = buildExpenseJournal({
+      ...base,
+      offsetCustomerId: 'cust-1',
+      receivableAccountId: 'acct-ar',
+    })
+    const ar = settled.lines.find((line) => line.accountId === 'acct-ar')
+    expect(ar?.credit?.toString()).toBe('290')
+    expect(ar?.customerId).toBe('cust-1')
+    expect(settled.lines.some((line) => line.accountId === 'acct-bank')).toBe(false)
+    const { debit, credit } = totals(settled.lines)
+    expect(debit.toString()).toBe(credit.toString())
+  })
+
+  it('can split settlement between customer balance and bank', () => {
+    const settled = buildExpenseJournal({
+      ...base,
+      offsetCustomerId: 'cust-1',
+      receivableAccountId: 'acct-ar',
+      paymentAccountId: 'acct-bank',
+      customerOffsetAmount: new Decimal(100),
+    })
+    expect(settled.lines.find((line) => line.accountId === 'acct-ar')?.credit?.toString()).toBe('100')
+    expect(settled.lines.find((line) => line.accountId === 'acct-bank')?.credit?.toString()).toBe('190')
   })
 })
 

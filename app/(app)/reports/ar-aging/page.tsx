@@ -1,26 +1,17 @@
 import type { Metadata } from 'next'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
-import { InteractiveGrid } from '@/components/data/interactive-grid'
 import { PageHeader } from '@/components/data/page-header'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
+import { AgingExplorer } from '@/components/reports/aging-explorer'
 import { Card } from '@/components/ui/card'
+import { AGING_COLORS, readAgingBucket } from '@/lib/aging'
 import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import { readSettings } from '../params'
 import { ReportControls } from '../report-controls'
-import { ShareBar } from '@/components/reports/figure-chart'
-import { AGING_BUCKETS, BUCKET_LABELS, aging, type AgingBucket } from '@/server/services/receivables.service'
-
-const AGING_COLORS: Record<AgingBucket, string> = {
-  unapplied: '#64748B',
-  current: '#0F766E',
-  d1_30: '#0369A1',
-  d31_60: '#B45309',
-  d61_90: '#C2410C',
-  d90_plus: '#BE123C',
-}
+import { AGING_BUCKETS, BUCKET_LABELS, aging } from '@/server/services/receivables.service'
 
 export const metadata: Metadata = { title: 'A/R Aging Summary' }
 
@@ -42,6 +33,7 @@ export default async function AgingPage({
   // quarter" is one click rather than a date typed by hand.
   const settings = readSettings(params, ctx.organization, 'this-fiscal-year')
   const asOf = settings.asOf
+  const activeBucket = readAgingBucket(params.bucket)
 
   const report = await aging(ctx, asOf)
   const currency = ctx.organization.baseCurrency
@@ -49,7 +41,7 @@ export default async function AgingPage({
   return (
     <>
       <PageHeader
-        className="print:hidden"
+        organization={ctx.organization}
         title="A/R Aging Summary"
         description={`Outstanding invoices as at ${formatDate(asOf)}, bucketed by how long they have been due.`}
         actions={
@@ -71,62 +63,52 @@ export default async function AgingPage({
         controls={{ mode: 'asOf', exportAs: 'ar-aging' }}
       />
 
-      {report.grandTotal.isZero() ? null : (
-        <div className="mb-4">
-          <ShareBar
-            caption="How long the money owed to you has been waiting"
-            currency={currency}
-            segments={AGING_BUCKETS.map((bucket) => ({
-              label: BUCKET_LABELS[bucket],
-              value: report.totals[bucket],
-              color: AGING_COLORS[bucket],
-            }))}
-          />
-        </div>
-      )}
-
-      {report.rows.length === 0 ? (
-        <div className="rounded-md border bg-card p-10 text-center text-sm text-muted-foreground">
-          Nothing outstanding.
-        </div>
-      ) : (
-        <InteractiveGrid
-          storageKey="bp-ar-aging"
-          currency={currency}
-          customizable
-          initialSort={{ id: 'total', dir: 'desc' }}
-          columns={[
-            { id: 'name', label: 'Customer', defaultWidth: 220 },
-            ...AGING_BUCKETS.map((bucket) => ({
-              id: bucket,
-              label: BUCKET_LABELS[bucket],
-              kind: 'money' as const,
-              total: true,
-              defaultWidth: 128,
-            })),
-            { id: 'total', label: 'Total', kind: 'money' as const, total: true, defaultWidth: 128 },
-          ]}
-          rows={report.rows.map((row) => ({
-            id: row.customerId,
-            cells: {
-              name: { value: row.customerName, href: customerStatement(row.customerId) },
-              ...Object.fromEntries(
-                AGING_BUCKETS.map((bucket) => [
-                  bucket,
-                  {
-                    value: row.buckets[bucket].isZero() ? null : row.buckets[bucket].toString(),
-                    href: customerStatement(
-                      row.customerId,
-                      bucket === 'current' || bucket === 'unapplied' ? 'open' : 'overdue',
-                    ),
-                  },
-                ]),
-              ),
-              total: { value: row.total.toString(), href: customerStatement(row.customerId, 'open') },
-            },
-          }))}
-        />
-      )}
+      <AgingExplorer
+        caption="How long the money owed to you has been waiting"
+        currency={currency}
+        storageKey="bp-ar-aging"
+        path="/reports/ar-aging"
+        params={params}
+        activeBucket={activeBucket}
+        rowNoun="customer"
+        segments={AGING_BUCKETS.map((bucket) => ({
+          id: bucket,
+          label: BUCKET_LABELS[bucket],
+          amount: report.totals[bucket].toString(),
+          color: AGING_COLORS[bucket],
+          count: report.rows.filter((row) => !row.buckets[bucket].isZero()).length,
+        }))}
+        columns={[
+          { id: 'name', label: 'Customer', defaultWidth: 220 },
+          ...AGING_BUCKETS.map((bucket) => ({
+            id: bucket,
+            label: BUCKET_LABELS[bucket],
+            kind: 'money' as const,
+            total: true,
+            defaultWidth: 128,
+          })),
+          { id: 'total', label: 'Total', kind: 'money' as const, total: true, defaultWidth: 128 },
+        ]}
+        rows={report.rows.map((row) => ({
+          id: row.customerId,
+          cells: {
+            name: { value: row.customerName, href: customerStatement(row.customerId) },
+            ...Object.fromEntries(
+              AGING_BUCKETS.map((bucket) => [
+                bucket,
+                {
+                  value: row.buckets[bucket].isZero() ? null : row.buckets[bucket].toString(),
+                  href: customerStatement(
+                    row.customerId,
+                    bucket === 'current' || bucket === 'unapplied' ? 'open' : 'overdue',
+                  ),
+                },
+              ]),
+            ),
+            total: { value: row.total.toString(), href: customerStatement(row.customerId, 'open') },
+          },
+        }))}
+      />
 
       <Card className="mt-4 overflow-hidden p-0">
         <div

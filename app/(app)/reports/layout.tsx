@@ -1,4 +1,3 @@
-import { CompanyLetterhead } from '@/components/print/company-letterhead'
 import { ReportTools } from '@/components/reports/report-tools'
 import { requireOrgContext } from '@/server/auth/context'
 import { forbidden } from '@/server/errors'
@@ -13,9 +12,10 @@ export default async function ReportsLayout({ children }: { children: React.Reac
   }
   // The report tabs are rendered by the shell, which carries the current period
   // across them. See components/layout/module-tabs.tsx.
+  // Company name + report title live on each page via PageHeader (organization=…),
+  // so print / PDF / screen share one masthead.
   return (
     <div data-report-root data-template="standard">
-      <CompanyLetterhead organization={ctx.organization} className="report-letterhead mb-4" />
       <ReportTools />
       {children}
     </div>

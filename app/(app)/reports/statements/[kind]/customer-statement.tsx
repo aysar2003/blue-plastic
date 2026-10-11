@@ -10,9 +10,13 @@ import { formatDate, toCalendarDate, type CalendarDate } from '@/lib/date'
 import { EARLIEST_DATE } from '@/lib/report-periods'
 import {
   STATEMENT_VIEW_LABELS,
+  forwardBalances,
+  signedOpen,
   statementFilterCaption,
   type StatementFilter,
 } from '@/lib/customer-statement'
+
+export { forwardBalances, signedOpen }
 import { letterheadLines, type LetterheadSource } from '@/lib/letterhead'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import type { StatementEntry, StatementItem } from '@/server/services/receivables.service'
@@ -77,11 +81,16 @@ export function CustomerStatement({
   const money = (value: Decimal.Value) => formatMoney(value, currency)
   const shownDebit = entries.reduce((sum, entry) => sum.plus(entry.charge), ZERO)
   const shownCredit = entries.reduce((sum, entry) => sum.plus(entry.credit), ZERO)
-  const shownOpen = entries.reduce((sum, entry) => sum.plus(entry.openAmount), ZERO)
+  /** Net still owing on the rows shown — invoices add, unapplied payments/credits subtract. */
+  const shownOpen = entries.reduce((sum, entry) => sum.plus(signedOpen(entry)), ZERO)
   const debitTotal = ledger ? charges : shownDebit
   const creditTotal = ledger ? credits : shownCredit
   const forwarded = forwardBalances(entries, opening)
-  const balanceTotal = ledger ? forwarded.closing : shownOpen
+  // Prefer the ledger running balance on the last row (source of truth from the
+  // statement service); fall back to the recomputed forward when empty.
+  const balanceTotal = ledger
+    ? (entries.at(-1)?.balance ?? forwarded.closing)
+    : shownOpen
   const paidTotal = entries.reduce((sum, entry) => sum.plus(paidOf(entry)), ZERO)
   const periodLabel = from <= EARLIEST_DATE ? `All dates through ${formatDate(to)}` : `${formatDate(from)} to ${formatDate(to)}`
 
@@ -290,7 +299,7 @@ function StatementRows({
         </TableCell>
         <TableCell className="numeric tabular font-medium">
           <Link href={entry.href} className="underline-offset-4 hover:underline">
-            {money(ledger ? (carried ?? entry.balance) : entry.openAmount)}
+            {money(ledger ? (entry.balance ?? carried ?? ZERO) : signedOpen(entry))}
           </Link>
         </TableCell>
       </ClickableRow>
@@ -401,37 +410,6 @@ function paidOf(entry: PaperEntry): Decimal {
   return ZERO
 }
 
-type CarryEntry = {
-  id: string
-  kind?: string
-  charge: Decimal
-  credit: Decimal
-  openAmount: Decimal
-}
-
-/**
- * Previous balance reads what was paid. A fully paid invoice adds nothing.
- * Every invoice or bill that still has a balance carries that remainder forward.
- * A journal still moves the balance. A payment does not, because it is already inside the paid amount.
- */
-export function forwardBalances(entries: CarryEntry[], opening: Decimal) {
-  let running = opening
-  const byId = new Map<string, Decimal>()
-  const accountAt: Record<string, { previous: string; current: string }> = {}
-  for (const entry of entries) {
-    if (entry.kind === 'INVOICE' || entry.kind === 'BILL') {
-      const previous = running
-      const open = new Decimal(entry.openAmount)
-      if (open.greaterThan(0)) running = running.plus(open)
-      accountAt[entry.id] = { previous: previous.toString(), current: running.toString() }
-    } else if (entry.kind === 'JOURNAL') {
-      running = running.plus(entry.charge).minus(entry.credit)
-    }
-    byId.set(entry.id, running)
-  }
-  return { byId, closing: running, accountAt }
-}
-
 function paidLabel(entry: PaperEntry, money: (value: Decimal.Value) => string): string {
   const paid = paidOf(entry)
   if (paid.isZero()) return ''
@@ -451,6 +429,7 @@ const KIND_TINT: Record<string, string> = {
   JOURNAL: 'bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-900/50',
   ESTIMATE: 'bg-stone-100/80 hover:bg-stone-200/70 dark:bg-stone-900/40 dark:hover:bg-stone-800/50',
   QUOTATION: 'bg-violet-100/80 hover:bg-violet-200/70 dark:bg-violet-900/40 dark:hover:bg-violet-800/50',
+  SALES_ORDER: 'bg-orange-100/80 hover:bg-orange-200/70 dark:bg-orange-900/40 dark:hover:bg-orange-800/50',
   PURCHASE_ORDER: 'bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-900/45 dark:hover:bg-slate-800/55',
 }
 

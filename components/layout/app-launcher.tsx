@@ -8,6 +8,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeftRightIcon,
   ChevronDownIcon,
+  DatabaseIcon,
   LayoutGridIcon,
   MonitorIcon,
   BanknoteIcon,
@@ -66,6 +67,7 @@ const ICONS: Record<LauncherIcon, LucideIcon> = {
   file: FileTextIcon,
   transfer: ArrowLeftRightIcon,
   monitor: MonitorIcon,
+  database: DatabaseIcon,
 }
 
 export type LauncherTile = {
@@ -96,7 +98,10 @@ export type LauncherSection = {
 
 function appIsCurrent(pathname: string, href: string, also: string[] = []) {
   const paths = [href, ...also]
-  return paths.some((path) => pathname === path || pathname.startsWith(`${path}/`))
+  return paths.some((path) => {
+    const base = path.split(/[?#]/)[0] || '/'
+    return pathname === base || pathname.startsWith(`${base}/`)
+  })
 }
 
 /**
@@ -151,7 +156,7 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
           aria-current={home ? 'page' : undefined}
           onClick={() => setOpenKey((key) => (key === '__apps__' ? null : '__apps__'))}
           className={cn(
-            'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-[#26262d] hover:bg-card hover:text-black dark:text-muted-foreground dark:hover:text-foreground',
+            'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-foreground hover:bg-card hover:text-foreground',
             (home || appsMenuOpen) && 'bg-card text-foreground shadow-sm ring-1 ring-border dark:text-foreground',
           )}
         >
@@ -177,7 +182,7 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
                 href="/dashboard"
                 role="menuitem"
                 onClick={() => setOpenKey(null)}
-                className="block px-3 py-1.5 text-xs font-bold text-[#141418] hover:bg-muted dark:text-popover-foreground"
+                className="block px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted"
               >
                 Apps home
               </Link>
@@ -238,7 +243,7 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
                       href={app.href}
                       role="menuitem"
                       onClick={() => setOpenKey(null)}
-                      className="block px-3 py-1.5 text-xs font-bold text-[#141418] hover:bg-muted dark:text-popover-foreground"
+                      className="block px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted"
                     >
                       {app.label} home
                     </Link>
@@ -252,9 +257,9 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
                         onClick={() => setOpenKey(null)}
                         className="block px-3 py-1.5 hover:bg-muted"
                       >
-                        <span className="block text-xs font-semibold text-[#141418] dark:text-popover-foreground">{item.label}</span>
+                        <span className="block text-xs font-semibold text-foreground">{item.label}</span>
                         {item.blurb ? (
-                          <span className="block text-[0.65rem] leading-snug text-[#4a4a54] dark:text-muted-foreground">
+                          <span className="block text-[0.65rem] leading-snug text-muted-foreground">
                             {item.blurb}
                           </span>
                         ) : null}
@@ -272,7 +277,7 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
 }
 
 const chipClass =
-  'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-[#26262d] hover:bg-card hover:text-black dark:text-muted-foreground dark:hover:text-foreground'
+  'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-foreground hover:bg-card hover:text-foreground'
 
 /** A top-bar app chip. With a menu: click opens the list. Without: go to the hub. */
 function AppChipLink({
@@ -355,11 +360,11 @@ function AppsMenuRow({ app, onDone }: { app: LauncherApp; onDone: () => void }) 
           </span>
         )}
         <span className="min-w-0">
-          <span className="block text-xs font-semibold text-[#141418] dark:text-popover-foreground">{app.label}</span>
+          <span className="block text-xs font-semibold text-foreground">{app.label}</span>
           {door.remembered ? (
             <span className="block text-[0.65rem] leading-snug text-primary">Back to where you left off</span>
           ) : app.blurb ? (
-            <span className="block text-[0.65rem] leading-snug text-[#4a4a54] dark:text-muted-foreground">
+            <span className="block text-[0.65rem] leading-snug text-muted-foreground">
               {app.blurb}
             </span>
           ) : null}
@@ -372,7 +377,7 @@ function AppsMenuRow({ app, onDone }: { app: LauncherApp; onDone: () => void }) 
           onClick={onDone}
           aria-label={`Open ${app.label} from the start`}
           title={`Open ${app.label} from the start`}
-          className="grid w-9 shrink-0 place-items-center text-[#4a4a54] hover:text-foreground dark:text-muted-foreground"
+          className="grid w-9 shrink-0 place-items-center text-muted-foreground hover:text-foreground"
         >
           <RotateCcwIcon className="size-3.5" aria-hidden />
         </Link>
@@ -396,7 +401,7 @@ function ForgetPlacesRow({ onDone }: { onDone: () => void }) {
             forgetAll()
             onDone()
           }}
-          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-[#4a4a54] hover:bg-muted hover:text-foreground dark:text-muted-foreground"
+          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <RotateCcwIcon className="size-3.5" aria-hidden />
           Start every app from the beginning
@@ -449,7 +454,7 @@ export function AppLauncher({
     <div className="relative mx-auto w-full px-[clamp(0.75rem,2vw,2.5rem)] pb-16 pt-8 sm:pt-12 lg:pt-14">
       <div className="mb-8 text-center sm:mb-10">
         <p
-          className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-[#4a4a54] dark:text-muted-foreground"
+          className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
           style={{ animation: 'launcher-fade 480ms ease both' }}
         >
           {eyebrow}
@@ -461,7 +466,7 @@ export function AppLauncher({
           {title}
         </h1>
         <p
-          className="mx-auto mt-2 max-w-md text-sm text-[#4a4a54] dark:text-muted-foreground"
+          className="mx-auto mt-2 max-w-md text-sm text-muted-foreground"
           style={{ animation: 'launcher-fade 640ms ease both' }}
         >
           {subtitle}
@@ -615,11 +620,11 @@ function AppTile({ app }: { app: LauncherTile }) {
         </span>
       )}
       <span className="max-w-[7rem] text-center">
-        <span className="block text-[0.8125rem] font-semibold leading-snug text-[#141418] dark:text-foreground transition-colors group-hover:text-black dark:group-hover:text-white">
+        <span className="block text-[0.8125rem] font-semibold leading-snug text-foreground transition-colors group-hover:text-foreground">
           {app.label}
         </span>
         {app.blurb ? (
-          <span className="mt-0.5 hidden text-[0.6875rem] font-medium leading-snug text-[#4a4a54] dark:text-muted-foreground sm:block">
+          <span className="mt-0.5 hidden text-[0.6875rem] font-medium leading-snug text-muted-foreground sm:block">
             {app.blurb}
           </span>
         ) : null}

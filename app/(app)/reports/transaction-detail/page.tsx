@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { ScrollTextIcon } from 'lucide-react'
 import type { JournalSourceType } from '@prisma/client'
 
+import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { EmptyState } from '@/components/data/empty-state'
 import { InteractiveGrid, type InteractiveColumn, type InteractiveRow } from '@/components/data/interactive-grid'
 import { PageHeader } from '@/components/data/page-header'
@@ -60,6 +61,7 @@ export default async function TransactionDetailPage({
     return (
       <>
         <PageHeader
+          organization={ctx.organization}
           title="Transaction Detail by Account"
           description="Every transaction that touched one account, with the document behind each."
         />
@@ -145,12 +147,16 @@ export default async function TransactionDetailPage({
     }
   }
   const splitList = [...splitAccounts.values()].sort((a, b) => a.code.localeCompare(b.code))
+  // One Account column on the main line (like the register). Per-account split
+  // amount columns stay available under Customize — showing them all at once
+  // was what scrambled Date / Type / Debit into an unreadable mash.
   const columns: InteractiveColumn[] = [
     { id: 'date', label: 'Date', kind: 'datetime', defaultWidth: 188 },
     { id: 'type', label: 'Type', defaultWidth: 148 },
     { id: 'number', label: 'Number', defaultWidth: 132 },
     { id: 'name', label: 'Name', defaultWidth: 168 },
     { id: 'memo', label: 'Memo', defaultWidth: 220 },
+    { id: 'account', label: 'Account', defaultWidth: 200 },
     ...splitList.map((split) => ({
       id: `split:${split.code}`,
       label: split.name,
@@ -162,12 +168,19 @@ export default async function TransactionDetailPage({
     { id: 'credit', label: 'Credit', kind: 'money', total: true, defaultWidth: 120 },
     { id: 'balance', label: 'Balance', kind: 'money', total: false, defaultWidth: 136 },
   ]
+  const defaultHidden = splitList.map((split) => `split:${split.code}`)
 
   return (
     <>
 
       <PageHeader
-        title="Transaction Detail by Account"
+        organization={ctx.organization}
+        title={
+          <span className="inline-flex items-center gap-2">
+            <AccountTypeIcon type={account.type} />
+            <span>Transaction Detail by Account</span>
+          </span>
+        }
         description={`${account.code} · ${account.name} — ${ACCOUNT_TYPE_LABELS[account.type]} · ${
           ACCOUNT_SUBTYPE_LABELS[account.subtype]
         } · ${debitNormal ? 'debit' : 'credit'} balance`}
@@ -213,7 +226,7 @@ export default async function TransactionDetailPage({
         />
       ) : (
         <InteractiveGrid
-          storageKey={`bp-txn-detail-${accountId}`}
+          storageKey={`bp-txn-detail-v3-${accountId}`}
           columns={columns}
           rows={ledger.entries.map((entry): InteractiveRow => {
             const source = sourceFor(sources, {
@@ -254,6 +267,7 @@ export default async function TransactionDetailPage({
               },
               name: parts.name ? { value: parts.name, href: nameHref } : { value: null },
               memo: { value: parts.note },
+              account: { value: entry.contraAccounts || null },
               debit: { value: entry.debit.isZero() ? null : entry.debit.toString() },
               credit: { value: entry.credit.isZero() ? null : entry.credit.toString() },
               balance: { value: entry.balance.toString() },
@@ -266,6 +280,7 @@ export default async function TransactionDetailPage({
           })}
           currency={currency}
           timeZone={ctx.organization.timeZone}
+          defaultHidden={defaultHidden}
           customizable
           totalLabel="Total"
           footers={[

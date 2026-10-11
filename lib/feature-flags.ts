@@ -12,16 +12,22 @@ export type ModuleFlag =
   | 'reports'
 
 /** Creator credit shown on shell and sign-in when enabled. */
-export const CREATOR_BRAND_NAME = 'Abdisalm Hero'
+export const CREATOR_BRAND_NAME = 'Abdisalam Abdullahi Mohamed'
 
 export type OrgFeatureFlags = {
   /** Show Delete on journals (list + detail) and allow journal:reverse delete path. */
   allowJournalDelete: boolean
-  /** Show Delete on customers and vendors (archives them; books stay reconstructible). */
-  allowContactDelete: boolean
+  /** Show Delete / Merge on customers (also needs customer:delete on the user). */
+  allowCustomerDelete: boolean
+  /** Show Delete / Merge on vendors (also needs vendor:delete on the user). */
+  allowVendorDelete: boolean
+  /** Show Delete / Merge on items (also needs item:delete on the user). */
+  allowItemDelete: boolean
+  /** Show Delete / Merge on chart accounts (also needs account:delete on the user). */
+  allowAccountDelete: boolean
   /** Show Delete on sales/purchase documents, payments, banking, inventory adjustments. */
   allowDocumentDelete: boolean
-  /** Show the creator brand name (Abdisalm Hero) on shell footer and sign-in. */
+  /** Show the creator credit on the shell footer and sign-in. */
   showCreatorBrand: boolean
   /** Apps visible in the launcher / header when enabled. */
   modules: Record<ModuleFlag, boolean>
@@ -29,7 +35,10 @@ export type OrgFeatureFlags = {
 
 export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   allowJournalDelete: true,
-  allowContactDelete: true,
+  allowCustomerDelete: true,
+  allowVendorDelete: true,
+  allowItemDelete: true,
+  allowAccountDelete: true,
   allowDocumentDelete: true,
   showCreatorBrand: true,
   modules: {
@@ -63,6 +72,8 @@ export const MODULE_KEY_TO_FLAG: Record<string, ModuleFlag | null> = {
   stores: 'inventory',
   journals: 'accounting',
   periods: 'accounting',
+  calendar: null,
+  databases: null,
 }
 
 export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
@@ -71,9 +82,18 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
   const data = raw as Record<string, unknown>
 
   if (typeof data.allowJournalDelete === 'boolean') base.allowJournalDelete = data.allowJournalDelete
-  if (typeof data.allowContactDelete === 'boolean') base.allowContactDelete = data.allowContactDelete
   if (typeof data.allowDocumentDelete === 'boolean') base.allowDocumentDelete = data.allowDocumentDelete
   if (typeof data.showCreatorBrand === 'boolean') base.showCreatorBrand = data.showCreatorBrand
+
+  // Legacy single switch → both contact sides until the new keys are saved.
+  if (typeof data.allowContactDelete === 'boolean') {
+    base.allowCustomerDelete = data.allowContactDelete
+    base.allowVendorDelete = data.allowContactDelete
+  }
+  if (typeof data.allowCustomerDelete === 'boolean') base.allowCustomerDelete = data.allowCustomerDelete
+  if (typeof data.allowVendorDelete === 'boolean') base.allowVendorDelete = data.allowVendorDelete
+  if (typeof data.allowItemDelete === 'boolean') base.allowItemDelete = data.allowItemDelete
+  if (typeof data.allowAccountDelete === 'boolean') base.allowAccountDelete = data.allowAccountDelete
 
   if (data.modules && typeof data.modules === 'object') {
     const modules = data.modules as Record<string, unknown>

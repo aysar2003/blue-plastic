@@ -18,12 +18,14 @@ export function SignedMoney({
   currency,
   className,
   emphasis = true,
+  title,
 }: {
   amount: Decimal | string | number
   currency: string
   className?: string
   /** Off where the whole column is signed and the weight would be noise. */
   emphasis?: boolean
+  title?: string
 }) {
   const value = amount instanceof Decimal ? amount : new Decimal(amount)
   const positive = value.greaterThan(0)
@@ -31,6 +33,7 @@ export function SignedMoney({
 
   return (
     <span
+      title={title}
       className={cn(
         'tabular',
         emphasis && (positive || negative) && 'font-semibold',

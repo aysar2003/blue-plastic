@@ -17,6 +17,8 @@ type Props = { params: Promise<{ registerId: string }> }
 export default async function PosRegisterPage({ params }: Props) {
   const { registerId } = await params
   const ctx = await requireOrgContext('pos:sell')
+  if (!(await posService.mayUseRegister(ctx, registerId))) redirect('/pos')
+
   const session = await posService.openSessionForRegister(ctx, registerId)
   if (!session) redirect(`/pos?open=${registerId}`)
 

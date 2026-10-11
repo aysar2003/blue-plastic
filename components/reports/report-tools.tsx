@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
+import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Columns3Icon, SearchIcon } from 'lucide-react'
 
+import { FontToolbarControls } from '@/components/appearance/font-controls'
 import { Input } from '@/components/ui/input'
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
+import { parseReportStyle, REPORT_STYLE_KEY, REPORT_STYLES } from '@/lib/report-styles'
 
 const storageKey = (path: string) => `bpc.reportCols:${path}`
 const splitKey = (path: string) => `bpc.reportSplits:${path}`
@@ -48,6 +51,9 @@ export function ReportTools() {
   const hiddenRaw = useBrowserStore(storageKey(pathname))
   const splitRaw = useBrowserStore(splitKey(pathname))
   const savedTemplate = useBrowserStore(templateKey)
+  const savedStyle = useBrowserStore(REPORT_STYLE_KEY)
+  const reportStyle = parseReportStyle(savedStyle)
+  const styleLabel = REPORT_STYLES.find((item) => item.id === reportStyle)?.label ?? 'SOM ERP'
   const hidden = useMemo(() => parseList(hiddenRaw), [hiddenRaw])
   // No saved choice means every split account is on. A stored list, even an
   // empty one, is a choice the person already made.
@@ -186,20 +192,30 @@ export function ReportTools() {
           Showing {match.shown} of {match.total}
         </p>
       ) : null}
-      <div className="ml-auto flex flex-wrap items-center gap-1" role="group" aria-label="Report template">
-        {TEMPLATES.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            aria-pressed={template === item.id}
-            onClick={() => writeBrowserStore(templateKey, item.id)}
-            className={`rounded-md px-2.5 py-1 text-sm ${
-              template === item.id ? 'bg-secondary font-medium' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <Link
+          href="/settings/appearance"
+          className="rounded-md px-2 py-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          title="Change colours and fonts in Settings → Appearance"
+        >
+          Style · {styleLabel}
+        </Link>
+        <FontToolbarControls />
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Report template">
+          {TEMPLATES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={template === item.id}
+              onClick={() => writeBrowserStore(templateKey, item.id)}
+              className={`rounded-md px-2.5 py-1 text-sm ${
+                template === item.id ? 'bg-secondary font-medium' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
       <details className="relative">
         <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm">

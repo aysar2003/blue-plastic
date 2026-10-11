@@ -24,6 +24,8 @@ export type PosOpenOrder = {
   cart: PosOpenCartLine[]
   customerId: string | null
   note: string
+  /** When the ticket was opened. Missing on tickets saved before this field existed. */
+  openedAt?: string
 }
 
 export type PosOrderBook = {
@@ -161,7 +163,50 @@ function dropOrder(book: PosOrderBook, id: string): PosOrderBook {
 }
 
 function blankOrder(id: string, kind: PosOpenOrder['kind'], label: string): PosOpenOrder {
-  return { id, kind, label, cart: [], customerId: null, note: '' }
+  return { id, kind, label, cart: [], customerId: null, note: '', openedAt: new Date().toISOString() }
+}
+
+/** What the ticket would ring up, before payment. */
+export function posOrderAmount(order: PosOpenOrder): number {
+  return order.cart.reduce((sum, line) => sum + (Number(line.price) || 0) * line.quantity, 0)
+}
+
+/**
+ * Tracking code under the order number, in the same shape as an Odoo
+ * reference (`262-1-000001`): a stable session prefix, then the order number.
+ */
+export function posOrderReference(sessionId: string, label: string): string {
+  let hash = 0
+  for (let i = 0; i < sessionId.length; i++) {
+    hash = (Math.imul(hash, 33) + sessionId.charCodeAt(i)) >>> 0
+  }
+  const config = String((hash % 900) + 100)
+  const digits = label.replace(/\D/g, '')
+  const seq = (digits || '0').padStart(6, '0').slice(-6)
+  return `${config}-1-${seq}`
+}
+
+/** Date and clock for the orders list. Today stays the word "Today". */
+export function posOrderWhen(openedAt: string | undefined, now: Date): { day: string; time: string } {
+  if (!openedAt) return { day: 'Today', time: '' }
+  const at = new Date(openedAt)
+  if (Number.isNaN(at.getTime())) return { day: 'Today', time: '' }
+  const sameDay =
+    at.getFullYear() === now.getFullYear() &&
+    at.getMonth() === now.getMonth() &&
+    at.getDate() === now.getDate()
+  const day = sameDay
+    ? 'Today'
+    : `${String(at.getMonth() + 1).padStart(2, '0')}/${String(at.getDate()).padStart(2, '0')}/${at.getFullYear()}`
+  const time = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+    .format(at)
+    .replace(/\s+/g, '')
+    .toLowerCase()
+  return { day, time }
 }
 
 function formatOrderNumber(n: number) {
@@ -221,7 +266,15 @@ function parseOrder(value: unknown): PosOpenOrder | null {
     return null
   }
   if (typeof note !== 'string' || note.length > 500) return null
-  return { id, kind, label, cart: lines, customerId, note }
+  const openedAt = parseOpenedAt(value.openedAt)
+  return { id, kind, label, cart: lines, customerId, note, ...(openedAt ? { openedAt } : {}) }
+}
+
+function parseOpenedAt(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 40) return undefined
+  const time = Date.parse(value)
+  if (Number.isNaN(time)) return undefined
+  return new Date(time).toISOString()
 }
 
 function parseBook(value: unknown): PosOrderBook | null {

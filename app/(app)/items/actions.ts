@@ -8,8 +8,10 @@ import { z } from 'zod'
 import { cuid, deleteRecordSchema } from '@/lib/validation/common'
 import { bulkSetActiveSchema, csvImportSchema, itemSchema } from '@/lib/validation/master-data'
 import { action } from '@/server/action'
+import { assertItemDeleteAllowed } from '@/server/feature-guards'
 import { importItems } from '@/server/services/import.service'
 import * as itemService from '@/server/services/item.service'
+import * as lifecycle from '@/server/services/master-data-lifecycle'
 
 export const createItem = action
   .requires('item:create')
@@ -86,20 +88,31 @@ export const addStandardCategories = action
   })
 
 /**
- * Delete an item.
- *
- * Guarded by `item:archive` rather than a new permission: whoever may take an
- * item out of circulation may delete one.
+ * Hard-delete an unused item. Items with document or stock history must be
+ * merged into another item instead.
  */
 export const deleteItem = action
-  .requires('item:archive')
+  .requires('item:delete')
   .input(deleteRecordSchema)
   .handler(async (ctx, input) => {
-    const result = await itemService.remove(ctx, input.id, input.reason)
+    assertItemDeleteAllowed(ctx)
+    const result = await lifecycle.purgeItem(ctx, input.id)
     revalidatePath('/items')
     revalidatePath('/inventory/stock')
     revalidatePath('/reports')
     return { id: result.id, number: result.name }
+  })
+
+export const mergeItems = action
+  .requires('item:delete')
+  .input(z.object({ keepId: cuid, absorbId: cuid }))
+  .handler(async (ctx, input) => {
+    assertItemDeleteAllowed(ctx)
+    const result = await lifecycle.mergeItems(ctx, input)
+    revalidatePath('/items')
+    revalidatePath('/inventory')
+    revalidatePath('/inventory/stock')
+    return result
   })
 
 export async function createItemForm(_prev: FormState, formData: FormData): Promise<FormState> {

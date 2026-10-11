@@ -13,8 +13,38 @@ export function assertDocumentDeleteAllowed(ctx: OrgContext) {
   }
 }
 
-export function assertContactDeleteAllowed(ctx: OrgContext) {
-  if (!ctx.features.allowContactDelete) {
-    throw precondition('Contact delete is turned off in Settings → Configuration.')
+export function assertJournalDeleteAllowed(ctx: OrgContext) {
+  if (!ctx.features.allowJournalDelete) {
+    throw precondition('Journal delete is turned off in Settings → Configuration.')
   }
+}
+
+export function assertCustomerDeleteAllowed(ctx: OrgContext) {
+  if (!ctx.features.allowCustomerDelete) {
+    throw precondition('Customer delete is turned off in Settings → Configuration.')
+  }
+}
+
+export function assertVendorDeleteAllowed(ctx: OrgContext) {
+  if (!ctx.features.allowVendorDelete) {
+    throw precondition('Vendor delete is turned off in Settings → Configuration.')
+  }
+}
+
+export function assertItemDeleteAllowed(ctx: OrgContext) {
+  if (!ctx.features.allowItemDelete) {
+    throw precondition('Item delete is turned off in Settings → Configuration.')
+  }
+}
+
+export function assertAccountDeleteAllowed(ctx: OrgContext) {
+  if (!ctx.features.allowAccountDelete) {
+    throw precondition('Account delete is turned off in Settings → Configuration.')
+  }
+}
+
+/** @deprecated Prefer assertCustomerDeleteAllowed / assertVendorDeleteAllowed. */
+export function assertContactDeleteAllowed(ctx: OrgContext) {
+  assertCustomerDeleteAllowed(ctx)
+  assertVendorDeleteAllowed(ctx)
 }

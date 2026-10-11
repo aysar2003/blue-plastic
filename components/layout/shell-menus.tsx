@@ -26,8 +26,8 @@ const GEAR = [
   { href: '/settings/tax', label: 'Tax' },
   { href: '/settings/users', label: 'Users' },
   { href: '/settings/appearance', label: 'Appearance' },
-  { href: '/settings/backup', label: 'Backup' },
-  { href: '/settings/activity', label: 'Activity log' },
+  { href: '/databases', label: 'Databases' },
+  { href: '/settings/activity', label: 'Trash' },
 ]
 
 export function ShellMenus() {

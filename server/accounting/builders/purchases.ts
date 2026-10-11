@@ -22,6 +22,19 @@ export type PurchaseJournalInput = {
   payableAccountId: string
   /** Bank or credit card, for a purchase paid at once. */
   paymentAccountId?: string | null
+  /**
+   * Settle the expense against this customer's receivable instead of cash.
+   * Credits AR for the full total when set alone; when a payment account is also
+   * set, AR takes the offset amount and the bank takes the rest.
+   */
+  offsetCustomerId?: string | null
+  /** Receivables control account — required when offsetCustomerId is set. */
+  receivableAccountId?: string | null
+  /**
+   * How much of the total to credit to the customer. Defaults to the full total
+   * when an offset customer is named and no separate amount is given.
+   */
+  customerOffsetAmount?: Decimal | null
   /** Where a line lands when nothing else says. */
   fallbackExpenseAccountId: string
   memo?: string | null
@@ -72,11 +85,18 @@ export function buildBillJournal(input: PurchaseJournalInput): DraftJournal {
  *   Dr Expense / Asset (per line)   net
  *   Dr Tax recoverable              tax
  *     Cr Bank / Credit card           total
+ *
+ * Or settled against a customer who owes you (buy from their shop / pay a cost
+ * by deducting their balance). Anything above what they owed leaves a credit on
+ * their account:
+ *
+ *   Dr Expense / Asset / Tax        total
+ *     Cr Accounts Receivable          total   (carrying the customer)
+ *
+ * Part bank and part customer is allowed when both are named.
  */
 export function buildExpenseJournal(input: PurchaseJournalInput): DraftJournal {
-  if (!input.paymentAccountId) {
-    throw new Error('An expense must say which account it was paid from.')
-  }
+  const credits = expensePaymentCredits(input)
 
   return {
     date: input.date,
@@ -87,13 +107,71 @@ export function buildExpenseJournal(input: PurchaseJournalInput): DraftJournal {
       ...expenseLines(input, 'debit'),
       ...stockLines(input, 'debit'),
       ...taxLines(input, 'debit'),
-      {
-        accountId: input.paymentAccountId,
-        credit: input.priced.total,
-        description: `Expense ${input.number}`,
-      },
+      ...credits,
     ],
   }
+}
+
+/** How an expense is settled: bank, customer receivable, or a split of both. */
+function expensePaymentCredits(input: PurchaseJournalInput): DraftLine[] {
+  const total = input.priced.total
+  const customerId = input.offsetCustomerId ?? null
+  const hasCustomer = Boolean(customerId)
+  const hasBank = Boolean(input.paymentAccountId)
+
+  if (!hasCustomer && !hasBank) {
+    throw new Error('An expense must say which account it was paid from, or which customer balance settles it.')
+  }
+
+  if (hasCustomer) {
+    if (!input.receivableAccountId) {
+      throw new Error('A customer-settled expense needs the receivables account.')
+    }
+
+    let offset = input.customerOffsetAmount ?? total
+    if (offset.isNegative()) {
+      throw new Error('The customer offset cannot be negative.')
+    }
+    if (offset.greaterThan(total)) {
+      throw new Error('The customer offset cannot be more than the expense total.')
+    }
+    // Customer alone always takes the whole bill.
+    if (!hasBank) offset = total
+
+    const bankPortion = total.minus(offset)
+    if (hasBank && bankPortion.isPositive() && !input.paymentAccountId) {
+      throw new Error('An expense must say which account it was paid from.')
+    }
+
+    const lines: DraftLine[] = []
+    if (offset.isPositive()) {
+      lines.push({
+        accountId: input.receivableAccountId,
+        credit: offset,
+        customerId: customerId!,
+        description: `Expense ${input.number}`,
+      })
+    }
+    if (bankPortion.isPositive() && input.paymentAccountId) {
+      lines.push({
+        accountId: input.paymentAccountId,
+        credit: bankPortion,
+        description: `Expense ${input.number}`,
+      })
+    }
+    if (lines.length === 0) {
+      throw new Error('An expense must say which account it was paid from, or which customer balance settles it.')
+    }
+    return lines
+  }
+
+  return [
+    {
+      accountId: input.paymentAccountId!,
+      credit: total,
+      description: `Expense ${input.number}`,
+    },
+  ]
 }
 
 /**

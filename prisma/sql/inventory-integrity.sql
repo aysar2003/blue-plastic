@@ -27,6 +27,10 @@ ALTER TABLE inventory_transactions
 CREATE OR REPLACE FUNCTION forbid_inventory_movement_change() RETURNS trigger AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
+    -- Company wipe / restore: the whole organisation is being removed.
+    IF current_setting('app.allow_company_wipe', true) = 'on' THEN
+      RETURN OLD;
+    END IF;
     RAISE EXCEPTION
       'Stock movements cannot be deleted. Record an adjustment instead.'
       USING ERRCODE = 'check_violation';

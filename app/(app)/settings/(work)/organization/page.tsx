@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { requireOrgContext } from '@/server/auth/context'
 import * as organizationService from '@/server/services/organization.service'
 import { AccountingForm } from './accounting-form'
+import { BrandingForm } from './branding-form'
 import { OrganizationForm } from './organization-form'
 
 export const metadata: Metadata = { title: 'Organisation' }
@@ -14,6 +15,15 @@ export default async function OrganizationSettingsPage() {
 
   return (
     <div className="space-y-6">
+      <BrandingForm
+        branding={{
+          name: organization.name,
+          brandMark: organization.brandMark,
+          hasLogo: Boolean(organization.logoStorageKey),
+          updatedAt: organization.updatedAt,
+        }}
+        canEdit={canEdit}
+      />
       <OrganizationForm organization={organization} canEdit={canEdit} />
       <AccountingForm
         baseCurrency={organization.baseCurrency}

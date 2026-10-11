@@ -109,6 +109,10 @@ CREATE OR REPLACE FUNCTION forbid_completed_entry_change() RETURNS trigger AS $$
 DECLARE
   v_status text;
 BEGIN
+  IF TG_OP = 'DELETE' AND current_setting('app.allow_company_wipe', true) = 'on' THEN
+    RETURN OLD;
+  END IF;
+
   SELECT status::text INTO v_status
     FROM bank_reconciliations
    WHERE id = COALESCE(NEW."reconciliationId", OLD."reconciliationId");

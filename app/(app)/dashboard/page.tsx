@@ -9,10 +9,7 @@ import * as workspace from '@/server/services/workspace.service'
 
 export const metadata: Metadata = { title: 'Apps' }
 
-/**
- * Home is the app launcher. The month's money figures live on the Accounting
- * overview, so this page stays a grid of apps.
- */
+/** Home is the app launcher. Company databases live in the Databases app. */
 export default async function DashboardPage() {
   const ctx = await requireOrgContext()
   const apps = appsForPermissions(ctx.permissions).filter((app) => isModuleEnabled(ctx.features, app.key))

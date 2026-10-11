@@ -4,7 +4,8 @@ import { useActionState } from 'react'
 
 import { updateFeatureFlagsForm } from '@/app/(app)/settings/(work)/organization/actions'
 import { idleState } from '@/components/forms/action-state'
-import type { OrgFeatureFlags } from '@/lib/feature-flags'
+import { CREATOR_BRAND_NAME, type OrgFeatureFlags } from '@/lib/feature-flags'
+import { PRODUCT_NAME } from '@/lib/product-brand'
 
 function Toggle({
   name,
@@ -52,26 +53,46 @@ export function FeaturesForm({ flags }: { flags: OrgFeatureFlags }) {
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Delete</h3>
         <p className="text-xs text-muted-foreground">
-          When off, Delete is hidden and the server refuses it.
+          Organisation switches — when off, Delete is hidden and the server refuses it.
+          Who may use each switch is set per user under Settings → Users (only the owner
+          has master-data delete by default).
         </p>
         <div className="grid gap-2 sm:grid-cols-1">
           <Toggle
-            name="allowJournalDelete"
-            label="Delete journal entries"
-            hint="Every journal — list and detail — can be deleted when on."
-            defaultChecked={flags.allowJournalDelete}
+            name="allowCustomerDelete"
+            label="Delete / merge customers"
+            hint="Unused customers can be removed; those with history are merged."
+            defaultChecked={flags.allowCustomerDelete}
           />
           <Toggle
-            name="allowContactDelete"
-            label="Delete customers and vendors"
-            hint="Removes them from active lists (archive). Open balances must be cleared first."
-            defaultChecked={flags.allowContactDelete}
+            name="allowVendorDelete"
+            label="Delete / merge vendors"
+            hint="Unused vendors can be removed; those with history are merged."
+            defaultChecked={flags.allowVendorDelete}
+          />
+          <Toggle
+            name="allowItemDelete"
+            label="Delete / merge items"
+            hint="Unused items can be removed; those on documents are merged."
+            defaultChecked={flags.allowItemDelete}
+          />
+          <Toggle
+            name="allowAccountDelete"
+            label="Delete / merge chart accounts"
+            hint="Unused accounts can be removed; linked accounts are merged."
+            defaultChecked={flags.allowAccountDelete}
           />
           <Toggle
             name="allowDocumentDelete"
             label="Delete documents and payments"
             hint="Invoices, bills, receipts, transfers, deposits, stock adjustments."
             defaultChecked={flags.allowDocumentDelete}
+          />
+          <Toggle
+            name="allowJournalDelete"
+            label="Delete journal entries"
+            hint="Every journal — list and detail — can be deleted when on."
+            defaultChecked={flags.allowJournalDelete}
           />
         </div>
       </section>
@@ -83,8 +104,8 @@ export function FeaturesForm({ flags }: { flags: OrgFeatureFlags }) {
         </p>
         <Toggle
           name="showCreatorBrand"
-          label="Show Abdisalm Hero"
-          hint="When on, the creator name appears next to HeroBooks on the shell footer and sign-in."
+          label={`Show ${CREATOR_BRAND_NAME}`}
+          hint={`When on, “Developed by ${CREATOR_BRAND_NAME}” appears next to ${PRODUCT_NAME} on the shell footer and sign-in.`}
           defaultChecked={flags.showCreatorBrand}
         />
       </section>

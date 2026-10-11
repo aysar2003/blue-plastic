@@ -132,6 +132,14 @@ export const DEFAULT_CHART: SeedAccount[] = [
     description: 'Contra-revenue. Carries a debit balance.',
   },
   { code: '4950', name: 'Other Income', type: 'REVENUE', subtype: 'OTHER_INCOME' },
+  {
+    code: '4960',
+    name: 'Cash Over (POS)',
+    type: 'REVENUE',
+    subtype: 'OTHER_INCOME',
+    systemKey: 'POS_CASH_OVER',
+    description: 'Drawer cash counted above expected when a POS session closes.',
+  },
 
   // --- Cost of goods sold -------------------------------------------------
   {
@@ -163,6 +171,14 @@ export const DEFAULT_CHART: SeedAccount[] = [
   { code: '6700', name: 'Professional Fees', type: 'EXPENSE', subtype: 'OPERATING_EXPENSE' },
   { code: '6800', name: 'Bank Charges', type: 'EXPENSE', subtype: 'OPERATING_EXPENSE' },
   { code: '6900', name: 'Bad Debt Expense', type: 'EXPENSE', subtype: 'OPERATING_EXPENSE' },
+  {
+    code: '6910',
+    name: 'Cash Short (POS)',
+    type: 'EXPENSE',
+    subtype: 'OPERATING_EXPENSE',
+    systemKey: 'POS_CASH_SHORT',
+    description: 'Drawer cash counted below expected when a POS session closes.',
+  },
   {
     code: '6950',
     name: 'Uncategorised Expense',

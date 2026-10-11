@@ -1,21 +1,26 @@
-import { letterheadOf, type LetterheadSource } from '@/lib/letterhead'
+import type { ReactNode } from 'react'
+
+import { ReportSheetHeader, type ReportSheetOrganization } from '@/components/reports/report-sheet-header'
 import { cn } from '@/lib/utils'
 
 /** Company name, address, phone, and email. Prints with the page. */
 export function CompanyLetterhead({
   organization,
+  title,
+  subtitle,
   className,
 }: {
-  organization: LetterheadSource
+  organization: ReportSheetOrganization
+  title?: ReactNode
+  subtitle?: string | null
   className?: string
 }) {
-  const block = letterheadOf(organization)
   return (
-    <div className={cn('text-sm', className)}>
-      <p className="text-base font-semibold">{block.name}</p>
-      {block.address ? <p className="text-muted-foreground">{block.address}</p> : null}
-      {block.phone ? <p className="text-muted-foreground">Phone {block.phone}</p> : null}
-      {block.email ? <p className="text-muted-foreground">Email {block.email}</p> : null}
-    </div>
+    <ReportSheetHeader
+      organization={organization}
+      title={title}
+      subtitle={subtitle}
+      className={cn(className)}
+    />
   )
 }

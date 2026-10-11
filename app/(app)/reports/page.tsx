@@ -20,6 +20,7 @@ import { formatDate, today } from '@/lib/date'
 import { resolvePeriod } from '@/lib/report-periods'
 import { requireOrgContext } from '@/server/auth/context'
 import { profitAndLoss } from '@/server/reports/statements'
+import { canViewGroupReports } from '@/server/services/company-group.service'
 
 export const metadata: Metadata = { title: 'Reports' }
 
@@ -30,6 +31,7 @@ export const metadata: Metadata = { title: 'Reports' }
 export default async function ReportsIndexPage() {
   const ctx = await requireOrgContext('report:read')
   const showOverview = canViewBusinessOverview(ctx.permissions)
+  const showGroupReports = await canViewGroupReports(ctx)
   const now = today(ctx.organization.timeZone)
   const month = resolvePeriod('this-month', now, ctx.organization.fiscalYearStartMonth)
   const report = await profitAndLoss(ctx.orgId, { ...month, basis: 'accrual' })
@@ -38,6 +40,11 @@ export default async function ReportsIndexPage() {
   return (
     <>
       <div className="mb-3 flex flex-wrap items-center justify-end gap-4 print:hidden">
+        {showGroupReports ? (
+          <Link href="/reports/companies" className="mr-auto text-sm font-medium text-primary underline-offset-4 hover:underline">
+            {ctx.isSystemOwner ? 'All companies' : 'Company group'}
+          </Link>
+        ) : null}
         <GiveFeedback />
         <CreateReportMenu permissions={[...ctx.permissions]} />
       </div>

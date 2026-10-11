@@ -5,7 +5,7 @@ import { PencilIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
-import { ConvertEstimateButton } from '@/components/sales/document-actions'
+import { ConvertSalesDocumentActions } from '@/components/sales/document-actions'
 import { DeleteButton } from '@/components/data/delete-record'
 import { DocumentActions } from '@/components/print/document-actions'
 import { Badge } from '@/components/ui/badge'
@@ -14,10 +14,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
-import { bySlug, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
+import { bySlug, byType, isSalesOrder, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { trailFor } from '@/server/services/audit.service'
+import { loadDepositAccounts } from '@/server/services/sales-options'
 import * as salesService from '@/server/services/sales.service'
 
 export const metadata: Metadata = { title: 'Document' }
@@ -34,7 +35,16 @@ export default async function SalesDocumentPage({
   const ctx = await requireOrgContext('invoice:read')
   const document = await salesService.get(ctx, id).catch(() => null)
   if (!document || document.type !== config.type) notFound()
-  const [trail, deliveryNote] = await Promise.all([
+  const canConvert =
+    (config.type === 'ESTIMATE' ||
+      config.type === 'QUOTATION' ||
+      isSalesOrder(config.type)) &&
+    ctx.permissions.has('invoice:create') &&
+    !document.convertedTo &&
+    document.status !== 'VOID' &&
+    document.status !== 'DECLINED' &&
+    document.status !== 'CLOSED'
+  const [trail, deliveryNote, depositAccounts] = await Promise.all([
     trailFor(ctx, document.id),
     config.type === 'INVOICE' || config.type === 'SALES_RECEIPT'
       ? db.deliveryNote.findFirst({
@@ -42,6 +52,7 @@ export default async function SalesDocumentPage({
           select: { id: true, number: true },
         })
       : Promise.resolve(null),
+    canConvert ? loadDepositAccounts(ctx) : Promise.resolve([]),
   ])
 
   const currency = ctx.organization.baseCurrency
@@ -53,13 +64,11 @@ export default async function SalesDocumentPage({
   // neither can one with money already applied to it — the payment would have to
   // be unpicked first. Better to hide the button than to explain the refusal.
   const applied = document.applications.length > 0
-  const canEdit = ctx.permissions.has('invoice:update') && document.status !== 'VOID' && !applied
-  const canConvert =
-    (config.type === 'ESTIMATE' || config.type === 'QUOTATION') &&
-    ctx.permissions.has('invoice:create') &&
-    !document.convertedTo &&
+  const canEdit =
+    ctx.permissions.has('invoice:update') &&
     document.status !== 'VOID' &&
-    document.status !== 'DECLINED'
+    document.status !== 'CLOSED' &&
+    !applied
 
   const shareBody = [
     `${config.singular} ${document.number}`,
@@ -105,10 +114,12 @@ export default async function SalesDocumentPage({
               </Link>
             ) : null}
             {canConvert ? (
-              <ConvertEstimateButton
+              <ConvertSalesDocumentActions
                 id={id}
                 number={document.number}
+                sourceType={config.type as 'ESTIMATE' | 'QUOTATION' | 'SALES_ORDER'}
                 today={today(ctx.organization.timeZone)}
+                depositAccounts={depositAccounts}
               />
             ) : null}
             {canEdit ? (
@@ -178,9 +189,24 @@ export default async function SalesDocumentPage({
 
       {document.convertedTo ? (
         <div className="mb-4 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-          Became invoice{' '}
-          <Link href={`/sales/invoices/${document.convertedTo.id}`} className="font-medium underline underline-offset-4">
+          Became {byType(document.convertedTo.type).singular.toLowerCase()}{' '}
+          <Link
+            href={`/sales/${byType(document.convertedTo.type).slug}/${document.convertedTo.id}`}
+            className="font-medium underline underline-offset-4"
+          >
             {document.convertedTo.number}
+          </Link>
+          .
+        </div>
+      ) : null}
+      {document.convertedFrom ? (
+        <div className="mb-4 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          Created from {byType(document.convertedFrom.type).singular.toLowerCase()}{' '}
+          <Link
+            href={`/sales/${byType(document.convertedFrom.type).slug}/${document.convertedFrom.id}`}
+            className="font-medium underline underline-offset-4"
+          >
+            {document.convertedFrom.number}
           </Link>
           .
         </div>

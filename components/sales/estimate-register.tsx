@@ -9,7 +9,7 @@ import { EnteredByToggle } from '@/components/data/entered-by-toggle'
 import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { SearchInput } from '@/components/data/search-input'
 import { SortableHeader, type SortState } from '@/components/data/sortable-header'
-import { ConvertEstimateButton } from '@/components/sales/document-actions'
+import { ConvertSalesDocumentActions } from '@/components/sales/document-actions'
 import { CustomerFilter } from '@/components/sales/customer-filter'
 import {
   DropdownMenu,
@@ -19,7 +19,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { AccountPickerOption } from '@/lib/account-options'
 import { listHref } from '@/lib/list-filters'
+import type { SalesDocumentType } from '@prisma/client'
 
 export type EstimateRegisterRow = {
   id: string
@@ -52,6 +54,8 @@ export function EstimateRegister({
   date,
   canCreate,
   convertToday,
+  depositAccounts,
+  sourceType,
   total,
   singular = 'Estimate',
   plural = 'Estimates',
@@ -68,6 +72,8 @@ export function EstimateRegister({
   date: string
   canCreate: boolean
   convertToday: string
+  depositAccounts: AccountPickerOption[]
+  sourceType: Extract<SalesDocumentType, 'ESTIMATE' | 'QUOTATION'>
   page?: number
   pageCount?: number
   total: number
@@ -229,7 +235,7 @@ export function EstimateRegister({
                 <TableHead data-column="entered-by" className="w-44">
                   Entered by
                 </TableHead>
-                <TableHead className="w-48 print:hidden">Action</TableHead>
+                <TableHead className="w-72 print:hidden">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -260,12 +266,14 @@ export function EstimateRegister({
                         View/Edit
                       </Link>
                       {row.canConvert ? (
-                        <ConvertEstimateButton
+                        <ConvertSalesDocumentActions
                           id={row.id}
                           number={row.number}
+                          sourceType={sourceType}
                           today={convertToday}
+                          depositAccounts={depositAccounts}
                           variant="ghost"
-                          label="Invoice"
+                          compact
                         />
                       ) : null}
                       <DropdownMenu>

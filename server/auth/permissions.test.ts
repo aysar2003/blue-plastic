@@ -85,7 +85,23 @@ describe('permission matrix', () => {
     expect(can('BOOKKEEPER', 'user:invite')).toBe(false)
   })
 
+  it('reserves master-data delete/merge for the owner unless granted in Settings', () => {
+    for (const permission of [
+      'customer:delete',
+      'vendor:delete',
+      'item:delete',
+      'account:delete',
+    ] as const) {
+      expect(can('OWNER', permission)).toBe(true)
+      expect(can('ADMIN', permission)).toBe(false)
+      expect(can('ACCOUNTANT', permission)).toBe(false)
+      expect(can('BOOKKEEPER', permission)).toBe(false)
+    }
+  })
+
   it('escalates monotonically: each role contains the one below it', () => {
+    // OWNER may hold delete capabilities that ADMIN does not — still a strict
+    // superset of every lower role's template.
     const chain = ['VIEWER', 'BOOKKEEPER', 'ACCOUNTANT', 'ADMIN', 'OWNER'] as const
     for (let i = 1; i < chain.length; i++) {
       const lower = ROLE_PERMISSIONS[chain[i - 1]]

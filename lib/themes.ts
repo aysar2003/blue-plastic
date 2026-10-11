@@ -3,6 +3,9 @@
  * and the matching variables live in app/globals.css so every screen uses them.
  */
 export type ThemeId =
+  | 'som'
+  | 'quick'
+  | 'quick-dark'
   | 'odoo'
   | 'odoo-dark'
   | 'ocean'
@@ -23,21 +26,42 @@ export type ThemeOption = {
   /** Preview chips, in order: ground, accent, ink. */
   swatches: [string, string, string]
   /** Optional group label for the appearance picker. */
-  group?: 'odoo' | 'color' | 'night'
+  group?: 'som' | 'quick' | 'odoo' | 'color' | 'night'
 }
 
 export const THEMES: ThemeOption[] = [
   {
+    id: 'som',
+    label: 'SOM ERP',
+    blurb: 'Product night desk: navy #070b14 ground, cyan #22d3ee CTAs and links',
+    swatches: ['#070b14', '#22d3ee', '#0b1220'],
+    group: 'som',
+  },
+  {
+    id: 'quick',
+    label: 'QuickBooks',
+    blurb: 'QBO clone: Source Sans, green #2CA01C bar, soft grey lists, green CTAs',
+    swatches: ['#ECEEF1', '#2CA01C', '#393A3D'],
+    group: 'quick',
+  },
+  {
+    id: 'quick-dark',
+    label: 'QuickBooks Dark',
+    blurb: 'Same QBO green on a dark desk for night work',
+    swatches: ['#1A1F1A', '#2CA01C', '#E8F5E9'],
+    group: 'quick',
+  },
+  {
     id: 'odoo',
     label: 'Odoo',
-    blurb: 'Full brand skin: purple navbar, teal links, Inter, flat grey workspace',
-    swatches: ['#F0EEEE', '#714B67', '#017E84'],
+    blurb: 'Live Odoo look: light navbar, plum #714B67 buttons, teal #017E84 links, #F8F9FA desk',
+    swatches: ['#F8F9FA', '#714B67', '#017E84'],
     group: 'odoo',
   },
   {
     id: 'odoo-dark',
     label: 'Odoo Dark',
-    blurb: 'Full brand skin on dark: purple navbar, plum actions, teal accents',
+    blurb: 'Same Odoo plum + teal on a dark desk',
     swatches: ['#1F1F23', '#714B67', '#017E84'],
     group: 'odoo',
   },
@@ -62,7 +86,21 @@ export const THEMES: ThemeOption[] = [
 export const THEME_IDS = THEMES.map((theme) => theme.id)
 
 export const THEME_GROUPS: { id: ThemeOption['group']; title: string; hint: string }[] = [
-  { id: 'odoo', title: 'Odoo', hint: 'Brand plum + teal for the whole system (lists, forms, reports, POS).' },
+  {
+    id: 'som',
+    title: 'SOM ERP',
+    hint: 'The product look from the login page — deep navy desk and cyan actions. Best match for the public website.',
+  },
+  {
+    id: 'quick',
+    title: 'QuickBooks Online',
+    hint: 'Full QBO look: green top bar, Source Sans, soft grey desk, green buttons — and QuickBooks report paper.',
+  },
+  {
+    id: 'odoo',
+    title: 'Odoo',
+    hint: 'Live Odoo Accounting: light top bar, plum buttons, teal links, system fonts — and Odoo report paper.',
+  },
   { id: 'color', title: 'Colour shells', hint: 'Other workspaces if you prefer a different accent.' },
   { id: 'night', title: 'Night', hint: 'Low-light desks.' },
 ]
