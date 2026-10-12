@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { calendarDate, chosenNumber, cuid, moneyString, optionalText, requiredText } from './common'
 
-const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'] as const
+const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'COGS', 'EXPENSE'] as const
 
 const ACCOUNT_SUBTYPES = [
   'BANK', 'ACCOUNTS_RECEIVABLE', 'UNDEPOSITED_FUNDS', 'INVENTORY', 'OTHER_CURRENT_ASSET',

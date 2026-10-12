@@ -143,6 +143,7 @@ function AccountDialog({
                 {...fieldProps('code', e?.code)}
                 defaultValue={account?.code}
                 inputMode="numeric"
+                inputKind="account-code"
                 placeholder="6100"
                 required
               />

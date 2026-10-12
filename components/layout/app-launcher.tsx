@@ -297,7 +297,6 @@ function AppChipLink({
   onDone: () => void
   children: ReactNode
 }) {
-  const door = useAppDoor(app.key, app.href)
   const activeClass = (current || open) && 'bg-card text-foreground shadow-sm ring-1 ring-border dark:text-foreground'
 
   if (hasMenu) {
@@ -316,15 +315,13 @@ function AppChipLink({
     )
   }
 
+  // Always the app’s front door — not a remembered deep page (e.g. Expenses).
   return (
     <Link
-      href={door.href}
+      href={app.href}
       aria-current={current ? 'page' : undefined}
-      title={door.remembered ? `${app.label} \u2014 back to where you left off` : undefined}
-      onClick={() => {
-        door.onClick()
-        onDone()
-      }}
+      title={app.label}
+      onClick={onDone}
       className={cn(chipClass, activeClass)}
     >
       {children}
@@ -332,19 +329,16 @@ function AppChipLink({
   )
 }
 
-/** One app in the Apps menu: opens where you left off, with a "start over" door beside it. */
+/** One app in the Apps menu: primary click opens the front door. */
 function AppsMenuRow({ app, onDone }: { app: LauncherApp; onDone: () => void }) {
   const Icon = ICONS[app.icon]
   const door = useAppDoor(app.key, app.href)
   return (
     <li className="flex items-stretch hover:bg-muted">
       <Link
-        href={door.href}
+        href={app.href}
         role="menuitem"
-        onClick={() => {
-          door.onClick()
-          onDone()
-        }}
+        onClick={onDone}
         className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5"
       >
         {isAppGlyph(app.glyph) ? (
@@ -361,22 +355,23 @@ function AppsMenuRow({ app, onDone }: { app: LauncherApp; onDone: () => void }) 
         )}
         <span className="min-w-0">
           <span className="block text-xs font-semibold text-foreground">{app.label}</span>
-          {door.remembered ? (
-            <span className="block text-[0.65rem] leading-snug text-primary">Back to where you left off</span>
-          ) : app.blurb ? (
+          {app.blurb ? (
             <span className="block text-[0.65rem] leading-snug text-muted-foreground">
               {app.blurb}
             </span>
           ) : null}
         </span>
       </Link>
-      {door.remembered ? (
+      {door.remembered && door.href !== app.href ? (
         <Link
-          href={app.href}
+          href={door.href}
           role="menuitem"
-          onClick={onDone}
-          aria-label={`Open ${app.label} from the start`}
-          title={`Open ${app.label} from the start`}
+          onClick={() => {
+            door.onClick()
+            onDone()
+          }}
+          aria-label={`Continue ${app.label} where you left off`}
+          title="Continue where you left off"
           className="grid w-9 shrink-0 place-items-center text-muted-foreground hover:text-foreground"
         >
           <RotateCcwIcon className="size-3.5" aria-hidden />
@@ -577,15 +572,11 @@ function TileGrid({ apps }: { apps: LauncherTile[] }) {
 function AppTile({ app }: { app: LauncherTile }) {
   const Icon = ICONS[app.icon]
   const glyph = isAppGlyph(app.glyph) ? app.glyph : null
-  // Home-grid apps reopen where they were left; hub sub-tiles are plain links.
-  const door = useAppDoor(app.key, app.href)
-  const href = glyph ? door.href : app.href
 
   return (
     <Link
-      href={href}
-      onClick={glyph ? door.onClick : undefined}
-      title={glyph && door.remembered ? `${app.label} \u2014 back to where you left off` : undefined}
+      href={app.href}
+      title={app.label}
       className={cn(
         'group flex flex-col items-center gap-2.5 outline-none',
         'focus-visible:rounded-2xl focus-visible:ring-2 focus-visible:ring-sky-500/50 focus-visible:ring-offset-4',

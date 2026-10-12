@@ -30,13 +30,13 @@ export type TutorialLesson = {
 export const DEFAULT_MARKETING_CONTACT: MarketingContact = {
   companyName: 'AL FURAAT GROUP OF COMPANY',
   contactName: 'Abdisalam Abdullahi Mohamed',
-  phone: '252-617305588',
+  phone: '252615785686',
   email: 'aysaryare@gmail.com',
   secondaryEmail: 'info@furaat.so',
-  address: 'Wada Balcad aad ee Somali Star ka bilaabata',
+  address: 'Furaat Store, ee ka soo horjeeda Isbitaalka Kismaayo',
   city: 'Kismaayo',
   region: 'Somalia',
-  whatsappE164: '252617305588',
+  whatsappE164: '252615785686',
 }
 
 export const TUTORIAL_LESSONS: TutorialLesson[] = [

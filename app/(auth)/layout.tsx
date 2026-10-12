@@ -34,7 +34,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
       </div>
 
-      <div className="relative w-full max-w-sm">{children}</div>
+      <div className="relative w-full max-w-lg">{children}</div>
 
       <div className="relative mt-8 max-w-sm space-y-2 text-center">
         <p className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-success">

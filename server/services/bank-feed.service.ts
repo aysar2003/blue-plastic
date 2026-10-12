@@ -56,7 +56,7 @@ export async function feedPage(ctx: OrgContext, accountId: string) {
   const [lines, chart, vendors, customers, invoices, bills, rules] = await Promise.all([
     linesFor(ctx, accountId),
     db.ledgerAccount.findMany({
-      where: { orgId: ctx.orgId, isActive: true, type: { in: ['REVENUE', 'EXPENSE'] } },
+      where: { orgId: ctx.orgId, isActive: true, type: { in: ['REVENUE', 'COGS', 'EXPENSE'] } },
       select: { id: true, code: true, name: true, type: true },
       orderBy: { code: 'asc' },
     }),

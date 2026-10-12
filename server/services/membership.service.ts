@@ -69,6 +69,21 @@ export async function invite(ctx: OrgContext, input: InviteUserInput) {
   const access = resolveAccess(input.role, input.permissionsOverride)
 
   return db.$transaction(async (tx) => {
+    const orgLimits = await tx.organization.findUnique({
+      where: { id: ctx.orgId },
+      select: { maxUsers: true },
+    })
+    if (orgLimits?.maxUsers != null && orgLimits.maxUsers > 0) {
+      const activeUsers = await tx.membership.count({
+        where: { orgId: ctx.orgId, status: 'ACTIVE' },
+      })
+      if (activeUsers >= orgLimits.maxUsers) {
+        throw precondition(
+          `This company is limited to ${orgLimits.maxUsers} users. Remove someone or ask the system owner to raise the limit.`,
+        )
+      }
+    }
+
     const existingUser = await tx.user.findUnique({
       where: { email: input.email },
       select: { id: true, passwordHash: true, homeOrgId: true },

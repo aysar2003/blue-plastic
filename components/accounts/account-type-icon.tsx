@@ -1,6 +1,7 @@
 import type { AccountType } from '@prisma/client'
 import {
   LandmarkIcon,
+  PackageIcon,
   ReceiptIcon,
   ScaleIcon,
   TrendingUpIcon,
@@ -16,6 +17,7 @@ const ICONS: Record<AccountType, LucideIcon> = {
   LIABILITY: ScaleIcon,
   EQUITY: LandmarkIcon,
   REVENUE: TrendingUpIcon,
+  COGS: PackageIcon,
   EXPENSE: ReceiptIcon,
 }
 
@@ -25,6 +27,7 @@ const TONE: Record<AccountType, string> = {
   LIABILITY: 'bg-amber-100 text-amber-900',
   EQUITY: 'bg-stone-200 text-stone-800',
   REVENUE: 'bg-emerald-100 text-emerald-900',
+  COGS: 'bg-orange-100 text-orange-950',
   EXPENSE: 'bg-rose-100 text-rose-900',
 }
 
@@ -35,8 +38,9 @@ const SIZES = {
 } as const
 
 /**
- * The mark for one statement type — assets, liabilities, equity, income or
- * expenses. Used in the chart column, pickers, and every place an account is named.
+ * The mark for one statement type — assets, liabilities, equity, income,
+ * cost of goods sold, or expenses. Used in the chart column, pickers, and
+ * every place an account is named.
  */
 export function AccountTypeIcon({
   type,

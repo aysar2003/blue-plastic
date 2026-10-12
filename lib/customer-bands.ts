@@ -1,5 +1,6 @@
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import type { CalendarDate } from '@/lib/date'
+import { collectionDueDate } from '@/lib/invoice-overdue'
 
 /**
  * The money bar on the customer list.
@@ -19,6 +20,10 @@ export type SalesBandDocument = {
   applied: string
   /** Due date, or the document date when the invoice has no due date. */
   due: CalendarDate | null
+  /** Payment promise date — overrides due for overdue banding when set. */
+  promisedDate?: CalendarDate | null
+  /** Cleared from overdue / collections (“un overdue”). */
+  excludeFromOverdue?: boolean
   date: CalendarDate
 }
 
@@ -94,8 +99,8 @@ export function customerBands(
     }
 
     if (row.type !== 'INVOICE') continue
-    const due = row.due ?? row.date
-    if (due < asOf) {
+    const due = collectionDueDate(row) ?? row.date
+    if (!row.excludeFromOverdue && due < asOf) {
       overdue.amount = overdue.amount.plus(balance)
       overdue.count += 1
       push(overdue.ids, row.customerId)

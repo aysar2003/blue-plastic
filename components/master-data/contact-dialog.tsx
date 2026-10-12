@@ -182,10 +182,20 @@ export function ContactDialog({
               <Input {...fieldProps('email', e?.email)} type="email" defaultValue={contact?.email ?? ''} />
             </Field>
             <Field name="phone" label="Phone" error={e?.phone}>
-              <Input {...fieldProps('phone', e?.phone)} defaultValue={contact?.phone ?? ''} />
+              <Input
+                {...fieldProps('phone', e?.phone)}
+                type="tel"
+                inputMode="tel"
+                defaultValue={contact?.phone ?? ''}
+              />
             </Field>
             <Field name="mobile" label="Mobile" error={e?.mobile}>
-              <Input {...fieldProps('mobile', e?.mobile)} defaultValue={contact?.mobile ?? ''} />
+              <Input
+                {...fieldProps('mobile', e?.mobile)}
+                type="tel"
+                inputMode="tel"
+                defaultValue={contact?.mobile ?? ''}
+              />
             </Field>
           </div>
 

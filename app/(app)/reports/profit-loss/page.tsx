@@ -18,8 +18,15 @@ import {
   statementPicture,
 } from '@/components/reports/figure-chart'
 import * as workspace from '@/server/services/workspace.service'
+import { groupReportScope } from '@/server/services/company-group.service'
+import { GroupReportBanner } from '../group-report-banner'
 import { ReportControls } from '../report-controls'
-import { COMPARISON_LABELS, readSettings, type SearchParams } from '../params'
+import {
+  COMPARISON_LABELS,
+  readSettings,
+  settingsToQuery,
+  type SearchParams,
+} from '../params'
 
 export const metadata: Metadata = { title: 'Profit and Loss' }
 
@@ -42,12 +49,14 @@ export default async function ProfitAndLossPage({
     compare: settings.comparison === 'none' ? undefined : settings.comparison,
   }
 
-  const [report, note] = await Promise.all([
+  const [report, note, groupScope] = await Promise.all([
     profitAndLoss(ctx.orgId, { ...settings.range, basis: settings.basis }, {
       comparison: settings.comparisonRange,
     }),
     workspace.readReportNote(ctx, 'profit-loss'),
+    groupReportScope(ctx),
   ])
+  const showGroup = groupScope.companies.length >= 2
 
   const drill = (accountId: string) =>
     `/reports/transaction-detail?account=${accountId}&period=custom&from=${settings.range.from}&to=${settings.range.to}&back=/reports/profit-loss`
@@ -98,6 +107,14 @@ export default async function ProfitAndLossPage({
       </p>
 
       <ReportNote reportKey="profit-loss" initial={note} />
+
+      {showGroup ? (
+        <GroupReportBanner
+          companies={groupScope.companies}
+          currentOrgId={ctx.orgId}
+          periodQuery={settingsToQuery(settings)}
+        />
+      ) : null}
 
       <ReportControls
         period={settings.period}

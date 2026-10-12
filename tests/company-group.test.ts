@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   MAX_SUB_COMPANIES,
+  applyGroupReportView,
   companyGroupKind,
   companyGroupLabel,
 } from '@/lib/company-group'
@@ -18,5 +19,29 @@ describe('company group', () => {
     expect(companyGroupLabel('main')).toBe('Main')
     expect(companyGroupLabel('sub')).toBe('Sub')
     expect(companyGroupLabel('standalone')).toBe('Solo')
+  })
+
+  it('scopes reports to one, each, or combined', () => {
+    const scope = {
+      orgIds: ['main', 'sub'],
+      rootOrgId: 'main',
+      title: 'SAFA · group',
+      companies: [
+        { id: 'main', name: 'SAFA', parentOrgId: null, baseCurrency: 'USD' },
+        { id: 'sub', name: 'AL FURAAT 3', parentOrgId: 'main', baseCurrency: 'USD' },
+      ],
+    }
+    expect(applyGroupReportView(scope, { view: 'one', org: 'sub' })).toMatchObject({
+      view: 'one',
+      selectedOrgId: 'sub',
+      orgIds: ['sub'],
+      title: 'AL FURAAT 3',
+    })
+    expect(applyGroupReportView(scope, { view: 'each' }).view).toBe('each')
+    expect(applyGroupReportView(scope, { view: 'combined' })).toMatchObject({
+      view: 'combined',
+      title: 'SAFA · combined',
+      orgIds: ['main', 'sub'],
+    })
   })
 })

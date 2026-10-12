@@ -63,7 +63,7 @@ export default async function BalanceSheetPage({
         asOf={settings.asOf}
         basis={settings.basis}
         comparison={settings.comparison}
-        controls={{ mode: 'asOf', basis: true, exportAs: 'balance-sheet' }}
+        controls={{ mode: 'range', basis: true, exportAs: 'balance-sheet' }}
       />
 
       <Card className="overflow-hidden p-0">

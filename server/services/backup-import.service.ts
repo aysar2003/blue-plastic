@@ -7,6 +7,7 @@ import {
   type CompanyBackup,
 } from '@/lib/backup-format'
 import { companyGroupKind, type CompanyGroupKind } from '@/lib/company-group'
+import { companyLimitStatus } from '@/lib/company-limits'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { forbidden, validation } from '@/server/errors'
@@ -36,6 +37,13 @@ export type DatabaseRow = {
   parentName: string | null
   childCount: number
   groupKind: CompanyGroupKind
+  accessRestricted: boolean
+  rentExpiresAt: string | null
+  maxUsers: number | null
+  rentNote: string | null
+  rentExpired: boolean
+  openBlocked: boolean
+  activeUsers: number
 }
 
 /** Empty-company overhead + average bytes per row for the heavy tables. */
@@ -128,7 +136,11 @@ function toDatabaseRow(
     updatedAt: Date
     parentOrgId: string | null
     parent: { name: string } | null
-    _count: { children: number }
+    _count: { children: number; memberships: number }
+    accessRestricted: boolean
+    rentExpiresAt: Date | null
+    maxUsers: number | null
+    rentNote: string | null
   },
   role: string,
   currentOrgId: string,
@@ -136,6 +148,7 @@ function toDatabaseRow(
   ownerName: string | null,
 ): DatabaseRow {
   const childCount = organization._count.children
+  const limits = companyLimitStatus(organization)
   return {
     id: organization.id,
     name: organization.name,
@@ -153,6 +166,13 @@ function toDatabaseRow(
       parentOrgId: organization.parentOrgId,
       childCount,
     }),
+    accessRestricted: limits.accessRestricted,
+    rentExpiresAt: limits.rentExpiresAt,
+    maxUsers: limits.maxUsers,
+    rentNote: limits.rentNote,
+    rentExpired: limits.rentExpired,
+    openBlocked: limits.openBlocked,
+    activeUsers: organization._count.memberships,
   }
 }
 
@@ -184,7 +204,16 @@ const ORG_LIST_SELECT = {
   updatedAt: true,
   parentOrgId: true,
   parent: { select: { name: true } },
-  _count: { select: { children: true } },
+  accessRestricted: true,
+  rentExpiresAt: true,
+  maxUsers: true,
+  rentNote: true,
+  _count: {
+    select: {
+      children: true,
+      memberships: { where: { status: 'ACTIVE' as const } },
+    },
+  },
 } as const
 
 /** Companies this person is allowed to see. Staff see only the one they are in. */

@@ -1297,7 +1297,7 @@ function AddressBox({ label, value, empty }: { label: string; value: string; emp
   return (
     <div className="space-y-1">
       <p className="text-xs font-medium">{label}</p>
-      <div className="max-h-16 overflow-hidden whitespace-pre-line rounded-md border bg-white px-2 py-1.5 text-xs text-slate-700">
+      <div className="max-h-16 overflow-hidden whitespace-pre-line rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs text-foreground">
         {value || <span className="text-muted-foreground">{empty}</span>}
       </div>
     </div>
@@ -1409,7 +1409,6 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
 function SheetLayout(props: LayoutProps) {
   const credit = props.config.type === 'CREDIT_MEMO'
   const accent = credit ? CUSTOMER_CREDIT.accent : FORM_SHEET.accent
-  const wash = credit ? CUSTOMER_CREDIT.wash : FORM_SHEET.wash
   const marks = credit
     ? {
         markA: CUSTOMER_CREDIT.markA,
@@ -1425,7 +1424,7 @@ function SheetLayout(props: LayoutProps) {
       }
 
   return (
-    <Card className="relative overflow-hidden bg-white p-0 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+    <Card className="relative overflow-hidden border-border bg-card p-0 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
       <div
         className="relative z-10 flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-white sm:px-5"
         style={{ background: accent }}
@@ -1443,11 +1442,11 @@ function SheetLayout(props: LayoutProps) {
         ) : null}
       </div>
       <SheetMarks colors={marks} />
-      <CardContent className="relative space-y-2.5 px-3 py-3 sm:px-4" style={{ background: wash }}>
+      <CardContent className="relative space-y-2.5 bg-muted/25 px-3 py-3 sm:px-4">
         <FormStatus state={props.state} />
 
         <div
-          className="rounded-md border border-slate-200/80 bg-white px-3 py-2.5 shadow-sm"
+          className="rounded-md border border-border bg-card px-3 py-2.5 shadow-sm"
           style={{ borderTopColor: accent, borderTopWidth: 2 }}
         >
           <div
@@ -1481,7 +1480,7 @@ function SheetLayout(props: LayoutProps) {
 
         <StripedLines props={props} />
 
-        <div className="rounded-md border border-slate-200/80 bg-white px-3 py-2.5 shadow-sm">
+        <div className="rounded-md border border-border bg-card px-3 py-2.5 shadow-sm">
           <NotesFields props={props} />
         </div>
       </CardContent>
@@ -1787,11 +1786,11 @@ function ModernLayout(props: LayoutProps) {
 }
 
 const lineInput =
-  'h-7 border-transparent bg-transparent px-1.5 shadow-none focus-visible:border-[#714B67] focus-visible:bg-white'
+  'h-7 border-transparent bg-transparent px-1.5 shadow-none focus-visible:border-ring focus-visible:bg-muted/40'
 
-/** Sheet line cells — rounded fields matching the sales item grid. */
+/** Sheet line cells — quiet fields that follow the theme (no paper-white rims). */
 const sheetLineInput =
-  'h-7 rounded-full border border-[#D4C4CE] bg-white px-2 shadow-none focus-visible:border-[#714B67] focus-visible:ring-1 focus-visible:ring-[#714B67]/25'
+  'h-7 rounded-md border border-border/70 bg-transparent px-2 text-foreground shadow-none focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring/20'
 
 /** The line band from a ruled sales sheet: Odoo purple head, then pale stripes. */
 function StripedLines({ props }: { props: LayoutProps }) {
@@ -1799,7 +1798,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
     props.config.type === 'CREDIT_MEMO' ? CUSTOMER_CREDIT.accent : FORM_SHEET.accent
 
   return (
-    <div className="rounded-lg p-1.5 sm:p-2" style={{ background: `${FORM_SHEET.wash}B3` }}>
+    <div className="rounded-lg bg-muted/40 p-1.5 sm:p-2">
       <div className="overflow-x-auto rounded-md">
         <table className="w-full border-separate border-spacing-0 text-sm">
           <thead>
@@ -1831,8 +1830,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
             {props.lines.map((line, index) => (
               <tr
                 key={line.key}
-                className={index % 2 === 0 ? 'bg-white/90' : undefined}
-                style={index % 2 === 1 ? { background: FORM_SHEET.rowAlt } : undefined}
+                className={index % 2 === 0 ? 'bg-card/80' : 'bg-muted/30'}
               >
                 <td className="px-1 py-1">
                   <EntityPicker
@@ -1858,7 +1856,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
                       aria-label={`Tax, line ${index + 1}`}
                       value={line.taxCodeId}
                       onChange={(event) => props.update(line.key, { taxCodeId: event.target.value })}
-                      className="mt-0.5 h-6 rounded-full border border-[#D4C4CE] bg-white px-2 text-xs"
+                      className="mt-0.5 h-6 rounded-md border border-border/70 bg-transparent px-2 text-xs"
                     >
                       <option value="">No tax</option>
                       {props.taxCodes.map((code) => (
@@ -1907,7 +1905,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
                       quantity={line.quantity}
                       onChange={(storeId) => props.update(line.key, { storeId })}
                       label={`Store, line ${index + 1}`}
-                      className="[&_select]:h-7 [&_select]:rounded-full [&_select]:border [&_select]:border-[#D4C4CE] [&_select]:bg-white [&_select]:px-2 [&_select]:text-sm"
+                      className="[&_select]:h-7 [&_select]:rounded-md [&_select]:border [&_select]:border-border/70 [&_select]:bg-transparent [&_select]:px-2 [&_select]:text-sm"
                     />
                   </td>
                 ) : null}

@@ -25,9 +25,9 @@ export function MetricCard({
 }) {
   const body = (
     <Card tone={tone} className={cn('p-4', className)}>
-      <p className="text-xs font-medium uppercase tracking-wider opacity-75">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wider">{label}</p>
       <p className="tabular mt-1 text-lg font-semibold">{value}</p>
-      {hint ? <p className="mt-0.5 text-xs opacity-70">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-xs">{hint}</p> : null}
     </Card>
   )
 

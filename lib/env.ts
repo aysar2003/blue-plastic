@@ -19,6 +19,12 @@ const schema = z.object({
   AUTH_SECRET: z
     .string()
     .min(32, 'AUTH_SECRET must be at least 32 characters — generate one with `openssl rand -base64 32`'),
+  /**
+   * Canonical HTTPS origin once a custom domain is attached, e.g. https://somerp.com.
+   * Optional: Auth.js already trusts the request host (`trustHost: true`).
+   */
+  APP_URL: z.string().url().optional(),
+  AUTH_URL: z.string().url().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 })
 
@@ -31,6 +37,8 @@ function load(): Env {
     DATABASE_URL: process.env.DATABASE_URL,
     DIRECT_URL: process.env.DIRECT_URL,
     AUTH_SECRET: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+    APP_URL: process.env.APP_URL || undefined,
+    AUTH_URL: process.env.AUTH_URL || undefined,
     NODE_ENV: process.env.NODE_ENV,
   })
 

@@ -46,8 +46,8 @@ export default async function NewAdjustmentPage({
           averageCost: item.averageCost.toFixed(6),
         }))}
         accounts={accountOptions(accounts, {
-          prefer: ['OPERATING_EXPENSE', 'COST_OF_GOODS_SOLD', 'OTHER_EXPENSE'],
-          preferTypes: ['EXPENSE', 'REVENUE'],
+          prefer: ['COST_OF_GOODS_SOLD', 'OPERATING_EXPENSE', 'OTHER_EXPENSE'],
+          preferTypes: ['COGS', 'EXPENSE', 'REVENUE'],
         })}
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}

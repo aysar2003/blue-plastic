@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { CalendarIcon } from 'lucide-react'
 
 import { formatDate, isCalendarDate, type CalendarDate } from '@/lib/date'
+import { filterDateInput } from '@/lib/input-guards'
 import { cn } from '@/lib/utils'
 import { Calendar } from './calendar'
 
@@ -167,7 +168,7 @@ export function DateField({
           aria-required={required}
           value={display}
           placeholder={placeholder}
-          onChange={(event) => setTyped(event.target.value)}
+          onChange={(event) => setTyped(filterDateInput(event.target.value))}
           onBlur={commit}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {

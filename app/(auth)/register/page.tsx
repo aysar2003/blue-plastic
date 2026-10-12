@@ -1,0 +1,50 @@
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { withDatabasePage } from '@/lib/page-guard'
+import { PRODUCT_NAME } from '@/lib/product-brand'
+import { isSelfServeEnabled } from '@/server/services/register.service'
+import { needsSetup } from '@/server/services/setup.service'
+import { RegisterForm } from './register-form'
+
+export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = { title: 'Create your company' }
+
+/**
+ * Self-serve company creation for SOM ERP — each business gets its own company,
+ * features, users, and books (international multi-company model).
+ */
+export default async function RegisterPage() {
+  return withDatabasePage(async () => {
+    const empty = await needsSetup()
+    if (!empty && !isSelfServeEnabled()) {
+      redirect('/sign-in')
+    }
+
+    return (
+      <div className="flex w-full max-w-lg flex-col gap-4">
+        <Card className="w-full border-border bg-card text-card-foreground shadow-sm">
+          <CardHeader>
+            <CardTitle>Request a company</CardTitle>
+            <CardDescription>
+              Ask to join {PRODUCT_NAME}. Your request waits for approval — you cannot sign in or open
+              books until the system owner accepts it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RegisterForm />
+          </CardContent>
+        </Card>
+        <p className="text-center text-sm text-muted-foreground">
+          Already have a company?{' '}
+          <Link href="/sign-in" className="font-medium text-primary underline">
+            Sign in
+          </Link>
+        </p>
+      </div>
+    )
+  })
+}

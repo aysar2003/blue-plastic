@@ -33,7 +33,7 @@ export function OpenCompanyReport({ orgId, current }: { orgId: string; current: 
       }}
     >
       {busy ? <Loader2Icon className="animate-spin" /> : null}
-      {current ? 'Open' : 'Connect'}
+      Open P&L
     </Button>
   )
 }

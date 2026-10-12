@@ -146,7 +146,17 @@ export const itemSchema = z
     barcode: optionalText(64),
     name: requiredText('Name', 160),
     description: optionalText(1000),
-    type: z.enum(['SERVICE', 'NON_INVENTORY', 'INVENTORY']),
+    type: z.enum([
+      'SERVICE',
+      'NON_INVENTORY',
+      'INVENTORY',
+      'INVENTORY_ASSEMBLY',
+      'OTHER_CHARGE',
+      'DISCOUNT',
+      'SUBTOTAL',
+      'GROUP',
+      'PAYMENT',
+    ]),
     categoryId: optionalId,
     unitOfMeasure: optionalText(20),
 
@@ -165,6 +175,23 @@ export const itemSchema = z
     cogsAccountId: optionalId,
     reorderPoint: optionalMoney,
     storeId: optionalId,
+
+    printGroupItems: z
+      .union([z.boolean(), z.enum(['true', 'false', 'on', 'off', ''])])
+      .optional()
+      .transform((value) => {
+        if (value === undefined || value === '') return true
+        if (value === true || value === 'true' || value === 'on') return true
+        return false
+      }),
+    itemPaymentMethod: z
+      .enum(['CASH', 'BANK_TRANSFER', 'CHEQUE', 'CARD', 'MOBILE_MONEY', 'OTHER'])
+      .optional()
+      .nullable(),
+    depositAccountId: optionalId,
+
+    /** JSON array: [{ itemId, quantity }] for GROUP / INVENTORY_ASSEMBLY. */
+    componentsJson: optionalText(20_000),
 
     /** Shown on the point-of-sale product grid. On by default for every item. */
     availableInPos: z
@@ -189,18 +216,29 @@ export const itemSchema = z
     openingDate: optionalDate,
   })
   .superRefine((item, ctx) => {
-    // Posting is driven by these mappings, so the rule is stated here as well as
-    // in the database — a form should say which field is missing, not quote a
-    // constraint name.
-    if (!item.incomeAccountId) {
+    const stockTracked = item.type === 'INVENTORY' || item.type === 'INVENTORY_ASSEMBLY'
+    const needsIncome = !['SUBTOTAL', 'GROUP', 'PAYMENT'].includes(item.type)
+
+    if (needsIncome && !item.incomeAccountId) {
       ctx.addIssue({
         code: 'custom',
         path: ['incomeAccountId'],
-        message: 'Choose the income account this item is sold into',
+        message:
+          item.type === 'DISCOUNT'
+            ? 'Choose the sales-discount account this discount posts to'
+            : 'Choose the income account this item is sold into',
       })
     }
 
-    if (item.type === 'INVENTORY') {
+    if (item.type === 'PAYMENT' && !item.depositAccountId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['depositAccountId'],
+        message: 'Choose Undeposited Funds or the bank account this payment deposits to',
+      })
+    }
+
+    if (stockTracked) {
       if (!item.inventoryAccountId) {
         ctx.addIssue({
           code: 'custom',
@@ -215,8 +253,6 @@ export const itemSchema = z
           message: 'A tracked item needs a cost of goods sold account',
         })
       }
-      // Opening stock has to be valued. Received quantity with no cost has no
-      // defensible figure to put in the inventory account.
       if (item.openingQuantity && Number(item.openingQuantity) > 0 && !item.openingUnitCost) {
         ctx.addIssue({
           code: 'custom',
@@ -228,7 +264,7 @@ export const itemSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['openingQuantity'],
-        message: 'Only an inventory product carries stock',
+        message: 'Only an inventory or assembly item carries stock',
       })
     }
   })

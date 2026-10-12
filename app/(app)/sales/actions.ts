@@ -5,6 +5,7 @@ import type { SalesDocumentType } from '@prisma/client'
 import { z } from 'zod'
 
 import { toFormState, type FormState } from '@/components/forms/action-state'
+import { isCalendarDate } from '@/lib/date'
 import { cuid, deleteRecordSchema } from '@/lib/validation/common'
 import {
   applyCreditSchema,
@@ -80,6 +81,39 @@ export const updateDocument = action
     const document = await salesService.update(ctx, id, rest)
     revalidateSales()
     revalidatePath(`/sales/invoices/${id}`)
+    return document
+  })
+
+/** New payment promise date on an overdue (or open) invoice. */
+export const recordPaymentPromise = action
+  .requires('invoice:update')
+  .input(
+    z.object({
+      id: cuid,
+      promisedDate: z.string().refine(isCalendarDate, 'Choose a valid date'),
+      note: z.string().trim().max(500).optional().nullable(),
+    }),
+  )
+  .handler(async (ctx, input) => {
+    const document = await salesService.setPaymentPromise(
+      ctx,
+      input.id,
+      input.promisedDate,
+      input.note,
+    )
+    revalidateSales()
+    revalidatePath(`/sales/invoices/${input.id}`)
+    return document
+  })
+
+/** Drop from / restore to the overdue list without changing the books. */
+export const setInvoiceUnOverdue = action
+  .requires('invoice:update')
+  .input(z.object({ id: cuid, exclude: z.boolean() }))
+  .handler(async (ctx, input) => {
+    const document = await salesService.setExcludeFromOverdue(ctx, input.id, input.exclude)
+    revalidateSales()
+    revalidatePath(`/sales/invoices/${input.id}`)
     return document
   })
 

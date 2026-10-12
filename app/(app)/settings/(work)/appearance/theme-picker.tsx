@@ -5,17 +5,15 @@ import { CheckIcon } from 'lucide-react'
 import { useTheme } from 'next-themes'
 
 import { writeBrowserStore } from '@/lib/browser-store'
-import { REPORT_STYLE_KEY, type ReportStyleId } from '@/lib/report-styles'
+import { REPORT_STYLE_KEY, reportStyleForTheme } from '@/lib/report-styles'
 import { THEME_GROUPS, THEMES, type ThemeId } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
-/** Full brand skins also set the matching report paper. */
-function reportStyleForTheme(id: ThemeId): ReportStyleId | null {
-  if (id === 'quick' || id === 'quick-dark') return 'quickbooks'
-  if (id === 'odoo' || id === 'odoo-dark') return 'odoo'
-  return null
-}
-
+/**
+ * Full brand skins also set the matching report paper.
+ * SOM / colour shells reset to herobooks so a prior Odoo Style pick cannot leave
+ * the plum masthead after the desk theme already matches the website.
+ */
 export function ThemePicker() {
   const { theme, setTheme } = useTheme()
   const mounted = useSyncExternalStore(
@@ -28,8 +26,7 @@ export function ThemePicker() {
 
   const pick = (id: ThemeId) => {
     setTheme(id)
-    const reportStyle = reportStyleForTheme(id)
-    if (reportStyle) writeBrowserStore(REPORT_STYLE_KEY, reportStyle)
+    writeBrowserStore(REPORT_STYLE_KEY, reportStyleForTheme(id))
   }
 
   return (

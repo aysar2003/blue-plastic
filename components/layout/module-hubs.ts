@@ -501,6 +501,10 @@ export const ACCOUNTING_REPORT_APPS: HubApp[] = [
   },
 ]
 
+/**
+ * Settings Control Center — every tile configures the *current* company only.
+ * Other companies keep their own features, users, tax, and books.
+ */
 export const SETTINGS_HUB_APPS: HubApp[] = [
   {
     key: 'organization',
@@ -509,17 +513,17 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     icon: 'building',
     accent: '#0B4F6C',
     wash: '#E0F2FE',
-    blurb: 'Name, logo, and mark',
+    blurb: 'Name, logo, address, currency',
   },
   {
     key: 'features',
-    label: 'Configuration',
+    label: 'Apps & features',
     href: '/settings/features',
     icon: 'sliders',
     permission: 'org:update',
     accent: '#714B67',
     wash: '#F3EAF1',
-    blurb: 'Turn apps and deletes on or off',
+    blurb: 'Turn apps on or off for this company',
   },
   {
     key: 'accounts',
@@ -568,7 +572,7 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     permission: 'org:read',
     accent: '#0F766E',
     wash: '#CCFBF1',
-    blurb: 'Invoice paper for the whole system',
+    blurb: 'Forms, invoice paper, receipts & report sheets',
   },
   {
     key: 'appearance',
@@ -577,7 +581,7 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     icon: 'palette',
     accent: '#6D28D9',
     wash: '#EDE9FE',
-    blurb: 'Colour of the books',
+    blurb: 'Theme and report look',
   },
   {
     key: 'profile',
@@ -597,6 +601,40 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     accent: '#334155',
     wash: '#F1F5F9',
     blurb: 'What was deleted',
+  },
+  {
+    key: 'databases',
+    label: 'Companies',
+    href: '/databases',
+    icon: 'database',
+    permission: 'org:update',
+    accent: '#0F766E',
+    wash: '#CCFBF1',
+    blurb: 'Switch or add companies',
+  },
+]
+
+/** Grouped for the Settings Control Center hub. */
+export const SETTINGS_HUB_SECTIONS: { label: string; blurb: string; keys: string[] }[] = [
+  {
+    label: 'Company',
+    blurb: 'Identity, which apps this company uses, look and paper.',
+    keys: ['organization', 'features', 'templates', 'appearance'],
+  },
+  {
+    label: 'Accounting setup',
+    blurb: 'Posting defaults, payment terms, and tax for this company’s books.',
+    keys: ['accounts', 'payment-terms', 'tax'],
+  },
+  {
+    label: 'People & access',
+    blurb: 'Who works in this company and your own login.',
+    keys: ['users', 'profile'],
+  },
+  {
+    label: 'Data & companies',
+    blurb: 'Deleted records and other companies on SOM ERP.',
+    keys: ['activity', 'databases'],
   },
 ]
 

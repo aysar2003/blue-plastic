@@ -143,7 +143,7 @@ export async function companySnapshots(
                       'OWNERS_EQUITY', 'RETAINED_EARNINGS',
                       'OPENING_BALANCE_EQUITY', 'DRAWINGS'
                     )
-                 OR a.type IN ('REVENUE', 'EXPENSE')
+                 OR a.type IN ('REVENUE', 'COGS', 'EXPENSE')
                THEN -(l.debit - l.credit) ELSE 0 END), 0) AS equity,
              COALESCE(SUM(CASE
                WHEN a.subtype = 'OPENING_BALANCE_EQUITY'

@@ -64,7 +64,7 @@ export default async function AccountRegisterPage({
     ['BANK', 'CREDIT_CARD', 'OTHER_CURRENT_ASSET', 'UNDEPOSITED_FUNDS'].includes(account.subtype)
   const categories = canType
     ? (await accountService.list(ctx))
-        .filter((row) => row.type === 'EXPENSE' || row.type === 'REVENUE')
+        .filter((row) => row.type === 'EXPENSE' || row.type === 'COGS' || row.type === 'REVENUE')
         .map((row) => ({ id: row.id, label: `${row.code} ${row.name}`, type: row.type }))
     : []
 

@@ -224,7 +224,7 @@ export async function ensureDamageAccount(ctx: OrgContext): Promise<string> {
     code: String(number),
     name: 'Inventory Damage and Loss',
     description: 'Where the cost goes when damaged stock is written off. A partial loss can instead stay on the item, which raises its cost.',
-    type: 'EXPENSE',
+    type: 'COGS',
     subtype: 'COST_OF_GOODS_SOLD',
     detailType: 'Inventory damage',
   })
@@ -243,13 +243,13 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
           where: { id: accountId, orgId: ctx.orgId, isActive: true },
           select: { id: true, name: true, type: true },
         })
-      : { id: await systemAccountId(tx, ctx.orgId, 'INVENTORY_SHRINKAGE'), name: '', type: 'EXPENSE' }
+      : { id: await systemAccountId(tx, ctx.orgId, 'INVENTORY_SHRINKAGE'), name: '', type: 'COGS' as const }
 
     if (!account) throw notFound('Account')
-    if (account.type !== 'EXPENSE' && account.type !== 'REVENUE') {
+    if (account.type !== 'EXPENSE' && account.type !== 'COGS' && account.type !== 'REVENUE') {
       throw validation(
-        `"${account.name}" is not an expense or income account, so a stock difference cannot go there.`,
-        { accountId: ['Choose an expense account, normally Inventory Shrinkage'] },
+        `"${account.name}" is not a cost of goods sold, expense, or income account, so a stock difference cannot go there.`,
+        { accountId: ['Choose a cost of goods sold or expense account, normally Inventory Shrinkage'] },
       )
     }
 

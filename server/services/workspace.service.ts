@@ -78,7 +78,16 @@ export async function tasks(ctx: OrgContext) {
         orgId: ctx.orgId,
         type: 'INVOICE',
         status: { in: ['OPEN', 'PARTIAL'] },
-        dueDate: { lt: new Date(`${day}T00:00:00.000Z`) },
+        excludeFromOverdue: false,
+        OR: [
+          { promisedDate: { lt: new Date(`${day}T00:00:00.000Z`) } },
+          {
+            AND: [
+              { promisedDate: null },
+              { dueDate: { lt: new Date(`${day}T00:00:00.000Z`) } },
+            ],
+          },
+        ],
       },
     }),
     db.purchaseDocument.count({
@@ -118,7 +127,9 @@ export async function homeFigures(ctx: OrgContext) {
   let moneyOut = new Decimal(0)
   for (const row of figures) {
     if (row.type === 'REVENUE') moneyIn = moneyIn.plus(present(row.type, row.movement))
-    if (row.type === 'EXPENSE') moneyOut = moneyOut.plus(present(row.type, row.movement))
+    if (row.type === 'EXPENSE' || row.type === 'COGS') {
+      moneyOut = moneyOut.plus(present(row.type, row.movement))
+    }
   }
 
   const open = await db.salesDocument.findMany({

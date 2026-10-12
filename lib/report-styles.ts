@@ -30,8 +30,8 @@ export const REPORT_STYLES: ReportStyleOption[] = [
   {
     id: 'odoo',
     label: 'Odoo',
-    blurb: 'Live Odoo P&L: system fonts, grey total bands (#DEE2E6), plum Print, white sheet.',
-    swatches: ['#FFFFFF', '#DEE2E6', '#714B67'],
+    blurb: 'Live Odoo P&L: system fonts, grey total bands (#DEE2E6), solid masthead in your theme colour, white sheet.',
+    swatches: ['#FFFFFF', '#DEE2E6', '#22D3EE'],
   },
 ]
 
@@ -42,4 +42,15 @@ export const DEFAULT_REPORT_STYLE: ReportStyleId = 'herobooks'
 export function parseReportStyle(raw: string | null | undefined): ReportStyleId {
   if (raw === 'quickbooks' || raw === 'odoo' || raw === 'herobooks') return raw
   return DEFAULT_REPORT_STYLE
+}
+
+/**
+ * Report paper that belongs with a System look brand skin.
+ * SOM / colour shells → SOM ERP sheet so a leftover Odoo/QBO pick cannot
+ * steal the website navy+cyan after the desk already matches the site.
+ */
+export function reportStyleForTheme(themeId: string | undefined | null): ReportStyleId {
+  if (themeId === 'quick' || themeId === 'quick-dark') return 'quickbooks'
+  if (themeId === 'odoo' || themeId === 'odoo-dark') return 'odoo'
+  return 'herobooks'
 }

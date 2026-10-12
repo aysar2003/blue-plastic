@@ -187,9 +187,9 @@ function Insight({
         <CardContent className="flex items-start gap-3 p-4">
           <span className="mt-0.5 rounded-md bg-black/5 p-2 dark:bg-white/10">{icon}</span>
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wider opacity-75">{label}</p>
+            <p className="text-xs font-medium uppercase tracking-wider">{label}</p>
             <p className="tabular mt-0.5 text-lg font-semibold">{value}</p>
-            <p className="text-xs opacity-70">{hint}</p>
+            <p className="text-xs">{hint}</p>
           </div>
         </CardContent>
       </Card>

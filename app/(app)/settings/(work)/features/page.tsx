@@ -5,7 +5,7 @@ import { FeaturesForm } from './features-form'
 import { requireOrgContext } from '@/server/auth/context'
 import * as organizationService from '@/server/services/organization.service'
 
-export const metadata: Metadata = { title: 'Configuration' }
+export const metadata: Metadata = { title: 'Apps & features' }
 
 export default async function FeaturesSettingsPage() {
   await requireOrgContext('org:update')
@@ -16,9 +16,10 @@ export default async function FeaturesSettingsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-base font-semibold">Configuration</h2>
+        <h2 className="text-base font-semibold">Apps & features</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Turn apps on or off for the whole organisation. To open apps for one person only, use{' '}
+          These switches belong to <span className="font-medium text-foreground">{ctx.organization.name}</span>{' '}
+          only. Other companies keep their own apps. To open apps for one person inside this company, use{' '}
           {canManageUsers ? (
             <Link href="/settings/users" className="font-medium text-primary underline">
               Settings → Users

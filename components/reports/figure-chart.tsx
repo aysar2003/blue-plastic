@@ -60,15 +60,15 @@ export function FigureChart({
     .join(', ')
 
   return (
-    <figure className="figure-chart rounded-xl bg-[#e4ebf2] px-4 py-4 ring-1 ring-slate-300/70">
-      <figcaption className="text-sm font-medium text-slate-800">{caption}</figcaption>
+    <figure className="figure-chart rounded-xl bg-card px-4 py-4 text-foreground ring-1 ring-border">
+      <figcaption className="text-sm font-medium text-foreground">{caption}</figcaption>
       <svg
         viewBox={`0 0 ${width} 168`}
         role="img"
         aria-label={summary}
-        className="mt-2 h-44 w-full"
+        className="mt-2 h-44 w-full text-foreground"
       >
-        <line x1="12" x2={width - 12} y1={baseline} y2={baseline} stroke="#94a3b8" strokeWidth="1" />
+        <line x1="12" x2={width - 12} y1={baseline} y2={baseline} stroke="currentColor" strokeOpacity="0.35" strokeWidth="1" />
         {bars.map((bar, index) => {
           const center = 12 + groupWidth * index + groupWidth / 2
           const current = box(bar.value.toNumber())
@@ -88,7 +88,7 @@ export function FigureChart({
                 />
               ) : null}
               <rect x={currentX} y={current.y} width="26" height={current.height} rx="3" fill={bar.color} />
-              <text x={center} y="152" textAnchor="middle" fontSize="12" fill="#334155">
+              <text x={center} y="152" textAnchor="middle" fontSize="12" fill="currentColor">
                 {bar.label}
               </text>
             </g>
@@ -96,12 +96,12 @@ export function FigureChart({
         })}
       </svg>
       {comparisonLabel ? (
-        <p className="mb-2 flex items-center gap-4 text-xs text-slate-600">
+        <p className="mb-2 flex items-center gap-4 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block size-2.5 rounded-sm bg-slate-700" /> This period
+            <span className="inline-block size-2.5 rounded-sm bg-foreground" /> This period
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block size-2.5 rounded-sm bg-slate-700/35" /> {comparisonLabel}
+            <span className="inline-block size-2.5 rounded-sm bg-foreground/35" /> {comparisonLabel}
           </span>
         </p>
       ) : null}
@@ -109,15 +109,15 @@ export function FigureChart({
         {bars.map((bar) => {
           const body = (
             <>
-              <p className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <p className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Swatch color={bar.color} selected={false} />
                 {bar.label}
               </p>
-              <p className="mt-1 text-base font-semibold tabular text-slate-950">
+              <p className="mt-1 text-base font-semibold tabular text-foreground">
                 {formatMoney(bar.value, currency)}
               </p>
               {comparisonLabel && bar.comparison ? (
-                <p className="text-sm tabular text-slate-500">
+                <p className="text-sm tabular text-muted-foreground">
                   {comparisonLabel}: {formatMoney(bar.comparison, currency)}
                 </p>
               ) : null}
@@ -128,7 +128,7 @@ export function FigureChart({
               {bar.href ? (
                 <Link
                   href={bar.href}
-                  className="block rounded-full px-2.5 py-1.5 transition-colors hover:bg-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="block rounded-full px-2.5 py-1.5 transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   {body}
                 </Link>
@@ -182,16 +182,16 @@ export function ShareBar({
   if (shown.length === 0 || total.isZero()) return null
 
   return (
-    <figure className="rounded-xl bg-[#e4ebf2] px-4 py-4 ring-1 ring-slate-300/70">
-      <figcaption className="text-base font-medium text-slate-800">{caption}</figcaption>
-      <div className="mt-3 flex h-4 gap-0.5 overflow-hidden rounded-full bg-white p-1 ring-1 ring-slate-300/70">
+    <figure className="rounded-xl bg-card px-4 py-4 text-foreground ring-1 ring-border">
+      <figcaption className="text-base font-medium text-foreground">{caption}</figcaption>
+      <div className="mt-3 flex h-4 gap-0.5 overflow-hidden rounded-full bg-background p-1 ring-1 ring-border">
         {shown.map((segment) => {
           const amount = formatMoney(segment.value, currency)
           const share = segment.value.abs().dividedBy(total).times(100).toNumber()
           const selected = Boolean(segment.id && activeId === segment.id)
           const dimmed = Boolean(activeId && segment.id && !selected)
           const className = cn(
-            'h-full min-w-1 rounded-full transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-700/50',
+            'h-full min-w-1 rounded-full transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
             dimmed && 'opacity-35',
             segment.href && 'hover:opacity-90',
           )
@@ -221,8 +221,8 @@ export function ShareBar({
           const body = (
             <>
               <Swatch color={segment.color} selected={selected} />
-              <span className="text-slate-700">{segment.label}</span>
-              <span className="font-semibold tabular text-slate-950">{amount}</span>
+              <span className="text-foreground">{segment.label}</span>
+              <span className="font-semibold tabular text-foreground">{amount}</span>
             </>
           )
           return (
@@ -233,15 +233,15 @@ export function ShareBar({
                   aria-current={selected ? 'page' : undefined}
                   scroll={false}
                   className={cn(
-                    'inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-700/40',
-                    selected ? 'bg-white text-slate-900' : 'text-slate-700 hover:bg-white/80',
+                    'inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                    selected ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-accent/60',
                   )}
                   style={selected ? { boxShadow: `0 0 0 1.5px ${segment.color}` } : undefined}
                 >
                   {body}
                 </Link>
               ) : (
-                <span className="inline-flex items-center gap-2 px-1 py-1 text-sm text-slate-700">{body}</span>
+                <span className="inline-flex items-center gap-2 px-1 py-1 text-sm text-foreground">{body}</span>
               )}
             </li>
           )

@@ -735,10 +735,10 @@ async function assertExpenseAccount(ctx: OrgContext, accountId: string | null) {
     select: { type: true, name: true },
   })
   if (!account) throw notFound('Account')
-  if (account.type !== 'EXPENSE' && account.type !== 'ASSET') {
+  if (account.type !== 'EXPENSE' && account.type !== 'COGS' && account.type !== 'ASSET') {
     throw validation(
-      `"${account.name}" is not an expense or asset account, so a bill cannot be categorised to it by default.`,
-      { defaultExpenseAccountId: ['Choose an expense or asset account'] },
+      `"${account.name}" is not an expense, cost of goods sold, or asset account, so a bill cannot be categorised to it by default.`,
+      { defaultExpenseAccountId: ['Choose an expense, cost of goods sold, or asset account'] },
     )
   }
 }

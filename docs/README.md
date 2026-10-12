@@ -1,8 +1,8 @@
-# Blue Plastic Center — Accounting System Documentation
+# SOM ERP — Accounting System Documentation
 
 A double-entry accounting platform (QuickBooks Online–class, excluding Payroll and
 Projects) built with Next.js, TypeScript, PostgreSQL, Prisma, NextAuth v5, Zod,
-Tailwind CSS, shadcn/ui and TanStack Query.
+Tailwind CSS, shadcn/ui and TanStack Query. Product brand: **SOM ERP**.
 
 ## Read in this order
 

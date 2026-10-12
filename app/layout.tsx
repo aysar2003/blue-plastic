@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Inter, Source_Sans_3 } from "next/font/google"
 
 import { Providers } from "@/components/providers"
 import { PRODUCT_DESCRIPTION, PRODUCT_NAME } from "@/lib/product-brand"
+import { resolveSiteUrl } from "@/lib/site-url"
 import "./globals.css"
 import { Analytics } from "@vercel/analytics/next"
 
@@ -14,6 +15,7 @@ const inter = Inter({ variable: "--font-odoo", subsets: ["latin"] })
 const sourceSans = Source_Sans_3({ variable: "--font-quickbooks", subsets: ["latin"] })
 
 export const metadata: Metadata = {
+  metadataBase: resolveSiteUrl(),
   title: {
     default: PRODUCT_NAME,
     template: `%s · ${PRODUCT_NAME}`,

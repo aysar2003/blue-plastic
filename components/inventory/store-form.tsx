@@ -101,7 +101,9 @@ export function StoreForm({
           <Field name="phone" label="Store phone" hint="Number to call the store itself.">
             <Input
               id="phone"
+              name="phone"
               type="tel"
+              inputMode="tel"
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
               placeholder="0612 000 000"
@@ -126,7 +128,9 @@ export function StoreForm({
           <Field name="keyHolderPhone" label="Key holder phone">
             <Input
               id="keyHolderPhone"
+              name="keyHolderPhone"
               type="tel"
+              inputMode="tel"
               value={keyHolderPhone}
               onChange={(event) => setKeyHolderPhone(event.target.value)}
               placeholder="0615 000 000"

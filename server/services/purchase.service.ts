@@ -1465,6 +1465,8 @@ async function resolveLines(
     : []
 
   const byId = new Map(items.map((item) => [item.id, item]))
+  const sellsGoods = items.some((item) => item.type === 'NON_INVENTORY')
+  const systemCogsAccountId = sellsGoods ? await systemAccountId(tx, ctx.orgId, 'COGS') : null
   const storeIds = [...new Set(lines.map((line) => line.storeId).filter((id): id is string => Boolean(id)))]
   const knownStores = storeIds.length
     ? new Set(
@@ -1500,7 +1502,9 @@ async function resolveLines(
       incomeAccountId:
         item?.type === 'INVENTORY'
           ? null
-          : (line.expenseAccountId ?? item?.expenseAccountId ?? vendorDefaultAccountId ?? null),
+          : item?.type === 'NON_INVENTORY'
+            ? systemCogsAccountId
+            : (line.expenseAccountId ?? item?.expenseAccountId ?? vendorDefaultAccountId ?? null),
       isStock: item?.type === 'INVENTORY',
     }
   })

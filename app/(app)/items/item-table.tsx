@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { itemTypeLabel } from '@/lib/item-types'
 import { formatMoney } from '@/lib/money'
 import { ItemNameMenu } from '@/components/inventory/item-name-menu'
 import { QtyCell } from '@/components/inventory/line-store'
@@ -54,7 +55,7 @@ import { setItemsActive } from './actions'
 export type ItemRow = ItemValues & {
   id: string
   name: string
-  type: 'SERVICE' | 'NON_INVENTORY' | 'INVENTORY'
+  type: NonNullable<ItemValues['type']>
   isActive: boolean
   incomeAccount: { code: string; name: string } | null
   expenseAccount: { code: string; name: string } | null
@@ -76,18 +77,13 @@ function accountText(account: { code: string; name: string } | null) {
   return account ? `${account.code} ${account.name}` : '—'
 }
 
-const TYPE_LABEL = {
-  SERVICE: 'Service',
-  NON_INVENTORY: 'Non-inventory',
-  INVENTORY: 'Inventory',
-} as const
-
 export function ItemTable({
   rows,
   accounts,
   taxCodes,
   categories,
   stores = [],
+  catalogItems = [],
   storeColumns = [],
   currency,
   canEdit,
@@ -104,6 +100,7 @@ export function ItemTable({
   taxCodes: SimpleOption[]
   categories: SimpleOption[]
   stores?: SimpleOption[]
+  catalogItems?: { id: string; label: string; type?: string }[]
   /** One calculated column per store. Existing columns stay as they are. */
   storeColumns?: { id: string; name: string }[]
   currency: string
@@ -265,7 +262,7 @@ export function ItemTable({
         return (
           <TableCell key={col.id}>
             <Badge variant={row.type === 'INVENTORY' ? 'default' : 'secondary'}>
-              {TYPE_LABEL[row.type]}
+              {itemTypeLabel(row.type)}
             </Badge>
           </TableCell>
         )
@@ -577,6 +574,7 @@ export function ItemTable({
           taxCodes={taxCodes}
           categories={categories}
           stores={stores}
+          catalogItems={catalogItems}
           currency={currency}
           recorded={editing.recorded}
           onClose={() => setEditing(null)}

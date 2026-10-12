@@ -26,7 +26,7 @@ export function ImportChartButton() {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             A CSV from Excel with columns code, name, type, subtype, and optionally detail,
-            openingBalance, openingBalanceDate. Type is ASSET, LIABILITY, EQUITY, REVENUE or EXPENSE.
+            openingBalance, openingBalanceDate. Type is ASSET, LIABILITY, EQUITY, REVENUE, COGS or EXPENSE.
             Subtype is the detail type, such as INCOME or OPERATING_EXPENSE.
           </p>
           <input

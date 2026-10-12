@@ -46,6 +46,18 @@ describe('report periods', () => {
     expect(resolvePeriod('last-quarter', today, 6)).toEqual({ from: '2026-03-01', to: '2026-05-31' })
   })
 
+  it('resolves named fiscal quarters for this year and last year', () => {
+    expect(resolvePeriod('fy-q1', today, 1)).toEqual({ from: '2026-01-01', to: '2026-03-31' })
+    expect(resolvePeriod('fy-q2', today, 1)).toEqual({ from: '2026-04-01', to: '2026-06-30' })
+    expect(resolvePeriod('fy-q3', today, 1)).toEqual({ from: '2026-07-01', to: '2026-09-30' })
+    expect(resolvePeriod('fy-q4', today, 1)).toEqual({ from: '2026-10-01', to: '2026-12-31' })
+    expect(resolvePeriod('last-fy-q1', today, 1)).toEqual({ from: '2025-01-01', to: '2025-03-31' })
+    expect(resolvePeriod('last-fy-q4', today, 1)).toEqual({ from: '2025-10-01', to: '2025-12-31' })
+    // April fiscal year: Q1 is Apr–Jun.
+    expect(resolvePeriod('fy-q1', today, 4)).toEqual({ from: '2026-04-01', to: '2026-06-30' })
+    expect(resolvePeriod('last-fy-q1', today, 4)).toEqual({ from: '2025-04-01', to: '2025-06-30' })
+  })
+
   it('handles a fiscal year that spans the new year', () => {
     // A year starting in October: today is in the year that began 2025-10-01.
     expect(resolvePeriod('this-fiscal-year', today, 10)).toEqual({ from: '2025-10-01', to: '2026-09-30' })

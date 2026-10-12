@@ -238,9 +238,19 @@ export default async function SalesListPage({
           customers={customers}
           rows={page.rows.map((row) => {
             const due = row.dueDate ? toCalendarDate(row.dueDate) : null
+            const promisedDate = row.promisedDate ? toCalendarDate(row.promisedDate) : null
             const open = row.status === 'OPEN' || row.status === 'PARTIAL'
-            const overdue = Boolean(due && due < now && open)
-            const days = overdue && due ? Math.round((toDate(now).getTime() - toDate(due).getTime()) / 86_400_000) : 0
+            const collectionDue = promisedDate ?? due
+            const overdue = Boolean(
+              open &&
+                !row.excludeFromOverdue &&
+                collectionDue &&
+                collectionDue < now,
+            )
+            const days =
+              overdue && collectionDue
+                ? Math.round((toDate(now).getTime() - toDate(collectionDue).getTime()) / 86_400_000)
+                : 0
             const trail = trails.get(row.id)
             const later = trail?.changed && trail.changed.name !== trail.entered?.name
             return {
@@ -248,10 +258,14 @@ export default async function SalesListPage({
               number: row.number,
               date: formatTransactionDate(toCalendarDate(row.date), row.createdAt, timeZone),
               due,
+              promisedDate,
+              excludeFromOverdue: row.excludeFromOverdue,
               customer: row.customer.displayName,
               amount: formatMoney(row.total, currency),
               balance: formatMoney(row.balance, currency),
-              statusText: overdue ? `Overdue ${days} ${days === 1 ? 'day' : 'days'}` : (STATUS_LABELS[row.status] ?? row.status),
+              statusText: overdue
+                ? `Overdue ${days} ${days === 1 ? 'day' : 'days'}`
+                : (STATUS_LABELS[row.status] ?? row.status),
               overdue,
               href: `${basePath}/${row.id}`,
               editHref: canEditDocuments && row.status !== 'VOID' ? `${basePath}/${row.id}/edit` : null,
@@ -260,6 +274,7 @@ export default async function SalesListPage({
                 ctx.permissions.has('payment:create') && open ? `/payments/new?customer=${row.customer.id}` : null,
               recorded: trail?.entered ? (later ? `${trail.entered.name} · ${trail.changed?.name}` : trail.entered.name) : null,
               canDelete,
+              canEditCollections: canEditDocuments && open,
             }
           })}
           basePath={basePath}

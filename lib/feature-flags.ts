@@ -11,6 +11,27 @@ export type ModuleFlag =
   | 'accounting'
   | 'reports'
 
+/** Ordered list for system-owner app allow / lock UI. */
+export const MODULE_FLAGS: readonly ModuleFlag[] = [
+  'sales',
+  'purchases',
+  'banking',
+  'inventory',
+  'pos',
+  'accounting',
+  'reports',
+] as const
+
+export const MODULE_FLAG_LABELS: Record<ModuleFlag, { label: string; hint: string }> = {
+  sales: { label: 'Sales', hint: 'Invoices, customers, payments' },
+  purchases: { label: 'Purchases', hint: 'Bills, vendors, expenses' },
+  banking: { label: 'Banking', hint: 'Accounts, transfers, deposits' },
+  inventory: { label: 'Inventory', hint: 'Products, stock, stores' },
+  pos: { label: 'Point of Sale', hint: 'Registers and till' },
+  accounting: { label: 'Accounting', hint: 'Chart, journals, periods' },
+  reports: { label: 'Reports', hint: 'Financial and operations reports' },
+}
+
 /** Creator credit shown on shell and sign-in when enabled. */
 export const CREATOR_BRAND_NAME = 'Abdisalam Abdullahi Mohamed'
 

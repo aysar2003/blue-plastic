@@ -173,7 +173,7 @@ export async function recordMovement(
     select: { id: true, name: true, type: true },
   })
   if (!item) throw precondition('That item does not exist.')
-  if (item.type !== 'INVENTORY') {
+  if (item.type !== 'INVENTORY' && item.type !== 'INVENTORY_ASSEMBLY') {
     throw precondition(`"${item.name}" is not a tracked item, so it has no stock to move.`)
   }
 

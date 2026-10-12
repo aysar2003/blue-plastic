@@ -59,7 +59,7 @@ export const MODULES: NavModule[] = [
   {
     key: 'sales',
     label: 'Sales',
-    href: '/sales/invoices?status=open',
+    href: '/sales',
     icon: ReceiptIcon,
     permission: 'invoice:read',
     owns: ['/sales', '/payments', '/customers'],
@@ -205,7 +205,7 @@ export const MODULES: NavModule[] = [
     tabs: [
       { label: 'Home', href: '/settings' },
       { label: 'Organisation', href: '/settings/organization' },
-      { label: 'Configuration', href: '/settings/features', permission: 'org:update' },
+      { label: 'Apps & features', href: '/settings/features', permission: 'org:update' },
       { label: 'Default accounts', href: '/settings/accounts', permission: 'account:read' },
       { label: 'Payment terms', href: '/settings/payment-terms' },
       { label: 'Tax', href: '/settings/tax', permission: 'tax:read' },

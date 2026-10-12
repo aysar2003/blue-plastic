@@ -11,6 +11,10 @@ import { SearchInput } from '@/components/data/search-input'
 import { SortableHeader, type SortState } from '@/components/data/sortable-header'
 import { CustomerFilter } from '@/components/sales/customer-filter'
 import {
+  InvoiceCollectionsMenuItems,
+  PaymentPromiseDialog,
+} from '@/components/sales/invoice-collections-actions'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -25,6 +29,8 @@ export type InvoiceRegisterRow = {
   number: string
   date: string
   due: string | null
+  promisedDate: string | null
+  excludeFromOverdue: boolean
   customer: string
   amount: string
   balance: string
@@ -36,6 +42,7 @@ export type InvoiceRegisterRow = {
   payHref: string | null
   recorded: string | null
   canDelete: boolean
+  canEditCollections: boolean
 }
 
 function sheetDate(iso: string) {
@@ -80,6 +87,7 @@ export function InvoiceRegister({
   pageSize?: number
 }) {
   const [selected, setSelected] = useState<string[]>([])
+  const [promiseFor, setPromiseFor] = useState<InvoiceRegisterRow | null>(null)
   const visible = rows.map((row) => row.id)
   const allOn = visible.length > 0 && visible.every((id) => selected.includes(id))
   const chosen = rows.filter((row) => selected.includes(row.id))
@@ -263,13 +271,25 @@ export function InvoiceRegister({
                 <TableCell className="uppercase">{row.customer}</TableCell>
                 <TableCell className="numeric tabular">{row.amount}</TableCell>
                 <TableCell className="numeric tabular">{row.balance}</TableCell>
-                <TableCell className="tabular whitespace-nowrap">{row.due ? sheetDate(row.due) : '—'}</TableCell>
+                <TableCell className="tabular whitespace-nowrap">
+                  {row.promisedDate ? (
+                    <span title={row.due ? `Invoice due ${sheetDate(row.due)}` : undefined}>
+                      Promise {sheetDate(row.promisedDate)}
+                    </span>
+                  ) : row.due ? (
+                    sheetDate(row.due)
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
                 <TableCell>
                   {row.overdue ? (
                     <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[#c2410c]">
                       <ClockIcon className="size-3.5" aria-hidden />
                       {row.statusText}
                     </span>
+                  ) : row.excludeFromOverdue ? (
+                    <span className="text-muted-foreground">Un overdue</span>
                   ) : (
                     <span className="text-muted-foreground">{row.statusText}</span>
                   )}
@@ -306,6 +326,12 @@ export function InvoiceRegister({
                             <Link href={row.payHref}>Receive payment</Link>
                           </DropdownMenuItem>
                         ) : null}
+                        <InvoiceCollectionsMenuItems
+                          invoiceId={row.id}
+                          excludeFromOverdue={row.excludeFromOverdue}
+                          canEdit={row.canEditCollections}
+                          onRecordPromise={() => setPromiseFor(row)}
+                        />
                         {row.canDelete ? (
                           <DeleteMenuItem kind="sales" id={row.id} number={row.number} redirectTo={basePath} />
                         ) : null}
@@ -325,6 +351,14 @@ export function InvoiceRegister({
           {total} {total === 1 ? 'row' : 'rows'}
         </span>
       </div>
+
+      {promiseFor ? (
+        <PaymentPromiseDialog
+          invoiceId={promiseFor.id}
+          initialDate={promiseFor.promisedDate}
+          onClose={() => setPromiseFor(null)}
+        />
+      ) : null}
     </div>
   )
 }

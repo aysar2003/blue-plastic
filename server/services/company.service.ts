@@ -1,7 +1,13 @@
 import 'server-only'
 
+import { companyLimitStatus } from '@/lib/company-limits'
 import { MAX_SUB_COMPANIES } from '@/lib/company-group'
-import type { AttachSubCompanyInput, CreateCompanyInput, DeleteCompanyInput } from '@/lib/validation/company'
+import type {
+  AttachSubCompanyInput,
+  CreateCompanyInput,
+  DeleteCompanyInput,
+  UpdateCompanyLimitsInput,
+} from '@/lib/validation/company'
 import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
 import type { OrgContext } from '@/server/auth/context'
 import { allowCompanyWipe } from '@/server/company-wipe'
@@ -291,6 +297,62 @@ export async function deleteCompany(ctx: OrgContext, input: DeleteCompanyInput) 
   }
 }
 
+const LIMIT_SELECT = {
+  id: true,
+  name: true,
+  accessRestricted: true,
+  rentExpiresAt: true,
+  maxUsers: true,
+  rentNote: true,
+} as const
+
+/**
+ * Set lock / rent end / max users for a company database.
+ * Only the system owner manages these limits.
+ */
+export async function updateCompanyLimits(ctx: OrgContext, input: UpdateCompanyLimitsInput) {
+  if (!ctx.isSystemOwner) {
+    throw forbidden('Only the system owner can set company limits.')
+  }
+
+  const organization = await db.organization.findUnique({
+    where: { id: input.orgId },
+    select: LIMIT_SELECT,
+  })
+  if (!organization) throw notFound('Company')
+
+  const activeUsers = await db.membership.count({
+    where: { orgId: organization.id, status: 'ACTIVE' },
+  })
+  if (input.maxUsers != null && input.maxUsers < activeUsers) {
+    throw validation(
+      `This company already has ${activeUsers} users. Raise the limit or remove users first.`,
+    )
+  }
+
+  const updated = await db.organization.update({
+    where: { id: organization.id },
+    data: {
+      accessRestricted: input.accessRestricted,
+      rentExpiresAt: input.rentExpiresAt ? new Date(input.rentExpiresAt) : null,
+      maxUsers: input.maxUsers,
+      rentNote: input.rentNote,
+    },
+    select: {
+      ...LIMIT_SELECT,
+      _count: { select: { memberships: { where: { status: 'ACTIVE' } } } },
+    },
+  })
+
+  const status = companyLimitStatus(updated)
+  return {
+    orgId: updated.id,
+    name: updated.name,
+    ...status,
+    activeUsers: updated._count.memberships,
+  }
+}
+
 /** Confirm the user may open this company, then the client updates the session. */
 export async function assertCanOpenCompany(ctx: OrgContext, orgId: string) {
   if (ctx.isSystemOwner) {
@@ -312,13 +374,28 @@ export async function assertCanOpenCompany(ctx: OrgContext, orgId: string) {
       status: true,
       role: true,
       version: true,
-      organization: { select: { id: true, name: true } },
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          accessRestricted: true,
+          rentExpiresAt: true,
+          maxUsers: true,
+          rentNote: true,
+        },
+      },
     },
   })
   if (!membership || membership.status !== 'ACTIVE') {
     throw notFound('Company')
   }
   if (membership.organization.id !== orgId) throw forbidden()
+
+  const limits = companyLimitStatus(membership.organization)
+  if (limits.openBlocked) {
+    throw forbidden(limits.blockReason ?? 'This company cannot be opened right now.')
+  }
+
   return {
     orgId: membership.organization.id,
     name: membership.organization.name,

@@ -66,13 +66,13 @@ export const LAUNCHER_APPS: LauncherApp[] = [
   {
     key: 'sales',
     label: 'Sales',
-    href: '/sales/invoices?status=open',
+    href: '/sales',
     icon: 'receipt',
     glyph: 'sales',
     permission: 'invoice:read',
     accent: '#0F766E',
     wash: '#CCFBF1',
-    blurb: 'Open invoices',
+    blurb: 'Invoices and orders',
   },
   {
     key: 'customers',

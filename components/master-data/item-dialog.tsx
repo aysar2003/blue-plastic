@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
 
 import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
-import { AlertTriangleIcon, PackageIcon, PlusIcon } from 'lucide-react'
+import { AlertTriangleIcon, ArrowLeftIcon, PackageIcon, PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { idleState } from '@/components/forms/action-state'
@@ -19,8 +19,19 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { DateField } from '@/components/ui/date-field'
 import { Separator } from '@/components/ui/separator'
 import { accountOptions, type AccountChoice } from '@/lib/account-options'
+import {
+  isStockTracked,
+  itemTypeLabel,
+  profileForType,
+} from '@/lib/item-types'
 import { createCategory, createItemForm, updateItemForm } from '@/app/(app)/items/actions'
 import type { ItemType } from '@prisma/client'
+import { ItemTypePicker } from '@/components/master-data/item-type-picker'
+import {
+  ItemComponentsEditor,
+  type CatalogItem,
+  type ComponentRow,
+} from '@/components/master-data/item-components-editor'
 
 export type ItemValues = {
   id?: string
@@ -46,32 +57,22 @@ export type ItemValues = {
   categoryId?: string | null
   storeId?: string | null
   availableInPos?: boolean
+  printGroupItems?: boolean
+  itemPaymentMethod?: string | null
+  depositAccountId?: string | null
+  components?: ComponentRow[]
 }
 
 /** The raw chart. Every account selector orders it rather than filtering it. */
 export type AccountOption = AccountChoice
 export type SimpleOption = { id: string; label: string }
 
-const TYPE_HELP: Record<ItemType, string> = {
-  SERVICE: 'Labour or a service. Needs an income account only. No stock is tracked.',
-  NON_INVENTORY:
-    'Goods bought and resold without tracking stock levels. Selling one will NOT reduce any stock figure and posts no cost — the purchase was expensed when you bought it.',
-  INVENTORY:
-    'Goods with tracked quantity and cost. Selling one moves inventory and posts cost of goods sold in the same journal as the sale.',
-}
-
-/** Cannot be changed later, so it is worth being blunt about at the moment of choosing. */
-const TYPE_WARNING: Partial<Record<ItemType, string>> = {
-  SERVICE: 'Stock is never tracked for a service. This cannot be changed later.',
-  NON_INVENTORY:
-    'This item will not appear on the Inventory screen and its quantity will never change, however many you sell. If you want to count this one, choose Inventory product — the type cannot be changed after the item is created.',
-}
-
 export function NewItemButton(props: {
   accounts: AccountOption[]
   taxCodes: SimpleOption[]
   categories: SimpleOption[]
   stores?: (SimpleOption & { isOffice?: boolean })[]
+  catalogItems?: CatalogItem[]
   currency: string
   today?: string
 }) {
@@ -93,6 +94,7 @@ export function ItemDialog({
   taxCodes,
   categories,
   stores = [],
+  catalogItems = [],
   currency,
   today,
   onClose,
@@ -106,6 +108,7 @@ export function ItemDialog({
   taxCodes: SimpleOption[]
   categories: SimpleOption[]
   stores?: (SimpleOption & { isOffice?: boolean })[]
+  catalogItems?: CatalogItem[]
   currency: string
   /** Default date for opening stock. */
   today?: string
@@ -122,12 +125,23 @@ export function ItemDialog({
     mode === 'create' ? createItemForm : updateItemForm,
     idleState,
   )
-  const [type, setType] = useState<ItemType>(item?.type ?? 'NON_INVENTORY')
+  const [step, setStep] = useState<'pick' | 'form'>(mode === 'edit' ? 'form' : 'pick')
+  const [type, setType] = useState<ItemType | null>(item?.type ?? null)
+  const profile = type ? profileForType(type) : null
+  const stock = type ? isStockTracked(type) : false
   const [categoryOptions, setCategoryOptions] = usePropState(categories)
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? '')
   const [addingCategory, setAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [savingCategory, setSavingCategory] = useState(false)
+  const [componentRows, setComponentRows] = useState<ComponentRow[]>(
+    () => item?.components?.length ? item.components : [{ itemId: '', quantity: '1' }],
+  )
+  const [depositToBank, setDepositToBank] = useState(() => {
+    if (!item?.depositAccountId) return false
+    const account = accounts.find((row) => row.id === item.depositAccountId)
+    return account?.subtype === 'BANK'
+  })
   const handled = useRef(false)
 
   async function saveNewCategory() {
@@ -167,34 +181,47 @@ export function ItemDialog({
     if (state.status !== 'success') handled.current = false
   }, [state, router, onClose, onCreated])
 
-  /**
-   * Four views of the *same* chart. Each puts the accounts the field normally
-   * wants at the top and keeps everything else selectable underneath — a
-   * business that posts its sales to an "Other income" account should not have
-   * to rename it before it can pick it.
-   */
   const income = useMemo(
-    () => accountOptions(accounts, { prefer: ['INCOME', 'OTHER_INCOME', 'SALES_DISCOUNTS'], preferTypes: ['REVENUE'] }),
-    [accounts],
+    () =>
+      accountOptions(accounts, {
+        prefer: profile?.discountIncome
+          ? ['SALES_DISCOUNTS', 'INCOME', 'OTHER_INCOME']
+          : ['INCOME', 'OTHER_INCOME', 'SALES_DISCOUNTS'],
+        preferTypes: ['REVENUE'],
+      }),
+    [accounts, profile?.discountIncome],
   )
   const expense = useMemo(
-    () => accountOptions(accounts, { prefer: ['OPERATING_EXPENSE', 'COST_OF_GOODS_SOLD', 'OTHER_EXPENSE'], preferTypes: ['EXPENSE'] }),
+    () => accountOptions(accounts, { prefer: ['OPERATING_EXPENSE', 'OTHER_EXPENSE'], preferTypes: ['EXPENSE'] }),
     [accounts],
   )
-  const cogs = useMemo(
-    () => accountOptions(accounts, { prefer: ['COST_OF_GOODS_SOLD'], preferTypes: ['EXPENSE'] }),
+  const cogsSystem = useMemo(
+    () =>
+      accounts.find((account) => account.systemKey === 'COGS') ??
+      accounts.find((account) => account.subtype === 'COST_OF_GOODS_SOLD') ??
+      null,
     [accounts],
   )
   const inventory = useMemo(
     () => accountOptions(accounts, { prefer: ['INVENTORY', 'OTHER_CURRENT_ASSET'], preferTypes: ['ASSET'] }),
     [accounts],
   )
+  const depositAccounts = useMemo(
+    () => accountOptions(accounts, { prefer: ['UNDEPOSITED_FUNDS', 'BANK'], preferTypes: ['ASSET'] }),
+    [accounts],
+  )
+  const undeposited = useMemo(
+    () =>
+      accounts.find((a) => a.subtype === 'UNDEPOSITED_FUNDS' || a.systemKey === 'UNDEPOSITED_FUNDS') ??
+      null,
+    [accounts],
+  )
 
-  // Controlled, because they are comboboxes rather than <select>s and because
-  // switching to Inventory pre-selects the usual stock and cost accounts.
   const [incomeAccountId, setIncomeAccountId] = useState(item?.incomeAccountId ?? '')
   const [expenseAccountId, setExpenseAccountId] = useState(item?.expenseAccountId ?? '')
-  const [cogsAccountId, setCogsAccountId] = useState(item?.cogsAccountId ?? '')
+  const [depositAccountId, setDepositAccountId] = useState(
+    item?.depositAccountId ?? undeposited?.id ?? '',
+  )
   const office = stores.find((store) => store.isOffice)
   const [inventoryAccountId, setInventoryAccountId] = useState(() => {
     if (item?.inventoryAccountId) return item.inventoryAccountId
@@ -208,317 +235,278 @@ export function ItemDialog({
   const [openingUnitCost, setOpeningUnitCost] = useState(item?.purchaseCost ?? '')
   const [openingDate, setOpeningDate] = useState(today ?? '')
 
-  const chooseType = (next: ItemType) => {
+  const pickType = (next: ItemType) => {
     setType(next)
-    if (next !== 'INVENTORY') {
+    setStep('form')
+    if (!isStockTracked(next)) {
       setInventoryAccountId('')
-      setCogsAccountId('')
       setOpeningQuantity('')
       return
     }
-    // The accounts a tracked item cannot do without, filled in from the chart's
-    // own stock and cost-of-sales accounts so the common case needs no thought.
     if (!inventoryAccountId) {
       setInventoryAccountId(accounts.find((a) => a.subtype === 'INVENTORY')?.id ?? '')
-    }
-    if (!cogsAccountId) {
-      setCogsAccountId(accounts.find((a) => a.subtype === 'COST_OF_GOODS_SOLD')?.id ?? '')
     }
   }
 
   const e = state.fieldErrors
+  const catalog = catalogItems.filter((row) => row.id !== item?.id)
+
+  const categoryField = (
+    <Field name="categoryId" label="Category" error={e?.categoryId}>
+      <div className="space-y-2">
+        <NativeSelect
+          {...fieldProps('categoryId', e?.categoryId)}
+          value={categoryId}
+          onChange={(event) => setCategoryId(event.target.value)}
+        >
+          <option value="">— none —</option>
+          {categoryOptions.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.label}
+            </option>
+          ))}
+        </NativeSelect>
+        {addingCategory ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={newCategoryName}
+              onChange={(event) => setNewCategoryName(event.target.value)}
+              placeholder="New category name"
+              autoFocus
+              className="min-w-0 flex-1"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void saveNewCategory()
+                }
+                if (event.key === 'Escape') {
+                  setAddingCategory(false)
+                  setNewCategoryName('')
+                }
+              }}
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={savingCategory || !newCategoryName.trim()}
+              onClick={() => void saveNewCategory()}
+            >
+              {savingCategory ? 'Saving…' : 'Add'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={savingCategory}
+              onClick={() => {
+                setAddingCategory(false)
+                setNewCategoryName('')
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+            onClick={() => setAddingCategory(true)}
+          >
+            + Add category
+          </button>
+        )}
+      </div>
+    </Field>
+  )
+
+  const unitField = (
+    <Field name="unitOfMeasure" label="Unit" error={e?.unitOfMeasure}>
+      <Input
+        {...fieldProps('unitOfMeasure', e?.unitOfMeasure)}
+        defaultValue={item?.unitOfMeasure ?? ''}
+        placeholder="kg, piece, roll"
+      />
+    </Field>
+  )
+
+  const posAndTax = type && type !== 'SUBTOTAL' && type !== 'GROUP' && type !== 'PAYMENT' ? (
+    <>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="hidden" name="availableInPos" value="false" />
+        <input
+          type="checkbox"
+          name="availableInPos"
+          value="true"
+          defaultChecked={item?.availableInPos !== false && type !== 'DISCOUNT'}
+          className="size-4 rounded border"
+        />
+        Available in Point of Sale
+      </label>
+      <Field name="salesTaxCodeId" label="Default sales tax" error={e?.salesTaxCodeId}>
+        <NativeSelect
+          {...fieldProps('salesTaxCodeId', e?.salesTaxCodeId)}
+          defaultValue={item?.salesTaxCodeId ?? ''}
+        >
+          <option value="">— none —</option>
+          {taxCodes.map((code) => (
+            <option key={code.id} value={code.id}>
+              {code.label}
+            </option>
+          ))}
+        </NativeSelect>
+      </Field>
+    </>
+  ) : null
 
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose() }}>
-      <DialogContent size="lg">
+      <DialogContent size={step === 'pick' ? 'xl' : 'lg'}>
         <DialogHeader>
-          <DialogTitle>{mode === 'create' ? 'New item' : `Edit ${item?.name}`}</DialogTitle>
+          <DialogTitle>
+            {mode === 'edit'
+              ? `Edit ${item?.name}`
+              : step === 'pick'
+                ? 'New item'
+                : `New item — ${type ? itemTypeLabel(type) : ''}`}
+          </DialogTitle>
           {recorded ? <p className="text-xs text-muted-foreground">{recorded}</p> : null}
         </DialogHeader>
 
-        <form action={formAction} className="mt-4 space-y-5">
-          <FormStatus state={state} />
-          {item?.id ? <input type="hidden" name="id" value={item.id} /> : null}
-          {mode === 'edit' ? <input type="hidden" name="type" value={type} /> : null}
-
-          <div className="grid gap-4 sm:grid-cols-[1fr_10rem]">
-            <Field name="name" label="Name" required error={e?.name}>
-              <Input
-                {...fieldProps('name', e?.name)}
-                defaultValue={item?.name ?? defaultName ?? ''}
-                autoFocus
-                required
-              />
-            </Field>
-            <Field name="sku" label="SKU" error={e?.sku}>
-              <Input {...fieldProps('sku', e?.sku)} defaultValue={item?.sku ?? ''} />
-            </Field>
-          </div>
-
-          <Field
-            name="barcode"
-            label="Barcode"
-            hint="Scan the package here, or type the code. The till adds this item when that code is scanned. A SKU scan still works."
-            error={e?.barcode}
-          >
-            <Input
-              {...fieldProps('barcode', e?.barcode)}
-              defaultValue={item?.barcode ?? ''}
-              autoComplete="off"
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') event.preventDefault()
-              }}
-            />
-          </Field>
-
-          <Field name="type" label="Type" hint={TYPE_HELP[type]} required error={e?.type}>
-            {mode === 'create' ? (
-              <NativeSelect
-                {...fieldProps('type', e?.type, true)}
-                value={type}
-                onChange={(event) => chooseType(event.target.value as ItemType)}
-              >
-                <option value="SERVICE">Service</option>
-                <option value="NON_INVENTORY">Non-inventory product</option>
-                <option value="INVENTORY">Inventory product</option>
-              </NativeSelect>
-            ) : (
-              <Input
-                id="type"
-                value={
-                  type === 'SERVICE' ? 'Service' : type === 'INVENTORY' ? 'Inventory product' : 'Non-inventory product'
-                }
-                disabled
-                readOnly
-                aria-describedby="type-hint"
-              />
-            )}
-          </Field>
-
-          {mode === 'create' && TYPE_WARNING[type] ? (
-            <p className="-mt-2 flex gap-2 rounded-md border border-warning/40 bg-warning/5 p-2.5 text-xs text-muted-foreground">
-              <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
-              <span>{TYPE_WARNING[type]}</span>
-            </p>
-          ) : null}
-
-          {type === 'INVENTORY' ? (
-            <p className="-mt-2 flex gap-2 rounded-md border bg-muted/40 p-2.5 text-xs text-muted-foreground">
-              <PackageIcon className="mt-0.5 size-3.5 shrink-0" />
-              <span>
-                Stock is part of this item, not a separate system. Anything entered under{' '}
-                <strong>Stock setup</strong> below posts as a real opening movement — into the inventory
-                account, against Opening Balance Equity — so the item is countable and sellable the moment
-                it is created. After that, stock moves through bills, invoices and adjustments.
-              </span>
-            </p>
-          ) : null}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field name="categoryId" label="Category" error={e?.categoryId}>
-              <div className="space-y-2">
-                <NativeSelect
-                  {...fieldProps('categoryId', e?.categoryId)}
-                  value={categoryId}
-                  onChange={(event) => setCategoryId(event.target.value)}
-                >
-                  <option value="">— none —</option>
-                  {categoryOptions.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.label}
-                    </option>
-                  ))}
-                </NativeSelect>
-                {addingCategory ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                      value={newCategoryName}
-                      onChange={(event) => setNewCategoryName(event.target.value)}
-                      placeholder="New category name"
-                      autoFocus
-                      className="min-w-0 flex-1"
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault()
-                          void saveNewCategory()
-                        }
-                        if (event.key === 'Escape') {
-                          setAddingCategory(false)
-                          setNewCategoryName('')
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={savingCategory || !newCategoryName.trim()}
-                      onClick={() => void saveNewCategory()}
-                    >
-                      {savingCategory ? 'Saving…' : 'Add'}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={savingCategory}
-                      onClick={() => {
-                        setAddingCategory(false)
-                        setNewCategoryName('')
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-primary underline-offset-4 hover:underline"
-                    onClick={() => setAddingCategory(true)}
-                  >
-                    + Add category
-                  </button>
-                )}
-              </div>
-            </Field>
-            <Field name="unitOfMeasure" label="Unit" error={e?.unitOfMeasure}>
-              <Input
-                {...fieldProps('unitOfMeasure', e?.unitOfMeasure)}
-                defaultValue={item?.unitOfMeasure ?? ''}
-                placeholder="kg, piece, roll"
-              />
-            </Field>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Selling</p>
-
-            <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
-              <Field name="salesPrice" label={`Price (${currency})`} error={e?.salesPrice}>
-                <Input
-                  {...fieldProps('salesPrice', e?.salesPrice)}
-                  inputMode="decimal"
-                  className="tabular"
-                  defaultValue={item?.salesPrice ?? ''}
-                />
-              </Field>
-              <Field
-                name="incomeAccountId"
-                label="Income account"
-                hint="Where revenue from this item is posted."
-                required
-                error={e?.incomeAccountId}
-              >
-                <AccountPicker
-                  id="incomeAccountId"
-                  name="incomeAccountId"
-                  options={income}
-                  value={incomeAccountId || null}
-                  onChange={(next) => setIncomeAccountId(next ?? '')}
-                  required
-                  error={e?.incomeAccountId}
-                />
-              </Field>
+        {step === 'pick' && mode === 'create' ? (
+          <div className="mt-4 space-y-4">
+            <ItemTypePicker onPick={pickType} />
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
             </div>
-
-            <label className="flex items-center gap-2 text-sm">
-              <input type="hidden" name="availableInPos" value="false" />
-              <input
-                type="checkbox"
-                name="availableInPos"
-                value="true"
-                defaultChecked={item?.availableInPos !== false}
-                className="size-4 rounded border"
-              />
-              Available in Point of Sale
-            </label>
-
-            <Field name="salesTaxCodeId" label="Default sales tax" error={e?.salesTaxCodeId}>
-              <NativeSelect
-                {...fieldProps('salesTaxCodeId', e?.salesTaxCodeId)}
-                defaultValue={item?.salesTaxCodeId ?? ''}
-              >
-                <option value="">— none —</option>
-                {taxCodes.map((code) => (
-                  <option key={code.id} value={code.id}>
-                    {code.label}
-                  </option>
-                ))}
-              </NativeSelect>
-            </Field>
           </div>
+        ) : type && profile ? (
+          <form action={formAction} className="mt-4 space-y-5">
+            <FormStatus state={state} />
+            {item?.id ? <input type="hidden" name="id" value={item.id} /> : null}
+            <input type="hidden" name="type" value={type} />
 
-          <Separator />
-
-          <div className="space-y-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Buying</p>
-
-            <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
-              <div className="space-y-4">
-                <Field
-                  name="purchaseCost"
-                  label={`Cost (${currency})`}
-                  hint={
-                    type === 'INVENTORY'
-                      ? 'Follows average cost whenever stock moves. Edit only as a starting figure before the first receipt.'
-                      : undefined
-                  }
-                  error={e?.purchaseCost}
-                >
-                  <Input
-                    {...fieldProps('purchaseCost', e?.purchaseCost)}
-                    inputMode="decimal"
-                    className="tabular"
-                    defaultValue={
-                      type === 'INVENTORY' && item?.averageCost && Number(item.averageCost) !== 0
-                        ? item.averageCost
-                        : (item?.purchaseCost ?? '')
-                    }
-                  />
-                </Field>
-
-                {type === 'INVENTORY' ? (
-                  <Field
-                    name="averageCost"
-                    label="Average cost"
-                    hint="What the stock is really sitting at — updates when you buy, sell, adjust, or transfer. Not editable."
-                  >
-                    <Input
-                      id="averageCost"
-                      readOnly
-                      tabIndex={-1}
-                      className="tabular text-muted-foreground"
-                      defaultValue={
-                        item?.averageCost && Number(item.averageCost) !== 0
-                          ? item.averageCost
-                          : '—'
-                      }
-                    />
-                  </Field>
-                ) : null}
+            {mode === 'create' ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{itemTypeLabel(type)}</p>
+                  <p className="text-xs text-muted-foreground">{profile.blurb}</p>
+                </div>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setStep('pick')}>
+                  <ArrowLeftIcon className="size-3.5" />
+                  Change type
+                </Button>
               </div>
+            ) : (
+              <Field name="type" label="Type" hint={profile.blurb}>
+                <Input id="type" value={itemTypeLabel(type)} disabled readOnly />
+              </Field>
+            )}
 
-              {type === 'INVENTORY' ? (
-                <Field
-                  name="cogsAccountId"
-                  label="Cost of goods sold account"
-                  hint="Posted in the same journal as the sale, so gross margin is right on the day."
+            <div className="grid gap-4 sm:grid-cols-[1fr_10rem]">
+              <Field name="name" label="Name" required error={e?.name}>
+                <Input
+                  {...fieldProps('name', e?.name)}
+                  defaultValue={item?.name ?? defaultName ?? ''}
+                  autoFocus
                   required
-                  error={e?.cogsAccountId}
-                >
-                  <AccountPicker
-                    id="cogsAccountId"
-                    name="cogsAccountId"
-                    options={cogs}
-                    value={cogsAccountId || null}
-                    onChange={(next) => setCogsAccountId(next ?? '')}
-                    required
-                    error={e?.cogsAccountId}
-                  />
+                />
+              </Field>
+              {type !== 'SUBTOTAL' && type !== 'PAYMENT' ? (
+                <Field name="sku" label="SKU" error={e?.sku}>
+                  <Input {...fieldProps('sku', e?.sku)} defaultValue={item?.sku ?? ''} />
                 </Field>
               ) : (
-                <Field name="expenseAccountId" label="Expense account" error={e?.expenseAccountId}>
+                <div />
+              )}
+            </div>
+
+            {stock || type === 'NON_INVENTORY' || type === 'SERVICE' || type === 'OTHER_CHARGE' ? (
+              <Field
+                name="barcode"
+                label="Barcode"
+                hint="Scan the package here, or type the code. The till adds this item when that code is scanned."
+                error={e?.barcode}
+              >
+                <Input
+                  {...fieldProps('barcode', e?.barcode)}
+                  defaultValue={item?.barcode ?? ''}
+                  autoComplete="off"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.preventDefault()
+                  }}
+                />
+              </Field>
+            ) : null}
+
+            {mode === 'create' && !stock && type !== 'SUBTOTAL' && type !== 'GROUP' && type !== 'PAYMENT' ? (
+              <p className="-mt-2 flex gap-2 rounded-md border border-warning/40 bg-warning/5 p-2.5 text-xs text-muted-foreground">
+                <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
+                <span>
+                  This type never tracks stock quantity. That cannot be changed after the item is created.
+                </span>
+              </p>
+            ) : null}
+
+            {stock ? (
+              <p className="-mt-2 flex gap-2 rounded-md border bg-muted/40 p-2.5 text-xs text-muted-foreground">
+                <PackageIcon className="mt-0.5 size-3.5 shrink-0" />
+                <span>
+                  Stock is part of this item. <strong>Stock setup</strong> below posts a real opening
+                  movement into the inventory account (against Opening Balance Equity).
+                </span>
+              </p>
+            ) : null}
+
+            {type !== 'SUBTOTAL' && type !== 'PAYMENT' ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {categoryField}
+                {unitField}
+              </div>
+            ) : null}
+
+            <Separator />
+
+            {/* —— SERVICE —— */}
+            {type === 'SERVICE' ? (
+              <div className="space-y-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Sales information
+                </p>
+                <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+                  <Field name="salesPrice" label={`Rate (${currency})`} error={e?.salesPrice}>
+                    <Input
+                      {...fieldProps('salesPrice', e?.salesPrice)}
+                      inputMode="decimal"
+                      className="tabular"
+                      defaultValue={item?.salesPrice ?? ''}
+                    />
+                  </Field>
+                  <Field
+                    name="incomeAccountId"
+                    label="Income account"
+                    hint="Where revenue from this service is posted."
+                    required
+                    error={e?.incomeAccountId}
+                  >
+                    <AccountPicker
+                      id="incomeAccountId"
+                      name="incomeAccountId"
+                      options={income}
+                      value={incomeAccountId || null}
+                      onChange={(next) => setIncomeAccountId(next ?? '')}
+                      required
+                      error={e?.incomeAccountId}
+                    />
+                  </Field>
+                </div>
+                <Field
+                  name="expenseAccountId"
+                  label="Expense account (optional)"
+                  hint="When a subcontractor or partner performs this service."
+                  error={e?.expenseAccountId}
+                >
                   <AccountPicker
                     id="expenseAccountId"
                     name="expenseAccountId"
@@ -529,125 +517,458 @@ export function ItemDialog({
                     error={e?.expenseAccountId}
                   />
                 </Field>
-              )}
-            </div>
-
-            {type === 'INVENTORY' ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  name="inventoryAccountId"
-                  label="Inventory account"
-                  hint="Where the value of stock on hand is held."
-                  required
-                  error={e?.inventoryAccountId}
-                >
-                  <AccountPicker
-                    id="inventoryAccountId"
-                    name="inventoryAccountId"
-                    options={inventory}
-                    value={inventoryAccountId || null}
-                    onChange={(next) => setInventoryAccountId(next ?? '')}
-                    required
-                    error={e?.inventoryAccountId}
-                  />
-                </Field>
-                <Field name="storeId" label="Store" hint="Where this item is kept. A new item posts to that store’s account." error={e?.storeId}>
-                  <NativeSelect
-                    {...fieldProps('storeId', e?.storeId)}
-                    defaultValue={item?.storeId ?? office?.id ?? ''}
-                    onChange={(event) => {
-                      const store = stores.find((row) => row.id === event.target.value)
-                      if (store && mode === 'create') {
-                        const account = accounts.find((row) => row.name === store.label && row.subtype === 'INVENTORY')
-                        if (account) setInventoryAccountId(account.id)
-                      }
-                    }}
-                  >
-                    <option value="">— no store —</option>
-                    {stores.map((store) => (
-                      <option key={store.id} value={store.id}>
-                        {store.label}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                </Field>
-                <Field name="reorderPoint" label="Reorder at" error={e?.reorderPoint}>
-                  <Input
-                    {...fieldProps('reorderPoint', e?.reorderPoint)}
-                    inputMode="decimal"
-                    className="tabular"
-                    defaultValue={item?.reorderPoint ?? ''}
-                  />
-                </Field>
+                {posAndTax}
               </div>
             ) : null}
-          </div>
 
-          {type === 'INVENTORY' && mode === 'create' ? (
-            <>
-              <Separator />
+            {/* —— OTHER CHARGE —— */}
+            {type === 'OTHER_CHARGE' ? (
               <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Stock setup
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    What is on the shelf today, and what it cost. Leave the quantity blank for an item you
-                    have not received yet — it can be received on a bill or counted in later.
-                  </p>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <Field name="openingQuantity" label="Quantity on hand" error={e?.openingQuantity}>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Charge details
+                </p>
+                <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+                  <Field name="salesPrice" label={`Amount or % (${currency})`} error={e?.salesPrice}>
                     <Input
-                      {...fieldProps('openingQuantity', e?.openingQuantity)}
+                      {...fieldProps('salesPrice', e?.salesPrice)}
                       inputMode="decimal"
                       className="tabular"
-                      placeholder="0"
-                      value={openingQuantity}
-                      onChange={(event) => setOpeningQuantity(event.target.value)}
+                      defaultValue={item?.salesPrice ?? ''}
                     />
                   </Field>
                   <Field
-                    name="openingUnitCost"
-                    label={`Cost each (${currency})`}
-                    error={e?.openingUnitCost}
+                    name="incomeAccountId"
+                    label="Account"
+                    hint="Income account for this charge on sales."
+                    required
+                    error={e?.incomeAccountId}
                   >
-                    <Input
-                      {...fieldProps('openingUnitCost', e?.openingUnitCost)}
-                      inputMode="decimal"
-                      className="tabular"
-                      value={openingUnitCost ?? ''}
-                      onChange={(event) => setOpeningUnitCost(event.target.value)}
-                    />
-                  </Field>
-                  <Field name="openingDate" label="As at" error={e?.openingDate}>
-                    <DateField
-                      id="openingDate"
-                      name="openingDate"
-                      value={openingDate}
-                      onChange={setOpeningDate}
-                      today={today}
+                    <AccountPicker
+                      id="incomeAccountId"
+                      name="incomeAccountId"
+                      options={income}
+                      value={incomeAccountId || null}
+                      onChange={(next) => setIncomeAccountId(next ?? '')}
+                      required
+                      error={e?.incomeAccountId}
                     />
                   </Field>
                 </div>
+                <Field
+                  name="expenseAccountId"
+                  label="Expense account (optional)"
+                  hint="When you purchase this charge from a vendor."
+                  error={e?.expenseAccountId}
+                >
+                  <AccountPicker
+                    id="expenseAccountId"
+                    name="expenseAccountId"
+                    options={expense}
+                    value={expenseAccountId || null}
+                    onChange={(next) => setExpenseAccountId(next ?? '')}
+                    clearable
+                    error={e?.expenseAccountId}
+                  />
+                </Field>
+                {posAndTax}
               </div>
-            </>
-          ) : null}
+            ) : null}
 
-          <Field name="description" label="Description" error={e?.description}>
-            <Input {...fieldProps('description', e?.description)} defaultValue={item?.description ?? ''} />
-          </Field>
+            {/* —— DISCOUNT —— */}
+            {type === 'DISCOUNT' ? (
+              <div className="space-y-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Discount
+                </p>
+                <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+                  <Field
+                    name="salesPrice"
+                    label={`Amount (${currency})`}
+                    hint="How much this discount reduces the sale by default."
+                    error={e?.salesPrice}
+                  >
+                    <Input
+                      {...fieldProps('salesPrice', e?.salesPrice)}
+                      inputMode="decimal"
+                      className="tabular"
+                      defaultValue={item?.salesPrice ?? ''}
+                    />
+                  </Field>
+                  <Field
+                    name="incomeAccountId"
+                    label="Discount account"
+                    hint="Sales discounts (contra-income) where this discount posts."
+                    required
+                    error={e?.incomeAccountId}
+                  >
+                    <AccountPicker
+                      id="incomeAccountId"
+                      name="incomeAccountId"
+                      options={income}
+                      value={incomeAccountId || null}
+                      onChange={(next) => setIncomeAccountId(next ?? '')}
+                      required
+                      error={e?.incomeAccountId}
+                    />
+                  </Field>
+                </div>
+                {posAndTax}
+              </div>
+            ) : null}
 
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <SubmitButton pendingLabel="Saving…">
-              {mode === 'create' ? 'Create item' : 'Save changes'}
-            </SubmitButton>
-          </div>
-        </form>
+            {/* —— SUBTOTAL —— */}
+            {type === 'SUBTOTAL' ? (
+              <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                A subtotal line totals the items above it on a sales form. No price or account is stored
+                on the item — only the name and description appear on documents.
+              </p>
+            ) : null}
+
+            {/* —— GROUP —— */}
+            {type === 'GROUP' ? (
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="hidden" name="printGroupItems" value="false" />
+                  <input
+                    type="checkbox"
+                    name="printGroupItems"
+                    value="true"
+                    defaultChecked={item?.printGroupItems !== false}
+                    className="size-4 rounded border"
+                  />
+                  Print items in group
+                </label>
+                <ItemComponentsEditor
+                  rows={componentRows}
+                  onChange={setComponentRows}
+                  catalog={catalog}
+                  label="Group items"
+                />
+              </div>
+            ) : null}
+
+            {/* —— PAYMENT —— */}
+            {type === 'PAYMENT' ? (
+              <div className="space-y-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Payment
+                </p>
+                <Field name="itemPaymentMethod" label="Payment method" error={e?.itemPaymentMethod}>
+                  <NativeSelect
+                    {...fieldProps('itemPaymentMethod', e?.itemPaymentMethod)}
+                    defaultValue={item?.itemPaymentMethod ?? 'CASH'}
+                  >
+                    <option value="CASH">Cash</option>
+                    <option value="CARD">Card</option>
+                    <option value="CHEQUE">Cheque</option>
+                    <option value="BANK_TRANSFER">Bank transfer</option>
+                    <option value="MOBILE_MONEY">Mobile money</option>
+                    <option value="OTHER">Other</option>
+                  </NativeSelect>
+                </Field>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Deposit to</p>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="depositMode"
+                      className="mt-1"
+                      checked={!depositToBank}
+                      onChange={() => {
+                        setDepositToBank(false)
+                        setDepositAccountId(undeposited?.id ?? '')
+                      }}
+                    />
+                    <span>
+                      Group with other undeposited funds
+                      {undeposited ? (
+                        <span className="block text-xs text-muted-foreground">
+                          {undeposited.code} — {undeposited.name}
+                        </span>
+                      ) : (
+                        <span className="block text-xs text-destructive">
+                          Undeposited Funds is missing from the chart.
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="depositMode"
+                      className="mt-1"
+                      checked={depositToBank}
+                      onChange={() => setDepositToBank(true)}
+                    />
+                    <span className="flex-1">
+                      Deposit To
+                      <AccountPicker
+                        id="depositAccountId"
+                        name={depositToBank ? 'depositAccountId' : undefined}
+                        options={depositAccounts}
+                        value={depositToBank ? depositAccountId || null : null}
+                        onChange={(next) => setDepositAccountId(next ?? '')}
+                        required={depositToBank}
+                        error={e?.depositAccountId}
+                        className="mt-1"
+                      />
+                    </span>
+                  </label>
+                  {!depositToBank ? (
+                    <input type="hidden" name="depositAccountId" value={depositAccountId} />
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {/* —— NON-INVENTORY / INVENTORY / ASSEMBLY —— */}
+            {(type === 'NON_INVENTORY' || stock) ? (
+              <div className="space-y-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Selling
+                </p>
+                <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+                  <Field name="salesPrice" label={`Sales price (${currency})`} error={e?.salesPrice}>
+                    <Input
+                      {...fieldProps('salesPrice', e?.salesPrice)}
+                      inputMode="decimal"
+                      className="tabular"
+                      defaultValue={item?.salesPrice ?? ''}
+                    />
+                  </Field>
+                  <Field
+                    name="incomeAccountId"
+                    label="Income account"
+                    hint="Where revenue from this item is posted."
+                    required
+                    error={e?.incomeAccountId}
+                  >
+                    <AccountPicker
+                      id="incomeAccountId"
+                      name="incomeAccountId"
+                      options={income}
+                      value={incomeAccountId || null}
+                      onChange={(next) => setIncomeAccountId(next ?? '')}
+                      required
+                      error={e?.incomeAccountId}
+                    />
+                  </Field>
+                </div>
+                {posAndTax}
+
+                <Separator />
+
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Buying
+                </p>
+                <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+                  <div className="space-y-4">
+                    <Field
+                      name="purchaseCost"
+                      label={`Cost (${currency})`}
+                      hint={
+                        stock
+                          ? 'Follows average cost whenever stock moves. Edit only as a starting figure before the first receipt.'
+                          : undefined
+                      }
+                      error={e?.purchaseCost}
+                    >
+                      <Input
+                        {...fieldProps('purchaseCost', e?.purchaseCost)}
+                        inputMode="decimal"
+                        className="tabular"
+                        defaultValue={
+                          stock && item?.averageCost && Number(item.averageCost) !== 0
+                            ? item.averageCost
+                            : (item?.purchaseCost ?? '')
+                        }
+                      />
+                    </Field>
+                    {stock ? (
+                      <Field
+                        name="averageCost"
+                        label="Average cost"
+                        hint="What the stock is really sitting at — updates when you buy, sell, adjust, or transfer. Not editable."
+                      >
+                        <Input
+                          id="averageCost"
+                          readOnly
+                          tabIndex={-1}
+                          className="tabular text-muted-foreground"
+                          defaultValue={
+                            item?.averageCost && Number(item.averageCost) !== 0
+                              ? item.averageCost
+                              : '—'
+                          }
+                        />
+                      </Field>
+                    ) : null}
+                  </div>
+                  <Field
+                    name={stock ? 'cogsAccountId' : 'expenseAccountId'}
+                    label="Cost of goods sold"
+                    hint={
+                      stock
+                        ? 'A sale posts this item’s average cost here, in the same journal as the sales price.'
+                        : 'Buying this product posts the cost here. It is not an expense.'
+                    }
+                    error={e?.cogsAccountId ?? e?.expenseAccountId}
+                  >
+                    <input
+                      type="hidden"
+                      name={stock ? 'cogsAccountId' : 'expenseAccountId'}
+                      value={cogsSystem?.id ?? ''}
+                    />
+                    <Input
+                      id={stock ? 'cogsAccountId' : 'expenseAccountId'}
+                      readOnly
+                      tabIndex={-1}
+                      value={
+                        cogsSystem
+                          ? `${cogsSystem.code} — ${cogsSystem.name}`
+                          : 'Cost of Goods Sold is not on the chart'
+                      }
+                      className="text-muted-foreground"
+                    />
+                  </Field>
+                </div>
+
+                {stock ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field
+                      name="inventoryAccountId"
+                      label="Inventory account"
+                      hint="Where the value of stock on hand is held."
+                      required
+                      error={e?.inventoryAccountId}
+                    >
+                      <AccountPicker
+                        id="inventoryAccountId"
+                        name="inventoryAccountId"
+                        options={inventory}
+                        value={inventoryAccountId || null}
+                        onChange={(next) => setInventoryAccountId(next ?? '')}
+                        required
+                        error={e?.inventoryAccountId}
+                      />
+                    </Field>
+                    <Field
+                      name="storeId"
+                      label="Store"
+                      hint="Where this item is kept. A new item posts to that store’s account."
+                      error={e?.storeId}
+                    >
+                      <NativeSelect
+                        {...fieldProps('storeId', e?.storeId)}
+                        defaultValue={item?.storeId ?? office?.id ?? ''}
+                        onChange={(event) => {
+                          const store = stores.find((row) => row.id === event.target.value)
+                          if (store && mode === 'create') {
+                            const account = accounts.find(
+                              (row) => row.name === store.label && row.subtype === 'INVENTORY',
+                            )
+                            if (account) setInventoryAccountId(account.id)
+                          }
+                        }}
+                      >
+                        <option value="">— no store —</option>
+                        {stores.map((store) => (
+                          <option key={store.id} value={store.id}>
+                            {store.label}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </Field>
+                    <Field name="reorderPoint" label="Reorder at" error={e?.reorderPoint}>
+                      <Input
+                        {...fieldProps('reorderPoint', e?.reorderPoint)}
+                        inputMode="decimal"
+                        className="tabular"
+                        defaultValue={item?.reorderPoint ?? ''}
+                      />
+                    </Field>
+                  </div>
+                ) : null}
+
+                {type === 'INVENTORY_ASSEMBLY' ? (
+                  <>
+                    <Separator />
+                    <ItemComponentsEditor
+                      rows={componentRows}
+                      onChange={setComponentRows}
+                      catalog={catalog}
+                      label="Bill of materials"
+                    />
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+
+            {stock && mode === 'create' ? (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Stock setup
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      What is on the shelf today, and what it cost. Leave the quantity blank for an item you
+                      have not received yet.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <Field name="openingQuantity" label="Quantity on hand" error={e?.openingQuantity}>
+                      <Input
+                        {...fieldProps('openingQuantity', e?.openingQuantity)}
+                        inputMode="decimal"
+                        className="tabular"
+                        placeholder="0"
+                        value={openingQuantity}
+                        onChange={(event) => setOpeningQuantity(event.target.value)}
+                      />
+                    </Field>
+                    <Field
+                      name="openingUnitCost"
+                      label={`Cost each (${currency})`}
+                      error={e?.openingUnitCost}
+                    >
+                      <Input
+                        {...fieldProps('openingUnitCost', e?.openingUnitCost)}
+                        inputMode="decimal"
+                        className="tabular"
+                        value={openingUnitCost ?? ''}
+                        onChange={(event) => setOpeningUnitCost(event.target.value)}
+                      />
+                    </Field>
+                    <Field name="openingDate" label="As at" error={e?.openingDate}>
+                      <DateField
+                        id="openingDate"
+                        name="openingDate"
+                        value={openingDate}
+                        onChange={setOpeningDate}
+                        today={today}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            <Field name="description" label="Description" error={e?.description}>
+              <Input {...fieldProps('description', e?.description)} defaultValue={item?.description ?? ''} />
+            </Field>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <SubmitButton pendingLabel="Saving…">
+                {mode === 'create' ? 'Create item' : 'Save changes'}
+              </SubmitButton>
+            </div>
+          </form>
+        ) : null}
       </DialogContent>
     </Dialog>
   )

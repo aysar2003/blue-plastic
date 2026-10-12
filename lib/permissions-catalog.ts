@@ -287,7 +287,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     permissions: [
       { key: 'period:read', label: 'View periods' },
       { key: 'period:close', label: 'Close periods' },
-      { key: 'period:reopen', label: 'Reopen periods' },
+      {
+        key: 'period:reopen',
+        label: 'Reopen / unlock periods (Owner & Admin by default)',
+      },
     ],
   },
   {

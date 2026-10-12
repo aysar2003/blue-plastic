@@ -61,8 +61,8 @@ export const SYSTEM_ACCOUNT_ROLES: SystemAccountRole[] = [
   {
     key: 'COGS',
     label: 'Cost of goods sold',
-    used: 'The default cost account for a tracked item sold, when the item does not name its own.',
-    types: ['EXPENSE'],
+    used: 'Every product and inventory sale posts its cost here, at the system cost, under the name Cost of Goods Sold.',
+    types: ['COGS'],
     subtypes: ['COST_OF_GOODS_SOLD'],
   },
   {
@@ -104,7 +104,7 @@ export const SYSTEM_ACCOUNT_ROLES: SystemAccountRole[] = [
     key: 'INVENTORY_SHRINKAGE',
     label: 'Inventory shrinkage',
     used: 'The difference when a stock count disagrees with the books.',
-    types: ['EXPENSE'],
+    types: ['COGS', 'EXPENSE'],
     subtypes: ['COST_OF_GOODS_SOLD', 'OPERATING_EXPENSE', 'OTHER_EXPENSE'],
   },
   {

@@ -17,6 +17,7 @@ import * as equityOwnersService from '@/server/services/equity-owners.service'
 import * as periodService from '@/server/services/period.service'
 import { MonthPanel, monthLabel } from './month-panel'
 import { OwnersEquityTools } from './owners-equity-tools'
+import { ClosedPeriodsBoard } from './closed-periods-board'
 import { OpenMonthButton, PeriodToggle } from './period-actions'
 import { CloseYearButton, ReopenYearButton } from './year-end-actions'
 
@@ -36,7 +37,10 @@ export default async function PeriodsPage({
   // Periods are created on demand by posting; this makes sure the page has
   // something to show before anything has been posted.
   await periodService.ensureCurrentFiscalYear(ctx)
-  const years = await periodService.listFiscalYears(ctx)
+  const [years, closures] = await Promise.all([
+    periodService.listFiscalYears(ctx),
+    periodService.listClosures(ctx),
+  ])
 
   const canClose = ctx.permissions.has('period:close')
   const canReopen = ctx.permissions.has('period:reopen')
@@ -80,11 +84,28 @@ export default async function PeriodsPage({
             locks the year.
           </li>
           <li>
+            <span className="font-medium text-foreground">Unlock / reopen</span> — only an{' '}
+            <span className="font-medium text-foreground">Owner or Admin</span> can reopen a closed
+            or year-locked period. Accountants can close, but cannot unlock.
+          </li>
+          <li>
             <span className="font-medium text-foreground">Owners distribution</span> — export the
             owners list, fill amounts in Excel, import once to move Retained Earnings into each
             Owner&apos;s equity account.
           </li>
         </ol>
+      </Card>
+
+      <Card className="mb-6 p-4">
+        <p className="text-sm font-medium">Closed periods</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Every month, completed quarter, and locked year — this year and prior years. Open the
+          matching P&amp;L or Balance Sheet, or pick the same close from any report&apos;s{' '}
+          <span className="font-medium text-foreground">Closed books</span> control.
+        </p>
+        <div className="mt-3">
+          <ClosedPeriodsBoard rows={closures} />
+        </div>
       </Card>
 
       {ownersSnap ? (

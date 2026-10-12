@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/data/page-header'
 import { SearchInput } from '@/components/data/search-input'
 import { TableToolbar } from '@/components/data/table-toolbar'
 import { readSort } from '@/components/data/sortable-header'
-import { ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_ORDER } from '@/lib/accounting-labels'
+import { ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_ORDER, isProfitAndLossType } from '@/lib/accounting-labels'
 import type { AccountType } from '@prisma/client'
 import { ACCOUNT_VIEWS, accountMatchesView, parseAccountView } from '@/lib/account-views'
 import { keepChartFamily, nestChartRows } from '@/lib/chart-tree'
@@ -97,7 +97,7 @@ export default async function AccountsPage({
     if (statement === 'balance') {
       return account.type === 'ASSET' || account.type === 'LIABILITY' || account.type === 'EQUITY'
     }
-    if (statement === 'profit') return account.type === 'REVENUE' || account.type === 'EXPENSE'
+    if (statement === 'profit') return isProfitAndLossType(account.type)
     return true
   })
   const typeCounts = new Map<AccountType, number>()

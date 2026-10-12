@@ -22,7 +22,8 @@ import { cn } from '@/lib/utils'
 
 import { MAX_SUB_COMPANIES, type CompanyGroupKind } from '@/lib/company-group'
 
-import { attachSubCompany, createCompany, deleteCompany } from './actions'
+import { attachSubCompany, createCompany, deleteCompany, openCompany } from './actions'
+import { DatabaseLimitsPanel } from './database-limits-panel'
 import { NoCompanyOpen } from './no-company-open'
 
 export type DatabaseListRow = {
@@ -39,6 +40,13 @@ export type DatabaseListRow = {
   parentName: string | null
   childCount: number
   groupKind: CompanyGroupKind
+  accessRestricted: boolean
+  rentExpiresAt: string | null
+  maxUsers: number | null
+  rentNote: string | null
+  rentExpired: boolean
+  openBlocked: boolean
+  activeUsers: number
 }
 
 type Inspected = {
@@ -76,6 +84,7 @@ export function DatabasesBoard({
   const [panelOpen, setPanelOpen] = useState(initialPanel === 'import')
   const [createOpen, setCreateOpen] = useState(initialPanel === 'create')
   const [deleteTarget, setDeleteTarget] = useState<DatabaseListRow | null>(null)
+  const [limitsTarget, setLimitsTarget] = useState<DatabaseListRow | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<Inspected | null>(null)
   const [confirmName, setConfirmName] = useState('')
   const [newName, setNewName] = useState('')
@@ -101,6 +110,7 @@ export function DatabasesBoard({
   const openPanel = () => {
     setCreateOpen(false)
     setDeleteTarget(null)
+    setLimitsTarget(null)
     setRestoreTarget(null)
     setPanelOpen(true)
     setInspected(null)
@@ -111,6 +121,7 @@ export function DatabasesBoard({
   const openCreate = () => {
     setPanelOpen(false)
     setDeleteTarget(null)
+    setLimitsTarget(null)
     setRestoreTarget(null)
     setCreateOpen(true)
     setNewName('')
@@ -123,15 +134,25 @@ export function DatabasesBoard({
   const openDelete = (db: DatabaseListRow) => {
     setPanelOpen(false)
     setCreateOpen(false)
+    setLimitsTarget(null)
     setRestoreTarget(null)
     setDeleteTarget(db)
     setConfirmName('')
+  }
+
+  const openLimits = (db: DatabaseListRow) => {
+    setPanelOpen(false)
+    setCreateOpen(false)
+    setDeleteTarget(null)
+    setRestoreTarget(null)
+    setLimitsTarget(db)
   }
 
   const openRestore = (row: Inspected) => {
     if (!row.matchedOrgId) return
     setCreateOpen(false)
     setDeleteTarget(null)
+    setLimitsTarget(null)
     setRestoreTarget(row)
     setConfirmName('')
   }
@@ -302,6 +323,11 @@ export function DatabasesBoard({
     }
     setOpeningId(orgId)
     try {
+      const allowed = await openCompany({ orgId })
+      if (!allowed.ok) {
+        toast.error(allowed.error.message)
+        return
+      }
       await update({ orgId })
       router.refresh()
       router.push('/dashboard')
@@ -375,7 +401,8 @@ export function DatabasesBoard({
   const missingCount = inspected?.filter((c) => c.status === 'missing').length ?? 0
   const presentCount = inspected?.filter((c) => c.status === 'present').length ?? 0
   const canDeleteAny = isSystemOwner && databases.length > 1
-  const showPicker = !createOpen && !panelOpen && !deleteTarget && !restoreTarget
+  const showPicker =
+    !createOpen && !panelOpen && !deleteTarget && !restoreTarget && !limitsTarget
 
   return (
     <div className="space-y-6">
@@ -386,6 +413,7 @@ export function DatabasesBoard({
           canConnect={canConnect}
           canCreate={isSystemOwner}
           canDelete={canDeleteAny}
+          canManageLimits={isSystemOwner}
           editList={editList}
           onEditListChange={setEditList}
           onOpen={(orgId, isCurrent) => {
@@ -397,6 +425,10 @@ export function DatabasesBoard({
           onDelete={(row) => {
             const full = databases.find((entry) => entry.id === row.id)
             if (full) openDelete(full)
+          }}
+          onLimits={(row) => {
+            const full = databases.find((entry) => entry.id === row.id)
+            if (full) openLimits(full)
           }}
         />
       ) : null}
@@ -481,6 +513,10 @@ export function DatabasesBoard({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {limitsTarget ? (
+        <DatabaseLimitsPanel company={limitsTarget} onClose={() => setLimitsTarget(null)} />
       ) : null}
 
       {deleteTarget ? (

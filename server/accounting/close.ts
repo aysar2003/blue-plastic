@@ -83,7 +83,7 @@ export async function closingPreview(
       JOIN journal_lines l ON l."accountId" = a.id AND l."journalDate" <= ${fiscalYear.endDate}
       JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
      WHERE a."orgId" = ${ctx.orgId}
-       AND a.type IN ('REVENUE', 'EXPENSE')
+       AND a.type IN ('REVENUE', 'COGS', 'EXPENSE')
      GROUP BY a.id, a.code, a.name
     HAVING COALESCE(SUM(l.debit - l.credit), 0) <> 0
      ORDER BY a.code

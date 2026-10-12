@@ -1,8 +1,16 @@
 import 'server-only'
 
-import { MAX_SUB_COMPANIES } from '@/lib/company-group'
+import {
+  applyGroupReportView,
+  MAX_SUB_COMPANIES,
+  type GroupCompanyOption,
+  type GroupReportView,
+} from '@/lib/company-group'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
+
+export { applyGroupReportView }
+export type { GroupCompanyOption, GroupReportView }
 
 /**
  * Resolve the main company id for a group (self if already main / standalone).
@@ -28,17 +36,31 @@ export async function listGroupOrgIds(rootOrgId: string): Promise<string[]> {
 
 /**
  * Org ids the caller may include on the consolidated company report.
- * System owner → every company. Main OWNER/ADMIN → their group. Else → null.
+ * System owner → every company. Main OWNER/ADMIN → their group. Else → empty.
  */
 export async function groupReportScope(
   ctx: OrgContext,
-): Promise<{ orgIds: string[] | 'all'; rootOrgId: string | null; title: string }> {
+): Promise<{
+  orgIds: string[] | 'all'
+  rootOrgId: string | null
+  title: string
+  companies: GroupCompanyOption[]
+}> {
   if (ctx.isSystemOwner) {
-    return { orgIds: 'all', rootOrgId: null, title: 'All companies' }
+    const companies = await db.organization.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, parentOrgId: true, baseCurrency: true },
+    })
+    return {
+      orgIds: 'all',
+      rootOrgId: null,
+      title: 'All companies',
+      companies,
+    }
   }
 
   if (ctx.role !== 'OWNER' && ctx.role !== 'ADMIN') {
-    return { orgIds: [], rootOrgId: null, title: 'Company group' }
+    return { orgIds: [], rootOrgId: null, title: 'Company group', companies: [] }
   }
 
   const rootOrgId = await resolveGroupRootId(ctx.orgId)
@@ -53,22 +75,27 @@ export async function groupReportScope(
     (mainMembership.role === 'OWNER' || mainMembership.role === 'ADMIN')
 
   if (!isMainAdmin) {
-    return { orgIds: [], rootOrgId: null, title: 'Company group' }
+    return { orgIds: [], rootOrgId: null, title: 'Company group', companies: [] }
   }
 
-  const orgIds = await listGroupOrgIds(rootOrgId)
-  if (orgIds.length <= 1) {
-    // No subs yet — still allow the page (single row) for the main admin.
-  }
-
-  const main = await db.organization.findUnique({
-    where: { id: rootOrgId },
-    select: { name: true },
+  const companies = await db.organization.findMany({
+    where: { OR: [{ id: rootOrgId }, { parentOrgId: rootOrgId }] },
+    orderBy: [{ parentOrgId: 'asc' }, { name: 'asc' }],
+    select: { id: true, name: true, parentOrgId: true, baseCurrency: true },
   })
+  // Main first, then subs by name.
+  companies.sort((a, b) => {
+    if (a.id === rootOrgId) return -1
+    if (b.id === rootOrgId) return 1
+    return a.name.localeCompare(b.name)
+  })
+
+  const main = companies.find((row) => row.id === rootOrgId)
   return {
-    orgIds,
+    orgIds: companies.map((row) => row.id),
     rootOrgId,
     title: main ? `${main.name} · group` : 'Company group',
+    companies,
   }
 }
 

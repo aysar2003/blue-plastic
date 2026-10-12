@@ -59,7 +59,7 @@ async function main() {
     return
   }
 
-  const orgName = process.env.SEED_ORG_NAME ?? 'Blue Plastic Center'
+  const orgName = process.env.SEED_ORG_NAME ?? 'Demo Company'
   const ownerEmail = (process.env.SEED_OWNER_EMAIL ?? 'owner@blueplasticcenter.test').toLowerCase()
   const ownerName = process.env.SEED_OWNER_NAME ?? 'Owner'
   const password = process.env.SEED_OWNER_PASSWORD

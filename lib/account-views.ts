@@ -15,7 +15,7 @@ export const ACCOUNT_VIEWS = [
 export type AccountView = (typeof ACCOUNT_VIEWS)[number]['value']
 
 const BALANCE_SHEET = new Set<AccountType>(['ASSET', 'LIABILITY', 'EQUITY'])
-const PROFIT_AND_LOSS = new Set<AccountType>(['REVENUE', 'EXPENSE'])
+const PROFIT_AND_LOSS = new Set<AccountType>(['REVENUE', 'COGS', 'EXPENSE'])
 
 export function parseAccountView(value: string | undefined): AccountView {
   return ACCOUNT_VIEWS.some((view) => view.value === value) ? (value as AccountView) : ''

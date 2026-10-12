@@ -2,6 +2,12 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 
 import { today } from '@/lib/date'
+import {
+  isStockTracked,
+  skipsIncomeAccount,
+  usesCogsCost,
+  usesOperatingExpense,
+} from '@/lib/item-types'
 import { Decimal, parseMoneyInput, ZERO } from '@/lib/money'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { ItemInput } from '@/lib/validation/master-data'
@@ -21,22 +27,40 @@ const ITEM_SELECT = {
   purchaseDescription: true, purchaseCost: true, expenseAccountId: true, purchaseTaxCodeId: true,
   inventoryAccountId: true, cogsAccountId: true, reorderPoint: true, storeId: true,
   isActive: true, availableInPos: true,
+  printGroupItems: true, itemPaymentMethod: true, depositAccountId: true,
   category: { select: { id: true, name: true } },
   incomeAccount: { select: { id: true, code: true, name: true } },
   expenseAccount: { select: { id: true, code: true, name: true } },
   inventoryAccount: { select: { id: true, code: true, name: true } },
   cogsAccount: { select: { id: true, code: true, name: true } },
+  depositAccount: { select: { id: true, code: true, name: true } },
   store: { select: { id: true, name: true } },
   salesTaxCode: { select: { id: true, name: true } },
   purchaseTaxCode: { select: { id: true, name: true } },
+  bomChildren: {
+    select: { componentItemId: true, quantity: true, sortOrder: true },
+    orderBy: { sortOrder: 'asc' as const },
+  },
 } satisfies Prisma.ItemSelect
 
-function serialise<T extends { salesPrice: unknown; purchaseCost: unknown; reorderPoint: unknown }>(item: T) {
+function serialise<
+  T extends {
+    salesPrice: unknown
+    purchaseCost: unknown
+    reorderPoint: unknown
+    bomChildren?: { componentItemId: string; quantity: unknown; sortOrder: number }[]
+  },
+>(item: T) {
+  const { bomChildren, ...rest } = item
   return {
-    ...item,
+    ...rest,
     salesPrice: item.salesPrice?.toString() ?? null,
     purchaseCost: item.purchaseCost?.toString() ?? null,
     reorderPoint: item.reorderPoint?.toString() ?? null,
+    components: (bomChildren ?? []).map((row) => ({
+      itemId: row.componentItemId,
+      quantity: String(row.quantity),
+    })),
   }
 }
 
@@ -107,7 +131,7 @@ export async function list(
       where,
       select: { id: true, type: true },
     })
-    const trackedIds = people.filter((row) => row.type === 'INVENTORY').map((row) => row.id)
+    const trackedIds = people.filter((row) => isStockTracked(row.type)).map((row) => row.id)
     const positions = await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
     const direction = dir === 'desc' ? -1 : 1
     const ordered = people
@@ -131,7 +155,7 @@ export async function list(
     const pagePositions = await positionsOf(
       db as unknown as Tx,
       ctx.orgId,
-      rows.filter((row) => row.type === 'INVENTORY').map((row) => row.id),
+      rows.filter((row) => isStockTracked(row.type)).map((row) => row.id),
     )
     return paged(
       rows.map((row) => attachStock(row, pagePositions.get(row.id))),
@@ -151,7 +175,7 @@ export async function list(
   // not a separate register kept somewhere else. The products list shows what
   // is on hand and what it is worth, so nobody has to hold two screens in their
   // head to answer "have we got any?".
-  const trackedIds = rows.filter((row) => row.type === 'INVENTORY').map((row) => row.id)
+  const trackedIds = rows.filter((row) => isStockTracked(row.type)).map((row) => row.id)
   const positions = await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
 
   return paged(
@@ -194,6 +218,7 @@ export async function get(ctx: OrgContext, id: string) {
 
 export async function create(ctx: OrgContext, input: ItemInput) {
   input = await accountForStore(ctx, input)
+  input = await assignProductCostAccount(ctx, input)
   await assertNameAndSkuFree(ctx, input.name, input.sku ?? null, input.barcode ?? null)
   await assertAccountsSuitable(ctx, input)
   const meta = await requestMeta()
@@ -210,7 +235,7 @@ export async function create(ctx: OrgContext, input: ItemInput) {
     // gets its first movement — so the item is usable the moment it exists.
     const openingQuantity = new Decimal(input.openingQuantity ?? '0')
 
-    if (item.type === 'INVENTORY' && openingQuantity.greaterThan(0)) {
+    if (isStockTracked(item.type) && openingQuantity.greaterThan(0)) {
       const date = input.openingDate ?? today(ctx.organization.timeZone)
 
       const movement = await recordMovement(tx, ctx, {
@@ -251,6 +276,7 @@ export async function create(ctx: OrgContext, input: ItemInput) {
       }
     }
 
+    await saveComponents(tx, ctx, item.id, item.type, input.componentsJson)
     await writeAudit(tx, ctx, { entity: 'Item', entityId: item.id, action: 'CREATE', after: item }, meta)
     return item
   })
@@ -258,7 +284,8 @@ export async function create(ctx: OrgContext, input: ItemInput) {
 
 export async function update(ctx: OrgContext, input: ItemInput & { id: string }) {
   const patched = await accountForStore(ctx, input, input.id)
-  input = { ...input, ...patched, id: input.id }
+  const assigned = await assignProductCostAccount(ctx, { ...input, ...patched })
+  input = { ...assigned, id: input.id }
   const before = await db.item.findFirst({ where: { id: input.id, orgId: ctx.orgId }, select: ITEM_SELECT })
   if (!before) throw notFound('Item')
 
@@ -283,6 +310,8 @@ export async function update(ctx: OrgContext, input: ItemInput & { id: string })
       select: { id: true, name: true, type: true },
     })
 
+    await saveComponents(tx, ctx, after.id, after.type, input.componentsJson)
+
     await writeAudit(
       tx,
       ctx,
@@ -299,7 +328,7 @@ export async function update(ctx: OrgContext, input: ItemInput & { id: string })
  */
 export async function setReorderPoint(ctx: OrgContext, id: string, raw: string) {
   const before = await db.item.findFirst({
-    where: { id, orgId: ctx.orgId, deletedAt: null, type: 'INVENTORY' },
+    where: { id, orgId: ctx.orgId, deletedAt: null, type: { in: ['INVENTORY', 'INVENTORY_ASSEMBLY'] } },
     select: { id: true, name: true, reorderPoint: true },
   })
   if (!before) throw notFound('Item')
@@ -382,7 +411,7 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
     if (!item) throw notFound('Item')
     if (item.deletedAt) return { id, name: item.name }
 
-    if (item.type === 'INVENTORY') {
+    if (isStockTracked(item.type)) {
       await writeOffRemainingStock(tx, ctx, id, item.name, reason)
     }
 
@@ -541,6 +570,53 @@ export async function createCategory(ctx: OrgContext, name: string) {
   })
 }
 
+/**
+ * Products and tracked stock do not pick an expense account.
+ * Their cost posts to the system Cost of Goods Sold account — sales price on
+ * one side, that account's cost on the other.
+ */
+async function assignProductCostAccount(ctx: OrgContext, input: ItemInput): Promise<ItemInput> {
+  if (skipsIncomeAccount(input.type)) {
+    return {
+      ...input,
+      incomeAccountId: null,
+      expenseAccountId: null,
+      inventoryAccountId: null,
+      cogsAccountId: null,
+      storeId: null,
+    }
+  }
+
+  if (usesOperatingExpense(input.type) || input.type === 'DISCOUNT') {
+    return { ...input, inventoryAccountId: null, cogsAccountId: null }
+  }
+
+  if (!usesCogsCost(input.type)) {
+    return { ...input, inventoryAccountId: null, cogsAccountId: null, expenseAccountId: null }
+  }
+
+  const account = await db.ledgerAccount.findUnique({
+    where: { orgId_systemKey: { orgId: ctx.orgId, systemKey: 'COGS' } },
+    select: { id: true },
+  })
+  if (!account) {
+    throw validation('There is no Cost of Goods Sold account on the chart, so a product cannot be saved.', {
+      cogsAccountId: ['Set up the Cost of Goods Sold account'],
+    })
+  }
+
+  if (isStockTracked(input.type)) {
+    return { ...input, cogsAccountId: account.id, expenseAccountId: null }
+  }
+
+  return {
+    ...input,
+    expenseAccountId: account.id,
+    cogsAccountId: null,
+    inventoryAccountId: null,
+  }
+}
+
 function toData(input: ItemInput) {
   return {
     sku: input.sku ?? null,
@@ -562,8 +638,65 @@ function toData(input: ItemInput) {
     inventoryAccountId: input.inventoryAccountId ?? null,
     cogsAccountId: input.cogsAccountId ?? null,
     reorderPoint: input.reorderPoint ?? null,
-    storeId: input.type === 'INVENTORY' ? (input.storeId ?? null) : null,
-    availableInPos: input.availableInPos,
+    storeId: isStockTracked(input.type) ? (input.storeId ?? null) : null,
+    availableInPos: input.type === 'PAYMENT' || input.type === 'SUBTOTAL' || input.type === 'GROUP'
+      ? false
+      : input.availableInPos,
+    printGroupItems: input.type === 'GROUP' ? (input.printGroupItems ?? true) : true,
+    itemPaymentMethod: input.type === 'PAYMENT' ? (input.itemPaymentMethod ?? 'CASH') : null,
+    depositAccountId: input.type === 'PAYMENT' ? (input.depositAccountId ?? null) : null,
+  }
+}
+
+function parseComponents(raw: string | null | undefined): { itemId: string; quantity: string }[] {
+  if (!raw?.trim()) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((row) => {
+        if (!row || typeof row !== 'object') return null
+        const itemId = String((row as { itemId?: unknown }).itemId ?? '')
+        const quantity = String((row as { quantity?: unknown }).quantity ?? '1')
+        if (!itemId) return null
+        return { itemId, quantity }
+      })
+      .filter((row): row is { itemId: string; quantity: string } => Boolean(row))
+  } catch {
+    return []
+  }
+}
+
+async function saveComponents(
+  tx: Tx,
+  ctx: OrgContext,
+  parentItemId: string,
+  type: ItemInput['type'],
+  raw: string | null | undefined,
+) {
+  if (type !== 'GROUP' && type !== 'INVENTORY_ASSEMBLY') {
+    await tx.itemComponent.deleteMany({ where: { parentItemId, orgId: ctx.orgId } })
+    return
+  }
+  const rows = parseComponents(raw)
+  await tx.itemComponent.deleteMany({ where: { parentItemId, orgId: ctx.orgId } })
+  for (const [index, row] of rows.entries()) {
+    const qty = parseMoneyInput(row.quantity)
+    if (!qty || qty.lessThanOrEqualTo(0)) continue
+    const child = await tx.item.findFirst({
+      where: { id: row.itemId, orgId: ctx.orgId, deletedAt: null },
+      select: { id: true },
+    })
+    if (!child || child.id === parentItemId) continue
+    await tx.itemComponent.create({
+      data: {
+        orgId: ctx.orgId,
+        parentItemId,
+        componentItemId: child.id,
+        quantity: qty,
+        sortOrder: index,
+      },
+    })
   }
 }
 
@@ -573,7 +706,7 @@ function toData(input: ItemInput) {
  * and the store is only where the report says it sits.
  */
 async function accountForStore(ctx: OrgContext, input: ItemInput, itemId?: string): Promise<ItemInput> {
-  if (input.type !== 'INVENTORY' || !input.storeId) return input
+  if (!isStockTracked(input.type) || !input.storeId) return input
   const store = await db.store.findFirst({
     where: { id: input.storeId, orgId: ctx.orgId, isActive: true },
     select: { inventoryAccountId: true },
@@ -641,13 +774,14 @@ async function assertAccountsSuitable(ctx: OrgContext, input: ItemInput) {
     input.expenseAccountId,
     input.inventoryAccountId,
     input.cogsAccountId,
+    input.depositAccountId,
   ].filter(Boolean) as string[]
 
   if (ids.length === 0) return
 
   const accounts = await db.ledgerAccount.findMany({
     where: { id: { in: ids }, orgId: ctx.orgId },
-    select: { id: true, name: true, type: true, subtype: true, isActive: true },
+    select: { id: true, name: true, type: true, subtype: true, systemKey: true, isActive: true },
   })
   const byId = new Map(accounts.map((a) => [a.id, a]))
 
@@ -667,16 +801,22 @@ async function assertAccountsSuitable(ctx: OrgContext, input: ItemInput) {
   }
 
   const expense = input.expenseAccountId ? byId.get(input.expenseAccountId) : null
-  if (expense && expense.type !== 'EXPENSE') {
+  const serviceLike = input.type === 'SERVICE' || input.type === 'OTHER_CHARGE'
+  if (expense && serviceLike && expense.type !== 'EXPENSE') {
     throw validation(`"${expense.name}" is not an expense account.`, {
       expenseAccountId: ['Choose an expense account'],
     })
   }
+  if (expense && !serviceLike && expense.type !== 'COGS') {
+    throw validation(`"${expense.name}" is not a cost of goods sold account.`, {
+      expenseAccountId: ['Use Cost of Goods Sold'],
+    })
+  }
 
   const cogs = input.cogsAccountId ? byId.get(input.cogsAccountId) : null
-  if (cogs && cogs.type !== 'EXPENSE') {
-    throw validation(`"${cogs.name}" is not an expense account, so cost of sales cannot be posted to it.`, {
-      cogsAccountId: ['Choose an expense account'],
+  if (cogs && cogs.type !== 'COGS') {
+    throw validation(`"${cogs.name}" is not a cost of goods sold account, so cost of sales cannot be posted to it.`, {
+      cogsAccountId: ['Choose a cost of goods sold account'],
     })
   }
 
@@ -686,4 +826,37 @@ async function assertAccountsSuitable(ctx: OrgContext, input: ItemInput) {
       inventoryAccountId: ['Choose an inventory account'],
     })
   }
+
+  const deposit = input.depositAccountId ? byId.get(input.depositAccountId) : null
+  if (deposit) {
+    const ok =
+      deposit.type === 'ASSET' &&
+      (deposit.subtype === 'BANK' || deposit.subtype === 'UNDEPOSITED_FUNDS')
+    if (!ok) {
+      throw validation(
+        `"${deposit.name}" is not a bank or Undeposited Funds account.`,
+        { depositAccountId: ['Choose Undeposited Funds or a bank account'] },
+      )
+    }
+  }
+}
+
+/** Short list for GROUP / Assembly component pickers. */
+export async function listCatalog(ctx: OrgContext) {
+  const rows = await db.item.findMany({
+    where: {
+      orgId: ctx.orgId,
+      deletedAt: null,
+      isActive: true,
+      type: { notIn: ['GROUP', 'SUBTOTAL', 'PAYMENT'] },
+    },
+    select: { id: true, name: true, sku: true, type: true },
+    orderBy: { name: 'asc' },
+    take: 500,
+  })
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.sku ? `${row.name} (${row.sku})` : row.name,
+    type: row.type,
+  }))
 }

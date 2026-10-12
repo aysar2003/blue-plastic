@@ -9,6 +9,7 @@ import type { Tx } from '@/server/db'
 import {
   accountFigures,
   CASH_SUBTYPES,
+  isProfitAndLoss,
   present,
   sumBy,
   type AccountFigures,
@@ -157,7 +158,7 @@ export async function profitAndLoss(
 
 function netIncomeOf(figures: AccountFigures[]): Decimal {
   return sumBy(
-    figures.filter((row) => row.type === 'REVENUE' || row.type === 'EXPENSE'),
+    figures.filter((row) => isProfitAndLoss(row.type)),
     (row) => (row.type === 'REVENUE' ? present(row.type, row.movement) : present(row.type, row.movement).negated()),
   )
 }
@@ -292,7 +293,7 @@ export async function balanceSheet(
   const postedEquity = totalOf('equity')
 
   const accumulatedProfit = sumBy(
-    figures.filter((row) => row.type === 'REVENUE' || row.type === 'EXPENSE'),
+    figures.filter((row) => isProfitAndLoss(row.type)),
     (row) => (row.type === 'REVENUE' ? present(row.type, row.closing) : present(row.type, row.closing).negated()),
   )
 
@@ -410,7 +411,7 @@ export async function cashFlow(
   const actualChange = closingCash.minus(openingCash)
 
   const netIncome = sumBy(
-    nonCash.filter((row) => row.type === 'REVENUE' || row.type === 'EXPENSE'),
+    nonCash.filter((row) => isProfitAndLoss(row.type)),
     (row) => row.movement.negated(),
   )
 
@@ -421,7 +422,7 @@ export async function cashFlow(
   }
 
   for (const row of nonCash) {
-    if (row.type === 'REVENUE' || row.type === 'EXPENSE') continue
+    if (isProfitAndLoss(row.type)) continue
     const contribution = row.movement.negated()
     if (contribution.isZero()) continue
     buckets[SECTION_FOR[row.subtype]].push({

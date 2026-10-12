@@ -111,8 +111,8 @@ export function Landing({
   signedIn: boolean
   contact?: MarketingContact
 }) {
-  const enterHref = signedIn ? '/dashboard' : '/sign-in'
-  const enterLabel = signedIn ? 'Open your books' : 'Sign in to your company'
+  const enterHref = signedIn ? '/dashboard' : '/register'
+  const enterLabel = signedIn ? 'Open your books' : 'Request a company'
 
   return (
     <WebsiteShell className="erp-landing min-h-screen bg-background text-[15px] leading-relaxed text-foreground">
@@ -182,9 +182,9 @@ function SiteHeader({
           {!signedIn ? (
             <Link
               className="hidden h-9 items-center rounded-md px-3 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:inline-flex"
-              href="/login"
+              href="/sign-in"
             >
-              Login
+              Sign in
             </Link>
           ) : null}
           <Link
@@ -444,24 +444,34 @@ function Tutorials() {
 }
 
 function Contact({ contact }: { contact: MarketingContact }) {
+  const officeLine = `${contact.address}, ${contact.city}, ${contact.region}`
+  const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(officeLine)}`
+  const waHref = whatsappUrl(
+    contact.whatsappE164,
+    `Assalaamu calaykum ${contact.contactName}. Waxaan ka imid website-ka ${PRODUCT_NAME} — waxaan jeclaan lahaa inaan kala hadlo nidaamka xisaabaadka, tababarka, ama furitaanka database shirkadeed.`,
+  )
+
   const rows = [
     {
       icon: Phone,
       term: 'Phone',
       detail: contact.phone,
       href: telUrl(contact.phone),
+      hint: 'Direct call',
     },
     {
       icon: MessageCircle,
       term: 'WhatsApp',
       detail: contact.phone,
-      href: whatsappUrl(contact.whatsappE164, `Salaan, waxaan ka helay ${PRODUCT_NAME}.`),
+      href: waHref,
+      hint: 'Chat now',
     },
     {
       icon: Mail,
       term: 'Email',
       detail: contact.email,
       href: mailtoUrl(contact.email, `${PRODUCT_NAME} support`),
+      hint: 'Personal',
     },
     ...(contact.secondaryEmail
       ? [
@@ -470,89 +480,111 @@ function Contact({ contact }: { contact: MarketingContact }) {
             term: 'Company email',
             detail: contact.secondaryEmail,
             href: mailtoUrl(contact.secondaryEmail, `${PRODUCT_NAME} inquiry`),
+            hint: 'Office',
           },
         ]
       : []),
     {
       icon: MapPin,
       term: 'Office',
-      detail: `${contact.address}, ${contact.city}, ${contact.region}`,
-      href: undefined as string | undefined,
+      detail: officeLine,
+      href: mapsHref,
+      hint: 'Open map',
     },
   ]
 
   return (
-    <section id="contact" className="scroll-mt-20 border-t border-border bg-secondary/40 py-20 sm:py-28">
+    <section id="contact" className="scroll-mt-20 border-t border-border py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
-        <div className="grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-end">
-          <SectionHeading
-            eyebrow="Contact · La soo xiriir"
-            title={contact.companyName}
-            body={`${contact.contactName} — call, WhatsApp, or email when you need help with SOM ERP, training, or a new company database.`}
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_90%_at_0%_0%,color-mix(in_oklab,var(--primary)_18%,transparent),transparent_55%),radial-gradient(60%_80%_at_100%_100%,color-mix(in_oklab,var(--success)_12%,transparent),transparent_50%)]"
+          />
+          <div
+            aria-hidden
+            className="erp-grid pointer-events-none absolute inset-0 opacity-20"
           />
 
-          <div className="flex flex-wrap gap-3">
-            <a
-              className="inline-flex h-11 items-center gap-2 rounded-md bg-primary px-5 text-[15px] font-semibold text-primary-foreground transition-colors hover:opacity-90"
-              href={whatsappUrl(contact.whatsappE164, `Salaan, waxaan ka helay ${PRODUCT_NAME}.`)}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <MessageCircle className="size-4" />
-              WhatsApp
-            </a>
-            <a
-              className="inline-flex h-11 items-center gap-2 rounded-md border border-border bg-card px-5 text-[15px] font-medium text-foreground transition-colors hover:bg-secondary"
-              href={telUrl(contact.phone)}
-            >
-              <Phone className="size-4" />
-              Call
-            </a>
-            <a
-              className="inline-flex h-11 items-center gap-2 rounded-md border border-border bg-card px-5 text-[15px] font-medium text-foreground transition-colors hover:bg-secondary"
-              href={mailtoUrl(contact.email, `${PRODUCT_NAME} support`)}
-            >
-              <Mail className="size-4" />
-              Email
-            </a>
-          </div>
-        </div>
+          <div className="relative grid gap-10 px-6 py-10 sm:px-10 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:items-end lg:gap-14">
+            <SectionHeading
+              eyebrow="Contact · La soo xiriir"
+              title={contact.companyName}
+              body={`${contact.contactName} — call, WhatsApp, or email when you need help with SOM ERP, training, or a new company database.`}
+            />
 
-        <dl className="mt-12 grid gap-4 sm:grid-cols-2">
-          {rows.map(({ icon: Icon, term, detail, href }) => {
-            const body = (
-              <>
-                <span className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-md bg-accent text-accent-foreground">
-                  <Icon className="size-4" />
-                </span>
-                <span>
-                  <dt className="text-[12px] uppercase tracking-[0.12em] text-muted-foreground">
-                    {term}
-                  </dt>
-                  <dd className="mt-1 text-[15px] font-medium text-foreground">{detail}</dd>
-                </span>
-              </>
-            )
-            return href ? (
+            <div className="flex flex-wrap gap-3">
               <a
-                key={`${term}-${detail}`}
-                href={href}
-                target={href.startsWith('http') ? '_blank' : undefined}
-                rel={href.startsWith('http') ? 'noreferrer' : undefined}
-                className="flex items-start gap-3.5 rounded-md border border-border bg-card px-4 py-4 transition-colors hover:border-primary/40 hover:bg-accent/60"
+                className="inline-flex h-12 items-center gap-2 rounded-lg bg-primary px-6 text-[15px] font-semibold text-primary-foreground shadow-[0_14px_40px_-16px_var(--glow)] transition-transform hover:-translate-y-0.5 hover:opacity-95"
+                href={waHref}
+                target="_blank"
+                rel="noreferrer"
               >
-                {body}
+                <MessageCircle className="size-4" />
+                WhatsApp
               </a>
-            ) : (
-              <div
-                key={`${term}-${detail}`}
-                className="flex items-start gap-3.5 rounded-md border border-border bg-card px-4 py-4"
+              <a
+                className="inline-flex h-12 items-center gap-2 rounded-lg border border-border bg-background/70 px-6 text-[15px] font-medium text-foreground backdrop-blur transition-colors hover:border-primary/40 hover:bg-accent/50"
+                href={telUrl(contact.phone)}
               >
-                {body}
-              </div>
-            )
-          })}
-        </dl>
+                <Phone className="size-4" />
+                Call
+              </a>
+              <a
+                className="inline-flex h-12 items-center gap-2 rounded-lg border border-border bg-background/70 px-6 text-[15px] font-medium text-foreground backdrop-blur transition-colors hover:border-primary/40 hover:bg-accent/50"
+                href={mailtoUrl(contact.email, `${PRODUCT_NAME} support`)}
+              >
+                <Mail className="size-4" />
+                Email
+              </a>
+            </div>
+          </div>
+
+          <dl className="relative grid gap-3 border-t border-border bg-background/35 p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-3">
+            {rows.map(({ icon: Icon, term, detail, href, hint }, index) => {
+              const body = (
+                <>
+                  <span className="mt-0.5 grid size-11 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground ring-1 ring-primary/15">
+                    <Icon className="size-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex items-center justify-between gap-2">
+                      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        {term}
+                      </dt>
+                      <span className="text-[11px] text-success/90">{hint}</span>
+                    </span>
+                    <dd className="mt-1.5 break-words text-[15px] font-semibold leading-snug tracking-tight text-foreground">
+                      {detail}
+                    </dd>
+                  </span>
+                </>
+              )
+              const className =
+                'erp-contact-card group flex items-start gap-3.5 rounded-xl border border-border/80 bg-card/90 px-4 py-4 shadow-[0_1px_0_color-mix(in_oklab,var(--foreground)_4%,transparent)] transition-[transform,border-color,background-color] hover:-translate-y-0.5 hover:border-primary/45 hover:bg-accent/40'
+              return href ? (
+                <a
+                  key={`${term}-${detail}`}
+                  href={href}
+                  target={href.startsWith('http') ? '_blank' : undefined}
+                  rel={href.startsWith('http') ? 'noreferrer' : undefined}
+                  className={className}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  {body}
+                </a>
+              ) : (
+                <div
+                  key={`${term}-${detail}`}
+                  className={className}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  {body}
+                </div>
+              )
+            })}
+          </dl>
+        </div>
       </div>
     </section>
   )
@@ -569,14 +601,14 @@ function Cta({ enterHref, enterLabel }: { enterHref: string; enterLabel: string 
           />
           <div className="relative max-w-2xl">
             <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-success">
-              Company login
+              Get started
             </p>
             <h2 className="mt-3 text-[2rem] font-bold tracking-[-0.02em] text-foreground sm:text-[2.3rem]">
-              Sign in and open your books.
+              Request a company on {PRODUCT_NAME}.
             </h2>
             <p className="mt-4 text-[16px] leading-[1.65] text-muted-foreground">
-              Staff use a dedicated login page. Your company data stays behind sign-in — the public
-              page only explains the system.
+              Outside businesses send a request. They cannot sign in until you approve them under
+              Databases. Each approved company gets its own apps, settings, users, and ledger.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
@@ -588,14 +620,15 @@ function Cta({ enterHref, enterLabel }: { enterHref: string; enterLabel: string 
               </Link>
               <Link
                 className="inline-flex h-11 items-center justify-center rounded-md border border-border px-6 text-[15px] font-medium text-foreground transition-colors hover:bg-secondary"
-                href="/login"
+                href="/sign-in"
               >
-                Go to login page
+                Sign in
               </Link>
             </div>
             <p className="mt-6 text-[13px] text-muted-foreground">
-              Login URL path: <span className="font-mono text-success">/login</span> or{' '}
-              <span className="font-mono text-success">/sign-in</span>
+              Create: <span className="font-mono text-success">/register</span>
+              <span className="mx-2 text-border">·</span>
+              Sign in: <span className="font-mono text-success">/sign-in</span>
             </p>
           </div>
         </div>
@@ -658,7 +691,10 @@ const landingCss = `
   .erp-float {
     animation: erp-float 7s ease-in-out infinite;
   }
+  .erp-contact-card {
+    animation: erp-fade-up 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
   @media (prefers-reduced-motion: reduce) {
-    .erp-fade, .erp-float { animation: none; }
+    .erp-fade, .erp-float, .erp-contact-card { animation: none; }
   }
 `

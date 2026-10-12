@@ -30,7 +30,7 @@ import { db, type Tx } from '@/server/db'
  */
 
 /** Accounts whose balance is naturally a debit. The rest are naturally credits. */
-export const DEBIT_NORMAL: AccountType[] = ['ASSET', 'EXPENSE']
+export const DEBIT_NORMAL: AccountType[] = ['ASSET', 'COGS', 'EXPENSE']
 
 export const isDebitNormal = (type: AccountType): boolean => DEBIT_NORMAL.includes(type)
 

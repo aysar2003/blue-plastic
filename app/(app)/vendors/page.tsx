@@ -116,7 +116,7 @@ export default async function VendorsPage({
   const canDelete = ctx.permissions.has('vendor:delete') && ctx.features.allowVendorDelete
   const termOptions = terms.map((term) => ({ id: term.id, label: `${term.name} — ${describeTerm(term)}` }))
   const expenseOptions = accountOptions(accounts, {
-    prefer: ['OPERATING_EXPENSE', 'COST_OF_GOODS_SOLD', 'OTHER_EXPENSE'],
+    prefer: ['OPERATING_EXPENSE', 'OTHER_EXPENSE'],
     preferTypes: ['EXPENSE'],
   })
   const currency = ctx.organization.baseCurrency

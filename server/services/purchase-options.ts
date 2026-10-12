@@ -141,7 +141,7 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
     // Where a cost lands. Expenses lead, then the rest of the chart — a bill can
     // legitimately capitalise into a fixed asset or settle a liability.
     expenseAccounts: accountOptions(chart, {
-      prefer: ['OPERATING_EXPENSE', 'COST_OF_GOODS_SOLD', 'OTHER_EXPENSE', 'DEPRECIATION'],
+      prefer: ['OPERATING_EXPENSE', 'OTHER_EXPENSE', 'DEPRECIATION'],
       preferTypes: ['EXPENSE'],
     }),
     terms,

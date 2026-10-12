@@ -8,16 +8,25 @@ import { formatDate } from '@/lib/date'
 import { formatSigned } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import { companySnapshots } from '@/server/reports/company-consolidation'
+import { applyGroupReportView } from '@/lib/company-group'
 import { groupReportScope } from '@/server/services/company-group.service'
 import { ReportControls } from '../report-controls'
 import { readSettings, type SearchParams } from '../params'
+import { CombinedPlSummary } from './combined-pl-summary'
+import { CompanyReportScope } from './company-report-scope'
 import { OpenCompanyReport } from './open-company-report'
 
 export const metadata: Metadata = { title: 'Company group' }
 
+function one(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value
+}
+
 /**
  * Consolidated books for a company group (main + subs), or every company for
- * the system owner. Staff outside the group stay on single-company reports.
+ * the system owner. The owner picks one company, each company side by side, or
+ * the combined group profit and loss. Staff outside the group stay on
+ * single-company reports.
  */
 export default async function CompanyReportsPage({
   searchParams,
@@ -30,16 +39,34 @@ export default async function CompanyReportsPage({
 
   const query = await searchParams
   const settings = readSettings(query, ctx.organization, 'this-month')
-  const { rows, totals } = await companySnapshots(settings.range, {
-    orgIds: scope.orgIds,
+  const resolved = applyGroupReportView(scope, {
+    view: one(query.view),
+    org: one(query.org),
   })
+  const { rows, totals } = await companySnapshots(settings.range, {
+    orgIds: resolved.orgIds,
+  })
+
+  const showCombinedHeadline = resolved.view === 'combined' || resolved.view === 'each'
+  const description =
+    resolved.view === 'one'
+      ? `${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}. One company in the group — open Profit and Loss for the full statement.`
+      : resolved.view === 'combined'
+        ? `${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}. Combined group figures in the same currency. Each company still keeps its own books.`
+        : `${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}. Each company keeps its own books. Sales income, expenses, and net income are for the period. Cash, equity, opening balance, retained earnings, customers owe, and bills to pay are as of the period end.`
 
   return (
     <>
       <PageHeader
         organization={ctx.organization}
-        title={scope.title}
-        description={`${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}. Each company keeps its own books. Sales income, expenses, and net income are for the period. Cash, equity, opening balance, retained earnings, customers owe, and bills to pay are as of the period end.`}
+        title={resolved.title}
+        description={description}
+      />
+      <CompanyReportScope
+        view={resolved.view}
+        selectedOrgId={resolved.selectedOrgId}
+        companies={scope.companies}
+        currentOrgId={ctx.orgId}
       />
       <ReportControls
         period={settings.period}
@@ -50,6 +77,14 @@ export default async function CompanyReportsPage({
         comparison="none"
         controls={{ mode: 'range' }}
       />
+
+      {showCombinedHeadline ? (
+        <CombinedPlSummary
+          totals={totals}
+          label={resolved.view === 'combined' ? 'Combined profit and loss' : 'Group total'}
+        />
+      ) : null}
+
       <Card className="overflow-hidden p-0">
         <Table>
           <TableHeader>
@@ -134,12 +169,17 @@ export default async function CompanyReportsPage({
               ))
             )}
           </TableBody>
-          {totals.length > 0 ? (
+          {totals.length > 0 && resolved.view !== 'one' ? (
             <TableFooter>
               {totals.map((total) => (
                 <TableRow key={total.currency}>
                   <TableCell colSpan={2} className="font-medium">
-                    {scope.orgIds === 'all' ? 'All companies' : 'Group'} · {total.currency}
+                    {resolved.view === 'combined'
+                      ? 'Combined'
+                      : scope.orgIds === 'all'
+                        ? 'All companies'
+                        : 'Group'}{' '}
+                    · {total.currency}
                     <span className="ml-2 font-normal text-muted-foreground">
                       {total.companies} {total.companies === 1 ? 'company' : 'companies'}
                     </span>

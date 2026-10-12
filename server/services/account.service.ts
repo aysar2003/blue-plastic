@@ -1,6 +1,7 @@
 import 'server-only'
 import type { AccountType, Prisma } from '@prisma/client'
 
+import { isDebitNormalType } from '@/lib/accounting-labels'
 import type { AccountChoice } from '@/lib/account-options'
 import { Decimal, ZERO, toMoneyString } from '@/lib/money'
 import { today } from '@/lib/date'
@@ -381,7 +382,7 @@ async function assertParentIsUsable(
   }
 }
 
-const isDebitNormal = (type: AccountType) => type === 'ASSET' || type === 'EXPENSE'
+const isDebitNormal = isDebitNormalType
 
 /**
  * The chart as a picker offers it: every postable account, with its kind and —
@@ -418,7 +419,7 @@ export async function selectableAccounts(
  *
  * Columns: code, name, type, subtype, and optionally detail, description,
  * openingBalance, openingBalanceDate. `type` is ASSET, LIABILITY, EQUITY,
- * REVENUE or EXPENSE. `subtype` is the detail type the reports already group
+ * REVENUE, COGS or EXPENSE. `subtype` is the detail type the reports already group
  * on, such as OPERATING_EXPENSE or INCOME. Each row is created through the
  * same path as the New account dialog, including its opening balance journal.
  */

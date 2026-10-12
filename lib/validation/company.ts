@@ -1,6 +1,12 @@
 import { z } from 'zod'
 
+import { MODULE_FLAGS } from '@/lib/feature-flags'
+
 import { currencyCode, requiredText } from './common'
+
+const boolFlag = z
+  .union([z.boolean(), z.literal('true'), z.literal('false'), z.literal('on')])
+  .transform((v) => v === true || v === 'true' || v === 'on')
 
 /** A new separate company on this instance (second database and beyond). */
 export const createCompanySchema = z.object({
@@ -38,3 +44,60 @@ export const deleteCompanySchema = z.object({
 })
 
 export type DeleteCompanyInput = z.infer<typeof deleteCompanySchema>
+
+/** System-owner limits: lock, rent end date, and max users for a company database. */
+export const updateCompanyLimitsSchema = z.object({
+  orgId: z.string().min(1),
+  accessRestricted: z
+    .union([z.boolean(), z.literal('true'), z.literal('false'), z.literal('on')])
+    .transform((v) => v === true || v === 'true' || v === 'on')
+    .default(false),
+  /** Empty string clears the rent end date. */
+  rentExpiresAt: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((v) => {
+      if (v == null || v === '') return null
+      const date = new Date(v)
+      if (Number.isNaN(date.getTime())) {
+        throw new z.ZodError([
+          {
+            code: 'custom',
+            path: ['rentExpiresAt'],
+            message: 'Enter a valid rent end date.',
+          },
+        ])
+      }
+      return date.toISOString()
+    }),
+  /** Empty or 0 clears the seat cap (unlimited). */
+  maxUsers: z
+    .union([z.string(), z.number(), z.null(), z.undefined()])
+    .optional()
+    .transform((v) => {
+      if (v == null || v === '') return null
+      const n = typeof v === 'number' ? v : Number(v)
+      if (!Number.isFinite(n) || n < 0) {
+        throw new z.ZodError([
+          {
+            code: 'custom',
+            path: ['maxUsers'],
+            message: 'Max users must be a number, or blank for unlimited.',
+          },
+        ])
+      }
+      if (n === 0) return null
+      return Math.min(500, Math.floor(n))
+    }),
+  rentNote: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .nullable()
+    .transform((v) => (v == null || v === '' ? null : v)),
+})
+
+export type UpdateCompanyLimitsInput = z.infer<typeof updateCompanyLimitsSchema>

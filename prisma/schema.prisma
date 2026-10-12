@@ -47,6 +47,13 @@ enum MembershipStatus {
   SUSPENDED
 }
 
+/// Public /register requests. No login until a system owner approves.
+enum CompanySignupStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum AuditAction {
   CREATE
   UPDATE
@@ -101,6 +108,9 @@ enum AccountType {
   LIABILITY
   EQUITY
   REVENUE
+  /// Cost of goods sold. Debit-normal and on the profit and loss, but not an
+  /// operating expense — gross profit is income minus this, before overheads.
+  COGS
   EXPENSE
 }
 
@@ -175,14 +185,26 @@ enum SystemAccountKey {
 }
 
 /// How an item behaves. The distinction drives which accounts it must map to and
-/// whether selling it moves stock.
+/// whether selling it moves stock. Labels follow QuickBooks Desktop item kinds.
 enum ItemType {
-  /// Labour and services. Income account only.
+  /// Labour and services. Income account; expense optional.
   SERVICE
   /// Goods bought and resold without tracking stock levels.
   NON_INVENTORY
   /// Goods with tracked quantity and cost. Selling one moves inventory and COGS.
   INVENTORY
+  /// Finished good built from parts — tracked like INVENTORY (BOM later).
+  INVENTORY_ASSEMBLY
+  /// Freight, fees, and other charges. No stock.
+  OTHER_CHARGE
+  /// Discount line; posts to a sales-discount income account.
+  DISCOUNT
+  /// Document subtotal marker — no GL mapping on the item.
+  SUBTOTAL
+  /// Bundle of other items entered together on a sale.
+  GROUP
+  /// Partial payment recorded on a sales form (deposit account).
+  PAYMENT
 }
 
 /// How a payment term computes a due date.
@@ -439,6 +461,18 @@ model Organization {
   parent      Organization?  @relation("OrgGroup", fields: [parentOrgId], references: [id], onDelete: Restrict)
   children    Organization[] @relation("OrgGroup")
 
+  /// When true, only the system owner may open this company (locked / restricted).
+  accessRestricted Boolean @default(false)
+
+  /// Rent / subscription end. After this moment staff cannot open the books (system owner still can).
+  rentExpiresAt DateTime? @db.Timestamptz(6)
+
+  /// Max ACTIVE memberships (users) for this company. Null = unlimited.
+  maxUsers Int?
+
+  /// Free note for the rent / restriction (e.g. invoice ref, plan name).
+  rentNote String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -561,6 +595,35 @@ model Membership {
   @@index([userId])
   @@index([orgId, status])
   @@map("memberships")
+}
+
+/// Outside people asking to join SOM ERP. Stored until the system owner
+/// approves (creates company + owner) or rejects. No User row until APPROVED.
+model CompanySignupRequest {
+  id String @id @default(cuid())
+
+  organizationName     String
+  baseCurrency         String   @db.Char(3)
+  fiscalYearStartMonth Int      @default(1)
+  ownerName            String
+  email                String
+  /// Password hash ready to copy onto User on approve — never plaintext.
+  passwordHash         String
+
+  status     CompanySignupStatus @default(PENDING)
+  reviewedAt DateTime?           @db.Timestamptz(6)
+  reviewedBy String?
+  note       String?
+
+  /// Set when approved — the company that was created.
+  organizationId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([email, status])
+  @@map("company_signup_requests")
 }
 
 // --- NextAuth adapter tables ------------------------------------------------
@@ -736,6 +799,7 @@ model LedgerAccount {
   itemsExpense      Item[]    @relation("ItemExpense")
   itemsInventory    Item[]    @relation("ItemInventory")
   itemsCogs         Item[]    @relation("ItemCogs")
+  itemsDeposit      Item[]    @relation("ItemDeposit")
   taxRatesSales     TaxRate[] @relation("TaxRateSales")
   taxRatesPurchase  TaxRate[] @relation("TaxRatePurchase")
   salesLines        SalesDocumentLine[]    @relation("SalesLineIncome")
@@ -1190,8 +1254,10 @@ model ItemCategory {
 /// than by whoever is typing the invoice. Which mappings are required depends on
 /// the type, and the rule is enforced in the service and by a database trigger:
 ///
-///   SERVICE / NON_INVENTORY  income account; expense account optional
-///   INVENTORY                income + inventory asset + COGS, all required
+///   SERVICE / OTHER_CHARGE   income; expense optional
+///   DISCOUNT                 income (sales discounts)
+///   NON_INVENTORY            income; purchase cost → system COGS
+///   INVENTORY / ASSEMBLY     income + inventory asset + COGS, all required
 model Item {
   id    String @id @default(cuid())
   orgId String
@@ -1230,6 +1296,15 @@ model Item {
   /// When true, the item appears on the point-of-sale product grid.
   availableInPos Boolean @default(true)
 
+  /// GROUP: print member lines on the invoice.
+  printGroupItems Boolean @default(true)
+
+  /// PAYMENT item: cash / card / … (QuickBooks payment item).
+  itemPaymentMethod PaymentMethod?
+
+  /// PAYMENT item: Undeposited Funds or a bank account.
+  depositAccountId String?
+
   /// Soft deletion. The row stays and its journal stays; both are excluded from
   /// every list, report, selector and balance. See `server/accounting/deletion.ts`.
   deletedAt    DateTime? @db.Timestamptz(6)
@@ -1245,6 +1320,7 @@ model Item {
   expenseAccount   LedgerAccount? @relation("ItemExpense", fields: [expenseAccountId], references: [id], onDelete: Restrict)
   inventoryAccount LedgerAccount? @relation("ItemInventory", fields: [inventoryAccountId], references: [id], onDelete: Restrict)
   cogsAccount      LedgerAccount? @relation("ItemCogs", fields: [cogsAccountId], references: [id], onDelete: Restrict)
+  depositAccount   LedgerAccount? @relation("ItemDeposit", fields: [depositAccountId], references: [id], onDelete: Restrict)
   store            Store?         @relation(fields: [storeId], references: [id], onDelete: SetNull)
   salesTaxCode     TaxCode?       @relation("ItemSalesTax", fields: [salesTaxCodeId], references: [id], onDelete: SetNull)
   purchaseTaxCode  TaxCode?       @relation("ItemPurchaseTax", fields: [purchaseTaxCodeId], references: [id], onDelete: SetNull)
@@ -1255,6 +1331,8 @@ model Item {
   storeTransfers   StoreTransfer[]
   storeTickets     StoreTicket[]
   deliveryNoteLines DeliveryNoteLine[]
+  bomParents       ItemComponent[] @relation("ItemBomParent")
+  bomChildren      ItemComponent[] @relation("ItemBomChild")
 
   @@unique([orgId, name])
   @@unique([orgId, sku])
@@ -1264,6 +1342,26 @@ model Item {
   @@index([orgId, deletedAt])
   @@index([orgId, storeId])
   @@map("items")
+}
+
+/// Members of a GROUP or bill-of-materials lines of an INVENTORY_ASSEMBLY.
+model ItemComponent {
+  id              String  @id @default(cuid())
+  orgId           String
+  parentItemId    String
+  componentItemId String
+  quantity        Decimal @db.Decimal(19, 4)
+  sortOrder       Int     @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  parent    Item @relation("ItemBomParent", fields: [parentItemId], references: [id], onDelete: Cascade)
+  component Item @relation("ItemBomChild", fields: [componentItemId], references: [id], onDelete: Restrict)
+
+  @@unique([parentItemId, componentItemId])
+  @@index([orgId, parentItemId])
+  @@map("item_components")
 }
 
 /// A place the stock is kept. Each store has an inventory account of its own,
@@ -1648,6 +1746,13 @@ model SalesDocument {
   /// restates the due date of a document already sent.
   paymentTermId String?
   expiryDate    DateTime? @db.Date
+
+  /// Customer promised to pay by this date. Used for overdue lists instead of dueDate.
+  promisedDate DateTime? @db.Date
+  /// Note from the last payment promise (who agreed, how, phone call, …).
+  promiseNote  String?
+  /// When true, the invoice stays open but leaves overdue / collections lists (“un overdue”).
+  excludeFromOverdue Boolean @default(false)
 
   status SalesDocumentStatus @default(DRAFT)
 

@@ -68,7 +68,7 @@ suite('the closing entry', () => {
         SELECT COALESCE(SUM(l.debit - l.credit), 0) AS balance
           FROM journal_lines l
           JOIN ledger_accounts a ON a.id = l."accountId"
-         WHERE l."orgId" = ${fixture.ctx.orgId} AND a.type IN ('REVENUE', 'EXPENSE')
+         WHERE l."orgId" = ${fixture.ctx.orgId} AND a.type IN ('REVENUE', 'COGS', 'EXPENSE')
       `
       expect(String(nominal[0].balance)).toBe('0')
 

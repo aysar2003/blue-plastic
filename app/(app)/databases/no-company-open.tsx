@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 import {
   CheckIcon,
   DatabaseIcon,
   Loader2Icon,
   PencilIcon,
   PlusIcon,
+  ShieldIcon,
   Trash2Icon,
 } from 'lucide-react'
 
@@ -28,6 +29,13 @@ export type CompanyOpenRow = {
   parentName: string | null
   childCount: number
   groupKind: CompanyGroupKind
+  accessRestricted: boolean
+  rentExpiresAt: string | null
+  maxUsers: number | null
+  rentNote: string | null
+  rentExpired: boolean
+  openBlocked: boolean
+  activeUsers: number
 }
 
 type Props = {
@@ -36,12 +44,14 @@ type Props = {
   canConnect: boolean
   canCreate: boolean
   canDelete: boolean
+  canManageLimits?: boolean
   editList: boolean
   onEditListChange: (open: boolean) => void
   onOpen: (orgId: string, isCurrent: boolean) => void
   onCreate: () => void
   onOpenOrRestore: () => void
   onDelete: (row: CompanyOpenRow) => void
+  onLimits?: (row: CompanyOpenRow) => void
 }
 
 type GroupTree = {
@@ -88,6 +98,64 @@ function buildGroups(databases: CompanyOpenRow[]): {
   return { trees, standalone }
 }
 
+/** Same breakpoints as the old flat card grid (sm / lg / xl / 2xl). */
+function columnsForViewport(width: number) {
+  if (width >= 1536) return 5
+  if (width >= 1280) return 4
+  if (width >= 1024) return 3
+  if (width >= 640) return 2
+  return 1
+}
+
+function useDatabaseColumns() {
+  const [count, setCount] = useState(3)
+
+  useLayoutEffect(() => {
+    const apply = () => setCount(columnsForViewport(window.innerWidth))
+    apply()
+    window.addEventListener('resize', apply)
+    return () => window.removeEventListener('resize', apply)
+  }, [])
+
+  return count
+}
+
+type GridUnit = {
+  key: string
+  weight: number
+  kind: 'family' | 'solo'
+}
+
+/**
+ * Families land first, left to right, so a main and its subs share a column.
+ * Solo cards then drop into the shortest column and keep the grid even.
+ */
+function packDatabaseColumns<T extends GridUnit>(items: T[], columnCount: number): T[][] {
+  const count = Math.max(1, columnCount)
+  const columns = Array.from({ length: count }, () => ({
+    weight: 0,
+    items: [] as T[],
+  }))
+
+  const place = (item: T) => {
+    let best = 0
+    for (let index = 1; index < columns.length; index++) {
+      if (columns[index].weight < columns[best].weight) best = index
+    }
+    columns[best].items.push(item)
+    columns[best].weight += item.weight
+  }
+
+  for (const item of items) {
+    if (item.kind === 'family') place(item)
+  }
+  for (const item of items) {
+    if (item.kind === 'solo') place(item)
+  }
+
+  return columns.map((column) => column.items)
+}
+
 function cardMeta(row: CompanyOpenRow) {
   const parts: string[] = []
   if (row.ownerName) parts.push(row.ownerName)
@@ -96,7 +164,35 @@ function cardMeta(row: CompanyOpenRow) {
     parts.push(`${row.childCount} sub${row.childCount === 1 ? '' : 's'}`)
   }
   parts.push(row.baseCurrency)
+  if (row.maxUsers != null) parts.push(`${row.activeUsers}/${row.maxUsers} users`)
+  else if (row.activeUsers > 0) parts.push(`${row.activeUsers} users`)
   return parts.join(' · ')
+}
+
+function limitBadges(row: CompanyOpenRow) {
+  const badges: { key: string; label: string; className: string }[] = []
+  if (row.accessRestricted) {
+    badges.push({
+      key: 'lock',
+      label: 'Locked',
+      className: 'bg-destructive/15 text-destructive ring-1 ring-inset ring-destructive/40',
+    })
+  }
+  if (row.rentExpired) {
+    badges.push({
+      key: 'rent-ended',
+      label: 'Rent ended',
+      className: 'bg-amber-400/20 text-amber-300 ring-1 ring-inset ring-amber-400/50',
+    })
+  } else if (row.rentExpiresAt) {
+    const day = new Date(row.rentExpiresAt).toLocaleDateString()
+    badges.push({
+      key: 'rent',
+      label: `Rent → ${day}`,
+      className: 'bg-violet-400/20 text-violet-300 ring-1 ring-inset ring-violet-400/40',
+    })
+  }
+  return badges
 }
 
 /** Bright mark — solid colours so Main / Sub / Solo stay readable on dark desks. */
@@ -122,9 +218,157 @@ function groupMark(kind: CompanyGroupKind) {
   }
 }
 
+function CompanyCard({
+  row,
+  busy,
+  canOpen,
+  selected,
+  editList,
+  canDelete,
+  canManageLimits,
+  onSelect,
+  onOpen,
+  onDelete,
+  onLimits,
+}: {
+  row: CompanyOpenRow
+  busy: boolean
+  canOpen: boolean
+  selected: boolean
+  editList: boolean
+  canDelete: boolean
+  canManageLimits: boolean
+  onSelect: () => void
+  onOpen: () => void
+  onDelete: () => void
+  onLimits?: () => void
+}) {
+  const group = companyGroupLabel(row.groupKind)
+  const mark = groupMark(row.groupKind)
+  const limits = limitBadges(row)
+  const staffBlocked = row.openBlocked && !canManageLimits
+
+  return (
+    <article
+      className={cn(
+        'relative flex min-h-[8.5rem] flex-col rounded-lg border bg-card p-4 pl-[1.05rem] transition',
+        row.isCurrent && 'border-primary/30 bg-muted/50',
+        selected && !row.isCurrent && 'ring-1 ring-border',
+        canOpen && !staffBlocked && 'cursor-pointer hover:border-primary/35 hover:bg-muted/30',
+        (!canOpen || staffBlocked) && 'opacity-80',
+        // Last so Main / Sub / Solo left colour is never overridden.
+        mark.stripe,
+      )}
+      onClick={onSelect}
+      onDoubleClick={() => {
+        if (canOpen && !staffBlocked) onOpen()
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span
+          className={cn(
+            'grid size-8 shrink-0 place-items-center rounded-md border bg-background text-muted-foreground',
+            row.isCurrent && 'border-primary/25 text-primary',
+          )}
+        >
+          <DatabaseIcon className="size-4" />
+        </span>
+        {row.isCurrent ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-primary-foreground">
+            <CheckIcon className="size-3" />
+            Current
+          </span>
+        ) : canOpen && !staffBlocked ? (
+          <button
+            type="button"
+            disabled={busy}
+            className="text-[0.7rem] font-semibold uppercase tracking-wider text-muted-foreground transition hover:text-primary disabled:opacity-60"
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpen()
+            }}
+          >
+            {busy ? <Loader2Icon className="size-3.5 animate-spin" /> : 'Connect'}
+          </button>
+        ) : (
+          <span className="text-[0.7rem] font-semibold uppercase tracking-wider text-muted-foreground">
+            {row.openBlocked ? 'Restricted' : 'Locked'}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-auto pt-6">
+        <h2 className="text-sm font-semibold uppercase leading-snug tracking-wide text-foreground">
+          {row.name}
+        </h2>
+        <p className="mt-1 truncate text-xs text-muted-foreground">{cardMeta(row)}</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <span
+            className={cn(
+              'inline-flex items-center rounded-md px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide',
+              mark.badge,
+            )}
+          >
+            {group}
+            {row.groupKind === 'main' && row.childCount > 0 ? ` · ${row.childCount}` : null}
+          </span>
+          {limits.map((badge) => (
+            <span
+              key={badge.key}
+              className={cn(
+                'inline-flex items-center rounded-md px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide',
+                badge.className,
+              )}
+            >
+              {badge.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {editList ? (
+        <div
+          className="mt-3 flex flex-wrap gap-1.5 border-t pt-3"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {row.isCurrent ? (
+            <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={onOpen}>
+              Open books
+            </Button>
+          ) : null}
+          {canManageLimits && onLimits ? (
+            <Button type="button" size="sm" variant="outline" onClick={onLimits}>
+              <ShieldIcon />
+              Limits
+            </Button>
+          ) : null}
+          <a
+            href={`/api/backup?orgId=${encodeURIComponent(row.id)}`}
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            Backup
+          </a>
+          {canDelete ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={onDelete}
+            >
+              <Trash2Icon />
+              Delete
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
 /**
- * Databases home: every company on this system as a connectable card, plus a
- * map of how main and sub companies are linked.
+ * Databases home: every company on this system as a connectable card.
+ * A main company and its subs share one column; solo companies fill the rest.
  */
 export function NoCompanyOpen({
   databases,
@@ -132,12 +376,14 @@ export function NoCompanyOpen({
   canConnect,
   canCreate,
   canDelete,
+  canManageLimits = false,
   editList,
   onEditListChange,
   onOpen,
   onCreate,
   onOpenOrRestore,
   onDelete,
+  onLimits,
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(
     () => databases.find((row) => row.isCurrent)?.id ?? databases[0]?.id ?? null,
@@ -145,6 +391,40 @@ export function NoCompanyOpen({
 
   const { trees, standalone } = buildGroups(databases)
   const hasLinks = trees.length > 0
+  const columnCount = useDatabaseColumns()
+
+  const cardFor = (row: CompanyOpenRow) => (
+    <CompanyCard
+      key={row.id}
+      row={row}
+      busy={busyId === row.id}
+      canOpen={row.isCurrent || canConnect}
+      selected={row.id === selectedId}
+      editList={editList}
+      canDelete={canDelete}
+      canManageLimits={canManageLimits}
+      onSelect={() => setSelectedId(row.id)}
+      onOpen={() => onOpen(row.id, row.isCurrent)}
+      onDelete={() => onDelete(row)}
+      onLimits={onLimits ? () => onLimits(row) : undefined}
+    />
+  )
+
+  const units = [
+    ...trees.map((tree) => ({
+      key: tree.root.id,
+      weight: 1 + tree.children.length,
+      kind: 'family' as const,
+      tree,
+    })),
+    ...standalone.map((row) => ({
+      key: row.id,
+      weight: 1,
+      kind: 'solo' as const,
+      row,
+    })),
+  ]
+  const columns = packDatabaseColumns(units, columnCount)
 
   return (
     <div className="space-y-8">
@@ -154,7 +434,8 @@ export function NoCompanyOpen({
             My databases
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Every company on this system. Connect opens its books. Staff never see this list.
+            Every company on this system. A main company sits above its subs. Connect opens one set
+            of books. Staff never see this list.
           </p>
           {databases.length > 0 ? (
             <p className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -189,7 +470,7 @@ export function NoCompanyOpen({
               </Button>
             </>
           ) : null}
-          {canDelete || canCreate ? (
+          {canDelete || canCreate || canManageLimits ? (
             <Button
               type="button"
               variant="ghost"
@@ -222,126 +503,31 @@ export function NoCompanyOpen({
           ) : null}
         </div>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-          {databases.map((row) => {
-            const busy = busyId === row.id
-            const canOpen = row.isCurrent || canConnect
-            const selected = row.id === selectedId
-            const group = companyGroupLabel(row.groupKind)
-            const mark = groupMark(row.groupKind)
-
-            return (
-              <li key={row.id}>
-                <article
-                  className={cn(
-                    'relative flex h-full min-h-[8.5rem] flex-col rounded-lg border bg-card p-4 pl-[1.05rem] transition',
-                    row.isCurrent && 'border-primary/30 bg-muted/50',
-                    selected && !row.isCurrent && 'ring-1 ring-border',
-                    canOpen && 'cursor-pointer hover:border-primary/35 hover:bg-muted/30',
-                    !canOpen && 'opacity-80',
-                    // Last so Main / Sub / Solo left colour is never overridden.
-                    mark.stripe,
-                  )}
-                  onClick={() => setSelectedId(row.id)}
-                  onDoubleClick={() => {
-                    if (canOpen) onOpen(row.id, row.isCurrent)
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span
-                      className={cn(
-                        'grid size-8 shrink-0 place-items-center rounded-md border bg-background text-muted-foreground',
-                        row.isCurrent && 'border-primary/25 text-primary',
-                      )}
-                    >
-                      <DatabaseIcon className="size-4" />
-                    </span>
-                    {row.isCurrent ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-primary-foreground">
-                        <CheckIcon className="size-3" />
-                        Current
-                      </span>
-                    ) : canOpen ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        className="text-[0.7rem] font-semibold uppercase tracking-wider text-muted-foreground transition hover:text-primary disabled:opacity-60"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onOpen(row.id, row.isCurrent)
-                        }}
-                      >
-                        {busy ? (
-                          <Loader2Icon className="size-3.5 animate-spin" />
-                        ) : (
-                          'Connect'
-                        )}
-                      </button>
-                    ) : (
-                      <span className="text-[0.7rem] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Locked
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-auto pt-6">
-                    <h2 className="text-sm font-semibold uppercase leading-snug tracking-wide text-foreground">
-                      {row.name}
-                    </h2>
-                    <p className="mt-1 truncate text-xs text-muted-foreground">{cardMeta(row)}</p>
-                    <span
-                      className={cn(
-                        'mt-2 inline-flex items-center rounded-md px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide',
-                        mark.badge,
-                      )}
-                    >
-                      {group}
-                      {row.groupKind === 'main' && row.childCount > 0
-                        ? ` · ${row.childCount}`
-                        : null}
-                    </span>
-                  </div>
-
-                  {editList ? (
-                    <div
-                      className="mt-3 flex flex-wrap gap-1.5 border-t pt-3"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {row.isCurrent ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          disabled={busy}
-                          onClick={() => onOpen(row.id, true)}
-                        >
-                          Open books
-                        </Button>
-                      ) : null}
-                      <a
-                        href={`/api/backup?orgId=${encodeURIComponent(row.id)}`}
-                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                      >
-                        Backup
-                      </a>
-                      {canDelete ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => onDelete(row)}
-                        >
-                          <Trash2Icon />
-                          Delete
-                        </Button>
-                      ) : null}
+        <ul
+          className="grid items-start gap-3"
+          style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
+        >
+          {columns.map((column, index) => (
+            <li key={column.map((unit) => unit.key).join(':') || `col-${index}`} className="flex min-w-0 flex-col gap-3">
+              {column.map((unit) =>
+                unit.kind === 'family' && unit.tree.children.length > 0 ? (
+                  <div
+                    key={unit.key}
+                    className="flex flex-col gap-1.5 rounded-xl border border-teal-400/35 bg-teal-400/[0.06] p-1.5"
+                  >
+                    {cardFor(unit.tree.root)}
+                    <div className="ml-1.5 flex flex-col gap-1.5 border-l-2 border-amber-400/80 pl-2">
+                      {unit.tree.children.map((child) => cardFor(child))}
                     </div>
-                  ) : null}
-                </article>
-              </li>
-            )
-          })}
+                  </div>
+                ) : unit.kind === 'family' ? (
+                  cardFor(unit.tree.root)
+                ) : (
+                  cardFor(unit.row)
+                ),
+              )}
+            </li>
+          ))}
         </ul>
       )}
 

@@ -23,7 +23,9 @@ export function RegisterEntry({
   const [pending, startTransition] = useTransition()
   const [direction, setDirection] = useState<'out' | 'in'>('out')
   const [date, setDate] = useState(today)
-  const choices = categories.filter((category) => (direction === 'out' ? category.type === 'EXPENSE' : category.type === 'REVENUE'))
+  const choices = categories.filter((category) =>
+    direction === 'out' ? category.type === 'EXPENSE' || category.type === 'COGS' : category.type === 'REVENUE',
+  )
 
   return (
     <form

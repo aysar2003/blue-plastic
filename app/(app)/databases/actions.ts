@@ -6,9 +6,13 @@ import {
   attachSubCompanySchema,
   createCompanySchema,
   deleteCompanySchema,
+  switchCompanySchema,
+  updateCompanyLimitsSchema,
 } from '@/lib/validation/company'
+import { reviewSignupRequestSchema } from '@/lib/validation/signup-request'
 import { action } from '@/server/action'
 import * as companyService from '@/server/services/company.service'
+import * as registerService from '@/server/services/register.service'
 
 /** Create another separate company (database) on this instance. */
 export const createCompany = action
@@ -41,4 +45,32 @@ export const deleteCompany = action
     revalidatePath('/reports/companies')
     revalidatePath('/', 'layout')
     return result
+  })
+
+/** Approve or reject a public /register request (system owner). */
+export const reviewSignupRequest = action
+  .input(reviewSignupRequestSchema)
+  .handler(async (ctx, input) => {
+    const result = await registerService.reviewSignupRequest(ctx, input)
+    revalidatePath('/databases')
+    revalidatePath('/reports/companies')
+    revalidatePath('/', 'layout')
+    return result
+  })
+
+/** Lock, rent end date, and max users for a company (system owner). */
+export const updateCompanyLimits = action
+  .input(updateCompanyLimitsSchema)
+  .handler(async (ctx, input) => {
+    const result = await companyService.updateCompanyLimits(ctx, input)
+    revalidatePath('/databases')
+    revalidatePath('/', 'layout')
+    return result
+  })
+
+/** Confirm the signed-in user may open this company before switching session. */
+export const openCompany = action
+  .input(switchCompanySchema)
+  .handler(async (ctx, input) => {
+    return companyService.assertCanOpenCompany(ctx, input.orgId)
   })

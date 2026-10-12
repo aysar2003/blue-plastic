@@ -22,7 +22,7 @@ export type Shortcut = {
 
 export const SHORTCUTS: Shortcut[] = [
   { keys: ['g', 'd'], label: 'Apps', href: '/dashboard', group: 'Go to' },
-  { keys: ['g', 'x'], label: 'Sales', href: '/sales/invoices?status=open', permission: 'invoice:read', group: 'Go to' },
+  { keys: ['g', 'x'], label: 'Sales', href: '/sales', permission: 'invoice:read', group: 'Go to' },
   { keys: ['g', 'i'], label: 'Invoices', href: '/sales/invoices?status=open', permission: 'invoice:read', group: 'Go to' },
   { keys: ['g', 'q'], label: 'Quotations', href: '/sales/quotations', permission: 'invoice:read', group: 'Go to' },
   { keys: ['g', 'u'], label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read', group: 'Go to' },

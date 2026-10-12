@@ -324,7 +324,9 @@ function FeedRow({
   const [vendorId, setVendorId] = useState(line.vendorId ?? line.suggestion?.vendorId ?? '')
   const [customerId, setCustomerId] = useState(line.customerId ?? line.suggestion?.customerId ?? '')
   const [payeeName, setPayeeName] = useState('')
-  const choices = categories.filter((category) => (moneyOut ? category.type === 'EXPENSE' : category.type === 'REVENUE'))
+  const choices = categories.filter((category) =>
+    moneyOut ? category.type === 'EXPENSE' || category.type === 'COGS' : category.type === 'REVENUE',
+  )
   const docs = moneyOut ? bills : invoices
 
   function remember(next?: { categoryAccountId?: string; vendorId?: string; customerId?: string; payeeName?: string }) {

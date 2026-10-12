@@ -86,7 +86,10 @@ export function FavouriteReports({ reports }: { reports: StandardReport[] }) {
                 const on = starred?.includes(key) ?? true
                 return (
                   <li key={key} className="flex items-center gap-2 border-b px-4 py-2.5 last:border-b-0">
-                    <Link href={report.href} className="min-w-0 flex-1 text-sm hover:text-primary hover:underline">
+                    <Link
+                      href={report.href}
+                      className="min-w-0 flex-1 text-sm text-foreground hover:text-primary hover:underline"
+                    >
                       {report.label}
                     </Link>
                     <button

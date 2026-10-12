@@ -31,6 +31,8 @@ export async function customerMoneyBar(ctx: OrgContext, asOf: CalendarDate) {
         total: string
         applied: string
         due: Date | null
+        promisedDate: Date | null
+        excludeFromOverdue: boolean
         date: Date
       }[]
     >`
@@ -44,6 +46,8 @@ export async function customerMoneyBar(ctx: OrgContext, asOf: CalendarDate) {
                 WHERE "invoiceId" = d.id OR "creditDocumentId" = d.id
              ), 0)::text                             AS applied,
              d."dueDate"                             AS due,
+             d."promisedDate"                        AS "promisedDate",
+             d."excludeFromOverdue"                  AS "excludeFromOverdue",
              d.date                                  AS date
         FROM sales_documents d
        WHERE d."orgId" = ${ctx.orgId}
@@ -79,6 +83,8 @@ export async function customerMoneyBar(ctx: OrgContext, asOf: CalendarDate) {
       total: row.total,
       applied: row.applied,
       due: row.due ? toCalendarDate(row.due) : null,
+      promisedDate: row.promisedDate ? toCalendarDate(row.promisedDate) : null,
+      excludeFromOverdue: row.excludeFromOverdue,
       date: toCalendarDate(row.date),
     })),
     payments.map((row) => ({

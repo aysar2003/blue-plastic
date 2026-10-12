@@ -12,7 +12,10 @@ export function NamedReportList({ reports }: { reports: { label: string; href: s
           <ul key={index} className={index === 0 ? 'md:border-r' : undefined}>
             {column.map((report) => (
               <li key={report.href + report.label} className="border-b px-4 py-2.5 last:border-b-0">
-                <Link href={report.href} className="text-sm hover:text-primary hover:underline">
+                <Link
+                  href={report.href}
+                  className="text-sm text-foreground hover:text-primary hover:underline"
+                >
                   {report.label}
                 </Link>
               </li>

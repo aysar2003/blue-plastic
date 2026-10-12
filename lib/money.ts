@@ -10,6 +10,12 @@ export type Money = Decimal
 /** Storage scale. Unit prices and rates need more than 2 decimals; postings do not. */
 export const STORAGE_SCALE = 4
 
+/**
+ * What a person may type after the radix point on money / quantity fields.
+ * Hard-capped in the input guard; the wire schema matches.
+ */
+export const INPUT_DECIMAL_SCALE = 5
+
 /** Minor units per currency, for rounding amounts that will be posted. */
 const MINOR_UNITS: Record<string, number> = {
   USD: 2, EUR: 2, GBP: 2, KES: 2, AED: 2, CAD: 2, AUD: 2, CHF: 2, ZAR: 2, INR: 2,
@@ -85,8 +91,8 @@ export function settleNumberInput(input: string): string | null {
   const value = parseMoneyInput(input)
   if (!value) return null
   return value
-    .toDecimalPlaces(STORAGE_SCALE, Decimal.ROUND_HALF_UP)
-    .toFixed(STORAGE_SCALE)
+    .toDecimalPlaces(INPUT_DECIMAL_SCALE, Decimal.ROUND_HALF_UP)
+    .toFixed(INPUT_DECIMAL_SCALE)
     .replace(/(\.\d*?)0+$/, '$1')
     .replace(/\.$/, '')
 }

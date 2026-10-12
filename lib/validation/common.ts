@@ -76,8 +76,15 @@ export function calculatedDecimal(pattern: RegExp, message: string) {
     })
 }
 
-/** Money crosses the wire as a decimal string, never a float (ADR-0003). */
-export const moneyString = calculatedDecimal(/^-?\d{1,15}(\.\d{1,4})?$/, 'Enter a valid amount')
+/**
+ * Money crosses the wire as a decimal string, never a float (ADR-0003).
+ * Up to five fractional digits may be typed; posting still rounds to the
+ * currency (and storage) scale.
+ */
+export const moneyString = calculatedDecimal(
+  /^-?\d{1,15}(\.\d{1,5})?$/,
+  'Enter a valid amount (up to 5 decimal places)',
+)
 
 export const calendarDate = z
   .string()

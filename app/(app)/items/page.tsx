@@ -48,9 +48,15 @@ export const metadata: Metadata = { title: 'Products and services' }
 
 const TYPE_FILTERS = [
   { value: '', label: 'All' },
-  { value: 'SERVICE', label: 'Services' },
-  { value: 'NON_INVENTORY', label: 'Non-inventory' },
-  { value: 'INVENTORY', label: 'Inventory' },
+  { value: 'SERVICE', label: 'Service' },
+  { value: 'INVENTORY', label: 'Inventory Part' },
+  { value: 'INVENTORY_ASSEMBLY', label: 'Inventory Assembly' },
+  { value: 'NON_INVENTORY', label: 'Non-inventory Part' },
+  { value: 'OTHER_CHARGE', label: 'Other Charge' },
+  { value: 'SUBTOTAL', label: 'Subtotal' },
+  { value: 'GROUP', label: 'Group' },
+  { value: 'DISCOUNT', label: 'Discount' },
+  { value: 'PAYMENT', label: 'Payment' },
 ]
 
 export default async function ItemsPage({
@@ -74,12 +80,13 @@ export default async function ItemsPage({
     dir: sort.dir,
   }
 
-  const [page, accounts, taxCodes, categories, shelf] = await Promise.all([
+  const [page, accounts, taxCodes, categories, shelf, catalogItems] = await Promise.all([
     itemService.list(ctx, query, { type, categoryId, includeInactive, ...sort }),
     accountService.selectableAccounts(ctx),
     taxService.listCodes(ctx),
     itemService.listCategories(ctx),
     storeService.quantities(ctx),
+    itemService.listCatalog(ctx),
   ])
 
   const editId = typeof params.edit === 'string' ? params.edit : undefined
@@ -108,6 +115,7 @@ export default async function ItemsPage({
       taxCodes={taxOptions}
       categories={categoryOptions}
       stores={storeOptions}
+      catalogItems={catalogItems}
       currency={ctx.organization.baseCurrency}
       today={today(ctx.organization.timeZone)}
     />
@@ -227,6 +235,7 @@ export default async function ItemsPage({
               taxCodes={taxOptions}
               categories={categoryOptions}
               stores={storeOptions}
+              catalogItems={catalogItems}
               currency={ctx.organization.baseCurrency}
               canEdit={ctx.permissions.has('item:update')}
               canArchive={ctx.permissions.has('item:archive')}

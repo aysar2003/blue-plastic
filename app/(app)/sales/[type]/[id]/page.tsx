@@ -310,7 +310,7 @@ function Detail({
   return (
     <Card tone={tone}>
       <CardContent className="p-3">
-        <p className="text-xs font-medium uppercase tracking-wider opacity-75">{label}</p>
+        <p className="text-xs font-medium uppercase tracking-wider">{label}</p>
         <div className="mt-0.5 text-sm font-medium">{children}</div>
       </CardContent>
     </Card>

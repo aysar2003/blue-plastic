@@ -144,6 +144,10 @@ describe('company group service', () => {
       expect(await canViewGroupReports(mainCtx)).toBe(true)
       const scope = await groupReportScope(mainCtx)
       expect(scope.orgIds).toEqual(expect.arrayContaining([main.id, sub1.id, sub2.id]))
+      expect(scope.companies.map((row) => row.id)).toEqual(
+        expect.arrayContaining([main.id, sub1.id, sub2.id]),
+      )
+      expect(scope.companies[0]?.id).toBe(main.id)
 
       // Cleanup via service (children first).
       for (const org of [sub2, sub1, main]) {

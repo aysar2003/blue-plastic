@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import { HeaderApps } from './app-launcher'
+import { ActiveAppLink, AppsBarToggle, useAppsBarHidden } from './apps-bar'
 import { AppMemoryProvider } from './app-memory'
 import { AccountantNav } from './accountant-nav'
 import { CompanySwitcher, type CompanyOption } from './company-switcher'
@@ -121,6 +122,7 @@ export function ShellChrome({
   children,
 }: ShellChromeProps) {
   const pathname = usePathname()
+  const { hidden: appsHidden, toggle: toggleAppsBar } = useAppsBarHidden()
   const current = moduleFor(pathname)
   const isHome = !current || current.key === 'dashboard'
   const isPos = pathname === '/pos' || pathname.startsWith('/pos/')
@@ -199,6 +201,14 @@ export function ShellChrome({
           ) : null}
 
           <div className="ml-auto flex items-center gap-1.5">
+            {working ? (
+              <ActiveAppLink
+                permissions={permissions}
+                hiddenApps={hiddenApps}
+                barHidden={appsHidden}
+              />
+            ) : null}
+            {working ? <AppsBarToggle hidden={appsHidden} onToggle={toggleAppsBar} /> : null}
             {working ? <QuickCreate permissions={permissions} currency={baseCurrency} /> : null}
             {working ? <CommandPalette permissions={permissions} /> : null}
             {working ? <ShellMenus /> : null}
@@ -215,8 +225,12 @@ export function ShellChrome({
         </header>
 
         {working ? (
-          <div className="shell-apps relative z-30 border-b border-border/70 bg-card/85 px-4 py-1.5 print:hidden sm:px-6">
-            <HeaderApps permissions={permissions} hidden={hiddenApps} />
+          <div
+            id="app-icon-bar"
+            hidden={appsHidden}
+            className="shell-apps relative z-30 border-b border-border/70 bg-card/85 px-4 py-1.5 print:hidden sm:px-6"
+          >
+            {appsHidden ? null : <HeaderApps permissions={permissions} hidden={hiddenApps} />}
           </div>
         ) : null}
 

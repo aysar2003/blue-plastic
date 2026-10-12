@@ -51,6 +51,58 @@ export function FeaturesForm({ flags }: { flags: OrgFeatureFlags }) {
       ) : null}
 
       <section className="space-y-3">
+        <h3 className="text-sm font-semibold">Apps — on / off</h3>
+        <p className="text-xs text-muted-foreground">
+          Turn an app off to hide it from Home and the Apps menu for everyone.
+          Expenses stay inside Purchases — they are not a separate home app.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Toggle
+            name="moduleSales"
+            label="Sales"
+            hint="Invoices, customers, payments"
+            defaultChecked={flags.modules.sales}
+          />
+          <Toggle
+            name="modulePurchases"
+            label="Purchases"
+            hint="Bills, vendors, expenses"
+            defaultChecked={flags.modules.purchases}
+          />
+          <Toggle
+            name="moduleBanking"
+            label="Banking"
+            hint="Accounts, transfers, deposits"
+            defaultChecked={flags.modules.banking}
+          />
+          <Toggle
+            name="moduleInventory"
+            label="Inventory"
+            hint="Products, stock, stores"
+            defaultChecked={flags.modules.inventory}
+          />
+          <Toggle
+            name="modulePos"
+            label="Point of Sale"
+            hint="Registers and till"
+            defaultChecked={flags.modules.pos}
+          />
+          <Toggle
+            name="moduleAccounting"
+            label="Accounting"
+            hint="Chart, journals, periods"
+            defaultChecked={flags.modules.accounting}
+          />
+          <Toggle
+            name="moduleReports"
+            label="Reports"
+            hint="Financial and operations reports"
+            defaultChecked={flags.modules.reports}
+          />
+        </div>
+      </section>
+
+      <section className="space-y-3">
         <h3 className="text-sm font-semibold">Delete</h3>
         <p className="text-xs text-muted-foreground">
           Organisation switches — when off, Delete is hidden and the server refuses it.
@@ -108,57 +160,6 @@ export function FeaturesForm({ flags }: { flags: OrgFeatureFlags }) {
           hint={`When on, “Developed by ${CREATOR_BRAND_NAME}” appears next to ${PRODUCT_NAME} on the shell footer and sign-in.`}
           defaultChecked={flags.showCreatorBrand}
         />
-      </section>
-
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold">Apps</h3>
-        <p className="text-xs text-muted-foreground">
-          Hide an app from the launcher and header when you do not use it.
-        </p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Toggle
-            name="moduleSales"
-            label="Sales"
-            hint="Invoices, customers, payments"
-            defaultChecked={flags.modules.sales}
-          />
-          <Toggle
-            name="modulePurchases"
-            label="Purchases"
-            hint="Bills, vendors, expenses"
-            defaultChecked={flags.modules.purchases}
-          />
-          <Toggle
-            name="moduleBanking"
-            label="Banking"
-            hint="Accounts, transfers, deposits"
-            defaultChecked={flags.modules.banking}
-          />
-          <Toggle
-            name="moduleInventory"
-            label="Inventory"
-            hint="Products, stock, stores"
-            defaultChecked={flags.modules.inventory}
-          />
-          <Toggle
-            name="modulePos"
-            label="Point of Sale"
-            hint="Registers and till"
-            defaultChecked={flags.modules.pos}
-          />
-          <Toggle
-            name="moduleAccounting"
-            label="Accounting"
-            hint="Chart, journals, periods"
-            defaultChecked={flags.modules.accounting}
-          />
-          <Toggle
-            name="moduleReports"
-            label="Reports"
-            hint="Financial and operations reports"
-            defaultChecked={flags.modules.reports}
-          />
-        </div>
       </section>
 
       <button

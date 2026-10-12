@@ -10,6 +10,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   LIABILITY: 'Liabilities',
   EQUITY: 'Equity',
   REVENUE: 'Income',
+  COGS: 'Cost of goods sold',
   EXPENSE: 'Expenses',
 }
 
@@ -19,6 +20,7 @@ export const ACCOUNT_TYPE_ORDER: AccountType[] = [
   'LIABILITY',
   'EQUITY',
   'REVENUE',
+  'COGS',
   'EXPENSE',
 ]
 
@@ -70,7 +72,8 @@ export const SUBTYPES_BY_TYPE: Record<AccountType, AccountSubtype[]> = {
   ],
   EQUITY: ['OWNERS_EQUITY', 'RETAINED_EARNINGS', 'OPENING_BALANCE_EQUITY', 'DRAWINGS'],
   REVENUE: ['INCOME', 'OTHER_INCOME', 'SALES_DISCOUNTS'],
-  EXPENSE: ['COST_OF_GOODS_SOLD', 'OPERATING_EXPENSE', 'OTHER_EXPENSE', 'DEPRECIATION'],
+  COGS: ['COST_OF_GOODS_SOLD'],
+  EXPENSE: ['OPERATING_EXPENSE', 'OTHER_EXPENSE', 'DEPRECIATION'],
 }
 
 /** Detail-type order inside Assets / Liabilities / … — Bank together, then AR, … */
@@ -107,4 +110,8 @@ export const PERIOD_STATUS_LABELS: Record<PeriodStatus, string> = {
 
 /** Accounts of these types are naturally debits; the rest are naturally credits. */
 export const isDebitNormalType = (type: AccountType): boolean =>
-  type === 'ASSET' || type === 'EXPENSE'
+  type === 'ASSET' || type === 'COGS' || type === 'EXPENSE'
+
+/** Income, cost of goods sold, and expenses — the accounts a profit and loss closes. */
+export const isProfitAndLossType = (type: AccountType): boolean =>
+  type === 'REVENUE' || type === 'COGS' || type === 'EXPENSE'

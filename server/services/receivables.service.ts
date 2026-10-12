@@ -78,7 +78,7 @@ export async function aging(
     >`
       SELECT d."customerId"                       AS "customerId",
              c."displayName"                      AS "customerName",
-             (${asOfDate}::date - d."dueDate")    AS days,
+             (${asOfDate}::date - COALESCE(d."promisedDate", d."dueDate")) AS days,
              (d.total - COALESCE((
                 SELECT SUM(a.amount) FROM sales_applications a WHERE a."invoiceId" = d.id
              ), 0))                               AS outstanding
@@ -88,6 +88,7 @@ export async function aging(
          AND d."deletedAt" IS NULL
          AND d.type     = 'INVOICE'
          AND d.status  IN ('OPEN', 'PARTIAL')
+         AND d."excludeFromOverdue" = false
          AND d.date    <= ${asOfDate}
     `,
     // The control account, broken down by whose balance it is.

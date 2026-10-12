@@ -1,6 +1,7 @@
 import 'server-only'
 import type { AccountSubtype, AccountType } from '@prisma/client'
 
+import { isDebitNormalType, isProfitAndLossType } from '@/lib/accounting-labels'
 import { toDate, type CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
 import { db, type Tx } from '@/server/db'
@@ -154,10 +155,10 @@ type RawFigures = {
  * revenue of 10,000 reads as 10,000 rather than as −10,000.
  */
 export function present(type: AccountType, raw: Decimal): Decimal {
-  return type === 'ASSET' || type === 'EXPENSE' ? raw : raw.negated()
+  return isDebitNormalType(type) ? raw : raw.negated()
 }
 
-export const isProfitAndLoss = (type: AccountType) => type === 'REVENUE' || type === 'EXPENSE'
+export const isProfitAndLoss = isProfitAndLossType
 export const isBalanceSheet = (type: AccountType) => !isProfitAndLoss(type)
 
 /** Money accounts, for the cash-flow statement and the dashboard. */

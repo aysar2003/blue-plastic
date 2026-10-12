@@ -23,6 +23,14 @@ export type PeriodKey =
   | 'last-month'
   | 'this-quarter'
   | 'last-quarter'
+  | 'fy-q1'
+  | 'fy-q2'
+  | 'fy-q3'
+  | 'fy-q4'
+  | 'last-fy-q1'
+  | 'last-fy-q2'
+  | 'last-fy-q3'
+  | 'last-fy-q4'
   | 'this-fiscal-year'
   | 'last-fiscal-year'
   | 'year-to-date'
@@ -45,6 +53,14 @@ export const PERIOD_LABELS: Record<PeriodKey, string> = {
   'last-month': 'Last month',
   'this-quarter': 'This quarter',
   'last-quarter': 'Last quarter',
+  'fy-q1': 'This year — Q1',
+  'fy-q2': 'This year — Q2',
+  'fy-q3': 'This year — Q3',
+  'fy-q4': 'This year — Q4',
+  'last-fy-q1': 'Last year — Q1',
+  'last-fy-q2': 'Last year — Q2',
+  'last-fy-q3': 'Last year — Q3',
+  'last-fy-q4': 'Last year — Q4',
   'this-fiscal-year': 'This year (fiscal)',
   'last-fiscal-year': 'Last year (fiscal)',
   'year-to-date': 'Year to date',
@@ -79,13 +95,25 @@ function quarterOf(date: CalendarDate, fiscalYearStartMonth: number): Period {
   return { from: start, to: endOfMonth(addMonths(start, 2)) }
 }
 
+/** Named fiscal quarter 1–4 within a labelled fiscal year. */
+export function fiscalQuarterRange(
+  fiscalYear: number,
+  quarter: 1 | 2 | 3 | 4,
+  fiscalYearStartMonth: number,
+): Period {
+  const year = fiscalYearRange(fiscalYear, fiscalYearStartMonth)
+  const start = addMonths(year.start, (quarter - 1) * 3)
+  return { from: start, to: endOfMonth(addMonths(start, 2)) }
+}
+
 export function resolvePeriod(
   key: PeriodKey,
   today: CalendarDate,
   fiscalYearStartMonth: number,
   custom?: Partial<Period>,
 ): Period {
-  const thisYear = fiscalYearRange(fiscalYearOf(today, fiscalYearStartMonth), fiscalYearStartMonth)
+  const thisFy = fiscalYearOf(today, fiscalYearStartMonth)
+  const thisYear = fiscalYearRange(thisFy, fiscalYearStartMonth)
 
   switch (key) {
     case 'today':
@@ -113,13 +141,26 @@ export function resolvePeriod(
       const start = addMonths(current.from, -3)
       return { from: start, to: addDays(current.from, -1) }
     }
+    case 'fy-q1':
+      return fiscalQuarterRange(thisFy, 1, fiscalYearStartMonth)
+    case 'fy-q2':
+      return fiscalQuarterRange(thisFy, 2, fiscalYearStartMonth)
+    case 'fy-q3':
+      return fiscalQuarterRange(thisFy, 3, fiscalYearStartMonth)
+    case 'fy-q4':
+      return fiscalQuarterRange(thisFy, 4, fiscalYearStartMonth)
+    case 'last-fy-q1':
+      return fiscalQuarterRange(thisFy - 1, 1, fiscalYearStartMonth)
+    case 'last-fy-q2':
+      return fiscalQuarterRange(thisFy - 1, 2, fiscalYearStartMonth)
+    case 'last-fy-q3':
+      return fiscalQuarterRange(thisFy - 1, 3, fiscalYearStartMonth)
+    case 'last-fy-q4':
+      return fiscalQuarterRange(thisFy - 1, 4, fiscalYearStartMonth)
     case 'this-fiscal-year':
       return { from: thisYear.start, to: thisYear.end }
     case 'last-fiscal-year': {
-      const previous = fiscalYearRange(
-        fiscalYearOf(today, fiscalYearStartMonth) - 1,
-        fiscalYearStartMonth,
-      )
+      const previous = fiscalYearRange(thisFy - 1, fiscalYearStartMonth)
       return { from: previous.start, to: previous.end }
     }
     case 'year-to-date':

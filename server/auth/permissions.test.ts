@@ -38,6 +38,10 @@ describe('permission matrix', () => {
     expect(can('ACCOUNTANT', 'journal:post')).toBe(true)
     expect(can('ACCOUNTANT', 'period:close')).toBe(true)
     expect(can('ACCOUNTANT', 'bank:reconcile')).toBe(true)
+    // Reopen / unlock is Owner & Admin only — closed books stay closed.
+    expect(can('ACCOUNTANT', 'period:reopen')).toBe(false)
+    expect(can('ADMIN', 'period:reopen')).toBe(true)
+    expect(can('OWNER', 'period:reopen')).toBe(true)
   })
 
   it('keeps sales away from the ledger and from other people', () => {

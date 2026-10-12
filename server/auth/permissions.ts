@@ -83,6 +83,8 @@ const BOOKKEEPER: Permission[] = [
 /**
  * ACCOUNTANT adds the ledger-level authority: posting, reversing, closing,
  * and the business overview (cash, bank balances, profit, expenses).
+ * Reopening a locked/closed period is Owner/Admin only — once closed, the books
+ * stay closed until someone with that authority unlocks them.
  * A bookkeeper does not get that snapshot with the role; an owner can grant
  * `report:overview` from the matrix.
  */
@@ -94,7 +96,6 @@ const ACCOUNTANT: Permission[] = [
   'journal:post',
   'journal:reverse',
   'period:close',
-  'period:reopen',
   'tax:manage',
   'bank:reconcile',
   'pos:manage',
@@ -104,6 +105,7 @@ const ACCOUNTANT: Permission[] = [
 
 const ADMIN: Permission[] = [
   ...ACCOUNTANT,
+  'period:reopen',
   'org:update',
   'user:invite',
   'user:update',

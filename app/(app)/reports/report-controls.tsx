@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { DownloadIcon, FileDownIcon, Loader2Icon, PrinterIcon } from 'lucide-react'
 
@@ -18,6 +18,20 @@ export type ControlSet = {
   comparison?: boolean
   /** Report key for the CSV endpoint. Omitted where export makes no sense. */
   exportAs?: string
+  /**
+   * Offer closed months / quarters / years as a period shortcut.
+   * On by default so every report can jump to the last close.
+   */
+  closedPeriods?: boolean
+}
+
+type ClosureOption = {
+  id: string
+  kind: 'month' | 'quarter' | 'year'
+  label: string
+  from: string
+  to: string
+  status: string
 }
 
 /**
@@ -51,6 +65,8 @@ export function ReportControls({
   const [pending, startTransition] = useTransition()
 
   const [draft, setDraft] = useState({ period, from, to, asOf, basis, comparison })
+  const [closures, setClosures] = useState<ClosureOption[]>([])
+  const [latestId, setLatestId] = useState<string | null>(null)
 
   // The URL is the source of truth; the draft only holds an edit in flight. When
   // the server comes back with different dates — which it does whenever a preset
@@ -62,8 +78,29 @@ export function ReportControls({
     setDraft({ period, from, to, asOf, basis, comparison })
   }
 
+  const showClosures = controls.closedPeriods !== false
+
+  useEffect(() => {
+    if (!showClosures) return
+    let cancelled = false
+    void fetch('/api/periods/closures')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { closures?: ClosureOption[]; latest?: ClosureOption | null } | null) => {
+        if (cancelled || !data) return
+        setClosures(data.closures ?? [])
+        setLatestId(data.latest?.id ?? null)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [showClosures])
+
   const apply = (next: Partial<typeof draft>) => {
     const merged = { ...draft, ...next }
+    if (controls.mode === 'range' && (next.from !== undefined || next.to !== undefined)) {
+      merged.asOf = merged.to
+    }
     setDraft(merged)
 
     // Keep the rest of the address — a statement's customer, a filter — and
@@ -76,13 +113,28 @@ export function ReportControls({
     if (merged.period === 'custom') {
       params.set('from', merged.from)
       params.set('to', merged.to)
-      params.set('asOf', merged.asOf)
+      params.set('asOf', controls.mode === 'range' ? merged.to : merged.asOf)
     }
     if (controls.basis) params.set('basis', merged.basis)
     if (controls.comparison) params.set('compare', merged.comparison)
 
     startTransition(() => router.push(`${pathname}?${params.toString()}`, { scroll: false }))
   }
+
+  const applyClosure = (id: string) => {
+    if (!id) return
+    const row = closures.find((c) => c.id === id)
+    if (!row) return
+    apply({
+      period: 'custom',
+      from: row.from,
+      to: row.to,
+      asOf: row.to,
+    })
+  }
+
+  const matchedClosure =
+    closures.find((c) => c.from === draft.from && c.to === draft.to)?.id ?? ''
 
   const exportHref = controls.exportAs
     ? `/api/reports/${controls.exportAs}?${new URLSearchParams(searchParams).toString()}`
@@ -99,7 +151,7 @@ export function ReportControls({
         <Label htmlFor="period">Period</Label>
         <NativeSelect
           id="period"
-          className="w-44"
+          className="w-52"
           value={draft.period}
           onChange={(event) => apply({ period: event.target.value as PeriodKey })}
         >
@@ -110,6 +162,35 @@ export function ReportControls({
           ))}
         </NativeSelect>
       </div>
+
+      {showClosures && closures.length > 0 ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="closure">Closed books</Label>
+          <NativeSelect
+            id="closure"
+            className="w-56"
+            value={matchedClosure}
+            onChange={(event) => applyClosure(event.target.value)}
+          >
+            <option value="">— pick a close —</option>
+            {latestId ? (
+              <option value={latestId}>
+                Latest close
+                {closures.find((c) => c.id === latestId)
+                  ? ` (${closures.find((c) => c.id === latestId)!.label})`
+                  : ''}
+              </option>
+            ) : null}
+            {closures.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.kind === 'month' ? 'Month' : row.kind === 'quarter' ? 'Quarter' : 'Year'}
+                {' · '}
+                {row.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+      ) : null}
 
       {controls.mode === 'range' ? (
         <>
@@ -132,8 +213,8 @@ export function ReportControls({
               className="w-44"
               value={draft.to}
               onChange={(next) => {
-                setDraft({ ...draft, period: 'custom', to: next })
-                if (next !== to) apply({ period: 'custom', to: next })
+                setDraft({ ...draft, period: 'custom', to: next, asOf: next })
+                if (next !== to) apply({ period: 'custom', to: next, asOf: next })
               }}
             />
           </div>

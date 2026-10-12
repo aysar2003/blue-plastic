@@ -2,11 +2,14 @@ import 'server-only'
 import type { PeriodStatus } from '@prisma/client'
 
 import { fiscalYearOf, today, toCalendarDate } from '@/lib/date'
+import type { ClosureKind, ClosureRow } from '@/lib/period-closures'
 import { ensureFiscalYear } from '@/server/accounting/period'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, precondition } from '@/server/errors'
+
+export type { ClosureKind, ClosureRow }
 
 export type PeriodRow = {
   id: string
@@ -206,4 +209,88 @@ export async function setStatus(ctx: OrgContext, periodId: string, status: 'OPEN
 
     return updated
   })
+}
+
+/**
+ * Every soft-closed month, completed closed quarter, and locked fiscal year —
+ * current and prior years — so reports can pick the last close or any earlier one.
+ */
+export async function listClosures(
+  ctx: OrgContext,
+  filter?: { kind?: ClosureKind },
+): Promise<ClosureRow[]> {
+  const years = await listFiscalYears(ctx)
+  const rows: ClosureRow[] = []
+
+  for (const year of years) {
+    const months = year.periods.filter((p) => p.periodNumber >= 1 && p.periodNumber <= 12)
+
+    if (year.status === 'LOCKED') {
+      rows.push({
+        id: `year:${year.id}`,
+        kind: 'year',
+        label: `Fiscal year ${year.year}`,
+        fiscalYear: year.year,
+        sequence: null,
+        from: toCalendarDate(year.startDate),
+        to: toCalendarDate(year.endDate),
+        status: 'LOCKED',
+        closedAt: null,
+      })
+    }
+
+    for (const quarter of [1, 2, 3, 4] as const) {
+      const slice = months.filter(
+        (p) => Math.ceil(p.periodNumber / 3) === quarter,
+      )
+      if (slice.length < 3) continue
+      const allClosed = slice.every((p) => p.status === 'CLOSED' || p.status === 'LOCKED')
+      if (!allClosed) continue
+      const first = slice[0]!
+      const last = slice[slice.length - 1]!
+      const latestClose = slice
+        .map((p) => p.closedAt)
+        .filter((d): d is Date => Boolean(d))
+        .sort((a, b) => b.getTime() - a.getTime())[0]
+      rows.push({
+        id: `quarter:${year.id}:q${quarter}`,
+        kind: 'quarter',
+        label: `FY ${year.year} — Q${quarter}`,
+        fiscalYear: year.year,
+        sequence: quarter,
+        from: toCalendarDate(first.startDate),
+        to: toCalendarDate(last.endDate),
+        status: slice.every((p) => p.status === 'LOCKED') ? 'LOCKED' : 'CLOSED',
+        closedAt: latestClose ? latestClose.toISOString() : null,
+      })
+    }
+
+    for (const period of months) {
+      if (period.status !== 'CLOSED' && period.status !== 'LOCKED') continue
+      rows.push({
+        id: `month:${period.id}`,
+        kind: 'month',
+        label: `${monthName(period.startDate)} ${year.year}`,
+        fiscalYear: year.year,
+        sequence: period.periodNumber,
+        from: toCalendarDate(period.startDate),
+        to: toCalendarDate(period.endDate),
+        status: period.status,
+        closedAt: period.closedAt ? period.closedAt.toISOString() : null,
+      })
+    }
+  }
+
+  const filtered = filter?.kind ? rows.filter((row) => row.kind === filter.kind) : rows
+  return filtered.sort((a, b) => (a.to < b.to ? 1 : a.to > b.to ? -1 : 0))
+}
+
+/** Most recent closed span (prefer month, else quarter, else year). */
+export async function latestClosure(ctx: OrgContext): Promise<ClosureRow | null> {
+  const rows = await listClosures(ctx)
+  return rows[0] ?? null
+}
+
+function monthName(date: Date): string {
+  return date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
 }

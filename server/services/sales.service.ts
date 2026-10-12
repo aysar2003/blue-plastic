@@ -2,6 +2,7 @@ import 'server-only'
 import type { DocumentType, Prisma, SalesDocumentType } from '@prisma/client'
 
 import { endOfMonth, isCalendarDate, startOfMonth, toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
+import { isCollectionOverdue } from '@/lib/invoice-overdue'
 import { Decimal, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
 import { isCashMethodName } from '@/lib/pos-payment'
@@ -75,6 +76,7 @@ const SEQUENCE_FOR: Record<SalesDocumentType, DocumentType> = {
 
 const DOCUMENT_SELECT = {
   id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true,
+  promisedDate: true, promiseNote: true, excludeFromOverdue: true,
   status: true, reference: true, memo: true, customerMessage: true,
   subtotal: true, discountAmount: true, taxTotal: true, total: true,
   currencyCode: true, depositAccountId: true, journalId: true, version: true,
@@ -130,21 +132,45 @@ export async function list(
     ...(options.customerId ? { customerId: options.customerId } : {}),
     ...(options.status === 'open' ? { status: { in: ['OPEN', 'PARTIAL'] } } : {}),
     ...(options.status === 'overdue'
-      ? { status: { in: ['OPEN', 'PARTIAL'] }, dueDate: { lt: toDate(today(ctx.organization.timeZone)) } }
+      ? (() => {
+          const asOf = toDate(today(ctx.organization.timeZone))
+          return {
+            status: { in: ['OPEN' as const, 'PARTIAL' as const] },
+            excludeFromOverdue: false,
+            OR: [
+              { promisedDate: { lt: asOf } },
+              { AND: [{ promisedDate: null }, { dueDate: { lt: asOf } }] },
+            ],
+          }
+        })()
       : {}),
     ...(options.status === 'draft' ? { status: 'DRAFT' } : {}),
     ...(options.status === 'notdue'
-      ? {
-          status: { in: ['OPEN', 'PARTIAL'] },
-          AND: [
-            {
-              OR: [
-                { dueDate: null },
-                { dueDate: { gte: toDate(today(ctx.organization.timeZone)) } },
-              ],
-            },
-          ],
-        }
+      ? (() => {
+          const asOf = toDate(today(ctx.organization.timeZone))
+          return {
+            status: { in: ['OPEN' as const, 'PARTIAL' as const] },
+            OR: [
+              { excludeFromOverdue: true },
+              {
+                AND: [
+                  { excludeFromOverdue: false },
+                  {
+                    OR: [
+                      { promisedDate: { gte: asOf } },
+                      {
+                        AND: [
+                          { promisedDate: null },
+                          { OR: [{ dueDate: null }, { dueDate: { gte: asOf } }] },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          }
+        })()
       : {}),
     ...(options.status === 'paid' ? { status: 'PAID' } : {}),
     ...(options.status === 'accepted' ? { status: 'ACCEPTED' } : {}),
@@ -215,7 +241,14 @@ export async function invoiceHome(ctx: OrgContext) {
   const now = today(ctx.organization.timeZone)
   const rows = await db.salesDocument.findMany({
     where: { orgId: ctx.orgId, type: 'INVOICE', deletedAt: null, status: { not: 'VOID' } },
-    select: { id: true, status: true, dueDate: true, total: true },
+    select: {
+      id: true,
+      status: true,
+      dueDate: true,
+      promisedDate: true,
+      excludeFromOverdue: true,
+      total: true,
+    },
   })
   const openIds = rows.filter((row) => row.status === 'OPEN' || row.status === 'PARTIAL').map((row) => row.id)
   const balances = await outstandingBalances(db, openIds)
@@ -246,8 +279,7 @@ export async function invoiceHome(ctx: OrgContext) {
     const owing = balances.get(row.id) ?? new Decimal(row.total.toString())
     unpaid = unpaid.plus(owing)
     unpaidCount += 1
-    const due = row.dueDate ? toCalendarDate(row.dueDate) : null
-    if (due && due < now) {
+    if (isCollectionOverdue(row, now)) {
       overdue = overdue.plus(owing)
       overdueCount += 1
     } else {
@@ -975,6 +1007,108 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
   })
 }
 
+/**
+ * Record (or replace) a customer payment promise on an open invoice.
+ * The promised date drives overdue lists; the invoice due date is unchanged.
+ */
+export async function setPaymentPromise(
+  ctx: OrgContext,
+  id: string,
+  promisedDate: CalendarDate,
+  note?: string | null,
+) {
+  if (!isCalendarDate(promisedDate)) {
+    throw validation('Choose a valid promise date.', { promisedDate: ['Invalid date'] })
+  }
+  const invoice = await db.salesDocument.findFirst({
+    where: { id, orgId: ctx.orgId, type: 'INVOICE', deletedAt: null },
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      promisedDate: true,
+      promiseNote: true,
+      excludeFromOverdue: true,
+    },
+  })
+  if (!invoice) throw notFound('Invoice')
+  if (invoice.status !== 'OPEN' && invoice.status !== 'PARTIAL') {
+    throw precondition('Only an unpaid invoice can take a payment promise.')
+  }
+
+  const meta = await requestMeta()
+  return db.$transaction(async (tx) => {
+    const updated = await tx.salesDocument.update({
+      where: { id },
+      data: {
+        promisedDate: toDate(promisedDate),
+        promiseNote: note?.trim() || null,
+        // A new promise puts the invoice back into collections until that date.
+        excludeFromOverdue: false,
+      },
+      select: { id: true, number: true, promisedDate: true, promiseNote: true },
+    })
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'SalesDocument',
+        entityId: id,
+        action: 'UPDATE',
+        before: {
+          promisedDate: invoice.promisedDate ? toCalendarDate(invoice.promisedDate) : null,
+          promiseNote: invoice.promiseNote,
+          excludeFromOverdue: invoice.excludeFromOverdue,
+        },
+        after: {
+          promisedDate,
+          promiseNote: note?.trim() || null,
+          excludeFromOverdue: false,
+        },
+      },
+      meta,
+    )
+    return updated
+  })
+}
+
+/**
+ * “Un overdue” — keep the invoice open but drop it from overdue / collections lists.
+ * Passing false restores it to normal overdue rules.
+ */
+export async function setExcludeFromOverdue(ctx: OrgContext, id: string, exclude: boolean) {
+  const invoice = await db.salesDocument.findFirst({
+    where: { id, orgId: ctx.orgId, type: 'INVOICE', deletedAt: null },
+    select: { id: true, number: true, status: true, excludeFromOverdue: true },
+  })
+  if (!invoice) throw notFound('Invoice')
+  if (invoice.status !== 'OPEN' && invoice.status !== 'PARTIAL') {
+    throw precondition('Only an unpaid invoice can leave the overdue list.')
+  }
+
+  const meta = await requestMeta()
+  return db.$transaction(async (tx) => {
+    const updated = await tx.salesDocument.update({
+      where: { id },
+      data: { excludeFromOverdue: exclude },
+      select: { id: true, number: true, excludeFromOverdue: true },
+    })
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'SalesDocument',
+        entityId: id,
+        action: 'UPDATE',
+        before: { excludeFromOverdue: invoice.excludeFromOverdue },
+        after: { excludeFromOverdue: exclude },
+      },
+      meta,
+    )
+    return updated
+  })
+}
+
 /** Post a draft, or re-post after an edit. */
 export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
   const document = await tx.salesDocument.findFirst({
@@ -1087,6 +1221,10 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
   const movesStockIn = document.type === 'CREDIT_MEMO'
 
   if (movesStockOut || movesStockIn) {
+    // Every product sale uses the system Cost of Goods Sold account, at the
+    // stock ledger's own cost. A per-item expense account would bury the margin
+    // in operating expenses.
+    const systemCogsAccountId = await systemAccountId(tx, ctx.orgId, 'COGS')
     const cogs = new Map<string, { cogsAccountId: string; inventoryAccountId: string; amount: Decimal }>()
     const storeAccounts = await storeService.accountsFor(
       tx,
@@ -1103,9 +1241,9 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     }[] = []
 
     for (const line of document.lines) {
-      if (line.item?.type !== 'INVENTORY') continue
-      if (!line.item.cogsAccountId || !line.item.inventoryAccountId) {
-        throw precondition(`"${line.item.name}" has no inventory or cost of goods sold account.`)
+      if (line.item?.type !== 'INVENTORY' && line.item?.type !== 'INVENTORY_ASSEMBLY') continue
+      if (!line.item.inventoryAccountId) {
+        throw precondition(`"${line.item.name}" has no inventory account.`)
       }
 
       const inventoryAccountId =
@@ -1133,13 +1271,13 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         })
       }
 
-      const key = `${line.item.cogsAccountId}|${inventoryAccountId}`
+      const key = `${systemCogsAccountId}|${inventoryAccountId}`
       const existing = cogs.get(key)
       const amount = movement.value.abs()
       if (existing) existing.amount = existing.amount.plus(amount)
       else
         cogs.set(key, {
-          cogsAccountId: line.item.cogsAccountId,
+          cogsAccountId: systemCogsAccountId,
           inventoryAccountId,
           amount,
         })

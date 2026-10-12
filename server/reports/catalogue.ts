@@ -123,8 +123,10 @@ const customerBalances: TableReport = {
              c."displayName"                        AS name,
              c.email                                AS email,
              COALESCE(SUM(d.total - COALESCE(a.applied, 0)), 0)  AS outstanding,
-             COALESCE(SUM(CASE WHEN d."dueDate" < ${toDate(asOf)}
-                               THEN d.total - COALESCE(a.applied, 0) ELSE 0 END), 0) AS overdue,
+             COALESCE(SUM(CASE
+               WHEN d."excludeFromOverdue" = false
+                AND COALESCE(d."promisedDate", d."dueDate") < ${toDate(asOf)}
+               THEN d.total - COALESCE(a.applied, 0) ELSE 0 END), 0) AS overdue,
              COUNT(d.id)::int                       AS "openCount"
         FROM customers c
         JOIN sales_documents d
@@ -185,7 +187,8 @@ const openInvoices: TableReport = {
         date: { lte: toDate(asOf) },
       },
       select: {
-        id: true, number: true, date: true, dueDate: true, total: true, reference: true,
+        id: true, number: true, date: true, dueDate: true, promisedDate: true,
+        excludeFromOverdue: true, total: true, reference: true,
         customer: { select: { id: true, displayName: true } },
         applications: { select: { amount: true } },
       },
@@ -202,9 +205,11 @@ const openInvoices: TableReport = {
       if (!balance.greaterThan(0)) continue
       outstanding = outstanding.plus(balance)
 
-      const daysOverdue = invoice.dueDate
-        ? Math.floor((asOfTime - invoice.dueDate.getTime()) / 86_400_000)
-        : 0
+      const collectionDue = invoice.promisedDate ?? invoice.dueDate
+      const daysOverdue =
+        !invoice.excludeFromOverdue && collectionDue
+          ? Math.floor((asOfTime - collectionDue.getTime()) / 86_400_000)
+          : 0
 
       rows.push({
         href: `/sales/invoices/${invoice.id}`,
@@ -212,7 +217,7 @@ const openInvoices: TableReport = {
           number: invoice.number,
           customer: invoice.customer.displayName,
           date: date(invoice.date),
-          dueDate: date(invoice.dueDate),
+          dueDate: date(collectionDue ?? invoice.dueDate),
           overdue: daysOverdue > 0 ? `${daysOverdue} days` : null,
           total: money(invoice.total.toString()),
           paid: money(applied),
@@ -1153,7 +1158,9 @@ const accountBalances: TableReport = {
 
     // Presented on the natural side, so income reads positive.
     const natural = (type: string, raw: string) =>
-      type === 'ASSET' || type === 'EXPENSE' ? new Decimal(raw) : new Decimal(raw).negated()
+      type === 'ASSET' || type === 'COGS' || type === 'EXPENSE'
+        ? new Decimal(raw)
+        : new Decimal(raw).negated()
 
     return {
       columns: [
@@ -1283,10 +1290,11 @@ const collectionsReport: TableReport = {
         orgId: ctx.orgId,
         type: 'INVOICE',
         status: { in: ['OPEN', 'PARTIAL'] },
+        excludeFromOverdue: false,
         date: { lte: toDate(asOf) },
       },
       select: {
-        id: true, number: true, date: true, dueDate: true, total: true,
+        id: true, number: true, date: true, dueDate: true, promisedDate: true, total: true,
         customer: { select: { displayName: true, phone: true, mobile: true, email: true } },
         applications: { select: { amount: true } },
       },
@@ -1297,7 +1305,7 @@ const collectionsReport: TableReport = {
     let outstanding = ZERO
 
     for (const invoice of invoices) {
-      const due = invoice.dueDate ?? invoice.date
+      const due = invoice.promisedDate ?? invoice.dueDate ?? invoice.date
       if (due.getTime() >= asOfTime) continue
       const applied = invoice.applications.reduce((sum, row) => sum.plus(row.amount.toString()), ZERO)
       const balance = new Decimal(invoice.total.toString()).minus(applied)

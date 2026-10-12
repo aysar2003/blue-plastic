@@ -26,7 +26,8 @@ export function SetupForm() {
         <Field name="organizationName" label="Organisation name" required error={state.fieldErrors?.organizationName}>
           <Input
             {...fieldProps('organizationName', state.fieldErrors?.organizationName)}
-            defaultValue={v.organizationName ?? 'Blue Plastic Center'}
+            defaultValue={v.organizationName ?? ''}
+            placeholder="Your company name"
             autoFocus
             required
           />

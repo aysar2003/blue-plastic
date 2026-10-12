@@ -52,7 +52,7 @@ export default async function ProfitAndLossDetailPage({
         status: { notIn: ['DRAFT', 'DELETED'] },
         isClosingEntry: false,
       },
-      account: { type: { in: ['REVENUE', 'EXPENSE'] } },
+      account: { type: { in: ['REVENUE', 'COGS', 'EXPENSE'] } },
     },
     select: {
       id: true,
