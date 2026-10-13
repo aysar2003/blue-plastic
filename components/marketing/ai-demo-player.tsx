@@ -87,10 +87,15 @@ function ReelPlayer({ video }: { video: AiDemoVideo }) {
   const [elapsed, setElapsed] = useState(0)
   const elapsedRef = useRef(0)
 
-  useEffect(() => {
-    elapsedRef.current = 0
+  // A new video restarts from the top.
+  const [seenVideoId, setSeenVideoId] = useState(video.id)
+  if (video.id !== seenVideoId) {
+    setSeenVideoId(video.id)
     setElapsed(0)
     setPlaying(true)
+  }
+  useEffect(() => {
+    elapsedRef.current = 0
   }, [video.id])
 
   useEffect(() => {

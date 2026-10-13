@@ -50,7 +50,9 @@ export const itemDialogOptions = action
 
     return {
       accounts,
-      taxCodes: taxCodes.filter((code) => code.isActive).map((code) => ({ id: code.id, label: code.name })),
+      taxCodes: ctx.features.enableTax
+        ? taxCodes.filter((code) => code.isActive).map((code) => ({ id: code.id, label: code.name }))
+        : [],
       categories: categories.map((category) => ({ id: category.id, label: category.name })),
       today: today(ctx.organization.timeZone),
       currency: ctx.organization.baseCurrency,

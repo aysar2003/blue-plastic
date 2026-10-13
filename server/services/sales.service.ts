@@ -699,9 +699,14 @@ export async function create(
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency, documentDiscount(input))
 
     const isDraft = input.saveAsDraft === true
+    const hasPaymentItem = lines.some((line) => line.isPayment)
+    if (priced.total.isNegative()) {
+      throw validation('Payment and discount lines cannot exceed the sale.')
+    }
     if (
       priced.total.isZero() &&
       !isDraft &&
+      !hasPaymentItem &&
       type !== 'ESTIMATE' &&
       type !== 'QUOTATION' &&
       type !== 'SALES_ORDER'
@@ -908,6 +913,22 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
     const lines = await resolveLines(tx, ctx, input.lines)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency, documentDiscount(input))
+
+    const isDraft = input.saveAsDraft === true
+    const hasPaymentItem = lines.some((line) => line.isPayment)
+    if (priced.total.isNegative()) {
+      throw validation('Payment and discount lines cannot exceed the sale.')
+    }
+    if (
+      priced.total.isZero() &&
+      !isDraft &&
+      !hasPaymentItem &&
+      existing.type !== 'ESTIMATE' &&
+      existing.type !== 'QUOTATION' &&
+      existing.type !== 'SALES_ORDER'
+    ) {
+      throw validation('A document with no value has nothing to record.')
+    }
 
     const term = input.paymentTermId
       ? await tx.paymentTerm.findFirst({
@@ -1122,7 +1143,14 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
           id: true, amount: true, taxAmount: true, taxCodeId: true, incomeAccountId: true,
           description: true, quantity: true, unitPrice: true, discountPercent: true, itemId: true, storeId: true,
           item: {
-            select: { id: true, name: true, type: true, inventoryAccountId: true, cogsAccountId: true },
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              inventoryAccountId: true,
+              cogsAccountId: true,
+              depositAccountId: true,
+            },
           },
         },
       },
@@ -1140,20 +1168,32 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
 
   const storedDiscount = new Decimal(document.discountAmount.toString())
   const priced = priceDocument(
-    document.lines.map((line) => ({
-      itemId: line.itemId,
-      description: line.description,
-      quantity: line.quantity.toString(),
-      unitPrice: line.unitPrice.toString(),
-      discountPercent: line.discountPercent?.toString() ?? null,
-      taxCodeId: line.taxCodeId,
-      incomeAccountId: line.incomeAccountId,
-    })),
+    document.lines.map((line) => {
+      const type = line.item?.type
+      const isDiscount = type === 'DISCOUNT'
+      const isSubtotal = type === 'SUBTOTAL'
+      const isPayment = type === 'PAYMENT'
+      return {
+        itemId: line.itemId,
+        description: line.description,
+        quantity: line.quantity.toString(),
+        unitPrice: line.unitPrice.toString(),
+        discountPercent: line.discountPercent?.toString() ?? null,
+        taxCodeId: line.taxCodeId,
+        incomeAccountId: isPayment || isSubtotal ? null : line.incomeAccountId,
+        depositAccountId: isPayment ? (line.item?.depositAccountId ?? null) : null,
+        isDiscount,
+        isSubtotal,
+        isPayment,
+        isStock: type === 'INVENTORY' || type === 'INVENTORY_ASSEMBLY',
+      }
+    }),
     taxCodes,
     ctx.organization.baseCurrency,
     storedDiscount.greaterThan(0) ? { kind: 'amount', value: storedDiscount.toString() } : null,
   )
 
+  const hasPaymentItem = priced.lines.some((line) => line.source.isPayment)
   const input: SalesJournalInput = {
     date: toCalendarDate(document.date),
     number: document.number,
@@ -1164,6 +1204,9 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     depositAccountId: document.depositAccountId,
     fallbackIncomeAccountId: await systemAccountId(tx, ctx.orgId, 'UNCATEGORISED_INCOME'),
     discountAccountId: priced.discountAmount.isZero() ? null : await salesDiscountAccountId(tx, ctx.orgId),
+    paymentDepositAccountId: hasPaymentItem
+      ? await systemAccountId(tx, ctx.orgId, 'UNDEPOSITED_FUNDS')
+      : null,
     memo: document.memo,
   }
 
@@ -1405,7 +1448,7 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
 }
 
 const CONVERTIBLE_SOURCES: SalesDocumentType[] = ['ESTIMATE', 'QUOTATION', 'SALES_ORDER']
-const CONVERT_TARGETS = ['INVOICE', 'SALES_RECEIPT', 'SALES_ORDER'] as const
+export const CONVERT_TARGETS = ['INVOICE', 'SALES_RECEIPT', 'SALES_ORDER'] as const
 export type ConvertTarget = (typeof CONVERT_TARGETS)[number]
 
 /**
@@ -1743,7 +1786,7 @@ async function resolveLines(
         select: {
           id: true, name: true, type: true, isActive: true, salesPrice: true,
           salesDescription: true, description: true, incomeAccountId: true, salesTaxCodeId: true,
-          inventoryAccountId: true, cogsAccountId: true,
+          inventoryAccountId: true, cogsAccountId: true, depositAccountId: true,
         },
       })
     : []
@@ -1767,7 +1810,17 @@ async function resolveLines(
     if (item && !item.isActive) {
       throw precondition(`"${item.name}" is archived and cannot be sold.`)
     }
+    if (item?.type === 'GROUP') {
+      throw validation(
+        `"${item.name}" is a group — pick it on the form so its members are added as lines.`,
+        { lines: ['Expand the group into its items'] },
+      )
+    }
     if (line.storeId && !knownStores.has(line.storeId)) throw notFound('Store')
+
+    const isDiscount = item?.type === 'DISCOUNT'
+    const isSubtotal = item?.type === 'SUBTOTAL'
+    const isPayment = item?.type === 'PAYMENT'
 
     return {
       itemId: line.itemId ?? null,
@@ -1777,9 +1830,16 @@ async function resolveLines(
       quantity: line.quantity,
       unitPrice: line.unitPrice !== '' ? line.unitPrice : (item?.salesPrice?.toString() ?? '0'),
       discountPercent: line.discountPercent ?? null,
-      taxCodeId: line.taxCodeId ?? item?.salesTaxCodeId ?? null,
-      incomeAccountId: item?.incomeAccountId ?? null,
+      taxCodeId: ctx.features.enableTax && !isPayment && !isSubtotal
+        ? (line.taxCodeId ?? item?.salesTaxCodeId ?? null)
+        : null,
+      incomeAccountId: isPayment || isSubtotal ? null : (item?.incomeAccountId ?? null),
+      depositAccountId: isPayment ? (item?.depositAccountId ?? null) : null,
       serviceDate: line.serviceDate ?? null,
+      isDiscount,
+      isSubtotal,
+      isPayment,
+      isStock: item?.type === 'INVENTORY' || item?.type === 'INVENTORY_ASSEMBLY',
     }
   })
 }

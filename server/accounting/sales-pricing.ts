@@ -20,6 +20,23 @@ export type DraftSalesLine = {
    * the same purchase twice.
    */
   isStock?: boolean
+  /**
+   * Discount item (QuickBooks Desktop): quantity × rate is money off the sale,
+   * not an add-on charge. The priced line amount is negative.
+   */
+  isDiscount?: boolean
+  /**
+   * Subtotal item: display-only running sum. Priced amount is always zero so the
+   * document total is not doubled.
+   */
+  isSubtotal?: boolean
+  /**
+   * Payment item: reduces amount due (negative priced amount) and posts to a
+   * deposit account rather than income.
+   */
+  isPayment?: boolean
+  /** PAYMENT item deposit account (Undeposited Funds or a bank). */
+  depositAccountId?: string | null
 }
 
 export type PricedLine = {
@@ -86,16 +103,41 @@ export function priceDocument(
   lines.forEach((line, index) => {
     const quantity = new Decimal(line.quantity)
     const unitPrice = new Decimal(line.unitPrice)
-    const gross = roundToCurrency(quantity.times(unitPrice), currency)
+
+    // Subtotal lines are labels only — they never change the document total.
+    if (line.isSubtotal) {
+      const emptyTax = computeLineTax(ZERO, null, currency)
+      priced.push({
+        source: line,
+        lineNumber: index + 1,
+        quantity,
+        unitPrice,
+        amount: ZERO,
+        taxAmount: ZERO,
+        tax: emptyTax,
+        incomeAccountId: null,
+        taxCodeId: null,
+        isStock: false,
+      })
+      return
+    }
+
+    const reducesTotal = Boolean(line.isDiscount || line.isPayment)
+    const sign = reducesTotal ? new Decimal(-1) : new Decimal(1)
+    const gross = roundToCurrency(quantity.times(unitPrice).times(sign), currency)
 
     const discountPercent = line.discountPercent ? new Decimal(line.discountPercent) : ZERO
-    const discount = discountPercent.isZero()
-      ? ZERO
-      : roundToCurrency(gross.times(discountPercent).dividedBy(100), currency)
+    // Discount / payment items are already money off — do not also apply a line %.
+    const discount =
+      reducesTotal || discountPercent.isZero()
+        ? ZERO
+        : roundToCurrency(gross.times(discountPercent).dividedBy(100), currency)
 
     const amount = gross.minus(discount)
 
-    const code = line.taxCodeId ? (taxCodes.get(line.taxCodeId) ?? null) : null
+    // Payment items are not taxed; they only reduce what is owed.
+    const code =
+      line.isPayment || !line.taxCodeId ? null : (taxCodes.get(line.taxCodeId) ?? null)
     const tax = computeLineTax(amount, code, currency)
 
     // For an inclusive code the entered price already contained the tax, so the
@@ -110,13 +152,15 @@ export function priceDocument(
       amount: net,
       taxAmount: tax.tax,
       tax,
-      incomeAccountId: line.incomeAccountId ?? null,
-      taxCodeId: line.taxCodeId ?? null,
+      incomeAccountId: line.isPayment || line.isSubtotal ? null : (line.incomeAccountId ?? null),
+      taxCodeId: code?.id ?? null,
       isStock: line.isStock ?? false,
     })
 
     subtotal = subtotal.plus(net)
-    lineDiscountTotal = lineDiscountTotal.plus(discount)
+    lineDiscountTotal = lineDiscountTotal.plus(
+      line.isDiscount ? net.abs() : discount,
+    )
   })
 
   const summary = summariseTax(priced.map((line) => line.tax))

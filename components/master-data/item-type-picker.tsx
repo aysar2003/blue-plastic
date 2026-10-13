@@ -18,7 +18,8 @@ export function ItemTypePicker({
       <div>
         <p className="text-sm font-semibold text-foreground">Choose item type</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Each type opens its own form and account rules — like QuickBooks. Type cannot change later.
+          Each type opens its own form and account rules. You can change type later only while the
+          item has never been used on a document or journal.
         </p>
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

@@ -1,29 +1,30 @@
 /**
- * Odoo POS / document brand tokens.
- * Used by the till chrome, print sheets, and PDF letterheads.
+ * Product chrome tokens (POS, print sheets, PDF letterheads).
+ * Aligned with the SOM ERP website: navy ground, cyan accent.
  */
 export const ODOO = {
-  purple: '#714B67',
-  purpleDark: '#5c3d55',
-  purpleDeep: '#4a3144',
-  teal: '#017e84',
-  tealDark: '#01666b',
-  ink: '#1f1f23',
-  surface: '#2a2a2e',
-  surfaceRaised: '#3a3a40',
-  wash: '#f5f5f5',
+  purple: '#0b1220',
+  purpleDark: '#070b14',
+  purpleDeep: '#05080f',
+  /** Solid CTAs — deep enough for white type; bright cyan stays on CSS --primary. */
+  teal: '#0e7490',
+  tealDark: '#155e75',
+  ink: '#e2e8f0',
+  surface: '#0d1524',
+  surfaceRaised: '#141c2c',
+  wash: '#f8fafc',
   paper: '#ffffff',
-  muted: '#8c8c8c',
-  line: '#e0e0e0',
-  danger: '#d23f3f',
+  muted: '#94a3b8',
+  line: '#e2e8f0',
+  danger: '#fb7185',
 } as const
 
-/** PDF device RGB (0–1) for the Odoo purple band. */
+/** PDF device RGB (0–1) for the product navy band + cyan accents. */
 export const ODOO_PDF = {
-  purple: [0.443, 0.294, 0.404] as const,
-  purpleSoft: [0.92, 0.88, 0.91] as const,
-  teal: [0.004, 0.494, 0.518] as const,
-  ink: [0.12, 0.12, 0.14] as const,
-  muted: [0.45, 0.45, 0.45] as const,
-  rule: [0.75, 0.75, 0.75] as const,
+  purple: [0.043, 0.071, 0.125] as const,
+  purpleSoft: [0.89, 0.97, 0.99] as const,
+  teal: [0.055, 0.455, 0.565] as const,
+  ink: [0.07, 0.09, 0.11] as const,
+  muted: [0.58, 0.64, 0.72] as const,
+  rule: [0.75, 0.8, 0.85] as const,
 }

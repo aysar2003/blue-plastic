@@ -9,6 +9,7 @@ import { requireOrgContext } from '@/server/auth/context'
 import * as accountService from '@/server/services/account.service'
 import * as taxService from '@/server/services/tax.service'
 import { AgencyButton, CodeButton, RateButton } from './tax-forms'
+import { TaxEnabledForm } from './tax-enabled-form'
 
 export const metadata: Metadata = { title: 'Tax' }
 
@@ -17,6 +18,25 @@ const APPLIES = { BOTH: 'Sales and purchases', SALES: 'Sales', PURCHASES: 'Purch
 
 export default async function TaxSettingsPage() {
   const ctx = await requireOrgContext('tax:read')
+  const canEditCompany = ctx.permissions.has('org:update')
+  const taxOn = ctx.features.enableTax
+
+  if (!taxOn) {
+    return (
+      <div className="space-y-6">
+        <TaxEnabledForm
+          enableTax={false}
+          companyName={ctx.organization.name}
+          canEdit={canEditCompany}
+        />
+        <EmptyState
+          icon={PercentIcon}
+          title="Tax is off for this company"
+          description="Agencies, rates, and codes stay saved, but they will not appear on items or documents until you turn tax on above."
+        />
+      </div>
+    )
+  }
 
   const [agencies, rates, codes, accounts] = await Promise.all([
     taxService.listAgencies(ctx),
@@ -32,6 +52,12 @@ export default async function TaxSettingsPage() {
 
   return (
     <div className="space-y-6">
+      <TaxEnabledForm
+        enableTax
+        companyName={ctx.organization.name}
+        canEdit={canEditCompany}
+      />
+
       <p className="text-sm text-muted-foreground">
         Tax is defined here and applied to documents from phase 4. A <strong>rate</strong> is one
         percentage owed to one agency; a <strong>code</strong> is what someone picks on a line, and may

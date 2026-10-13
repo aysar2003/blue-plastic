@@ -54,7 +54,7 @@ export default async function ReportsIndexPage() {
       eyebrow={ctx.organization.name}
       title="Reports"
       subtitle="Grouped the way QuickBooks Online groups them. Every figure is read from the ledger."
-      sections={reportSectionsFor(ctx.permissions)}
+      sections={reportSectionsFor(ctx.permissions, { enableTax: ctx.features.enableTax })}
       searchable
       banner={
         <div>

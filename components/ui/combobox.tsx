@@ -115,6 +115,9 @@ export function Combobox({
   const filtered = React.useMemo(() => {
     const needle = normalise(query.trim())
     if (!needle) return options
+    // Opening with the current choice still in the box must show every option —
+    // otherwise Deposit to / account pickers look locked to one bank.
+    if (selected && normalise(selected.label) === needle) return options
     return options
       .map((option, index) => ({ option, index }))
       .filter(
@@ -126,7 +129,7 @@ export function Combobox({
         (a, b) => matchScore(a.option, needle) - matchScore(b.option, needle) || a.index - b.index,
       )
       .map(({ option }) => option)
-  }, [options, query])
+  }, [options, query, selected])
 
   const canCreate =
     Boolean(onCreate) &&
@@ -272,6 +275,9 @@ export function Combobox({
     // on focus — they delete characters themselves when they want a new search.
     setQuery((current) => (current.trim() ? current : (selected?.label ?? '')))
     setOpen(true)
+    // Select the seeded label so the next keystroke replaces it and filters,
+    // while the full list stays visible until they type.
+    queueMicrotask(() => inputRef.current?.select())
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {

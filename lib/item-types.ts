@@ -156,3 +156,23 @@ export function usesCogsCost(type: ItemType): boolean {
 export function skipsIncomeAccount(type: ItemType): boolean {
   return type === 'SUBTOTAL' || type === 'GROUP' || type === 'PAYMENT'
 }
+
+/** Discount items reduce the document total — they never add to it (QuickBooks Desktop). */
+export function isDiscountItem(type: string | null | undefined): boolean {
+  return type === 'DISCOUNT'
+}
+
+/** Subtotal lines show a running sum only — they do not add to the document total. */
+export function isSubtotalItem(type: string | null | undefined): boolean {
+  return type === 'SUBTOTAL'
+}
+
+/** Payment items reduce amount due and post to a deposit account, not income. */
+export function isPaymentItem(type: string | null | undefined): boolean {
+  return type === 'PAYMENT'
+}
+
+/** Group items expand into their member lines on a sales form. */
+export function isGroupItem(type: string | null | undefined): boolean {
+  return type === 'GROUP'
+}

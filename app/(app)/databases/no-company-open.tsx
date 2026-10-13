@@ -36,6 +36,7 @@ export type CompanyOpenRow = {
   rentExpired: boolean
   openBlocked: boolean
   activeUsers: number
+  modules?: Record<string, boolean>
 }
 
 type Props = {

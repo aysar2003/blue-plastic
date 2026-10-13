@@ -40,6 +40,11 @@ export type ItemValues = {
   name?: string | null
   description?: string | null
   type?: ItemType
+  /**
+   * True when the item has never appeared on a document or journal, so its
+   * type may still be changed. Omitted / false locks the field.
+   */
+  typeEditable?: boolean
   unitOfMeasure?: string | null
   salesDescription?: string | null
   salesPrice?: string | null
@@ -185,9 +190,9 @@ export function ItemDialog({
     () =>
       accountOptions(accounts, {
         prefer: profile?.discountIncome
-          ? ['SALES_DISCOUNTS', 'INCOME', 'OTHER_INCOME']
+          ? ['SALES_DISCOUNTS', 'INCOME', 'OTHER_INCOME', 'OPERATING_EXPENSE', 'OTHER_EXPENSE']
           : ['INCOME', 'OTHER_INCOME', 'SALES_DISCOUNTS'],
-        preferTypes: ['REVENUE'],
+        preferTypes: profile?.discountIncome ? ['REVENUE', 'EXPENSE'] : ['REVENUE'],
       }),
     [accounts, profile?.discountIncome],
   )
@@ -250,6 +255,7 @@ export function ItemDialog({
 
   const e = state.fieldErrors
   const catalog = catalogItems.filter((row) => row.id !== item?.id)
+  const canChangeType = mode === 'create' || Boolean(item?.typeEditable)
 
   const categoryField = (
     <Field name="categoryId" label="Category" error={e?.categoryId}>
@@ -342,19 +348,21 @@ export function ItemDialog({
         />
         Available in Point of Sale
       </label>
-      <Field name="salesTaxCodeId" label="Default sales tax" error={e?.salesTaxCodeId}>
-        <NativeSelect
-          {...fieldProps('salesTaxCodeId', e?.salesTaxCodeId)}
-          defaultValue={item?.salesTaxCodeId ?? ''}
-        >
-          <option value="">— none —</option>
-          {taxCodes.map((code) => (
-            <option key={code.id} value={code.id}>
-              {code.label}
-            </option>
-          ))}
-        </NativeSelect>
-      </Field>
+      {taxCodes.length > 0 ? (
+        <Field name="salesTaxCodeId" label="Default sales tax" error={e?.salesTaxCodeId}>
+          <NativeSelect
+            {...fieldProps('salesTaxCodeId', e?.salesTaxCodeId)}
+            defaultValue={item?.salesTaxCodeId ?? ''}
+          >
+            <option value="">— none —</option>
+            {taxCodes.map((code) => (
+              <option key={code.id} value={code.id}>
+                {code.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+      ) : null}
     </>
   ) : null
 
@@ -372,10 +380,15 @@ export function ItemDialog({
           {recorded ? <p className="text-xs text-muted-foreground">{recorded}</p> : null}
         </DialogHeader>
 
-        {step === 'pick' && mode === 'create' ? (
+        {step === 'pick' && canChangeType ? (
           <div className="mt-4 space-y-4">
-            <ItemTypePicker onPick={pickType} />
-            <div className="flex justify-end">
+            <ItemTypePicker value={type} onPick={pickType} />
+            <div className="flex justify-end gap-2">
+              {mode === 'edit' && type ? (
+                <Button type="button" variant="outline" onClick={() => setStep('form')}>
+                  Back
+                </Button>
+              ) : null}
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
@@ -387,7 +400,7 @@ export function ItemDialog({
             {item?.id ? <input type="hidden" name="id" value={item.id} /> : null}
             <input type="hidden" name="type" value={type} />
 
-            {mode === 'create' ? (
+            {canChangeType ? (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
                 <div>
                   <p className="text-sm font-semibold text-foreground">{itemTypeLabel(type)}</p>
@@ -399,7 +412,11 @@ export function ItemDialog({
                 </Button>
               </div>
             ) : (
-              <Field name="type" label="Type" hint={profile.blurb}>
+              <Field
+                name="type"
+                label="Type"
+                hint="Type is locked because this item already appears on a document or journal."
+              >
                 <Input id="type" value={itemTypeLabel(type)} disabled readOnly />
               </Field>
             )}
@@ -444,7 +461,8 @@ export function ItemDialog({
               <p className="-mt-2 flex gap-2 rounded-md border border-warning/40 bg-warning/5 p-2.5 text-xs text-muted-foreground">
                 <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
                 <span>
-                  This type never tracks stock quantity. That cannot be changed after the item is created.
+                  This type never tracks stock quantity. You can still change the type until the item
+                  is used on a document or journal.
                 </span>
               </p>
             ) : null}
@@ -597,7 +615,7 @@ export function ItemDialog({
                   <Field
                     name="incomeAccountId"
                     label="Discount account"
-                    hint="Sales discounts (contra-income) where this discount posts."
+                    hint="Contra-income (sales discounts) or a separate expense account prepared for discounts."
                     required
                     error={e?.incomeAccountId}
                   >

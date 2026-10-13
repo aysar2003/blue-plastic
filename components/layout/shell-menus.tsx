@@ -28,7 +28,7 @@ const GEAR = [
   { href: '/settings/appearance', label: 'Appearance' },
   { href: '/databases', label: 'Databases' },
   { href: '/settings/activity', label: 'Trash' },
-]
+] as const
 
 export function ShellMenus() {
   const pathname = usePathname()

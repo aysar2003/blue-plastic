@@ -610,6 +610,10 @@ model CompanySignupRequest {
   /// Password hash ready to copy onto User on approve — never plaintext.
   passwordHash         String
 
+  /// Apps the applicant asked for. Shape: `Record<ModuleFlag, boolean>` from
+  /// `lib/feature-flags.ts`. Null = all apps (legacy requests).
+  requestedModules Json?
+
   status     CompanySignupStatus @default(PENDING)
   reviewedAt DateTime?           @db.Timestamptz(6)
   reviewedBy String?

@@ -9,6 +9,11 @@ import { SubmitButton } from '@/components/forms/submit-button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { CURRENCIES, MONTHS } from '@/lib/constants'
+import {
+  MODULE_FLAG_LABELS,
+  MODULE_FLAGS,
+  MODULE_FORM_KEYS,
+} from '@/lib/feature-flags'
 import { registerAction, type RegisterState } from './actions'
 
 const initialState: RegisterState = {}
@@ -16,6 +21,13 @@ const initialState: RegisterState = {}
 export function RegisterForm() {
   const [state, formAction] = useActionState(registerAction, initialState)
   const v = state.values ?? {}
+
+  function moduleDefault(key: (typeof MODULE_FLAGS)[number]): boolean {
+    const formKey = MODULE_FORM_KEYS[key]
+    const raw = v[formKey]
+    if (raw === 'false') return false
+    return true
+  }
 
   if (state.pending) {
     return (
@@ -90,6 +102,50 @@ export function RegisterForm() {
               ))}
             </select>
           </Field>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Apps you need
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Choose only what your business will use. The system owner can change this when they
+            approve your request.
+          </p>
+          {state.fieldErrors?.moduleSales?.[0] ? (
+            <p className="mt-1 text-xs text-destructive">{state.fieldErrors.moduleSales[0]}</p>
+          ) : null}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {MODULE_FLAGS.map((key) => {
+            const formKey = MODULE_FORM_KEYS[key]
+            return (
+              <label
+                key={key}
+                className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
+              >
+                <input
+                  type="checkbox"
+                  name={formKey}
+                  value="true"
+                  defaultChecked={moduleDefault(key)}
+                  className="mt-0.5 size-4 rounded border-input"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-foreground">
+                    {MODULE_FLAG_LABELS[key].label}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                    {MODULE_FLAG_LABELS[key].hint}
+                  </span>
+                </span>
+              </label>
+            )
+          })}
         </div>
       </div>
 

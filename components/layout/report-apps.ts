@@ -418,9 +418,13 @@ export const REPORT_SECTIONS: LauncherSection[] = [
 /** Catalogue tiles the caller may open. The business overview tile is not a general report. */
 export function reportSectionsFor(
   permissions: ReadonlySet<string> | Iterable<string>,
+  options: { enableTax?: boolean } = {},
 ): LauncherSection[] {
+  const enableTax = options.enableTax !== false
   return REPORT_SECTIONS.map((section) => ({
     ...section,
-    apps: withoutBusinessOverview(section.apps, permissions),
+    apps: withoutBusinessOverview(section.apps, permissions).filter(
+      (app) => enableTax || app.key !== 'tax-summary',
+    ),
   })).filter((section) => section.apps.length > 0)
 }

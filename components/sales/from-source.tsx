@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { FileCheck2Icon, Loader2Icon, ReceiptIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -110,11 +110,14 @@ export function FromSourcePicker({
     [sources, customerId],
   )
 
-  useEffect(() => {
+  // A different customer starts a fresh pick.
+  const [seenCustomerId, setSeenCustomerId] = useState(customerId)
+  if (customerId !== seenCustomerId) {
+    setSeenCustomerId(customerId)
     setSelectedId('')
     setDialogOpen(false)
     setDetail(null)
-  }, [customerId])
+  }
 
   if (!customerId || forCustomer.length === 0) return null
 

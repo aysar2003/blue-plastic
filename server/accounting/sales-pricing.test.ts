@@ -123,4 +123,71 @@ describe('line arithmetic', () => {
       }
     }
   })
+
+  it('subtracts a discount item from the sale, like QuickBooks Desktop', () => {
+    const doc = priceDocument(
+      [
+        { quantity: '100', unitPrice: '20' },
+        { quantity: '1', unitPrice: '100', isDiscount: true, incomeAccountId: 'sales-discounts' },
+      ],
+      codes,
+      'USD',
+    )
+    expect(doc.lines[1]?.amount.toString()).toBe('-100')
+    expect(doc.subtotal.toString()).toBe('1900')
+    expect(doc.total.toString()).toBe('1900')
+    expect(doc.lineDiscountTotal.toString()).toBe('100')
+  })
+
+  it('ignores a subtotal item in the document total', () => {
+    const doc = priceDocument(
+      [
+        { quantity: '2', unitPrice: '50', incomeAccountId: 'acct-sales' },
+        { quantity: '1', unitPrice: '0', isSubtotal: true },
+        { quantity: '1', unitPrice: '25', incomeAccountId: 'acct-sales' },
+      ],
+      codes,
+      'USD',
+    )
+    expect(doc.lines[1]?.amount.toString()).toBe('0')
+    expect(doc.subtotal.toString()).toBe('125')
+    expect(doc.total.toString()).toBe('125')
+  })
+
+  it('subtracts a payment item from amount due', () => {
+    const doc = priceDocument(
+      [
+        { quantity: '1', unitPrice: '100', incomeAccountId: 'acct-sales' },
+        {
+          quantity: '1',
+          unitPrice: '40',
+          isPayment: true,
+          depositAccountId: 'acct-undeposited',
+        },
+      ],
+      codes,
+      'USD',
+    )
+    expect(doc.lines[1]?.amount.toString()).toBe('-40')
+    expect(doc.subtotal.toString()).toBe('60')
+    expect(doc.total.toString()).toBe('60')
+  })
+
+  it('allows a payment item to bring amount due to zero', () => {
+    const doc = priceDocument(
+      [
+        { quantity: '1', unitPrice: '50', incomeAccountId: 'acct-sales' },
+        {
+          quantity: '1',
+          unitPrice: '50',
+          isPayment: true,
+          depositAccountId: 'acct-undeposited',
+        },
+      ],
+      codes,
+      'USD',
+    )
+    expect(doc.total.toString()).toBe('0')
+    expect(doc.subtotal.toString()).toBe('0')
+  })
 })

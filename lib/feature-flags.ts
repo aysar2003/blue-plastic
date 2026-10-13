@@ -50,6 +50,11 @@ export type OrgFeatureFlags = {
   allowDocumentDelete: boolean
   /** Show the creator credit on the shell footer and sign-in. */
   showCreatorBrand: boolean
+  /**
+   * Sales/purchase tax for this company. When off, tax settings, codes, line
+   * tax, and tax reports stay hidden and the server will not apply tax.
+   */
+  enableTax: boolean
   /** Apps visible in the launcher / header when enabled. */
   modules: Record<ModuleFlag, boolean>
 }
@@ -62,6 +67,7 @@ export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   allowAccountDelete: true,
   allowDocumentDelete: true,
   showCreatorBrand: true,
+  enableTax: true,
   modules: {
     sales: true,
     purchases: true,
@@ -105,6 +111,7 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
   if (typeof data.allowJournalDelete === 'boolean') base.allowJournalDelete = data.allowJournalDelete
   if (typeof data.allowDocumentDelete === 'boolean') base.allowDocumentDelete = data.allowDocumentDelete
   if (typeof data.showCreatorBrand === 'boolean') base.showCreatorBrand = data.showCreatorBrand
+  if (typeof data.enableTax === 'boolean') base.enableTax = data.enableTax
 
   // Legacy single switch → both contact sides until the new keys are saved.
   if (typeof data.allowContactDelete === 'boolean') {
@@ -130,4 +137,53 @@ export function isModuleEnabled(flags: OrgFeatureFlags, moduleKey: string): bool
   const flag = MODULE_KEY_TO_FLAG[moduleKey]
   if (!flag) return true
   return flags.modules[flag] !== false
+}
+
+/** Build a full modules map from checkboxes / JSON; missing keys stay on by default. */
+export function parseModulesSelection(raw: unknown): Record<ModuleFlag, boolean> {
+  const modules = { ...DEFAULT_FEATURE_FLAGS.modules }
+  if (!raw || typeof raw !== 'object') return modules
+  const data = raw as Record<string, unknown>
+  for (const key of MODULE_FLAGS) {
+    if (typeof data[key] === 'boolean') modules[key] = data[key]
+  }
+  return modules
+}
+
+/** At least one app must stay on — empty selection is not useful. */
+export function hasAnyModuleEnabled(modules: Record<ModuleFlag, boolean>): boolean {
+  return MODULE_FLAGS.some((key) => modules[key])
+}
+
+/** Merge module map into default feature flags (for signup approve / DB grants). */
+export function featureFlagsWithModules(
+  modules: Record<ModuleFlag, boolean>,
+): OrgFeatureFlags {
+  return {
+    ...structuredClone(DEFAULT_FEATURE_FLAGS),
+    modules: { ...DEFAULT_FEATURE_FLAGS.modules, ...modules },
+  }
+}
+
+/** Form field names used on register + Features (moduleSales → sales). */
+export const MODULE_FORM_KEYS: Record<ModuleFlag, string> = {
+  sales: 'moduleSales',
+  purchases: 'modulePurchases',
+  banking: 'moduleBanking',
+  inventory: 'moduleInventory',
+  pos: 'modulePos',
+  accounting: 'moduleAccounting',
+  reports: 'moduleReports',
+}
+
+export function modulesFromFormValues(
+  values: Record<string, unknown>,
+): Record<ModuleFlag, boolean> {
+  const modules = { ...DEFAULT_FEATURE_FLAGS.modules }
+  for (const key of MODULE_FLAGS) {
+    const formKey = MODULE_FORM_KEYS[key]
+    const raw = values[formKey]
+    modules[key] = raw === true || raw === 'true' || raw === 'on'
+  }
+  return modules
 }

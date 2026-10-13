@@ -25,8 +25,8 @@ export const SALES_HUB_APPS: SalesHubApp[] = [
     href: '/sales/estimates',
     icon: 'book',
     permission: 'invoice:read',
-    accent: '#714B67',
-    wash: '#F3E8F0',
+    accent: '#22d3ee',
+    wash: '#cffafe',
     blurb: 'Estimates — create, list, convert',
   },
   {
@@ -35,8 +35,8 @@ export const SALES_HUB_APPS: SalesHubApp[] = [
     href: '/sales/quotations',
     icon: 'notebook',
     permission: 'invoice:read',
-    accent: '#5B4B8A',
-    wash: '#EDE9FE',
+    accent: '#0891b2',
+    wash: '#ecfeff',
     blurb: 'Quotations — create, list, convert',
   },
   {

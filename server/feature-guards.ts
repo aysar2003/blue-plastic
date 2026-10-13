@@ -43,6 +43,16 @@ export function assertAccountDeleteAllowed(ctx: OrgContext) {
   }
 }
 
+export function assertTaxEnabled(ctx: OrgContext) {
+  if (!ctx.features.enableTax) {
+    throw precondition('Tax is turned off in Settings → Tax for this company.')
+  }
+}
+
+export function isTaxEnabled(ctx: OrgContext): boolean {
+  return ctx.features.enableTax !== false
+}
+
 /** @deprecated Prefer assertCustomerDeleteAllowed / assertVendorDeleteAllowed. */
 export function assertContactDeleteAllowed(ctx: OrgContext) {
   assertCustomerDeleteAllowed(ctx)

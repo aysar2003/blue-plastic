@@ -101,7 +101,9 @@ export default async function ItemsPage({
 
   const trails = await trailsFor(ctx, page.rows.map((row) => row.id))
   const canCreate = ctx.permissions.has('item:create')
-  const taxOptions = taxCodes.filter((c) => c.isActive).map((c) => ({ id: c.id, label: c.name }))
+  const taxOptions = ctx.features.enableTax
+    ? taxCodes.filter((c) => c.isActive).map((c) => ({ id: c.id, label: c.name }))
+    : []
   const categoryOptions = categories.map((c) => ({ id: c.id, label: c.name }))
   const storeOptions = shelf.stores.map((store) => ({
     id: store.id,

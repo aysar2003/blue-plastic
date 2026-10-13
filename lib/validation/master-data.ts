@@ -225,7 +225,7 @@ export const itemSchema = z
         path: ['incomeAccountId'],
         message:
           item.type === 'DISCOUNT'
-            ? 'Choose the sales-discount account this discount posts to'
+            ? 'Choose an income or expense account this discount posts to'
             : 'Choose the income account this item is sold into',
       })
     }

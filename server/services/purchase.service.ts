@@ -1495,7 +1495,9 @@ async function resolveLines(
       quantity: line.quantity,
       unitPrice: line.unitPrice !== '' ? line.unitPrice : (item?.purchaseCost?.toString() ?? '0'),
       discountPercent: line.discountPercent ?? null,
-      taxCodeId: line.taxCodeId ?? item?.purchaseTaxCodeId ?? null,
+      taxCodeId: ctx.features.enableTax
+        ? (line.taxCodeId ?? item?.purchaseTaxCodeId ?? null)
+        : null,
       // `incomeAccountId` is the pricing engine's neutral name for "where this
       // line posts". On a purchase that is the expense or asset account — and for
       // tracked stock it is handled separately, so it is left unset here.

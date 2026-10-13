@@ -44,6 +44,25 @@ export async function loadFormOptions(ctx: OrgContext) {
       select: {
         id: true, name: true, sku: true, salesPrice: true, type: true,
         salesDescription: true, description: true, salesTaxCodeId: true,
+        // GROUP members — expanded onto the form when the group is chosen.
+        bomParents: {
+          orderBy: { sortOrder: 'asc' },
+          select: {
+            quantity: true,
+            component: {
+              select: {
+                id: true,
+                name: true,
+                salesPrice: true,
+                salesDescription: true,
+                description: true,
+                salesTaxCodeId: true,
+                type: true,
+                isActive: true,
+              },
+            },
+          },
+        },
       },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     }),
@@ -97,22 +116,41 @@ export async function loadFormOptions(ctx: OrgContext) {
       sku: item.sku,
       price: item.salesPrice?.toString() ?? null,
       description: item.salesDescription ?? item.description ?? item.name,
-      taxCodeId: item.salesTaxCodeId,
+      taxCodeId: ctx.features.enableTax ? item.salesTaxCodeId : null,
       type: item.type,
       group: ITEM_GROUPS[item.type],
       onHand:
         item.type === 'INVENTORY'
           ? (positions.get(item.id)?.quantity ?? new Decimal(0)).toFixed(2)
           : null,
+      components:
+        item.type === 'GROUP'
+          ? item.bomParents
+              .filter((row) => row.component.isActive)
+              .map((row) => ({
+                itemId: row.component.id,
+                label: row.component.name,
+                quantity: row.quantity.toString(),
+                price: row.component.salesPrice?.toString() ?? null,
+                description:
+                  row.component.salesDescription ??
+                  row.component.description ??
+                  row.component.name,
+                taxCodeId: ctx.features.enableTax ? row.component.salesTaxCodeId : null,
+                type: row.component.type,
+              }))
+          : undefined,
     })),
-    taxCodes: taxCodes.map((code) => ({
-      id: code.id,
-      label: code.name,
-      isInclusive: code.isInclusive,
-      // A preview figure only. The server recomputes with full precision and
-      // compound sequencing before anything is posted.
-      rate: code.components.reduce((total, component) => total + Number(component.taxRate.rate), 0),
-    })),
+    taxCodes: ctx.features.enableTax
+      ? taxCodes.map((code) => ({
+          id: code.id,
+          label: code.name,
+          isInclusive: code.isInclusive,
+          // A preview figure only. The server recomputes with full precision and
+          // compound sequencing before anything is posted.
+          rate: code.components.reduce((total, component) => total + Number(component.taxRate.rate), 0),
+        }))
+      : [],
     // Where the money lands on a receipt or a refund. Bank and undeposited funds
     // lead; the whole chart follows.
     depositAccounts: accountOptions(chart, {
@@ -155,8 +193,14 @@ export async function loadDepositAccounts(ctx: OrgContext) {
 
 export const ITEM_GROUPS: Record<string, string> = {
   INVENTORY: 'Inventory products',
+  INVENTORY_ASSEMBLY: 'Inventory assemblies',
   NON_INVENTORY: 'Non-inventory products',
   SERVICE: 'Services',
+  OTHER_CHARGE: 'Other charges',
+  DISCOUNT: 'Discounts',
+  SUBTOTAL: 'Subtotals',
+  GROUP: 'Groups',
+  PAYMENT: 'Payments',
 }
 
 export { MONEY_SUBTYPES }

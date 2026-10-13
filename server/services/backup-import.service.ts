@@ -8,6 +8,11 @@ import {
 } from '@/lib/backup-format'
 import { companyGroupKind, type CompanyGroupKind } from '@/lib/company-group'
 import { companyLimitStatus } from '@/lib/company-limits'
+import {
+  DEFAULT_FEATURE_FLAGS,
+  parseFeatureFlags,
+  type ModuleFlag,
+} from '@/lib/feature-flags'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { forbidden, validation } from '@/server/errors'
@@ -44,6 +49,8 @@ export type DatabaseRow = {
   rentExpired: boolean
   openBlocked: boolean
   activeUsers: number
+  /** Apps granted on this company (featureFlags.modules). */
+  modules: Record<ModuleFlag, boolean>
 }
 
 /** Empty-company overhead + average bytes per row for the heavy tables. */
@@ -141,6 +148,7 @@ function toDatabaseRow(
     rentExpiresAt: Date | null
     maxUsers: number | null
     rentNote: string | null
+    featureFlags?: unknown
   },
   role: string,
   currentOrgId: string,
@@ -149,6 +157,9 @@ function toDatabaseRow(
 ): DatabaseRow {
   const childCount = organization._count.children
   const limits = companyLimitStatus(organization)
+  const modules =
+    parseFeatureFlags(organization.featureFlags ?? null).modules ??
+    DEFAULT_FEATURE_FLAGS.modules
   return {
     id: organization.id,
     name: organization.name,
@@ -173,6 +184,7 @@ function toDatabaseRow(
     rentExpired: limits.rentExpired,
     openBlocked: limits.openBlocked,
     activeUsers: organization._count.memberships,
+    modules,
   }
 }
 
@@ -208,6 +220,7 @@ const ORG_LIST_SELECT = {
   rentExpiresAt: true,
   maxUsers: true,
   rentNote: true,
+  featureFlags: true,
   _count: {
     select: {
       children: true,

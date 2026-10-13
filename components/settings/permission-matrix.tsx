@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 
 /** Soft accent per app — matches the home launcher tiles. */
 const APP_ACCENT: Record<string, string> = {
-  pos: '#714B67',
+  pos: '#22d3ee',
   sales: '#0F766E',
   customers: '#0369A1',
   purchases: '#C2410C',

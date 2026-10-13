@@ -280,7 +280,7 @@ export function PosTerminal(props: {
     setBook(next)
   }
 
-  const active = book ? activePosOrder(book) : null
+  const active = useMemo(() => (book ? activePosOrder(book) : null), [book])
   const cart = active?.cart ?? EMPTY_CART
   const customerId = active?.customerId ?? null
   const note = active?.note ?? ''

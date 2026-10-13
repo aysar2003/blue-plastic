@@ -400,7 +400,7 @@ export function BillForm({
   const customerBalance = selectedCustomer ? new Decimal(selectedCustomer.balance || 0) : null
 
   const payloadInput = useRef<HTMLInputElement>(null)
-  const payloadFor = () =>
+  const payloadFor = (draft: boolean) =>
     JSON.stringify({
       ...(document?.id ? { id: document.id } : { type: config.type }),
       number,
@@ -411,7 +411,7 @@ export function BillForm({
       paymentTermId,
       paymentAccountId: config.needsPaymentAccount && !payFromCustomer ? paymentAccountId : '',
       offsetCustomerId: payFromCustomer ? offsetCustomerId : '',
-      saveAsDraft: saveAsDraft.current,
+      saveAsDraft: draft,
       lines: filled.map((line) => ({
         // A category line has no item and always a quantity of one; an item line
         // takes its account from the item, not from this form.
@@ -442,11 +442,11 @@ export function BillForm({
     <form
       action={formAction}
       onSubmit={() => {
-        if (payloadInput.current) payloadInput.current.value = payloadFor()
+        if (payloadInput.current) payloadInput.current.value = payloadFor(saveAsDraft.current)
       }}
       className="space-y-2"
     >
-      <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor()} />
+      <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor(false)} />
 
       <Card className="overflow-hidden bg-white p-0">
         {isVendorCredit ? (
@@ -646,7 +646,7 @@ export function BillForm({
                 <thead>
                   <tr
                     className="text-[12px] font-semibold uppercase tracking-wide text-white"
-                    style={{ background: isVendorCredit ? VENDOR_CREDIT.accent : FORM_SHEET.accent }}
+                    style={{ background: isVendorCredit ? VENDOR_CREDIT.band : FORM_SHEET.band }}
                   >
                     <th className="w-64 px-2 py-2 text-left">Category</th>
                     <th className="px-2 py-2 text-left">Description</th>
@@ -738,7 +738,7 @@ export function BillForm({
             <thead>
                 <tr
                   className="text-[12px] font-semibold uppercase tracking-wide text-white"
-                  style={{ background: isVendorCredit ? VENDOR_CREDIT.accent : FORM_SHEET.accent }}
+                  style={{ background: isVendorCredit ? VENDOR_CREDIT.band : FORM_SHEET.band }}
                 >
                 <th className="w-44 px-2 py-2 text-left">Item</th>
                 <th className="px-2 py-2 text-left">Description</th>
@@ -937,7 +937,7 @@ export function BillForm({
 }
 
 const lineInput =
-  'h-7 border-transparent bg-transparent px-1.5 shadow-none focus-visible:border-[#714B67] focus-visible:bg-white'
+  'h-7 border-transparent bg-transparent px-1.5 shadow-none focus-visible:border-ring focus-visible:bg-muted/40'
 
 function costFromTotal(quantity: string, totalText: string): { quantity: string; unitPrice: string } | null {
   if (totalText.trim() === '') return { quantity, unitPrice: '' }

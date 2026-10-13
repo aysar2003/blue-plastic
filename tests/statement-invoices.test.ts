@@ -167,8 +167,8 @@ describe('invoice by invoice', () => {
     const billHtml = renderToStaticMarkup(
       createElement(StatementInvoices, { ...paper, documents, part: 'summary', subject: 'bill' }),
     )
-    expect(invoiceHtml).toContain('#714B67')
-    expect(billHtml).toContain('#714B67')
+    expect(invoiceHtml).toContain('var(--primary)')
+    expect(billHtml).toContain('var(--primary)')
     expect(billHtml).toContain('Bill summary')
     expect(invoiceHtml).toContain('Invoice summary')
   })

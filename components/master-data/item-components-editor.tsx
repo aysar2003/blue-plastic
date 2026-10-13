@@ -1,10 +1,11 @@
 'use client'
 
+import { useMemo } from 'react'
 import { PlusIcon, Trash2Icon } from 'lucide-react'
 
+import { EntityPicker } from '@/components/forms/entity-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { NativeSelect } from '@/components/ui/native-select'
 
 export type ComponentRow = { itemId: string; quantity: string }
 export type CatalogItem = { id: string; label: string; type?: string }
@@ -24,6 +25,16 @@ export function ItemComponentsEditor({
     onChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)))
   }
 
+  const options = useMemo(
+    () =>
+      catalog.map((item) => ({
+        id: item.id,
+        label: item.label,
+        hint: item.type,
+      })),
+    [catalog],
+  )
+
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
@@ -40,18 +51,14 @@ export function ItemComponentsEditor({
             {rows.map((row, index) => (
               <tr key={index} className="border-t border-border">
                 <td className="px-2 py-1">
-                  <NativeSelect
-                    value={row.itemId}
-                    onChange={(event) => setRow(index, { itemId: event.target.value })}
-                    className="h-8"
-                  >
-                    <option value="">— choose —</option>
-                    {catalog.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </NativeSelect>
+                  <EntityPicker
+                    options={options}
+                    value={row.itemId || null}
+                    onChange={(next) => setRow(index, { itemId: next ?? '' })}
+                    placeholder="Search items…"
+                    emptyMessage="No item matches."
+                    clearable
+                  />
                 </td>
                 <td className="px-2 py-1">
                   <Input

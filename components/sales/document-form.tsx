@@ -104,6 +104,16 @@ export type ItemOption = {
   group?: string
   onHand?: string | null
   sku?: string | null
+  /** GROUP members expanded onto the form when the group is chosen. */
+  components?: {
+    itemId: string
+    label: string
+    quantity: string
+    price: string | null
+    description: string | null
+    taxCodeId: string | null
+    type?: string
+  }[]
 }
 export type Option = { id: string; label: string }
 export type CustomerOption = Option & {
@@ -305,6 +315,8 @@ export function DocumentForm({
   const nextKey = useRef(Math.max(document?.lines.length ?? 0, minimumLines) + 1)
   const handled = useRef(false)
   const afterSave = useRef<'close' | 'new'>('close')
+  /** Set in the button click; read when the form builds the payload on submit. */
+  const saveAsDraft = useRef(false)
 
   // Start on the customer name so Tab walks the form without the mouse.
   useEffect(() => {
@@ -345,6 +357,18 @@ export function DocumentForm({
   }, [state, router, config.slug, document?.id, initialCustomerId, today, depositAccounts, minimumLines, defaultStoreId])
 
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
+  const discountItemIds = useMemo(
+    () => new Set(items.filter((item) => item.type === 'DISCOUNT').map((item) => item.id)),
+    [items],
+  )
+  const paymentItemIds = useMemo(
+    () => new Set(items.filter((item) => item.type === 'PAYMENT').map((item) => item.id)),
+    [items],
+  )
+  const subtotalItemIds = useMemo(
+    () => new Set(items.filter((item) => item.type === 'SUBTOTAL').map((item) => item.id)),
+    [items],
+  )
   const trackedIds = useMemo(
     () => items.filter((item) => item.type === 'INVENTORY').map((item) => item.id),
     [items],
@@ -409,16 +433,22 @@ export function DocumentForm({
     let tax = ZERO
 
     for (const line of lines) {
+      const itemType = itemById.get(line.itemId)?.type
+      // Subtotal is display-only — never part of the document math.
+      if (itemType === 'SUBTOTAL') continue
+
       const quantity = parseMoneyInput(line.quantity) ?? ZERO
       const price = parseMoneyInput(line.unitPrice) ?? ZERO
       if (quantity.isZero() && price.isZero()) continue
 
-      const gross = quantity.times(price).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
-      const discountPercent = parseMoneyInput(line.discountPercent) ?? ZERO
+      const reduces = itemType === 'DISCOUNT' || itemType === 'PAYMENT'
+      const sign = reduces ? new Decimal(-1) : new Decimal(1)
+      const gross = quantity.times(price).times(sign).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+      const discountPercent = reduces ? ZERO : (parseMoneyInput(line.discountPercent) ?? ZERO)
       const lineDiscount = gross.times(discountPercent).dividedBy(100).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
       const amount = gross.minus(lineDiscount)
 
-      const code = line.taxCodeId ? taxById.get(line.taxCodeId) : null
+      const code = itemType === 'PAYMENT' ? null : line.taxCodeId ? taxById.get(line.taxCodeId) : null
       if (!code) {
         netSubtotal = netSubtotal.plus(amount)
         continue
@@ -451,13 +481,71 @@ export function DocumentForm({
       tax: taxAfter,
       total: netSubtotal.minus(discount).plus(taxAfter),
     }
-  }, [lines, taxById, offersDocumentDiscount, discountKind, discountValue])
+  }, [lines, taxById, itemById, offersDocumentDiscount, discountKind, discountValue])
+
+  /** Running sum shown on a SUBTOTAL line (items since the previous subtotal). */
+  const subtotalDisplayByKey = useMemo(() => {
+    const out: Record<number, string> = {}
+    let running = ZERO
+    for (const line of lines) {
+      const itemType = itemById.get(line.itemId)?.type
+      if (itemType === 'SUBTOTAL') {
+        out[line.key] = running.toFixed(2)
+        running = ZERO
+        continue
+      }
+      const quantity = parseMoneyInput(line.quantity) ?? ZERO
+      const price = parseMoneyInput(line.unitPrice) ?? ZERO
+      if (quantity.isZero() && price.isZero()) continue
+      const reduces = itemType === 'DISCOUNT' || itemType === 'PAYMENT'
+      const sign = reduces ? new Decimal(-1) : new Decimal(1)
+      const gross = quantity.times(price).times(sign).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+      const discountPercent = reduces ? ZERO : (parseMoneyInput(line.discountPercent) ?? ZERO)
+      const lineDiscount = gross.times(discountPercent).dividedBy(100).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+      running = running.plus(gross.minus(lineDiscount))
+    }
+    return out
+  }, [lines, itemById])
 
   const update = (key: number, patch: Partial<Line>) =>
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)))
 
   const chooseItem = (key: number, itemId: string) => {
     const item = itemId ? itemById.get(itemId) : null
+
+    // GROUP expands into its members (QuickBooks Desktop).
+    if (item?.type === 'GROUP') {
+      if (!item.components || item.components.length === 0) {
+        toast.error(
+          `"${item.label}" has no items. Open the group and add members before using it on a sale.`,
+        )
+        return
+      }
+      setLines((current) => {
+        const index = current.findIndex((line) => line.key === key)
+        if (index < 0) return current
+        const host = current[index]!
+        const groupQty = parseMoneyInput(host.quantity)?.greaterThan(0)
+          ? parseMoneyInput(host.quantity)!
+          : new Decimal(1)
+        const members: Line[] = item.components!.map((component) => {
+          const memberQty = (parseMoneyInput(component.quantity) ?? new Decimal(1)).times(groupQty)
+          return {
+            key: nextKey.current++,
+            itemId: component.itemId,
+            description: component.description ?? component.label,
+            quantity: memberQty.toFixed(4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, ''),
+            unitPrice: component.price ?? '',
+            discountPercent: '',
+            taxCodeId: component.taxCodeId ?? '',
+            storeId: host.storeId || defaultStoreId,
+          }
+        })
+        return [...current.slice(0, index), ...members, ...current.slice(index + 1)]
+      })
+      return
+    }
+
     setLines((current) =>
       current.map((line) =>
         line.key === key
@@ -465,9 +553,14 @@ export function DocumentForm({
               ...line,
               itemId,
               description: item?.description ?? '',
-              unitPrice: item?.price ?? '',
-              taxCodeId: item?.taxCodeId ?? '',
-              quantity: line.quantity.trim() === '' ? '1' : line.quantity,
+              unitPrice: item?.type === 'SUBTOTAL' ? '' : (item?.price ?? ''),
+              taxCodeId: item?.type === 'SUBTOTAL' || item?.type === 'PAYMENT' ? '' : (item?.taxCodeId ?? ''),
+              quantity:
+                item?.type === 'SUBTOTAL'
+                  ? '1'
+                  : line.quantity.trim() === ''
+                    ? '1'
+                    : line.quantity,
             }
           : line,
       ),
@@ -525,10 +618,8 @@ export function DocumentForm({
     }
   }
 
-  /** Set in the button click; read when the form builds the payload on submit. */
-  const saveAsDraft = useRef(false)
   const payloadInput = useRef<HTMLInputElement>(null)
-  const payloadFor = () =>
+  const payloadFor = (draft: boolean) =>
     JSON.stringify({
       ...(document?.id ? { id: document.id } : { type: config.type }),
       number,
@@ -539,7 +630,7 @@ export function DocumentForm({
       customerMessage,
       paymentTermId,
       depositAccountId: config.needsDeposit ? depositAccountId : '',
-      saveAsDraft: saveAsDraft.current,
+      saveAsDraft: draft,
       ...(convertedFromId && !document?.id ? { convertedFromId } : {}),
       ...(offersDocumentDiscount ? { discountKind, discountValue } : {}),
       lines: filled.map((line) => ({
@@ -553,7 +644,14 @@ export function DocumentForm({
       })),
     })
 
-  const canSave = customerId !== '' && filled.length > 0 && totals.total.greaterThan(0)
+  // Payment items can bring amount due to zero (still a real sale — cash already taken).
+  const hasPaymentLine = filled.some((line) => paymentItemIds.has(line.itemId))
+  const canSave =
+    customerId !== '' &&
+    filled.length > 0 &&
+    !totals.total.isNegative() &&
+    (totals.total.greaterThan(0) || hasPaymentLine) &&
+    (!config.needsDeposit || depositAccountId !== '')
   /** A draft can be unfinished — customer and at least one line are enough. */
   const canDraft = customerId !== '' && filled.length > 0
 
@@ -562,6 +660,10 @@ export function DocumentForm({
     state,
     customers,
     itemOptions,
+    discountItemIds,
+    paymentItemIds,
+    subtotalItemIds,
+    subtotalDisplayByKey,
     taxCodes,
     depositAccounts,
     terms,
@@ -617,13 +719,13 @@ export function DocumentForm({
     <form
       action={formAction}
       onSubmit={() => {
-        if (payloadInput.current) payloadInput.current.value = payloadFor()
+        if (payloadInput.current) payloadInput.current.value = payloadFor(saveAsDraft.current)
       }}
       className={
         config.type === 'SALES_RECEIPT' ? 'mx-auto w-full max-w-5xl space-y-2' : 'space-y-2'
       }
     >
-      <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor()} />
+      <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor(false)} />
 
       {config.type === 'SALES_RECEIPT' ? (
         <SalesReceiptToolbar
@@ -835,6 +937,12 @@ type LayoutProps = {
   state: FormState
   customers: CustomerOption[]
   itemOptions: { id: string; label: string; group?: string; hint?: string }[]
+  /** Item ids whose type is Discount — line amount reduces the document. */
+  discountItemIds: Set<string>
+  paymentItemIds: Set<string>
+  subtotalItemIds: Set<string>
+  /** SUBTOTAL line key → running sum to show in Amount. */
+  subtotalDisplayByKey: Record<number, string>
   taxCodes: TaxOption[]
   depositAccounts: AccountPickerOption[]
   terms: TermOption[]
@@ -1349,8 +1457,9 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                   <Input
                     aria-label={`Quantity, line ${index + 1}`}
                     inputMode="decimal"
+                    readOnly={props.subtotalItemIds.has(line.itemId)}
                     className={cn(lineInput, 'tabular text-center')}
-                    value={line.quantity}
+                    value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
                     onChange={(event) => props.update(line.key, { quantity: event.target.value })}
                   />
                 </td>
@@ -1358,13 +1467,21 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                   <Input
                     aria-label={`Rate, line ${index + 1}`}
                     inputMode="decimal"
+                    readOnly={props.subtotalItemIds.has(line.itemId)}
                     className={cn(lineInput, 'tabular text-right')}
-                    value={line.unitPrice}
+                    value={props.subtotalItemIds.has(line.itemId) ? '' : line.unitPrice}
                     onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
                   />
                 </td>
                 <td className="px-1 py-1">
-                  <AmountField line={line} onCommit={(next) => props.update(line.key, next)} />
+                  <AmountField
+                    line={line}
+                    isDiscount={props.discountItemIds.has(line.itemId)}
+                    isPayment={props.paymentItemIds.has(line.itemId)}
+                    isSubtotal={props.subtotalItemIds.has(line.itemId)}
+                    subtotalDisplay={props.subtotalDisplayByKey[line.key]}
+                    onCommit={(next) => props.update(line.key, next)}
+                  />
                 </td>
                 {props.stores.length > 0 ? (
                   <td className="px-1 py-1 align-top">
@@ -1409,6 +1526,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
 function SheetLayout(props: LayoutProps) {
   const credit = props.config.type === 'CREDIT_MEMO'
   const accent = credit ? CUSTOMER_CREDIT.accent : FORM_SHEET.accent
+  const band = credit ? CUSTOMER_CREDIT.band : FORM_SHEET.band
   const marks = credit
     ? {
         markA: CUSTOMER_CREDIT.markA,
@@ -1427,7 +1545,7 @@ function SheetLayout(props: LayoutProps) {
     <Card className="relative overflow-hidden border-border bg-card p-0 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
       <div
         className="relative z-10 flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-white sm:px-5"
-        style={{ background: accent }}
+        style={{ background: band }}
       >
         <div className="min-w-0">
           <p className="truncate text-[10px] font-medium uppercase tracking-[0.14em] text-white/80">
@@ -1451,8 +1569,7 @@ function SheetLayout(props: LayoutProps) {
         >
           <div
             className={cn(
-              '[&_label]:text-[10px] [&_label]:font-semibold [&_label]:uppercase [&_label]:tracking-[0.08em]',
-              credit ? '[&_label]:text-[#3F2C38]' : '[&_label]:text-[#714B67]',
+              '[&_label]:text-[10px] [&_label]:font-semibold [&_label]:uppercase [&_label]:tracking-[0.08em] [&_label]:text-primary',
             )}
           >
             <HeaderFields props={props} />
@@ -1665,32 +1782,56 @@ function AmountField({
   line,
   onCommit,
   className,
+  isDiscount = false,
+  isPayment = false,
+  isSubtotal = false,
+  subtotalDisplay,
 }: {
   line: Line
   onCommit: (next: { quantity: string; unitPrice: string }) => void
   className?: string
+  isDiscount?: boolean
+  isPayment?: boolean
+  isSubtotal?: boolean
+  /** Pre-computed running sum for a SUBTOTAL line. */
+  subtotalDisplay?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  const reduces = isDiscount || isPayment
   const quantity = parseMoneyInput(line.quantity) ?? ZERO
   const price = parseMoneyInput(line.unitPrice) ?? ZERO
-  const gross = quantity.times(price)
-  const discount = gross.times(parseMoneyInput(line.discountPercent) ?? ZERO).dividedBy(100)
+  const sign = reduces ? new Decimal(-1) : new Decimal(1)
+  const gross = quantity.times(price).times(sign)
+  const discount = reduces
+    ? ZERO
+    : gross.times(parseMoneyInput(line.discountPercent) ?? ZERO).dividedBy(100)
   const amount = quantity.isZero() && price.isZero() ? null : gross.minus(discount)
-  const shown =
-    draft ??
-    (amount
-      ? amount.toFixed(4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
-      : '')
+  const shown = isSubtotal
+    ? (subtotalDisplay ?? '0')
+    : draft ??
+      (amount
+        ? amount.toFixed(4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+        : '')
 
   return (
     <Input
       aria-label="Amount"
       inputMode="decimal"
-      className={cn(className ?? lineInput, 'tabular text-right')}
+      readOnly={isSubtotal}
+      className={cn(className ?? lineInput, 'tabular text-right', isSubtotal && 'text-muted-foreground')}
       value={shown}
-      onChange={(event) => setDraft(event.target.value)}
+      onChange={(event) => {
+        if (isSubtotal) return
+        setDraft(event.target.value)
+      }}
       onBlur={(event) => {
-        const next = unitPriceFromTotal(line.quantity, event.currentTarget.value, line.discountPercent)
+        if (isSubtotal) return
+        // Discount / payment lines store a positive rate; the signed amount is display-only.
+        const raw = event.currentTarget.value.trim()
+        const entered = parseMoneyInput(raw)
+        const totalText =
+          reduces && entered ? entered.abs().toString() : event.currentTarget.value
+        const next = unitPriceFromTotal(line.quantity, totalText, reduces ? '' : line.discountPercent)
         if (next) onCommit(next)
         setDraft(null)
       }}
@@ -1792,10 +1933,10 @@ const lineInput =
 const sheetLineInput =
   'h-7 rounded-md border border-border/70 bg-transparent px-2 text-foreground shadow-none focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring/20'
 
-/** The line band from a ruled sales sheet: Odoo purple head, then pale stripes. */
+/** The line band from a ruled sales sheet: product brand head, then pale stripes. */
 function StripedLines({ props }: { props: LayoutProps }) {
   const head =
-    props.config.type === 'CREDIT_MEMO' ? CUSTOMER_CREDIT.accent : FORM_SHEET.accent
+    props.config.type === 'CREDIT_MEMO' ? CUSTOMER_CREDIT.band : FORM_SHEET.band
 
   return (
     <div className="rounded-lg bg-muted/40 p-1.5 sm:p-2">
@@ -1871,8 +2012,9 @@ function StripedLines({ props }: { props: LayoutProps }) {
                   <Input
                     aria-label={`Quantity, line ${index + 1}`}
                     inputMode="decimal"
+                    readOnly={props.subtotalItemIds.has(line.itemId)}
                     className={cn(sheetLineInput, 'tabular text-center')}
-                    value={line.quantity}
+                    value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
                     onChange={(event) => props.update(line.key, { quantity: event.target.value })}
                   />
                 </td>
@@ -1880,14 +2022,19 @@ function StripedLines({ props }: { props: LayoutProps }) {
                   <Input
                     aria-label={`Rate, line ${index + 1}`}
                     inputMode="decimal"
+                    readOnly={props.subtotalItemIds.has(line.itemId)}
                     className={cn(sheetLineInput, 'tabular text-right')}
-                    value={line.unitPrice}
+                    value={props.subtotalItemIds.has(line.itemId) ? '' : line.unitPrice}
                     onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
                   />
                 </td>
                 <td className="px-1 py-1">
                   <AmountField
                     line={line}
+                    isDiscount={props.discountItemIds.has(line.itemId)}
+                    isPayment={props.paymentItemIds.has(line.itemId)}
+                    isSubtotal={props.subtotalItemIds.has(line.itemId)}
+                    subtotalDisplay={props.subtotalDisplayByKey[line.key]}
                     onCommit={(next) => props.update(line.key, next)}
                     className={sheetLineInput}
                   />

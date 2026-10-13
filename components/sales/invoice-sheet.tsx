@@ -93,7 +93,8 @@ export function InvoiceSheet({
   const hasTax = Number(document.taxTotal) > 0
   const showsSettlement = config.type === 'INVOICE' || config.type === 'BILL'
   const isCredit = config.type === 'CREDIT_MEMO'
-  const brand = isCredit ? CUSTOMER_CREDIT.accent : FORM_SHEET.accent
+  const brand = isCredit ? CUSTOMER_CREDIT.band : FORM_SHEET.band
+  const brandAccent = isCredit ? CUSTOMER_CREDIT.accent : FORM_SHEET.accent
   const brandSoft = isCredit ? CUSTOMER_CREDIT.wash : FORM_SHEET.wash
   const marks = isCredit
     ? {
@@ -128,7 +129,7 @@ export function InvoiceSheet({
       <div className="relative px-8 pb-24 pt-10 sm:px-12">
         <div className="flex justify-end">
           <div className="max-w-md text-right">
-            <p className="text-sm font-semibold" style={{ color: brand }}>
+            <p className="text-sm font-semibold" style={{ color: brandAccent }}>
               {document.number}
             </p>
             {seller.map((line) => (
@@ -143,7 +144,7 @@ export function InvoiceSheet({
             ) : null}
             <p
               className="mt-8 text-xl font-bold uppercase tracking-[0.18em]"
-              style={{ color: brand }}
+              style={{ color: brandAccent }}
             >
               {config.singular}
             </p>
@@ -160,7 +161,7 @@ export function InvoiceSheet({
         </div>
 
         <dl className="mt-10 grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-          <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
+          <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
             {isCredit ? 'Credit to' : 'Billed to'}
           </dt>
           <dd className="text-[#5C6B7A]">
@@ -170,7 +171,7 @@ export function InvoiceSheet({
             {customer.phone ? <span className="block">{customer.phone}</span> : null}
             {customer.email ? <span className="block">{customer.email}</span> : null}
           </dd>
-          <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
+          <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
             Date
           </dt>
           <dd className="text-[#5C6B7A]">
@@ -178,7 +179,7 @@ export function InvoiceSheet({
           </dd>
           {document.dueDate ? (
             <>
-              <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
+              <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
                 Due
               </dt>
               <dd className="text-[#5C6B7A]">{longDate(toCalendarDate(document.dueDate))}</dd>
@@ -186,7 +187,7 @@ export function InvoiceSheet({
           ) : null}
           {document.expiryDate && isProposal(config.type) ? (
             <>
-              <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
+              <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
                 Valid until
               </dt>
               <dd className="text-[#5C6B7A]">{longDate(toCalendarDate(document.expiryDate))}</dd>
@@ -194,7 +195,7 @@ export function InvoiceSheet({
           ) : null}
           {document.reference ? (
             <>
-              <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
+              <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
                 Reference
               </dt>
               <dd className="text-[#5C6B7A]">{document.reference}</dd>
@@ -202,7 +203,7 @@ export function InvoiceSheet({
           ) : null}
           {document.paymentTerm?.name ? (
             <>
-              <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
+              <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
                 Terms
               </dt>
               <dd className="text-[#5C6B7A]">{document.paymentTerm.name}</dd>
@@ -234,7 +235,7 @@ export function InvoiceSheet({
                 </span>
                 <span className="tabular text-right">{line.blank ? '' : trimNumber(line.quantity)}</span>
                 <span className="tabular text-right">{line.blank ? '' : money(line.unitPrice)}</span>
-                <span className="tabular text-right font-medium" style={{ color: brand }}>
+                <span className="tabular text-right font-medium" style={{ color: brandAccent }}>
                   {line.blank ? '' : money(line.amount)}
                 </span>
               </div>
@@ -261,7 +262,7 @@ export function InvoiceSheet({
           ) : null}
           <div
             className="flex items-baseline justify-between gap-6 pt-2 text-base font-bold"
-            style={{ color: brand }}
+            style={{ color: brandAccent }}
           >
             <dt className="uppercase tracking-[0.08em]">{ledger ? 'Debit' : 'Total'}</dt>
             <dd className="tabular text-lg">{money(document.total)}</dd>
@@ -273,8 +274,8 @@ export function InvoiceSheet({
                 <dd className="tabular">{money(document.amountApplied)}</dd>
               </div>
               <div
-                className="flex items-baseline justify-between gap-6 border-t border-[#e0d5dc] pt-2 font-bold"
-                style={{ color: brand }}
+                className="flex items-baseline justify-between gap-6 border-t border-border pt-2 font-bold"
+                style={{ color: brandAccent }}
               >
                 <dt>{ledger ? 'Balance' : 'Amount due'}</dt>
                 <dd className="tabular">{money(document.balance)}</dd>

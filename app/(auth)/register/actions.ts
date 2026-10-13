@@ -23,6 +23,18 @@ export async function registerAction(
   formData: FormData,
 ): Promise<RegisterState> {
   const raw = Object.fromEntries(formData) as Record<string, string>
+  // Unchecked app boxes omit the key — force false so Zod does not keep stale defaults.
+  for (const key of [
+    'moduleSales',
+    'modulePurchases',
+    'moduleBanking',
+    'moduleInventory',
+    'modulePos',
+    'moduleAccounting',
+    'moduleReports',
+  ] as const) {
+    raw[key] = formData.get(key) === 'true' || formData.get(key) === 'on' ? 'true' : 'false'
+  }
   const values = { ...raw, password: '', confirmPassword: '' }
 
   const parsed = setupSchema.safeParse(raw)

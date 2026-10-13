@@ -306,8 +306,8 @@ export const INVENTORY_HUB_APPS: HubApp[] = [
     href: '/items/categories',
     icon: 'package',
     permission: 'item:read',
-    accent: '#714B67',
-    wash: '#F3EEF2',
+    accent: '#22d3ee',
+    wash: '#cffafe',
     blurb: 'Building, plumbing, electrical…',
   },
   {
@@ -521,8 +521,8 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     href: '/settings/features',
     icon: 'sliders',
     permission: 'org:update',
-    accent: '#714B67',
-    wash: '#F3EAF1',
+    accent: '#22d3ee',
+    wash: '#cffafe',
     blurb: 'Turn apps on or off for this company',
   },
   {
@@ -552,7 +552,7 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     permission: 'tax:read',
     accent: '#BE123C',
     wash: '#FFE4E6',
-    blurb: 'Rates and codes',
+    blurb: 'On/off, rates, and codes for this company',
   },
   {
     key: 'users',

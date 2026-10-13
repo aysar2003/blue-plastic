@@ -118,7 +118,7 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
       label: item.sku ? `${item.sku} — ${item.name}` : item.name,
       price: item.purchaseCost?.toString() ?? null,
       description: item.purchaseDescription ?? item.description ?? item.name,
-      taxCodeId: item.purchaseTaxCodeId,
+      taxCodeId: ctx.features.enableTax ? item.purchaseTaxCodeId : null,
       expenseAccountId: item.expenseAccountId,
       type: item.type,
       group: ITEM_GROUPS[item.type],
@@ -127,12 +127,14 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
           ? (positions.get(item.id)?.quantity ?? new Decimal(0)).toFixed(2)
           : null,
     })),
-    taxCodes: taxCodes.map((code) => ({
-      id: code.id,
-      label: code.name,
-      isInclusive: code.isInclusive,
-      rate: code.components.reduce((total, c) => total + Number(c.taxRate.rate), 0),
-    })),
+    taxCodes: ctx.features.enableTax
+      ? taxCodes.map((code) => ({
+          id: code.id,
+          label: code.name,
+          isInclusive: code.isInclusive,
+          rate: code.components.reduce((total, c) => total + Number(c.taxRate.rate), 0),
+        }))
+      : [],
     // Where the money left from, on an expense. Bank and credit card lead.
     paymentAccounts: accountOptions(chart, {
       prefer: ['BANK', 'CREDIT_CARD', 'UNDEPOSITED_FUNDS', 'OTHER_CURRENT_ASSET'],

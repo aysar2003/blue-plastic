@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 
 import { SheetMarks } from '@/components/sales/sheet-marks'
+import { FORM_SHEET } from '@/lib/credit-brand'
 import { formatDate, formatDateTime } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import * as organizationService from '@/server/services/organization.service'
@@ -63,7 +64,7 @@ export default async function PrintDeliveryNotePage({
       </div>
 
       <article className="invoice-sheet relative min-h-[900px] overflow-hidden bg-white text-[#1f1f23] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:min-h-0 print:shadow-none">
-        <div className="bg-[#714B67] px-8 py-4 text-white sm:px-12">
+        <div className="px-8 py-4 text-white sm:px-12" style={{ background: FORM_SHEET.band }}>
           <p className="text-xs font-medium uppercase tracking-[0.14em] text-white/80">Delivery note</p>
           <h1 className="text-xl font-semibold tracking-wide sm:text-2xl">
             {organization.legalName ?? organization.name}
@@ -72,9 +73,9 @@ export default async function PrintDeliveryNotePage({
         <SheetMarks />
 
         <div className="relative px-8 pb-16 pt-10 sm:px-12">
-          <header className="flex flex-wrap items-start justify-between gap-6 border-b border-[#714B67]/20 pb-6">
+          <header className="flex flex-wrap items-start justify-between gap-6 border-b border-primary/20 pb-6">
             <div>
-              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-[#714B67]">
+              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-primary">
                 Delivery note
               </p>
               <h1 className="mt-1 text-3xl font-bold tracking-tight tabular">{note.number}</h1>
@@ -97,7 +98,7 @@ export default async function PrintDeliveryNotePage({
 
           <div className="mt-8 grid gap-6 sm:grid-cols-2">
             <section>
-              <h3 className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-[#714B67]">
+              <h3 className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary">
                 Deliver to
               </h3>
               <p className="mt-2 text-base font-semibold">{note.customerName}</p>
@@ -109,7 +110,7 @@ export default async function PrintDeliveryNotePage({
               {note.customerPhone ? <p className="mt-1 text-sm">Tel. {note.customerPhone}</p> : null}
             </section>
             <section className="sm:text-right">
-              <h3 className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-[#714B67]">
+              <h3 className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary">
                 References
               </h3>
               <p className="mt-2 text-sm">
@@ -128,7 +129,10 @@ export default async function PrintDeliveryNotePage({
 
           <table className="mt-8 w-full border-collapse text-sm">
             <thead>
-              <tr className="bg-[#714B67] text-left text-[0.65rem] font-semibold uppercase tracking-wider text-white">
+              <tr
+                className="text-left text-[0.65rem] font-semibold uppercase tracking-wider text-white"
+                style={{ background: FORM_SHEET.band }}
+              >
                 <th className="px-3 py-2.5">#</th>
                 <th className="px-3 py-2.5">Item / description</th>
                 <th className="px-3 py-2.5">Store</th>

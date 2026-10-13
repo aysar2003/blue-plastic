@@ -1,7 +1,10 @@
 import 'server-only'
 
+import type { Prisma } from '@prisma/client'
+
 import { companyLimitStatus } from '@/lib/company-limits'
 import { MAX_SUB_COMPANIES } from '@/lib/company-group'
+import { featureFlagsWithModules, parseFeatureFlags } from '@/lib/feature-flags'
 import type {
   AttachSubCompanyInput,
   CreateCompanyInput,
@@ -53,6 +56,16 @@ export async function createCompany(ctx: OrgContext, input: CreateCompanyInput) 
     parentName = parent.name
   }
 
+  const modules = {
+    sales: input.moduleSales,
+    purchases: input.modulePurchases,
+    banking: input.moduleBanking,
+    inventory: input.moduleInventory,
+    pos: input.modulePos,
+    accounting: input.moduleAccounting,
+    reports: input.moduleReports,
+  }
+
   return db.$transaction(async (tx) => {
     const organization = await tx.organization.create({
       data: {
@@ -61,6 +74,7 @@ export async function createCompany(ctx: OrgContext, input: CreateCompanyInput) 
         fiscalYearStartMonth: input.fiscalYearStartMonth,
         timeZone: ctx.organization.timeZone,
         parentOrgId,
+        featureFlags: featureFlagsWithModules(modules) as unknown as Prisma.InputJsonValue,
       },
       select: { id: true, name: true, baseCurrency: true, parentOrgId: true },
     })
@@ -304,10 +318,11 @@ const LIMIT_SELECT = {
   rentExpiresAt: true,
   maxUsers: true,
   rentNote: true,
+  featureFlags: true,
 } as const
 
 /**
- * Set lock / rent end / max users for a company database.
+ * Set lock / rent end / max users / apps for a company database.
  * Only the system owner manages these limits.
  */
 export async function updateCompanyLimits(ctx: OrgContext, input: UpdateCompanyLimitsInput) {
@@ -330,6 +345,20 @@ export async function updateCompanyLimits(ctx: OrgContext, input: UpdateCompanyL
     )
   }
 
+  const current = parseFeatureFlags(organization.featureFlags)
+  const nextFlags = {
+    ...current,
+    modules: {
+      sales: input.moduleSales,
+      purchases: input.modulePurchases,
+      banking: input.moduleBanking,
+      inventory: input.moduleInventory,
+      pos: input.modulePos,
+      accounting: input.moduleAccounting,
+      reports: input.moduleReports,
+    },
+  }
+
   const updated = await db.organization.update({
     where: { id: organization.id },
     data: {
@@ -337,6 +366,7 @@ export async function updateCompanyLimits(ctx: OrgContext, input: UpdateCompanyL
       rentExpiresAt: input.rentExpiresAt ? new Date(input.rentExpiresAt) : null,
       maxUsers: input.maxUsers,
       rentNote: input.rentNote,
+      featureFlags: nextFlags as unknown as Prisma.InputJsonValue,
     },
     select: {
       ...LIMIT_SELECT,
@@ -350,6 +380,7 @@ export async function updateCompanyLimits(ctx: OrgContext, input: UpdateCompanyL
     name: updated.name,
     ...status,
     activeUsers: updated._count.memberships,
+    modules: parseFeatureFlags(updated.featureFlags).modules,
   }
 }
 

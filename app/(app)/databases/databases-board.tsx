@@ -21,8 +21,15 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 import { MAX_SUB_COMPANIES, type CompanyGroupKind } from '@/lib/company-group'
+import type { ModuleFlag } from '@/lib/feature-flags'
 
 import { attachSubCompany, createCompany, deleteCompany, openCompany } from './actions'
+import {
+  allModulesOn,
+  CompanyAppsPicker,
+  hasAnyModuleOn,
+  moduleActionFields,
+} from './company-apps-picker'
 import { DatabaseLimitsPanel } from './database-limits-panel'
 import { NoCompanyOpen } from './no-company-open'
 
@@ -47,6 +54,7 @@ export type DatabaseListRow = {
   rentExpired: boolean
   openBlocked: boolean
   activeUsers: number
+  modules: Record<ModuleFlag, boolean>
 }
 
 type Inspected = {
@@ -90,6 +98,7 @@ export function DatabasesBoard({
   const [newName, setNewName] = useState('')
   const [newCurrency, setNewCurrency] = useState('USD')
   const [newParentOrgId, setNewParentOrgId] = useState('')
+  const [newModules, setNewModules] = useState(allModulesOn)
   const [attachOrgId, setAttachOrgId] = useState('')
   const [attachParentOrgId, setAttachParentOrgId] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -169,6 +178,7 @@ export function DatabasesBoard({
   const closeCreate = () => {
     if (busy) return
     setCreateOpen(false)
+    setNewModules(allModulesOn())
   }
 
   const closeDelete = () => {
@@ -189,6 +199,10 @@ export function DatabasesBoard({
       toast.error('Enter a company name.')
       return
     }
+    if (!hasAnyModuleOn(newModules)) {
+      toast.error('Leave at least one app on for this company.')
+      return
+    }
     setBusy(true)
     try {
       const result = await createCompany({
@@ -197,6 +211,7 @@ export function DatabasesBoard({
         fiscalYearStartMonth: 1,
         seedChart: true,
         parentOrgId: newParentOrgId || null,
+        ...moduleActionFields(newModules),
       })
       if (!result.ok) {
         toast.error(result.error.message)
@@ -208,6 +223,7 @@ export function DatabasesBoard({
           : `${result.data.name} created.`,
       )
       setCreateOpen(false)
+      setNewModules(allModulesOn())
       startTransition(() => router.refresh())
       // Open the new company right away.
       await update({ orgId: result.data.id })
@@ -606,7 +622,8 @@ export function DatabasesBoard({
               </h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 A new separate database — its own ledger, customers, and stock. Optionally nest
-                under a main company (up to {MAX_SUB_COMPANIES} subs). You become the owner.
+                under a main company (up to {MAX_SUB_COMPANIES} subs). You become the owner and
+                choose which apps it may use.
               </p>
             </div>
             <Button
@@ -664,8 +681,18 @@ export function DatabasesBoard({
                 </select>
               </div>
             </div>
+            <CompanyAppsPicker
+              modules={newModules}
+              onChange={setNewModules}
+              disabled={busy}
+              hint="ERP grant for this company. Turn apps off to withhold them; you can add or remove apps later under Limits."
+            />
             <div className="flex flex-wrap gap-2">
-              <Button type="button" disabled={busy || !newName.trim()} onClick={runCreate}>
+              <Button
+                type="button"
+                disabled={busy || !newName.trim() || !hasAnyModuleOn(newModules)}
+                onClick={runCreate}
+              >
                 {busy ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
                 Create and open
               </Button>

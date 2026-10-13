@@ -44,6 +44,7 @@ export function GlobalMonthChart({ data }: { data: MonthChartData | null }) {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read localStorage only after hydration so server and client markup match
     setVisible(window.localStorage.getItem(STORAGE_KEY) === '1')
     setReady(true)
   }, [])

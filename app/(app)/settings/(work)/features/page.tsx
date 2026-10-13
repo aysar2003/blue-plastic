@@ -18,8 +18,13 @@ export default async function FeaturesSettingsPage() {
       <div>
         <h2 className="text-base font-semibold">Apps & features</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          These switches belong to <span className="font-medium text-foreground">{ctx.organization.name}</span>{' '}
-          only. Other companies keep their own apps. To open apps for one person inside this company, use{' '}
+          Company settings for <span className="font-medium text-foreground">{ctx.organization.name}</span>{' '}
+          only — not the ERP system Limits under Databases. Other companies keep their own apps. Tax
+          on/off lives under{' '}
+          <Link href="/settings/tax" className="font-medium text-primary underline">
+            Settings → Tax
+          </Link>
+          . To open apps for one person inside this company, use{' '}
           {canManageUsers ? (
             <Link href="/settings/users" className="font-medium text-primary underline">
               Settings → Users

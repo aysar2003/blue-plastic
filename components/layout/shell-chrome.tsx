@@ -15,13 +15,13 @@ import { CommandPalette } from './command-palette'
 import { moduleFor } from './nav-items'
 import { NavigationProgress } from './navigation-progress'
 import { QuickCreate } from './quick-create'
+import { ScrollChain } from './scroll-chain'
 import { ShellMenus } from './shell-menus'
 import { UserMenu } from './user-menu'
 import { CompanyLetterhead } from '@/components/print/company-letterhead'
 import type { LetterheadSource } from '@/lib/letterhead'
 import { orgLogoUrl, resolveBrandMark } from '@/lib/org-brand'
 import { PRODUCT_CREDIT, PRODUCT_NAME } from '@/lib/product-brand'
-import { cn } from '@/lib/utils'
 
 type ShellChromeProps = {
   orgName: string
@@ -153,6 +153,7 @@ export function ShellChrome({
   return (
     <AppMemoryProvider userId={user.id}>
     <div className="app-surface relative flex min-h-svh overflow-x-clip">
+      <ScrollChain />
       <NavTrailRecorder />
       <NavigationProgress />
       {isPos ? null : <AppAtmosphere />}

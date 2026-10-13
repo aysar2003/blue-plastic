@@ -53,6 +53,7 @@ export function ContactMoneyBar({
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(storageKey)
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restore the saved panel state from localStorage after hydration
       if (stored === '0') setOpen(false)
       if (stored === '1') setOpen(true)
       const h = window.localStorage.getItem(`${storageKey}:h`)
@@ -243,7 +244,7 @@ export function ContactMoneyBar({
           }}
           className="group flex h-3 w-full max-w-xs cursor-ns-resize items-center justify-center"
         >
-          <span className="h-1 w-10 rounded-full bg-[#c5d0da] transition-colors group-hover:bg-[#9aadb8] group-active:bg-[#714B67]" />
+          <span className="h-1 w-10 rounded-full bg-[#c5d0da] transition-colors group-hover:bg-[#9aadb8] group-active:bg-primary" />
         </div>
         <button
           type="button"

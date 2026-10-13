@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { ChevronDownIcon, ChevronUpIcon, LayoutGridIcon } from 'lucide-react'
 
 import { appForPath } from '@/lib/app-memory'
-import { APP_ALSO, appsForPermissions, LAUNCHER_APPS } from './launcher-apps'
+import { APP_ALSO, appsForPermissions } from './launcher-apps'
 
 /** Remembered in this browser so the icon row stays hidden after a reload. */
 export const APPS_BAR_STORAGE_KEY = 'bp.apps-bar.hidden'
@@ -16,6 +16,7 @@ export function useAppsBarHidden() {
 
   useEffect(() => {
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- read localStorage only after hydration so server and client markup match
       setHidden(window.localStorage.getItem(APPS_BAR_STORAGE_KEY) === '1')
     } catch {
       setHidden(false)

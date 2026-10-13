@@ -8,8 +8,14 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import type { ModuleFlag } from '@/lib/feature-flags'
 
 import { updateCompanyLimits } from './actions'
+import {
+  CompanyAppsPicker,
+  hasAnyModuleOn,
+  moduleActionFields,
+} from './company-apps-picker'
 import type { DatabaseListRow } from './databases-board'
 
 function toDateInput(iso: string | null): string {
@@ -37,8 +43,15 @@ export function DatabaseLimitsPanel({
     company.maxUsers != null ? String(company.maxUsers) : '',
   )
   const [rentNote, setRentNote] = useState(company.rentNote ?? '')
+  const [modules, setModules] = useState<Record<ModuleFlag, boolean>>(() => ({
+    ...company.modules,
+  }))
 
   function save() {
+    if (!hasAnyModuleOn(modules)) {
+      toast.error('Leave at least one app on for this company.')
+      return
+    }
     startTransition(async () => {
       const result = await updateCompanyLimits({
         orgId: company.id,
@@ -46,6 +59,7 @@ export function DatabaseLimitsPanel({
         rentExpiresAt: rentExpiresAt || null,
         maxUsers: maxUsers.trim() === '' ? null : Number(maxUsers),
         rentNote: rentNote.trim() || null,
+        ...moduleActionFields(modules),
       })
       if (!result.ok) {
         toast.error(result.error.message)
@@ -71,8 +85,8 @@ export function DatabaseLimitsPanel({
             Limits · {company.name}
           </h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Xayiraad, rent (time limit), iyo tiro users. Restriction, rent end date, and max users
-            for this database.
+            ERP system Limits: lock, rent, seats, and which apps this company may use. Add or remove
+            apps anytime. Company tax on/off is Settings → Tax inside the company — not here.
           </p>
         </div>
         <Button type="button" variant="ghost" size="icon" aria-label="Close limits" onClick={onClose}>
@@ -137,8 +151,15 @@ export function DatabaseLimitsPanel({
           />
         </div>
 
+        <CompanyAppsPicker
+          modules={modules}
+          onChange={setModules}
+          disabled={pending}
+          hint="Check to grant an app, uncheck to remove it from this company. At least one must stay on."
+        />
+
         <div className="flex flex-wrap gap-2">
-          <Button type="button" disabled={pending} onClick={save}>
+          <Button type="button" disabled={pending || !hasAnyModuleOn(modules)} onClick={save}>
             {pending ? <Loader2Icon className="animate-spin" /> : <SaveIcon />}
             Save limits
           </Button>

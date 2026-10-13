@@ -53,6 +53,7 @@ export function MergeIntoDialog({
   useEffect(() => {
     if (!open) return
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- show the spinner while the merge-target request is in flight
     setLoading(true)
     void listMergeTargets({ kind, id: absorbId }).then((result) => {
       if (cancelled) return

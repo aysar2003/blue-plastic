@@ -178,24 +178,6 @@ export async function getFeatureFlags(ctx: OrgContext): Promise<OrgFeatureFlags>
 
 export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFeaturesInput) {
   const meta = await requestMeta()
-  const flags: OrgFeatureFlags = {
-    allowJournalDelete: input.allowJournalDelete,
-    allowCustomerDelete: input.allowCustomerDelete,
-    allowVendorDelete: input.allowVendorDelete,
-    allowItemDelete: input.allowItemDelete,
-    allowAccountDelete: input.allowAccountDelete,
-    allowDocumentDelete: input.allowDocumentDelete,
-    showCreatorBrand: input.showCreatorBrand,
-    modules: {
-      sales: input.moduleSales,
-      purchases: input.modulePurchases,
-      banking: input.moduleBanking,
-      inventory: input.moduleInventory,
-      pos: input.modulePos,
-      accounting: input.moduleAccounting,
-      reports: input.moduleReports,
-    },
-  }
 
   return db.$transaction(async (tx) => {
     const before = await tx.organization.findUnique({
@@ -203,6 +185,28 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       select: { featureFlags: true },
     })
     if (!before) throw notFound('Organisation')
+
+    // Keep company tax (Settings → Tax) separate from apps/deletes saved here.
+    const previous = parseFeatureFlags(before.featureFlags)
+    const flags: OrgFeatureFlags = {
+      allowJournalDelete: input.allowJournalDelete,
+      allowCustomerDelete: input.allowCustomerDelete,
+      allowVendorDelete: input.allowVendorDelete,
+      allowItemDelete: input.allowItemDelete,
+      allowAccountDelete: input.allowAccountDelete,
+      allowDocumentDelete: input.allowDocumentDelete,
+      showCreatorBrand: input.showCreatorBrand,
+      enableTax: previous.enableTax,
+      modules: {
+        sales: input.moduleSales,
+        purchases: input.modulePurchases,
+        banking: input.moduleBanking,
+        inventory: input.moduleInventory,
+        pos: input.modulePos,
+        accounting: input.moduleAccounting,
+        reports: input.moduleReports,
+      },
+    }
 
     const after = await tx.organization.update({
       where: { id: ctx.orgId },
@@ -219,6 +223,44 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
         action: 'UPDATE',
         before: { featureFlags: before.featureFlags },
         after: { featureFlags: after.featureFlags },
+      },
+      meta,
+    )
+    return parseFeatureFlags(after.featureFlags)
+  })
+}
+
+/** Company tax on/off — Settings → Tax. Not ERP Databases → Limits. */
+export async function updateEnableTax(ctx: OrgContext, enableTax: boolean) {
+  const meta = await requestMeta()
+
+  return db.$transaction(async (tx) => {
+    const before = await tx.organization.findUnique({
+      where: { id: ctx.orgId },
+      select: { featureFlags: true },
+    })
+    if (!before) throw notFound('Organisation')
+
+    const flags: OrgFeatureFlags = {
+      ...parseFeatureFlags(before.featureFlags),
+      enableTax,
+    }
+
+    const after = await tx.organization.update({
+      where: { id: ctx.orgId },
+      data: { featureFlags: flags },
+      select: { featureFlags: true },
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Organization',
+        entityId: ctx.orgId,
+        action: 'UPDATE',
+        before: { enableTax: parseFeatureFlags(before.featureFlags).enableTax },
+        after: { enableTax },
       },
       meta,
     )

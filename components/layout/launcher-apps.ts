@@ -59,8 +59,8 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     icon: 'monitor',
     glyph: 'pos',
     permission: 'pos:read',
-    accent: '#714B67',
-    wash: '#F3E8F0',
+    accent: '#22d3ee',
+    wash: '#cffafe',
     blurb: 'Sell at the till',
   },
   {

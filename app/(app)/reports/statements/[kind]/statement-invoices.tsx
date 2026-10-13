@@ -65,7 +65,8 @@ export function StatementInvoices({
   template?: DocumentTemplate
   printedBy?: string
 }) {
-  const brand = FORM_SHEET.accent
+  const brand = FORM_SHEET.band
+  const brandAccent = FORM_SHEET.accent
   const brandSoft = FORM_SHEET.wash
   const money = (value: Decimal | string) => formatMoney(value, baseCurrency)
   const totals = documents.reduce(
@@ -110,7 +111,7 @@ export function StatementInvoices({
         <div className="relative px-8 pb-24 pt-10 sm:px-12">
           <div className="flex justify-end">
             <div className="max-w-md text-right">
-              <p className="text-xl font-bold uppercase tracking-[0.18em]" style={{ color: brand }}>
+              <p className="text-xl font-bold uppercase tracking-[0.18em]" style={{ color: brandAccent }}>
                 {noun.summary}
               </p>
               <p className="mt-1 text-sm text-[#5C6B7A]">{period}</p>
@@ -119,7 +120,7 @@ export function StatementInvoices({
           </div>
 
           <dl className="mt-10 grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-            <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
+            <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
               {noun.party}
             </dt>
             <dd className="text-[#5C6B7A]">
@@ -134,7 +135,7 @@ export function StatementInvoices({
               ))}
               {customer.email ? <span className="block">{customer.email}</span> : null}
             </dd>
-            <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brand }}>
+            <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
               {noun.title}
             </dt>
             <dd className="text-[#5C6B7A]">{documents.length}</dd>
@@ -167,12 +168,12 @@ export function StatementInvoices({
                 <span className="tabular">{document.dueDate ? shortDate(toCalendarDate(document.dueDate)) : '—'}</span>
                 <span className="tabular text-right">{money(document.total)}</span>
                 <span className="tabular text-right">{money(document.amountApplied)}</span>
-                <span className="tabular text-right font-medium" style={{ color: brand }}>
+                <span className="tabular text-right font-medium" style={{ color: brandAccent }}>
                   {money(document.balance)}
                 </span>
               </div>
             ))}
-            <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_6.5rem_6.5rem_6.5rem_6.5rem] border-t-2 px-2 py-2 text-[13px] font-bold" style={{ borderColor: brand, color: brand }}>
+            <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_6.5rem_6.5rem_6.5rem_6.5rem] border-t-2 px-2 py-2 text-[13px] font-bold" style={{ borderColor: brandAccent, color: brandAccent }}>
               <span />
               <span>Total</span>
               <span />
@@ -183,7 +184,7 @@ export function StatementInvoices({
           </div>
 
           <dl className="ml-auto mt-6 w-72 space-y-1.5 text-sm text-[#5C6B7A]">
-            <div className="flex items-baseline justify-between gap-6 border-t border-[#e0d5dc] pt-2 font-bold" style={{ color: brand }}>
+            <div className="flex items-baseline justify-between gap-6 border-t border-border pt-2 font-bold" style={{ color: brandAccent }}>
               <dt>Account balance at {shortDate(to)}</dt>
               <dd className="tabular">{money(closing)}</dd>
             </div>

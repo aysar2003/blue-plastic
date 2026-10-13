@@ -2,7 +2,13 @@ import 'server-only'
 
 import type { Prisma } from '@prisma/client'
 
-import { DEFAULT_FEATURE_FLAGS } from '@/lib/feature-flags'
+import {
+  featureFlagsWithModules,
+  MODULE_FLAG_LABELS,
+  MODULE_FLAGS,
+  parseModulesSelection,
+  type ModuleFlag,
+} from '@/lib/feature-flags'
 import type { SetupInput } from '@/lib/validation/auth'
 import type { OrgContext } from '@/server/auth/context'
 import { hashPassword } from '@/server/auth/password'
@@ -10,6 +16,10 @@ import { db } from '@/server/db'
 import { conflict, forbidden, notFound } from '@/server/errors'
 import { createDefaultSequences } from '@/server/sequences'
 import { needsSetup } from '@/server/services/setup.service'
+
+function flagsForSignup(modules: Record<ModuleFlag, boolean>) {
+  return featureFlagsWithModules(modules) as unknown as Prisma.InputJsonValue
+}
 
 /**
  * Public /register stays available so businesses can *request* a company.
@@ -54,6 +64,8 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
     throw conflict('A company with that name already exists. Choose another name.')
   }
 
+  const requestedModules = parseModulesSelection(input.requestedModules)
+
   if (empty) {
     const passwordHash = await hashPassword(input.password)
     return db.$transaction(async (tx) => {
@@ -62,7 +74,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
           name: orgName,
           baseCurrency: input.baseCurrency,
           fiscalYearStartMonth: input.fiscalYearStartMonth,
-          featureFlags: DEFAULT_FEATURE_FLAGS as unknown as Prisma.InputJsonValue,
+          featureFlags: flagsForSignup(requestedModules),
         },
         select: { id: true, name: true },
       })
@@ -139,6 +151,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
       ownerName: input.name.trim(),
       email,
       passwordHash,
+      requestedModules,
       status: 'PENDING',
     },
     select: { id: true, email: true },
@@ -155,6 +168,9 @@ export type SignupRequestRow = {
   ownerName: string
   email: string
   createdAt: string
+  /** Apps they asked for (labels for the review UI). */
+  requestedApps: string[]
+  modules: Record<ModuleFlag, boolean>
 }
 
 /** Pending public registrations — system owner only. */
@@ -171,18 +187,42 @@ export async function listPendingSignupRequests(ctx: OrgContext): Promise<Signup
       ownerName: true,
       email: true,
       createdAt: true,
+      requestedModules: true,
     },
   })
-  return rows.map((row) => ({
-    ...row,
-    createdAt: row.createdAt.toISOString(),
-  }))
+  return rows.map((row) => {
+    const modules = parseModulesSelection(row.requestedModules)
+    return {
+      id: row.id,
+      organizationName: row.organizationName,
+      baseCurrency: row.baseCurrency,
+      fiscalYearStartMonth: row.fiscalYearStartMonth,
+      ownerName: row.ownerName,
+      email: row.email,
+      createdAt: row.createdAt.toISOString(),
+      modules,
+      requestedApps: MODULE_FLAGS.filter((key) => modules[key]).map(
+        (key) => MODULE_FLAG_LABELS[key].label,
+      ),
+    }
+  })
 }
 
 /** Approve → create company + owner. Reject → no account, no books. */
 export async function reviewSignupRequest(
   ctx: OrgContext,
-  input: { id: string; decision: 'approve' | 'reject'; note?: string },
+  input: {
+    id: string
+    decision: 'approve' | 'reject'
+    note?: string
+    moduleSales?: boolean
+    modulePurchases?: boolean
+    moduleBanking?: boolean
+    moduleInventory?: boolean
+    modulePos?: boolean
+    moduleAccounting?: boolean
+    moduleReports?: boolean
+  },
 ) {
   if (!ctx.isSystemOwner) {
     throw forbidden('Only the system owner can approve company registrations.')
@@ -224,13 +264,34 @@ export async function reviewSignupRequest(
     throw conflict('A company with that name already exists. Reject this request.')
   }
 
+  // Owner may grant different apps than the applicant asked for (add or remove).
+  const requested = parseModulesSelection(request.requestedModules)
+  const modules =
+    input.moduleSales !== undefined ||
+    input.modulePurchases !== undefined ||
+    input.moduleBanking !== undefined ||
+    input.moduleInventory !== undefined ||
+    input.modulePos !== undefined ||
+    input.moduleAccounting !== undefined ||
+    input.moduleReports !== undefined
+      ? {
+          sales: input.moduleSales ?? requested.sales,
+          purchases: input.modulePurchases ?? requested.purchases,
+          banking: input.moduleBanking ?? requested.banking,
+          inventory: input.moduleInventory ?? requested.inventory,
+          pos: input.modulePos ?? requested.pos,
+          accounting: input.moduleAccounting ?? requested.accounting,
+          reports: input.moduleReports ?? requested.reports,
+        }
+      : requested
+
   const created = await db.$transaction(async (tx) => {
     const organization = await tx.organization.create({
       data: {
         name: request.organizationName,
         baseCurrency: request.baseCurrency,
         fiscalYearStartMonth: request.fiscalYearStartMonth,
-        featureFlags: DEFAULT_FEATURE_FLAGS as unknown as Prisma.InputJsonValue,
+        featureFlags: flagsForSignup(modules),
       },
       select: { id: true, name: true },
     })
@@ -282,6 +343,7 @@ export async function reviewSignupRequest(
           name: organization.name,
           owner: user.email,
           approvedSignupRequestId: request.id,
+          modules,
         },
       },
     })

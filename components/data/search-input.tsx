@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { RotateCcwIcon, SearchIcon } from 'lucide-react'
 
@@ -30,9 +30,12 @@ export function SearchInput({
   const [value, setValue] = useState(urlQuery)
   const [isPending, startTransition] = useTransition()
 
-  useEffect(() => {
+  // Follow the URL when it changes (back/forward, cleared filters).
+  const [seenUrlQuery, setSeenUrlQuery] = useState(urlQuery)
+  if (urlQuery !== seenUrlQuery) {
+    setSeenUrlQuery(urlQuery)
     setValue(urlQuery)
-  }, [urlQuery])
+  }
 
   const apply = (nextQuery: string) => {
     const next = new URLSearchParams(searchParams.toString())

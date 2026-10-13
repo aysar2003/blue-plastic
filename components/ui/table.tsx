@@ -1,5 +1,6 @@
 import * as React from 'react'
 
+import { TableScrollPort } from '@/components/ui/table-scroll-port'
 import { cn } from '@/lib/utils'
 
 /**
@@ -18,25 +19,23 @@ function Table({
   /** Skip the sticky scroll pane — use inside forms, dialogs, and nested sheets. */
   embed?: boolean
 }) {
-  return (
-    <div
-      data-slot="table-container"
-      {...(embed ? {} : { 'data-table-scroll': '' })}
-      className={cn(
-        'relative w-full max-w-full',
-        embed
-          ? 'overflow-x-auto'
-          : 'sticky top-0 z-20 max-h-dvh overflow-auto overscroll-contain',
-        containerClassName,
-      )}
-    >
-      <table
-        data-slot="table"
-        className={cn('w-full max-w-full caption-bottom text-[0.8125rem]', className)}
-        {...props}
-      />
-    </div>
+  const sheet = (
+    <table
+      data-slot="table"
+      className={cn('w-full max-w-full caption-bottom text-[0.8125rem]', className)}
+      {...props}
+    />
   )
+
+  if (embed) {
+    return (
+      <div data-slot="table-container" className={cn('relative w-full max-w-full overflow-x-auto', containerClassName)}>
+        {sheet}
+      </div>
+    )
+  }
+
+  return <TableScrollPort className={containerClassName}>{sheet}</TableScrollPort>
 }
 
 /**

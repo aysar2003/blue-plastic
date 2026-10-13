@@ -157,8 +157,15 @@ export async function list(
       ctx.orgId,
       rows.filter((row) => isStockTracked(row.type)).map((row) => row.id),
     )
+    const locked = await typeLockedItemIds(
+      ctx,
+      rows.map((row) => row.id),
+    )
     return paged(
-      rows.map((row) => attachStock(row, pagePositions.get(row.id))),
+      rows.map((row) => ({
+        ...attachStock(row, pagePositions.get(row.id)),
+        typeEditable: !locked.has(row.id),
+      })),
       total,
       query,
     )
@@ -176,10 +183,19 @@ export async function list(
   // is on hand and what it is worth, so nobody has to hold two screens in their
   // head to answer "have we got any?".
   const trackedIds = rows.filter((row) => isStockTracked(row.type)).map((row) => row.id)
-  const positions = await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
+  const [positions, locked] = await Promise.all([
+    positionsOf(db as unknown as Tx, ctx.orgId, trackedIds),
+    typeLockedItemIds(
+      ctx,
+      rows.map((row) => row.id),
+    ),
+  ])
 
   return paged(
-    rows.map((row) => attachStock(row, positions.get(row.id))),
+    rows.map((row) => ({
+      ...attachStock(row, positions.get(row.id)),
+      typeEditable: !locked.has(row.id),
+    })),
     total,
     query,
   )
@@ -213,12 +229,53 @@ function attachStock<
 export async function get(ctx: OrgContext, id: string) {
   const item = await db.item.findFirst({ where: { id, orgId: ctx.orgId }, select: ITEM_SELECT })
   if (!item) throw notFound('Item')
-  return serialise(item)
+  const locked = await typeLockedItemIds(ctx, [id])
+  return { ...serialise(item), typeEditable: !locked.has(id) }
+}
+
+/**
+ * Items that already appear on a sales/purchase document, stock movement,
+ * adjustment, transfer, ticket, or delivery note. Their type is fixed.
+ */
+export async function typeLockedItemIds(ctx: OrgContext, itemIds: string[]): Promise<Set<string>> {
+  if (itemIds.length === 0) return new Set()
+
+  const onItem = { orgId: ctx.orgId, itemId: { in: itemIds } }
+  const [sales, purchases, movements, adjustments, transfers, tickets, deliveries] = await Promise.all([
+    db.salesDocumentLine.findMany({ where: onItem, select: { itemId: true }, distinct: ['itemId'] }),
+    db.purchaseDocumentLine.findMany({ where: onItem, select: { itemId: true }, distinct: ['itemId'] }),
+    db.inventoryTransaction.findMany({ where: onItem, select: { itemId: true }, distinct: ['itemId'] }),
+    db.inventoryAdjustmentLine.findMany({ where: onItem, select: { itemId: true }, distinct: ['itemId'] }),
+    db.storeTransfer.findMany({ where: onItem, select: { itemId: true }, distinct: ['itemId'] }),
+    db.storeTicket.findMany({ where: onItem, select: { itemId: true }, distinct: ['itemId'] }),
+    db.deliveryNoteLine.findMany({
+      where: { orgId: ctx.orgId, itemId: { in: itemIds } },
+      select: { itemId: true },
+      distinct: ['itemId'],
+    }),
+  ])
+
+  const locked = new Set<string>()
+  for (const row of [
+    ...sales,
+    ...purchases,
+    ...movements,
+    ...adjustments,
+    ...transfers,
+    ...tickets,
+    ...deliveries,
+  ]) {
+    if (row.itemId) locked.add(row.itemId)
+  }
+  return locked
 }
 
 export async function create(ctx: OrgContext, input: ItemInput) {
   input = await accountForStore(ctx, input)
   input = await assignProductCostAccount(ctx, input)
+  if (!ctx.features.enableTax) {
+    input = { ...input, salesTaxCodeId: null, purchaseTaxCodeId: null, isTaxable: false }
+  }
   await assertNameAndSkuFree(ctx, input.name, input.sku ?? null, input.barcode ?? null)
   await assertAccountsSuitable(ctx, input)
   const meta = await requestMeta()
@@ -286,19 +343,25 @@ export async function update(ctx: OrgContext, input: ItemInput & { id: string })
   const patched = await accountForStore(ctx, input, input.id)
   const assigned = await assignProductCostAccount(ctx, { ...input, ...patched })
   input = { ...assigned, id: input.id }
+  if (!ctx.features.enableTax) {
+    input = { ...input, salesTaxCodeId: null, purchaseTaxCodeId: null, isTaxable: false }
+  }
   const before = await db.item.findFirst({ where: { id: input.id, orgId: ctx.orgId }, select: ITEM_SELECT })
   if (!before) throw notFound('Item')
 
   await assertNameAndSkuFree(ctx, input.name, input.sku ?? null, input.barcode ?? null, input.id)
   await assertAccountsSuitable(ctx, input)
 
-  // Changing what an item *is* would reclassify everything already sold through
-  // it, so the type is fixed once the item exists.
+  // Type may change only while the item has never appeared on a document or in
+  // the stock/journal ledgers. Once it has, every past line would be reclassified.
   if (before.type !== input.type) {
-    throw validation(
-      `An item's type cannot be changed after it is created — it would reclassify every document that already used it. Create a new item instead.`,
-      { type: ['Type cannot be changed'] },
-    )
+    const locked = await typeLockedItemIds(ctx, [input.id])
+    if (locked.has(input.id)) {
+      throw validation(
+        `This item's type cannot change — it already appears on a document or journal. Create a new item instead.`,
+        { type: ['Type cannot be changed'] },
+      )
+    }
   }
 
   const meta = await requestMeta()
@@ -680,14 +743,21 @@ async function saveComponents(
   }
   const rows = parseComponents(raw)
   await tx.itemComponent.deleteMany({ where: { parentItemId, orgId: ctx.orgId } })
+  const blocked = new Set(['GROUP', 'SUBTOTAL', 'PAYMENT'])
   for (const [index, row] of rows.entries()) {
     const qty = parseMoneyInput(row.quantity)
     if (!qty || qty.lessThanOrEqualTo(0)) continue
     const child = await tx.item.findFirst({
-      where: { id: row.itemId, orgId: ctx.orgId, deletedAt: null },
-      select: { id: true },
+      where: { id: row.itemId, orgId: ctx.orgId, deletedAt: null, isActive: true },
+      select: { id: true, name: true, type: true },
     })
     if (!child || child.id === parentItemId) continue
+    if (blocked.has(child.type)) {
+      throw validation(
+        `"${child.name}" cannot be a group member (${child.type.toLowerCase().replaceAll('_', ' ')}).`,
+        { componentsJson: ['Choose inventory, non-inventory, service, other charge, or discount items'] },
+      )
+    }
     await tx.itemComponent.create({
       data: {
         orgId: ctx.orgId,
@@ -794,10 +864,20 @@ async function assertAccountsSuitable(ctx: OrgContext, input: ItemInput) {
   }
 
   const income = input.incomeAccountId ? byId.get(input.incomeAccountId) : null
-  if (income && income.type !== 'REVENUE') {
-    throw validation(`"${income.name}" is not an income account, so sales cannot be posted to it.`, {
-      incomeAccountId: ['Choose an income account'],
-    })
+  if (income) {
+    if (input.type === 'DISCOUNT') {
+      // Contra-income (sales discounts) or a dedicated discount expense account.
+      if (income.type !== 'REVENUE' && income.type !== 'EXPENSE') {
+        throw validation(
+          `"${income.name}" is not an income or expense account, so this discount cannot post to it.`,
+          { incomeAccountId: ['Choose an income or expense account'] },
+        )
+      }
+    } else if (income.type !== 'REVENUE') {
+      throw validation(`"${income.name}" is not an income account, so sales cannot be posted to it.`, {
+        incomeAccountId: ['Choose an income account'],
+      })
+    }
   }
 
   const expense = input.expenseAccountId ? byId.get(input.expenseAccountId) : null
@@ -841,7 +921,7 @@ async function assertAccountsSuitable(ctx: OrgContext, input: ItemInput) {
   }
 }
 
-/** Short list for GROUP / Assembly component pickers. */
+/** Catalog for GROUP / Assembly component pickers (every sellable child type). */
 export async function listCatalog(ctx: OrgContext) {
   const rows = await db.item.findMany({
     where: {
@@ -852,7 +932,6 @@ export async function listCatalog(ctx: OrgContext) {
     },
     select: { id: true, name: true, sku: true, type: true },
     orderBy: { name: 'asc' },
-    take: 500,
   })
   return rows.map((row) => ({
     id: row.id,

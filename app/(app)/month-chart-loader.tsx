@@ -4,7 +4,7 @@ import { resolvePeriod } from '@/lib/report-periods'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { profitAndLoss } from '@/server/reports/statements'
-import { GlobalMonthChart, type MonthChartData } from './global-month-chart'
+import { GlobalMonthChart, type MonthChartData } from '@/components/layout/global-month-chart'
 
 /** Server fetch for the Reports-home this-month chart. */
 export async function MonthChartLoader({ ctx }: { ctx: OrgContext }) {

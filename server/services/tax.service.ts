@@ -12,6 +12,7 @@ import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition } from '@/server/errors'
+import { assertTaxEnabled } from '@/server/feature-guards'
 
 /* --- Payment terms -------------------------------------------------------- */
 
@@ -112,6 +113,7 @@ export async function upsertAgency(
   ctx: OrgContext,
   input: { id?: string | null; name: string; registrationNumber?: string | null; filingFrequency: 'MONTHLY' | 'QUARTERLY' | 'ANNUALLY' },
 ) {
+  assertTaxEnabled(ctx)
   const meta = await requestMeta()
 
   const existing = await db.taxAgency.findUnique({
@@ -162,6 +164,7 @@ export async function listRates(ctx: OrgContext) {
 }
 
 export async function upsertRate(ctx: OrgContext, input: TaxRateInput) {
+  assertTaxEnabled(ctx)
   const meta = await requestMeta()
 
   const existing = await db.taxRate.findUnique({
@@ -242,6 +245,7 @@ export async function listCodes(ctx: OrgContext) {
 }
 
 export async function upsertCode(ctx: OrgContext, input: TaxCodeInput) {
+  assertTaxEnabled(ctx)
   const meta = await requestMeta()
 
   const existing = await db.taxCode.findUnique({
@@ -300,6 +304,7 @@ export async function upsertCode(ctx: OrgContext, input: TaxCodeInput) {
 }
 
 export async function setCodeActive(ctx: OrgContext, id: string, isActive: boolean) {
+  assertTaxEnabled(ctx)
   const meta = await requestMeta()
 
   if (!isActive) {

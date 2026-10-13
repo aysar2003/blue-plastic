@@ -1,4 +1,4 @@
-import { ODOO } from '@/lib/odoo-brand'
+import { FORM_SHEET } from '@/lib/credit-brand'
 
 export type SheetMarkColors = {
   markA: string
@@ -8,10 +8,10 @@ export type SheetMarkColors = {
 }
 
 const DEFAULT_MARKS: SheetMarkColors = {
-  markA: ODOO.purpleDeep,
-  markB: ODOO.purple,
-  markC: ODOO.teal,
-  markD: '#8fd4d7',
+  markA: FORM_SHEET.markA,
+  markB: FORM_SHEET.markB,
+  markC: FORM_SHEET.markC,
+  markD: FORM_SHEET.markD,
 }
 
 /** Corner marks shared by the sales sheet template and the printed document. */

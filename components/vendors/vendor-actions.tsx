@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ChevronDownIcon, MoreHorizontalIcon } from 'lucide-react'
@@ -68,9 +68,14 @@ export function VendorActions({
   const [editing, setEditing] = useState(startEditing && Boolean(contact))
   const [merging, setMerging] = useState(false)
 
-  useEffect(() => {
-    if (startEditing && contact) setEditing(true)
-  }, [startEditing, contact, vendorId])
+  // Reopen the edit dialog when a new "edit" request arrives (adjusting state
+  // during render instead of in an effect avoids a cascading re-render).
+  const editRequest = startEditing && contact ? vendorId : null
+  const [seenEditRequest, setSeenEditRequest] = useState(editRequest)
+  if (editRequest !== seenEditRequest) {
+    setSeenEditRequest(editRequest)
+    if (editRequest) setEditing(true)
+  }
 
   const closeEdit = () => {
     setEditing(false)

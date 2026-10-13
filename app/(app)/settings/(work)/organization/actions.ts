@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 
@@ -154,6 +155,40 @@ export async function updateFeatureFlagsForm(
   }
   const result = await updateFeatureFlags(values)
   return toFormState(result, 'Configuration saved.')
+}
+
+export const updateEnableTax = action
+  .requires('org:update')
+  .input(
+    z.object({
+      enableTax: z
+        .union([z.literal('true'), z.literal('false'), z.literal('on'), z.boolean()])
+        .transform((v) => v === true || v === 'true' || v === 'on'),
+    }),
+  )
+  .handler(async (ctx, input) => {
+    const flags = await organizationService.updateEnableTax(ctx, input.enableTax)
+    revalidatePath('/settings/tax')
+    revalidatePath('/settings/features')
+    revalidatePath('/reports/tax-summary')
+    revalidatePath('/items')
+    revalidatePath('/', 'layout')
+    return flags
+  })
+
+export async function updateEnableTaxForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const enableTax =
+    formData.get('enableTax') === 'true' || formData.get('enableTax') === 'on' ? 'true' : 'false'
+  const result = await updateEnableTax({ enableTax })
+  return toFormState(
+    result,
+    enableTax === 'true'
+      ? 'Tax is on for this company.'
+      : 'Tax is off for this company — it will not show on documents.',
+  )
 }
 
 export const updateDocumentTemplate = action

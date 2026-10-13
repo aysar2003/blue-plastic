@@ -37,6 +37,11 @@ export type SalesJournalInput = {
   fallbackIncomeAccountId: string
   /** Contra-revenue account. Required when the document carries a discount. */
   discountAccountId?: string | null
+  /**
+   * Fallback when a PAYMENT item has no deposit account of its own
+   * (Undeposited Funds).
+   */
+  paymentDepositAccountId?: string | null
   memo?: string | null
   /**
    * Cost of what was sold, when the document moved tracked stock.
@@ -69,6 +74,7 @@ export function buildInvoiceJournal(input: SalesJournalInput): DraftJournal {
         description: `Invoice ${input.number}`,
       },
       ...discountLines(input, 'debit'),
+      ...paymentItemLines(input, 'debit'),
       ...incomeLines(input, 'credit'),
       ...taxLines(input, 'credit'),
       ...cogsLines(input, 'out'),
@@ -94,6 +100,7 @@ export function buildSalesReceiptJournal(input: SalesJournalInput): DraftJournal
     lines: [
       ...depositLines,
       ...discountLines(input, 'debit'),
+      ...paymentItemLines(input, 'debit'),
       ...incomeLines(input, 'credit'),
       ...taxLines(input, 'credit'),
       ...cogsLines(input, 'out'),
@@ -295,11 +302,66 @@ function discountLines(input: SalesJournalInput, side: 'debit' | 'credit'): Draf
   return [draft]
 }
 
+/**
+ * Put a signed money amount on the natural side. Discount item lines arrive as
+ * negative credits (money off income); the posting engine refuses negatives, so
+ * they flip to the other side as a positive debit.
+ */
+function signedDraft(
+  accountId: string,
+  amount: Decimal,
+  description: string | null,
+  side: 'debit' | 'credit',
+): DraftLine {
+  const draft: DraftLine = { accountId, description }
+  const abs = amount.abs()
+  const onDebit = amount.isNegative() ? side === 'credit' : side === 'debit'
+  if (onDebit) draft.debit = abs
+  else draft.credit = abs
+  return draft
+}
+
+/**
+ * Payment items collected on the document: money already taken, so it lands in
+ * the item's deposit account (or Undeposited Funds) instead of receivables.
+ */
+function paymentItemLines(input: SalesJournalInput, side: 'debit' | 'credit'): DraftLine[] {
+  const byAccount = new Map<string, { amount: Decimal; description: string }>()
+
+  for (const line of input.priced.lines) {
+    if (!line.source.isPayment || line.amount.isZero()) continue
+    const accountId =
+      line.source.depositAccountId ?? input.paymentDepositAccountId ?? input.depositAccountId
+    if (!accountId) {
+      throw new Error('A payment item needs a deposit account.')
+    }
+    const abs = line.amount.abs()
+    const existing = byAccount.get(accountId)
+    if (existing) {
+      existing.amount = existing.amount.plus(abs)
+    } else {
+      byAccount.set(accountId, {
+        amount: abs,
+        description: line.source.description ?? 'Payment',
+      })
+    }
+  }
+
+  return [...byAccount.entries()].map(([accountId, entry]) => {
+    const draft: DraftLine = { accountId, description: entry.description }
+    if (side === 'debit') draft.debit = entry.amount
+    else draft.credit = entry.amount
+    return draft
+  })
+}
+
 /** One line per income account, so the profit and loss reads by category. */
 function incomeLines(input: SalesJournalInput, side: 'debit' | 'credit'): DraftLine[] {
   const byAccount = new Map<string, { amount: Decimal; description: string }>()
 
   for (const line of input.priced.lines) {
+    // Payment and subtotal lines never post through income.
+    if (line.source.isPayment || line.source.isSubtotal) continue
     if (line.amount.isZero()) continue
     const accountId = line.incomeAccountId ?? input.fallbackIncomeAccountId
     const existing = byAccount.get(accountId)
@@ -310,12 +372,9 @@ function incomeLines(input: SalesJournalInput, side: 'debit' | 'credit'): DraftL
     }
   }
 
-  return [...byAccount.entries()].map(([accountId, entry]) => {
-    const draft: DraftLine = { accountId, description: entry.description || null }
-    if (side === 'debit') draft.debit = entry.amount
-    else draft.credit = entry.amount
-    return draft
-  })
+  return [...byAccount.entries()].map(([accountId, entry]) =>
+    signedDraft(accountId, entry.amount, entry.description || null, side),
+  )
 }
 
 /** One line per tax rate, so a tax return can be assembled from the ledger. */
@@ -327,10 +386,7 @@ function taxLines(input: SalesJournalInput, side: 'debit' | 'credit'): DraftLine
     if (!rate.salesAccountId) {
       throw new Error(`Tax rate "${rate.name}" has no account to post to.`)
     }
-    const draft: DraftLine = { accountId: rate.salesAccountId, description: rate.name }
-    if (side === 'debit') draft.debit = rate.amount
-    else draft.credit = rate.amount
-    lines.push(draft)
+    lines.push(signedDraft(rate.salesAccountId, rate.amount, rate.name, side))
   }
 
   return lines

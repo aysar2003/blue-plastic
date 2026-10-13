@@ -20,7 +20,6 @@ const suite = hasDatabase ? describe : describe.skip
 const stamp = Date.now().toString(36)
 const orgName = `Restore Probe ${stamp}`
 let orgId: string | null = null
-let ownerId: string | null = null
 
 async function cleanup() {
   if (!orgId) return
@@ -51,7 +50,6 @@ suite('company backup restore', () => {
         select: { id: true, name: true, email: true, image: true },
       })
       if (!owner) throw new Error('No system owner in the database — cannot test restore.')
-      ownerId = owner.id
 
       const organization = await db.organization.create({
         data: {

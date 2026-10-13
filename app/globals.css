@@ -615,6 +615,27 @@ html.ink {
   }
 
   /*
+   * Solid primary fills keep paired ink. Do not target bg-primary/10 washes —
+   * those stay on page foreground. Bright cyan (SOM) fails with white type.
+   */
+  .bg-primary,
+  button.bg-primary,
+  a.bg-primary,
+  [data-slot='button'].bg-primary {
+    color: var(--primary-foreground);
+  }
+
+  .bg-destructive,
+  [data-slot='button'].bg-destructive {
+    color: var(--destructive-foreground);
+  }
+
+  .bg-success,
+  [data-slot='button'].bg-success {
+    color: var(--success-foreground);
+  }
+
+  /*
    * Amounts are read in columns and compared vertically, so they get tabular
    * figures. Misaligned digits in a ledger are a real usability defect, not a
    * typographic nicety.
@@ -1085,8 +1106,7 @@ html:not(.odoo):not(.odoo-dark):not(.quick):not(.quick-dark) .shell-topbar [data
   color: var(--muted-foreground) !important;
 }
 
-.shell-tabs a.text-primary,
-.shell-tabs a[class*='text-primary'] {
+.shell-tabs a.text-primary {
   color: var(--primary) !important;
 }
 
@@ -1940,9 +1960,46 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-sur
   color: var(--muted-foreground) !important;
 }
 
+/*
+ * Hard-coded print-sheet greys (#5C6B7A, #3d4c5c) vanish on night desks.
+ * Remap to theme ink when those hexes appear as Tailwind arbitrary colours.
+ */
+html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is(
+  .text-\[\#5C6B7A\],
+  .text-\[\#5c6b7a\],
+  .text-\[\#3d4c5c\],
+  .text-\[\#3D4C5C\],
+  .text-\[\#3F2C38\],
+  .text-\[\#3f2c38\]
+) {
+  color: var(--muted-foreground) !important;
+}
+
+/*
+ * Labels that must stay on-brand use primary, never a fixed plum.
+ * Match `.text-primary` only — `text-primary-foreground` also contains that
+ * substring, and painting it cyan made New item / Search ink vanish on cyan CTAs.
+ */
+html.som :is(.app-surface, .sales-surface) :is(label.text-primary, .text-primary) {
+  color: var(--primary) !important;
+}
+
+html.som :is(.app-surface, .sales-surface) :is(
+  .text-primary-foreground,
+  [data-slot='button'].bg-primary,
+  button.bg-primary,
+  a.bg-primary
+) {
+  color: var(--primary-foreground) !important;
+}
+
 /* SOM ERP website look — remap leftover QuickBooks greens / Odoo plum to cyan. */
 html.som [class*='bg-[#2ca01c]'],
-html.som [class*='hover:bg-[#248a18]'] {
+html.som [class*='hover:bg-[#248a18]'],
+html.som [class*='bg-[#714B67]'],
+html.som [class*='bg-[#714b67]'],
+html.som [class*='bg-[#5c3d55]'],
+html.som [class*='bg-[#624159]'] {
   background-color: var(--primary) !important;
   color: var(--primary-foreground) !important;
 }
@@ -1957,7 +2014,9 @@ html.som [class*='text-[#0369a1]'],
 html.som [class*='text-[#0e7490]'],
 html.som [class*='text-[#017e84]'],
 html.som [class*='text-[#714B67]'],
-html.som [class*='text-[#714b67]'] {
+html.som [class*='text-[#714b67]'],
+html.som [class*='text-[#3F2C38]'],
+html.som [class*='text-[#3f2c38]'] {
   color: var(--primary) !important;
 }
 

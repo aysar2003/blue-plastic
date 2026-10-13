@@ -268,6 +268,24 @@ suite('item account mappings', () => {
     })
   })
 
+  it('accepts a discount item posted to a dedicated expense account', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const { ctx, accounts } = await makeOrg(tx)
+
+      const item = await tx.item.create({
+        data: {
+          orgId: ctx.orgId,
+          name: 'Expense discount',
+          type: 'DISCOUNT',
+          incomeAccountId: accounts[CODE.rent],
+          salesPrice: '10',
+        },
+        select: { id: true, type: true },
+      })
+      expect(item.type).toBe('DISCOUNT')
+    })
+  })
+
   it('refuses a tracked item with no inventory or COGS account', async () => {
     await inRolledBackTransaction(async (tx) => {
       const { ctx, accounts } = await makeOrg(tx)

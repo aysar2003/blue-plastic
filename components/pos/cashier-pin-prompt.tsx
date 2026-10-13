@@ -56,7 +56,7 @@ export function CashierPinPrompt({
           maxLength={CASHIER_PIN_MAX}
           pattern="[A-Za-z0-9]{4,64}"
           title="Use at least 4 letters or numbers."
-          className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#714B67]"
+          className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-primary"
         />
       </label>
       {error ? (

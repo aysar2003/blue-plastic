@@ -97,6 +97,130 @@ describe('invoice', () => {
   })
 })
 
+describe('invoice with a discount item', () => {
+  const pricedWithDiscount = priceDocument(
+    [
+      { quantity: '1', unitPrice: '2000', incomeAccountId: 'acct-sales' },
+      {
+        quantity: '1',
+        unitPrice: '100',
+        isDiscount: true,
+        incomeAccountId: 'acct-discounts',
+      },
+    ],
+    new Map(),
+    'USD',
+  )
+  const journal = buildInvoiceJournal({
+    ...base,
+    priced: pricedWithDiscount,
+  })
+
+  it('reduces what the customer owes', () => {
+    expect(pricedWithDiscount.total.toString()).toBe('1900')
+    expect(journal.lines.find((line) => line.accountId === 'acct-ar')?.debit?.toString()).toBe('1900')
+  })
+
+  it('debits the discount account instead of crediting a negative', () => {
+    const discount = journal.lines.find((line) => line.accountId === 'acct-discounts')
+    expect(discount?.debit?.toString()).toBe('100')
+    expect(discount?.credit).toBeUndefined()
+  })
+
+  it('still credits goods income in full', () => {
+    expect(journal.lines.find((line) => line.accountId === 'acct-sales')?.credit?.toString()).toBe(
+      '2000',
+    )
+  })
+
+  it('balances', () => {
+    const { debit, credit } = totals(journal.lines)
+    expect(debit.toString()).toBe(credit.toString())
+    expect(debit.toString()).toBe('2000')
+  })
+})
+
+describe('invoice with a payment item', () => {
+  const pricedWithPayment = priceDocument(
+    [
+      { quantity: '1', unitPrice: '100', incomeAccountId: 'acct-sales' },
+      {
+        quantity: '1',
+        unitPrice: '40',
+        isPayment: true,
+        depositAccountId: 'acct-undeposited',
+      },
+    ],
+    new Map(),
+    'USD',
+  )
+  const journal = buildInvoiceJournal({
+    ...base,
+    priced: pricedWithPayment,
+  })
+
+  it('reduces receivables to what is still owed', () => {
+    expect(pricedWithPayment.total.toString()).toBe('60')
+    expect(journal.lines.find((line) => line.accountId === 'acct-ar')?.debit?.toString()).toBe('60')
+  })
+
+  it('debits the payment deposit account for the amount taken', () => {
+    const payment = journal.lines.find((line) => line.accountId === 'acct-undeposited')
+    expect(payment?.debit?.toString()).toBe('40')
+  })
+
+  it('still credits full goods income', () => {
+    expect(journal.lines.find((line) => line.accountId === 'acct-sales')?.credit?.toString()).toBe(
+      '100',
+    )
+  })
+
+  it('balances', () => {
+    const { debit, credit } = totals(journal.lines)
+    expect(debit.toString()).toBe(credit.toString())
+    expect(debit.toString()).toBe('100')
+  })
+})
+
+describe('sales receipt with a payment item', () => {
+  const priced = priceDocument(
+    [
+      { quantity: '1', unitPrice: '100', incomeAccountId: 'acct-sales' },
+      {
+        quantity: '1',
+        unitPrice: '40',
+        isPayment: true,
+        depositAccountId: 'acct-undeposited',
+      },
+    ],
+    new Map(),
+    'USD',
+  )
+  const journal = buildSalesReceiptJournal({
+    ...base,
+    priced,
+    depositAccountId: 'acct-bank',
+  })
+
+  it('debits the receipt deposit for what is still due', () => {
+    expect(priced.total.toString()).toBe('60')
+    expect(journal.lines.find((line) => line.accountId === 'acct-bank')?.debit?.toString()).toBe('60')
+  })
+
+  it('debits the payment item deposit separately', () => {
+    expect(journal.lines.find((line) => line.accountId === 'acct-undeposited')?.debit?.toString()).toBe(
+      '40',
+    )
+  })
+
+  it('credits full goods income and balances', () => {
+    expect(journal.lines.find((line) => line.accountId === 'acct-sales')?.credit?.toString()).toBe('100')
+    const { debit, credit } = totals(journal.lines)
+    expect(debit.toString()).toBe(credit.toString())
+    expect(debit.toString()).toBe('100')
+  })
+})
+
 describe('sales receipt', () => {
   const journal = buildSalesReceiptJournal({ ...base, depositAccountId: 'acct-bank' })
 

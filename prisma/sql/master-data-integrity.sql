@@ -45,7 +45,13 @@ BEGIN
       RAISE EXCEPTION 'The income account does not belong to this organisation.'
         USING ERRCODE = 'foreign_key_violation';
     END IF;
-    IF v_type <> 'REVENUE' THEN
+    -- Discount may post to contra-income or to a dedicated expense account.
+    IF NEW.type = 'DISCOUNT' THEN
+      IF v_type NOT IN ('REVENUE', 'EXPENSE') THEN
+        RAISE EXCEPTION 'A discount account must be an income or expense account, not %.', lower(v_type)
+          USING ERRCODE = 'check_violation';
+      END IF;
+    ELSIF v_type <> 'REVENUE' THEN
       RAISE EXCEPTION 'An item''s income account must be an income account, not %.', lower(v_type)
         USING ERRCODE = 'check_violation';
     END IF;

@@ -53,8 +53,9 @@ export function FeaturesForm({ flags }: { flags: OrgFeatureFlags }) {
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Apps — on / off</h3>
         <p className="text-xs text-muted-foreground">
-          Turn an app off to hide it from Home and the Apps menu for everyone.
-          Expenses stay inside Purchases — they are not a separate home app.
+          Company apps for this organisation only. Turn an app off to hide it from Home and the
+          Apps menu for everyone here. The ERP system owner can also grant or revoke apps under
+          Databases → Limits — that is separate from this company page.
         </p>
         <div className="grid gap-2 sm:grid-cols-2">
           <Toggle

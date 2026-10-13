@@ -17,6 +17,19 @@ import {
   listGroupOrgIds,
 } from '@/server/services/company-group.service'
 
+/** Needs a real database; skipped when DATABASE_URL is not set. */
+const suite = process.env.DATABASE_URL ? describe : describe.skip
+
+const ALL_APPS = {
+  moduleSales: true,
+  modulePurchases: true,
+  moduleBanking: true,
+  moduleInventory: true,
+  modulePos: true,
+  moduleAccounting: true,
+  moduleReports: true,
+}
+
 const stamp = `grp-${Date.now().toString(36)}`
 const createdIds: string[] = []
 
@@ -67,7 +80,7 @@ async function ownerCtx(): Promise<OrgContext | null> {
   }
 }
 
-describe('company group service', () => {
+suite('company group service', () => {
   afterAll(async () => {
     for (const id of [...createdIds].reverse()) {
       try {
@@ -95,7 +108,7 @@ describe('company group service', () => {
         name: `${stamp}-MAIN`,
         baseCurrency: 'USD',
         fiscalYearStartMonth: 1,
-        seedChart: false,
+        seedChart: false, ...ALL_APPS,
         parentOrgId: null,
       })
       createdIds.push(main.id)
@@ -104,7 +117,7 @@ describe('company group service', () => {
         name: `${stamp}-SUB-A`,
         baseCurrency: 'USD',
         fiscalYearStartMonth: 1,
-        seedChart: false,
+        seedChart: false, ...ALL_APPS,
         parentOrgId: main.id,
       })
       createdIds.push(sub1.id)
@@ -113,7 +126,7 @@ describe('company group service', () => {
         name: `${stamp}-SUB-B`,
         baseCurrency: 'USD',
         fiscalYearStartMonth: 1,
-        seedChart: false,
+        seedChart: false, ...ALL_APPS,
         parentOrgId: main.id,
       })
       createdIds.push(sub2.id)
@@ -130,7 +143,7 @@ describe('company group service', () => {
           name: `${stamp}-SUB-C`,
           baseCurrency: 'USD',
           fiscalYearStartMonth: 1,
-          seedChart: false,
+          seedChart: false, ...ALL_APPS,
           parentOrgId: main.id,
         }),
       ).rejects.toBeInstanceOf(AppError)
@@ -167,7 +180,7 @@ describe('company group service', () => {
       name: `${stamp}-ATTACH-MAIN`,
       baseCurrency: 'USD',
       fiscalYearStartMonth: 1,
-      seedChart: false,
+      seedChart: false, ...ALL_APPS,
     })
     createdIds.push(main.id)
 
@@ -175,7 +188,7 @@ describe('company group service', () => {
       name: `${stamp}-ATTACH-CHILD`,
       baseCurrency: 'USD',
       fiscalYearStartMonth: 1,
-      seedChart: false,
+      seedChart: false, ...ALL_APPS,
     })
     createdIds.push(standalone.id)
 

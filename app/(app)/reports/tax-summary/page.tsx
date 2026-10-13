@@ -1,4 +1,6 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
+import { PercentIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
 import { InteractiveGrid } from '@/components/data/interactive-grid'
@@ -13,6 +15,27 @@ export const metadata: Metadata = { title: 'Sales Tax Liability' }
 
 export default async function TaxSummaryPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const ctx = await requireOrgContext('report:read')
+
+  if (!ctx.features.enableTax) {
+    return (
+      <EmptyState
+        icon={PercentIcon}
+        title="Tax is turned off"
+        description="This company is not using tax, so there is no sales tax liability report. Turn tax on under Settings → Tax."
+        action={
+          ctx.permissions.has('tax:read') || ctx.permissions.has('org:update') ? (
+            <Link
+              href="/settings/tax"
+              className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Open Settings → Tax
+            </Link>
+          ) : undefined
+        }
+      />
+    )
+  }
+
   const query = await searchParams
   const settings = readSettings(query, ctx.organization, 'this-quarter')
   const currency = ctx.organization.baseCurrency

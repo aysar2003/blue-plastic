@@ -1,12 +1,7 @@
-import { Suspense } from 'react'
-
 import { isModuleEnabled } from '@/lib/feature-flags'
 import { ROLE_LABELS } from '@/lib/roles'
 import type { OrgContext } from '@/server/auth/context'
-import { listUserDatabases } from '@/server/services/backup-import.service'
-import { canViewGroupReports } from '@/server/services/company-group.service'
 import { LAUNCHER_APPS } from './launcher-apps'
-import { MonthChartLoader } from './month-chart-loader'
 import { MODULES } from './nav-items'
 import { ShellChrome } from './shell-chrome'
 
@@ -17,6 +12,9 @@ import { ShellChrome } from './shell-chrome'
  *
  * Stock and balance bells stream in via Suspense so page content is not blocked
  * on those queries; each loader is also short-cached per organisation.
+ *
+ * Server data (company list, group-report access, the month chart) is loaded
+ * by the app layout and passed in, so this component never imports server/.
  */
 export async function AppShell({
   ctx,
@@ -24,12 +22,19 @@ export async function AppShell({
   stockAlertsSlot = null,
   balanceAlertsSlot = null,
   calendarAlertsSlot = null,
+  monthChartSlot = null,
+  showCompanyReports = false,
+  databases = [],
 }: {
   ctx: OrgContext
   children: React.ReactNode
   stockAlertsSlot?: React.ReactNode
   balanceAlertsSlot?: React.ReactNode
   calendarAlertsSlot?: React.ReactNode
+  /** Reports-home month chart; the layout only passes it with report:read. */
+  monthChartSlot?: React.ReactNode
+  showCompanyReports?: boolean
+  databases?: { id: string; name: string; isCurrent: boolean }[]
 }) {
   const modules = MODULES.filter(
     (entry) =>
@@ -44,10 +49,6 @@ export async function AppShell({
     (app) => app.key,
   )
   const canSwitch = ctx.isSystemOwner || ctx.canConnect
-  const [showCompanyReports, databases] = await Promise.all([
-    canViewGroupReports(ctx),
-    canSwitch ? listUserDatabases(ctx) : Promise.resolve([]),
-  ])
   const companies = databases.map((row) => ({
     id: row.id,
     name: row.name,
@@ -76,13 +77,7 @@ export async function AppShell({
       stockAlertsSlot={stockAlertsSlot}
       balanceAlertsSlot={balanceAlertsSlot}
       calendarAlertsSlot={calendarAlertsSlot}
-      monthChartSlot={
-        ctx.permissions.has('report:read') ? (
-          <Suspense fallback={null}>
-            <MonthChartLoader ctx={ctx} />
-          </Suspense>
-        ) : null
-      }
+      monthChartSlot={monthChartSlot}
     >
       {children}
     </ShellChrome>
