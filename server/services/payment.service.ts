@@ -15,6 +15,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
+import * as approvalService from '@/server/services/approval.service'
 import { outstandingBalances, refreshStatus } from '@/server/services/sales.service'
 
 const PAYMENT_SELECT = {
@@ -250,6 +251,9 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
     })
     if (clash) throw numberTaken()
 
+    const gate = await approvalService.needsApproval(ctx, 'CUSTOMER_PAYMENT', amount, tx)
+    const holdForApproval = gate.required
+
     const payment = await tx.customerPayment.create({
       data: {
         orgId: ctx.orgId,
@@ -262,27 +266,11 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
         memo: input.memo ?? null,
         depositAccountId: deposit.id,
         currencyCode: ctx.organization.baseCurrency,
+        status: holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         createdById: ctx.userId,
       },
       select: { id: true, number: true },
     })
-
-    const journal = await postJournal(
-      tx,
-      ctx,
-      buildCustomerPaymentJournal({
-        date: input.date,
-        number: payment.number,
-        paymentId: payment.id,
-        customerId: customer.id,
-        amount,
-        depositAccountId: deposit.id,
-        receivableAccountId: await systemAccountId(tx, ctx.orgId, 'ACCOUNTS_RECEIVABLE'),
-        memo: input.memo,
-      }),
-    )
-
-    await tx.customerPayment.update({ where: { id: payment.id }, data: { journalId: journal.id } })
 
     for (const application of applications) {
       await assertInvoiceBelongsToCustomer(tx, ctx, application.invoiceId, customer.id)
@@ -294,7 +282,20 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
           amount: application.amount.toFixed(4),
         },
       })
-      await refreshStatus(tx, application.invoiceId)
+    }
+
+    if (holdForApproval) {
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'CUSTOMER_PAYMENT',
+        entityId: payment.id,
+        title: `Payment ${payment.number}`,
+        href: `/payments/${payment.id}`,
+        amount,
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    } else {
+      await postPayment(tx, ctx, payment.id)
     }
 
     await writeAudit(
@@ -309,6 +310,7 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
           amount: amount.toString(),
           applied: appliedTotal.toString(),
           invoices: applications.length,
+          pendingApproval: holdForApproval,
         },
       },
       meta,
@@ -316,6 +318,53 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
 
     return { id: payment.id, number: payment.number }
   })
+}
+
+/** Post a customer payment that is still waiting for approval (or finish create). */
+export async function postPayment(tx: Tx, ctx: OrgContext, id: string) {
+  const payment = await tx.customerPayment.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      amount: true,
+      memo: true,
+      customerId: true,
+      depositAccountId: true,
+      journalId: true,
+      status: true,
+      applications: { select: { invoiceId: true } },
+    },
+  })
+  if (!payment) throw notFound('Payment')
+  if (payment.journalId) throw precondition(`Payment ${payment.number} is already posted.`)
+
+  const journal = await postJournal(
+    tx,
+    ctx,
+    buildCustomerPaymentJournal({
+      date: toCalendarDate(payment.date),
+      number: payment.number,
+      paymentId: payment.id,
+      customerId: payment.customerId,
+      amount: new Decimal(payment.amount.toString()),
+      depositAccountId: payment.depositAccountId,
+      receivableAccountId: await systemAccountId(tx, ctx.orgId, 'ACCOUNTS_RECEIVABLE'),
+      memo: payment.memo,
+    }),
+  )
+
+  await tx.customerPayment.update({
+    where: { id: payment.id },
+    data: { journalId: journal.id, status: 'OPEN' },
+  })
+
+  for (const application of payment.applications) {
+    await refreshStatus(tx, application.invoiceId)
+  }
+
+  return { id: payment.id, number: payment.number, journalId: journal.id }
 }
 
 /**

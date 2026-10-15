@@ -1,7 +1,7 @@
 import 'server-only'
 import type { Prisma } from '@prisma/client'
 
-import { toDate, today, type CalendarDate } from '@/lib/date'
+import { toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { BillPaymentInput } from '@/lib/validation/purchases'
@@ -14,6 +14,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
+import * as approvalService from '@/server/services/approval.service'
 import { outstandingBalances, refreshStatus } from '@/server/services/purchase.service'
 
 const PAYMENT_SELECT = {
@@ -227,6 +228,9 @@ export async function create(ctx: OrgContext, input: BillPaymentInput) {
     })
     if (clash) throw numberTaken()
 
+    const gate = await approvalService.needsApproval(ctx, 'BILL_PAYMENT', amount, tx)
+    const holdForApproval = gate.required
+
     const payment = await tx.billPayment.create({
       data: {
         orgId: ctx.orgId,
@@ -239,27 +243,11 @@ export async function create(ctx: OrgContext, input: BillPaymentInput) {
         memo: input.memo ?? null,
         paymentAccountId: account.id,
         currencyCode: ctx.organization.baseCurrency,
+        status: holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         createdById: ctx.userId,
       },
       select: { id: true, number: true },
     })
-
-    const journal = await postJournal(
-      tx,
-      ctx,
-      buildBillPaymentJournal({
-        date: input.date,
-        number: payment.number,
-        paymentId: payment.id,
-        vendorId: vendor.id,
-        amount,
-        paymentAccountId: account.id,
-        payableAccountId: await systemAccountId(tx, ctx.orgId, 'ACCOUNTS_PAYABLE'),
-        memo: input.memo,
-      }),
-    )
-
-    await tx.billPayment.update({ where: { id: payment.id }, data: { journalId: journal.id } })
 
     for (const application of applications) {
       await assertBillBelongsToVendor(tx, ctx, application.billId, vendor.id)
@@ -271,7 +259,20 @@ export async function create(ctx: OrgContext, input: BillPaymentInput) {
           amount: application.amount.toFixed(4),
         },
       })
-      await refreshStatus(tx, application.billId)
+    }
+
+    if (holdForApproval) {
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'BILL_PAYMENT',
+        entityId: payment.id,
+        title: `Bill payment ${payment.number}`,
+        href: `/bill-payments?q=${encodeURIComponent(payment.number)}`,
+        amount,
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    } else {
+      await postBillPayment(tx, ctx, payment.id)
     }
 
     await writeAudit(
@@ -281,13 +282,64 @@ export async function create(ctx: OrgContext, input: BillPaymentInput) {
         entity: 'BillPayment',
         entityId: payment.id,
         action: 'CREATE',
-        after: { number: payment.number, amount: amount.toString(), bills: applications.length },
+        after: {
+          number: payment.number,
+          amount: amount.toString(),
+          bills: applications.length,
+          pendingApproval: holdForApproval,
+        },
       },
       meta,
     )
 
     return { id: payment.id, number: payment.number }
   })
+}
+
+/** Post a bill payment that is still waiting for approval (or finish create). */
+export async function postBillPayment(tx: Tx, ctx: OrgContext, id: string) {
+  const payment = await tx.billPayment.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      amount: true,
+      memo: true,
+      vendorId: true,
+      paymentAccountId: true,
+      journalId: true,
+      applications: { select: { billId: true } },
+    },
+  })
+  if (!payment) throw notFound('Bill payment')
+  if (payment.journalId) throw precondition(`Bill payment ${payment.number} is already posted.`)
+
+  const journal = await postJournal(
+    tx,
+    ctx,
+    buildBillPaymentJournal({
+      date: toCalendarDate(payment.date),
+      number: payment.number,
+      paymentId: payment.id,
+      vendorId: payment.vendorId,
+      amount: new Decimal(payment.amount.toString()),
+      paymentAccountId: payment.paymentAccountId,
+      payableAccountId: await systemAccountId(tx, ctx.orgId, 'ACCOUNTS_PAYABLE'),
+      memo: payment.memo,
+    }),
+  )
+
+  await tx.billPayment.update({
+    where: { id: payment.id },
+    data: { journalId: journal.id, status: 'OPEN' },
+  })
+
+  for (const application of payment.applications) {
+    await refreshStatus(tx, application.billId)
+  }
+
+  return { id: payment.id, number: payment.number, journalId: journal.id }
 }
 
 /** Put a vendor credit against one or more bills. Posts nothing: the credit is already in the ledger. */

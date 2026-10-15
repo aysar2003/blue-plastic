@@ -33,6 +33,7 @@ import { db, type Tx } from '@/server/db'
 import type { StockAlertSummary } from '@/lib/stock-alert'
 import { notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
+import * as approvalService from '@/server/services/approval.service'
 
 /** Stock on hand, valued, with reorder flags. */
 export async function stockOnHand(ctx: OrgContext) {
@@ -303,24 +304,21 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
     })
     if (clash) throw numberTaken()
 
-    const adjustment = await tx.inventoryAdjustment.create({
-      data: {
-        orgId: ctx.orgId,
-        number,
-        date: toDate(input.date),
-        accountId: account.id,
-        storeId,
-        memo: input.memo ?? null,
-        reason: input.reason ?? null,
-        createdById: ctx.userId,
-      },
-      select: { id: true, number: true },
-    })
+    type PlannedLine = {
+      itemId: string
+      inventoryAccountId: string
+      counted: Decimal
+      previous: Decimal
+      change: Decimal
+      unitCost: Decimal
+      value: Decimal
+      description: string | null
+      quantityForMove: Decimal
+      valueOverride: Decimal.Value | undefined
+      unitCostForMove: Decimal.Value | undefined
+    }
 
-    const stockLines = new Map<string, Decimal>()
-    let totalValue = ZERO
-    let lineNumber = 0
-
+    const planned: PlannedLine[] = []
     for (const line of input.lines) {
       const item = byId.get(line.itemId)!
       const position = positions.get(line.itemId)!
@@ -335,85 +333,88 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
       if (mode === 'cost' && !entered.isPositive()) continue
       if (mode !== 'cost' && change.isZero()) continue
 
-      const movement = await recordMovement(tx, ctx, {
-        itemId: line.itemId,
-        date: input.date,
-        type: 'ADJUSTMENT',
-        sourceType: 'INVENTORY_ADJUSTMENT',
-        sourceId: adjustment.id,
-        storeId,
-        quantity: mode === 'cost' ? 0 : change,
-        // A count values found stock at the current average. Damage leaves the
-        // value on whatever is still there, so that cost rises. Adding cost
-        // posts the amount onto the item without changing the quantity.
-        unitCost:
-          mode === 'count' && change.isPositive()
-            ? (line.unitCost ?? (position.averageCost.isZero() ? '0' : position.averageCost))
-            : undefined,
-        valueOverride: mode === 'damage' ? 0 : mode === 'cost' ? entered : undefined,
-      })
-
-      await tx.inventoryAdjustmentLine.create({
-        data: {
-          orgId: ctx.orgId,
-          adjustmentId: adjustment.id,
-          lineNumber: ++lineNumber,
-          itemId: line.itemId,
-          countedQuantity: counted.toFixed(4),
-          previousQuantity: previous.toFixed(4),
-          quantityChange: change.toFixed(4),
-          unitCost: movement.unitCost.toFixed(6),
-          value: movement.value.toFixed(4),
-          description: line.description ?? null,
-        },
-      })
-
-      stockLines.set(
-        item.inventoryAccountId!,
-        (stockLines.get(item.inventoryAccountId!) ?? ZERO).plus(movement.value),
+      const unitCostForMove =
+        mode === 'count' && change.isPositive()
+          ? (line.unitCost ?? (position.averageCost.isZero() ? '0' : position.averageCost))
+          : undefined
+      const valueOverride = mode === 'damage' ? 0 : mode === 'cost' ? entered : undefined
+      const unitCost = new Decimal(
+        unitCostForMove ?? (position.averageCost.isZero() ? '0' : position.averageCost.toString()),
       )
-      totalValue = totalValue.plus(movement.value)
+      const quantityForMove = mode === 'cost' ? ZERO : change
+      const value =
+        valueOverride !== undefined
+          ? new Decimal(valueOverride)
+          : quantityForMove.times(unitCost)
+
+      planned.push({
+        itemId: line.itemId,
+        inventoryAccountId: item.inventoryAccountId!,
+        counted,
+        previous,
+        change,
+        unitCost,
+        value,
+        description: line.description ?? null,
+        quantityForMove,
+        valueOverride,
+        unitCostForMove,
+      })
     }
 
-    if (lineNumber === 0) {
+    if (planned.length === 0) {
       throw validation('Nothing has changed — every count matches what the books already say.')
     }
 
-    // Stock up means the asset rises and the difference is a credit to shrinkage
-    // (a recovery); stock down means the asset falls and shrinkage is charged.
-    const lines: DraftLine[] = []
-    for (const [inventoryAccountId, value] of stockLines) {
-      if (value.isZero()) continue
-      lines.push(
-        value.isPositive()
-          ? { accountId: inventoryAccountId, debit: value, description: 'Stock adjustment' }
-          : { accountId: inventoryAccountId, credit: value.abs(), description: 'Stock adjustment' },
-      )
-    }
-    if (!totalValue.isZero()) {
-      lines.push(
-        totalValue.isPositive()
-          ? { accountId: account.id, credit: totalValue, description: input.reason ?? 'Stock adjustment' }
-          : { accountId: account.id, debit: totalValue.abs(), description: input.reason ?? 'Stock adjustment' },
-      )
-    }
+    const totalValue = planned.reduce((sum, line) => sum.plus(line.value), ZERO)
+    const gate = await approvalService.needsApproval(ctx, 'INVENTORY_ADJUSTMENT', totalValue.abs(), tx)
+    const holdForApproval = gate.required
 
-    if (lines.length >= 2) {
-      const journal = await postJournal(tx, ctx, {
+    const adjustment = await tx.inventoryAdjustment.create({
+      data: {
+        orgId: ctx.orgId,
+        number,
+        date: toDate(input.date),
+        accountId: account.id,
+        storeId,
+        memo: input.memo ?? null,
+        reason: input.reason ?? null,
+        status: holdForApproval ? 'PENDING_APPROVAL' : 'POSTED',
+        createdById: ctx.userId,
+        lines: {
+          create: planned.map((line, index) => ({
+            orgId: ctx.orgId,
+            lineNumber: index + 1,
+            itemId: line.itemId,
+            countedQuantity: line.counted.toFixed(4),
+            previousQuantity: line.previous.toFixed(4),
+            quantityChange: line.change.toFixed(4),
+            unitCost: line.unitCost.toFixed(6),
+            value: line.value.toFixed(4),
+            description: line.description,
+          })),
+        },
+      },
+      select: { id: true, number: true },
+    })
+
+    if (holdForApproval) {
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'INVENTORY_ADJUSTMENT',
+        entityId: adjustment.id,
+        title: `Stock adjustment ${adjustment.number}`,
+        href: '/inventory#adjustments',
+        amount: totalValue.abs(),
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    } else {
+      await postAdjustment(tx, ctx, adjustment.id, {
+        mode,
+        planned,
+        reason: input.reason ?? null,
         date: input.date,
-        memo: `Stock adjustment ${adjustment.number}${input.reason ? ` — ${input.reason}` : ''}`,
-        sourceType: 'INVENTORY_ADJUSTMENT',
-        sourceId: adjustment.id,
-        lines,
-      })
-
-      await tx.inventoryAdjustment.update({
-        where: { id: adjustment.id },
-        data: { journalId: journal.id },
-      })
-      await tx.inventoryTransaction.updateMany({
-        where: { orgId: ctx.orgId, sourceId: adjustment.id, journalId: null },
-        data: { journalId: journal.id },
+        accountId: account.id,
       })
     }
 
@@ -424,7 +425,12 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
         entity: 'InventoryAdjustment',
         entityId: adjustment.id,
         action: 'CREATE',
-        after: { number: adjustment.number, lines: lineNumber, value: totalValue.toString() },
+        after: {
+          number: adjustment.number,
+          lines: planned.length,
+          value: totalValue.toString(),
+          pendingApproval: holdForApproval,
+        },
       },
       meta,
     )
@@ -433,15 +439,148 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
   })
 }
 
-/**
- * Void a stock adjustment.
- *
- * A count entered against the wrong item is the commonest mistake in stock
- * keeping, and until now there was no way back from it. Voiding reverses the
- * journal and puts the stock back exactly as it was — the movements are undone
- * by their opposites rather than deleted, so the register still reads as "this
- * was counted, then it was undone", which is what an auditor needs to see.
- */
+type AdjustmentPlannedLine = {
+  itemId: string
+  inventoryAccountId: string
+  change: Decimal
+  value: Decimal
+  quantityForMove: Decimal
+  valueOverride: Decimal.Value | undefined
+  unitCostForMove: Decimal.Value | undefined
+}
+
+/** Move stock and post the journal for an adjustment waiting on approval. */
+export async function postAdjustment(
+  tx: Tx,
+  ctx: OrgContext,
+  id: string,
+  precomputed?: {
+    mode: 'count' | 'damage' | 'cost'
+    planned: AdjustmentPlannedLine[]
+    reason: string | null
+    date: CalendarDate
+    accountId: string
+  },
+) {
+  const adjustment = await tx.inventoryAdjustment.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      reason: true,
+      accountId: true,
+      storeId: true,
+      journalId: true,
+      status: true,
+      lines: {
+        orderBy: { lineNumber: 'asc' },
+        select: {
+          itemId: true,
+          quantityChange: true,
+          unitCost: true,
+          value: true,
+          item: { select: { inventoryAccountId: true } },
+        },
+      },
+    },
+  })
+  if (!adjustment) throw notFound('Adjustment')
+  if (adjustment.journalId) throw precondition(`Adjustment ${adjustment.number} is already posted.`)
+
+  const date = precomputed?.date ?? toCalendarDate(adjustment.date)
+  const reason = precomputed?.reason ?? adjustment.reason
+  const accountId = precomputed?.accountId ?? adjustment.accountId
+  const storeId = adjustment.storeId
+
+  const planned: AdjustmentPlannedLine[] =
+    precomputed?.planned ??
+    adjustment.lines.map((line) => ({
+      itemId: line.itemId,
+      inventoryAccountId: line.item.inventoryAccountId!,
+      change: new Decimal(line.quantityChange.toString()),
+      value: new Decimal(line.value.toString()),
+      quantityForMove: new Decimal(line.quantityChange.toString()),
+      valueOverride: undefined,
+      unitCostForMove: line.unitCost.toString(),
+    }))
+
+  const stockLines = new Map<string, Decimal>()
+  let totalValue = ZERO
+
+  for (const line of planned) {
+    const movement = await recordMovement(tx, ctx, {
+      itemId: line.itemId,
+      date,
+      type: 'ADJUSTMENT',
+      sourceType: 'INVENTORY_ADJUSTMENT',
+      sourceId: adjustment.id,
+      storeId,
+      quantity: line.quantityForMove,
+      unitCost: line.unitCostForMove,
+      valueOverride: line.valueOverride,
+    })
+
+    stockLines.set(
+      line.inventoryAccountId,
+      (stockLines.get(line.inventoryAccountId) ?? ZERO).plus(movement.value),
+    )
+    totalValue = totalValue.plus(movement.value)
+
+    // Keep stored line value in sync with the movement that actually posted.
+    await tx.inventoryAdjustmentLine.updateMany({
+      where: { adjustmentId: adjustment.id, itemId: line.itemId, orgId: ctx.orgId },
+      data: {
+        unitCost: movement.unitCost.toFixed(6),
+        value: movement.value.toFixed(4),
+      },
+    })
+  }
+
+  const journalLines: DraftLine[] = []
+  for (const [inventoryAccountId, value] of stockLines) {
+    if (value.isZero()) continue
+    journalLines.push(
+      value.isPositive()
+        ? { accountId: inventoryAccountId, debit: value, description: 'Stock adjustment' }
+        : { accountId: inventoryAccountId, credit: value.abs(), description: 'Stock adjustment' },
+    )
+  }
+  if (!totalValue.isZero()) {
+    journalLines.push(
+      totalValue.isPositive()
+        ? { accountId, credit: totalValue, description: reason ?? 'Stock adjustment' }
+        : { accountId, debit: totalValue.abs(), description: reason ?? 'Stock adjustment' },
+    )
+  }
+
+  if (journalLines.length >= 2) {
+    const journal = await postJournal(tx, ctx, {
+      date,
+      memo: `Stock adjustment ${adjustment.number}${reason ? ` — ${reason}` : ''}`,
+      sourceType: 'INVENTORY_ADJUSTMENT',
+      sourceId: adjustment.id,
+      lines: journalLines,
+    })
+
+    await tx.inventoryAdjustment.update({
+      where: { id: adjustment.id },
+      data: { journalId: journal.id, status: 'POSTED' },
+    })
+    await tx.inventoryTransaction.updateMany({
+      where: { orgId: ctx.orgId, sourceId: adjustment.id, journalId: null },
+      data: { journalId: journal.id },
+    })
+  } else {
+    await tx.inventoryAdjustment.update({
+      where: { id: adjustment.id },
+      data: { status: 'POSTED' },
+    })
+  }
+
+  return { id: adjustment.id, number: adjustment.number }
+}
+
 /**
  * Delete a stock adjustment.
  *

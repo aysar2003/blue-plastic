@@ -2,15 +2,16 @@ import 'server-only'
 import type { JournalSourceType, Prisma } from '@prisma/client'
 
 import { isCalendarDate, toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
-import { Decimal, parseMoneyInput, toMoneyString } from '@/lib/money'
+import { Decimal, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { ManualJournalInput } from '@/lib/validation/accounting'
 import { partyRequiredBy } from '@/lib/account-options'
 import { deleteJournals, restoreJournals } from '@/server/accounting/deletion'
-import { postJournal, reverseJournal } from '@/server/accounting/posting'
+import { postJournal, promoteDraftJournal, reverseJournal } from '@/server/accounting/posting'
 import type { OrgContext } from '@/server/auth/context'
-import { db } from '@/server/db'
+import { db, type Tx } from '@/server/db'
 import { notFound, validation } from '@/server/errors'
+import * as approvalService from '@/server/services/approval.service'
 import * as assemblyBuildService from '@/server/services/assembly-build.service'
 import * as bankingService from '@/server/services/banking.service'
 import * as billPaymentService from '@/server/services/bill-payment.service'
@@ -507,23 +508,52 @@ export async function createManual(ctx: OrgContext, input: ManualJournalInput) {
 
   await assertPartiesExist(ctx, lines)
 
-  return db.$transaction((tx) =>
-    postJournal(tx, ctx, {
+  const draftLines = lines.map((line) => ({
+    accountId: line.accountId,
+    debit: line.debit === '' ? 0 : line.debit,
+    credit: line.credit === '' ? 0 : line.credit,
+    description: line.description,
+    customerId: line.customerId,
+    vendorId: line.vendorId,
+  }))
+  const total = draftLines.reduce((sum, line) => {
+    const debit = line.debit === '' || line.debit === 0 ? ZERO : new Decimal(line.debit)
+    return sum.plus(debit)
+  }, ZERO)
+
+  return db.$transaction(async (tx) => {
+    const gate = await approvalService.needsApproval(ctx, 'JOURNAL', total, tx)
+    const holdForApproval = gate.required
+
+    const journal = await postJournal(tx, ctx, {
       date: input.date,
       memo: input.memo,
       journalNumber: input.number,
       sourceType: 'MANUAL',
       isAdjusting: input.isAdjusting,
-      lines: lines.map((line) => ({
-        accountId: line.accountId,
-        debit: line.debit === '' ? 0 : line.debit,
-        credit: line.credit === '' ? 0 : line.credit,
-        description: line.description,
-        customerId: line.customerId,
-        vendorId: line.vendorId,
-      })),
-    }),
-  )
+      asDraft: holdForApproval,
+      lines: draftLines,
+    })
+
+    if (holdForApproval) {
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'JOURNAL',
+        entityId: journal.id,
+        title: `Journal ${journal.journalNumber}`,
+        href: `/journals/${journal.id}`,
+        amount: total,
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    }
+
+    return journal
+  })
+}
+
+/** Promote a draft manual journal onto the ledger after approval. */
+export async function promoteApprovedManual(tx: Tx, ctx: OrgContext, id: string) {
+  return promoteDraftJournal(tx, ctx, id)
 }
 
 /** A named party has to be one of this organisation's, not merely a valid id. */

@@ -33,6 +33,13 @@ export const decideApproval = action
     revalidatePath('/approvals')
     revalidatePath('/sales', 'layout')
     revalidatePath('/purchases', 'layout')
+    revalidatePath('/payments', 'layout')
+    revalidatePath('/bill-payments', 'layout')
+    revalidatePath('/banking', 'layout')
+    revalidatePath('/journals', 'layout')
+    revalidatePath('/inventory', 'layout')
+    revalidatePath('/customers', 'layout')
+    revalidatePath('/vendors', 'layout')
     return result
   })
 

@@ -4,16 +4,17 @@ import { unstable_cache } from 'next/cache'
 import type { Prisma } from '@prisma/client'
 
 import { balanceAlertKind, balanceMoment, type BalanceAlert } from '@/lib/balance-alert'
-import { Decimal, formatMoney, toMoneyString } from '@/lib/money'
+import { Decimal, formatMoney, toMoneyString, ZERO } from '@/lib/money'
 import { formatDate, toCalendarDate, toDate, today } from '@/lib/date'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { CustomerInput, VendorInput } from '@/lib/validation/master-data'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
-import { postJournal } from '@/server/accounting/posting'
+import { postJournal, promoteDraftJournal } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
+import * as approvalService from '@/server/services/approval.service'
 
 /**
  * Customers and vendors are the same shape with opposite signs: one owes the
@@ -341,7 +342,25 @@ export async function createCustomer(ctx: OrgContext, input: CustomerInput) {
       meta,
     )
 
-    await postOpeningBalance(tx, ctx, 'customer', customer.id, customer.displayName, input)
+    const opening = input.openingBalance ? new Decimal(input.openingBalance).abs() : ZERO
+    const gate =
+      opening.greaterThan(0)
+        ? await approvalService.needsApproval(ctx, 'CUSTOMER', opening, tx)
+        : { required: false, levels: 1 }
+    await postOpeningBalance(tx, ctx, 'customer', customer.id, customer.displayName, input, {
+      asDraft: gate.required,
+    })
+    if (gate.required) {
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'CUSTOMER',
+        entityId: customer.id,
+        title: `Customer ${customer.displayName}`,
+        href: `/customers?id=${customer.id}`,
+        amount: opening,
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    }
     return customer
   })
 }
@@ -368,9 +387,51 @@ export async function createVendor(ctx: OrgContext, input: VendorInput) {
       meta,
     )
 
-    await postOpeningBalance(tx, ctx, 'vendor', vendor.id, vendor.displayName, input)
+    const opening = input.openingBalance ? new Decimal(input.openingBalance).abs() : ZERO
+    const gate =
+      opening.greaterThan(0)
+        ? await approvalService.needsApproval(ctx, 'VENDOR', opening, tx)
+        : { required: false, levels: 1 }
+    await postOpeningBalance(tx, ctx, 'vendor', vendor.id, vendor.displayName, input, {
+      asDraft: gate.required,
+    })
+    if (gate.required) {
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'VENDOR',
+        entityId: vendor.id,
+        title: `Vendor ${vendor.displayName}`,
+        href: `/vendors/${vendor.id}`,
+        amount: opening,
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    }
     return vendor
   })
+}
+
+/** Promote a draft opening-balance journal for a customer or vendor after approval. */
+export async function postOpeningBalanceApproval(
+  tx: Tx,
+  ctx: OrgContext,
+  side: Side,
+  id: string,
+) {
+  const journal = await tx.journal.findFirst({
+    where: {
+      orgId: ctx.orgId,
+      sourceType: 'OPENING_BALANCE',
+      sourceId: id,
+      status: 'DRAFT',
+    },
+    select: { id: true },
+  })
+  if (!journal) {
+    // No draft opening balance — contact was approved with nothing to post.
+    return { id, side }
+  }
+  await promoteDraftJournal(tx, ctx, journal.id)
+  return { id, side, journalId: journal.id }
 }
 
 export async function updateCustomer(ctx: OrgContext, input: CustomerInput & { id: string }) {
@@ -531,10 +592,11 @@ async function postOpeningBalance(
   id: string,
   name: string,
   input: { openingBalance?: string | null; openingBalanceDate?: string | null; balanceTime?: string | null },
+  options?: { asDraft?: boolean },
 ) {
-  if (!input.openingBalance) return
+  if (!input.openingBalance) return null
   const signed = new Decimal(input.openingBalance)
-  if (signed.isZero()) return
+  if (signed.isZero()) return null
 
   const amount = signed.abs()
   const isCredit = signed.isNegative()
@@ -570,11 +632,12 @@ async function postOpeningBalance(
             { accountId: control, credit: amount, vendorId: id },
           ]
 
-  await postJournal(tx, ctx, {
+  return postJournal(tx, ctx, {
     date,
     memo,
     sourceType: 'OPENING_BALANCE',
     sourceId: id,
+    asDraft: options?.asDraft,
     lines,
   })
 }

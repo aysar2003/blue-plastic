@@ -344,6 +344,10 @@ enum InventoryMovementType {
 }
 
 enum BankDocumentStatus {
+  /// Waiting for maker-checker approval; not on the ledger yet.
+  PENDING_APPROVAL
+  /// Rejected back to an editable unposted state.
+  DRAFT
   POSTED
   VOID
 }

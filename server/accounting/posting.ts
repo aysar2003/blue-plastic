@@ -36,6 +36,11 @@ export type DraftJournal = {
   reversalReason?: string | null
   /** Set only when someone typed the entry number. Other postings take the next one. */
   journalNumber?: string | null
+  /**
+   * Maker-checker: write a draft journal that does not affect balances until
+   * `promoteDraftJournal` flips it to POSTED.
+   */
+  asDraft?: boolean
   lines: DraftLine[]
 }
 
@@ -160,7 +165,7 @@ export async function postJournal(
       memo: draft.memo ?? null,
       sourceType: draft.sourceType,
       sourceId: draft.sourceId ?? null,
-      status: 'POSTED',
+      status: draft.asDraft ? 'DRAFT' : 'POSTED',
       isAdjusting: draft.isAdjusting ?? false,
       isClosingEntry: draft.isClosingEntry ?? false,
       reversalOfId: draft.reversalOfId ?? null,
@@ -191,17 +196,56 @@ export async function postJournal(
   await writeAudit(tx, ctx, {
     entity: 'Journal',
     entityId: journal.id,
-    action: 'POST',
+    action: draft.asDraft ? 'SUBMIT' : 'POST',
     after: {
       journalNumber: journal.journalNumber,
       date: draft.date,
       sourceType: draft.sourceType,
       total: toMoneyString(debits, 2),
       lines: rounded.length,
+      draft: draft.asDraft ?? false,
     },
   })
 
   return { ...journal, total: toMoneyString(debits, 2) }
+}
+
+/**
+ * Flip a maker-checker draft journal onto the ledger. Reports and balances only
+ * read POSTED entries, so this is the moment the entry becomes real.
+ */
+export async function promoteDraftJournal(
+  tx: Tx,
+  ctx: OrgContext,
+  journalId: string,
+): Promise<PostedJournal> {
+  const journal = await tx.journal.findFirst({
+    where: { id: journalId, orgId: ctx.orgId },
+    select: { id: true, journalNumber: true, date: true, periodId: true, status: true },
+  })
+  if (!journal) throw notFound('Journal')
+  if (journal.status === 'POSTED') {
+    const total = await journalTotal(tx, journal.id)
+    return { ...journal, total }
+  }
+  if (journal.status !== 'DRAFT') {
+    throw precondition(`Journal ${journal.journalNumber} is not waiting to be posted.`)
+  }
+
+  await tx.journal.update({
+    where: { id: journal.id },
+    data: { status: 'POSTED', postedAt: new Date() },
+  })
+
+  const total = await journalTotal(tx, journal.id)
+  await writeAudit(tx, ctx, {
+    entity: 'Journal',
+    entityId: journal.id,
+    action: 'POST',
+    after: { journalNumber: journal.journalNumber, promotedFromDraft: true, total },
+  })
+
+  return { ...journal, total }
 }
 
 /**

@@ -452,6 +452,59 @@ async function revertEntityToDraft(
       where: { id: entityId, orgId: ctx.orgId, status: 'PENDING_APPROVAL' },
       data: { status: 'DRAFT' },
     })
+    return
+  }
+  if (entityType === 'CUSTOMER_PAYMENT') {
+    await tx.customerPayment.updateMany({
+      where: { id: entityId, orgId: ctx.orgId, status: 'PENDING_APPROVAL' },
+      data: { status: 'DRAFT' },
+    })
+    return
+  }
+  if (entityType === 'BILL_PAYMENT') {
+    await tx.billPayment.updateMany({
+      where: { id: entityId, orgId: ctx.orgId, status: 'PENDING_APPROVAL' },
+      data: { status: 'DRAFT' },
+    })
+    return
+  }
+  if (entityType === 'BANK_TRANSFER') {
+    await tx.bankTransfer.updateMany({
+      where: { id: entityId, orgId: ctx.orgId, status: 'PENDING_APPROVAL' },
+      data: { status: 'DRAFT' },
+    })
+    return
+  }
+  if (entityType === 'DEPOSIT') {
+    await tx.deposit.updateMany({
+      where: { id: entityId, orgId: ctx.orgId, status: 'PENDING_APPROVAL' },
+      data: { status: 'DRAFT' },
+    })
+    return
+  }
+  if (entityType === 'INVENTORY_ADJUSTMENT') {
+    await tx.inventoryAdjustment.updateMany({
+      where: { id: entityId, orgId: ctx.orgId, status: 'PENDING_APPROVAL' },
+      data: { status: 'DRAFT' },
+    })
+    return
+  }
+  if (entityType === 'JOURNAL') {
+    // Draft journals may be deleted outright — they never hit balances.
+    await tx.journal.deleteMany({
+      where: { id: entityId, orgId: ctx.orgId, status: 'DRAFT', sourceType: 'MANUAL' },
+    })
+    return
+  }
+  if (entityType === 'CUSTOMER' || entityType === 'VENDOR') {
+    await tx.journal.deleteMany({
+      where: {
+        orgId: ctx.orgId,
+        sourceType: 'OPENING_BALANCE',
+        sourceId: entityId,
+        status: 'DRAFT',
+      },
+    })
   }
 }
 
@@ -469,6 +522,46 @@ async function postApprovedEntity(
   if (entityType === 'PURCHASE_DOCUMENT') {
     const purchases = await import('@/server/services/purchase.service')
     await purchases.postDocument(tx, ctx, entityId)
+    return
+  }
+  if (entityType === 'CUSTOMER_PAYMENT') {
+    const payments = await import('@/server/services/payment.service')
+    await payments.postPayment(tx, ctx, entityId)
+    return
+  }
+  if (entityType === 'BILL_PAYMENT') {
+    const billPayments = await import('@/server/services/bill-payment.service')
+    await billPayments.postBillPayment(tx, ctx, entityId)
+    return
+  }
+  if (entityType === 'BANK_TRANSFER') {
+    const banking = await import('@/server/services/banking.service')
+    await banking.postTransfer(tx, ctx, entityId)
+    return
+  }
+  if (entityType === 'DEPOSIT') {
+    const banking = await import('@/server/services/banking.service')
+    await banking.postDeposit(tx, ctx, entityId)
+    return
+  }
+  if (entityType === 'INVENTORY_ADJUSTMENT') {
+    const inventory = await import('@/server/services/inventory.service')
+    await inventory.postAdjustment(tx, ctx, entityId)
+    return
+  }
+  if (entityType === 'JOURNAL') {
+    const journals = await import('@/server/services/journal.service')
+    await journals.promoteApprovedManual(tx, ctx, entityId)
+    return
+  }
+  if (entityType === 'CUSTOMER') {
+    const contacts = await import('@/server/services/contact.service')
+    await contacts.postOpeningBalanceApproval(tx, ctx, 'customer', entityId)
+    return
+  }
+  if (entityType === 'VENDOR') {
+    const contacts = await import('@/server/services/contact.service')
+    await contacts.postOpeningBalanceApproval(tx, ctx, 'vendor', entityId)
   }
 }
 

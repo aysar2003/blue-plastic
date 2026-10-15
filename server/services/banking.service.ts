@@ -15,6 +15,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
+import * as approvalService from '@/server/services/approval.service'
 
 /** Accounts a bank register can be opened on. */
 export async function bankAccounts(ctx: OrgContext) {
@@ -111,6 +112,9 @@ export async function createTransfer(ctx: OrgContext, input: TransferInput) {
     if (transferClash) throw numberTaken()
     const amount = new Decimal(input.amount)
 
+    const gate = await approvalService.needsApproval(ctx, 'BANK_TRANSFER', amount, tx)
+    const holdForApproval = gate.required
+
     const transfer = await tx.bankTransfer.create({
       data: {
         orgId: ctx.orgId,
@@ -122,26 +126,25 @@ export async function createTransfer(ctx: OrgContext, input: TransferInput) {
         memo: input.memo ?? null,
         reference: input.reference ?? null,
         currencyCode: ctx.organization.baseCurrency,
+        status: holdForApproval ? 'PENDING_APPROVAL' : 'POSTED',
         createdById: ctx.userId,
       },
       select: { id: true, number: true },
     })
 
-    const journal = await postJournal(
-      tx,
-      ctx,
-      buildTransferJournal({
-        date: input.date,
-        number: transfer.number,
-        transferId: transfer.id,
-        fromAccountId: from.id,
-        toAccountId: to.id,
+    if (holdForApproval) {
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'BANK_TRANSFER',
+        entityId: transfer.id,
+        title: `Transfer ${transfer.number}`,
+        href: '/banking#transfers',
         amount,
-        memo: input.memo,
-      }),
-    )
-
-    await tx.bankTransfer.update({ where: { id: transfer.id }, data: { journalId: journal.id } })
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    } else {
+      await postTransfer(tx, ctx, transfer.id)
+    }
 
     await writeAudit(
       tx,
@@ -150,13 +153,58 @@ export async function createTransfer(ctx: OrgContext, input: TransferInput) {
         entity: 'BankTransfer',
         entityId: transfer.id,
         action: 'CREATE',
-        after: { number: transfer.number, amount: amount.toString(), from: from.name, to: to.name },
+        after: {
+          number: transfer.number,
+          amount: amount.toString(),
+          from: from.name,
+          to: to.name,
+          pendingApproval: holdForApproval,
+        },
       },
       meta,
     )
 
     return { id: transfer.id, number: transfer.number }
   })
+}
+
+export async function postTransfer(tx: Tx, ctx: OrgContext, id: string) {
+  const transfer = await tx.bankTransfer.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      amount: true,
+      memo: true,
+      fromAccountId: true,
+      toAccountId: true,
+      journalId: true,
+    },
+  })
+  if (!transfer) throw notFound('Transfer')
+  if (transfer.journalId) throw precondition(`Transfer ${transfer.number} is already posted.`)
+
+  const journal = await postJournal(
+    tx,
+    ctx,
+    buildTransferJournal({
+      date: toCalendarDate(transfer.date),
+      number: transfer.number,
+      transferId: transfer.id,
+      fromAccountId: transfer.fromAccountId,
+      toAccountId: transfer.toAccountId,
+      amount: new Decimal(transfer.amount.toString()),
+      memo: transfer.memo,
+    }),
+  )
+
+  await tx.bankTransfer.update({
+    where: { id: transfer.id },
+    data: { journalId: journal.id, status: 'POSTED' },
+  })
+
+  return { id: transfer.id, number: transfer.number, journalId: journal.id }
 }
 
 /* --- Deposits ------------------------------------------------------------- */
@@ -169,7 +217,7 @@ export async function undepositedPayments(ctx: OrgContext) {
     where: {
       orgId: ctx.orgId,
       depositAccountId: undeposited,
-      status: { not: 'VOID' },
+      status: { notIn: ['VOID', 'DRAFT', 'PENDING_APPROVAL'] },
       // A payment already on a paying-in slip is not waiting for one.
       depositLines: { none: {} },
     },
@@ -227,8 +275,8 @@ export async function createDeposit(ctx: OrgContext, input: DepositInput) {
     if (payments.length !== input.paymentIds.length) throw notFound('Payment')
 
     for (const payment of payments) {
-      if (payment.status === 'VOID') {
-        throw precondition(`Payment ${payment.number} is void and cannot be banked.`)
+      if (payment.status === 'VOID' || payment.status === 'DRAFT' || payment.status === 'PENDING_APPROVAL') {
+        throw precondition(`Payment ${payment.number} is not posted and cannot be banked.`)
       }
       if (payment.depositAccountId !== undeposited) {
         throw validation(
@@ -256,6 +304,9 @@ export async function createDeposit(ctx: OrgContext, input: DepositInput) {
     if (depositClash) throw numberTaken()
     let lineNumber = 0
 
+    const gate = await approvalService.needsApproval(ctx, 'DEPOSIT', total, tx)
+    const holdForApproval = gate.required
+
     const deposit = await tx.deposit.create({
       data: {
         orgId: ctx.orgId,
@@ -266,6 +317,7 @@ export async function createDeposit(ctx: OrgContext, input: DepositInput) {
         memo: input.memo ?? null,
         reference: input.reference ?? null,
         currencyCode: ctx.organization.baseCurrency,
+        status: holdForApproval ? 'PENDING_APPROVAL' : 'POSTED',
         createdById: ctx.userId,
         lines: {
           create: [
@@ -289,30 +341,19 @@ export async function createDeposit(ctx: OrgContext, input: DepositInput) {
       select: { id: true, number: true },
     })
 
-    const journal = await postJournal(
-      tx,
-      ctx,
-      buildDepositJournal({
-        date: input.date,
-        number: deposit.number,
-        depositId: deposit.id,
-        bankAccountId: bank.id,
-        memo: input.memo,
-        lines: [
-          // Everything banked out of Undeposited Funds clears that account.
-          ...(paymentTotal.isZero()
-            ? []
-            : [{ accountId: undeposited, amount: paymentTotal, description: 'Payments banked' }]),
-          ...input.otherLines.map((line) => ({
-            accountId: line.accountId,
-            amount: line.amount,
-            description: line.description ?? null,
-          })),
-        ],
-      }),
-    )
-
-    await tx.deposit.update({ where: { id: deposit.id }, data: { journalId: journal.id } })
+    if (holdForApproval) {
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'DEPOSIT',
+        entityId: deposit.id,
+        title: `Deposit ${deposit.number}`,
+        href: '/banking#deposits',
+        amount: total,
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    } else {
+      await postDeposit(tx, ctx, deposit.id)
+    }
 
     await writeAudit(
       tx,
@@ -321,13 +362,78 @@ export async function createDeposit(ctx: OrgContext, input: DepositInput) {
         entity: 'Deposit',
         entityId: deposit.id,
         action: 'CREATE',
-        after: { number: deposit.number, total: total.toString(), payments: payments.length },
+        after: {
+          number: deposit.number,
+          total: total.toString(),
+          payments: payments.length,
+          pendingApproval: holdForApproval,
+        },
       },
       meta,
     )
 
     return { id: deposit.id, number: deposit.number }
   })
+}
+
+export async function postDeposit(tx: Tx, ctx: OrgContext, id: string) {
+  const deposit = await tx.deposit.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      memo: true,
+      bankAccountId: true,
+      journalId: true,
+      lines: {
+        orderBy: { lineNumber: 'asc' },
+        select: {
+          amount: true,
+          description: true,
+          accountId: true,
+          customerPaymentId: true,
+        },
+      },
+    },
+  })
+  if (!deposit) throw notFound('Deposit')
+  if (deposit.journalId) throw precondition(`Deposit ${deposit.number} is already posted.`)
+
+  const undeposited = await systemAccountId(tx, ctx.orgId, 'UNDEPOSITED_FUNDS')
+  const paymentTotal = deposit.lines
+    .filter((line) => line.customerPaymentId)
+    .reduce((sum, line) => sum.plus(line.amount.toString()), ZERO)
+  const otherLines = deposit.lines.filter((line) => line.accountId)
+
+  const journal = await postJournal(
+    tx,
+    ctx,
+    buildDepositJournal({
+      date: toCalendarDate(deposit.date),
+      number: deposit.number,
+      depositId: deposit.id,
+      bankAccountId: deposit.bankAccountId,
+      memo: deposit.memo,
+      lines: [
+        ...(paymentTotal.isZero()
+          ? []
+          : [{ accountId: undeposited, amount: paymentTotal, description: 'Payments banked' }]),
+        ...otherLines.map((line) => ({
+          accountId: line.accountId!,
+          amount: line.amount.toString(),
+          description: line.description ?? null,
+        })),
+      ],
+    }),
+  )
+
+  await tx.deposit.update({
+    where: { id: deposit.id },
+    data: { journalId: journal.id, status: 'POSTED' },
+  })
+
+  return { id: deposit.id, number: deposit.number, journalId: journal.id }
 }
 
 /* --- Deleting ------------------------------------------------------------- */
