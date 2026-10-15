@@ -8,7 +8,7 @@ import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { DepositInput, TransferInput } from '@/lib/validation/banking'
 import { buildDepositJournal, buildTransferJournal } from '@/server/accounting/builders/banking'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
-import { softDeleteDocument } from '@/server/accounting/deletion'
+import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
 import { postJournal } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
@@ -340,6 +340,21 @@ export async function removeDeposit(ctx: OrgContext, id: string, reason?: string
   return removeBankDocument(ctx, 'Deposit', id, reason)
 }
 
+export async function restoreTransfer(ctx: OrgContext, id: string) {
+  return restoreBankDocument(ctx, 'BankTransfer', id)
+}
+
+/**
+ * Deposit lines are removed on delete so payments can sit undeposited again.
+ * Those links are not kept, so a deposit cannot be restored without inventing
+ * which payments it banked.
+ */
+export async function restoreDeposit(_ctx: OrgContext, _id: string): Promise<never> {
+  throw precondition(
+    'A deleted deposit cannot be restored — the payments it banked were released and are no longer linked. Enter a new deposit from undeposited funds instead.',
+  )
+}
+
 /**
  * Delete a deposit inside somebody else's transaction.
  *
@@ -428,6 +443,42 @@ async function removeBankDocumentWithin(
       before: { status: document.status },
     })
   }
+}
+
+async function restoreBankDocument(
+  ctx: OrgContext,
+  entity: 'BankTransfer' | 'Deposit',
+  id: string,
+) {
+  return db.$transaction(async (tx) => {
+    const document =
+      entity === 'BankTransfer'
+        ? await tx.bankTransfer.findFirst({
+            where: { id, orgId: ctx.orgId, deletedAt: undefined },
+            select: { id: true, number: true, journalId: true, deletedAt: true },
+          })
+        : await tx.deposit.findFirst({
+            where: { id, orgId: ctx.orgId, deletedAt: undefined },
+            select: { id: true, number: true, journalId: true, deletedAt: true },
+          })
+
+    if (!document) throw notFound(entity === 'BankTransfer' ? 'Transfer' : 'Deposit')
+    const href = '/banking/accounts'
+    if (!document.deletedAt) return { id, number: document.number, href }
+
+    await restoreSoftDeletedDocument(tx, ctx, {
+      clear: () =>
+        entity === 'BankTransfer'
+          ? tx.bankTransfer.update({ where: { id }, data: CLEAR_DELETION })
+          : tx.deposit.update({ where: { id }, data: CLEAR_DELETION }),
+      entity,
+      id,
+      number: document.number,
+      journalIds: [document.journalId],
+    })
+
+    return { id, number: document.number, href }
+  })
 }
 
 /**

@@ -95,8 +95,8 @@ CREATE CONSTRAINT TRIGGER trg_journal_balanced
 -- The history of what was once posted survives in full, which is the whole
 -- reason the physical row is kept. The deletion stamp must be set in the same
 -- statement, so an entry can never be marked deleted without saying when and by
--- whom -- and the reverse transition does not exist: an entry cannot be
--- un-deleted by an UPDATE any more than it could be edited.
+-- whom. Trash restore is the one reverse transition: DELETED back to POSTED or
+-- REVERSED, only when the stamp is cleared and nothing else about the row moves.
 CREATE OR REPLACE FUNCTION forbid_posted_journal_mutation() RETURNS trigger AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
@@ -129,6 +129,26 @@ BEGIN
 
     RAISE EXCEPTION
       'Journal % cannot be changed while it is being deleted.', OLD."journalNumber"
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- Restoring from Trash. Mirror of the deletion transition: status goes back,
+  -- the stamp clears, and every other column stays byte-identical.
+  IF OLD.status = 'DELETED' AND NEW.status IN ('POSTED', 'REVERSED') THEN
+    IF NEW."deletedAt" IS NOT NULL THEN
+      RAISE EXCEPTION
+        'Journal % cannot be restored without clearing the deletion stamp.', OLD."journalNumber"
+        USING ERRCODE = 'check_violation';
+    END IF;
+
+    IF (to_jsonb(NEW) - 'status' - 'updatedAt' - 'deletedAt' - 'deletedById' - 'deleteReason')
+       = (to_jsonb(OLD) - 'status' - 'updatedAt' - 'deletedAt' - 'deletedById' - 'deleteReason')
+    THEN
+      RETURN NEW;
+    END IF;
+
+    RAISE EXCEPTION
+      'Journal % cannot be changed while it is being restored.', OLD."journalNumber"
       USING ERRCODE = 'check_violation';
   END IF;
 

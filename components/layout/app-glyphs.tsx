@@ -40,6 +40,7 @@ export type AppGlyphName =
   | 'settings'
   | 'help'
   | 'items'
+  | 'barcodes'
 
 const GLYPHS: Record<AppGlyphName, ReactNode> = {
   // A till: plum body, teal screen, a yellow ticket coming out of the top.
@@ -239,6 +240,19 @@ const GLYPHS: Record<AppGlyphName, ReactNode> = {
       <circle cx="15" cy="15" r="9" fill={C.orange} />
       <rect x="25" y="6" width="17" height="17" rx="3" fill={C.teal} />
       <path d="M24 26l12 17H12Z" fill={C.plum} />
+    </>
+  ),
+  // Vertical bars of a package barcode on a warm label.
+  barcodes: (
+    <>
+      <rect x="6" y="8" width="36" height="32" rx="4" fill={C.amber} />
+      <rect x="11" y="12" width="3" height="18" fill={C.plumDeep} />
+      <rect x="16" y="12" width="2" height="18" fill={C.plumDeep} />
+      <rect x="20" y="12" width="4" height="18" fill={C.plumDeep} />
+      <rect x="26" y="12" width="2" height="18" fill={C.plumDeep} />
+      <rect x="30" y="12" width="3" height="18" fill={C.plumDeep} />
+      <rect x="35" y="12" width="2" height="18" fill={C.plumDeep} />
+      <rect x="12" y="33" width="24" height="3" rx="1.5" fill={C.teal} />
     </>
   ),
 }

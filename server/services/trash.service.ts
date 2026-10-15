@@ -3,15 +3,24 @@ import 'server-only'
 import { purchaseByType } from '@/lib/purchase-types'
 import { byType as salesByType } from '@/lib/sales-types'
 import { letterheadOf } from '@/lib/letterhead'
+import type { PrintInk } from '@/lib/print-ink'
 import { presentTrashEntry } from '@/lib/trash-log'
 import { toCalendarDate } from '@/lib/date'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
-import { notFound } from '@/server/errors'
-import { listTrashFiles } from '@/server/files/trash-files'
+import { notFound, precondition } from '@/server/errors'
+import { listTrashFiles, removeTrashFilesForLogs } from '@/server/files/trash-files'
 import { renderSalesDocumentPdf } from '@/server/reports/sales-document-pdf'
 import { renderTrashRecordPdf } from '@/server/reports/trash-record-pdf'
+import * as assemblyBuildService from '@/server/services/assembly-build.service'
+import * as bankingService from '@/server/services/banking.service'
+import * as billPaymentService from '@/server/services/bill-payment.service'
+import * as inventoryService from '@/server/services/inventory.service'
+import * as journalService from '@/server/services/journal.service'
 import * as organizationService from '@/server/services/organization.service'
+import * as paymentService from '@/server/services/payment.service'
+import * as purchaseService from '@/server/services/purchase.service'
+import * as salesService from '@/server/services/sales.service'
 
 function recordOf(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -41,19 +50,200 @@ async function loadDeleteLog(ctx: OrgContext, id: string) {
   return row
 }
 
+function afterRecord(after: unknown): Record<string, unknown> | null {
+  return recordOf(after)
+}
+
+function isRestored(after: unknown): boolean {
+  return afterRecord(after)?.restored === true
+}
+
+function isCleared(after: unknown): boolean {
+  return afterRecord(after)?.cleared === true
+}
+
+function isGoneFromTrash(after: unknown): boolean {
+  return isRestored(after) || isCleared(after)
+}
+
+/** DELETE audit rows still sitting in Trash (not restored, not cleared). */
+function activeTrashWhere(orgId: string) {
+  return {
+    orgId,
+    action: 'DELETE' as const,
+    AND: [
+      { NOT: { after: { path: ['restored'], equals: true } } },
+      { NOT: { after: { path: ['cleared'], equals: true } } },
+    ],
+  }
+}
+
+const RESTORABLE = new Set([
+  'Journal',
+  'SalesDocument',
+  'PurchaseDocument',
+  'CustomerPayment',
+  'BillPayment',
+  'BankTransfer',
+  'InventoryAdjustment',
+  'AssemblyBuild',
+])
+
 /** One trash line with its papers — for the detail screen. */
 export async function get(ctx: OrgContext, id: string) {
   const row = await loadDeleteLog(ctx, id)
   const entry = presentTrashEntry(row)
   const files = await listTrashFiles(ctx, id)
+  if (isCleared(row.after)) throw notFound('Trash entry')
+
+  const restored = isRestored(row.after)
   return {
     ...entry,
     entity: row.entity,
+    entityId: row.entityId,
+    restored,
+    canRestore: !restored && RESTORABLE.has(row.entity),
+    cannotRestoreReason:
+      row.entity === 'Deposit'
+        ? 'Deposits cannot be restored — the payments they banked were released.'
+        : !RESTORABLE.has(row.entity)
+          ? 'This kind of record cannot be restored from Trash.'
+          : null,
     files: files.map((file) => ({
       ...file,
       createdAt: file.createdAt.toISOString(),
     })),
   }
+}
+
+/**
+ * Put a deleted transaction back into the working books from its Trash line.
+ *
+ * Marks the DELETE audit row so the entry leaves the Trash list, and writes a
+ * RESTORE audit on the live record.
+ */
+export async function restore(
+  ctx: OrgContext,
+  id: string,
+): Promise<{ id: string; number: string; href: string }> {
+  const row = await loadDeleteLog(ctx, id)
+  if (isCleared(row.after)) {
+    throw precondition('This record was cleared from Trash and can no longer be restored.')
+  }
+  if (isRestored(row.after)) {
+    throw precondition('This record was already restored.')
+  }
+  if (row.entity === 'Deposit') {
+    throw precondition(
+      'A deleted deposit cannot be restored — the payments it banked were released and are no longer linked. Enter a new deposit from undeposited funds instead.',
+    )
+  }
+  if (!RESTORABLE.has(row.entity)) {
+    throw precondition('This kind of record cannot be restored from Trash.')
+  }
+
+  let result: { id: string; number: string; href: string }
+
+  switch (row.entity) {
+    case 'Journal':
+      result = await journalService.restore(ctx, row.entityId)
+      break
+    case 'SalesDocument':
+      result = await salesService.restore(ctx, row.entityId)
+      break
+    case 'PurchaseDocument':
+      result = await purchaseService.restore(ctx, row.entityId)
+      break
+    case 'CustomerPayment':
+      result = await paymentService.restore(ctx, row.entityId)
+      break
+    case 'BillPayment':
+      result = await billPaymentService.restore(ctx, row.entityId)
+      break
+    case 'BankTransfer':
+      result = await bankingService.restoreTransfer(ctx, row.entityId)
+      break
+    case 'InventoryAdjustment':
+      result = await inventoryService.restoreAdjustment(ctx, row.entityId)
+      break
+    case 'AssemblyBuild':
+      result = await assemblyBuildService.restore(ctx, row.entityId)
+      break
+    default:
+      throw precondition('This kind of record cannot be restored from Trash.')
+  }
+
+  const previous = afterRecord(row.after) ?? {}
+  await db.auditLog.update({
+    where: { id: row.id },
+    data: {
+      after: {
+        ...previous,
+        restored: true,
+        restoredAt: new Date().toISOString(),
+        restoredById: ctx.userId,
+        restoredTo: result.href,
+      },
+    },
+  })
+
+  return result
+}
+
+async function markCleared(
+  ctx: OrgContext,
+  rows: { id: string; after: unknown }[],
+): Promise<number> {
+  if (rows.length === 0) return 0
+
+  await removeTrashFilesForLogs(
+    ctx,
+    rows.map((row) => row.id),
+  )
+
+  const clearedAt = new Date().toISOString()
+  for (const row of rows) {
+    const previous = afterRecord(row.after) ?? {}
+    await db.auditLog.update({
+      where: { id: row.id },
+      data: {
+        after: {
+          ...previous,
+          cleared: true,
+          clearedAt,
+          clearedById: ctx.userId,
+        },
+      },
+    })
+  }
+
+  return rows.length
+}
+
+/**
+ * Remove one Trash line. Soft-deleted ledger rows stay in the database; the
+ * entry leaves Trash and can no longer be restored from here.
+ */
+export async function clearOne(ctx: OrgContext, id: string): Promise<{ count: number }> {
+  const row = await loadDeleteLog(ctx, id)
+  if (isGoneFromTrash(row.after)) {
+    throw precondition('That trash entry is already gone.')
+  }
+  const count = await markCleared(ctx, [{ id: row.id, after: row.after }])
+  return { count }
+}
+
+/**
+ * Empty Trash for this company. Soft-deleted books stay out of reports; only
+ * the Trash list and its uploaded papers are cleared.
+ */
+export async function clearAll(ctx: OrgContext): Promise<{ count: number }> {
+  const rows = await db.auditLog.findMany({
+    where: activeTrashWhere(ctx.orgId),
+    select: { id: true, after: true },
+  })
+  const count = await markCleared(ctx, rows)
+  return { count }
 }
 
 function filenameFor(kind: string, name: string | null) {
@@ -68,7 +258,9 @@ function filenameFor(kind: string, name: string | null) {
 export async function renderPdf(
   ctx: OrgContext,
   id: string,
+  options?: { ink?: PrintInk },
 ): Promise<{ bytes: Uint8Array; filename: string }> {
+  const ink = options?.ink ?? 'color'
   const row = await loadDeleteLog(ctx, id)
   const entry = presentTrashEntry(row)
   const org = await organizationService.get(ctx)
@@ -119,6 +311,7 @@ export async function renderPdf(
       const config = salesByType(document.type)
       const currency = document.currencyCode || ctx.organization.baseCurrency
       const bytes = renderSalesDocumentPdf({
+        ink,
         ...letterhead,
         title: `${config.singular} (deleted)`,
         number: document.number,
@@ -182,6 +375,7 @@ export async function renderPdf(
       const config = purchaseByType(document.type)
       const currency = document.currencyCode || ctx.organization.baseCurrency
       const bytes = renderSalesDocumentPdf({
+        ink,
         ...letterhead,
         title: `${config.singular} (deleted)`,
         number: document.number,
@@ -241,6 +435,7 @@ export async function renderPdf(
         })),
       ]
       const bytes = renderTrashRecordPdf({
+        ink,
         ...letterhead,
         kind: entry.kind,
         name: journal.journalNumber,
@@ -268,6 +463,7 @@ export async function renderPdf(
     })
     if (payment) {
       const bytes = renderTrashRecordPdf({
+        ink,
         ...letterhead,
         kind: entry.kind,
         name: payment.number,
@@ -300,6 +496,7 @@ export async function renderPdf(
     })
     if (payment) {
       const bytes = renderTrashRecordPdf({
+        ink,
         ...letterhead,
         kind: entry.kind,
         name: payment.number,
@@ -334,6 +531,7 @@ export async function renderPdf(
     })
     if (transfer) {
       const bytes = renderTrashRecordPdf({
+        ink,
         ...letterhead,
         kind: 'Transfer',
         name: transfer.number,
@@ -372,6 +570,7 @@ export async function renderPdf(
     })
     if (deposit) {
       const bytes = renderTrashRecordPdf({
+        ink,
         ...letterhead,
         kind: 'Deposit',
         name: deposit.number,
@@ -415,6 +614,7 @@ export async function renderPdf(
     })
     if (adjustment) {
       const bytes = renderTrashRecordPdf({
+        ink,
         ...letterhead,
         kind: 'Stock adjustment',
         name: adjustment.number,
@@ -459,6 +659,7 @@ export async function renderPdf(
   }
 
   const bytes = renderTrashRecordPdf({
+        ink,
     ...letterhead,
     kind: entry.kind,
     name: entry.name,

@@ -1,9 +1,39 @@
+'use client'
+
+import { useSyncExternalStore } from 'react'
+
+import { DocumentBarcode } from '@/components/print/document-barcode'
 import { longDate, type SheetDocument } from '@/components/sales/invoice-sheet'
 import { accentWash, type DocumentTemplate } from '@/lib/document-template'
 import { letterheadOf, type LetterheadSource } from '@/lib/letterhead'
 import { toCalendarDate } from '@/lib/date'
-import { formatMoney } from '@/lib/money'
+import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import { STATUS_LABELS } from '@/lib/sales-types'
+
+/** Cached so getSnapshot stays referentially stable (React forbids a fresh value each read). */
+let clientNowLabel: string | null = null
+
+function readClientNowLabel() {
+  if (clientNowLabel == null) {
+    clientNowLabel = new Intl.DateTimeFormat('en-GB', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date())
+  }
+  return clientNowLabel
+}
+
+function useClientNowLabel() {
+  return useSyncExternalStore(
+    () => () => {},
+    readClientNowLabel,
+    () => '',
+  )
+}
 
 const TITLES: Record<string, string> = {
   INVOICE: 'INVOICE',
@@ -13,6 +43,10 @@ const TITLES: Record<string, string> = {
   SALES_ORDER: 'SALES ORDER',
   SALES_RECEIPT: 'SALES RECEIPT',
   REFUND_RECEIPT: 'REFUND',
+  BILL: 'BILL',
+  EXPENSE: 'EXPENSE',
+  VENDOR_CREDIT: 'VENDOR CREDIT',
+  PURCHASE_ORDER: 'PURCHASE ORDER',
 }
 
 /**
@@ -31,6 +65,7 @@ export function MerchantInvoice({
   currentBalance,
   printedBy,
   words,
+  ledger = false,
 }: {
   document: SheetDocument
   organization: LetterheadSource & { timeZone?: string | null; taxRegistrationNumber?: string | null }
@@ -51,6 +86,8 @@ export function MerchantInvoice({
   /** Account balance after this paper. Falls back to the document balance. */
   currentBalance?: string | null
   printedBy?: string | null
+  /** Statement / portal: Debit = invoice total, Credit = payments, Balance = remaining. */
+  ledger?: boolean
 }) {
   const label = words ?? {
     party: 'Bill to',
@@ -64,7 +101,7 @@ export function MerchantInvoice({
   const wash = accentWash(accent)
   const company = letterheadOf(organization)
   const currency = document.currencyCode || baseCurrency
-  const money = (value: string | number) => formatMoney(value, currency)
+  const money = (value: Parameters<typeof formatMoney>[0]) => formatMoney(value, currency)
   const customer = document.customer
   const address = [customer.billingLine1, customer.billingLine2, customer.billingCity, customer.billingRegion]
     .filter(Boolean)
@@ -73,17 +110,19 @@ export function MerchantInvoice({
   const status =
     document.status === 'PAID' ? 'PAID' : owed || document.status === 'OPEN' || document.status === 'PARTIAL' ? 'UNPAID' : (STATUS_LABELS[document.status] ?? document.status).toUpperCase()
   const statusColor = status === 'PAID' ? '#047857' : status === 'UNPAID' ? '#be123c' : accent
-  const printedOn = new Intl.DateTimeFormat('en-GB', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date())
+  const printedOn = useClientNowLabel()
+
+  // Account running figure: Previous + Debit − Credit (payment / customer credit).
+  const prior = previousBalance != null && previousBalance !== '' ? new Decimal(previousBalance) : ZERO
+  const debit = new Decimal(document.total)
+  const credit = new Decimal(document.amountApplied || 0)
+  const accountBalance = prior.plus(debit).minus(credit)
 
   return (
-    <article className="merchant-invoice relative overflow-hidden bg-white text-[13px] text-[#1f2933] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:shadow-none">
+    <article
+      className="merchant-invoice relative overflow-hidden bg-white text-[13px] text-[#1f2933] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:overflow-visible print:shadow-none"
+      style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
+    >
       <div className="flex items-start justify-between gap-6 px-8 pb-4 pt-6">
         <div>
           <h1 className="text-3xl font-black tracking-tight" style={{ color: accent }}>
@@ -118,6 +157,9 @@ export function MerchantInvoice({
             {TITLES[config.type] ?? config.singular.toUpperCase()}
           </p>
           <p className="mt-1 font-semibold">{document.number}</p>
+          <div className="mt-2 flex justify-end">
+            <DocumentBarcode value={document.number} height={40} moduleWidth={1.15} />
+          </div>
           <p className="mt-2 inline-block rounded px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: statusColor }}>
             {status}
           </p>
@@ -177,16 +219,46 @@ export function MerchantInvoice({
             <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>
               {label.account}
             </p>
-            <dl className="mt-1 space-y-0.5">
-              <div className="flex justify-between gap-4">
-                <dt>Previous balance</dt>
-                <dd className="tabular">{previousBalance ? money(previousBalance) : '—'}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt>Current balance</dt>
-                <dd className="tabular">{money(currentBalance ?? document.balance)}</dd>
-              </div>
-            </dl>
+            {ledger ? (
+              <>
+                <dl className="mt-1 space-y-0.5">
+                  <div className="flex justify-between gap-4">
+                    <dt>Previous balance</dt>
+                    <dd className="tabular">{money(prior)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt>Debit (invoice)</dt>
+                    <dd className="tabular">{money(debit)}</dd>
+                  </div>
+                  {credit.greaterThan('0.004') ? (
+                    <div className="flex justify-between gap-4">
+                      <dt>Credit (payment)</dt>
+                      <dd className="tabular">{money(credit)}</dd>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between gap-4 border-t border-[#d1d5db] pt-1 font-semibold">
+                    <dt>Balance</dt>
+                    <dd className="tabular">{money(accountBalance)}</dd>
+                  </div>
+                </dl>
+                <p className="mt-2 text-[11px] leading-snug text-[#5C6B7A]">
+                  Previous = Balance from the invoice before this one. Balance =
+                  Previous + Debit − Credit
+                  {credit.greaterThan('0.004') ? '.' : ' (no credit on this invoice).'}
+                </p>
+              </>
+            ) : (
+              <dl className="mt-1 space-y-0.5">
+                <div className="flex justify-between gap-4">
+                  <dt>Previous balance</dt>
+                  <dd className="tabular">{previousBalance ? money(previousBalance) : '—'}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt>Current balance</dt>
+                  <dd className="tabular">{money(currentBalance ?? document.balance)}</dd>
+                </div>
+              </dl>
+            )}
           </div>
           {template.terms ? (
             <div>
@@ -204,9 +276,23 @@ export function MerchantInvoice({
             <Total label="Discount" value={money(document.discountAmount)} accent={accent} />
           ) : null}
           {Number(document.taxTotal) > 0 ? <Total label="Tax" value={money(document.taxTotal)} accent={accent} /> : null}
-          <Total label="Grand total" value={money(document.total)} accent={accent} strong />
-          <Total label="Paid amount" value={money(document.amountApplied)} accent={accent} />
-          <Total label="Balance" value={money(document.balance)} accent={accent} strong />
+          {ledger ? (
+            <>
+              <Total label="Debit (invoice)" value={money(debit)} accent={accent} strong />
+              {credit.greaterThan('0.004') ? (
+                <Total label="Credit (payment)" value={money(credit)} accent={accent} />
+              ) : null}
+              <Total label="Balance" value={money(accountBalance)} accent={accent} strong />
+            </>
+          ) : (
+            <>
+              <Total label="Grand total" value={money(document.total)} accent={accent} strong />
+              {credit.greaterThan('0.004') ? (
+                <Total label="Paid amount" value={money(document.amountApplied)} accent={accent} />
+              ) : null}
+              <Total label="Balance" value={money(document.balance)} accent={accent} strong />
+            </>
+          )}
         </dl>
       </div>
 
@@ -239,7 +325,10 @@ function Total({
   strong?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 px-2 py-1 text-white" style={{ background: accent }}>
+    <div
+      className="flex items-center justify-between gap-3 px-2 py-1 text-white"
+      style={{ background: accent, printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
+    >
       <dt className={strong ? 'font-bold uppercase' : 'uppercase'}>{label}</dt>
       <dd className={`tabular ${strong ? 'font-bold' : ''}`}>{value}</dd>
     </div>

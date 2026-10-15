@@ -1,13 +1,7 @@
 'use client'
 
-import { PrinterIcon } from 'lucide-react'
-
-import { Button } from '@/components/ui/button'
+import { PrintInkMenu } from '@/components/print/print-ink-menu'
 
 export function PrintPageButton() {
-  return (
-    <Button type="button" variant="outline" size="icon" title="Print" onClick={() => window.print()}>
-      <PrinterIcon />
-    </Button>
-  )
+  return <PrintInkMenu label="" size="icon" />
 }

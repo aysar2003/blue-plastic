@@ -16,6 +16,7 @@ import {
   createOverlayBlock,
   moveOverlayBlock,
   OVERLAY_BLOCK_KINDS,
+  OVERLAY_FONT_FAMILIES,
   overlayLogoStorageKey,
   parseTemplateOverlay,
   resizeOverlayBlock,
@@ -300,6 +301,7 @@ export function MediaTemplateEditor({
                   color: block.style.color,
                   background: block.kind === 'logo' ? block.style.background : block.style.background,
                   fontSize: block.style.fontSize,
+                  fontFamily: block.style.fontFamily,
                   fontWeight: block.style.fontWeight,
                   textAlign: block.style.align,
                   opacity: block.style.opacity,
@@ -433,7 +435,7 @@ export function MediaTemplateEditor({
                 />
               </label>
               <label className="block space-y-1 text-xs">
-                <span className="text-muted-foreground">Border</span>
+                <span className="text-muted-foreground">Border colour</span>
                 <Input
                   type="color"
                   value={toColorInput(selected.style.borderColor)}
@@ -441,20 +443,49 @@ export function MediaTemplateEditor({
                   onChange={(event) => updateSelected({ style: { borderColor: event.target.value } })}
                 />
               </label>
+              <label className="block space-y-1 text-xs">
+                <span className="text-muted-foreground">Border {selected.style.borderWidth}px</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={8}
+                  value={selected.style.borderWidth}
+                  className="w-full"
+                  onChange={(event) =>
+                    updateSelected({ style: { borderWidth: Number(event.target.value) } })
+                  }
+                />
+              </label>
               {selected.kind !== 'logo' ? (
-                <label className="block space-y-1 text-xs">
-                  <span className="text-muted-foreground">Size {selected.style.fontSize}px</span>
-                  <input
-                    type="range"
-                    min={8}
-                    max={48}
-                    value={selected.style.fontSize}
-                    className="w-full"
-                    onChange={(event) =>
-                      updateSelected({ style: { fontSize: Number(event.target.value) } })
-                    }
-                  />
-                </label>
+                <>
+                  <label className="block space-y-1 text-xs">
+                    <span className="text-muted-foreground">Font type</span>
+                    <select
+                      value={selected.style.fontFamily}
+                      className="h-8 w-full rounded-md border border-input bg-card px-2 text-sm"
+                      onChange={(event) => updateSelected({ style: { fontFamily: event.target.value } })}
+                    >
+                      {OVERLAY_FONT_FAMILIES.map((font) => (
+                        <option key={font.id} value={font.id}>
+                          {font.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block space-y-1 text-xs">
+                    <span className="text-muted-foreground">Size {selected.style.fontSize}px</span>
+                    <input
+                      type="range"
+                      min={8}
+                      max={48}
+                      value={selected.style.fontSize}
+                      className="w-full"
+                      onChange={(event) =>
+                        updateSelected({ style: { fontSize: Number(event.target.value) } })
+                      }
+                    />
+                  </label>
+                </>
               ) : null}
               <label className="block space-y-1 text-xs">
                 <span className="text-muted-foreground">Opacity</span>

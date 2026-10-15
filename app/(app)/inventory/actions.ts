@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 import {
+  assemblyBuildSchema,
   inventoryAdjustmentSchema,
   negativeStockSchema,
   storeTicketSchema,
@@ -16,6 +17,7 @@ import { deleteRecordSchema } from '@/lib/validation/common'
 import { action } from '@/server/action'
 import { requestMeta, writeAudit } from '@/server/audit'
 import { db } from '@/server/db'
+import * as assemblyBuildService from '@/server/services/assembly-build.service'
 import * as inventoryService from '@/server/services/inventory.service'
 import { readStockCountFile } from '@/server/services/stock-count-sheet'
 import * as storeService from '@/server/services/store.service'
@@ -27,6 +29,7 @@ export const createAdjustment = action
   .handler(async (ctx, input) => {
     const adjustment = await inventoryService.createAdjustment(ctx, input)
     revalidatePath('/inventory/stock')
+    revalidatePath('/stores')
     revalidatePath('/accounts')
     revalidatePath('/reports/trial-balance')
     return adjustment
@@ -127,6 +130,37 @@ export async function saveAdjustmentForm(_prev: FormState, formData: FormData): 
   return toFormState(
     result,
     result.ok && 'number' in result.data ? `${result.data.number} posted.` : 'Posted.',
+  )
+}
+
+export const createAssemblyBuild = action
+  .requires('inventory:adjust')
+  .input(assemblyBuildSchema)
+  .handler(async (ctx, input) => {
+    const build = await assemblyBuildService.create(ctx, input)
+    revalidatePath('/inventory/stock')
+    revalidatePath('/inventory/builds/new')
+    revalidatePath('/items')
+    revalidatePath('/accounts')
+    revalidatePath('/journals')
+    revalidatePath('/reports/trial-balance')
+    return build
+  })
+
+export async function saveAssemblyBuildForm(_prev: FormState, formData: FormData): Promise<FormState> {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(String(formData.get('payload') ?? '{}'))
+  } catch {
+    return { status: 'error', message: 'The build could not be read. Please try again.' }
+  }
+
+  const result = await createAssemblyBuild(parsed)
+  return toFormState(
+    result,
+    result.ok && 'number' in result.data
+      ? `${result.data.number} built · cost ${result.data.unitCost} each.`
+      : 'Built.',
   )
 }
 

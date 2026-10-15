@@ -23,6 +23,7 @@ import {
   updateCustomerForm,
   updateVendorForm,
 } from '@/app/(app)/customers/actions'
+import { MergeIntoDialog } from '@/components/master-data/merge-into-dialog'
 
 export type ContactSide = 'customer' | 'vendor'
 
@@ -66,6 +67,8 @@ export function NewContactButton(props: {
   today: string
   currency: string
   className?: string
+  /** Show “Invite to portal” on the customer form. */
+  portalInvite?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const label = props.side === 'customer' ? 'New customer' : 'New vendor'
@@ -91,6 +94,7 @@ export function ContactDialog({
   onClose,
   defaultName,
   onCreated,
+  portalInvite = false,
 }: {
   side: ContactSide
   mode: 'create' | 'edit'
@@ -104,6 +108,8 @@ export function ContactDialog({
   defaultName?: string
   /** Hands the new record back to whatever opened this. */
   onCreated?: (record: { id: string; label: string }) => void
+  /** Show “Invite to portal” when the company portal is on and the user may manage it. */
+  portalInvite?: boolean
 }) {
   const router = useRouter()
   const formAction =
@@ -122,11 +128,32 @@ export function ContactDialog({
     contact?.defaultExpenseAccountId ?? '',
   )
   const handled = useRef(false)
+  const [mergeOpen, setMergeOpen] = useState(false)
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
       handled.current = true
-      toast.success(state.message ?? 'Saved.')
+      if (state.portalLoginUrl && state.temporaryPassword) {
+        const summary = [
+          state.portalEmail ? `Email: ${state.portalEmail}` : null,
+          `Password: ${state.temporaryPassword}`,
+          `Login: ${state.portalLoginUrl}`,
+        ]
+          .filter(Boolean)
+          .join('\n')
+        void navigator.clipboard.writeText(summary).then(
+          () =>
+            toast.success('Saved. Portal email, password, and login link copied — send them to the customer.'),
+          () => toast.success(state.message ?? 'Saved.'),
+        )
+      } else if (state.inviteUrl) {
+        void navigator.clipboard.writeText(state.inviteUrl).then(
+          () => toast.success('Saved. Portal login link copied — send it to the customer.'),
+          () => toast.success(state.message ?? 'Saved.'),
+        )
+      } else {
+        toast.success(state.message ?? 'Saved.')
+      }
       if (state.created) onCreated?.({ id: state.created.id, label: state.created.label ?? '' })
       router.refresh()
       onClose()
@@ -138,6 +165,7 @@ export function ContactDialog({
   const noun = side === 'customer' ? 'customer' : 'vendor'
 
   return (
+    <>
     <Dialog open onOpenChange={(next) => { if (!next) onClose() }}>
       <DialogContent size="lg">
         <DialogHeader>
@@ -146,6 +174,16 @@ export function ContactDialog({
 
         <form action={submit} className="mt-4 space-y-5">
           <FormStatus state={state} />
+          {mode === 'edit' && contact?.id && state.mergeClash ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">
+                Merge this {noun} into “{state.mergeClash.name}”?
+              </span>
+              <Button type="button" size="sm" onClick={() => setMergeOpen(true)}>
+                Merge…
+              </Button>
+            </div>
+          ) : null}
           {contact?.id ? <input type="hidden" name="id" value={contact.id} /> : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -198,6 +236,19 @@ export function ContactDialog({
               />
             </Field>
           </div>
+
+          {side === 'customer' && portalInvite ? (
+            <label className="flex items-start gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              <input type="checkbox" name="inviteToPortal" value="true" className="mt-0.5 size-4" />
+              <span>
+                <span className="font-medium">Invite to customer portal</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Creates email, temporary password, and a branded login link so they can view only
+                  their invoices and balance. Requires an email address.
+                </span>
+              </span>
+            </label>
+          ) : null}
 
           <Separator />
 
@@ -386,6 +437,18 @@ export function ContactDialog({
         </form>
       </DialogContent>
     </Dialog>
+    {mergeOpen && mode === 'edit' && contact?.id && state.mergeClash ? (
+      <MergeIntoDialog
+        open
+        onClose={() => setMergeOpen(false)}
+        onMerged={onClose}
+        kind={side}
+        absorbId={contact.id}
+        absorbLabel={contact.displayName ?? ''}
+        preferredKeepId={state.mergeClash.id}
+      />
+    ) : null}
+    </>
   )
 }
 
@@ -494,7 +557,7 @@ function CustomerRegistration({
               <li key={paper.id}>
                 <a
                   href={contact?.id ? `/api/customers/${contact.id}/files/${paper.id}` : undefined}
-                  className="text-[#0b4f6c] underline-offset-4 hover:underline"
+                  className="text-primary underline-offset-4 hover:underline"
                 >
                   {paper.originalName}
                 </a>

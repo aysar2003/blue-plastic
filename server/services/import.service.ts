@@ -182,7 +182,10 @@ export async function importItems(
         where: { orgId: ctx.orgId, isActive: true },
         select: { id: true, name: true, code: true },
       }),
-      db.item.findMany({ where: { orgId: ctx.orgId }, select: { name: true, sku: true } }),
+      db.item.findMany({
+        where: { orgId: ctx.orgId },
+        select: { id: true, name: true, sku: true, barcode: true },
+      }),
       db.store.findMany({
         where: { orgId: ctx.orgId, isActive: true },
         select: { id: true, name: true, isOffice: true },
@@ -200,11 +203,20 @@ export async function importItems(
     return emptyFile(rows.length, 'Install the chart of accounts before importing products.')
   }
 
-  const names = new Set(existingItems.map((item) => item.name.toLowerCase()))
+  const byName = new Map(existingItems.map((item) => [item.name.toLowerCase(), item]))
+  const names = new Set(byName.keys())
   const skus = new Set(existingItems.filter((item) => item.sku).map((item) => item.sku!.toLowerCase()))
   const seenNames = new Set<string>()
   const seenSkus = new Set<string>()
-  const valid: { row: number; data: Record<string, unknown>; inactive: boolean; label: string }[] = []
+  const seenBarcodes = new Set<string>()
+  const valid: {
+    row: number
+    data: Record<string, unknown>
+    inactive: boolean
+    label: string
+    /** When set, this row only attaches a barcode to a product that already exists. */
+    barcodeUpdateId?: string
+  }[] = []
 
   rows.forEach((row, index) => {
     const lineNumber = index + 2
@@ -219,7 +231,49 @@ export async function importItems(
 
     const draft = shaped.draft
     const nameKey = draft.name.toLowerCase()
+    const barcode = draft.barcode.trim().replace(/\s+/g, '')
+    const barcodeKey = barcode.toLowerCase()
+
+    if (barcode) {
+      if (barcode.length > 64) {
+        issues.push({ row: lineNumber, field: 'Barcode', message: 'Barcode is too long (max 64)' })
+        return
+      }
+      const ownedBy = existingItems.find(
+        (item) => item.barcode && item.barcode.toLowerCase() === barcodeKey && item.name.toLowerCase() !== nameKey,
+      )
+      if (ownedBy || seenBarcodes.has(barcodeKey)) {
+        issues.push({
+          row: lineNumber,
+          field: 'Barcode',
+          message: ownedBy
+            ? `Barcode "${barcode}" already belongs to "${ownedBy.name}" — skipped`
+            : `Barcode "${barcode}" is repeated in this file — skipped`,
+        })
+        return
+      }
+    }
+
     if (names.has(nameKey) || seenNames.has(nameKey)) {
+      const existing = byName.get(nameKey)
+      if (existing && barcode && !seenNames.has(nameKey)) {
+        if (existing.barcode?.toLowerCase() === barcodeKey) {
+          issues.push({
+            row: lineNumber,
+            message: `"${draft.name}" already has barcode ${barcode} — skipped`,
+          })
+          return
+        }
+        seenBarcodes.add(barcodeKey)
+        valid.push({
+          row: lineNumber,
+          data: { name: draft.name, barcode },
+          inactive: false,
+          label: barcode,
+          barcodeUpdateId: existing.id,
+        })
+        return
+      }
       issues.push({ row: lineNumber, message: `"${draft.name}" already exists — skipped` })
       return
     }
@@ -282,6 +336,7 @@ export async function importItems(
     const parsed = itemSchema.safeParse({
       name: draft.name,
       sku: draft.sku,
+      barcode,
       type: draft.type,
       description: draft.salesDescription,
       salesDescription: draft.salesDescription,
@@ -317,11 +372,14 @@ export async function importItems(
 
     seenNames.add(nameKey)
     if (draft.sku) seenSkus.add(draft.sku.toLowerCase())
+    if (barcodeKey) seenBarcodes.add(barcodeKey)
     valid.push({
       row: lineNumber,
       data: parsed.data,
       inactive: shaped.inactive,
-      label: draft.type === 'INVENTORY' && draft.openingQuantity ? draft.openingQuantity : draft.salesPrice,
+      label:
+        barcode ||
+        (draft.type === 'INVENTORY' && draft.openingQuantity ? draft.openingQuantity : draft.salesPrice),
     })
   })
 
@@ -343,6 +401,11 @@ export async function importItems(
   let imported = 0
   for (const entry of valid) {
     try {
+      if (entry.barcodeUpdateId) {
+        await itemService.setBarcode(ctx, entry.barcodeUpdateId, String(entry.data.barcode ?? ''))
+        imported += 1
+        continue
+      }
       const created = await itemService.create(ctx, entry.data as never)
       imported += 1
       if (entry.inactive) {

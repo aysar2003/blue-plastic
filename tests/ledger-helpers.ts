@@ -82,6 +82,7 @@ export async function makeOrg(tx: Tx, options: { fiscalYearStartMonth?: number }
       permissions: permissionsFor('OWNER'),
       isSystemOwner: false,
       canConnect: false,
+      portalCustomerId: null,
       features: DEFAULT_FEATURE_FLAGS,
       organization: {
         ...orgFields,

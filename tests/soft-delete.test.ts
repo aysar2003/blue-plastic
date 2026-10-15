@@ -215,6 +215,25 @@ suite('the ledger still refuses everything except the deletion transition', () =
     })
   })
 
+  it('allows Trash restore: DELETED back to POSTED when the stamp clears', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const fixture = await makeOrg(tx)
+      const journal = await postRent(tx, fixture, '30')
+      await deleteJournals(tx, fixture.ctx, [journal.id], 'gone')
+
+      const { restoreJournals } = await import('@/server/accounting/deletion')
+      await restoreJournals(tx, fixture.ctx, [journal.id])
+
+      const after = await tx.journal.findUnique({
+        where: { id: journal.id },
+        select: { status: true, deletedAt: true },
+      })
+      expect(after?.status).toBe('POSTED')
+      expect(after?.deletedAt).toBeNull()
+      expect(await movementOf(tx, fixture, fixture.accounts[CODE.rent])).toBe('30')
+    })
+  })
+
   it('still refuses to physically delete a posted entry', async () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)

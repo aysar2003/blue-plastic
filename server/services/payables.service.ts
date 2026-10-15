@@ -257,6 +257,7 @@ export async function vendorStatement(
             unitPrice: true,
             amount: true,
             item: { select: { name: true } },
+            expenseAccount: { select: { name: true } },
           },
         },
       },
@@ -378,7 +379,7 @@ export async function vendorStatement(
         isCredit ? total : ZERO,
       )
       const items: StatementItem[] = document.lines.map((line) => {
-        const name = line.item?.name
+        const name = line.item?.name ?? line.expenseAccount?.name
         const note = line.description
         const description = name && note && name !== note ? `${name} — ${note}` : name || note || 'Line'
         return {

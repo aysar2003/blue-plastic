@@ -58,7 +58,7 @@ export function StoreItemMenu({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href={`/inventory/adjustments/new?item=${itemId}`}>Adjustment</Link>
+              <Link href={`/inventory/adjustments/new?item=${itemId}&store=${storeId}`}>Adjustment</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href={`/stores/tickets/new?from=${storeId}&item=${itemId}`}>

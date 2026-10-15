@@ -37,7 +37,7 @@ export default async function NewSalesDocumentPage({
     loadFormOptions(ctx),
     searchParams,
     peekDocumentNumber(db, ctx.orgId, config.type),
-    config.type === 'SALES_RECEIPT' ? salesService.neighbors(ctx, config.type, null) : Promise.resolve(undefined),
+    salesService.neighbors(ctx, config.type, null),
     storeService.quantities(ctx),
     loadsSources ? salesService.listConvertibleSources(ctx) : Promise.resolve([]),
   ])

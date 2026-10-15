@@ -9,6 +9,12 @@ export type StoreChoice = {
 /** item id → store id → quantity, already rounded for display. */
 export type StockByStore = Record<string, Record<string, string>>
 
+/** On hand in one store. Missing rows are zero, not the company total. */
+export function quantityAtStore(stock: StockByStore, itemId: string, storeId: string): string {
+  if (!itemId || !storeId) return '0.00'
+  return stock[itemId]?.[storeId] ?? '0.00'
+}
+
 export function officeStoreId(stores: StoreChoice[]): string {
   return stores.find((store) => store.isOffice)?.id ?? stores[0]?.id ?? ''
 }

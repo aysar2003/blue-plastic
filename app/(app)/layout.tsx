@@ -16,6 +16,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // No session, a revoked membership, or a token issued before a role change
     // (ADR-0007) all land here.
     if (!ctx) redirect('/sign-in')
+    // Portal logins never enter the ERP shell.
+    if (ctx.role === 'CUSTOMER') redirect('/portal')
 
     const canSwitch = ctx.isSystemOwner || ctx.canConnect
     const [showCompanyReports, databases] = await Promise.all([

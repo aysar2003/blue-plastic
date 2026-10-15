@@ -42,5 +42,11 @@ export function letterheadLines(org: LetterheadSource): string[] {
 }
 
 function clean(value: string | null | undefined): string {
-  return value?.trim() ?? ''
+  if (!value) return ''
+  return value
+    .trim()
+    .replace(/,+/g, ',')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/^[,\s]+|[,\s]+$/g, '')
+    .trim()
 }

@@ -75,7 +75,7 @@ BEGIN
       USING ERRCODE = 'foreign_key_violation';
   END IF;
 
-  IF v_type <> 'INVENTORY' THEN
+  IF v_type <> 'INVENTORY' AND v_type <> 'INVENTORY_ASSEMBLY' THEN
     RAISE EXCEPTION
       '"%" is not a tracked inventory item, so it has no stock to move.', v_name
       USING ERRCODE = 'check_violation';

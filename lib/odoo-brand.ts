@@ -25,6 +25,8 @@ export const ODOO_PDF = {
   purpleSoft: [0.89, 0.97, 0.99] as const,
   teal: [0.055, 0.455, 0.565] as const,
   ink: [0.07, 0.09, 0.11] as const,
-  muted: [0.58, 0.64, 0.72] as const,
+  /** Secondary labels on white paper — dark enough to print clearly. */
+  contact: [0.24, 0.3, 0.36] as const,
+  muted: [0.35, 0.4, 0.45] as const,
   rule: [0.75, 0.8, 0.85] as const,
 }

@@ -416,21 +416,24 @@ function paidLabel(entry: PaperEntry, money: (value: Decimal.Value) => string): 
   return money(paid)
 }
 
-/** A light wash so rows of one transaction type read as the same kind. */
+/**
+ * Soft kind washes. Hover always uses --band so night desks never get a paper
+ * wash under light ink (pastel hover:bg-*-100 erased row text on SOM/dark).
+ */
 const KIND_TINT: Record<string, string> = {
-  INVOICE: 'bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/45 dark:hover:bg-sky-900/55',
-  BILL: 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/45 dark:hover:bg-indigo-900/55',
-  PAYMENT: 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50',
-  CREDIT_MEMO: 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50',
-  VENDOR_CREDIT: 'bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/40 dark:hover:bg-orange-900/50',
-  SALES_RECEIPT: 'bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/40 dark:hover:bg-teal-900/50',
-  EXPENSE: 'bg-lime-50 hover:bg-lime-100 dark:bg-lime-950/35 dark:hover:bg-lime-900/45',
-  REFUND_RECEIPT: 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50',
-  JOURNAL: 'bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-900/50',
-  ESTIMATE: 'bg-stone-100/80 hover:bg-stone-200/70 dark:bg-stone-900/40 dark:hover:bg-stone-800/50',
-  QUOTATION: 'bg-violet-100/80 hover:bg-violet-200/70 dark:bg-violet-900/40 dark:hover:bg-violet-800/50',
-  SALES_ORDER: 'bg-orange-100/80 hover:bg-orange-200/70 dark:bg-orange-900/40 dark:hover:bg-orange-800/50',
-  PURCHASE_ORDER: 'bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-900/45 dark:hover:bg-slate-800/55',
+  INVOICE: 'bg-sky-50 hover:bg-[var(--band)] dark:bg-sky-950/45',
+  BILL: 'bg-indigo-50 hover:bg-[var(--band)] dark:bg-indigo-950/45',
+  PAYMENT: 'bg-emerald-50 hover:bg-[var(--band)] dark:bg-emerald-950/40',
+  CREDIT_MEMO: 'bg-amber-50 hover:bg-[var(--band)] dark:bg-amber-950/40',
+  VENDOR_CREDIT: 'bg-orange-50 hover:bg-[var(--band)] dark:bg-orange-950/40',
+  SALES_RECEIPT: 'bg-teal-50 hover:bg-[var(--band)] dark:bg-teal-950/40',
+  EXPENSE: 'bg-lime-50 hover:bg-[var(--band)] dark:bg-lime-950/35',
+  REFUND_RECEIPT: 'bg-rose-50 hover:bg-[var(--band)] dark:bg-rose-950/40',
+  JOURNAL: 'bg-violet-50 hover:bg-[var(--band)] dark:bg-violet-950/40',
+  ESTIMATE: 'bg-stone-100/80 hover:bg-[var(--band)] dark:bg-stone-900/40',
+  QUOTATION: 'bg-violet-100/80 hover:bg-[var(--band)] dark:bg-violet-900/40',
+  SALES_ORDER: 'bg-orange-100/80 hover:bg-[var(--band)] dark:bg-orange-900/40',
+  PURCHASE_ORDER: 'bg-slate-100 hover:bg-[var(--band)] dark:bg-slate-900/45',
 }
 
 function kindTint(kind: string | undefined): string {

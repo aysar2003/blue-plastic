@@ -72,6 +72,29 @@ export const createCategory = action
   .handler(async (ctx, input) => {
     const category = await itemService.createCategory(ctx, input.name)
     revalidatePath('/items')
+    revalidatePath('/items/categories')
+    return { id: category.id, name: category.name }
+  })
+
+export const updateCategory = action
+  .requires('item:update')
+  .input(z.object({ id: cuid, name: z.string().trim().min(1).max(120) }))
+  .handler(async (ctx, input) => {
+    const category = await itemService.updateCategory(ctx, input.id, input.name)
+    revalidatePath('/items')
+    revalidatePath('/items/categories')
+    revalidatePath(`/items/categories/${category.id}`)
+    return { id: category.id, name: category.name }
+  })
+
+export const deleteCategory = action
+  .requires('item:update')
+  .input(deleteRecordSchema)
+  .handler(async (ctx, input) => {
+    const category = await itemService.deleteCategory(ctx, input.id)
+    revalidatePath('/items')
+    revalidatePath('/items/categories')
+    revalidatePath(`/items/categories/${category.id}`)
     return { id: category.id, name: category.name }
   })
 
@@ -112,6 +135,19 @@ export const mergeItems = action
     revalidatePath('/items')
     revalidatePath('/inventory')
     revalidatePath('/inventory/stock')
+    return result
+  })
+
+/** Fold one product category into another — items move; absorbed name is retired. */
+export const mergeCategories = action
+  .requires('item:update')
+  .input(z.object({ keepId: cuid, absorbId: cuid }))
+  .handler(async (ctx, input) => {
+    const result = await lifecycle.mergeCategories(ctx, input)
+    revalidatePath('/items')
+    revalidatePath('/items/categories')
+    revalidatePath(`/items/categories/${result.keepId}`)
+    revalidatePath(`/items/categories/${input.absorbId}`)
     return result
   })
 

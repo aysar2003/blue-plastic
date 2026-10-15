@@ -25,6 +25,9 @@ const MEMBER_SELECT = {
 export type MemberRow = Prisma.MembershipGetPayload<{ select: typeof MEMBER_SELECT }>
 
 function resolveAccess(role: string, permissionsOverride: readonly string[] | undefined) {
+  if (role === 'CUSTOMER') {
+    throw forbidden('Customer portal logins are invited from the customer record, not from Users.')
+  }
   const cleaned = sanitizePermissions(permissionsOverride)
   if (role === 'CUSTOM') {
     if (cleaned.length === 0) {
@@ -38,6 +41,8 @@ function resolveAccess(role: string, permissionsOverride: readonly string[] | un
 export async function list(ctx: OrgContext, query: ListQuery) {
   const where: Prisma.MembershipWhereInput = {
     orgId: ctx.orgId,
+    // Portal logins are managed under Customers → Portal users, not Settings → Users.
+    role: { not: 'CUSTOMER' },
     ...(query.q
       ? {
           user: {
@@ -208,9 +213,12 @@ export async function updateRole(ctx: OrgContext, membershipId: string, role: Ro
   if (role === 'OWNER') {
     throw forbidden('The owner role cannot be assigned here. Transfer ownership instead.')
   }
+  if (role === 'CUSTOMER') {
+    throw forbidden('Customer portal logins are invited from the customer record, not from Users.')
+  }
   return updateAccess(ctx, {
     membershipId,
-    role,
+    role: role as Exclude<Role, 'OWNER' | 'CUSTOMER'>,
     permissionsOverride: [],
   })
 }

@@ -10,11 +10,11 @@ import { Pagination } from '@/components/data/pagination'
 import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { SignedMoney } from '@/components/data/signed-money'
 import { SortableHeader, type SortState } from '@/components/data/sortable-header'
+import { ReportRowStyleControls, ReportSheet, useReportSheetTemplate } from '@/components/reports/report-sheet'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ACCOUNT_SUBTYPE_LABELS, ACCOUNT_TYPE_LABELS } from '@/lib/accounting-labels'
-import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import { chartSubIndentPadStyle, chartSubIndentStyle, childDisplayName } from '@/lib/chart-tree'
 import { REPORT_DRILL_LINK } from '@/lib/report-drill'
 import { cn } from '@/lib/utils'
@@ -39,15 +39,6 @@ export type ChartAccountRow = {
 }
 
 type ChartColumnId = 'number' | 'name' | 'type' | 'detail' | 'balance'
-type SheetTemplate = 'standard' | 'compact' | 'plain'
-
-const TEMPLATE_KEY = 'bpc.reportTemplate'
-
-const TEMPLATES: { id: SheetTemplate; label: string }[] = [
-  { id: 'standard', label: 'Standard' },
-  { id: 'compact', label: 'Compact' },
-  { id: 'plain', label: 'Plain' },
-]
 
 const CHART_COLUMNS: { id: ChartColumnId; label: string }[] = [
   { id: 'number', label: 'Number' },
@@ -103,34 +94,16 @@ export function ChartTable({
   const { prefs, visible, toggle } = useTableColumnPrefs('bpc.chartColumns', CHART_COLUMNS)
   const columns = visible.map((column) => column.id as ChartColumnId)
   const span = columns.length + 2
-  const savedTemplate = useBrowserStore(TEMPLATE_KEY)
-  const template: SheetTemplate =
-    savedTemplate === 'compact' || savedTemplate === 'plain' || savedTemplate === 'standard'
-      ? savedTemplate
-      : 'standard'
+  const template = useReportSheetTemplate()
   const striped = template !== 'plain'
   const headClass = striped ? 'ledger-head hover:bg-[var(--band)]' : 'hover:bg-muted/40'
   const headCell = striped ? 'bg-[var(--band)]' : undefined
 
   return (
-    <div data-report-root data-template={template}>
+    <ReportSheet>
       <div className="mb-3 flex flex-wrap items-center justify-end gap-2 print:hidden">
         <FontToolbarControls />
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Row style">
-          {TEMPLATES.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={template === item.id}
-              onClick={() => writeBrowserStore(TEMPLATE_KEY, item.id)}
-              className={`rounded-md px-2.5 py-1 text-sm ${
-                template === item.id ? 'bg-secondary font-medium' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <ReportRowStyleControls />
         <details className="relative">
           <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm">
             <Columns3Icon className="size-3.5 text-muted-foreground" aria-hidden />
@@ -256,7 +229,7 @@ export function ChartTable({
         </ScrollSheet>
         <Pagination total={rows.length} />
       </Card>
-    </div>
+    </ReportSheet>
   )
 }
 

@@ -90,6 +90,11 @@ export async function list(ctx: OrgContext, query: ListQuery) {
   const where: Prisma.AuditLogWhereInput = {
     orgId: ctx.orgId,
     action: 'DELETE',
+    // Restored or cleared rows leave Trash; ledger soft-deletes stay in the database.
+    AND: [
+      { NOT: { after: { path: ['restored'], equals: true } } },
+      { NOT: { after: { path: ['cleared'], equals: true } } },
+    ],
     ...(needle.length
       ? {
           OR: needle.flatMap((value) => [
@@ -101,6 +106,7 @@ export async function list(ctx: OrgContext, query: ListQuery) {
             { before: { path: ['name'], string_contains: value } },
             { before: { path: ['email'], string_contains: value } },
             { before: { path: ['sku'], string_contains: value } },
+            { before: { path: ['entries'], array_contains: value } },
             { after: { path: ['reason'], string_contains: value } },
           ]),
         }

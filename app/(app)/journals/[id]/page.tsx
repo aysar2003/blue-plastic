@@ -6,6 +6,7 @@ import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { DeleteButton } from '@/components/data/delete-record'
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
+import { neighborHrefs, RecordNav } from '@/components/forms/record-nav'
 import { DocumentActions } from '@/components/print/document-actions'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -26,7 +27,11 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
 
   const journal = await journalService.get(ctx, id).catch(() => null)
   if (!journal) notFound()
-  const trail = await trailFor(ctx, journal.id)
+  const isManual = journal.sourceType === 'MANUAL'
+  const [trail, neighbors] = await Promise.all([
+    trailFor(ctx, journal.id),
+    isManual ? journalService.neighbors(ctx, id) : Promise.resolve(undefined),
+  ])
 
   const currency = ctx.organization.baseCurrency
   const canReverse = ctx.permissions.has('journal:reverse') && journal.status === 'POSTED'
@@ -91,6 +96,12 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
       />
 
       <RecordedBy trail={trail} timeZone={ctx.organization.timeZone} />
+
+      {isManual && neighbors ? (
+        <div className="mb-4 flex flex-wrap items-center gap-1 print:hidden">
+          <RecordNav {...neighborHrefs('/journals', neighbors, journal.id, '')} />
+        </div>
+      ) : null}
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Detail

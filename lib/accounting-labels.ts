@@ -98,6 +98,7 @@ export const JOURNAL_SOURCE_LABELS: Record<JournalSourceType, string> = {
   TRANSFER: 'Transfer',
   DEPOSIT: 'Deposit',
   INVENTORY_ADJUSTMENT: 'Inventory adjustment',
+  ASSEMBLY_BUILD: 'Assembly build',
   POS_CASH_MOVE: 'POS cash in/out',
   POS_SESSION_CLOSE: 'POS session close',
 }

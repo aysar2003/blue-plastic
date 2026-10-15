@@ -121,6 +121,12 @@ export const ITEM_TEMPLATE: TemplateColumn[] = [
   },
   { header: 'SKU', required: false, hint: 'Your code. It has to be unique.', example: 'DRM-1' },
   {
+    header: 'Barcode',
+    required: false,
+    hint: 'Package barcode for the till. Paste or type the code. On an existing product (matched by name), this updates the barcode so POS can scan it.',
+    example: '5901234123457',
+  },
+  {
     header: 'Type',
     required: false,
     hint: 'Service, Non-inventory, or Inventory. A quantity on hand makes it Inventory.',
@@ -340,6 +346,7 @@ const ITEM_SAMPLES: Record<string, string>[] = [
   {
     'Product/Service Name': 'Blue drum',
     SKU: 'DRM-1',
+    Barcode: '5901234123457',
     Type: 'Inventory',
     'Sales Description': '20L drum',
     'Sales Price': '25',
@@ -355,6 +362,7 @@ const ITEM_SAMPLES: Record<string, string>[] = [
   {
     'Product/Service Name': 'Delivery',
     Type: 'Service',
+    Barcode: '5901234123458',
     'Sales Description': 'Local delivery',
     'Sales Price': '15',
     Taxable: 'Yes',

@@ -77,6 +77,7 @@ export async function resolveSources(
   const transferIds = idsFor(['TRANSFER'])
   const depositIds = idsFor(['DEPOSIT'])
   const adjustmentIds = idsFor(['INVENTORY_ADJUSTMENT'])
+  const buildIds = idsFor(['ASSEMBLY_BUILD'])
   const openingIds = idsFor(['OPENING_BALANCE'])
   const posCashMoveIds = idsFor(['POS_CASH_MOVE'])
   const posSessionCloseIds = idsFor(['POS_SESSION_CLOSE'])
@@ -89,6 +90,7 @@ export async function resolveSources(
     transfers,
     deposits,
     adjustments,
+    builds,
     openingAccounts,
     openingItems,
     openingCustomers,
@@ -141,6 +143,12 @@ export async function resolveSources(
     adjustmentIds.length
       ? db.inventoryAdjustment.findMany({
           where: { orgId, id: { in: adjustmentIds } },
+          select: { id: true, number: true },
+        })
+      : [],
+    buildIds.length
+      ? db.assemblyBuild.findMany({
+          where: { orgId, id: { in: buildIds } },
           select: { id: true, number: true },
         })
       : [],
@@ -248,6 +256,15 @@ export async function resolveSources(
     resolved.set(key('INVENTORY_ADJUSTMENT', adjustment.id), {
       number: adjustment.number,
       href: '/inventory#adjustments',
+      partyName: null,
+      partyHref: null,
+    })
+  }
+
+  for (const build of builds) {
+    resolved.set(key('ASSEMBLY_BUILD', build.id), {
+      number: build.number,
+      href: '/inventory/builds/new',
       partyName: null,
       partyHref: null,
     })

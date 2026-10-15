@@ -311,6 +311,16 @@ export const INVENTORY_HUB_APPS: HubApp[] = [
     blurb: 'Building, plumbing, electrical…',
   },
   {
+    key: 'barcodes',
+    label: 'Barcodes',
+    href: '/barcodes',
+    icon: 'barcode',
+    permission: 'item:read',
+    accent: '#B45309',
+    wash: '#FEF3C7',
+    blurb: 'Generate, print, Excel',
+  },
+  {
     key: 'stock',
     label: 'Stock on hand',
     href: '/inventory/stock',
@@ -339,6 +349,16 @@ export const INVENTORY_HUB_APPS: HubApp[] = [
     accent: '#B45309',
     wash: '#FEF3C7',
     blurb: 'A count that differs',
+  },
+  {
+    key: 'builds',
+    label: 'Build assemblies',
+    href: '/inventory/builds/new',
+    icon: 'package',
+    permission: 'inventory:adjust',
+    accent: '#0369A1',
+    wash: '#E0F2FE',
+    blurb: 'Combine parts into finished goods',
   },
   {
     key: 'reports',
@@ -600,7 +620,7 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     permission: 'audit:read',
     accent: '#334155',
     wash: '#F1F5F9',
-    blurb: 'What was deleted',
+    blurb: 'Deleted records — view, restore, clear',
   },
   {
     key: 'databases',

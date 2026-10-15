@@ -13,6 +13,7 @@ import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
 import { LockedNumber } from '@/components/forms/locked-number'
 import { FormStatus } from '@/components/forms/form-status'
+import { neighborHrefs, RecordNav } from '@/components/forms/record-nav'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -128,6 +129,7 @@ export function BillForm({
   documentNumber,
   document,
   initialVendorId,
+  neighbors,
   stores = [],
   stock = {},
 }: {
@@ -146,6 +148,11 @@ export function BillForm({
   documentNumber: string
   /** Set when a vendor page opened this form, so the vendor is already chosen. */
   initialVendorId?: string
+  /** The saved document before this one, and the one after, in date then number order. */
+  neighbors?: {
+    previous: { id: string; number: string } | null
+    next: { id: string; number: string } | null
+  }
   /** Present when editing. Saving reverses the original journal and posts a new one. */
   document?: {
     id: string
@@ -225,6 +232,76 @@ export function BillForm({
   const nextKey = useRef(lines.reduce((max, line) => Math.max(max, line.key), 0) + 1)
   const handled = useRef(false)
   const afterSave = useRef<'close' | 'new'>('close')
+
+  /** Wipe typed fields back to a blank sheet (or the last saved document when editing). */
+  const resetForm = () => {
+    if (document) {
+      setNumber(documentNumber)
+      setVendorId(document.vendorId)
+      setDate(document.date)
+      setReference(document.reference ?? '')
+      setMemo(document.memo ?? '')
+      setPaymentTermId(document.paymentTermId ?? '')
+      setPaymentSource(document.offsetCustomerId ? 'customer' : 'bank')
+      setOffsetCustomerId(document.offsetCustomerId ?? '')
+      setPaymentAccountId(document.paymentAccountId ?? paymentAccounts[0]?.id ?? '')
+      const restored = withItemRows(
+        document.lines.map((line, index) => ({
+          key: index + 1,
+          kind: line.itemId ? ('item' as const) : ('category' as const),
+          itemId: line.itemId ?? '',
+          expenseAccountId: line.expenseAccountId ?? '',
+          description: line.description ?? '',
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          taxCodeId: line.taxCodeId ?? '',
+          storeId: line.storeId ?? officeId,
+        })),
+        officeId,
+        itemRows,
+      )
+      setLines(restored)
+      setShowCategories(
+        Boolean(
+          document.lines.some(
+            (line) =>
+              !line.itemId &&
+              (Boolean(line.expenseAccountId) ||
+                Boolean(line.description) ||
+                Number(line.unitPrice) !== 0),
+          ),
+        ),
+      )
+      nextKey.current = restored.reduce((max, line) => Math.max(max, line.key), 0) + 1
+      return
+    }
+    setVendorId(initialVendorId ?? '')
+    setOffsetCustomerId('')
+    setPaymentSource('bank')
+    setDate(today)
+    setReference('')
+    setMemo('')
+    setPaymentTermId(
+      initialVendorId
+        ? (vendors.find((vendor) => vendor.id === initialVendorId)?.paymentTermId ?? '')
+        : '',
+    )
+    setPaymentAccountId(paymentAccounts[0]?.id ?? '')
+    const fallback =
+      (initialVendorId
+        ? vendors.find((vendor) => vendor.id === initialVendorId)?.defaultExpenseAccountId
+        : null) ?? ''
+    const blank = withItemRows(
+      fallback
+        ? [empty(1, fallback), empty(2, fallback)]
+        : [empty(1), empty(2)],
+      officeId,
+      itemRows,
+    )
+    setLines(blank)
+    setShowCategories(false)
+    nextKey.current = blank.reduce((max, line) => Math.max(max, line.key), 0) + 1
+  }
 
   // Start on the party name so Tab walks the form without the mouse.
   useEffect(() => {
@@ -447,6 +524,10 @@ export function BillForm({
       className="space-y-2"
     >
       <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor(false)} />
+
+      <div className="flex flex-wrap items-center gap-1 print:hidden">
+        <RecordNav {...neighborHrefs(`/purchases/${config.slug}`, neighbors, document?.id)} />
+      </div>
 
       <Card className="overflow-hidden bg-white p-0">
         {isVendorCredit ? (
@@ -896,6 +977,9 @@ export function BillForm({
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => router.push(`/purchases/${config.slug}`)}>
           Close
+        </Button>
+        <Button type="button" variant="outline" onClick={resetForm}>
+          Reset
         </Button>
         <SubmitButton
           variant="outline"

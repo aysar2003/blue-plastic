@@ -49,11 +49,18 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
   purchases: fromHub(PURCHASE_HUB_APPS),
   banking: fromHub(BANKING_HUB_APPS),
   inventory: fromHub(INVENTORY_HUB_APPS),
+  barcodes: [
+    { label: 'Barcode desk', href: '/barcodes', permission: 'item:read' },
+    { label: 'Print labels', href: '/barcodes/print', permission: 'item:read' },
+    { label: 'Excel export', href: '/api/exports/barcodes', permission: 'item:read' },
+    { label: 'Products', href: '/items', permission: 'item:read' },
+  ],
   accounting: fromHub(ACCOUNTING_HUB_APPS),
   settings: fromHub(SETTINGS_HUB_APPS),
   help: fromHub(HELP_HUB_APPS),
   customers: [
     { label: 'All customers', href: '/customers', permission: 'customer:read' },
+    { label: 'Portal users', href: '/customers/portal-users', permission: 'customer:read' },
     { label: 'Customer statements', href: '/reports/statements/customer', permission: 'report:read' },
     { label: 'A/R aging', href: '/reports/ar-aging', permission: 'report:read' },
   ],

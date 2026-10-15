@@ -8,7 +8,7 @@ import { parseReportStyle, REPORT_STYLE_KEY, reportStyleForTheme } from '@/lib/r
 
 /**
  * Keeps <html data-report-style> in sync with the Appearance picker, so every
- * [data-report-root] sheet (Reports, chart of accounts) uses the same fonts and rows.
+ * [data-report-root] sheet (Reports, chart of accounts, bank lists) uses the same fonts and rows.
  *
  * When the System look is SOM ERP (website navy + cyan), a leftover Odoo/QBO
  * report-paper pick is cleared on first hydrate so the desk matches the site.

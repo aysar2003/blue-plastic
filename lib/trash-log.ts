@@ -2,9 +2,8 @@
  * How a deletion is shown in Trash.
  *
  * The log names the record the way a person knows it — an invoice number, a
- * customer name — and nothing else. It does not carry the database id, and it
- * does not build a path back into the working books. Delete already took the
- * record out of those books.
+ * customer name — and nothing else. The Trash detail screen holds restore and
+ * PDF; this presenter stays display-only.
  */
 
 const KIND: Record<string, string> = {

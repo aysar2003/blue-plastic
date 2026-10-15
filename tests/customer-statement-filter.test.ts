@@ -44,6 +44,15 @@ describe('customer statement filters', () => {
     expect(entryVisible(overdue, readStatementFilter({ status: 'open' }), '2026-10-03')).toBe(true)
   })
 
+  it('shows a customer-offset expense on the statement and under paid / expense filters', () => {
+    const expense = row({ kind: 'EXPENSE' })
+    expect(entryVisible(expense, readStatementFilter({}), '2026-10-03')).toBe(true)
+    expect(entryVisible(expense, readStatementFilter({ type: 'expense' }), '2026-10-03')).toBe(true)
+    expect(entryVisible(expense, readStatementFilter({ status: 'paid' }), '2026-10-03')).toBe(true)
+    expect(entryVisible(expense, readStatementFilter({ status: 'open' }), '2026-10-03')).toBe(false)
+    expect(entryVisible(expense, readStatementFilter({ type: 'journal' }), '2026-10-03')).toBe(false)
+  })
+
   it('writes a PDF that names the statement', () => {
     const bytes = buildTextPdf([
       { runs: [{ text: 'Customer statement', x: 40, bold: true }], size: 12, height: 16 },

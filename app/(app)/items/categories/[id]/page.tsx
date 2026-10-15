@@ -4,12 +4,14 @@ import { notFound } from 'next/navigation'
 import { PackageIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
+import { MetricCard } from '@/components/data/metric-card'
 import { PageHeader } from '@/components/data/page-header'
 import { Pagination } from '@/components/data/pagination'
 import { SearchInput } from '@/components/data/search-input'
 import { Card } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { today } from '@/lib/date'
+import { formatMoney } from '@/lib/money'
 import { parseListQuery } from '@/lib/validation/common'
 import { readSort } from '@/components/data/sortable-header'
 import { requireOrgContext } from '@/server/auth/context'
@@ -50,9 +52,9 @@ export default async function ItemCategoryPage({
   const query = parseListQuery(queryParams)
   const sort = readSort(queryParams, SORTABLE, { sort: 'name', dir: 'asc' })
 
-  let category: Awaited<ReturnType<typeof itemService.getCategory>>
+  let shelf: Awaited<ReturnType<typeof itemService.categoryShelf>>
   try {
-    category = await itemService.getCategory(ctx, id)
+    shelf = await itemService.categoryShelf(ctx, id)
   } catch {
     notFound()
   }
@@ -63,7 +65,7 @@ export default async function ItemCategoryPage({
     dir: sort.dir,
   }
 
-  const [page, accounts, taxCodes, categories, shelf] = await Promise.all([
+  const [page, accounts, taxCodes, categories, storeShelf] = await Promise.all([
     itemService.list(ctx, query, { categoryId: id, ...sort }),
     accountService.selectableAccounts(ctx),
     taxService.listCodes(ctx),
@@ -75,11 +77,12 @@ export default async function ItemCategoryPage({
     ctx,
     page.rows.map((row) => row.id),
   )
+  const currency = ctx.organization.baseCurrency
   const taxOptions = ctx.features.enableTax
     ? taxCodes.filter((c) => c.isActive).map((c) => ({ id: c.id, label: c.name }))
     : []
   const categoryOptions = categories.map((c) => ({ id: c.id, label: c.name }))
-  const storeOptions = shelf.stores.map((store) => ({
+  const storeOptions = storeShelf.stores.map((store) => ({
     id: store.id,
     label: store.name,
     isOffice: store.isOffice,
@@ -88,19 +91,33 @@ export default async function ItemCategoryPage({
   return (
     <>
       <PageHeader
-        title={category.name}
-        description="Items in this category, with on-hand quantity and a column for each store. Turn store columns on in the table customize menu if they are hidden."
+        title={shelf.name}
+        description="Category dashboard — items in this group, on-hand quantity, and stock cost across stores."
         actions={
           <>
             <Link href="/items/categories" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
               All categories
             </Link>
-            <Link href={`/items?category=${category.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            <Link href={`/items?category=${shelf.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
               In products list
             </Link>
           </>
         }
       />
+
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Items" value={shelf.itemCount} />
+        <MetricCard label="On hand" value={shelf.onHand} />
+        <MetricCard
+          label="Total cost"
+          value={formatMoney(shelf.totalCost, currency)}
+        />
+        <MetricCard
+          label="Showing"
+          value={page.total}
+          hint={query.q ? 'Matching this search' : 'In this category'}
+        />
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <SearchInput placeholder="Search in this category" />
@@ -121,17 +138,17 @@ export default async function ItemCategoryPage({
           <ItemTable
             sort={sort}
             linkParams={linkParams}
-            storeColumns={shelf.stores}
+            storeColumns={storeShelf.stores}
             rows={page.rows.map((row) => ({
               ...row,
               recorded: whoText(trails.get(row.id)),
-              storeQty: shelf.byItem[row.id] ?? {},
+              storeQty: storeShelf.byItem[row.id] ?? {},
             }))}
             accounts={accounts}
             taxCodes={taxOptions}
             categories={categoryOptions}
             stores={storeOptions}
-            currency={ctx.organization.baseCurrency}
+            currency={currency}
             canEdit={ctx.permissions.has('item:update')}
             canArchive={ctx.permissions.has('item:archive')}
             canAdjust={ctx.permissions.has('inventory:adjust')}
@@ -143,7 +160,8 @@ export default async function ItemCategoryPage({
       )}
 
       <p className="mt-3 text-xs text-muted-foreground">
-        As of {today(ctx.organization.timeZone)}. Stock columns use live store quantities.
+        As of {today(ctx.organization.timeZone)}. Stock columns use live store quantities;
+        total cost is inventory value at average cost.
       </p>
     </>
   )

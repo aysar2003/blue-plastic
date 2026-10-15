@@ -1,10 +1,13 @@
 'use server'
 
+import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 import { formatAccessDeniedMessage } from '@/lib/access-denied'
 import { isNavigationError } from '@/lib/db-error'
+import { portalLoginUrl } from '@/lib/portal-login'
+import { generateTemporaryPassword } from '@/lib/temporary-password'
 import { z } from 'zod'
 import {
   bulkSetActiveSchema,
@@ -15,7 +18,7 @@ import {
 import { cuid } from '@/lib/validation/common'
 import { action } from '@/server/action'
 import { requireOrgContext, type OrgContext } from '@/server/auth/context'
-import { isAppError } from '@/server/errors'
+import { isAppError, validation } from '@/server/errors'
 import {
   listCustomerFiles,
   readCustomerUploads,
@@ -30,6 +33,7 @@ import {
 import * as contactService from '@/server/services/contact.service'
 import { importContacts } from '@/server/services/import.service'
 import * as lifecycle from '@/server/services/master-data-lifecycle'
+import * as portalService from '@/server/services/portal.service'
 
 function revalidateContacts() {
   revalidatePath('/customers')
@@ -44,11 +48,47 @@ export const createCustomer = action
   .requires('customer:create')
   .input(customerSchema)
   .handler(async (ctx, input) => {
+    if (input.inviteToPortal && !input.email) {
+      throw validation('Email is required to invite to the portal.')
+    }
     const customer = await contactService.createCustomer(ctx, input)
+    let portalLogin: string | undefined
+    let portalEmail: string | undefined
+    let temporaryPassword: string | undefined
+    if (
+      input.inviteToPortal &&
+      input.email &&
+      ctx.features.enableCustomerPortal &&
+      ctx.permissions.has('portal:manage')
+    ) {
+      temporaryPassword = generateTemporaryPassword()
+      const invite = await portalService.invitePortalUser(ctx, {
+        customerId: customer.id,
+        name: input.displayName,
+        email: input.email,
+        inviteMode: 'password',
+        temporaryPassword,
+      })
+      const h = await headers()
+      const host = h.get('x-forwarded-host') ?? h.get('host')
+      const proto = h.get('x-forwarded-proto') ?? 'http'
+      const origin = host ? `${proto}://${host}` : null
+      portalLogin = portalLoginUrl(invite.orgId, origin)
+      portalEmail = invite.email
+      revalidatePath('/customers/portal-users')
+    }
     revalidateContacts()
     // The label comes back so a picker that opened this dialog can show the new
     // record immediately, without re-reading the list to find out its name.
-    return { id: customer.id, displayName: input.displayName }
+    return {
+      id: customer.id,
+      displayName: input.displayName,
+      portalLoginUrl: portalLogin,
+      portalEmail,
+      temporaryPassword,
+      /** @deprecated same as portalLoginUrl for older toast copy */
+      inviteUrl: portalLogin,
+    }
   })
 
 export const updateCustomer = action
@@ -56,9 +96,40 @@ export const updateCustomer = action
   .input(customerSchema.extend({ id: cuid }))
   .handler(async (ctx, input) => {
     const customer = await contactService.updateCustomer(ctx, input)
+    let portalLogin: string | undefined
+    let portalEmail: string | undefined
+    let temporaryPassword: string | undefined
+    if (
+      input.inviteToPortal &&
+      input.email &&
+      ctx.features.enableCustomerPortal &&
+      ctx.permissions.has('portal:manage')
+    ) {
+      temporaryPassword = generateTemporaryPassword()
+      const invite = await portalService.invitePortalUser(ctx, {
+        customerId: customer.id,
+        name: input.displayName,
+        email: input.email,
+        inviteMode: 'password',
+        temporaryPassword,
+      })
+      const h = await headers()
+      const host = h.get('x-forwarded-host') ?? h.get('host')
+      const proto = h.get('x-forwarded-proto') ?? 'http'
+      const origin = host ? `${proto}://${host}` : null
+      portalLogin = portalLoginUrl(invite.orgId, origin)
+      portalEmail = invite.email
+      revalidatePath('/customers/portal-users')
+    }
     revalidateContacts()
     revalidatePath(`/customers/${input.id}`)
-    return { id: customer.id }
+    return {
+      id: customer.id,
+      portalLoginUrl: portalLogin,
+      portalEmail,
+      temporaryPassword,
+      inviteUrl: portalLogin,
+    }
   })
 
 export const removeCustomerFile = action
@@ -200,9 +271,23 @@ export async function createCustomerForm(_prev: FormState, formData: FormData): 
 
   const result = await createCustomer(formValues(formData))
   if (!result.ok || !result.data.id) return toFormState(result, 'Customer created.')
+  const portal = portalInviteFields(result.data)
   const stored = await attachUploads('customer:create', result.data.id, uploads)
-  if (!stored) return toFormState(result, 'Customer created.')
-  return papersState(stored, 'Customer created.', { id: result.data.id, label: result.data.displayName })
+  const message = portal.portalLoginUrl
+    ? 'Customer created. Portal login details are ready to copy.'
+    : 'Customer created.'
+  if (!stored) {
+    return {
+      status: 'success',
+      message,
+      created: { id: result.data.id, label: result.data.displayName },
+      ...portal,
+    }
+  }
+  return {
+    ...papersState(stored, message, { id: result.data.id, label: result.data.displayName }),
+    ...portal,
+  }
 }
 
 export async function updateCustomerForm(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -229,9 +314,27 @@ export async function updateCustomerForm(_prev: FormState, formData: FormData): 
 
   const result = await updateCustomer(values)
   if (!result.ok || !values.id) return toFormState(result, 'Customer saved.')
+  const portal = portalInviteFields(result.data)
   const stored = await attachUploads('customer:update', values.id, uploads)
-  if (!stored) return toFormState(result, 'Customer saved.')
-  return papersState(stored, 'Customer saved.')
+  const message = portal.portalLoginUrl
+    ? 'Customer saved. Portal login details are ready to copy.'
+    : 'Customer saved.'
+  if (!stored) return { status: 'success', message, ...portal }
+  return { ...papersState(stored, message), ...portal }
+}
+
+function portalInviteFields(data: {
+  portalLoginUrl?: string
+  portalEmail?: string
+  temporaryPassword?: string
+  inviteUrl?: string
+}): Pick<FormState, 'portalLoginUrl' | 'portalEmail' | 'temporaryPassword' | 'inviteUrl'> {
+  return {
+    portalLoginUrl: data.portalLoginUrl,
+    portalEmail: data.portalEmail,
+    temporaryPassword: data.temporaryPassword,
+    inviteUrl: data.inviteUrl ?? data.portalLoginUrl,
+  }
 }
 
 type PaperWarning = { message: string; code?: string }

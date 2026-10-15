@@ -1,13 +1,14 @@
 import Link from 'next/link'
-import { Decimal, formatMoney } from '@/lib/money'
 import { bandDetail, type CustomerBand, type BandKey } from '@/lib/customer-bands'
+import { MONEY_BAR } from '@/lib/money-bar-bands'
+import { Decimal, formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
 const LOOK: Record<BandKey, { title: string; bar: string }> = {
-  estimates: { title: 'Estimates', bar: 'bg-[#5ec8e5]' },
-  overdue: { title: 'Overdue', bar: 'bg-[#d4652f]' },
-  open: { title: 'Open', bar: 'bg-[#c5c9ce]' },
-  paid: { title: 'Recently paid', bar: 'bg-[#2ca01c]' },
+  estimates: { title: 'Estimates', bar: MONEY_BAR.estimates.bar },
+  overdue: { title: 'Overdue', bar: MONEY_BAR.overdue.bar },
+  open: { title: 'Open', bar: MONEY_BAR.open.bar },
+  paid: { title: 'Recently paid', bar: MONEY_BAR.paid.bar },
 }
 
 /**

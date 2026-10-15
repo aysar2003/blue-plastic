@@ -13,7 +13,7 @@ export function ContactDetailReopen() {
     <button
       type="button"
       onClick={detail.show}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-sm hover:bg-accent"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-sm hover:bg-[var(--band)]"
       aria-expanded={false}
       aria-label="Show information"
     >

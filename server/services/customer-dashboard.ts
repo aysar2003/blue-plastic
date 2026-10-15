@@ -111,9 +111,9 @@ export type CustomerActivityRow = {
   status: string
 }
 
-/** Every sale, payment, delivery note, and opening journal for one customer, newest first. */
+/** Every sale, payment, customer-offset expense, delivery note, and opening journal for one customer, newest first. */
 export async function customerActivity(ctx: OrgContext, customerId: string): Promise<CustomerActivityRow[]> {
-  const [documents, payments, journals, deliveries] = await Promise.all([
+  const [documents, payments, expenses, journals, deliveries] = await Promise.all([
     db.salesDocument.findMany({
       where: { orgId: ctx.orgId, customerId },
       select: {
@@ -146,6 +146,26 @@ export async function customerActivity(ctx: OrgContext, customerId: string): Pro
       orderBy: [{ date: 'desc' }, { number: 'desc' }],
       take: 80,
     }),
+    db.purchaseDocument.findMany({
+      where: { orgId: ctx.orgId, offsetCustomerId: customerId, type: 'EXPENSE' },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        total: true,
+        status: true,
+        lines: {
+          orderBy: { lineNumber: 'asc' },
+          take: 1,
+          select: {
+            expenseAccount: { select: { name: true } },
+            item: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: [{ date: 'desc' }, { number: 'desc' }],
+      take: 80,
+    }),
     db.journalLine.findMany({
       where: {
         orgId: ctx.orgId,
@@ -155,6 +175,7 @@ export async function customerActivity(ctx: OrgContext, customerId: string): Pro
           deletedAt: null,
           salesDocuments: { none: {} },
           customerPayments: { none: {} },
+          purchaseDocuments: { none: {} },
         },
       },
       select: {
@@ -210,6 +231,18 @@ export async function customerActivity(ctx: OrgContext, customerId: string): Pro
       amount: payment.amount.toString(),
       status: payment.status,
       sort: `${toCalendarDate(payment.date)}-${payment.number}`,
+    })),
+    ...expenses.map((document) => ({
+      id: document.id,
+      href: `/purchases/expenses/${document.id}`,
+      kind: 'Expense',
+      number: document.number,
+      date: toCalendarDate(document.date),
+      due: null,
+      account: document.lines[0]?.item?.name ?? document.lines[0]?.expenseAccount?.name ?? null,
+      amount: document.total.toString(),
+      status: document.status,
+      sort: `${toCalendarDate(document.date)}-${document.number}`,
     })),
     ...journals.map((line) => ({
       id: line.id,

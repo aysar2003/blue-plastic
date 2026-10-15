@@ -36,7 +36,7 @@ export default async function EditSalesDocumentPage({
   const [document, options, neighbors, shelf] = await Promise.all([
     salesService.get(ctx, id),
     loadFormOptions(ctx),
-    config.type === 'SALES_RECEIPT' ? salesService.neighbors(ctx, config.type, id) : Promise.resolve(undefined),
+    salesService.neighbors(ctx, config.type, id),
     storeService.quantities(ctx),
   ])
 

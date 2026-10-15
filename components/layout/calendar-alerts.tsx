@@ -30,7 +30,7 @@ export function CalendarAlerts({ alerts }: { alerts: CalendarAlertItem[] }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="relative grid size-8 place-items-center rounded-md text-slate-600 hover:bg-slate-100"
+        className="relative grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-[var(--band)] hover:text-foreground"
         aria-label={alerts.length > 0 ? `Calendar reminders, ${alerts.length}` : 'Calendar reminders'}
       >
         <CalendarClockIcon className="size-4" />

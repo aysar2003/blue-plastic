@@ -22,8 +22,8 @@ export type MoneyBarBand = {
 const MIN_HEIGHT = 56
 const MAX_HEIGHT = 160
 const COLLAPSE_BELOW = 36
-/** Compact strip — roughly 3/5 of the previous default height. */
-const DEFAULT_HEIGHT = 88
+/** Tall enough that the coloured share strip under the tiles stays visible. */
+const DEFAULT_HEIGHT = 118
 
 /**
  * QuickBooks-style money strip above the customer / vendor list.
@@ -124,7 +124,7 @@ export function ContactMoneyBar({
 
   const total = bands.reduce((sum, band) => sum.plus(new Decimal(band.amount).abs()), new Decimal(0))
   const compact = height < 78
-  const showBar = height >= 100
+  const showBar = height >= 90
 
   if (!open) {
     return (
@@ -162,22 +162,27 @@ export function ContactMoneyBar({
                   // ~3/5 of the old tile size: tighter padding and type.
                   'rounded-lg border border-border/80 bg-card px-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors',
                   compact ? 'py-1.5' : 'py-2',
-                  'hover:border-border hover:bg-accent/40',
-                  selected && 'border-border bg-accent shadow-sm ring-1 ring-border',
+                  'hover:border-border hover:bg-[var(--band)]',
+                  selected && 'border-border bg-[var(--band)] shadow-sm ring-1 ring-border',
                 )}
                 aria-current={selected ? 'true' : undefined}
               >
                 <p
                   className={cn(
-                    'tabular font-semibold leading-none tracking-tight',
+                    'tabular font-semibold leading-none tracking-tight text-foreground',
                     compact ? 'text-sm sm:text-base' : 'text-base sm:text-lg',
-                    band.accent && selected ? band.accent : 'text-foreground',
+                    band.accent ? band.accent : null,
                   )}
                 >
                   {formatMoney(band.amount, currency)}
                 </p>
                 <p className={cn('text-xs text-muted-foreground', compact ? 'mt-0.5' : 'mt-1')}>
-                  <span className={cn('font-medium', band.key === 'overdue' && 'text-[#d4652f]')}>
+                  <span
+                    className={cn(
+                      'font-medium',
+                      band.key === 'overdue' && (band.accent ?? 'text-[var(--warning,#d4652f)]'),
+                    )}
+                  >
                     {band.detail}
                   </span>
                 </p>
@@ -244,12 +249,12 @@ export function ContactMoneyBar({
           }}
           className="group flex h-3 w-full max-w-xs cursor-ns-resize items-center justify-center"
         >
-          <span className="h-1 w-10 rounded-full bg-[#c5d0da] transition-colors group-hover:bg-[#9aadb8] group-active:bg-primary" />
+          <span className="h-1 w-10 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50 group-active:bg-primary" />
         </div>
         <button
           type="button"
           onClick={toggle}
-          className="absolute bottom-0.5 right-2 inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-white hover:text-foreground"
+          className="absolute bottom-0.5 right-2 inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-card hover:text-foreground"
           aria-expanded={true}
           aria-label="Hide money summary"
         >

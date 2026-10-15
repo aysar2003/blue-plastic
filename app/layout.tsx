@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono, Inter, Source_Sans_3 } from "next/font/google"
 
 import { Providers } from "@/components/providers"
@@ -22,6 +22,13 @@ export const metadata: Metadata = {
   },
   applicationName: PRODUCT_NAME,
   description: PRODUCT_DESCRIPTION,
+}
+
+/** Fit phone and desktop browsers; layout scales to the viewport width. */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({

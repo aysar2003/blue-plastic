@@ -178,14 +178,16 @@ export function bandDetail(band: CustomerBand): string {
   if (band.key === 'estimates') return countPhrase(band.count, 'estimate', 'estimates')
   if (band.key === 'overdue') return countPhrase(band.count, 'overdue invoice', 'overdue invoices')
   if (band.key === 'paid') return countPhrase(band.count, 'recently paid', 'recently paid')
-  if (band.count === 0 && band.extra === 0) {
-    return countPhrase(band.holders, 'open balance', 'open balances')
+  // Open amount often comes from ledger balances when invoice count is 0 —
+  // never label the tile with only credits when holders carry the figure.
+  if (band.count === 0) {
+    const balances = countPhrase(band.holders, 'open balance', 'open balances')
+    if (band.extra === 0) return balances
+    return `${balances} and ${countPhrase(band.extra, 'credit', 'credits')}`
   }
   const invoices = countPhrase(band.count, 'open invoice', 'open invoices')
   if (band.extra === 0) return invoices
-  const credits = countPhrase(band.extra, 'credit', 'credits')
-  if (band.count === 0) return credits
-  return `${invoices} and ${credits}`
+  return `${invoices} and ${countPhrase(band.extra, 'credit', 'credits')}`
 }
 
 function countPhrase(count: number, singular: string, plural: string) {

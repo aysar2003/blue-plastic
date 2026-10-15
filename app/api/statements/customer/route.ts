@@ -2,13 +2,15 @@ import { NextResponse } from 'next/server'
 
 import { letterheadOf } from '@/lib/letterhead'
 import { formatMoney, ZERO } from '@/lib/money'
+import { parsePrintInk } from '@/lib/print-ink'
 import { readStatementFilter, visibleEntries } from '@/lib/customer-statement'
 import { readSettings, type SearchParams } from '@/app/(app)/reports/params'
-import { requireOrgContext } from '@/server/auth/context'
+import { getOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
-import { isAppError } from '@/server/errors'
+import { isAppError, unauthenticated } from '@/server/errors'
 import { renderCustomerStatementPdf } from '@/server/reports/customer-statement-pdf'
 import * as organizationService from '@/server/services/organization.service'
+import * as portalService from '@/server/services/portal.service'
 import * as receivables from '@/server/services/receivables.service'
 
 export const dynamic = 'force-dynamic'
@@ -18,11 +20,15 @@ export const dynamic = 'force-dynamic'
  *
  * The query is the same one the page uses, so the file matches the filters:
  * dates, regular or detailed, type, and open / overdue / paid.
+ * Portal logins may only download their own linked customer.
  */
 export async function GET(request: Request) {
   try {
-    const ctx = await requireOrgContext('report:read')
+    const ctx = await getOrgContext()
+    if (!ctx) throw unauthenticated()
+
     const url = new URL(request.url)
+    const ink = parsePrintInk(url.searchParams.get('ink'))
     const query = Object.fromEntries(url.searchParams) as SearchParams
     const customerId = url.searchParams.get('customerId')
     if (!customerId) {
@@ -31,6 +37,8 @@ export async function GET(request: Request) {
         { status: 422 },
       )
     }
+
+    portalService.assertCustomerDataAccess(ctx, customerId)
 
     const customer = await db.customer.findFirst({
       where: { id: customerId, orgId: ctx.orgId },
@@ -66,6 +74,7 @@ export async function GET(request: Request) {
     const currency = ctx.organization.baseCurrency
     const company = letterheadOf(org)
     const bytes = renderCustomerStatementPdf({
+      ink,
       orgName: company.name,
       orgAddress: company.address ? [company.address] : [],
       orgPhone: company.phone,

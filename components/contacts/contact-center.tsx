@@ -75,12 +75,13 @@ export type ActivitySortKey = (typeof ACTIVITY_COLUMNS)[number]['key']
 
 export type PeopleSortKey = 'name' | 'company' | 'phone' | 'email' | 'balance'
 
+/** Name + balance only — the left pane is narrow; company/phone live on the profile. */
 const PEOPLE_COLUMNS: { key: PeopleSortKey; label: string; align?: 'end' }[] = [
   { key: 'name', label: 'Name' },
-  { key: 'company', label: 'Company' },
-  { key: 'phone', label: 'Phone' },
   { key: 'balance', label: 'Balance', align: 'end' },
 ]
+
+const PEOPLE_GRID = 'grid-cols-[minmax(0,1fr)_5.75rem_1.75rem]'
 
 export function isActivitySort(value: string | undefined): value is ActivitySortKey {
   return ACTIVITY_COLUMNS.some((column) => column.key === value)
@@ -257,7 +258,9 @@ export function ContactCenter({
   }
 
   const groups = groupTransactions(ordered)
-  const splitKey = filterPath.includes('vendor') ? 'contact-split:vendors' : 'contact-split:customers'
+  const splitKey = filterPath.includes('vendor')
+    ? 'contact-split:vendors-v2'
+    : 'contact-split:customers-v2'
 
   const peopleRows = people.map((person) => {
     const href = personHref(person.id)
@@ -355,7 +358,12 @@ export function ContactCenter({
                 <ContactDetailReopen />
               </div>
             </div>
-            <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_4.25rem_5.25rem_1.75rem] border-b px-2 py-1 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div
+              className={cn(
+                'grid border-b px-2 py-1 text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground',
+                PEOPLE_GRID,
+              )}
+            >
               {PEOPLE_COLUMNS.map((column) => {
                 const active = peopleSort?.sort === column.key
                 const Icon = active
@@ -435,7 +443,7 @@ export function ContactCenter({
                             <li key={item.label}>
                               <Link
                                 href={item.href}
-                                className="text-sm text-[#0b4f6c] underline-offset-4 hover:underline"
+                                className="text-sm font-medium text-primary underline-offset-4 hover:underline"
                               >
                                 {item.label}
                               </Link>
@@ -454,7 +462,7 @@ export function ContactCenter({
                             <li key={report.label}>
                               <Link
                                 href={report.href}
-                                className="text-sm text-[#0b4f6c] underline-offset-4 hover:underline"
+                                className="text-sm font-medium text-primary underline-offset-4 hover:underline"
                               >
                                 {report.label}
                               </Link>
@@ -480,7 +488,9 @@ export function ContactCenter({
                 aria-current={tab === item.id ? 'page' : undefined}
                 className={cn(
                   'rounded-md px-2.5 py-1 text-sm',
-                  tab === item.id ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent',
+                  tab === item.id
+                    ? 'bg-[var(--band)] font-medium text-foreground'
+                    : 'text-muted-foreground hover:bg-[var(--band)] hover:text-foreground',
                 )}
               >
                 {item.label}
@@ -661,7 +671,8 @@ function TransactionLine({
     <Link
       href={row.href}
       className={cn(
-        'grid h-[2.2rem] items-center px-3 text-sm hover:bg-[#d7ebf6]',
+        /* --band stays readable on night desks; accent washes go near-white and hide light ink. */
+        'group/tx grid h-[2.2rem] items-center px-3 text-sm text-foreground hover:bg-[var(--band)] hover:text-foreground',
         inset
           ? 'grid-cols-[1.1rem_7rem_6rem_7.5rem_minmax(0,1fr)_7rem] border-t border-border/40 pl-2'
           : 'grid-cols-[7rem_6rem_7.5rem_minmax(0,1fr)_7rem]',
@@ -672,8 +683,8 @@ function TransactionLine({
       {inset ? <span /> : null}
       <span className="truncate">{row.kind}</span>
       <span className="truncate font-medium">{row.number}</span>
-      <span className="tabular text-muted-foreground">{formatDate(row.date)}</span>
-      <span className="truncate text-muted-foreground">{row.account ?? '—'}</span>
+      <span className="tabular text-foreground/70 group-hover/tx:text-foreground">{formatDate(row.date)}</span>
+      <span className="truncate text-foreground/70 group-hover/tx:text-foreground">{row.account ?? '—'}</span>
       <span className="tabular text-right">{formatMoney(row.amount, currency)}</span>
     </Link>
   )

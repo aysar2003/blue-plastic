@@ -151,6 +151,21 @@ export function FeaturesForm({ flags }: { flags: OrgFeatureFlags }) {
       </section>
 
       <section className="space-y-3">
+        <h3 className="text-sm font-semibold">Customer portal</h3>
+        <p className="text-xs text-muted-foreground">
+          Self-service login for customers — view-only balance, invoices, payments, and
+          statements. Who may invite portal users is set under Settings → Users
+          (<span className="font-medium">Manage customer portal</span>).
+        </p>
+        <Toggle
+          name="enableCustomerPortal"
+          label="Enable customer portal"
+          hint="When on, staff can give customers a login password or an invite link so they set their own — view only for their invoices and balance."
+          defaultChecked={flags.enableCustomerPortal}
+        />
+      </section>
+
+      <section className="space-y-3">
         <h3 className="text-sm font-semibold">Brand</h3>
         <p className="text-xs text-muted-foreground">
           Creator credit shown on the shell footer and the sign-in screen.

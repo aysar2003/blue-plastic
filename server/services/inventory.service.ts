@@ -7,6 +7,7 @@ import type { Prisma } from '@prisma/client'
 
 import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
+import { foldStoreQuantities } from '@/lib/store-stock'
 import type {
   InventoryAdjustmentInput,
   StoreTicketInput,
@@ -15,6 +16,7 @@ import type {
 import {
   positionsOf,
   recordMovement,
+  restoreMovementsFor,
   reverseMovementsFor,
   stockAgreesWithLedger,
   valuation,
@@ -22,7 +24,7 @@ import {
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
 import * as accountService from '@/server/services/account.service'
 import * as storeService from '@/server/services/store.service'
-import { softDeleteDocument } from '@/server/accounting/deletion'
+import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
 import { postJournal } from '@/server/accounting/posting'
 import type { DraftLine } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
@@ -87,7 +89,7 @@ async function queryStockAlerts(orgId: string): Promise<StockAlertSummary> {
       ) t ON true
      WHERE i."orgId" = ${orgId}
        AND i."deletedAt" IS NULL
-       AND i.type = 'INVENTORY'
+       AND i.type IN ('INVENTORY', 'INVENTORY_ASSEMBLY')
        AND (
          COALESCE(t."runningQuantity", 0) <= 0
          OR (
@@ -236,6 +238,7 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
   const mode = input.mode ?? 'count'
   const accountId =
     input.accountId ?? (mode === 'damage' ? await ensureDamageAccount(ctx) : null)
+  const office = await storeService.ensureOffice(ctx)
 
   return db.$transaction(async (tx) => {
     const account = accountId
@@ -271,6 +274,28 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
     }
 
     const positions = await positionsOf(tx, ctx.orgId, input.lines.map((line) => line.itemId))
+    const stores = await tx.store.findMany({
+      where: { orgId: ctx.orgId, isActive: true },
+      select: { id: true, isOffice: true },
+    })
+    const officeId = stores.find((store) => store.isOffice)?.id ?? office.id
+    const storeId = input.storeId ?? officeId
+    if (!stores.some((store) => store.id === storeId)) throw notFound('Store')
+
+    const shelfGroups = await tx.inventoryTransaction.groupBy({
+      by: ['itemId', 'storeId'],
+      where: { orgId: ctx.orgId, itemId: { in: input.lines.map((line) => line.itemId) } },
+      _sum: { quantity: true },
+    })
+    const shelf = foldStoreQuantities(
+      shelfGroups.map((row) => ({
+        itemId: row.itemId,
+        storeId: row.storeId,
+        quantity: row._sum.quantity?.toString() ?? '0',
+      })),
+      officeId,
+    )
+
     const number = await assignDocumentNumber(tx, ctx.orgId, 'INVENTORY_ADJUSTMENT', input.number)
     const clash = await tx.inventoryAdjustment.findFirst({
       where: { orgId: ctx.orgId, number },
@@ -284,6 +309,7 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
         number,
         date: toDate(input.date),
         accountId: account.id,
+        storeId,
         memo: input.memo ?? null,
         reason: input.reason ?? null,
         createdById: ctx.userId,
@@ -298,9 +324,10 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
     for (const line of input.lines) {
       const item = byId.get(line.itemId)!
       const position = positions.get(line.itemId)!
+      const previous = new Decimal(shelf[line.itemId]?.[storeId] ?? '0')
       const entered = new Decimal(line.countedQuantity)
-      const counted = mode === 'damage' ? position.quantity.minus(entered) : mode === 'cost' ? position.quantity : entered
-      const change = counted.minus(position.quantity)
+      const counted = mode === 'damage' ? previous.minus(entered) : mode === 'cost' ? previous : entered
+      const change = counted.minus(previous)
 
       if (mode === 'damage' && !entered.isPositive()) {
         throw validation(`Enter how many of "${item.name}" were damaged or lost.`)
@@ -314,6 +341,7 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
         type: 'ADJUSTMENT',
         sourceType: 'INVENTORY_ADJUSTMENT',
         sourceId: adjustment.id,
+        storeId,
         quantity: mode === 'cost' ? 0 : change,
         // A count values found stock at the current average. Damage leaves the
         // value on whatever is still there, so that cost rises. Adding cost
@@ -332,7 +360,7 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
           lineNumber: ++lineNumber,
           itemId: line.itemId,
           countedQuantity: counted.toFixed(4),
-          previousQuantity: position.quantity.toFixed(4),
+          previousQuantity: previous.toFixed(4),
           quantityChange: change.toFixed(4),
           unitCost: movement.unitCost.toFixed(6),
           value: movement.value.toFixed(4),
@@ -444,6 +472,33 @@ export async function removeAdjustment(ctx: OrgContext, id: string, reason?: str
       reason,
       before: { status: adjustment.status },
     })
+  })
+}
+
+/** Put a deleted stock adjustment back into the books and the stock ledger. */
+export async function restoreAdjustment(ctx: OrgContext, id: string) {
+  return db.$transaction(async (tx) => {
+    const adjustment = await tx.inventoryAdjustment.findFirst({
+      where: { id, orgId: ctx.orgId, deletedAt: undefined },
+      select: { id: true, number: true, journalId: true, deletedAt: true },
+    })
+    if (!adjustment) throw notFound('Adjustment')
+    const href = '/inventory/stock'
+    if (!adjustment.deletedAt) return { id, number: adjustment.number, href }
+
+    if (adjustment.journalId) {
+      await restoreMovementsFor(tx, ctx, { sourceId: id, journalId: adjustment.journalId })
+    }
+
+    await restoreSoftDeletedDocument(tx, ctx, {
+      clear: () => tx.inventoryAdjustment.update({ where: { id }, data: CLEAR_DELETION }),
+      entity: 'InventoryAdjustment',
+      id,
+      number: adjustment.number,
+      journalIds: [adjustment.journalId],
+    })
+
+    return { id, number: adjustment.number, href }
   })
 }
 

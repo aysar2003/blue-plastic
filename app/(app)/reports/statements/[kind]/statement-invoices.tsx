@@ -37,6 +37,7 @@ export function StatementInvoices({
   template,
   printedBy,
   subject = 'invoice',
+  documentHref,
 }: {
   organization: InvoiceSheetOrganization
   baseCurrency: string
@@ -64,6 +65,8 @@ export function StatementInvoices({
   paper?: 'merchant' | 'classic'
   template?: DocumentTemplate
   printedBy?: string
+  /** Override the per-document open link (portal uses `/portal/invoices/:id`). */
+  documentHref?: (document: SheetDocument) => string
 }) {
   const brand = FORM_SHEET.band
   const brandAccent = FORM_SHEET.accent
@@ -199,9 +202,11 @@ export function StatementInvoices({
         const sale = subject === 'invoice' ? byType(document.type as SalesDocumentType) : null
         const purchase = subject === 'bill' ? purchaseByType(document.type as PurchaseDocumentType) : null
         const config = sale ?? { type: document.type, singular: purchase?.singular ?? 'Bill' }
-        const href = sale
-          ? `/sales/${sale.slug}/${document.id}`
-          : `/purchases/${purchase?.slug ?? 'bills'}/${document.id}`
+        const href =
+          documentHref?.(document) ??
+          (sale
+            ? `/sales/${sale.slug}/${document.id}`
+            : `/purchases/${purchase?.slug ?? 'bills'}/${document.id}`)
         return (
         <section
           key={document.id}
@@ -232,6 +237,7 @@ export function StatementInvoices({
               previousBalance={accountAt?.[document.id]?.previous ?? opening?.toString() ?? null}
               currentBalance={accountAt?.[document.id]?.current ?? closing.toString()}
               printedBy={printedBy}
+              ledger
               words={
                 subject === 'bill'
                   ? {

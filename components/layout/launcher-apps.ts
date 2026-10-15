@@ -34,6 +34,7 @@ export type LauncherIcon =
   | 'transfer'
   | 'monitor'
   | 'database'
+  | 'barcode'
 
 export type LauncherApp = {
   key: string
@@ -139,6 +140,17 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     accent: '#1D4ED8',
     wash: '#DBEAFE',
     blurb: 'Products and stock',
+  },
+  {
+    key: 'barcodes',
+    label: 'Barcodes',
+    href: '/barcodes',
+    icon: 'barcode',
+    glyph: 'barcodes',
+    permission: 'item:read',
+    accent: '#B45309',
+    wash: '#FEF3C7',
+    blurb: 'Generate and print labels',
   },
   {
     key: 'stores',
@@ -254,6 +266,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
 /** Paths that belong to an app whose own door uses a different prefix. */
 export const APP_ALSO: Record<string, string[]> = {
   inventory: ['/items'],
+  barcodes: ['/barcodes/print'],
   accounting: ['/accounts'],
   databases: ['/settings/backup'],
 }

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 
 import { DocumentActions } from '@/components/print/document-actions'
+import { DocumentBarcode } from '@/components/print/document-barcode'
 import { formatDate, formatDateTime, toCalendarDate } from '@/lib/date'
 import { Decimal } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
@@ -74,6 +75,9 @@ export default async function PrintStoreTicketPage({
                 Store ticket
               </p>
               <h1 className="mt-1 text-3xl font-bold tabular tracking-tight">{ticket.number}</h1>
+              <div className="mt-2">
+                <DocumentBarcode value={ticket.number} height={40} moduleWidth={1.15} />
+              </div>
               <p className="mt-1 text-xs font-medium uppercase tracking-wide text-[#5C6B7A]">
                 {originLabel}
               </p>
@@ -90,6 +94,11 @@ export default async function PrintStoreTicketPage({
             <p className="mt-1 text-xl font-semibold leading-snug">{ticket.item.name}</p>
             {ticket.item.sku ? (
               <p className="mt-1 text-sm tabular text-white/70">SKU {ticket.item.sku}</p>
+            ) : null}
+            {ticket.item.barcode ? (
+              <div className="mt-3 rounded-md bg-white px-2 py-1.5">
+                <DocumentBarcode value={ticket.item.barcode} height={36} moduleWidth={1.2} />
+              </div>
             ) : null}
           </div>
 

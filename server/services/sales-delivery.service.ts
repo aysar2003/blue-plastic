@@ -262,6 +262,22 @@ export async function voidForSale(tx: Tx, ctx: OrgContext, salesDocumentId: stri
   })
 }
 
+/** Re-open notes and sale tickets that were voided when the sale was deleted. */
+export async function restoreForSale(tx: Tx, ctx: OrgContext, salesDocumentId: string) {
+  await tx.storeTicket.updateMany({
+    where: { orgId: ctx.orgId, salesDocumentId, origin: 'SALE', status: 'VOID' },
+    data: { status: 'POSTED' },
+  })
+  await tx.deliveryNote.updateMany({
+    where: { orgId: ctx.orgId, salesDocumentId, status: 'VOID' },
+    data: {
+      status: 'POSTED',
+      voidedAt: null,
+      voidReason: null,
+    },
+  })
+}
+
 export async function updateNotes(
   ctx: OrgContext,
   id: string,
@@ -532,7 +548,7 @@ export async function getTicket(ctx: OrgContext, id: string) {
       createdById: true,
       store: { select: { id: true, name: true } },
       toStore: { select: { id: true, name: true } },
-      item: { select: { id: true, name: true, sku: true } },
+      item: { select: { id: true, name: true, sku: true, barcode: true } },
       salesDocument: {
         select: {
           id: true,

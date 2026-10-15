@@ -9,6 +9,7 @@ import { letterheadOf, type LetterheadSource } from '@/lib/letterhead'
 import { formatMoney } from '@/lib/money'
 import { ODOO_PDF } from '@/lib/odoo-brand'
 import { buildTextPdf, type PdfRow } from '@/lib/pdf-text'
+import type { PrintInk } from '@/lib/print-ink'
 import type { JournalRow } from '@/server/services/journal.service'
 
 const PDF_WIDTH = 792
@@ -26,6 +27,7 @@ export type MonthExport = {
   expenses: string | null
   net: string | null
   rows: JournalRow[]
+  ink?: PrintInk
 }
 
 export function monthTitle(periodNumber: number, start: Date) {
@@ -134,7 +136,7 @@ export function renderMonthPdf(input: MonthExport): Uint8Array {
     body.push({ size: 9, height: 16, runs: [{ text: 'Nothing posted in this month.', x: 36 }] })
   }
 
-  return buildTextPdf(body, { width: PDF_WIDTH, height: PDF_HEIGHT, header })
+  return buildTextPdf(body, { width: PDF_WIDTH, height: PDF_HEIGHT, header, ink: input.ink })
 }
 
 export async function renderMonthWorkbook(input: MonthExport): Promise<Uint8Array> {

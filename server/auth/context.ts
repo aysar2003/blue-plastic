@@ -57,6 +57,11 @@ export type OrgContext = {
   isSystemOwner: boolean
   /** May use Connect to open another company. True for the system owner too. */
   canConnect: boolean
+  /**
+   * When role is CUSTOMER, the customer master this login is linked to.
+   * Null for staff, or for a CUSTOMER membership missing its portal link.
+   */
+  portalCustomerId: string | null
 }
 
 /**
@@ -132,6 +137,14 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
     if (sameOrg && membership.version !== session.user.membershipVersion) return null
 
     const { featureFlags, logoStorageKey, ...organization } = membership.organization
+    let portalCustomerId: string | null = null
+    if (membership.role === 'CUSTOMER') {
+      const link = await db.customerPortalUser.findUnique({
+        where: { orgId_userId: { orgId, userId: membership.user.id } },
+        select: { customerId: true },
+      })
+      portalCustomerId = link?.customerId ?? null
+    }
     return {
       orgId: membership.organization.id,
       userId: membership.user.id,
@@ -143,6 +156,7 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
         hasLogo: Boolean(logoStorageKey),
       },
       user: membership.user,
+      portalCustomerId,
       ...flags,
     }
   }
@@ -174,6 +188,7 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
       email: access.email,
       image: access.image,
     },
+    portalCustomerId: null,
     ...flags,
   }
 })
@@ -186,6 +201,17 @@ export async function requireOrgContext(permission?: Permission): Promise<OrgCon
     throw forbidden(`This action requires the "${permission}" permission.`)
   }
   return ctx
+}
+
+export type PortalContext = OrgContext & { portalCustomerId: string }
+
+/** Customer portal pages and APIs — role CUSTOMER with a linked customer. */
+export async function requirePortalContext(): Promise<PortalContext> {
+  const ctx = await requireOrgContext('portal:read')
+  if (ctx.role !== 'CUSTOMER' || !ctx.portalCustomerId) {
+    throw forbidden('This login is not linked to a customer portal.')
+  }
+  return ctx as PortalContext
 }
 
 export function assertPermission(ctx: OrgContext, permission: Permission): void {

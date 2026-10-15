@@ -1850,18 +1850,22 @@ option {
   color: var(--foreground);
 }
 
-[data-report-root][data-template='standard'] table > tbody > tr:nth-child(even) {
+[data-report-root][data-template='standard'] table > tbody > tr:nth-child(even),
+[data-report-root][data-template='compact'] table > tbody > tr:nth-child(even) {
   background-color: var(--stripe);
   color: var(--foreground);
 }
 
-[data-report-root][data-template='standard'] table > tbody > tr:nth-child(odd) {
+[data-report-root][data-template='standard'] table > tbody > tr:nth-child(odd),
+[data-report-root][data-template='compact'] table > tbody > tr:nth-child(odd) {
   background-color: var(--card);
   color: var(--foreground);
 }
 
 [data-report-root][data-template='standard'] table > tbody > tr[class*='bg-[#d5dde6]'],
-[data-report-root][data-template='standard'] table > tbody > tr[class*='bg-muted'] {
+[data-report-root][data-template='standard'] table > tbody > tr[class*='bg-muted'],
+[data-report-root][data-template='compact'] table > tbody > tr[class*='bg-[#d5dde6]'],
+[data-report-root][data-template='compact'] table > tbody > tr[class*='bg-muted'] {
   background-color: var(--band);
   color: var(--foreground);
 }
@@ -1924,9 +1928,126 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-sur
   color: var(--foreground) !important;
 }
 
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='bg-white'], [class*='bg-sky-50'], [class*='bg-slate-50'], [class*='bg-gray-50']) {
+html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-slot='dialog-content']) :is([class*='bg-white'], [class*='bg-sky-50'], [class*='bg-slate-50'], [class*='bg-gray-50']):not(.merchant-invoice):not(.invoice-sheet) {
   background-color: var(--card) !important;
   color: var(--foreground) !important;
+}
+
+/*
+ * Customer papers are always a white sheet with dark ink — night themes must
+ * not lighten type on invoices, delivery notes, or statement invoice pages.
+ * Without this, Print / Save as PDF shows pale text on white (unreadable).
+ */
+html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) {
+  background-color: #ffffff !important;
+  color: #1f2933 !important;
+}
+
+html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
+  .text-\[\#5C6B7A\],
+  .text-\[\#5c6b7a\],
+  .text-\[\#3d4c5c\],
+  .text-\[\#3D4C5C\]
+) {
+  color: #5c6b7a !important;
+}
+
+html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
+  .text-\[\#1f1f23\],
+  .text-\[\#1f2933\],
+  .text-\[\#1B3A4B\],
+  .text-\[\#1b3a4b\]
+) {
+  color: #1f2933 !important;
+}
+
+/*
+ * Light “paper” hovers (QB blue / slate / pastel kind tints) wash out light ink
+ * on night themes. Dialogs and menus portal outside .app-surface.
+ */
+html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content'],
+  [data-slot='popover-content'],
+  [data-slot='dropdown-menu-content']
+) :is(
+  [class*='hover:bg-slate-50'],
+  [class*='hover:bg-slate-100'],
+  [class*='hover:bg-slate-200'],
+  [class*='hover:bg-gray-50'],
+  [class*='hover:bg-gray-100'],
+  [class*='hover:bg-white'],
+  [class*='hover:bg-sky-100'],
+  [class*='hover:bg-indigo-100'],
+  [class*='hover:bg-emerald-100'],
+  [class*='hover:bg-amber-100'],
+  [class*='hover:bg-orange-100'],
+  [class*='hover:bg-teal-100'],
+  [class*='hover:bg-lime-100'],
+  [class*='hover:bg-rose-100'],
+  [class*='hover:bg-violet-100'],
+  [class*='hover:bg-violet-200'],
+  [class*='hover:bg-stone-200'],
+  [class*='hover:bg-orange-200'],
+  [class*='d7ebf6']
+):hover {
+  background-color: var(--band) !important;
+  color: var(--foreground) !important;
+}
+
+/*
+ * Accent hovers from light skins are near-white. On night desks that erase the
+ * row ink — force the band and let muted cells follow the row.
+ */
+html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content'],
+  [data-slot='popover-content'],
+  [data-slot='dropdown-menu-content']
+) :is([class*='hover:bg-accent']:hover, [class*='focus:bg-accent']:focus) {
+  background-color: var(--band) !important;
+  color: var(--foreground) !important;
+}
+
+/*
+ * Night themes lock .text-muted-foreground with !important, so parent
+ * hover:text-* never reaches date/status cells. On any hovered or selected
+ * interactive row, muted ink must follow the row.
+ */
+html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content'],
+  [data-slot='popover-content'],
+  [data-slot='dropdown-menu-content']
+) :is(a, button, tr, [data-slot='table-row'], [role='option'], [role='menuitem'], [role='row']):is(
+  :hover,
+  [data-state='selected'],
+  [aria-selected='true'],
+  [aria-current='true'],
+  [aria-current='page']
+) .text-muted-foreground,
+html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content'],
+  [data-slot='popover-content'],
+  [data-slot='dropdown-menu-content']
+) :is(a, button, [role='option'], [role='menuitem']).text-muted-foreground:is(:hover, [data-state='selected'], [aria-current='page']) {
+  color: var(--foreground) !important;
+}
+
+/* Selected accent fills (combobox / tabs) — same muted-child lock. */
+html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content'],
+  [data-slot='popover-content'],
+  [data-slot='dropdown-menu-content']
+) .bg-accent .text-muted-foreground {
+  color: var(--accent-foreground) !important;
 }
 
 /*
@@ -2119,7 +2240,8 @@ html.quick .app-glyph-tile {
 /* The customer-facing invoice uses a named page so its margins stay tight
  * while lists keep the wider margin above. Colours have to print: the Odoo
  * purple band, table head, and corner marks are the document, not decoration. */
-.invoice-sheet {
+.invoice-sheet,
+.merchant-invoice {
   page: invoice;
 }
 
@@ -2174,6 +2296,19 @@ a.report-drill-link:hover {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+
+  /* Black & White print — greyscale while keeping background fills. */
+  html[data-print-ink='mono'] body {
+    filter: grayscale(1);
+  }
+
+  html[data-print-ink='mono'] .merchant-invoice,
+  html[data-print-ink='mono'] .invoice-sheet,
+  html[data-print-ink='mono'] [data-report-root],
+  html[data-print-ink='mono'] [data-portal-shell] {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }
 
 @page invoice {
@@ -2186,12 +2321,68 @@ a.report-drill-link:hover {
   }
 
   .invoice-sheet,
-  .invoice-sheet * {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+  .invoice-sheet *,
+  .merchant-invoice,
+  .merchant-invoice * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Portal / dark UI: keep the merchant paper white with ink, bands coloured. */
+  .merchant-invoice,
+  .invoice-sheet {
+    background: #ffffff !important;
+    color: #1f2933 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  /*
+   * Night themes remap bg-white / grey text with !important. Those selectors
+   * outrank a plain .merchant-invoice print rule — lock paper ink again here.
+   */
+  html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) {
+    background-color: #ffffff !important;
+    color: #1f2933 !important;
+  }
+
+  html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) :is(
+    .text-\[\#5C6B7A\],
+    .text-\[\#5c6b7a\],
+    .text-\[\#3d4c5c\],
+    .text-\[\#3D4C5C\],
+    .text-\[\#1f1f23\],
+    .text-\[\#1f2933\],
+    .text-\[\#1B3A4B\],
+    .text-\[\#1b3a4b\]
+  ) {
+    color: #1f2933 !important;
+  }
+
+  html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) :is(
+    .text-\[\#5C6B7A\],
+    .text-\[\#5c6b7a\],
+    .text-\[\#3d4c5c\],
+    .text-\[\#3D4C5C\]
+  ) {
+    color: #5c6b7a !important;
+  }
+
+  html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) .text-white {
+    color: #ffffff !important;
+  }
+
+  [data-invoice-page] {
+    break-after: page;
+    break-inside: avoid;
+  }
+
+  [data-invoice-page]:last-of-type {
+    break-after: auto;
   }
 
   body:has(.invoice-sheet) .company-print-letterhead,
+  body:has(.merchant-invoice) .company-print-letterhead,
   body:has([data-report-root]) .company-print-letterhead {
     display: none !important;
   }
@@ -2199,7 +2390,9 @@ a.report-drill-link:hover {
   /* Invoice sheets carry their own letterhead; a report that prints them
    * (a customer's invoices, invoice by invoice) drops the report's one. */
   [data-report-root]:has(.invoice-sheet) .report-letterhead,
-  [data-report-root]:has(.invoice-sheet) [data-report-sheet-header] {
+  [data-report-root]:has(.invoice-sheet) [data-report-sheet-header],
+  [data-report-root]:has(.merchant-invoice) .report-letterhead,
+  [data-report-root]:has(.merchant-invoice) [data-report-sheet-header] {
     display: none !important;
   }
 
@@ -2252,6 +2445,22 @@ a.report-drill-link:hover {
   body {
     background: #fff;
     color: #000;
+  }
+
+  /* Customer portal: whole sheet prints on white paper with colours kept. */
+  [data-portal-shell] {
+    background: #fff !important;
+    color: #111827 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  [data-portal-shell] [data-report-root],
+  [data-portal-shell] [data-statement-invoices] {
+    background: #fff !important;
+    color: #111827 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Panels print as plain rules, not as boxes with a tint. */
@@ -2485,11 +2694,13 @@ html[data-report-style] [data-report-root] table > thead th :is(a, button, span,
   color: inherit;
 }
 
-html[data-report-style] [data-report-root][data-template='standard'] table > tbody > tr:nth-child(odd) {
+html[data-report-style] [data-report-root][data-template='standard'] table > tbody > tr:nth-child(odd),
+html[data-report-style] [data-report-root][data-template='compact'] table > tbody > tr:nth-child(odd) {
   background-color: var(--report-row-odd);
 }
 
-html[data-report-style] [data-report-root][data-template='standard'] table > tbody > tr:nth-child(even) {
+html[data-report-style] [data-report-root][data-template='standard'] table > tbody > tr:nth-child(even),
+html[data-report-style] [data-report-root][data-template='compact'] table > tbody > tr:nth-child(even) {
   background-color: var(--report-row-even);
 }
 
@@ -2532,7 +2743,8 @@ html[data-report-style] [data-report-root][data-template='plain'] :is(th, td) {
   padding-bottom: var(--report-row-pad-y);
 }
 
-html[data-report-style='odoo'] [data-report-root][data-template='compact'] :is(th, td) {
+/* Compact keeps paper banding but tightens every style (SOM / QBO / Odoo). */
+html[data-report-style] [data-report-root][data-template='compact'] :is(th, td) {
   padding-top: 0.12rem;
   padding-bottom: 0.12rem;
 }

@@ -27,6 +27,7 @@ const SOFT_DELETED_MODELS = new Set([
   'BankTransfer',
   'Deposit',
   'InventoryAdjustment',
+  'AssemblyBuild',
   'Item',
 ])
 

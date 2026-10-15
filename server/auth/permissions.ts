@@ -1,8 +1,14 @@
 import type { Role } from '@prisma/client'
 
-import { PERMISSIONS, type Permission, isPermission } from '@/lib/permissions-catalog'
+import {
+  PERMISSIONS,
+  STAFF_PERMISSIONS,
+  type Permission,
+  isPermission,
+  isStaffPermission,
+} from '@/lib/permissions-catalog'
 
-export { PERMISSIONS, type Permission, isPermission }
+export { PERMISSIONS, STAFF_PERMISSIONS, type Permission, isPermission, isStaffPermission }
 export { PERMISSION_GROUPS } from '@/lib/permissions-catalog'
 
 /**
@@ -29,6 +35,7 @@ const SALES: Permission[] = [
   ...READ_ONLY.filter((p) => !p.startsWith('audit') && !p.startsWith('journal') && !p.startsWith('bank')),
   'customer:create',
   'customer:update',
+  'portal:manage',
   'item:read',
   'invoice:create',
   'invoice:update',
@@ -110,6 +117,7 @@ const ADMIN: Permission[] = [
   'user:invite',
   'user:update',
   'user:remove',
+  'portal:manage',
 ]
 
 /** Store keeper: shelf, tickets, transfers, receive — not the books. */
@@ -130,6 +138,9 @@ const STORE_KEEPER: Permission[] = [
   'calendar:delete',
 ]
 
+/** Portal login — balance, invoices, payments, and statement only. */
+const CUSTOMER: Permission[] = ['portal:read']
+
 /**
  * CUSTOM has no built-in matrix — effective access comes only from
  * `permissionsOverride` on the membership row.
@@ -143,6 +154,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   STORE_KEEPER: new Set(STORE_KEEPER),
   VIEWER: new Set(READ_ONLY),
   CUSTOM: new Set(),
+  CUSTOMER: new Set(CUSTOMER),
 }
 
 export function permissionsFor(role: Role): ReadonlySet<Permission> {
@@ -152,13 +164,15 @@ export function permissionsFor(role: Role): ReadonlySet<Permission> {
 /**
  * Resolve what a member may do: an explicit override list wins; otherwise the
  * role template. Invalid keys are dropped so a bad row cannot mint unknown capabilities.
+ * CUSTOMER always uses the portal template — overrides cannot escalate into the ERP.
  */
 export function effectivePermissions(
   role: Role,
   permissionsOverride: readonly string[] | null | undefined,
 ): ReadonlySet<Permission> {
+  if (role === 'CUSTOMER') return permissionsFor('CUSTOMER')
   if (permissionsOverride && permissionsOverride.length > 0) {
-    const allowed = permissionsOverride.filter(isPermission)
+    const allowed = permissionsOverride.filter(isStaffPermission)
     if (allowed.length > 0) return new Set(allowed)
   }
   if (role === 'CUSTOM') return new Set()
@@ -169,12 +183,12 @@ export function can(role: Role, permission: Permission): boolean {
   return permissionsFor(role).has(permission)
 }
 
-/** Sanitize a client-supplied list into a unique, ordered Permission[]. */
+/** Sanitize a client-supplied list into a unique, ordered staff Permission[]. */
 export function sanitizePermissions(input: readonly string[] | null | undefined): Permission[] {
   if (!input?.length) return []
   const seen = new Set<Permission>()
   for (const key of input) {
-    if (isPermission(key)) seen.add(key)
+    if (isStaffPermission(key)) seen.add(key)
   }
-  return PERMISSIONS.filter((p) => seen.has(p))
+  return STAFF_PERMISSIONS.filter((p) => seen.has(p))
 }

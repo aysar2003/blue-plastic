@@ -4,13 +4,12 @@ import { useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeftIcon,
-  FileDownIcon,
   Loader2Icon,
   MailIcon,
   MessageCircleIcon,
-  PrinterIcon,
 } from 'lucide-react'
 
+import { PdfInkMenu, PrintInkMenu } from '@/components/print/print-ink-menu'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Dialog,
@@ -22,13 +21,14 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { readStoredPrintInk, withPrintInk } from '@/lib/print-ink'
 
 /**
  * Print, PDF, Email, and WhatsApp for any paper the books produce.
  *
- * There is no mail or WhatsApp server here — Email and WhatsApp open the apps
- * the user already uses. When a PDF URL is available it downloads (or shares)
- * with the message; otherwise Print / Save as PDF covers the file.
+ * Print and PDF each offer Color or Black & White. Email and WhatsApp open the
+ * apps the user already uses; when a PDF URL is available it downloads (or
+ * shares) with the last ink choice.
  */
 export function DocumentActions({
   paper = 'document',
@@ -69,25 +69,13 @@ export function DocumentActions({
   const file = filename ?? `${paper.replace(/\s+/g, '-').toLowerCase()}.pdf`
   const subjectLine = subject || `Your ${paper}`
 
-  const print = () => {
-    if (printHref) {
-      window.location.href = printHref
-      return
-    }
-    window.print()
-  }
-
-  const downloadPdf = () => {
-    if (pdfHref) return
-    window.print()
-  }
-
   const sharePdf = async (mode: 'email' | 'whatsapp') => {
     setBusy(true)
     setNote(null)
     try {
       if (pdfHref) {
-        const response = await fetch(pdfHref)
+        const ink = readStoredPrintInk()
+        const response = await fetch(withPrintInk(pdfHref, ink))
         if (!response.ok) {
           setNote('The PDF could not be prepared.')
           return
@@ -141,25 +129,8 @@ export function DocumentActions({
         </Link>
       ) : null}
 
-      {printHref ? (
-        <Link href={printHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          <PrinterIcon /> Print
-        </Link>
-      ) : (
-        <Button type="button" size="sm" variant="outline" onClick={print}>
-          <PrinterIcon /> Print
-        </Button>
-      )}
-
-      {pdfHref ? (
-        <a href={pdfHref} download={file} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          <FileDownIcon /> PDF
-        </a>
-      ) : (
-        <Button type="button" size="sm" variant="outline" onClick={downloadPdf} title="Opens print — choose Save as PDF">
-          <FileDownIcon /> PDF
-        </Button>
-      )}
+      <PrintInkMenu printHref={printHref} />
+      <PdfInkMenu pdfHref={pdfHref} filename={file} />
 
       <Dialog
         open={emailOpen}

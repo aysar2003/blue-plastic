@@ -74,6 +74,7 @@ async function ownerCtx(): Promise<OrgContext | null> {
     permissions: permissionsFor('OWNER'),
     isSystemOwner: true,
     canConnect: true,
+    portalCustomerId: null,
     features: DEFAULT_FEATURE_FLAGS,
     organization: { ...orgFields, hasLogo: Boolean(logoStorageKey) },
     user: owner,

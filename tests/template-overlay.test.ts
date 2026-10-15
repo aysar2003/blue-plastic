@@ -32,13 +32,21 @@ describe('template overlay', () => {
           y: 6,
           w: 12,
           h: 5,
-          style: { color: '#111111', fontSize: 18, fontWeight: 'bold' },
+          style: {
+            color: '#111111',
+            fontSize: 18,
+            fontWeight: 'bold',
+            fontFamily: 'Georgia, serif',
+            borderWidth: 2,
+          },
         },
       ],
     })
     expect(parsed.blocks).toHaveLength(1)
     expect(parsed.blocks[0]?.text).toBe('Total')
     expect(parsed.blocks[0]?.style.fontWeight).toBe('bold')
+    expect(parsed.blocks[0]?.style.fontFamily).toContain('Georgia')
+    expect(parsed.blocks[0]?.style.borderWidth).toBe(2)
   })
 
   it('parses logo blocks with storage keys', () => {

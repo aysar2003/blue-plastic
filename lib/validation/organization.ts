@@ -56,6 +56,7 @@ export const organizationFeaturesSchema = z.object({
   allowAccountDelete: boolFlag.default(true),
   allowDocumentDelete: boolFlag.default(true),
   showCreatorBrand: boolFlag.default(true),
+  enableCustomerPortal: boolFlag.default(false),
   moduleSales: boolFlag.default(true),
   modulePurchases: boolFlag.default(true),
   moduleBanking: boolFlag.default(true),

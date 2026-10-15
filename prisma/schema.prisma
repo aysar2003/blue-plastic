@@ -39,6 +39,8 @@ enum Role {
   VIEWER
   /// Access comes from Membership.permissionsOverride, not a role template.
   CUSTOM
+  /// Customer portal login — sees only their linked customer’s AR data.
+  CUSTOMER
 }
 
 enum MembershipStatus {
@@ -99,6 +101,8 @@ enum DocumentType {
   STORE_TICKET
   /// Customer delivery / packing note for goods leaving on a sale.
   DELIVERY_NOTE
+  /// Finished goods built from a bill of materials.
+  ASSEMBLY_BUILD
 }
 
 /// Statement classification. Determines which financial statement an account
@@ -307,6 +311,8 @@ enum InventoryMovementType {
   OPENING
   /// Moved from one store to another. Global quantity and value do not change.
   TRANSFER
+  /// Components issued / finished goods received when building an assembly.
+  BUILD
 }
 
 enum BankDocumentStatus {
@@ -392,6 +398,7 @@ enum JournalSourceType {
   TRANSFER
   DEPOSIT
   INVENTORY_ADJUSTMENT
+  ASSEMBLY_BUILD
   POS_CASH_MOVE
   POS_SESSION_CLOSE
 }
@@ -484,6 +491,7 @@ model Organization {
   periods        AccountingPeriod[]
   journals       Journal[]
   customers      Customer[]
+  customerPortalUsers CustomerPortalUser[]
   vendors        Vendor[]
   salesDocuments     SalesDocument[]
   customerPayments   CustomerPayment[]
@@ -493,6 +501,7 @@ model Organization {
   deposits           Deposit[]
   inventoryMovements InventoryTransaction[]
   inventoryAdjustments InventoryAdjustment[]
+  assemblyBuilds       AssemblyBuild[]
   storeTransfers       StoreTransfer[]
   storeTickets         StoreTicket[]
   deliveryNotes        DeliveryNote[]
@@ -555,6 +564,7 @@ model User {
   bookmarks   WorkspaceBookmark[]
   calendarEvents CalendarEvent[]
   posRegisters PosRegisterStaff[]
+  customerPortalUsers CustomerPortalUser[]
 
   @@map("users")
 }
@@ -954,6 +964,7 @@ model Journal {
   deposits          Deposit[]
   inventoryMovements InventoryTransaction[]
   inventoryAdjustments InventoryAdjustment[]
+  assemblyBuilds       AssemblyBuild[]
   storeTransfers StoreTransfer[]
   files LedgerFile[]
   posCashMovements PosCashMovement[]
@@ -1146,12 +1157,32 @@ model Customer {
   posRegisters  PosRegister[]
   /// Expenses settled by reducing what this customer owes (or building a credit).
   offsetPurchases PurchaseDocument[] @relation("PurchaseOffsetCustomer")
+  portalUsers  CustomerPortalUser[]
 
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
   @@unique([id, orgId])
   @@index([orgId, isActive, displayName])
   @@map("customers")
+}
+
+/// Login that may open the customer portal for one customer in one company.
+model CustomerPortalUser {
+  id         String @id @default(cuid())
+  orgId      String
+  userId     String
+  customerId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([orgId, customerId])
+  @@map("customer_portal_users")
 }
 
 /// A portrait or a debt-agreement paper kept with the customer who was registered.
@@ -1332,6 +1363,8 @@ model Item {
   purchaseLines    PurchaseDocumentLine[]
   movements        InventoryTransaction[]
   adjustmentLines  InventoryAdjustmentLine[]
+  assemblyBuilds   AssemblyBuild[] @relation("AssemblyBuildItem")
+  assemblyBuildLines AssemblyBuildLine[]
   storeTransfers   StoreTransfer[]
   storeTickets     StoreTicket[]
   deliveryNoteLines DeliveryNoteLine[]
@@ -1404,6 +1437,8 @@ model Store {
   tickets      StoreTicket[]
   ticketsIn    StoreTicket[]   @relation("TicketToStore")
   deliveryNotes DeliveryNote[]
+  assemblyBuilds AssemblyBuild[]
+  adjustments  InventoryAdjustment[]
   posRegisters  PosRegister[]
 
   @@unique([orgId, name])
@@ -2490,6 +2525,9 @@ model InventoryAdjustment {
   memo   String?
   reason String?
 
+  /// Which store this count applies to. Null on older adjustments, counted at the office.
+  storeId String?
+
   status BankDocumentStatus @default(POSTED)
 
   journalId String?
@@ -2510,12 +2548,14 @@ model InventoryAdjustment {
   organization Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
   account      LedgerAccount             @relation("AdjustmentAccount", fields: [accountId], references: [id], onDelete: Restrict)
   journal      Journal?                  @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  store        Store?                    @relation(fields: [storeId], references: [id], onDelete: SetNull)
   lines        InventoryAdjustmentLine[]
 
   @@unique([orgId, number])
   @@unique([id, orgId])
   @@index([orgId, date(sort: Desc)])
   @@index([orgId, deletedAt])
+  @@index([orgId, storeId])
 
   @@map("inventory_adjustments")
 }
@@ -2547,6 +2587,75 @@ model InventoryAdjustmentLine {
   @@unique([adjustmentId, lineNumber])
   @@index([orgId, itemId])
   @@map("inventory_adjustment_lines")
+}
+
+/// Build finished goods from an Inventory Assembly bill of materials.
+///
+/// Components leave stock at average cost; the assembly arrives at the sum of
+/// those costs so a later sale posts the right COGS.
+model AssemblyBuild {
+  id    String @id @default(cuid())
+  orgId String
+
+  number String
+  date   DateTime @db.Date
+
+  itemId  String
+  storeId String?
+  /// How many finished units were produced.
+  quantity Decimal @db.Decimal(19, 4)
+  /// Cost of one finished unit (materials total ÷ quantity).
+  unitCost Decimal @db.Decimal(19, 6)
+  /// Total materials value moved into the assembly.
+  value Decimal @db.Decimal(19, 4)
+
+  memo String?
+
+  status BankDocumentStatus @default(POSTED)
+
+  journalId String?
+
+  deletedAt    DateTime? @db.Timestamptz(6)
+  deletedById  String?
+  deleteReason String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  item         Item               @relation("AssemblyBuildItem", fields: [itemId], references: [id], onDelete: Restrict)
+  store        Store?             @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  journal      Journal?           @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  lines        AssemblyBuildLine[]
+
+  @@unique([orgId, number])
+  @@unique([id, orgId])
+  @@index([orgId, date(sort: Desc)])
+  @@index([orgId, deletedAt])
+  @@index([orgId, itemId])
+  @@map("assembly_builds")
+}
+
+model AssemblyBuildLine {
+  id      String @id @default(cuid())
+  buildId String
+  orgId   String
+
+  lineNumber Int @db.SmallInt
+  itemId     String
+
+  /// BOM quantity per finished unit × build quantity.
+  quantity Decimal @db.Decimal(19, 4)
+  unitCost Decimal @db.Decimal(19, 6)
+  value    Decimal @db.Decimal(19, 4)
+
+  build AssemblyBuild @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  item  Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([buildId, lineNumber])
+  @@index([orgId, itemId])
+  @@map("assembly_build_lines")
 }
 
 /// Stock moved from one store to another. Quantity and value leave one store

@@ -7,7 +7,7 @@ import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { BillPaymentInput } from '@/lib/validation/purchases'
 import { buildBillPaymentJournal } from '@/server/accounting/builders/purchases'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
-import { softDeleteDocument } from '@/server/accounting/deletion'
+import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
 import { postJournal } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
@@ -386,6 +386,33 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
     for (const billId of billIds) await refreshStatus(tx, billId)
 
     return { id, number: payment.number }
+  })
+}
+
+/**
+ * Put a deleted vendor payment back. Applications are not rebuilt — the payment
+ * returns unapplied for the user to allocate again.
+ */
+export async function restore(ctx: OrgContext, id: string) {
+  return db.$transaction(async (tx) => {
+    const payment = await tx.billPayment.findFirst({
+      where: { id, orgId: ctx.orgId, deletedAt: undefined },
+      select: { id: true, number: true, journalId: true, deletedAt: true },
+    })
+    if (!payment) throw notFound('Payment')
+    if (!payment.deletedAt) {
+      return { id, number: payment.number, href: `/bill-payments` }
+    }
+
+    await restoreSoftDeletedDocument(tx, ctx, {
+      clear: () => tx.billPayment.update({ where: { id }, data: CLEAR_DELETION }),
+      entity: 'BillPayment',
+      id,
+      number: payment.number,
+      journalIds: [payment.journalId],
+    })
+
+    return { id, number: payment.number, href: `/bill-payments` }
   })
 }
 

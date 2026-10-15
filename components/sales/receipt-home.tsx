@@ -3,14 +3,15 @@ import { PlusIcon } from 'lucide-react'
 
 import { buttonVariants } from '@/components/ui/button'
 import { listHref } from '@/lib/list-filters'
+import { MONEY_BAR } from '@/lib/money-bar-bands'
 import { Decimal, formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
 const BANDS = [
-  { key: 'today', label: 'Today', field: 'todayTotal', count: 'todayCount', bar: 'bg-[#2ca01c]' },
-  { key: 'month', label: 'This month', field: 'monthTotal', count: 'monthCount', bar: 'bg-[#0b4f6c]' },
-  { key: 'year', label: 'This year', field: 'yearTotal', count: 'yearCount', bar: 'bg-[#5ec8e5]' },
-  { key: 'all', label: 'All dates', field: 'allTotal', count: 'allCount', bar: 'bg-[#c5c9ce]' },
+  { key: 'today', label: 'Today', field: 'todayTotal', count: 'todayCount', bar: MONEY_BAR.today.bar },
+  { key: 'month', label: 'This month', field: 'monthTotal', count: 'monthCount', bar: MONEY_BAR.month.bar },
+  { key: 'year', label: 'This year', field: 'yearTotal', count: 'yearCount', bar: MONEY_BAR.year.bar },
+  { key: 'all', label: 'All dates', field: 'allTotal', count: 'allCount', bar: MONEY_BAR.older.bar },
 ] as const
 
 export type ReceiptHomeFigures = {
@@ -43,10 +44,10 @@ export function ReceiptHome({
   const year = Decimal.max(new Decimal(home.yearTotal).minus(new Decimal(home.monthTotal)), 0)
   const older = Decimal.max(new Decimal(home.allTotal).minus(new Decimal(home.yearTotal)), 0)
   const slices = [
-    { key: 'today', amount: today, bar: 'bg-[#2ca01c]', label: 'Today' },
-    { key: 'month', amount: month, bar: 'bg-[#0b4f6c]', label: 'Rest of this month' },
-    { key: 'year', amount: year, bar: 'bg-[#5ec8e5]', label: 'Rest of this year' },
-    { key: 'older', amount: older, bar: 'bg-[#c5c9ce]', label: 'Earlier' },
+    { key: 'today', amount: today, bar: MONEY_BAR.today.bar, label: 'Today' },
+    { key: 'month', amount: month, bar: MONEY_BAR.month.bar, label: 'Rest of this month' },
+    { key: 'year', amount: year, bar: MONEY_BAR.year.bar, label: 'Rest of this year' },
+    { key: 'older', amount: older, bar: MONEY_BAR.older.bar, label: 'Earlier' },
   ].filter((slice) => !slice.amount.isZero())
   const barTotal = slices.reduce((sum, slice) => sum.plus(slice.amount), new Decimal(0))
 
@@ -58,7 +59,7 @@ export function ReceiptHome({
           <p className="mt-1 text-sm text-muted-foreground">Paid on the spot, deposited straight into a bank account.</p>
         </div>
         {canCreate ? (
-          <Link href="/sales/sales-receipts/new" className={cn(buttonVariants(), 'bg-[#2ca01c] hover:bg-[#248a18]')}>
+          <Link href="/sales/sales-receipts/new" className={buttonVariants()}>
             <PlusIcon /> New receipt
           </Link>
         ) : null}

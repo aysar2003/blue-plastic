@@ -2,14 +2,22 @@ import Link from 'next/link'
 import { PlusIcon } from 'lucide-react'
 
 import { listHref } from '@/lib/list-filters'
+import { MONEY_BAR } from '@/lib/money-bar-bands'
 import { Decimal, formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
 const BANDS = [
-  { key: 'open', field: 'unpaid', count: 'unpaidCount', label: 'Unpaid', bar: 'bg-[#5b6b82]' },
-  { key: 'overdue', field: 'overdue', count: 'overdueCount', label: 'Overdue', bar: 'bg-[#e07a3d]' },
-  { key: 'notdue', field: 'notDue', count: 'notDueCount', label: 'Not due yet', bar: 'bg-[#8eb4d4]' },
-  { key: 'paid', field: 'paid', count: 'paidCount', label: 'Paid', bar: 'bg-[#2f9e57]' },
+  { key: 'open', field: 'unpaid', count: 'unpaidCount', label: 'Unpaid', bar: MONEY_BAR.open.bar },
+  {
+    key: 'overdue',
+    field: 'overdue',
+    count: 'overdueCount',
+    label: 'Overdue',
+    bar: MONEY_BAR.overdue.bar,
+    accent: MONEY_BAR.overdue.accent,
+  },
+  { key: 'notdue', field: 'notDue', count: 'notDueCount', label: 'Not due yet', bar: MONEY_BAR.notDue.bar },
+  { key: 'paid', field: 'paid', count: 'paidCount', label: 'Paid', bar: MONEY_BAR.paid.bar },
 ] as const
 
 type Home = {
@@ -90,8 +98,20 @@ export function InvoiceHome({
               )}
             >
               <p className="text-[0.7rem] font-semibold uppercase tracking-wider text-muted-foreground">{band.label}</p>
-              <p className="mt-1 text-xl font-semibold tabular">{formatMoney(amount, currency)}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p
+                className={cn(
+                  'mt-1 text-xl font-semibold tabular',
+                  'accent' in band && band.accent ? band.accent : null,
+                )}
+              >
+                {formatMoney(amount, currency)}
+              </p>
+              <p
+                className={cn(
+                  'mt-0.5 text-xs text-muted-foreground',
+                  band.key === 'overdue' && MONEY_BAR.overdue.accent,
+                )}
+              >
                 {count === 1 ? '1 invoice' : `${count} invoices`}
               </p>
             </Link>

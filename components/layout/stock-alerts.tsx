@@ -21,7 +21,7 @@ export function StockAlerts({ alerts, total }: { alerts: StockAlert[]; total: nu
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="relative grid size-8 place-items-center rounded-md text-slate-600 hover:bg-slate-100"
+        className="relative grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-[var(--band)] hover:text-foreground"
         aria-label={count > 0 ? `Stock warnings, ${count}` : 'Stock warnings'}
       >
         <PackageIcon className="size-4" />

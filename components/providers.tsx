@@ -6,6 +6,7 @@ import { Toaster } from 'sonner'
 
 import { UiFontProvider } from '@/components/appearance/ui-font-provider'
 import { WebsiteLookProvider } from '@/components/appearance/website-look-provider'
+import { PrintInkSync } from '@/components/print/print-ink-sync'
 import { ReportStyleProvider } from '@/components/reports/report-style-provider'
 import { ForbiddenWatcher } from '@/components/system/forbidden-watcher'
 import { THEME_IDS } from '@/lib/themes'
@@ -31,6 +32,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ReportStyleProvider />
         <WebsiteLookProvider />
         <UiFontProvider />
+        <PrintInkSync />
         {children}
         <ForbiddenWatcher />
         <Toaster richColors closeButton position="bottom-right" />

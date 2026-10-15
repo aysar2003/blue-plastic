@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { ASSIGNABLE_ROLES } from '@/lib/roles'
-import { PERMISSION_GROUPS, PERMISSIONS } from '@/lib/permissions-catalog'
+import { PERMISSION_GROUPS, PERMISSIONS, STAFF_PERMISSIONS } from '@/lib/permissions-catalog'
 import {
   ROLE_PERMISSIONS,
   can,
@@ -119,11 +119,21 @@ describe('permission matrix', () => {
     }
   })
 
-  it('never offers OWNER or CUSTOM as a ready-made assignable role', () => {
-    // Ownership moves by explicit transfer; CUSTOM is chosen via the matrix.
+  it('never offers OWNER, CUSTOM, or CUSTOMER as a ready-made assignable role', () => {
+    // Ownership moves by explicit transfer; CUSTOM is chosen via the matrix;
+    // CUSTOMER portal logins are invited from the customer record.
     expect(ASSIGNABLE_ROLES).not.toContain('OWNER')
     expect(ASSIGNABLE_ROLES).not.toContain('CUSTOM')
+    expect(ASSIGNABLE_ROLES).not.toContain('CUSTOMER')
     expect(ASSIGNABLE_ROLES).toContain('STORE_KEEPER')
+  })
+
+  it('gives CUSTOMER only portal:read and ignores overrides', () => {
+    expect(can('CUSTOMER', 'portal:read')).toBe(true)
+    expect(can('CUSTOMER', 'invoice:read')).toBe(false)
+    expect(can('CUSTOMER', 'report:read')).toBe(false)
+    const escalated = effectivePermissions('CUSTOMER', ['invoice:create', 'org:update'])
+    expect([...escalated]).toEqual(['portal:read'])
   })
 
   it('falls back to viewer for an unknown role', () => {
@@ -134,9 +144,15 @@ describe('permission matrix', () => {
     expect(new Set(PERMISSIONS).size).toBe(PERMISSIONS.length)
   })
 
-  it('shows every permission in the access matrix, including the business overview', () => {
+  it('shows every staff permission in the access matrix, including the business overview', () => {
     const shown = PERMISSION_GROUPS.flatMap((group) => group.permissions.map((item) => item.key))
-    expect(new Set(shown)).toEqual(new Set(PERMISSIONS))
+    expect(new Set(shown)).toEqual(new Set(STAFF_PERMISSIONS))
+    expect(PERMISSIONS).toContain('portal:read')
+    expect(PERMISSIONS).toContain('portal:manage')
+    expect(STAFF_PERMISSIONS).not.toContain('portal:read')
+    expect(STAFF_PERMISSIONS).toContain('portal:manage')
+    expect(can('SALES', 'portal:manage')).toBe(true)
+    expect(can('CUSTOMER', 'portal:manage')).toBe(false)
     const reports = PERMISSION_GROUPS.find((group) => group.id === 'reports')
     expect(reports?.permissions.map((item) => item.key)).toContain('report:overview')
   })

@@ -147,14 +147,14 @@ export default async function VendorPage({
                 key={`${row.kind}-${row.id}`}
                 href={row.href}
                 className={cn(
-                  'grid grid-cols-[7.5rem_6.5rem_7.5rem_minmax(0,1fr)_8rem] items-center px-3 py-2 text-sm hover:bg-[#d7ebf6]',
+                  'group/tx grid grid-cols-[7.5rem_6.5rem_7.5rem_minmax(0,1fr)_8rem] items-center px-3 py-2 text-sm text-foreground hover:bg-[var(--band)] hover:text-foreground',
                   index % 2 === 0 ? 'bg-card' : 'band-alt',
                 )}
               >
                 <span>{row.kind}</span>
                 <span className="font-medium">{row.number}</span>
-                <span className="tabular text-muted-foreground">{formatDate(row.date)}</span>
-                <span className="truncate text-muted-foreground">{row.account ?? '—'}</span>
+                <span className="tabular text-foreground/70 group-hover/tx:text-foreground">{formatDate(row.date)}</span>
+                <span className="truncate text-foreground/70 group-hover/tx:text-foreground">{row.account ?? '—'}</span>
                 <span className="tabular text-right">{formatMoney(row.amount, currency)}</span>
               </Link>
             ))}

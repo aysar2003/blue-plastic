@@ -26,9 +26,10 @@ export default async function EditPurchasePage({
   if (!config) notFound()
 
   const ctx = await requireOrgContext('bill:update')
-  const [document, options, shelf] = await Promise.all([
+  const [document, options, neighbors, shelf] = await Promise.all([
     purchaseService.get(ctx, id),
     loadPurchaseOptions(ctx),
+    purchaseService.neighbors(ctx, config.type, id),
     storeService.quantities(ctx),
   ])
 
@@ -78,6 +79,7 @@ export default async function EditPurchasePage({
             storeId: line.storeId,
           })),
         }}
+        neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}
       />

@@ -245,18 +245,18 @@ export default async function ProfitAndLossDetailPage({
               ) : (
                 <div className="divide-y">
                   {section.accounts.map((account) => (
-                    <details key={account.accountId} className="group open:bg-white" open={account.rows.length <= 12}>
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                    <details key={account.accountId} className="group open:bg-card" open={account.rows.length <= 12}>
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--band)] [&::-webkit-details-marker]:hidden">
                         <span className="min-w-0">
                           <span className="tabular text-muted-foreground">{account.code}</span>{' '}
-                          <span className="font-medium text-slate-900">{account.name}</span>
+                          <span className="font-medium text-foreground">{account.name}</span>
                           <span className="ml-2 text-xs text-muted-foreground">{account.rows.length} txn</span>
                         </span>
                         <span className="shrink-0 tabular font-medium">
                           {formatMoney(account.total, currency)}
                         </span>
                       </summary>
-                      <div className="border-t bg-[#fbfcfd] p-2">
+                      <div className="border-t bg-muted/30 p-2">
                         <InteractiveGrid
                           storageKey="bp-pl-detail-lines"
                           currency={currency}

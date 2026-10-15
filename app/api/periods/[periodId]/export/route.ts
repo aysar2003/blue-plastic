@@ -5,6 +5,7 @@ import type { JournalSourceType } from '@prisma/client'
 import { JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
 import { toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
+import { parsePrintInk } from '@/lib/print-ink'
 import { requireOrgContext } from '@/server/auth/context'
 import { isAppError, notFound } from '@/server/errors'
 import {
@@ -60,6 +61,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ peri
       net = formatMoney(picture.net, currency)
     }
 
+    const ink = parsePrintInk(url.searchParams.get('ink'))
     const payload: MonthExport = {
       org: { ...ctx.organization, tradingName: ctx.organization.name },
       label: monthTitle(period.periodNumber, period.startDate),
@@ -71,6 +73,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ peri
       expenses,
       net,
       rows: journals.rows,
+      ink,
     }
 
     const slug = payload.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')

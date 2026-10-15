@@ -15,6 +15,12 @@ export const inventoryAdjustmentSchema = z.object({
     .transform((v) => (v === '' ? null : v))
     .nullable()
     .optional(),
+  /** Blank uses the office store. Counts are against that store's shelf, not the company total. */
+  storeId: z
+    .union([cuid, z.literal('')])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
   reason: optionalText(300),
   memo: optionalText(1000),
   lines: z
@@ -110,3 +116,22 @@ export const negativeStockSchema = z.object({
   allowNegativeStock: z.coerce.boolean(),
 })
 
+/** Produce finished goods from an Inventory Assembly bill of materials. */
+export const assemblyBuildSchema = z.object({
+  number: chosenNumber,
+  date: calendarDate,
+  itemId: cuid,
+  /** Blank uses the item’s default store / office stock. */
+  storeId: z
+    .union([cuid, z.literal('')])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+  quantity: calculatedDecimal(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity').refine(
+    (v) => Number(v) > 0,
+    'Quantity must be more than zero',
+  ),
+  memo: optionalText(1000),
+})
+
+export type AssemblyBuildInput = z.infer<typeof assemblyBuildSchema>

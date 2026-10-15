@@ -7,7 +7,7 @@ import { action } from '@/server/action'
 import { db } from '@/server/db'
 import { notFound } from '@/server/errors'
 
-const kindSchema = z.enum(['customer', 'vendor', 'item', 'account'])
+const kindSchema = z.enum(['customer', 'vendor', 'item', 'account', 'category'])
 
 function fold(name: string) {
   return name.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
@@ -80,6 +80,26 @@ export const listMergeTargets = action
           label: row.sku ? `${row.name} (${row.sku})` : row.name,
           name: row.name,
         })),
+        key,
+      )
+    }
+
+    if (input.kind === 'category') {
+      if (!ctx.permissions.has('item:update')) throw notFound('Category')
+      const self = await db.itemCategory.findFirst({
+        where: { id: input.id, orgId: ctx.orgId, isActive: true },
+        select: { name: true },
+      })
+      if (!self) throw notFound('Category')
+      const rows = await db.itemCategory.findMany({
+        where: { orgId: ctx.orgId, id: { not: input.id }, isActive: true },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+        take: 500,
+      })
+      const key = fold(self.name)
+      return sortPreferSame(
+        rows.map((row) => ({ id: row.id, label: row.name, name: row.name })),
         key,
       )
     }

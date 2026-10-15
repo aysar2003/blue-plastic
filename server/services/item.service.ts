@@ -386,6 +386,42 @@ export async function update(ctx: OrgContext, input: ItemInput & { id: string })
 }
 
 /**
+ * Attach or replace a package barcode on an item that already exists — used when
+ * an import row matches a product by name and only needs the till code filled in.
+ */
+export async function setBarcode(ctx: OrgContext, id: string, barcode: string) {
+  const code = barcode.trim().replace(/\s+/g, '')
+  if (!code) throw validation('Barcode is required.', { barcode: ['Required'] })
+  if (code.length > 64) {
+    throw validation('Barcode is too long.', { barcode: ['At most 64 characters'] })
+  }
+
+  const before = await db.item.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: { id: true, name: true, barcode: true },
+  })
+  if (!before) throw notFound('Item')
+
+  await assertNameAndSkuFree(ctx, before.name, null, code, id)
+  const meta = await requestMeta()
+
+  return db.$transaction(async (tx) => {
+    const after = await tx.item.update({
+      where: { id },
+      data: { barcode: code },
+      select: { id: true, name: true, barcode: true },
+    })
+    await writeAudit(
+      tx,
+      ctx,
+      { entity: 'Item', entityId: after.id, action: 'UPDATE', before, after },
+      meta,
+    )
+    return after
+  })
+}
+
+/**
  * The quantity at which this product should be ordered again.
  * Blank clears the limit. It does not move stock or post a journal.
  */
@@ -582,18 +618,49 @@ export async function ensureStandardCategories(ctx: OrgContext) {
   return listCategories(ctx)
 }
 
-/** Category cards for the catalogue hub: item counts per category. Read-only. */
+/** Category cards for the catalogue hub: item counts and stock cost per category. */
 export async function categoryDashboard(ctx: OrgContext) {
   const categories = await listCategories(ctx)
-  const counts = await db.item.groupBy({
-    by: ['categoryId'],
-    where: { orgId: ctx.orgId, isActive: true },
-    _count: { _all: true },
+  if (categories.length === 0) return []
+
+  const items = await db.item.findMany({
+    where: {
+      orgId: ctx.orgId,
+      isActive: true,
+      categoryId: { in: categories.map((row) => row.id) },
+    },
+    select: { id: true, categoryId: true, type: true },
   })
-  const byCategory = new Map(counts.map((row) => [row.categoryId ?? 'none', row._count._all]))
+
+  const counts = new Map<string, number>()
+  for (const item of items) {
+    if (!item.categoryId) continue
+    counts.set(item.categoryId, (counts.get(item.categoryId) ?? 0) + 1)
+  }
+
+  const trackedIds = items.filter((row) => isStockTracked(row.type)).map((row) => row.id)
+  const positions = await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
+  const costByCategory = new Map<string, Decimal>()
+  const onHandByCategory = new Map<string, Decimal>()
+  for (const item of items) {
+    if (!item.categoryId || !isStockTracked(item.type)) continue
+    const position = positions.get(item.id)
+    if (!position) continue
+    costByCategory.set(
+      item.categoryId,
+      (costByCategory.get(item.categoryId) ?? ZERO).plus(position.value),
+    )
+    onHandByCategory.set(
+      item.categoryId,
+      (onHandByCategory.get(item.categoryId) ?? ZERO).plus(position.quantity),
+    )
+  }
+
   return categories.map((category) => ({
     ...category,
-    itemCount: byCategory.get(category.id) ?? 0,
+    itemCount: counts.get(category.id) ?? 0,
+    totalCost: (costByCategory.get(category.id) ?? ZERO).toFixed(2),
+    onHand: (onHandByCategory.get(category.id) ?? ZERO).toFixed(2),
   }))
 }
 
@@ -604,6 +671,31 @@ export async function getCategory(ctx: OrgContext, id: string) {
   })
   if (!category) throw notFound('Category')
   return category
+}
+
+/** Summary figures for one category dashboard. */
+export async function categoryShelf(ctx: OrgContext, id: string) {
+  const category = await getCategory(ctx, id)
+  const items = await db.item.findMany({
+    where: { orgId: ctx.orgId, isActive: true, categoryId: id },
+    select: { id: true, type: true },
+  })
+  const trackedIds = items.filter((row) => isStockTracked(row.type)).map((row) => row.id)
+  const positions = await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
+  let totalCost = ZERO
+  let onHand = ZERO
+  for (const itemId of trackedIds) {
+    const position = positions.get(itemId)
+    if (!position) continue
+    totalCost = totalCost.plus(position.value)
+    onHand = onHand.plus(position.quantity)
+  }
+  return {
+    ...category,
+    itemCount: items.length,
+    totalCost: totalCost.toFixed(2),
+    onHand: onHand.toFixed(2),
+  }
 }
 
 /** Create a product category from the item form when one is missing. */
@@ -631,6 +723,67 @@ export async function createCategory(ctx: OrgContext, name: string) {
     data: { orgId: ctx.orgId, name: trimmed },
     select: { id: true, name: true },
   })
+}
+
+/** Rename an active product category. */
+export async function updateCategory(ctx: OrgContext, id: string, name: string) {
+  const trimmed = name.trim()
+  if (!trimmed) throw validation('Category name is required.', { name: ['Required'] })
+
+  const category = await db.itemCategory.findFirst({
+    where: { id, orgId: ctx.orgId, isActive: true },
+    select: { id: true, name: true },
+  })
+  if (!category) throw notFound('Category')
+
+  const clash = await db.itemCategory.findFirst({
+    where: {
+      orgId: ctx.orgId,
+      id: { not: id },
+      name: { equals: trimmed, mode: 'insensitive' },
+    },
+    select: { id: true, name: true, isActive: true },
+  })
+  if (clash) {
+    throw conflict(`A category called "${clash.name}" already exists.`, {
+      clashId: [clash.id],
+      clashName: [clash.name],
+      merge: ['true'],
+    })
+  }
+
+  return db.itemCategory.update({
+    where: { id },
+    data: { name: trimmed },
+    select: { id: true, name: true },
+  })
+}
+
+/**
+ * Soft-delete a category. Refuses when any active item still sits in it —
+ * move or reassign those products first.
+ */
+export async function deleteCategory(ctx: OrgContext, id: string) {
+  const category = await db.itemCategory.findFirst({
+    where: { id, orgId: ctx.orgId, isActive: true },
+    select: { id: true, name: true },
+  })
+  if (!category) throw notFound('Category')
+
+  const itemCount = await db.item.count({
+    where: { orgId: ctx.orgId, categoryId: id, isActive: true },
+  })
+  if (itemCount > 0) {
+    throw conflict(
+      `"${category.name}" still has ${itemCount} item${itemCount === 1 ? '' : 's'}. Reassign or remove them before deleting the category.`,
+    )
+  }
+
+  await db.itemCategory.update({
+    where: { id },
+    data: { isActive: false },
+  })
+  return { id: category.id, name: category.name }
 }
 
 /**
@@ -683,7 +836,7 @@ async function assignProductCostAccount(ctx: OrgContext, input: ItemInput): Prom
 function toData(input: ItemInput) {
   return {
     sku: input.sku ?? null,
-    barcode: input.barcode ?? null,
+    barcode: input.barcode ? input.barcode.trim().replace(/\s+/g, '') : null,
     name: input.name,
     description: input.description ?? null,
     type: input.type,
@@ -743,6 +896,7 @@ async function saveComponents(
   }
   const rows = parseComponents(raw)
   await tx.itemComponent.deleteMany({ where: { parentItemId, orgId: ctx.orgId } })
+  const stockedOnly = type === 'INVENTORY_ASSEMBLY'
   const blocked = new Set(['GROUP', 'SUBTOTAL', 'PAYMENT'])
   for (const [index, row] of rows.entries()) {
     const qty = parseMoneyInput(row.quantity)
@@ -752,7 +906,14 @@ async function saveComponents(
       select: { id: true, name: true, type: true },
     })
     if (!child || child.id === parentItemId) continue
-    if (blocked.has(child.type)) {
+    if (stockedOnly) {
+      if (child.type !== 'INVENTORY' && child.type !== 'INVENTORY_ASSEMBLY') {
+        throw validation(
+          `"${child.name}" cannot be in a bill of materials — only inventory parts and assemblies.`,
+          { componentsJson: ['Choose inventory or assembly items'] },
+        )
+      }
+    } else if (blocked.has(child.type)) {
       throw validation(
         `"${child.name}" cannot be a group member (${child.type.toLowerCase().replaceAll('_', ' ')}).`,
         { componentsJson: ['Choose inventory, non-inventory, service, other charge, or discount items'] },
@@ -798,10 +959,14 @@ async function assertNameAndSkuFree(
 ) {
   const byName = await db.item.findUnique({
     where: { orgId_name: { orgId: ctx.orgId, name } },
-    select: { id: true },
+    select: { id: true, name: true },
   })
   if (byName && byName.id !== selfId) {
-    throw conflict(`Another item is already called "${name}".`)
+    throw conflict(`Another item is already called "${byName.name}".`, {
+      clashId: [byName.id],
+      clashName: [byName.name],
+      merge: ['true'],
+    })
   }
 
   if (sku) {
@@ -921,7 +1086,7 @@ async function assertAccountsSuitable(ctx: OrgContext, input: ItemInput) {
   }
 }
 
-/** Catalog for GROUP / Assembly component pickers (every sellable child type). */
+/** Catalog for GROUP / Assembly component pickers. */
 export async function listCatalog(ctx: OrgContext) {
   const rows = await db.item.findMany({
     where: {
@@ -933,9 +1098,16 @@ export async function listCatalog(ctx: OrgContext) {
     select: { id: true, name: true, sku: true, type: true },
     orderBy: { name: 'asc' },
   })
+  const stockIds = rows
+    .filter((row) => row.type === 'INVENTORY' || row.type === 'INVENTORY_ASSEMBLY')
+    .map((row) => row.id)
+  const positions = stockIds.length
+    ? await positionsOf(db as unknown as Tx, ctx.orgId, stockIds)
+    : new Map()
   return rows.map((row) => ({
     id: row.id,
     label: row.sku ? `${row.name} (${row.sku})` : row.name,
     type: row.type,
+    averageCost: positions.get(row.id)?.averageCost.toFixed(6) ?? null,
   }))
 }

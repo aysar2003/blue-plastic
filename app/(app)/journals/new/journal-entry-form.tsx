@@ -11,6 +11,7 @@ import { idleState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { Field, fieldProps } from '@/components/forms/field'
 import { FormStatus } from '@/components/forms/form-status'
+import { neighborHrefs, RecordNav } from '@/components/forms/record-nav'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -145,6 +146,7 @@ export function JournalEntryForm({
   today,
   currency,
   register,
+  neighbors,
 }: {
   accounts: AccountPickerOption[]
   customers: PartyOption[]
@@ -154,6 +156,11 @@ export function JournalEntryForm({
   today: string
   currency: string
   register: JournalRegisterLine[]
+  /** Manual journals before / after this blank form (new sits after the last). */
+  neighbors?: {
+    previous: { id: string; number: string } | null
+    next: { id: string; number: string } | null
+  }
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(postManualJournalForm, idleState)
@@ -384,6 +391,7 @@ export function JournalEntryForm({
       <input type="hidden" name="payload" value={payload} />
 
       <div className="flex flex-wrap items-center gap-1.5 print:hidden">
+        <RecordNav {...neighborHrefs('/journals', neighbors, undefined, '')} />
         <JournalFinder currency={currency} />
         <Button type="button" variant="outline" size="sm" onClick={revert}>
           <PlusIcon />
@@ -680,7 +688,7 @@ export function JournalEntryForm({
               </thead>
               <tbody>
                 {listed.map((line) => (
-                  <tr key={line.lineId} className="border-t hover:bg-slate-50">
+                  <tr key={line.lineId} className="border-t hover:bg-muted/50">
                     <td className="tabular whitespace-nowrap px-3 py-1.5 text-muted-foreground">
                       {formatDate(line.date)}
                     </td>
@@ -801,7 +809,7 @@ function JournalFinder({ currency }: { currency: string }) {
             <li key={row.id}>
               <button
                 type="button"
-                className="flex w-full items-baseline justify-between gap-3 rounded-md px-2 py-2 text-left text-sm hover:bg-slate-100"
+                className="flex w-full items-baseline justify-between gap-3 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   setOpen(false)
                   router.push(`/journals/${row.id}`)

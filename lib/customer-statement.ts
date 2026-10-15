@@ -7,6 +7,7 @@ export type StatementKind =
   | 'PAYMENT'
   | 'SALES_RECEIPT'
   | 'REFUND_RECEIPT'
+  | 'EXPENSE'
   | 'JOURNAL'
   | 'ESTIMATE'
   | 'QUOTATION'
@@ -35,6 +36,7 @@ export const STATEMENT_TYPES = [
   'credit',
   'receipt',
   'refund',
+  'expense',
   'journal',
   'estimate',
   'quotation',
@@ -76,6 +78,7 @@ export const STATEMENT_TYPE_LABELS: Record<StatementType, string> = {
   credit: 'Credit memo',
   receipt: 'Sales receipt',
   refund: 'Refund',
+  expense: 'Expense',
   journal: 'Journal',
   estimate: 'Estimate',
   quotation: 'Quotation',
@@ -94,6 +97,7 @@ const TYPE_KIND: Record<Exclude<StatementType, 'all'>, StatementKind> = {
   credit: 'CREDIT_MEMO',
   receipt: 'SALES_RECEIPT',
   refund: 'REFUND_RECEIPT',
+  expense: 'EXPENSE',
   journal: 'JOURNAL',
   estimate: 'ESTIMATE',
   quotation: 'QUOTATION',
@@ -132,6 +136,7 @@ const TYPE_PLURAL: Record<Exclude<StatementType, 'all'>, string> = {
   credit: 'credit memos',
   receipt: 'sales receipts',
   refund: 'refunds',
+  expense: 'expenses',
   journal: 'journals',
   estimate: 'estimates',
   quotation: 'quotations',
@@ -185,9 +190,14 @@ export function entryVisible(entry: FilterableEntry, filter: StatementFilter, as
     return false
   }
 
-  // Paid: settled documents, and every receipt of money.
+  // Paid: settled documents, every receipt of money, and customer-offset expenses.
   if (entry.kind === 'JOURNAL' || entry.kind === 'ESTIMATE' || entry.kind === 'QUOTATION') return false
-  if (entry.kind === 'PAYMENT' || entry.kind === 'SALES_RECEIPT' || entry.kind === 'REFUND_RECEIPT') {
+  if (
+    entry.kind === 'PAYMENT' ||
+    entry.kind === 'SALES_RECEIPT' ||
+    entry.kind === 'REFUND_RECEIPT' ||
+    entry.kind === 'EXPENSE'
+  ) {
     return true
   }
   return !isOpen(entry.openAmount)
@@ -245,6 +255,27 @@ export function forwardBalances(entries: StatementCarryEntry[], opening: Decimal
     byId.set(entry.id, running)
   }
   return { byId, closing: running, accountAt }
+}
+
+/**
+ * Invoice-by-invoice paper: the Balance printed at the bottom of one invoice
+ * becomes Previous balance on the next. On each paper:
+ * Balance = Previous + Debit − Credit (payment / credit applied to that invoice).
+ */
+export function invoiceChainBalances(
+  documents: { id: string; total: string | number | Decimal; amountApplied?: string | number | Decimal }[],
+  opening: Decimal.Value = ZERO,
+) {
+  let running = new Decimal(opening)
+  const accountAt: Record<string, { previous: string; current: string }> = {}
+  for (const document of documents) {
+    const previous = running.toString()
+    const debit = new Decimal(document.total)
+    const credit = new Decimal(document.amountApplied ?? 0)
+    running = running.plus(debit).minus(credit)
+    accountAt[document.id] = { previous, current: running.toString() }
+  }
+  return { accountAt, closing: running }
 }
 
 /** Open invoice/bill amounts add; unapplied payment/credit remainders subtract. */

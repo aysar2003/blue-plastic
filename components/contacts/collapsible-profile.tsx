@@ -32,7 +32,7 @@ export function CollapsibleProfile({
             <button
               type="button"
               onClick={detail.hide}
-              className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-[var(--band)] hover:text-foreground"
               aria-expanded={detail.open}
               aria-label="Hide information"
               title="Hide information"

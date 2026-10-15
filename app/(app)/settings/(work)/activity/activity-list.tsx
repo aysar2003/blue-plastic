@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { apiGet } from '@/lib/api'
 import { formatDateTime } from '@/lib/date'
+import { ClearAllTrashButton } from './clear-trash-button'
 
 type TrashRow = {
   id: string
@@ -25,7 +26,13 @@ type TrashRow = {
 
 type TrashPage = { rows: TrashRow[]; total: number; page: number; pageCount: number }
 
-export function ActivityList({ timeZone }: { timeZone: string }) {
+export function ActivityList({
+  timeZone,
+  canClear = false,
+}: {
+  timeZone: string
+  canClear?: boolean
+}) {
   const [draft, setDraft] = useState('')
   const [q, setQ] = useState('')
   const { data, isPending, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
@@ -37,30 +44,35 @@ export function ActivityList({ timeZone }: { timeZone: string }) {
       getNextPageParam: (last) => (last.page < last.pageCount ? last.page + 1 : undefined),
     })
 
-  const search = (
-    <form
-      className="flex max-w-sm gap-2"
-      onSubmit={(event) => {
-        event.preventDefault()
-        setQ(draft.trim())
-      }}
-    >
-      <Input
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        placeholder="Number, name, or person"
-        aria-label="Search trash"
-      />
-      <Button type="submit" variant="outline" size="sm">
-        Search
-      </Button>
-    </form>
+  const toolbar = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <form
+        className="flex max-w-sm flex-1 gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          setQ(draft.trim())
+        }}
+      >
+        <Input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Number, name, or person"
+          aria-label="Search trash"
+        />
+        <Button type="submit" variant="outline" size="sm">
+          Search
+        </Button>
+      </form>
+      {canClear ? (
+        <ClearAllTrashButton disabled={isPending || (data !== undefined && data.pages.every((page) => page.rows.length === 0) && !q)} />
+      ) : null}
+    </div>
   )
 
   if (isPending) {
     return (
       <div className="space-y-4">
-        {search}
+        {toolbar}
         <div className="flex items-center justify-center gap-2 rounded-md border py-16 text-sm text-muted-foreground">
           <Loader2Icon className="size-4 animate-spin" /> Loading trash…
         </div>
@@ -71,7 +83,7 @@ export function ActivityList({ timeZone }: { timeZone: string }) {
   if (isError) {
     return (
       <div className="space-y-4">
-        {search}
+        {toolbar}
         <EmptyState
           icon={Trash2Icon}
           title="Trash could not be loaded"
@@ -86,7 +98,7 @@ export function ActivityList({ timeZone }: { timeZone: string }) {
   if (rows.length === 0) {
     return (
       <div className="space-y-4">
-        {search}
+        {toolbar}
         <EmptyState
           icon={Trash2Icon}
           title={q ? 'Nothing in trash matches that' : 'Trash is empty'}
@@ -98,7 +110,7 @@ export function ActivityList({ timeZone }: { timeZone: string }) {
 
   return (
     <div className="space-y-4">
-      {search}
+      {toolbar}
       <Card className="overflow-hidden p-0">
         <Table>
           <TableHeader>
@@ -107,7 +119,7 @@ export function ActivityList({ timeZone }: { timeZone: string }) {
               <TableHead>Who</TableHead>
               <TableHead>Deleted</TableHead>
               <TableHead>Reason</TableHead>
-              <TableHead className="w-40">PDF & upload</TableHead>
+              <TableHead className="w-48">View / restore</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -133,8 +145,16 @@ export function ActivityList({ timeZone }: { timeZone: string }) {
                 </TableCell>
                 <TableCell className="max-w-xs text-muted-foreground">{row.reason ?? '—'}</TableCell>
                 <TableCell className="space-x-2 whitespace-nowrap text-sm">
+                  <Link
+                    href={`/settings/activity/${row.id}`}
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    View
+                  </Link>
                   <a
-                    href={`/api/trash/${row.id}/pdf?download=1`}
+                    href={`/api/trash/${row.id}/pdf`}
+                    target="_blank"
+                    rel="noreferrer"
                     className="text-primary underline-offset-4 hover:underline"
                   >
                     PDF
@@ -143,7 +163,7 @@ export function ActivityList({ timeZone }: { timeZone: string }) {
                     href={`/settings/activity/${row.id}`}
                     className="text-primary underline-offset-4 hover:underline"
                   >
-                    Upload
+                    Restore
                   </Link>
                 </TableCell>
               </TableRow>

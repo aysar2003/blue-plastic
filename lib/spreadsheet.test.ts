@@ -68,8 +68,8 @@ describe('QuickBooks values', () => {
   it('maps a QuickBooks product row and values the quantity from the purchase cost', () => {
     const { rows } = parseCsv(
       [
-        'Product/Service Name,SKU,Type,Sales Description,Sales Price / Rate,Purchase Cost,Quantity on hand,Income Account,Expense Account,Inventory Asset Account,Taxable',
-        'Blue drum,DRM-1,Inventory,20L drum,25.00,12.50,40,Sales of Product Income,Cost of Goods Sold,Inventory Asset,Yes',
+        'Product/Service Name,SKU,Barcode,Type,Sales Description,Sales Price / Rate,Purchase Cost,Quantity on hand,Income Account,Expense Account,Inventory Asset Account,Taxable',
+        'Blue drum,DRM-1,5901234123457,Inventory,20L drum,25.00,12.50,40,Sales of Product Income,Cost of Goods Sold,Inventory Asset,Yes',
       ].join('\n'),
     )
 
@@ -77,6 +77,7 @@ describe('QuickBooks values', () => {
     expect(shaped.draft).toMatchObject({
       name: 'Blue drum',
       sku: 'DRM-1',
+      barcode: '5901234123457',
       type: 'INVENTORY',
       salesDescription: '20L drum',
       salesPrice: '25',
@@ -128,6 +129,7 @@ describe('blank sheet', () => {
     expect(shaped.draft).toMatchObject({
       name: 'Blue drum',
       sku: 'DRM-1',
+      barcode: '5901234123457',
       type: 'INVENTORY',
       salesPrice: '25',
       purchaseCost: '12.5',

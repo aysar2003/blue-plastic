@@ -62,7 +62,7 @@ export const SYSTEM_TEMPLATES: SystemTemplateEntry[] = [
   {
     id: 'report-sheet',
     label: 'Report & chart density',
-    blurb: 'Standard, Compact, or Plain rows on reports and the chart of accounts.',
+    blurb: 'Standard, Compact, or Plain rows on reports, the chart of accounts, and bank account lists.',
     managedHere: true,
   },
   {

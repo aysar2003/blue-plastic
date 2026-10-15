@@ -119,7 +119,20 @@ describe('fitted columns', () => {
     expect(extra.map((column) => column.id)).toContain('description')
     expect(main.map((column) => column.id)).toEqual(expect.arrayContaining(['debit', 'credit', 'balance']))
   })
+
+  it('fits a phone by keeping a short main row and moving the rest under', () => {
+    const { main, extra } = columnsForViewport(ledger, preferred, 360)
+    expect(main.map((column) => column.id)[0]).toBe('date')
+    expect(main.length).toBeLessThan(ledger.length - 3)
+    expect(extra.length).toBeGreaterThan(5)
+    expect(minSumFits(main, 360)).toBe(true)
+  })
 })
+
+function minSumFits(columns: { kind?: string }[], width: number) {
+  const sum = columns.reduce((total, column) => total + columnMinWidth(column.kind), 0)
+  return sum <= width
+}
 
 describe('totals', () => {
   it('sums numeric cells and ignores blanks and labels', () => {

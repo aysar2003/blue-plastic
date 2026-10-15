@@ -55,20 +55,27 @@ export function ContactPersonRow({
     router.push(doubleClickHref)
   }
 
+  const tipParts = [
+    doubleClickHref ? 'Double-click for QuickReport' : null,
+    company?.trim() ? `Company: ${company.trim()}` : null,
+    phone?.trim() ? `Phone: ${phone.trim()}` : null,
+  ].filter(Boolean)
+  const tip = tipParts.length > 0 ? tipParts.join(' · ') : undefined
+
   return (
     <div
       className={cn(
-        'group grid h-[2.2rem] grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_4.25rem_5.25rem_1.75rem] items-center px-1 text-sm',
+        'group grid h-[2.2rem] grid-cols-[minmax(0,1fr)_5.75rem_1.75rem] items-center px-1 text-sm',
         selected
           ? 'bg-primary/25 font-medium text-foreground'
-          : 'text-foreground hover:bg-accent',
+          : 'text-foreground hover:bg-[var(--band)]',
         !active && 'opacity-55',
       )}
     >
       <Link
         href={href}
         aria-current={selected ? 'true' : undefined}
-        title={doubleClickHref ? 'Double-click for QuickReport' : undefined}
+        title={tip}
         className="flex h-full min-w-0 items-center truncate px-1 uppercase"
         onDoubleClick={openReport}
       >
@@ -77,22 +84,7 @@ export function ContactPersonRow({
       <Link
         href={href}
         tabIndex={-1}
-        className="flex h-full min-w-0 items-center truncate px-1 text-xs text-muted-foreground"
-        onDoubleClick={openReport}
-      >
-        {company?.trim() || '—'}
-      </Link>
-      <Link
-        href={href}
-        tabIndex={-1}
-        className="flex h-full min-w-0 items-center truncate px-1 text-xs tabular-nums text-muted-foreground"
-        onDoubleClick={openReport}
-      >
-        {phone?.trim() || '—'}
-      </Link>
-      <Link
-        href={href}
-        tabIndex={-1}
+        title={tip}
         className="tabular flex h-full items-center justify-end px-1 text-right text-xs"
         onDoubleClick={openReport}
       >

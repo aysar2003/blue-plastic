@@ -350,7 +350,7 @@ export async function valuation(tx: Tx, orgId: string) {
       ) t ON true
      WHERE i."orgId" = ${orgId}
        AND i."deletedAt" IS NULL
-       AND i.type = 'INVENTORY'
+       AND i.type IN ('INVENTORY', 'INVENTORY_ASSEMBLY')
      ORDER BY i.name
   `
 
@@ -507,4 +507,114 @@ export async function reverseMovementsFor(
   }
 
   return { reversed, value: removed }
+}
+
+/**
+ * Put stock back the way it was before a soft delete's compensating movements.
+ *
+ * Delete nets every movement on the source to zero by appending the opposite.
+ * Restore brings the net back to the original journal's effect. New rows are not
+ * tied to that journal id, so a later delete/restore cycle still sees one clear
+ * target. Calling `reverseMovementsFor` again would see a zero net and do nothing.
+ */
+export async function restoreMovementsFor(
+  tx: Tx,
+  ctx: OrgContext,
+  source: { sourceId: string; journalId: string; date?: CalendarDate },
+): Promise<{ restored: number; value: Decimal }> {
+  const movements = await tx.inventoryTransaction.findMany({
+    where: { orgId: ctx.orgId, sourceId: source.sourceId },
+    orderBy: { sequence: 'asc' },
+    select: {
+      itemId: true,
+      date: true,
+      type: true,
+      sourceType: true,
+      journalId: true,
+      quantity: true,
+      unitCost: true,
+      value: true,
+    },
+  })
+
+  if (movements.length === 0) return { restored: 0, value: ZERO }
+
+  type Net = {
+    quantity: Decimal
+    value: Decimal
+    unitCost: Decimal
+    type: InventoryMovementType
+    sourceType: JournalSourceType
+  }
+
+  const target = new Map<string, Net>()
+  const current = new Map<string, { quantity: Decimal; value: Decimal }>()
+
+  for (const movement of movements) {
+    const quantity = new Decimal(movement.quantity.toString())
+    const value = new Decimal(movement.value.toString())
+
+    const running = current.get(movement.itemId)
+    if (running) {
+      running.quantity = running.quantity.plus(quantity)
+      running.value = running.value.plus(value)
+    } else {
+      current.set(movement.itemId, { quantity, value })
+    }
+
+    if (movement.journalId !== source.journalId) continue
+
+    const existing = target.get(movement.itemId)
+    if (existing) {
+      existing.quantity = existing.quantity.plus(quantity)
+      existing.value = existing.value.plus(value)
+    } else {
+      target.set(movement.itemId, {
+        quantity,
+        value,
+        unitCost: new Decimal(movement.unitCost.toString()),
+        type: movement.type,
+        sourceType: movement.sourceType,
+      })
+    }
+  }
+
+  if (target.size === 0) return { restored: 0, value: ZERO }
+
+  let applied = ZERO
+  let restored = 0
+
+  for (const [itemId, want] of target) {
+    const have = current.get(itemId) ?? { quantity: ZERO, value: ZERO }
+    const quantity = want.quantity.minus(have.quantity)
+    const value = want.value.minus(have.value)
+    if (quantity.isZero() && value.isZero()) continue
+
+    const before = await positionOf(tx, itemId)
+
+    await tx.inventoryTransaction.create({
+      data: {
+        orgId: ctx.orgId,
+        itemId,
+        date: toDate(source.date ?? toCalendarDate(movements[0].date)),
+        type: want.type,
+        sourceType: want.sourceType,
+        sourceId: source.sourceId,
+        sourceLineId: null,
+        quantity: quantity.toFixed(4),
+        unitCost: want.unitCost.toFixed(6),
+        value: value.toFixed(4),
+        runningQuantity: before.quantity.plus(quantity).toFixed(4),
+        runningValue: before.value.plus(value).toFixed(4),
+        sequence: before.sequence + 1,
+        journalId: null,
+        createdById: ctx.userId,
+      },
+    })
+
+    applied = applied.plus(value)
+    restored += 1
+  }
+
+  return { restored, value: applied }
 }

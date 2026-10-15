@@ -72,6 +72,11 @@ export default async function PurchaseDocumentPage({
           <>
             <DocumentActions
               paper={config.singular.toLowerCase()}
+              printHref={`/purchases/${config.slug}/${id}/print`}
+              pdfHref={`/api/purchases/${id}/pdf`}
+              filename={`${config.slug.replace(/s$/, '')}-${document.number
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')}.pdf`}
               defaultTo={document.offsetCustomer?.email ?? document.vendor.email ?? ''}
               defaultSubject={`${config.singular} ${document.number} — ${ctx.organization.name}`}
               defaultBody={[

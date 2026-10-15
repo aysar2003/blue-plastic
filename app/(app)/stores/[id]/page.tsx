@@ -214,7 +214,7 @@ export default async function StoreDashboardPage({
               </Link>
             ) : null}
             {canSell ? (
-              <Link href={`/sales/invoice/new?store=${id}`} className={buttonVariants({ size: 'sm' })}>
+              <Link href={`/sales/invoices/new?store=${id}`} className={buttonVariants({ size: 'sm' })}>
                 Sell
               </Link>
             ) : null}

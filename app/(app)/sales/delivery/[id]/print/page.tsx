@@ -1,13 +1,14 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 
+import { DocumentActions } from '@/components/print/document-actions'
+import { DocumentBarcode } from '@/components/print/document-barcode'
 import { SheetMarks } from '@/components/sales/sheet-marks'
 import { FORM_SHEET } from '@/lib/credit-brand'
 import { formatDate, formatDateTime } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import * as organizationService from '@/server/services/organization.service'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
-import { DocumentActions } from '@/components/print/document-actions'
 
 export const metadata = { title: 'Print delivery note' }
 
@@ -79,6 +80,9 @@ export default async function PrintDeliveryNotePage({
                 Delivery note
               </p>
               <h1 className="mt-1 text-3xl font-bold tracking-tight tabular">{note.number}</h1>
+              <div className="mt-2">
+                <DocumentBarcode value={note.number} height={40} moduleWidth={1.15} />
+              </div>
               <p className="mt-1 text-sm text-[#5C6B7A]">
                 {formatDate(note.date)} · {issued}
               </p>

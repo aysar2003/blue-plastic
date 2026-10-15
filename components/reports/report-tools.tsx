@@ -7,21 +7,13 @@ import { usePathname } from 'next/navigation'
 import { Columns3Icon, SearchIcon } from 'lucide-react'
 
 import { FontToolbarControls } from '@/components/appearance/font-controls'
+import { ReportRowStyleControls } from '@/components/reports/report-sheet'
 import { Input } from '@/components/ui/input'
 import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import { parseReportStyle, REPORT_STYLE_KEY, REPORT_STYLES } from '@/lib/report-styles'
 
 const storageKey = (path: string) => `bpc.reportCols:${path}`
 const splitKey = (path: string) => `bpc.reportSplits:${path}`
-const templateKey = 'bpc.reportTemplate'
-
-type ReportTemplate = 'standard' | 'compact' | 'plain'
-
-const TEMPLATES: { id: ReportTemplate; label: string }[] = [
-  { id: 'standard', label: 'Standard' },
-  { id: 'compact', label: 'Compact' },
-  { id: 'plain', label: 'Plain' },
-]
 
 /**
  * Search and column visibility for whichever report is on screen.
@@ -50,7 +42,6 @@ export function ReportTools() {
   const [splits, setSplits] = useState<string[]>([])
   const hiddenRaw = useBrowserStore(storageKey(pathname))
   const splitRaw = useBrowserStore(splitKey(pathname))
-  const savedTemplate = useBrowserStore(templateKey)
   const savedStyle = useBrowserStore(REPORT_STYLE_KEY)
   const reportStyle = parseReportStyle(savedStyle)
   const styleLabel = REPORT_STYLES.find((item) => item.id === reportStyle)?.label ?? 'SOM ERP'
@@ -59,16 +50,6 @@ export function ReportTools() {
   // empty one, is a choice the person already made.
   const shownSplits = useMemo(() => (splitRaw === null ? null : parseList(splitRaw)), [splitRaw])
   const [match, setMatch] = useState<{ shown: number; total: number } | null>(null)
-  const template: ReportTemplate =
-    savedTemplate === 'compact' || savedTemplate === 'plain' || savedTemplate === 'standard'
-      ? savedTemplate
-      : 'standard'
-
-  useEffect(() => {
-    const root = document.querySelector('[data-report-root]')
-    if (!root) return
-    root.setAttribute('data-template', template)
-  }, [pathname, template])
 
   useEffect(() => {
     const root = document.querySelector('[data-report-root]')
@@ -201,21 +182,7 @@ export function ReportTools() {
           Style · {styleLabel}
         </Link>
         <FontToolbarControls />
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Report template">
-          {TEMPLATES.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={template === item.id}
-              onClick={() => writeBrowserStore(templateKey, item.id)}
-              className={`rounded-md px-2.5 py-1 text-sm ${
-                template === item.id ? 'bg-secondary font-medium' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <ReportRowStyleControls />
       </div>
       <details className="relative">
         <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm">

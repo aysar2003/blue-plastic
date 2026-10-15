@@ -96,12 +96,23 @@ export const PERMISSIONS = [
   'calendar:create',
   'calendar:update',
   'calendar:delete',
+
+  // Customer portal — portal:read is CUSTOMER-only; portal:manage is staff.
+  'portal:read',
+  'portal:manage',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
 
+/** Staff invite / edit matrix — customers never receive portal:read this way. */
+export const STAFF_PERMISSIONS = PERMISSIONS.filter((p) => p !== 'portal:read') as readonly Permission[]
+
 export function isPermission(value: string): value is Permission {
   return (PERMISSIONS as readonly string[]).includes(value)
+}
+
+export function isStaffPermission(value: string): value is Permission {
+  return (STAFF_PERMISSIONS as readonly string[]).includes(value)
 }
 
 export type PermissionGroup = {
@@ -151,6 +162,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         key: 'customer:delete',
         label: 'Delete / merge customers',
         hint: 'Only the owner has this by default — grant it here for other users',
+      },
+      {
+        key: 'portal:manage',
+        label: 'Manage customer portal',
+        hint: 'Invite customers to the view-only portal (also needs the company portal switch on)',
       },
     ],
   },

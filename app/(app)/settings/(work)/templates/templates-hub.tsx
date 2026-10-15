@@ -153,6 +153,7 @@ export function TemplatesHub({
               storageKey={INVOICE_FORM_TEMPLATE_STORAGE_KEY}
               options={INVOICE_FORM_TEMPLATES}
               defaultId={DEFAULT_INVOICE_FORM_TEMPLATE}
+              accent={template.accent}
               parse={(raw) => (isInvoiceFormTemplateId(raw ?? '') ? raw! : DEFAULT_INVOICE_FORM_TEMPLATE)}
             />
           ) : null}
@@ -164,6 +165,7 @@ export function TemplatesHub({
               storageKey={SALES_RECEIPT_FORM_TEMPLATE_STORAGE_KEY}
               options={SALES_RECEIPT_FORM_TEMPLATES}
               defaultId={DEFAULT_SALES_RECEIPT_FORM_TEMPLATE}
+              accent={template.accent}
               parse={(raw) =>
                 isSalesReceiptFormTemplateId(raw ?? '') ? raw! : DEFAULT_SALES_RECEIPT_FORM_TEMPLATE
               }
@@ -177,6 +179,7 @@ export function TemplatesHub({
               storageKey={SALES_FORM_TEMPLATE_STORAGE_KEY}
               options={SALES_FORM_TEMPLATES}
               defaultId={DEFAULT_SALES_FORM_TEMPLATE}
+              accent={template.accent}
               parse={(raw) => (isSalesFormTemplateId(raw ?? '') ? raw! : DEFAULT_SALES_FORM_TEMPLATE)}
             />
           ) : null}
@@ -200,7 +203,9 @@ export function TemplatesHub({
               storageKey={REPORT_SHEET_TEMPLATE_KEY}
               options={REPORT_SHEET_TEMPLATES}
               defaultId={DEFAULT_REPORT_SHEET_TEMPLATE}
+              accent={template.accent}
               parse={(raw) => parseReportSheetTemplate(raw)}
+              persistHint="Saved in this browser. Reports, the chart of accounts, and bank account lists use the row style you pick here."
             />
           ) : null}
 

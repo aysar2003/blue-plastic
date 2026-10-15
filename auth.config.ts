@@ -31,12 +31,15 @@ export const authConfig = {
       if (pathname.startsWith('/api/')) return true
 
       // Public product + auth doors (no session). `/register` is self-serve company create.
+      // Customer portal login + invite accept are public; authenticated `/portal` stays gated.
       const isPublic =
         pathname === '/' ||
         pathname === '/sign-in' ||
         pathname === '/login' ||
         pathname === '/setup' ||
-        pathname === '/register'
+        pathname === '/register' ||
+        pathname === '/portal/login' ||
+        pathname === '/portal/accept'
       if (isPublic) return true
 
       return Boolean(auth?.user)

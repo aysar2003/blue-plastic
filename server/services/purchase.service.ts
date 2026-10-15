@@ -8,10 +8,11 @@ import { dueDateFor } from '@/lib/payment-terms'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { PurchaseDocumentInput, ReceiveOrderInput } from '@/lib/validation/purchases'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
-import { softDeleteDocument } from '@/server/accounting/deletion'
+import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
 import { priceDocument, type DraftSalesLine } from '@/server/accounting/sales-pricing'
-import { recordMovement, reverseMovementsFor } from '@/server/accounting/inventory'
+import { recordMovement, restoreMovementsFor, reverseMovementsFor } from '@/server/accounting/inventory'
+import { purchaseByType } from '@/lib/purchase-types'
 import {
   buildBillJournal,
   buildExpenseJournal,
@@ -261,6 +262,21 @@ export async function get(ctx: OrgContext, id: string) {
     applications: document.applications.map((a) => ({ ...a, amount: a.amount.toString() })),
     amountApplied: toMoneyString(applied, 2),
     balance: document.type === 'BILL' ? toMoneyString(total.minus(applied), 2) : '0.00',
+  }
+}
+
+/** The document before and after this one, in date then number order. A new form sits after the last. */
+export async function neighbors(ctx: OrgContext, type: PurchaseDocumentType, currentId: string | null) {
+  const rows = await db.purchaseDocument.findMany({
+    where: { orgId: ctx.orgId, type, deletedAt: null },
+    select: { id: true, number: true },
+    orderBy: [{ date: 'asc' }, { number: 'asc' }],
+  })
+  const index = currentId == null ? rows.length : rows.findIndex((row) => row.id === currentId)
+  const place = index < 0 ? rows.length : index
+  return {
+    previous: place > 0 ? rows[place - 1]! : null,
+    next: place < rows.length - 1 ? rows[place + 1]! : null,
   }
 }
 
@@ -648,25 +664,45 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
   if (!PURCHASE_POSTS_A_JOURNAL[document.type]) return null
   if (document.journalId) throw conflict(`${document.number} is already posted.`)
 
+  for (const line of document.lines) {
+    const type = line.item?.type
+    if (type === 'GROUP' || type === 'DISCOUNT' || type === 'SUBTOTAL' || type === 'PAYMENT') {
+      throw validation(
+        `"${line.item!.name}" is a sales form item and cannot be bought on a bill or expense.`,
+        { lines: ['Choose inventory, a service, a non-inventory part, or another charge'] },
+      )
+    }
+  }
+
   const taxCodes = await loadTaxCodes(
     tx,
     ctx,
     document.lines.map((line) => ({ taxCodeId: line.taxCodeId })),
   )
 
+  const needsCogs = document.lines.some((line) => line.item?.type === 'NON_INVENTORY')
+  const systemCogsAccountId = needsCogs ? await systemAccountId(tx, ctx.orgId, 'COGS') : null
+
   const priced = priceDocument(
-    document.lines.map((line) => ({
-      itemId: line.itemId,
-      description: line.description,
-      quantity: line.quantity.toString(),
-      unitPrice: line.unitPrice.toString(),
-      discountPercent: line.discountPercent?.toString() ?? null,
-      taxCodeId: line.taxCodeId,
-      // Tracked stock is priced but not expensed: its cost is added to the
-      // inventory asset below instead.
-      incomeAccountId: line.item?.type === 'INVENTORY' ? null : line.expenseAccountId,
-      isStock: line.item?.type === 'INVENTORY',
-    })),
+    document.lines.map((line) => {
+      const stocked = line.item?.type === 'INVENTORY' || line.item?.type === 'INVENTORY_ASSEMBLY'
+      return {
+        itemId: line.itemId,
+        description: line.description,
+        quantity: line.quantity.toString(),
+        unitPrice: line.unitPrice.toString(),
+        discountPercent: line.discountPercent?.toString() ?? null,
+        taxCodeId: line.taxCodeId,
+        // Tracked stock is priced but not expensed: its cost is added to the
+        // inventory asset below instead. Non-inventory goods go to COGS.
+        incomeAccountId: stocked
+          ? null
+          : line.item?.type === 'NON_INVENTORY'
+            ? systemCogsAccountId
+            : line.expenseAccountId,
+        isStock: stocked,
+      }
+    }),
     taxCodes,
     ctx.organization.baseCurrency,
   )
@@ -703,7 +739,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     )
 
     for (const [index, line] of document.lines.entries()) {
-      if (line.item?.type !== 'INVENTORY') continue
+      if (line.item?.type !== 'INVENTORY' && line.item?.type !== 'INVENTORY_ASSEMBLY') continue
       if (!line.item.inventoryAccountId) {
         throw precondition(`"${line.item.name}" has no inventory account.`)
       }
@@ -857,6 +893,55 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
 }
 
 /**
+ * Put a deleted purchase document back into the working books.
+ *
+ * Applications released on delete are not rebuilt — bills return unpaid for the
+ * user to settle again. Stock and purchase-order received counts are put back.
+ */
+export async function restore(ctx: OrgContext, id: string) {
+  return db.$transaction(async (tx) => {
+    const document = await tx.purchaseDocument.findFirst({
+      where: { id, orgId: ctx.orgId, deletedAt: undefined },
+      select: {
+        id: true,
+        type: true,
+        number: true,
+        journalId: true,
+        deletedAt: true,
+        convertedFromId: true,
+      },
+    })
+    if (!document) throw notFound('Document')
+    if (!document.deletedAt) {
+      return { id, number: document.number, href: purchaseHref(document.type, document.id) }
+    }
+
+    if (document.journalId) {
+      await restoreMovementsFor(tx, ctx, { sourceId: id, journalId: document.journalId })
+    }
+
+    if (document.convertedFromId) {
+      await applyOrderQuantities(tx, ctx, document.convertedFromId, id)
+    }
+
+    await restoreSoftDeletedDocument(tx, ctx, {
+      clear: () => tx.purchaseDocument.update({ where: { id }, data: CLEAR_DELETION }),
+      entity: 'PurchaseDocument',
+      id,
+      number: document.number,
+      journalIds: [document.journalId],
+      before: { type: document.type },
+    })
+
+    return { id, number: document.number, href: purchaseHref(document.type, document.id) }
+  })
+}
+
+function purchaseHref(type: PurchaseDocumentType, id: string) {
+  return `/purchases/${purchaseByType(type).slug}/${id}`
+}
+
+/**
  * Put a deleted receipt's quantities back on the order it was received against.
  *
  * The order's count is the only thing in the system that would otherwise be left
@@ -907,6 +992,83 @@ async function restoreOrderQuantities(
     await tx.purchaseDocumentLine.update({
       where: { id: line.id },
       data: { quantityReceived: restored.toFixed(4) },
+    })
+
+    remainingByKey.set(key, ZERO)
+  }
+
+  const refreshed = await tx.purchaseDocumentLine.findMany({
+    where: { documentId: orderId },
+    select: { quantity: true, quantityReceived: true },
+  })
+
+  const outstanding = refreshed.reduce(
+    (total, line) =>
+      total.plus(
+        Decimal.max(
+          new Decimal(line.quantity.toString()).minus(line.quantityReceived.toString()),
+          0,
+        ),
+      ),
+    ZERO,
+  )
+
+  const anyReceived = refreshed.some((line) => !new Decimal(line.quantityReceived.toString()).isZero())
+
+  if (order.status !== 'VOID' && order.status !== 'DRAFT') {
+    await tx.purchaseDocument.update({
+      where: { id: orderId },
+      data: { status: outstanding.isZero() ? 'CLOSED' : anyReceived ? 'PARTIAL' : 'OPEN' },
+    })
+  }
+}
+
+/** Put received quantities back on the order when a deleted bill is restored. */
+async function applyOrderQuantities(
+  tx: Tx,
+  ctx: OrgContext,
+  orderId: string,
+  billId: string,
+): Promise<void> {
+  const [order, bill] = await Promise.all([
+    tx.purchaseDocument.findFirst({
+      where: { id: orderId, orgId: ctx.orgId, type: 'PURCHASE_ORDER' },
+      select: {
+        id: true,
+        status: true,
+        lines: {
+          select: { id: true, itemId: true, description: true, quantity: true, quantityReceived: true },
+        },
+      },
+    }),
+    tx.purchaseDocument.findFirst({
+      where: { id: billId, orgId: ctx.orgId, deletedAt: undefined },
+      select: { lines: { select: { itemId: true, description: true, quantity: true } } },
+    }),
+  ])
+  if (!order || !bill) return
+
+  const remainingByKey = new Map<string, Decimal>()
+  for (const line of bill.lines) {
+    const key = line.itemId ?? `text:${line.description ?? ''}`
+    remainingByKey.set(
+      key,
+      (remainingByKey.get(key) ?? ZERO).plus(new Decimal(line.quantity.toString())),
+    )
+  }
+
+  for (const line of order.lines) {
+    const key = line.itemId ?? `text:${line.description ?? ''}`
+    const addBack = remainingByKey.get(key)
+    if (!addBack || addBack.isZero()) continue
+
+    const received = new Decimal(line.quantityReceived.toString())
+    const ordered = new Decimal(line.quantity.toString())
+    const next = Decimal.min(received.plus(addBack), ordered)
+
+    await tx.purchaseDocumentLine.update({
+      where: { id: line.id },
+      data: { quantityReceived: next.toFixed(4) },
     })
 
     remainingByKey.set(key, ZERO)
@@ -994,7 +1156,7 @@ export async function receivableOrder(
       itemId: line.itemId,
       itemName: line.item?.name ?? null,
       sku: line.item?.sku ?? null,
-      isTracked: line.item?.type === 'INVENTORY',
+      isTracked: line.item?.type === 'INVENTORY' || line.item?.type === 'INVENTORY_ASSEMBLY',
       description: line.description,
       unitPrice: line.unitPrice.toString(),
       ordered: ordered.toFixed(2),
@@ -1485,7 +1647,15 @@ async function resolveLines(
     if (item && !item.isActive) {
       throw precondition(`"${item.name}" is archived and cannot be bought.`)
     }
+    if (item && (item.type === 'GROUP' || item.type === 'DISCOUNT' || item.type === 'SUBTOTAL' || item.type === 'PAYMENT')) {
+      throw validation(
+        `"${item.name}" is a sales form item and cannot be bought on a bill or expense.`,
+        { lines: ['Choose inventory, a service, a non-inventory part, or another charge'] },
+      )
+    }
     if (line.storeId && !knownStores.has(line.storeId)) throw notFound('Store')
+
+    const stocked = item?.type === 'INVENTORY' || item?.type === 'INVENTORY_ASSEMBLY'
 
     return {
       itemId: line.itemId ?? null,
@@ -1501,13 +1671,12 @@ async function resolveLines(
       // `incomeAccountId` is the pricing engine's neutral name for "where this
       // line posts". On a purchase that is the expense or asset account — and for
       // tracked stock it is handled separately, so it is left unset here.
-      incomeAccountId:
-        item?.type === 'INVENTORY'
-          ? null
-          : item?.type === 'NON_INVENTORY'
-            ? systemCogsAccountId
-            : (line.expenseAccountId ?? item?.expenseAccountId ?? vendorDefaultAccountId ?? null),
-      isStock: item?.type === 'INVENTORY',
+      incomeAccountId: stocked
+        ? null
+        : item?.type === 'NON_INVENTORY'
+          ? systemCogsAccountId
+          : (line.expenseAccountId ?? item?.expenseAccountId ?? vendorDefaultAccountId ?? null),
+      isStock: stocked,
     }
   })
 }

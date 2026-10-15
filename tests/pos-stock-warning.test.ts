@@ -77,8 +77,8 @@ describe('POS stock warning (product tiles)', () => {
     expect(tile).toContain('focus-visible:border-[color:var(--product-hover-border)]')
     expect(tile).toContain('focus-visible:bg-[var(--product-hover-bg)]')
     expect(tile).toContain('transition-colors')
-    // Dark till (the default): accent border, lighter teal fill.
-    expect(tile).toContain('--product-hover-border:#017e84')
+    // Dark till (the default): accent border, lighter teal fill (ODOO.teal).
+    expect(tile).toContain('--product-hover-border:#0e7490')
     expect(tile).toContain('--product-hover-bg:#226066')
   })
 })

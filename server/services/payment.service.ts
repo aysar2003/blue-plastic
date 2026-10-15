@@ -7,7 +7,7 @@ import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { PaymentInput } from '@/lib/validation/sales'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { buildCustomerPaymentJournal } from '@/server/accounting/builders/sales'
-import { softDeleteDocument } from '@/server/accounting/deletion'
+import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
 import { removeDepositWithin } from '@/server/services/banking.service'
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
@@ -649,6 +649,33 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
     for (const invoiceId of invoiceIds) await refreshStatus(tx, invoiceId)
 
     return { id, number: payment.number }
+  })
+}
+
+/**
+ * Put a deleted customer payment back. Applications are not rebuilt — the
+ * payment returns unapplied for the user to allocate again.
+ */
+export async function restore(ctx: OrgContext, id: string) {
+  return db.$transaction(async (tx) => {
+    const payment = await tx.customerPayment.findFirst({
+      where: { id, orgId: ctx.orgId, deletedAt: undefined },
+      select: { id: true, number: true, journalId: true, deletedAt: true },
+    })
+    if (!payment) throw notFound('Payment')
+    if (!payment.deletedAt) {
+      return { id, number: payment.number, href: `/payments/${id}` }
+    }
+
+    await restoreSoftDeletedDocument(tx, ctx, {
+      clear: () => tx.customerPayment.update({ where: { id }, data: CLEAR_DELETION }),
+      entity: 'CustomerPayment',
+      id,
+      number: payment.number,
+      journalIds: [payment.journalId],
+    })
+
+    return { id, number: payment.number, href: `/payments/${id}` }
   })
 }
 

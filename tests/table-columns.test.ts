@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { ITEM_DEFAULT_HIDDEN, ITEM_MAIN_COLUMN_IDS } from '@/lib/item-table-columns'
+import { ITEM_DEFAULT_HIDDEN } from '@/lib/item-table-columns'
 import { buildRegisterColumns, defaultRegisterPrefs } from '@/lib/register-table-columns'
 import { partitionColumns } from '@/lib/table-fit'
 
@@ -55,17 +55,5 @@ describe('table columns', () => {
       'Sales — Plastic Products',
       'Cost of Goods Sold',
     ])
-  })
-
-  it('keeps item money on the first row', () => {
-    const columns = [
-      { id: 'name', label: 'Item' },
-      { id: 'sku', label: 'SKU' },
-      { id: 'price', label: 'Price' },
-      { id: 'store:1', label: 'Xafiiska' },
-    ]
-    const { main, extra } = partitionColumns(columns, ITEM_MAIN_COLUMN_IDS)
-    expect(main.map((column) => column.id)).toEqual(['name', 'price'])
-    expect(extra.map((column) => column.id)).toEqual(['sku', 'store:1'])
   })
 })

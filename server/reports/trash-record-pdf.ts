@@ -4,6 +4,7 @@ import { formatDateTime } from '@/lib/date'
 import { odooPdfLetterhead } from '@/lib/odoo-pdf'
 import { ODOO_PDF } from '@/lib/odoo-brand'
 import { buildTextPdf, type PdfRow } from '@/lib/pdf-text'
+import type { PrintInk } from '@/lib/print-ink'
 
 /** A short paper for a trash entry when the original form cannot be rebuilt. */
 export function renderTrashRecordPdf(input: {
@@ -18,6 +19,7 @@ export function renderTrashRecordPdf(input: {
   timeZone: string
   reason: string | null
   fields: { label: string; value: string }[]
+  ink?: PrintInk
 }): Uint8Array {
   const rows: PdfRow[] = []
   const line = (text: string, options: { bold?: boolean; size?: number; height?: number } = {}) => {
@@ -51,5 +53,5 @@ export function renderTrashRecordPdf(input: {
     line(`${field.label}: ${field.value}`, { size: 10, height: 14 })
   }
 
-  return buildTextPdf(rows)
+  return buildTextPdf(rows, { ink: input.ink })
 }

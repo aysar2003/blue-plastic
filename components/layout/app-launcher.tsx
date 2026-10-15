@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeftRightIcon,
+  BarcodeIcon,
   ChevronDownIcon,
   DatabaseIcon,
   LayoutGridIcon,
@@ -68,6 +69,7 @@ const ICONS: Record<LauncherIcon, LucideIcon> = {
   transfer: ArrowLeftRightIcon,
   monitor: MonitorIcon,
   database: DatabaseIcon,
+  barcode: BarcodeIcon,
 }
 
 export type LauncherTile = {

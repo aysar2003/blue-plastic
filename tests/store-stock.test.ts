@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   foldStoreQuantities,
+  quantityAtStore,
   negativeStockWarning,
   shortStockNote,
   formatStockQty,
@@ -74,5 +75,21 @@ describe('negativeStockWarning', () => {
     expect(stockWarningTitle(negativeStockWarning(-7, 2, 'Xafiiska')!)).toBe(
       'Xafiiska after this sale: \u22129 (on hand \u22127)',
     )
+  })
+})
+
+describe('quantityAtStore', () => {
+  it('reads one shelf and treats a missing store as zero, not the company total', () => {
+    const stock = foldStoreQuantities(
+      [
+        { itemId: 'tabo', storeId: null, quantity: '1000' },
+        { itemId: 'tabo', storeId: 'two', quantity: '250' },
+      ],
+      'office',
+    )
+    expect(quantityAtStore(stock, 'tabo', 'two')).toBe('250.00')
+    expect(quantityAtStore(stock, 'tabo', 'office')).toBe('1000.00')
+    expect(quantityAtStore(stock, 'tabo', 'missing')).toBe('0.00')
+    expect(quantityAtStore(stock, 'other', 'office')).toBe('0.00')
   })
 })

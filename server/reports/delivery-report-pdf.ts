@@ -4,7 +4,8 @@ import { formatDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { ODOO_PDF } from '@/lib/odoo-brand'
 import { odooPdfLetterhead, odooPdfTableHead } from '@/lib/odoo-pdf'
-import { buildTextPdf, type PdfRow } from '@/lib/pdf-text'
+import { buildTextPdf, PDF_PAGE, type PdfRow } from '@/lib/pdf-text'
+import type { PrintInk } from '@/lib/print-ink'
 import type { DeliveryOrderDetail } from '@/server/services/delivery.service'
 
 export function renderDeliveryReportPdf(input: {
@@ -12,6 +13,7 @@ export function renderDeliveryReportPdf(input: {
   currency: string
   filterLabel: string
   orders: DeliveryOrderDetail[]
+  ink?: PrintInk
 }): Uint8Array {
   const money = (value: string) => formatMoney(value, input.currency)
   const rows: PdfRow[] = []
@@ -19,7 +21,7 @@ export function renderDeliveryReportPdf(input: {
     rows.push({
       size: options.size ?? 10,
       height: options.height ?? 14,
-      runs: [{ text, x: 40, bold: options.bold, color: ODOO_PDF.ink }],
+      runs: [{ text, x: PDF_PAGE.left, bold: options.bold, color: ODOO_PDF.ink }],
     })
   }
 
@@ -48,11 +50,11 @@ export function renderDeliveryReportPdf(input: {
 
     rows.push(
       odooPdfTableHead([
-        { text: 'Item', x: 40 },
-        { text: 'Ordered', x: 280 },
-        { text: 'Received', x: 360 },
-        { text: 'Outstanding', x: 440 },
-        { text: 'Value due', x: 520 },
+        { text: 'Item', x: PDF_PAGE.left },
+        { text: 'Ordered', x: 300, align: 'right' },
+        { text: 'Received', x: 380, align: 'right' },
+        { text: 'Outstanding', x: 470, align: 'right' },
+        { text: 'Value due', x: PDF_PAGE.right, align: 'right' },
       ]),
     )
 
@@ -61,11 +63,15 @@ export function renderDeliveryReportPdf(input: {
         size: 8,
         height: 12,
         runs: [
-          { text: (row.itemName || row.description || 'Line').slice(0, 36), x: 40, color: ODOO_PDF.ink },
-          { text: row.ordered, x: 280, color: ODOO_PDF.ink },
-          { text: row.received, x: 360, color: ODOO_PDF.ink },
-          { text: row.outstanding, x: 440, color: ODOO_PDF.ink },
-          { text: money(row.outstandingValue), x: 520, color: ODOO_PDF.ink },
+          {
+            text: (row.itemName || row.description || 'Line').slice(0, 36),
+            x: PDF_PAGE.left,
+            color: ODOO_PDF.ink,
+          },
+          { text: row.ordered, x: 300, align: 'right', color: ODOO_PDF.ink },
+          { text: row.received, x: 380, align: 'right', color: ODOO_PDF.ink },
+          { text: row.outstanding, x: 470, align: 'right', color: ODOO_PDF.ink },
+          { text: money(row.outstandingValue), x: PDF_PAGE.right, align: 'right', color: ODOO_PDF.ink },
         ],
       })
     }
@@ -76,5 +82,5 @@ export function renderDeliveryReportPdf(input: {
     line('No purchase orders in this filter.', { size: 10, height: 16 })
   }
 
-  return buildTextPdf(rows)
+  return buildTextPdf(rows, { ink: input.ink })
 }

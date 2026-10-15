@@ -6,11 +6,12 @@ import { Decimal, parseMoneyInput, toMoneyString } from '@/lib/money'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { ManualJournalInput } from '@/lib/validation/accounting'
 import { partyRequiredBy } from '@/lib/account-options'
-import { deleteJournals } from '@/server/accounting/deletion'
+import { deleteJournals, restoreJournals } from '@/server/accounting/deletion'
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, validation } from '@/server/errors'
+import * as assemblyBuildService from '@/server/services/assembly-build.service'
 import * as bankingService from '@/server/services/banking.service'
 import * as billPaymentService from '@/server/services/bill-payment.service'
 import * as inventoryService from '@/server/services/inventory.service'
@@ -222,6 +223,30 @@ export async function registerLines(ctx: OrgContext) {
       amount: toMoneyString(debit.isZero() ? credit : debit, 2),
     }
   })
+}
+
+/**
+ * The manual journal before and after this one, in date then number order.
+ * A blank new form sits after the last manual entry.
+ */
+export async function neighbors(ctx: OrgContext, currentId: string | null) {
+  const rows = await db.journal.findMany({
+    where: {
+      orgId: ctx.orgId,
+      sourceType: 'MANUAL',
+      status: { not: 'DELETED' },
+    },
+    select: { id: true, journalNumber: true },
+    orderBy: [{ date: 'asc' }, { journalNumber: 'asc' }],
+  })
+  const index = currentId == null ? rows.length : rows.findIndex((row) => row.id === currentId)
+  const place = index < 0 ? rows.length : index
+  return {
+    previous: place > 0 ? { id: rows[place - 1]!.id, number: rows[place - 1]!.journalNumber } : null,
+    next: place < rows.length - 1
+      ? { id: rows[place + 1]!.id, number: rows[place + 1]!.journalNumber }
+      : null,
+  }
 }
 
 /**
@@ -552,6 +577,31 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
 }
 
 /**
+ * Put a deleted journal back. Document-owned entries restore through the
+ * document service so stock and related rows come back with the ledger.
+ */
+export async function restore(ctx: OrgContext, id: string) {
+  const journal = await db.journal.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: { id: true, journalNumber: true, sourceType: true, sourceId: true, status: true },
+  })
+  if (!journal) throw notFound('Journal')
+  if (journal.status !== 'DELETED') {
+    return { id, number: journal.journalNumber, href: `/journals/${id}` }
+  }
+
+  if (journal.sourceId) {
+    const owner = RESTORED_BY[journal.sourceType]
+    if (owner) return owner(ctx, journal.sourceId)
+  }
+
+  return db.$transaction(async (tx) => {
+    await restoreJournals(tx, ctx, [id])
+    return { id, number: journal.journalNumber, href: `/journals/${id}` }
+  })
+}
+
+/**
  * Which service owns the transaction behind a journal.
  *
  * A closing entry and a reversal are deliberately absent: the first is undone by
@@ -575,6 +625,28 @@ const OWNED_BY: Partial<
   TRANSFER: (ctx, id, reason) => bankingService.removeTransfer(ctx, id, reason),
   DEPOSIT: (ctx, id, reason) => bankingService.removeDeposit(ctx, id, reason),
   INVENTORY_ADJUSTMENT: (ctx, id, reason) => inventoryService.removeAdjustment(ctx, id, reason),
+  ASSEMBLY_BUILD: (ctx, id, reason) => assemblyBuildService.remove(ctx, id, reason),
+}
+
+const RESTORED_BY: Partial<
+  Record<
+    JournalSourceType,
+    (ctx: OrgContext, id: string) => Promise<{ id: string; number: string; href: string }>
+  >
+> = {
+  INVOICE: (ctx, id) => salesService.restore(ctx, id),
+  SALES_RECEIPT: (ctx, id) => salesService.restore(ctx, id),
+  CREDIT_MEMO: (ctx, id) => salesService.restore(ctx, id),
+  REFUND_RECEIPT: (ctx, id) => salesService.restore(ctx, id),
+  CUSTOMER_PAYMENT: (ctx, id) => paymentService.restore(ctx, id),
+  BILL: (ctx, id) => purchaseService.restore(ctx, id),
+  EXPENSE: (ctx, id) => purchaseService.restore(ctx, id),
+  VENDOR_CREDIT: (ctx, id) => purchaseService.restore(ctx, id),
+  BILL_PAYMENT: (ctx, id) => billPaymentService.restore(ctx, id),
+  TRANSFER: (ctx, id) => bankingService.restoreTransfer(ctx, id),
+  DEPOSIT: (ctx, id) => bankingService.restoreDeposit(ctx, id),
+  INVENTORY_ADJUSTMENT: (ctx, id) => inventoryService.restoreAdjustment(ctx, id),
+  ASSEMBLY_BUILD: (ctx, id) => assemblyBuildService.restore(ctx, id),
 }
 
 export async function reverse(

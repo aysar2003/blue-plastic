@@ -110,13 +110,28 @@ export function columnsForViewport<T extends { id: string; kind?: string }>(
     else main.push(column)
   }
 
-  const pinned = (column: T, index: number) =>
-    index === 0 ||
-    column.kind === 'money' ||
-    column.kind === 'number' ||
-    column.kind === 'signed' ||
-    column.kind === 'date' ||
-    column.kind === 'datetime'
+  // Phone / small tablet: only keep the lead column pinned so the rest can
+  // drop into the band underneath and the sheet still fits the viewport.
+  // Mid widths keep figures pinned; laptop keeps dates pinned too.
+  const pinned = (column: T, index: number) => {
+    if (width < 640) return index === 0
+    if (width < 900) {
+      return (
+        index === 0 ||
+        column.kind === 'money' ||
+        column.kind === 'number' ||
+        column.kind === 'signed'
+      )
+    }
+    return (
+      index === 0 ||
+      column.kind === 'money' ||
+      column.kind === 'number' ||
+      column.kind === 'signed' ||
+      column.kind === 'date' ||
+      column.kind === 'datetime'
+    )
+  }
 
   const minSum = (list: T[]) => list.reduce((sum, column) => sum + columnMinWidth(column.kind), 0)
 
@@ -130,6 +145,13 @@ export function columnsForViewport<T extends { id: string; kind?: string }>(
       if (size > widest) {
         widest = size
         dropAt = index
+      }
+    }
+    // Still too wide on a phone: drop trailing unpinned-or-secondary columns.
+    if (dropAt < 0 && width < 640) {
+      for (let index = main.length - 1; index > 0; index -= 1) {
+        dropAt = index
+        break
       }
     }
     if (dropAt < 0) break

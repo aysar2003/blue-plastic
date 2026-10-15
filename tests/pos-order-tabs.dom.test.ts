@@ -262,4 +262,40 @@ describe('POS till tabs', () => {
     expect(cartText()).toContain('$12.00')
     expect(document.body.textContent).toContain('Added 9BBB item')
   })
+
+  it('adds the item when an internal EAN-13 package code is entered', async () => {
+    await renderTill()
+    await act(async () => {
+      root!.render(
+        createElement(PosTerminal, {
+          ...props,
+          products: [
+            ...props.products,
+            {
+              id: 'drum',
+              name: 'Blue drum',
+              sku: 'DRM-1',
+              barcode: '2000000000015',
+              category: null,
+              price: '40',
+              onHand: '8',
+            },
+          ],
+        }),
+      )
+    })
+    const search = document.querySelector('[data-pos-barcode-search]')
+    if (!(search instanceof HTMLInputElement)) throw new Error('barcode search missing')
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(search, '2000000000015')
+      search.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => {
+      search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+    expect(cartText()).toContain('Blue drum')
+    expect(cartText()).toContain('$40.00')
+    expect(document.body.textContent).toContain('Added Blue drum')
+  })
 })

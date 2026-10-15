@@ -234,10 +234,11 @@ describe('invoice by invoice', () => {
       'Previous balance</dt><dd class="tabular">$0.00',
       'Previous balance</dt><dd class="tabular">$100.00',
     ])
-    const current = html.match(/Current balance<\/dt><dd class="tabular">([^<]+)/g)
+    // Ledger paper labels the running figure "Balance" (Previous + Debit − Credit).
+    const current = html.match(/>Balance<\/dt><dd class="tabular">([^<]+)/g)
     expect(current).toEqual([
-      'Current balance</dt><dd class="tabular">$100.00',
-      'Current balance</dt><dd class="tabular">$150.00',
+      '>Balance</dt><dd class="tabular">$100.00',
+      '>Balance</dt><dd class="tabular">$150.00',
     ])
   })
 })

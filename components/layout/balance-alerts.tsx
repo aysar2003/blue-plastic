@@ -16,7 +16,7 @@ export function BalanceAlerts({ alerts }: { alerts: BalanceAlert[] }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="relative grid size-8 place-items-center rounded-md text-slate-600 hover:bg-slate-100"
+        className="relative grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-[var(--band)] hover:text-foreground"
         aria-label={alerts.length > 0 ? `Balance reminders, ${alerts.length}` : 'Balance reminders'}
       >
         <BellIcon className="size-4" />

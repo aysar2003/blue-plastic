@@ -195,6 +195,7 @@ export type StatementKind =
   | 'PAYMENT'
   | 'SALES_RECEIPT'
   | 'REFUND_RECEIPT'
+  | 'EXPENSE'
   | 'JOURNAL'
   | 'ESTIMATE'
   | 'QUOTATION'
@@ -260,10 +261,10 @@ export async function statement(
   `
   const opening = new Decimal(openingRow?.balance ?? '0')
 
-  // Documents and payments first. Journals are loaded after so we can skip any
-  // posting that already appears as a document/payment — including legacy rows
-  // where only `sourceId` is set and `journalId` on the document is null.
-  const [documents, payments] = await Promise.all([
+  // Documents, payments, and customer-offset expenses first. Journals are loaded
+  // after so we can skip any posting that already appears as one of those —
+  // including legacy rows where only `sourceId` is set and `journalId` is null.
+  const [documents, payments, expenses] = await Promise.all([
     client.salesDocument.findMany({
       where: {
         orgId: ctx.orgId,
@@ -317,11 +318,42 @@ export async function statement(
         applications: { select: { amount: true } },
       },
     }),
+    client.purchaseDocument.findMany({
+      where: {
+        orgId: ctx.orgId,
+        offsetCustomerId: customerId,
+        type: 'EXPENSE',
+        status: { notIn: ['DRAFT', 'VOID'] },
+        date: { gte: from, lte: to },
+      },
+      select: {
+        id: true,
+        journalId: true,
+        number: true,
+        date: true,
+        total: true,
+        taxTotal: true,
+        memo: true,
+        reference: true,
+        status: true,
+        lines: {
+          orderBy: { lineNumber: 'asc' },
+          select: {
+            description: true,
+            quantity: true,
+            unitPrice: true,
+            amount: true,
+            item: { select: { name: true } },
+            expenseAccount: { select: { name: true } },
+          },
+        },
+      },
+    }),
   ])
 
-  // Cover every document/payment for this customer (any date) so a journal in
-  // the period is not double-counted when its document falls outside the filter.
-  const [allDocumentLinks, allPaymentLinks] = await Promise.all([
+  // Cover every document/payment/expense for this customer (any date) so a journal
+  // in the period is not double-counted when its document falls outside the filter.
+  const [allDocumentLinks, allPaymentLinks, allExpenseLinks] = await Promise.all([
     client.salesDocument.findMany({
       where: { orgId: ctx.orgId, customerId, type: { not: 'SALES_ORDER' } },
       select: { id: true, journalId: true },
@@ -330,15 +362,21 @@ export async function statement(
       where: { orgId: ctx.orgId, customerId },
       select: { id: true, journalId: true },
     }),
+    client.purchaseDocument.findMany({
+      where: { orgId: ctx.orgId, offsetCustomerId: customerId, type: 'EXPENSE' },
+      select: { id: true, journalId: true },
+    }),
   ])
 
   const coveredJournalIds = [
     ...allDocumentLinks.map((row) => row.journalId).filter((id): id is string => Boolean(id)),
     ...allPaymentLinks.map((row) => row.journalId).filter((id): id is string => Boolean(id)),
+    ...allExpenseLinks.map((row) => row.journalId).filter((id): id is string => Boolean(id)),
   ]
   const coveredSourceIds = [
     ...allDocumentLinks.map((row) => row.id),
     ...allPaymentLinks.map((row) => row.id),
+    ...allExpenseLinks.map((row) => row.id),
   ]
 
   // Prefer posted AR amounts over document/payment totals so a legacy import
@@ -374,13 +412,14 @@ export async function statement(
         status: { notIn: ['DRAFT', 'DELETED'] },
         salesDocuments: { none: {} },
         customerPayments: { none: {} },
+        purchaseDocuments: { none: {} },
         ...(coveredJournalIds.length > 0 ? { id: { notIn: coveredJournalIds } } : {}),
         ...(coveredSourceIds.length > 0
           ? {
               OR: [{ sourceId: null }, { sourceId: { notIn: coveredSourceIds } }],
             }
           : {}),
-        // Document-backed source types always belong on the document/payment row.
+        // Document-backed source types always belong on the document/payment/expense row.
         sourceType: {
           notIn: [
             'INVOICE',
@@ -388,6 +427,7 @@ export async function statement(
             'SALES_RECEIPT',
             'REFUND_RECEIPT',
             'CUSTOMER_PAYMENT',
+            'EXPENSE',
           ],
         },
       },
@@ -483,6 +523,50 @@ export async function statement(
         status: payment.status,
         lines: [],
         href: `/payments?q=${encodeURIComponent(payment.number)}`,
+      }
+    }),
+    ...expenses.map((document) => {
+      const total = new Decimal(document.total.toString())
+      // Customer-offset expenses credit AR (goods/services taken against what they owe).
+      const posted = postedChargeCredit(
+        document.journalId ? arByJournalId.get(document.journalId) : undefined,
+        ZERO,
+        total,
+      )
+      const items: StatementItem[] = document.lines.map((line) => {
+        const name = line.item?.name ?? line.expenseAccount?.name
+        const note = line.description
+        const description =
+          name && note && name !== note ? `${name} — ${note}` : name || note || 'Line'
+        return {
+          description,
+          quantity: line.quantity.toString(),
+          rate: line.unitPrice.toString(),
+          amount: line.amount.toString(),
+        }
+      })
+      if (!new Decimal(document.taxTotal.toString()).isZero()) {
+        items.push({
+          description: 'Tax',
+          quantity: '',
+          rate: '',
+          amount: document.taxTotal.toString(),
+        })
+      }
+      return {
+        id: document.id,
+        kind: 'EXPENSE' as const,
+        number: document.number,
+        date: document.date,
+        dueDate: null,
+        description: document.memo ?? document.reference ?? 'Expense',
+        charge: posted.charge,
+        credit: posted.credit,
+        openAmount: ZERO,
+        original: total,
+        status: document.status,
+        lines: items,
+        href: `/purchases/expenses/${document.id}`,
       }
     }),
     ...journals.map((line) => {

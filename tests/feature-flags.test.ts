@@ -25,6 +25,11 @@ describe('feature flags', () => {
     expect(parseFeatureFlags({ enableTax: false }).enableTax).toBe(false)
   })
 
+  it('defaults customer portal off and can turn it on', () => {
+    expect(parseFeatureFlags(null).enableCustomerPortal).toBe(false)
+    expect(parseFeatureFlags({ enableCustomerPortal: true }).enableCustomerPortal).toBe(true)
+  })
+
   it('maps the legacy contact delete switch onto customer and vendor', () => {
     const parsed = parseFeatureFlags({ allowContactDelete: false })
     expect(parsed.allowCustomerDelete).toBe(false)
@@ -34,7 +39,7 @@ describe('feature flags', () => {
   it('hides every launcher app that belongs to a switched-off module', () => {
     const flags = parseFeatureFlags({ modules: { sales: false, inventory: false } })
     const hidden = LAUNCHER_APPS.filter((app) => !isModuleEnabled(flags, app.key)).map((app) => app.key)
-    expect(hidden.sort()).toEqual(['customers', 'inventory', 'payments', 'sales', 'stores'])
+    expect(hidden.sort()).toEqual(['barcodes', 'customers', 'inventory', 'payments', 'sales', 'stores'])
   })
 
   it('never hides settings', () => {

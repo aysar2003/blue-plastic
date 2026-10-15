@@ -21,8 +21,18 @@ export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = { title: 'Sign in' }
 
-export default async function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   return withDatabasePage(async () => {
+    const params = await searchParams
+    const token = typeof params.token === 'string' ? params.token : ''
+    if (token) {
+      redirect(`/portal/accept?token=${encodeURIComponent(token)}`)
+    }
+
     // Empty instance — send people to create the first company.
     if (await needsSetup()) redirect('/register')
 
@@ -45,6 +55,12 @@ export default async function SignInPage() {
           <SignInForm />
         </CardContent>
       </Card>
+      <p className="text-center text-sm text-muted-foreground">
+        Customer?{' '}
+        <Link href="/portal/login" className="font-medium text-primary underline">
+          Customer portal login
+        </Link>
+      </p>
       {canRegister ? (
         <p className="text-center text-sm text-muted-foreground">
           New business?{' '}

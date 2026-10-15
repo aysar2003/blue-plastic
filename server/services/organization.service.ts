@@ -197,6 +197,7 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       allowDocumentDelete: input.allowDocumentDelete,
       showCreatorBrand: input.showCreatorBrand,
       enableTax: previous.enableTax,
+      enableCustomerPortal: input.enableCustomerPortal,
       modules: {
         sales: input.moduleSales,
         purchases: input.modulePurchases,

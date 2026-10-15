@@ -139,6 +139,42 @@ export async function removeTrashFile(ctx: OrgContext, auditLogId: string, fileI
   await unlink(absolutePath(file.storageKey)).catch(() => undefined)
 }
 
+/** Drop every paper attached to the given trash lines (used when clearing Trash). */
+export async function removeTrashFilesForLogs(ctx: OrgContext, auditLogIds: string[]) {
+  const ids = [...new Set(auditLogIds.filter(Boolean))]
+  if (ids.length === 0) return 0
+
+  const files = await db.trashFile.findMany({
+    where: { orgId: ctx.orgId, auditLogId: { in: ids } },
+    select: { id: true, storageKey: true },
+  })
+  if (files.length === 0) return 0
+
+  await db.trashFile.deleteMany({
+    where: { id: { in: files.map((file) => file.id) } },
+  })
+  await Promise.all(files.map((file) => unlink(absolutePath(file.storageKey)).catch(() => undefined)))
+  return files.length
+}
+
+/** Drop every paper attached to the given trash lines (Clear Trash). */
+export async function removeAllTrashFilesForLogs(ctx: OrgContext, auditLogIds: string[]) {
+  const ids = [...new Set(auditLogIds.filter(Boolean))]
+  if (ids.length === 0) return 0
+
+  const files = await db.trashFile.findMany({
+    where: { orgId: ctx.orgId, auditLogId: { in: ids } },
+    select: { id: true, storageKey: true },
+  })
+  if (files.length === 0) return 0
+
+  await db.trashFile.deleteMany({
+    where: { orgId: ctx.orgId, id: { in: files.map((file) => file.id) } },
+  })
+  await Promise.all(files.map((file) => unlink(absolutePath(file.storageKey)).catch(() => undefined)))
+  return files.length
+}
+
 /** Refuse path traversal even if a storage key in the DB is ever corrupted. */
 function absolutePath(storageKey: string) {
   const full = path.resolve(/*turbopackIgnore: true*/ ROOT, storageKey)

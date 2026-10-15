@@ -28,7 +28,7 @@ export function FilterChips({
             className={
               on
                 ? 'rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground'
-                : 'rounded-md bg-card px-3 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border hover:bg-accent'
+                : 'rounded-md bg-card px-3 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border hover:bg-[var(--band)] hover:text-foreground'
             }
           >
             {option.label}

@@ -10,6 +10,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:db": "node scripts/run-db-tests.mjs",
     "test:watch": "vitest",
     "verify": "pnpm lint; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; pnpm typecheck; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; pnpm test",
     "db:generate": "prisma generate",

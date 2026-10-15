@@ -46,4 +46,29 @@ describe('customer money bar', () => {
     expect(bandDetail(bands.open)).toBe('1 open balance')
     expect(bands.overdue.amount).toBe('0.00')
   })
+
+  it('labels open balances even when credit memos are the only open documents', () => {
+    const bands = customerBands(
+      [
+        {
+          customerId: 'a',
+          type: 'CREDIT_MEMO',
+          status: 'OPEN',
+          total: '15',
+          applied: '0',
+          due: null,
+          date: '2026-09-20',
+        },
+      ],
+      [],
+      AS_OF,
+      FROM,
+      [{ customerId: 'b', balance: '27000' }],
+    )
+
+    expect(bands.open.amount).toBe('27000.00')
+    expect(bands.open.count).toBe(0)
+    expect(bands.open.extra).toBe(1)
+    expect(bandDetail(bands.open)).toBe('1 open balance and 1 credit')
+  })
 })

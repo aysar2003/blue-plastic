@@ -123,6 +123,15 @@ export const customerSchema = z.object({
   balanceTime: optionalTime,
   /** Days before the balance time that the top warning should appear. */
   reminderDays,
+
+  /**
+   * When true (and the company portal is on), create an active portal login for
+   * this customer's email with a generated temporary password.
+   */
+  inviteToPortal: z
+    .union([z.literal('true'), z.literal('false'), z.literal('on'), z.boolean(), z.literal('')])
+    .optional()
+    .transform((value) => value === true || value === 'true' || value === 'on'),
 })
 
 export type CustomerInput = z.infer<typeof customerSchema>

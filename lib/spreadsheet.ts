@@ -297,6 +297,8 @@ export type ShapedItem = {
   draft?: {
     name: string
     sku: string
+    /** Package barcode for POS. Empty when the sheet left it blank. */
+    barcode: string
     type: ItemKind
     salesDescription: string
     salesPrice: string
@@ -393,6 +395,7 @@ export function shapeItem(row: CsvRow, order: DateOrder): ShapedItem {
     draft: {
       name,
       sku: pick(row, 'sku'),
+      barcode: pick(row, 'barcode', 'bar code', 'upc', 'ean'),
       type,
       salesDescription: pick(row, 'sales description', 'description', 'memo/description', 'memo'),
       salesPrice: price.value,

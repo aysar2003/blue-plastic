@@ -8,6 +8,7 @@ import { ClickableRow } from '@/components/data/clickable-row'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { AccountTableRow } from '@/app/(app)/accounts/account-row-actions'
+import { ReportRowStyleControls, ReportSheet } from '@/components/reports/report-sheet'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -124,8 +125,12 @@ export default async function BankingPage({
           description="Install or add accounts on the chart of accounts, and they will appear here."
         />
       ) : (
-        <Card className="mb-6 overflow-hidden p-0" data-report-root data-template="standard">
-          <Table className="min-w-[56rem]">
+        <Card className="mb-6 overflow-hidden p-0">
+          <ReportSheet>
+            <div className="flex justify-end border-b px-3 py-2 print:hidden">
+              <ReportRowStyleControls />
+            </div>
+            <Table className="min-w-[56rem]">
             <TableHeader>
               <TableRow className="ledger-head hover:bg-[var(--band)]">
                 <TableHead className="w-12 bg-[var(--band)] print:hidden" aria-label="Type" />
@@ -306,6 +311,7 @@ export default async function BankingPage({
               })}
             </TableBody>
           </Table>
+          </ReportSheet>
         </Card>
       )}
 

@@ -74,6 +74,7 @@ export const MODULES: NavModule[] = [
       { label: 'Credit memos', href: '/sales/credit-memos', permission: 'invoice:read' },
       { label: 'Payments', href: '/payments', permission: 'payment:read' },
       { label: 'Customers', href: '/customers', permission: 'customer:read' },
+      { label: 'Portal users', href: '/customers/portal-users', permission: 'customer:read' },
       { label: 'Reports', href: '/sales/reports', permission: 'report:read' },
     ],
   },
@@ -140,6 +141,7 @@ export const MODULES: NavModule[] = [
       { label: 'Stock on hand', href: '/inventory/stock', permission: 'inventory:read' },
       { label: 'Stores', href: '/stores', permission: 'inventory:read' },
       { label: 'Adjust stock', href: '/inventory/adjustments/new', permission: 'inventory:adjust' },
+      { label: 'Build assemblies', href: '/inventory/builds/new', permission: 'inventory:adjust' },
     ],
   },
   {

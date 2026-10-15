@@ -26,6 +26,7 @@ import * as accountService from '@/server/services/account.service'
 import * as contactService from '@/server/services/contact.service'
 import * as taxService from '@/server/services/tax.service'
 import { vendorActivity } from '@/server/services/vendor-activity'
+import { MONEY_BAR } from '@/lib/money-bar-bands'
 import { isVendorBandKey, vendorMoneyBar } from '@/server/services/vendor-dashboard'
 import { VENDOR_COLUMNS } from '@/server/services/import.service'
 
@@ -285,7 +286,7 @@ export default async function VendorsPage({
       title="Vendor information"
       moneyBar={
         <ContactMoneyBar
-          storageKey="bp-vendor-money-bar-v2"
+          storageKey="bp-vendor-money-bar-v3"
           currency={currency}
           active={band}
           bands={[
@@ -294,29 +295,29 @@ export default async function VendorsPage({
               href: bandHref('orders'),
               amount: bar.orders.amount,
               detail: vendorBandDetail(bar.orders),
-              bar: 'bg-[#5ec8e5]',
+              bar: MONEY_BAR.orders.bar,
             },
             {
               key: 'overdue',
               href: bandHref('overdue'),
               amount: bar.overdue.amount,
               detail: vendorBandDetail(bar.overdue),
-              bar: 'bg-[#d4652f]',
-              accent: 'text-[#d4652f]',
+              bar: MONEY_BAR.overdue.bar,
+              accent: MONEY_BAR.overdue.accent,
             },
             {
               key: 'open',
               href: bandHref('open'),
               amount: bar.open.amount,
               detail: vendorBandDetail(bar.open),
-              bar: 'bg-[#c5c9ce]',
+              bar: MONEY_BAR.open.bar,
             },
             {
               key: 'paid',
               href: bandHref('paid'),
               amount: bar.paid.amount,
               detail: vendorBandDetail(bar.paid),
-              bar: 'bg-[#2ca01c]',
+              bar: MONEY_BAR.paid.bar,
             },
           ]}
         />
@@ -370,7 +371,7 @@ export default async function VendorsPage({
               expenseAccounts={expenseOptions}
               today={asOf}
               currency={currency}
-              className="bg-[#2ca01c] text-white hover:bg-[#248a18]"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             />
           ) : null}
         </>

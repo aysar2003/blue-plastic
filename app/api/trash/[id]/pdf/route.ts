@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { parsePrintInk } from '@/lib/print-ink'
 import { requireOrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
 import * as trashService from '@/server/services/trash.service'
@@ -14,8 +15,10 @@ export async function GET(
   try {
     const { id } = await params
     const ctx = await requireOrgContext('audit:read')
-    const { bytes, filename } = await trashService.renderPdf(ctx, id)
-    const download = new URL(request.url).searchParams.get('download') === '1'
+    const url = new URL(request.url)
+    const ink = parsePrintInk(url.searchParams.get('ink'))
+    const { bytes, filename } = await trashService.renderPdf(ctx, id, { ink })
+    const download = url.searchParams.get('download') === '1'
 
     return new NextResponse(Buffer.from(bytes), {
       headers: {

@@ -164,9 +164,9 @@ export function Combobox({
 
     const below = window.innerHeight - rect.bottom
     const above = below < 280 && rect.top > below
-    // The box on the form is often a narrow column. The list has to be wide
-    // enough for a registered name to show in full, and still stay on screen.
-    const width = Math.min(Math.max(rect.width, 420), window.innerWidth - 16)
+    // The box on the form is often a narrow column (e.g. inside a dialog). The
+    // list must be wide enough for long customer names to wrap and read in full.
+    const width = Math.min(Math.max(rect.width, 520), window.innerWidth - 16)
     const left = Math.min(rect.left, Math.max(8, window.innerWidth - width - 8))
     const next = {
       top: above ? rect.top - 4 : rect.bottom + 4,
@@ -188,9 +188,11 @@ export function Combobox({
 
   function close(refocus = true) {
     setOpen(false)
-    // Keep typed text when nothing is chosen yet, so a second click does not
-    // wipe what they wrote. A chosen name resets to the label on the next open.
-    if (selected) setQuery('')
+    // Always clear the search box. When a value is chosen the closed field shows
+    // the option label; when nothing is chosen an empty box must stay empty —
+    // leaving typed-but-unchosen text looks like a registered pick and has
+    // posted sales with no itemId (Uncategorised Income, no stock).
+    setQuery('')
     if (refocus) {
       // Keep focus on this control after the list closes — never drop to <body>,
       // or the next Tab starts again at the top of the form.
@@ -335,7 +337,7 @@ export function Combobox({
       }
       event.preventDefault()
       setOpen(false)
-      if (selected) setQuery('')
+      setQuery('')
       queueMicrotask(() => {
         if (inputRef.current) focusNextField(inputRef.current, direction)
       })
@@ -460,8 +462,10 @@ export function Combobox({
                           index === active ? 'bg-accent' : '',
                         )}
                       >
-                        <PlusIcon className="size-4 shrink-0" />
-                        <span className="truncate">{createLabel(query.trim())}</span>
+                        <PlusIcon className="mt-0.5 size-4 shrink-0" />
+                        <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">
+                          {createLabel(query.trim())}
+                        </span>
                       </button>
                     )
                   }
@@ -489,25 +493,32 @@ export function Combobox({
                           choose(row, 0)
                         }}
                         className={cn(
-                          'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-popover-foreground',
+                          'flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-popover-foreground',
                           index === active ? 'bg-accent text-accent-foreground' : '',
                         )}
                       >
                         <CheckIcon
                           className={cn(
-                            'size-4 shrink-0',
+                            'mt-0.5 size-4 shrink-0',
                             option.value === value ? 'opacity-100' : 'opacity-0',
                           )}
                         />
                         {option.accountType ? (
                           <AccountTypeIcon type={option.accountType} size="sm" />
                         ) : null}
-                        <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                        {option.hint ? (
-                          <span className="shrink-0 text-xs tabular text-muted-foreground">
-                            {option.hint}
-                          </span>
-                        ) : null}
+                        <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">
+                          <span className="block whitespace-normal break-words">{option.label}</span>
+                          {option.hint ? (
+                            <span
+                              className={cn(
+                                'mt-0.5 block whitespace-normal break-words text-xs',
+                                index === active ? 'text-accent-foreground/80' : 'text-muted-foreground',
+                              )}
+                            >
+                              {option.hint}
+                            </span>
+                          ) : null}
+                        </span>
                       </button>
                     </React.Fragment>
                   )

@@ -714,16 +714,21 @@ async function assertNameFree(ctx: OrgContext, side: Side, name: string, selfId?
     side === 'customer'
       ? await db.customer.findUnique({
           where: { orgId_displayName: { orgId: ctx.orgId, displayName: name } },
-          select: { id: true },
+          select: { id: true, displayName: true },
         })
       : await db.vendor.findUnique({
           where: { orgId_displayName: { orgId: ctx.orgId, displayName: name } },
-          select: { id: true },
+          select: { id: true, displayName: true },
         })
 
   if (existing && existing.id !== selfId) {
     throw conflict(
-      `Another ${side} is already called "${name}". Two identical names on an aging report help nobody.`,
+      `Another ${side} is already called "${existing.displayName}". Merge into that one, or pick a different name.`,
+      {
+        clashId: [existing.id],
+        clashName: [existing.displayName],
+        merge: ['true'],
+      },
     )
   }
 }

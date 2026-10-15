@@ -59,6 +59,11 @@ export function customerContactMenu(
     )
   }
   links.push({ type: 'link', label: 'Item list', href: '/items' })
+  links.push({
+    type: 'link',
+    label: 'Portal users',
+    href: `/customers/portal-users?customerId=${id}`,
+  })
 
   return links
 }

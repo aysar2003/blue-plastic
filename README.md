@@ -36,7 +36,8 @@ organisation exists.
 | --- | --- |
 | `pnpm dev` / `pnpm build` / `pnpm start` | the app |
 | `pnpm verify` | lint + typecheck + tests — run before every hand-off |
-| `pnpm test` | Vitest (unit + integration; integration needs `DATABASE_URL`) |
+| `pnpm test` | Vitest (unit; DB suites skip when `DATABASE_URL` is hosted Supabase) |
+| `pnpm test:db` | Same, but runs DB integration suites (`ALLOW_DB_TESTS=1`; prefer local Postgres) |
 | `pnpm db:migrate` / `db:deploy` / `db:studio` / `db:seed` / `db:reset` | Prisma |
 
 Integration tests run every case inside a transaction that is deliberately rolled

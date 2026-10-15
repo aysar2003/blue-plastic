@@ -1,3 +1,4 @@
+import { ReportSheet } from '@/components/reports/report-sheet'
 import { ReportTools } from '@/components/reports/report-tools'
 import { requireOrgContext } from '@/server/auth/context'
 import { forbidden } from '@/server/errors'
@@ -14,10 +15,11 @@ export default async function ReportsLayout({ children }: { children: React.Reac
   // across them. See components/layout/module-tabs.tsx.
   // Company name + report title live on each page via PageHeader (organization=…),
   // so print / PDF / screen share one masthead.
+  // Row density (Standard / Compact / Plain) comes from ReportSheet + ReportTools.
   return (
-    <div data-report-root data-template="standard">
+    <ReportSheet>
       <ReportTools />
       {children}
-    </div>
+    </ReportSheet>
   )
 }

@@ -15,6 +15,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   STORE_KEEPER: 'Store keeper',
   VIEWER: 'Viewer',
   CUSTOM: 'Custom access',
+  CUSTOMER: 'Customer portal',
 }
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
@@ -26,6 +27,7 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   STORE_KEEPER: 'Stock, store tickets, transfers and receiving — not the full ledger.',
   VIEWER: 'Read-only access to records and reports.',
   CUSTOM: 'Access chosen module by module — not a preset role.',
+  CUSTOMER: 'Sees only their own invoices, payments, and statement in the customer portal.',
 }
 
 /**

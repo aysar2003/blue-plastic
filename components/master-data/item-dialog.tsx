@@ -24,6 +24,7 @@ import {
   itemTypeLabel,
   profileForType,
 } from '@/lib/item-types'
+import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import { createCategory, createItemForm, updateItemForm } from '@/app/(app)/items/actions'
 import type { ItemType } from '@prisma/client'
 import { ItemTypePicker } from '@/components/master-data/item-type-picker'
@@ -32,6 +33,7 @@ import {
   type CatalogItem,
   type ComponentRow,
 } from '@/components/master-data/item-components-editor'
+import { MergeIntoDialog } from '@/components/master-data/merge-into-dialog'
 
 export type ItemValues = {
   id?: string
@@ -148,6 +150,7 @@ export function ItemDialog({
     return account?.subtype === 'BANK'
   })
   const handled = useRef(false)
+  const [mergeOpen, setMergeOpen] = useState(false)
 
   async function saveNewCategory() {
     const name = newCategoryName.trim()
@@ -254,7 +257,26 @@ export function ItemDialog({
   }
 
   const e = state.fieldErrors
-  const catalog = catalogItems.filter((row) => row.id !== item?.id)
+  const catalog = useMemo(() => {
+    const base = catalogItems.filter((row) => row.id !== item?.id)
+    if (type === 'INVENTORY_ASSEMBLY') {
+      return base.filter((row) => row.type === 'INVENTORY' || row.type === 'INVENTORY_ASSEMBLY')
+    }
+    return base
+  }, [catalogItems, item?.id, type])
+  const estimatedBomCost = useMemo(() => {
+    if (type !== 'INVENTORY_ASSEMBLY') return null
+    const byId = new Map(catalogItems.map((row) => [row.id, row]))
+    let total = ZERO
+    for (const row of componentRows) {
+      if (!row.itemId) continue
+      const avg = byId.get(row.itemId)?.averageCost
+      const qty = Number(row.quantity)
+      if (!avg || !Number.isFinite(qty) || qty <= 0) continue
+      total = total.plus(new Decimal(avg).times(qty))
+    }
+    return total.isZero() ? null : total
+  }, [type, componentRows, catalogItems])
   const canChangeType = mode === 'create' || Boolean(item?.typeEditable)
 
   const categoryField = (
@@ -367,6 +389,7 @@ export function ItemDialog({
   ) : null
 
   return (
+    <>
     <Dialog open onOpenChange={(next) => { if (!next) onClose() }}>
       <DialogContent size={step === 'pick' ? 'xl' : 'lg'}>
         <DialogHeader>
@@ -397,6 +420,16 @@ export function ItemDialog({
         ) : type && profile ? (
           <form action={formAction} className="mt-4 space-y-5">
             <FormStatus state={state} />
+            {mode === 'edit' && item?.id && state.mergeClash ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">
+                  Merge this item into “{state.mergeClash.name}”?
+                </span>
+                <Button type="button" size="sm" onClick={() => setMergeOpen(true)}>
+                  Merge…
+                </Button>
+              </div>
+            ) : null}
             {item?.id ? <input type="hidden" name="id" value={item.id} /> : null}
             <input type="hidden" name="type" value={type} />
 
@@ -443,14 +476,17 @@ export function ItemDialog({
               <Field
                 name="barcode"
                 label="Barcode"
-                hint="Scan the package here, or type the code. The till adds this item when that code is scanned."
+                hint="Click this field, scan the package with a USB/Bluetooth scanner (or type the code), then Save. POS adds the item when that code is scanned at the till."
                 error={e?.barcode}
               >
                 <Input
                   {...fieldProps('barcode', e?.barcode)}
                   defaultValue={item?.barcode ?? ''}
+                  placeholder="Scan or type barcode"
                   autoComplete="off"
+                  data-item-barcode="true"
                   onKeyDown={(event) => {
+                    // Scanners end with Enter — keep the code in the field; do not submit the form.
                     if (event.key === 'Enter') event.preventDefault()
                   }}
                 />
@@ -917,6 +953,16 @@ export function ItemDialog({
                       catalog={catalog}
                       label="Bill of materials"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Estimated cost from materials (average × qty):{' '}
+                      <span className="font-medium tabular text-foreground">
+                        {estimatedBomCost
+                          ? formatMoney(estimatedBomCost, currency)
+                          : '— add stocked parts with a cost'}
+                      </span>
+                      . Build assemblies under Inventory to put finished units on hand at that cost.
+                      Sales price stays what you enter above.
+                    </p>
                   </>
                 ) : null}
               </div>
@@ -989,5 +1035,17 @@ export function ItemDialog({
         ) : null}
       </DialogContent>
     </Dialog>
+    {mergeOpen && mode === 'edit' && item?.id && state.mergeClash ? (
+      <MergeIntoDialog
+        open
+        onClose={() => setMergeOpen(false)}
+        onMerged={onClose}
+        kind="item"
+        absorbId={item.id}
+        absorbLabel={item.name ?? ''}
+        preferredKeepId={state.mergeClash.id}
+      />
+    ) : null}
+    </>
   )
 }

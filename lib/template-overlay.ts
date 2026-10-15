@@ -9,6 +9,7 @@ export type OverlayBlockStyle = {
   color: string
   background: string
   fontSize: number
+  fontFamily: string
   fontWeight: 'normal' | 'bold'
   align: 'left' | 'center' | 'right'
   opacity: number
@@ -46,6 +47,7 @@ export const DEFAULT_OVERLAY_STYLE: OverlayBlockStyle = {
   color: '#0f172a',
   background: 'rgba(255,255,255,0.72)',
   fontSize: 14,
+  fontFamily: 'ui-sans-serif, system-ui, sans-serif',
   fontWeight: 'normal',
   align: 'left',
   opacity: 1,
@@ -53,6 +55,14 @@ export const DEFAULT_OVERLAY_STYLE: OverlayBlockStyle = {
   borderWidth: 1,
   objectFit: 'contain',
 }
+
+export const OVERLAY_FONT_FAMILIES = [
+  { id: 'ui-sans-serif, system-ui, sans-serif', label: 'System' },
+  { id: 'Georgia, "Times New Roman", serif', label: 'Serif' },
+  { id: '"Courier New", Courier, monospace', label: 'Mono' },
+  { id: 'Arial, Helvetica, sans-serif', label: 'Arial' },
+  { id: 'Verdana, Geneva, sans-serif', label: 'Verdana' },
+] as const
 
 export const OVERLAY_BLOCK_KINDS: { id: OverlayBlockKind; label: string; blurb: string }[] = [
   { id: 'text', label: 'Text', blurb: 'Free text you can drag and restyle.' },
@@ -172,6 +182,10 @@ export function parseTemplateOverlay(raw: unknown): TemplateOverlay {
         typeof styleRaw.fontSize === 'number'
           ? clamp(styleRaw.fontSize, 8, 72)
           : DEFAULT_OVERLAY_STYLE.fontSize,
+      fontFamily:
+        typeof styleRaw.fontFamily === 'string' && styleRaw.fontFamily.trim()
+          ? styleRaw.fontFamily.trim().slice(0, 120)
+          : DEFAULT_OVERLAY_STYLE.fontFamily,
       fontWeight: styleRaw.fontWeight === 'bold' ? 'bold' : 'normal',
       align:
         styleRaw.align === 'center' || styleRaw.align === 'right' || styleRaw.align === 'left'

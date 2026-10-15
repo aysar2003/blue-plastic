@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useMemo, useState, useSyncExternalStore } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import type { AccountType } from '@prisma/client'
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon, GripVerticalIcon } from 'lucide-react'
@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate, formatDateTime, isCalendarDate } from '@/lib/date'
 import {
+  columnShareWeights,
   columnsForViewport,
   compareSortValues,
   defaultColumnWidth,
@@ -187,6 +188,18 @@ export function InteractiveGrid({
   }, [baseLayout, liveWidth])
   const [sort, setSort] = useState<GridSort | null>(initialSort)
   const [dragId, setDragId] = useState<string | null>(null)
+  const shellRef = useRef<HTMLDivElement>(null)
+  const [containerWidth, setContainerWidth] = useState(0)
+
+  useEffect(() => {
+    const node = shellRef.current
+    if (!node) return
+    const measure = () => setContainerWidth(Math.max(0, Math.floor(node.clientWidth)))
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
 
   const byId = useMemo(() => new Map(columns.map((column) => [column.id, column])), [columns])
   const visible = layout.order
@@ -271,16 +284,15 @@ export function InteractiveGrid({
   for (const column of visible) {
     preferred[column.id] = layout.widths[column.id] ?? column.defaultWidth ?? defaultColumnWidth(column.kind)
   }
-  const placed = columnsForViewport(visible, preferred)
+  const viewportWidth = containerWidth > 0 ? containerWidth : 1180
+  const placed = columnsForViewport(visible, preferred, viewportWidth)
   const main = placed.main.length > 0 ? placed.main : visible
   const extra = placed.main.length > 0 ? placed.extra : []
-  const mainMinWidth = main.reduce(
-    (sum, column) => sum + (preferred[column.id] ?? column.defaultWidth ?? defaultColumnWidth(column.kind)),
-    0,
-  )
+  const shareWeights = columnShareWeights(main, preferred, viewportWidth)
+  const shareTotal = shareWeights.reduce((sum, weight) => sum + weight, 0) || 1
 
   return (
-    <>
+    <div ref={shellRef} className="w-full min-w-0 max-w-full">
       {customizable ? (
         <div className="mb-2 flex justify-end print:hidden">
           <TableColumnCustomize
@@ -295,21 +307,21 @@ export function InteractiveGrid({
       <Table
         data-layout="grid"
         containerClassName="rounded-md border bg-card"
-        style={{ width: '100%', minWidth: mainMinWidth, tableLayout: 'fixed' }}
+        style={{ width: '100%', tableLayout: 'fixed' }}
       >
           <colgroup>
-            {main.map((column) => (
+            {main.map((column, index) => (
               <col
                 key={column.id}
                 style={{
-                  width: preferred[column.id] ?? column.defaultWidth ?? defaultColumnWidth(column.kind),
+                  width: `${((shareWeights[index] ?? 1) / shareTotal) * 100}%`,
                 }}
               />
             ))}
           </colgroup>
           <TableHeader>
             <TableRow>
-              {main.map((column) => {
+              {main.map((column, columnIndex) => {
                 const numeric = isFigure(column.kind)
                 const active = sort?.id === column.id
                 const Icon = active ? (sort.dir === 'asc' ? ArrowUpIcon : ArrowDownIcon) : ChevronsUpDownIcon
@@ -320,6 +332,7 @@ export function InteractiveGrid({
                       'overflow-visible',
                       numeric && 'numeric',
                       dragId === column.id && 'bg-primary/10',
+                      columnIndex === 0 && 'sticky left-0 z-40',
                     )}
                     aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
                     onDragOver={(event) => event.preventDefault()}
@@ -412,7 +425,7 @@ export function InteractiveGrid({
               return (
               <Fragment key={row.id}>
                 <TableRow className={cn(row.emphasis && 'bg-muted/40', showBand && 'border-b-0', row.className)}>
-                  {main.map((column) => (
+                  {main.map((column, columnIndex) => (
                     <GridCellView
                       key={column.id}
                       column={column}
@@ -420,6 +433,7 @@ export function InteractiveGrid({
                       currency={currency}
                       timeZone={timeZone}
                       emphasis={row.emphasis}
+                      stickyStart={columnIndex === 0}
                     />
                   ))}
                 </TableRow>
@@ -518,7 +532,7 @@ export function InteractiveGrid({
           ) : null}
       </Table>
       {note ? <p className="mt-3 text-xs text-muted-foreground">{note}</p> : null}
-    </>
+    </div>
   )
 }
 
@@ -533,23 +547,28 @@ function GridCellView({
   currency,
   timeZone,
   emphasis,
+  stickyStart,
 }: {
   column: InteractiveColumn
   cell: InteractiveCell | null | undefined
   currency: string
   timeZone: string
   emphasis?: boolean
+  /** Keep the lead column with the row while the sheet scrolls sideways. */
+  stickyStart?: boolean
 }) {
   const numeric = isFigure(column.kind)
   const text = present(column, cell, currency, timeZone)
   const className = cn(
+    'max-w-0 overflow-hidden',
     numeric && 'numeric tabular',
     (column.kind === 'date' || column.kind === 'datetime') && 'tabular',
     emphasis && 'font-medium',
+    stickyStart && 'sticky left-0 z-10 bg-card',
   )
   if (!text) {
     return (
-      <TableCell className={cn('max-w-0 overflow-hidden', className)}>
+      <TableCell className={className}>
         {numeric ? '' : <span className="text-muted-foreground">—</span>}
       </TableCell>
     )
@@ -566,7 +585,7 @@ function GridCellView({
     </>
   )
   return (
-    <TableCell className={cn('max-w-0 overflow-hidden', className)} title={text}>
+    <TableCell className={className} title={text}>
       {cell?.href ? (
         <Link href={cell.href} className={cn(LINK, 'inline-flex max-w-full min-w-0 items-center gap-1.5')}>
           {body}

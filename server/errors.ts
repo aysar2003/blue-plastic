@@ -63,7 +63,8 @@ export function forbidden(message = 'You do not have permission to do that.'): A
   return new AppError('FORBIDDEN', message)
 }
 export const notFound = (what = 'Record') => new AppError('NOT_FOUND', `${what} not found.`)
-export const conflict = (m: string) => new AppError('CONFLICT', m)
+export const conflict = (m: string, details?: Record<string, string[]>) =>
+  new AppError('CONFLICT', m, details)
 export const validation = (m: string, details?: Record<string, string[]>) =>
   new AppError('VALIDATION', m, details)
 export const precondition = (m: string) => new AppError('PRECONDITION_FAILED', m)

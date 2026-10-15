@@ -7,13 +7,14 @@ import { Decimal, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
 import { isCashMethodName } from '@/lib/pos-payment'
 import { posPostedAccounts } from '@/lib/pos-register-posting'
+import { byType as salesByType } from '@/lib/sales-types'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { SalesDocumentInput } from '@/lib/validation/sales'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
-import { softDeleteDocument } from '@/server/accounting/deletion'
+import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
+import { positionOf, recordMovement, restoreMovementsFor, reverseMovementsFor } from '@/server/accounting/inventory'
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
 import { priceDocument, type DraftSalesLine } from '@/server/accounting/sales-pricing'
-import { recordMovement, reverseMovementsFor } from '@/server/accounting/inventory'
 import {
   buildCreditMemoJournal,
   buildInvoiceJournal,
@@ -479,7 +480,7 @@ export async function customerChoices(ctx: OrgContext) {
   })
 }
 
-/** The receipt before and after this one, in date then number order. A new form sits after the last. */
+/** The document before and after this one, in date then number order. A new form sits after the last. */
 export async function neighbors(ctx: OrgContext, type: SalesDocumentType, currentId: string | null) {
   const rows = await db.salesDocument.findMany({
     where: { orgId: ctx.orgId, type, deletedAt: null },
@@ -700,6 +701,7 @@ export async function create(
 
     const isDraft = input.saveAsDraft === true
     const hasPaymentItem = lines.some((line) => line.isPayment)
+    assertPostedSaleLines(type, isDraft, lines)
     if (priced.total.isNegative()) {
       throw validation('Payment and discount lines cannot exceed the sale.')
     }
@@ -916,6 +918,7 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
 
     const isDraft = input.saveAsDraft === true
     const hasPaymentItem = lines.some((line) => line.isPayment)
+    assertPostedSaleLines(existing.type, isDraft, lines)
     if (priced.total.isNegative()) {
       throw validation('Payment and discount lines cannot exceed the sale.')
     }
@@ -1160,6 +1163,21 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
   if (!POSTS_A_JOURNAL[document.type]) return null
   if (document.journalId) throw conflict(`${document.number} is already posted.`)
 
+  for (const [index, line] of document.lines.entries()) {
+    if (!line.itemId) {
+      throw validation(
+        'Every posted sales line must use a product or service from the item list. A name typed by hand is not a registered sale.',
+        { lines: [`Line ${index + 1}: choose an item from Products and services`] },
+      )
+    }
+    if (line.item?.type === 'GROUP') {
+      throw validation(
+        `"${line.item.name}" is a group — pick it on the form so its members are added as lines.`,
+        { lines: ['Expand the group into its items'] },
+      )
+    }
+  }
+
   const taxCodes = await loadTaxCodes(
     tx,
     ctx,
@@ -1282,6 +1300,29 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       unitCost: Decimal
       value: Decimal
     }[] = []
+
+    // Assemblies must be built before they are sold. Selling an unbuilt unit
+    // would issue stock at $0 cost and leave the bill of materials untouched.
+    if (movesStockOut) {
+      const assemblyNeed = new Map<string, { name: string; needed: Decimal }>()
+      for (const line of document.lines) {
+        if (line.item?.type !== 'INVENTORY_ASSEMBLY') continue
+        const needed = new Decimal(line.quantity.toString())
+        const prior = assemblyNeed.get(line.item.id)
+        if (prior) prior.needed = prior.needed.plus(needed)
+        else assemblyNeed.set(line.item.id, { name: line.item.name, needed })
+      }
+      for (const [itemId, row] of assemblyNeed) {
+        const onHand = (await positionOf(tx, itemId)).quantity
+        if (row.needed.greaterThan(onHand)) {
+          throw precondition(
+            `There ${onHand.equals(1) ? 'is' : 'are'} ${onHand.toFixed(2)} of "${row.name}" built and ready to sell, ` +
+              `and this sale needs ${row.needed.toFixed(2)}. ` +
+              `Assemblies are finished goods: build them first (Inventory → Build assemblies) so materials leave stock and COGS has a cost, then sell.`,
+          )
+        }
+      }
+    }
 
     for (const line of document.lines) {
       if (line.item?.type !== 'INVENTORY' && line.item?.type !== 'INVENTORY_ASSEMBLY') continue
@@ -1445,6 +1486,51 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
 
     return { id, number: document.number }
   })
+}
+
+/**
+ * Put a deleted sales document back into the working books.
+ *
+ * Applications released on delete are not rebuilt — the document returns unpaid
+ * (or unapplied), and payments stay unapplied for the user to link again.
+ */
+export async function restore(ctx: OrgContext, id: string) {
+  return db.$transaction(async (tx) => {
+    const document = await tx.salesDocument.findFirst({
+      where: { id, orgId: ctx.orgId, deletedAt: undefined },
+      select: {
+        id: true,
+        type: true,
+        number: true,
+        journalId: true,
+        deletedAt: true,
+      },
+    })
+    if (!document) throw notFound('Document')
+    if (!document.deletedAt) {
+      return { id, number: document.number, href: salesHref(document.type, document.id) }
+    }
+
+    if (document.journalId) {
+      await restoreMovementsFor(tx, ctx, { sourceId: id, journalId: document.journalId })
+    }
+    await salesDelivery.restoreForSale(tx, ctx, id)
+
+    await restoreSoftDeletedDocument(tx, ctx, {
+      clear: () => tx.salesDocument.update({ where: { id }, data: CLEAR_DELETION }),
+      entity: 'SalesDocument',
+      id,
+      number: document.number,
+      journalIds: [document.journalId],
+      before: { type: document.type },
+    })
+
+    return { id, number: document.number, href: salesHref(document.type, document.id) }
+  })
+}
+
+function salesHref(type: SalesDocumentType, id: string) {
+  return `/sales/${salesByType(type).slug}/${id}`
 }
 
 const CONVERTIBLE_SOURCES: SalesDocumentType[] = ['ESTIMATE', 'QUOTATION', 'SALES_ORDER']
@@ -1767,6 +1853,36 @@ async function requireCustomer(tx: Tx, ctx: OrgContext, customerId: string) {
     throw precondition(`${customer.displayName} is archived. Restore them before invoicing.`)
   }
   return customer
+}
+
+/**
+ * Posted sales must name a registered item. A free-typed label in the picker
+ * that was never chosen is not inventory, not income mapping, and not COGS —
+ * accepting it would post Uncategorised Income with no stock movement.
+ */
+function assertPostedSaleLines(
+  type: SalesDocumentType,
+  isDraft: boolean,
+  lines: DraftSalesLine[],
+) {
+  if (isDraft) return
+  if (
+    type !== 'INVOICE' &&
+    type !== 'SALES_RECEIPT' &&
+    type !== 'CREDIT_MEMO' &&
+    type !== 'REFUND_RECEIPT'
+  ) {
+    return
+  }
+
+  for (const [index, line] of lines.entries()) {
+    if (line.isSubtotal) continue
+    if (line.itemId) continue
+    throw validation(
+      'Every posted sales line must use a product or service from the item list. A name typed by hand is not a registered sale.',
+      { lines: [`Line ${index + 1}: choose an item from Products and services`] },
+    )
+  }
 }
 
 /**

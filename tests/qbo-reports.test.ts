@@ -141,6 +141,7 @@ suite('QuickBooks-style lists follow the documents', () => {
         permissions: permissionsFor('OWNER'),
         isSystemOwner: true,
         canConnect: true,
+        portalCustomerId: null,
         features: DEFAULT_FEATURE_FLAGS,
         organization: { ...orgFields, hasLogo: Boolean(logoStorageKey) },
         user: { id: user.id, name: user.name ?? '', email: user.email, image: user.image },

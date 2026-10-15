@@ -1,32 +1,43 @@
 import { NextResponse } from 'next/server'
 
 import { letterheadOf } from '@/lib/letterhead'
+import { parsePrintInk } from '@/lib/print-ink'
 import { byType } from '@/lib/sales-types'
-import { requireOrgContext } from '@/server/auth/context'
-import { isAppError } from '@/server/errors'
+import { getOrgContext } from '@/server/auth/context'
+import { isAppError, unauthenticated } from '@/server/errors'
 import { renderSalesDocumentPdf } from '@/server/reports/sales-document-pdf'
 import * as organizationService from '@/server/services/organization.service'
+import * as portalService from '@/server/services/portal.service'
 import * as salesService from '@/server/services/sales.service'
 
 export const dynamic = 'force-dynamic'
 
 /** Sales document as a downloadable PDF — invoice, quotation, receipt, or credit. */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params
-    const ctx = await requireOrgContext('invoice:read')
+    const ctx = await getOrgContext()
+    if (!ctx) throw unauthenticated()
+
+    const ink = parsePrintInk(new URL(request.url).searchParams.get('ink'))
+
     const [document, org] = await Promise.all([
       salesService.get(ctx, id),
       organizationService.get(ctx),
     ])
+
+    // Portal logins may only download their own customer's documents.
+    portalService.assertInvoicePdfAccess(ctx, document.customer.id)
+
     const config = byType(document.type)
     const company = letterheadOf(org)
     const currency = document.currencyCode || ctx.organization.baseCurrency
 
     const bytes = renderSalesDocumentPdf({
+      ink,
       orgName: company.name,
       orgAddress: company.address ? [company.address] : [],
       orgPhone: company.phone,

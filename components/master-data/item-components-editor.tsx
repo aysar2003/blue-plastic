@@ -8,7 +8,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 export type ComponentRow = { itemId: string; quantity: string }
-export type CatalogItem = { id: string; label: string; type?: string }
+export type CatalogItem = {
+  id: string
+  label: string
+  type?: string
+  averageCost?: string | null
+}
 
 export function ItemComponentsEditor({
   rows,

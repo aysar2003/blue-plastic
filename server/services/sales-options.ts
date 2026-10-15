@@ -42,7 +42,7 @@ export async function loadFormOptions(ctx: OrgContext) {
     db.item.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: {
-        id: true, name: true, sku: true, salesPrice: true, type: true,
+        id: true, name: true, sku: true, barcode: true, salesPrice: true, type: true,
         salesDescription: true, description: true, salesTaxCodeId: true,
         // GROUP members — expanded onto the form when the group is chosen.
         bomParents: {
@@ -114,6 +114,7 @@ export async function loadFormOptions(ctx: OrgContext) {
       id: item.id,
       label: item.name,
       sku: item.sku,
+      barcode: item.barcode,
       price: item.salesPrice?.toString() ?? null,
       description: item.salesDescription ?? item.description ?? item.name,
       taxCodeId: ctx.features.enableTax ? item.salesTaxCodeId : null,

@@ -8,7 +8,6 @@ import { useRouter } from 'next/navigation'
 import {
   CheckIcon,
   ChevronDownIcon,
-  ChevronRightIcon,
   LayoutTemplateIcon,
   PlusIcon,
   PrinterIcon,
@@ -27,6 +26,7 @@ import { idleState, type FormState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
+import { neighborHrefs, RecordNav } from '@/components/forms/record-nav'
 import { PartyInfo } from '@/components/forms/party-info'
 import { LockedNumber } from '@/components/forms/locked-number'
 import { FormStatus } from '@/components/forms/form-status'
@@ -104,6 +104,8 @@ export type ItemOption = {
   group?: string
   onHand?: string | null
   sku?: string | null
+  /** Package barcode — searchable on invoice/receipt lines the same way as at the till. */
+  barcode?: string | null
   /** GROUP members expanded onto the form when the group is chosen. */
   components?: {
     itemId: string
@@ -229,7 +231,7 @@ export function DocumentForm({
   initialCustomerId?: string
   /** Set when the form was opened from a store, so lines issue from that shelf. */
   initialStoreId?: string
-  /** Sales receipts only: the saved receipt before this one, and the one after. */
+  /** The saved document before this one, and the one after, in date then number order. */
   neighbors?: {
     previous: { id: string; number: string } | null
     next: { id: string; number: string } | null
@@ -318,6 +320,60 @@ export function DocumentForm({
   /** Set in the button click; read when the form builds the payload on submit. */
   const saveAsDraft = useRef(false)
 
+  /** Wipe typed fields back to a blank sheet (or the last saved document when editing). */
+  const resetForm = () => {
+    if (document) {
+      const restoredDiscount = Number(document.discountAmount ?? 0)
+      const restoredPercent =
+        config.type === 'SALES_RECEIPT' && restoredDiscount <= 0
+          ? sharedLineDiscount(document)
+          : ''
+      setNumber(documentNumber)
+      setCustomerId(document.customerId)
+      setDate(document.date)
+      setReference(document.reference ?? '')
+      setMemo(document.memo ?? '')
+      setCustomerMessage(document.customerMessage ?? '')
+      setPaymentTermId(document.paymentTermId ?? '')
+      setDepositAccountId(document.depositAccountId ?? depositAccounts[0]?.id ?? '')
+      setDiscountKind(restoredDiscount > 0 ? 'amount' : 'percent')
+      setDiscountValue(restoredDiscount > 0 ? restoredDiscount.toFixed(2) : restoredPercent)
+      setConvertedFromId(null)
+      setConvertedFromLabel(null)
+      setLines(
+        withMinimumLines(
+          document.lines.map((line, index) => ({
+            key: index + 1,
+            itemId: line.itemId ?? '',
+            description: line.description ?? '',
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            discountPercent: restoredPercent ? '' : (line.discountPercent ?? ''),
+            taxCodeId: line.taxCodeId ?? '',
+            storeId: line.storeId ?? defaultStoreId,
+          })),
+          minimumLines,
+          defaultStoreId,
+        ),
+      )
+      nextKey.current = Math.max(document.lines.length, minimumLines) + 1
+      return
+    }
+    setCustomerId(initialCustomerId ?? '')
+    setDate(today)
+    setReference('')
+    setMemo('')
+    setCustomerMessage('')
+    setPaymentTermId('')
+    setDepositAccountId(depositAccounts[0]?.id ?? '')
+    setDiscountKind('percent')
+    setDiscountValue('')
+    setConvertedFromId(null)
+    setConvertedFromLabel(null)
+    setLines(Array.from({ length: minimumLines }, (_, index) => empty(index + 1, defaultStoreId)))
+    nextKey.current = minimumLines + 1
+  }
+
   // Start on the customer name so Tab walks the form without the mouse.
   useEffect(() => {
     if (customerId) return
@@ -379,7 +435,10 @@ export function DocumentForm({
         id: item.id,
         label: item.label,
         group: item.group,
-        hint: [item.sku, item.onHand != null ? `${item.onHand} on hand` : null].filter(Boolean).join(' · ') || undefined,
+        hint:
+          [item.barcode, item.sku, item.onHand != null ? `${item.onHand} on hand` : null]
+            .filter(Boolean)
+            .join(' · ') || undefined,
       })),
     [items],
   )
@@ -585,9 +644,8 @@ export function DocumentForm({
       return current.filter((line) => line.key !== key)
     })
 
-  const filled = lines.filter(
-    (line) => line.itemId || line.description || parseMoneyInput(line.unitPrice)?.greaterThan(0),
-  )
+  // A rate alone is not a sale line — item or description must name what moved.
+  const filled = lines.filter((line) => Boolean(line.itemId || line.description.trim()))
 
   const applyFromSource = (applied: AppliedSource) => {
     const seeded = applied.lines.map((line, index) => ({
@@ -731,14 +789,20 @@ export function DocumentForm({
         <SalesReceiptToolbar
           slug={config.slug}
           recordId={document?.id}
-          next={neighbors?.next ?? null}
+          neighbors={neighbors}
           canSave={canSave}
           onSave={() => {
             afterSave.current = 'close'
             saveAsDraft.current = false
           }}
         />
-      ) : null}
+      ) : (
+        <div className="flex flex-wrap items-center gap-1 print:hidden">
+          <RecordNav
+            {...neighborHrefs(`/sales/${config.slug}`, neighbors, document?.id)}
+          />
+        </div>
+      )}
 
       {usesPrintSheet ? null : usesInvoiceSheet ? (
         <TemplateMenu options={INVOICE_FORM_TEMPLATES} value={template} onChange={setTemplate} />
@@ -756,6 +820,9 @@ export function DocumentForm({
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
         <Button type="button" variant="outline" onClick={() => router.push(`/sales/${config.slug}`)}>
           Close
+        </Button>
+        <Button type="button" variant="outline" onClick={resetForm}>
+          Reset
         </Button>
         <SubmitButton
           variant="outline"
@@ -1609,32 +1676,25 @@ function SheetLayout(props: LayoutProps) {
 function SalesReceiptToolbar({
   slug,
   recordId,
-  next,
+  neighbors,
   canSave,
   onSave,
 }: {
   slug: string
   recordId?: string
-  next: { id: string; number: string } | null
+  neighbors?: {
+    previous: { id: string; number: string } | null
+    next: { id: string; number: string } | null
+  }
   canSave: boolean
   onSave: () => void
 }) {
   const router = useRouter()
-  const forwardHref = next ? `/sales/${slug}/${next.id}/edit` : recordId ? `/sales/${slug}/new` : null
+  const nav = neighborHrefs(`/sales/${slug}`, neighbors, recordId)
 
   return (
     <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-background p-1.5 print:hidden">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={!forwardHref}
-        title={next ? `Forward to ${next.number}` : recordId ? 'Forward to a new receipt' : 'No later receipt'}
-        onClick={() => forwardHref && router.push(forwardHref)}
-      >
-        Forward
-        <ChevronRightIcon />
-      </Button>
+      <RecordNav {...nav} />
       <Button
         type="button"
         variant="outline"
@@ -1733,7 +1793,7 @@ function ReceiptFinder({ slug }: { slug: string }) {
             <li key={row.id}>
               <button
                 type="button"
-                className="flex w-full items-baseline justify-between gap-3 rounded-md px-2 py-2 text-left text-sm hover:bg-slate-100"
+                className="flex w-full items-baseline justify-between gap-3 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   setOpen(false)
                   router.push(`/sales/${slug}/${row.id}/edit`)

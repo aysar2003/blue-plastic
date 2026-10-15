@@ -439,6 +439,78 @@ export async function findItemNameDuplicates(ctx: OrgContext) {
   return groupByFoldedName(rows, (row) => row.name)
 }
 
+/* --- Product categories --------------------------------------------------- */
+
+/**
+ * Fold one category into another. Every item (and any child category) moves
+ * to the survivor; the absorbed row is retired so its name frees up.
+ */
+export async function mergeCategories(ctx: OrgContext, input: MergeInput) {
+  sameOrgIds(input.keepId, input.absorbId)
+  const meta = await requestMeta()
+  return db.$transaction(async (tx) => {
+    const [keep, absorb] = await Promise.all([
+      tx.itemCategory.findFirst({
+        where: { id: input.keepId, orgId: ctx.orgId },
+        select: { id: true, name: true, parentId: true, isActive: true },
+      }),
+      tx.itemCategory.findFirst({
+        where: { id: input.absorbId, orgId: ctx.orgId },
+        select: { id: true, name: true, parentId: true, isActive: true },
+      }),
+    ])
+    if (!keep || !absorb) throw notFound('Category')
+
+    // Survivor must stay in the tree; if it sat under the row we absorb, lift it first.
+    if (keep.parentId === absorb.id) {
+      await tx.itemCategory.update({
+        where: { id: keep.id },
+        data: { parentId: absorb.parentId },
+      })
+    }
+
+    await tx.itemCategory.updateMany({
+      where: { orgId: ctx.orgId, parentId: absorb.id },
+      data: { parentId: keep.id },
+    })
+    await tx.item.updateMany({
+      where: { orgId: ctx.orgId, categoryId: absorb.id },
+      data: { categoryId: keep.id },
+    })
+
+    // Free @@unique([orgId, name]) before retiring the absorbed row.
+    await tx.itemCategory.update({
+      where: { id: absorb.id },
+      data: {
+        name: `${absorb.name} · merged ${Date.now()}`,
+        isActive: false,
+        parentId: null,
+      },
+    })
+
+    if (!keep.isActive) {
+      await tx.itemCategory.update({
+        where: { id: keep.id },
+        data: { isActive: true },
+      })
+    }
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'ItemCategory',
+        entityId: keep.id,
+        action: 'UPDATE',
+        before: { absorbedId: absorb.id, absorbedName: absorb.name },
+        after: { keepId: keep.id, keepName: keep.name },
+      },
+      meta,
+    )
+    return { keepId: keep.id, keepName: keep.name, absorbedName: absorb.name }
+  })
+}
+
 /* --- Ledger accounts ------------------------------------------------------ */
 
 export async function accountUsage(tx: Tx, orgId: string, id: string) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { nextInternalEan13 } from '@/lib/barcode-ean13'
 import {
   EMPTY_SCAN,
   matchPosBarcode,
@@ -37,6 +38,19 @@ describe('POS barcode', () => {
     expect(matchPosBarcode(products, 'nope')).toBeNull()
   })
 
+  it('sells an existing stock item after a barcode is attached later', () => {
+    const catalogue = [
+      { id: 'drum', sku: 'DRM-1', barcode: null as string | null },
+      { id: 'cap', sku: 'CAP-1', barcode: null as string | null },
+    ]
+    expect(matchPosBarcode(catalogue, '5901234123457')).toBeNull()
+
+    catalogue[0]!.barcode = '5901234123457'
+    expect(matchPosBarcode(catalogue, '5901234123457')?.id).toBe('drum')
+    expect(matchPosBarcode(catalogue, ' 5901 2341 23457 ')?.id).toBe('drum')
+    expect(matchPosBarcode(catalogue, 'CAP-1')?.id).toBe('cap')
+  })
+
   it('treats a fast burst ending in Enter as a scan, and slow typing as a person', () => {
     const scanned = scan(['1', '2', '3', '4', '5', '6', '7', '8', 'Enter'], 10)
     expect(scanned.slice(0, -1).map((key) => key.swallow)).toEqual([
@@ -62,5 +76,32 @@ describe('POS barcode', () => {
     const held = noteScanKey(EMPTY_SCAN, 'a', 10, true)
     expect(held.swallow).toBe(false)
     expect(held.code).toBeNull()
+  })
+
+  it('sells after an internal EAN-13 is generated for a catalogue item', () => {
+    const catalogue = [
+      { id: 'drum', sku: 'DRM-1', barcode: null as string | null },
+      { id: 'cap', sku: 'CAP-1', barcode: null as string | null },
+    ]
+    const code = nextInternalEan13(catalogue.map((row) => row.barcode))
+    expect(code).toBe('2000000000015')
+    expect(matchPosBarcode(catalogue, code)).toBeNull()
+
+    catalogue[0]!.barcode = code
+    expect(matchPosBarcode(catalogue, code)?.id).toBe('drum')
+    expect(matchPosBarcode(catalogue, '2000000000015')?.id).toBe('drum')
+
+    const second = nextInternalEan13(catalogue.map((row) => row.barcode))
+    catalogue[1]!.barcode = second
+    expect(matchPosBarcode(catalogue, second)?.id).toBe('cap')
+    expect(matchPosBarcode(catalogue, code)?.id).toBe('drum')
+  })
+
+  it('prefers an exact barcode over a matching SKU when both could apply', () => {
+    const clash = [
+      { id: 'by-sku', sku: '2000000000015', barcode: null as string | null },
+      { id: 'by-code', sku: 'OTHER', barcode: '2000000000015' },
+    ]
+    expect(matchPosBarcode(clash, '2000000000015')?.id).toBe('by-code')
   })
 })

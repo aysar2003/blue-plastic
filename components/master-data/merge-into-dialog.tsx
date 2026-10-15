@@ -6,13 +6,13 @@ import { toast } from 'sonner'
 
 import { mergeAccounts } from '@/app/(app)/accounts/actions'
 import { mergeCustomers, mergeVendors } from '@/app/(app)/customers/actions'
-import { mergeItems } from '@/app/(app)/items/actions'
+import { mergeCategories, mergeItems } from '@/app/(app)/items/actions'
 import { listMergeTargets } from '@/app/(app)/master-data/actions'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { NativeSelect } from '@/components/ui/native-select'
 
-export type MergeKind = 'customer' | 'vendor' | 'item' | 'account'
+export type MergeKind = 'customer' | 'vendor' | 'item' | 'account' | 'category'
 
 export type MergeOption = { id: string; label: string }
 
@@ -21,6 +21,7 @@ const MERGE = {
   vendor: mergeVendors,
   item: mergeItems,
   account: mergeAccounts,
+  category: mergeCategories,
 } as const
 
 /**
@@ -30,23 +31,33 @@ const MERGE = {
 export function MergeIntoDialog({
   open,
   onClose,
+  onMerged,
   kind,
   absorbId,
   absorbLabel,
   options: seededOptions = [],
+  preferredKeepId,
 }: {
   open: boolean
   onClose: () => void
+  /** After a successful merge — e.g. close the edit dialog that offered it. */
+  onMerged?: () => void
   kind: MergeKind
   absorbId: string
   absorbLabel: string
   options?: MergeOption[]
+  /** Pre-select this survivor when rename hit a known duplicate. */
+  preferredKeepId?: string
 }) {
   const router = useRouter()
   const [choices, setChoices] = useState<MergeOption[]>(
     seededOptions.filter((option) => option.id !== absorbId),
   )
-  const [keepId, setKeepId] = useState(choices[0]?.id ?? '')
+  const [keepId, setKeepId] = useState(
+    preferredKeepId && preferredKeepId !== absorbId
+      ? preferredKeepId
+      : (choices[0]?.id ?? ''),
+  )
   const [isPending, startTransition] = useTransition()
   const [loading, setLoading] = useState(false)
 
@@ -63,12 +74,16 @@ export function MergeIntoDialog({
         return
       }
       setChoices(result.data)
-      setKeepId(result.data[0]?.id ?? '')
+      const preferred =
+        preferredKeepId && result.data.some((row) => row.id === preferredKeepId)
+          ? preferredKeepId
+          : (result.data[0]?.id ?? '')
+      setKeepId(preferred)
     })
     return () => {
       cancelled = true
     }
-  }, [open, kind, absorbId])
+  }, [open, kind, absorbId, preferredKeepId])
 
   if (!open) return null
 
@@ -82,6 +97,7 @@ export function MergeIntoDialog({
       if (result.ok) {
         toast.success(`Merged into ${result.data.keepName}.`)
         onClose()
+        onMerged?.()
         router.refresh()
       } else {
         toast.error(result.error.message)

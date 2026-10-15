@@ -2,9 +2,18 @@ import 'server-only'
 
 import { formatDate, formatTransactionDate, isCalendarDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
-import { odooPdfLetterhead, odooPdfTableHead } from '@/lib/odoo-pdf'
+import { odooPdfLetterhead, odooPdfTableHead, odooPdfTotalBand } from '@/lib/odoo-pdf'
 import { ODOO_PDF } from '@/lib/odoo-brand'
-import { buildTextPdf, type PdfRow } from '@/lib/pdf-text'
+import { buildTextPdf, pdfBarcodeRow, PDF_PAGE, type PdfRow } from '@/lib/pdf-text'
+import type { PrintInk } from '@/lib/print-ink'
+
+/** Column edges for the sales line table (full letter width). */
+const COL = {
+  qty: PDF_PAGE.left,
+  item: 80,
+  unit: 470,
+  amount: PDF_PAGE.right,
+} as const
 
 /**
  * Sales document (invoice, quotation, receipt, credit) as an Odoo-styled PDF.
@@ -17,6 +26,8 @@ export function renderSalesDocumentPdf(input: {
   title: string
   number: string
   date: Date | string
+  /** Colour or black-and-white paper. */
+  ink?: PrintInk
   /** Clock time of the document, when the row stores one. */
   createdAt?: Date | null
   timeZone?: string
@@ -46,7 +57,7 @@ export function renderSalesDocumentPdf(input: {
     rows.push({
       size: options.size ?? 10,
       height: options.height ?? 14,
-      runs: [{ text, x: 40, bold: options.bold, color: ODOO_PDF.ink }],
+      runs: [{ text, x: PDF_PAGE.left, bold: options.bold, color: ODOO_PDF.ink }],
     })
   }
 
@@ -77,68 +88,120 @@ export function renderSalesDocumentPdf(input: {
     }),
   )
 
+  const numberBarcode = pdfBarcodeRow(input.number, { align: 'right', height: 40 })
+  if (numberBarcode) rows.push(numberBarcode)
+
   line(`Date ${date}`, { size: 9, height: 12 })
   if (due) line(`Due ${formatDate(due)}`, { size: 9, height: 14 })
 
   line('Billed to', { bold: true, size: 9, height: 14 })
   line(input.customerName, { size: 10, height: 13 })
-  for (const part of input.customerAddress) line(part, { size: 9, height: 12 })
+  for (const part of input.customerAddress.map(cleanPart).filter(Boolean)) {
+    line(part, { size: 9, height: 12 })
+  }
   if (input.customerEmail) line(input.customerEmail, { size: 9, height: 14 })
 
   rows.push(
     odooPdfTableHead([
-      { text: 'Qty', x: 40 },
-      { text: 'Item', x: 80 },
-      { text: 'Description', x: 160 },
-      { text: 'Unit', x: 400 },
-      { text: 'Amount', x: 480 },
+      { text: 'Qty', x: COL.qty },
+      { text: 'Item', x: COL.item },
+      { text: 'Unit', x: COL.unit, align: 'right' },
+      { text: 'Amount', x: COL.amount, align: 'right' },
     ]),
   )
 
   for (const row of input.lines) {
+    const item = lineItemLabel(row)
     rows.push({
-      size: 8,
-      height: 12,
+      size: 9,
+      height: 13,
       runs: [
-        { text: row.quantity, x: 40, color: ODOO_PDF.ink },
-        { text: (row.sku ?? '').slice(0, 12), x: 80, color: ODOO_PDF.ink },
-        { text: row.description.slice(0, 40), x: 160, color: ODOO_PDF.ink },
-        { text: money(row.unitPrice), x: 400, color: ODOO_PDF.ink },
-        { text: money(row.amount), x: 480, color: ODOO_PDF.ink },
+        { text: row.quantity, x: COL.qty, color: ODOO_PDF.ink },
+        { text: item.slice(0, 48), x: COL.item, color: ODOO_PDF.ink },
+        { text: money(row.unitPrice), x: COL.unit, align: 'right', color: ODOO_PDF.ink },
+        { text: money(row.amount), x: COL.amount, align: 'right', color: ODOO_PDF.ink },
       ],
     })
   }
 
   line('', { height: 10 })
-  line(`Subtotal ${money(input.subtotal)}`, { size: 9, height: 12 })
-  if (Number(input.discountAmount) > 0) {
-    line(`Discount ${money(input.discountAmount)}`, { size: 9, height: 12 })
-  }
-  if (Number(input.taxTotal) > 0) {
-    line(`Tax ${money(input.taxTotal)}`, { size: 9, height: 12 })
-  }
   rows.push({
-    size: 11,
-    height: 18,
-    fill: ODOO_PDF.purpleSoft,
-    fillInset: 36,
+    size: 9,
+    height: 13,
     runs: [
-      {
-        text: `Total ${money(input.total)}`,
-        x: 40,
-        bold: true,
-        color: ODOO_PDF.purple,
-      },
+      { text: 'Subtotal', x: COL.unit - 80, color: ODOO_PDF.contact },
+      { text: money(input.subtotal), x: COL.amount, align: 'right', color: ODOO_PDF.ink },
     ],
   })
+  if (Number(input.discountAmount) > 0) {
+    rows.push({
+      size: 9,
+      height: 13,
+      runs: [
+        { text: 'Discount', x: COL.unit - 80, color: ODOO_PDF.contact },
+        { text: money(input.discountAmount), x: COL.amount, align: 'right', color: ODOO_PDF.ink },
+      ],
+    })
+  }
+  if (Number(input.taxTotal) > 0) {
+    rows.push({
+      size: 9,
+      height: 13,
+      runs: [
+        { text: 'Tax', x: COL.unit - 80, color: ODOO_PDF.contact },
+        { text: money(input.taxTotal), x: COL.amount, align: 'right', color: ODOO_PDF.ink },
+      ],
+    })
+  }
+  rows.push(odooPdfTotalBand(`Total ${money(input.total)}`))
   if (input.amountApplied && Number(input.amountApplied) > 0) {
-    line(`Paid ${money(input.amountApplied)}`, { size: 9, height: 12 })
-    if (input.balance) line(`Amount due ${money(input.balance)}`, { bold: true, size: 10, height: 14 })
+    rows.push({
+      size: 9,
+      height: 13,
+      runs: [
+        { text: 'Paid', x: COL.unit - 80, color: ODOO_PDF.contact },
+        { text: money(input.amountApplied), x: COL.amount, align: 'right', color: ODOO_PDF.ink },
+      ],
+    })
+    if (input.balance) {
+      rows.push({
+        size: 10,
+        height: 15,
+        runs: [
+          { text: 'Amount due', x: COL.unit - 80, bold: true, color: ODOO_PDF.ink },
+          {
+            text: money(input.balance),
+            x: COL.amount,
+            align: 'right',
+            bold: true,
+            color: ODOO_PDF.ink,
+          },
+        ],
+      })
+    }
   }
   if (input.message) {
     line('', { height: 8 })
     line(input.message, { size: 9, height: 14 })
   }
 
-  return buildTextPdf(rows)
+  return buildTextPdf(rows, { ink: input.ink })
+}
+
+/** Prefer the description / name; append SKU when it adds information. */
+function lineItemLabel(row: { sku: string | null; description: string }): string {
+  const name = row.description.trim() || 'Line'
+  const sku = row.sku?.trim()
+  if (!sku) return name
+  if (name.toLowerCase().includes(sku.toLowerCase())) return name
+  return `${name} (${sku})`
+}
+
+function cleanPart(value: string): string {
+  return value
+    .trim()
+    .replace(/,+/g, ',')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/^[,\s]+|[,\s]+$/g, '')
+    .trim()
 }

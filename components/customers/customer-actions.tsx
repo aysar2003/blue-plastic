@@ -48,6 +48,7 @@ export function CustomerActions({
   mergeOptions = [],
   startEditing = false,
   clearEditHref,
+  portalInvite = false,
 }: {
   customerId: string
   contact?: ContactValues
@@ -68,6 +69,7 @@ export function CustomerActions({
   startEditing?: boolean
   /** Drop `edit=` from the URL when the dialog closes. */
   clearEditHref?: string
+  portalInvite?: boolean
 }) {
   const router = useRouter()
   const [editing, setEditing] = useState(startEditing && Boolean(contact))
@@ -288,6 +290,7 @@ export function CustomerActions({
           terms={terms}
           today={today}
           currency={currency}
+          portalInvite={portalInvite}
           onClose={closeEdit}
         />
       ) : null}

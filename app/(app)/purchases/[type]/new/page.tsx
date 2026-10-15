@@ -9,6 +9,7 @@ import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { peekDocumentNumber } from '@/server/sequences'
 import { loadPurchaseOptions } from '@/server/services/purchase-options'
+import * as purchaseService from '@/server/services/purchase.service'
 import * as storeService from '@/server/services/store.service'
 
 export async function generateMetadata({
@@ -32,9 +33,10 @@ export default async function NewPurchasePage({
   const ctx = await requireOrgContext('bill:create')
   const vendorParam = (await searchParams).vendor
   const requestedVendor = typeof vendorParam === 'string' ? vendorParam : undefined
-  const [options, documentNumber, shelf] = await Promise.all([
+  const [options, documentNumber, neighbors, shelf] = await Promise.all([
     loadPurchaseOptions(ctx),
     peekDocumentNumber(db, ctx.orgId, config.type),
+    purchaseService.neighbors(ctx, config.type, null),
     storeService.quantities(ctx),
   ])
   const initialVendorId = options.vendors.some((vendor) => vendor.id === requestedVendor)
@@ -64,6 +66,7 @@ export default async function NewPurchasePage({
         currency={ctx.organization.baseCurrency}
         documentNumber={documentNumber}
         initialVendorId={initialVendorId}
+        neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}
       />

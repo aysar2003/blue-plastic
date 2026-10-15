@@ -18,13 +18,16 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { DateField } from '@/components/ui/date-field'
 import { Input } from '@/components/ui/input'
+import { NativeSelect } from '@/components/ui/native-select'
 import type { AccountPickerOption } from '@/lib/account-options'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
+import { quantityAtStore, type StockByStore } from '@/lib/store-stock'
 import { saveAdjustmentForm } from '@/app/(app)/inventory/actions'
 import { StockCountExcelTools } from '@/components/inventory/stock-count-excel'
 import type { StockCountImportLine } from '@/lib/stock-count-sheet'
 
 type ItemOption = { id: string; label: string; onHand: string; averageCost: string; sku?: string | null }
+type StoreOption = { id: string; label: string; isOffice?: boolean }
 type Line = { key: number; itemId: string; counted: string; description: string }
 type AdjustMode = 'count' | 'damage' | 'cost'
 
@@ -46,20 +49,26 @@ const blankLine = (key: number): Line => ({ key, itemId: '', counted: '', descri
 
 export function AdjustmentForm({
   items,
+  stores,
+  stockByStore,
   accounts,
   today,
   currency,
   documentNumber,
   initialItemId,
+  initialStoreId,
   initialMode = 'count',
 }: {
   items: ItemOption[]
+  stores: StoreOption[]
+  stockByStore: StockByStore
   accounts: AccountPickerOption[]
   today: string
   currency: string
   documentNumber: string
   /** Opens the count already sitting on this product. */
   initialItemId?: string
+  initialStoreId?: string
   initialMode?: AdjustMode
 }) {
   const router = useRouter()
@@ -67,6 +76,11 @@ export function AdjustmentForm({
 
   const [number, setNumber] = usePropState(documentNumber)
   const [date, setDate] = useState(today)
+  const [storeId, setStoreId] = useState(
+    initialStoreId && stores.some((store) => store.id === initialStoreId)
+      ? initialStoreId
+      : (stores.find((store) => store.isOffice)?.id ?? stores[0]?.id ?? ''),
+  )
   const [accountId, setAccountId] = useState('')
   const [reason, setReason] = useState('')
   const [memo, setMemo] = useState('')
@@ -100,7 +114,15 @@ export function AdjustmentForm({
     if (state.status !== 'success') handled.current = false
   }, [state, router, today])
 
-  const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
+  const shelfItems = useMemo(
+    () =>
+      items.map((item) => ({
+        ...item,
+        onHand: storeId ? quantityAtStore(stockByStore, item.id, storeId) : item.onHand,
+      })),
+    [items, storeId, stockByStore],
+  )
+  const itemById = useMemo(() => new Map(shelfItems.map((item) => [item.id, item])), [shelfItems])
 
   const totals = useMemo(() => {
     let value = ZERO
@@ -140,6 +162,7 @@ export function AdjustmentForm({
     number,
     date,
     mode,
+    storeId,
     accountId,
     reason,
     memo,
@@ -174,6 +197,26 @@ export function AdjustmentForm({
               required
               aria-invalid={state.fieldErrors?.date ? true : undefined}
             />
+          </Field>
+
+          <Field
+            name="storeId"
+            label="Store"
+            hint="The count is this store's shelf, not the company total."
+            error={state.fieldErrors?.storeId}
+          >
+            <NativeSelect
+              id="storeId"
+              value={storeId}
+              onChange={(event) => setStoreId(event.target.value)}
+              aria-invalid={state.fieldErrors?.storeId ? true : undefined}
+            >
+              {stores.map((store) => (
+                <option key={store.id} value={store.id}>
+                  {store.label}
+                </option>
+              ))}
+            </NativeSelect>
           </Field>
 
           <Field
@@ -232,7 +275,7 @@ export function AdjustmentForm({
           <CardContent className="space-y-2 p-4">
             <p className="text-sm font-medium">Count from Excel</p>
             <StockCountExcelTools
-              catalog={items.map((item) => ({
+              catalog={shelfItems.map((item) => ({
                 id: item.id,
                 label: item.label,
                 sku: item.sku ?? null,
@@ -291,7 +334,7 @@ export function AdjustmentForm({
                   >
                     <td className="px-2 py-2">
                       <EntityPicker
-                        options={items}
+                        options={shelfItems}
                         value={line.itemId || null}
                         onChange={(next) =>
                           setLines((current) =>

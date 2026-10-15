@@ -33,8 +33,9 @@ import { notFound } from '@/server/errors'
  * refuses every UPDATE to a posted journal except this one, and refuses it unless
  * the deletion stamp is set in the same statement.
  *
- * **Not exposed as anything else.** There is no Void, no Reverse and no
- * alternative workflow in front of the person. One verb.
+ * **Not exposed as anything else on the record.** There is no Void branching in
+ * front of the person — one verb, Delete. Trash can Restore a mis-click; that
+ * path lives under Settings → Trash, not on the live document.
  */
 
 /** The stamp written on every soft-deleted record. */
@@ -118,6 +119,76 @@ export async function deleteJournals(
   return related.length
 }
 
+/** Clear the soft-delete stamp so a row is visible in the working books again. */
+export const CLEAR_DELETION = {
+  deletedAt: null,
+  deletedById: null,
+  deleteReason: null,
+} as const
+
+/**
+ * Put deleted journals back into the books.
+ *
+ * Status goes back to what deletion took away: a reversing entry returns as
+ * POSTED; an original that still has its reversal beside it returns as
+ * REVERSED; otherwise POSTED. The stamp clears in the same statement — the
+ * immutability trigger permits only that transition.
+ *
+ * Idempotent. Restoring something already live changes nothing.
+ */
+export async function restoreJournals(
+  tx: Tx,
+  ctx: OrgContext,
+  journalIds: (string | null | undefined)[],
+  options?: { audit?: boolean },
+): Promise<number> {
+  const ids = [...new Set(journalIds.filter(Boolean) as string[])]
+  if (ids.length === 0) return 0
+
+  const related = await tx.journal.findMany({
+    where: {
+      orgId: ctx.orgId,
+      OR: [{ id: { in: ids } }, { reversalOfId: { in: ids } }],
+      status: 'DELETED',
+    },
+    select: { id: true, journalNumber: true, reversalOfId: true },
+  })
+
+  if (related.length === 0) return 0
+
+  const relatedIds = new Set(related.map((journal) => journal.id))
+  const hasReversal = new Set(
+    related.filter((journal) => journal.reversalOfId && relatedIds.has(journal.reversalOfId)).map(
+      (journal) => journal.reversalOfId as string,
+    ),
+  )
+
+  for (const journal of related) {
+    const status = journal.reversalOfId
+      ? 'POSTED'
+      : hasReversal.has(journal.id)
+        ? 'REVERSED'
+        : 'POSTED'
+
+    await tx.journal.update({
+      where: { id: journal.id },
+      data: { status, ...CLEAR_DELETION },
+    })
+  }
+
+  if (options?.audit !== false) {
+    await writeAudit(tx, ctx, {
+      entity: 'Journal',
+      entityId: related[0].id,
+      action: 'RESTORE',
+      before: { status: 'DELETED', entries: related.map((journal) => journal.journalNumber) },
+      after: { status: 'RESTORED' },
+    })
+  }
+
+  return related.length
+}
+
 /**
  * Soft-delete a record and its journal in one transaction.
  *
@@ -161,6 +232,45 @@ export async function softDeleteDocument(
       action: 'DELETE',
       before: { number: input.number, ...input.before },
       after: { deletedAt: stamp.deletedAt.toISOString(), reason: stamp.deleteReason },
+    },
+    meta,
+  )
+
+  return { id: input.id, number: input.number }
+}
+
+/**
+ * Clear a soft-deleted record's stamp and put its journals back.
+ *
+ * Side-effects unique to one document type (stock, applications, order counts)
+ * stay in that service's restore. This is only the shared half.
+ */
+export async function restoreSoftDeletedDocument(
+  tx: Tx,
+  ctx: OrgContext,
+  input: {
+    clear: () => Promise<unknown>
+    entity: string
+    id: string
+    number: string
+    journalIds?: (string | null | undefined)[]
+    before?: Record<string, unknown>
+  },
+): Promise<{ id: string; number: string }> {
+  const meta = await requestMeta()
+
+  await input.clear()
+  await restoreJournals(tx, ctx, input.journalIds ?? [], { audit: false })
+
+  await writeAudit(
+    tx,
+    ctx,
+    {
+      entity: input.entity,
+      entityId: input.id,
+      action: 'RESTORE',
+      before: { number: input.number, status: 'DELETED', ...input.before },
+      after: { deletedAt: null },
     },
     meta,
   )

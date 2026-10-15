@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { parsePrintInk } from '@/lib/print-ink'
 import { requireOrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
 import { renderDeliveryReportPdf } from '@/server/reports/delivery-report-pdf'
@@ -15,6 +16,7 @@ export async function GET(request: Request) {
   try {
     const ctx = await requireOrgContext('bill:read')
     const url = new URL(request.url)
+    const ink = parsePrintInk(url.searchParams.get('ink'))
     const filterRaw = url.searchParams.get('filter') ?? ''
     const filter =
       filterRaw === 'outstanding' || filterRaw === 'delivered' ? filterRaw : 'all'
@@ -37,6 +39,7 @@ export async function GET(request: Request) {
       currency: ctx.organization.baseCurrency,
       filterLabel,
       orders,
+      ink,
     })
 
     return new NextResponse(Buffer.from(bytes), {

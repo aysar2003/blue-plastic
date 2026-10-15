@@ -14,7 +14,8 @@ import { cn } from '@/lib/utils'
 
 const MIN = 176
 const MAX = 520
-const DEFAULT = 256
+/** Wide enough for Name + Balance without truncating column headers. */
+const DEFAULT = 300
 
 type DetailPanelContextValue = {
   open: boolean

@@ -17,6 +17,7 @@ import { readSort } from '@/components/data/sortable-header'
 import { describeTerm } from '@/lib/payment-terms'
 import { today } from '@/lib/date'
 import { bandDetail } from '@/lib/customer-bands'
+import { MONEY_BAR } from '@/lib/money-bar-bands'
 import { presetRange, readDatePreset } from '@/lib/list-filters'
 import { letterheadLines } from '@/lib/letterhead'
 import { formatMoney } from '@/lib/money'
@@ -103,6 +104,8 @@ export default async function CustomersPage({
     : [null, []]
 
   const canCreate = ctx.permissions.has('customer:create')
+  const portalInvite =
+    ctx.features.enableCustomerPortal && ctx.permissions.has('portal:manage')
   const canInvoice = ctx.permissions.has('invoice:create')
   const canPay = ctx.permissions.has('payment:create')
   const canReport = ctx.permissions.has('report:read')
@@ -279,7 +282,7 @@ export default async function CustomersPage({
       title="Customer information"
       moneyBar={
         <ContactMoneyBar
-          storageKey="bp-customer-money-bar-v2"
+          storageKey="bp-customer-money-bar-v3"
           currency={currency}
           active={band}
           bands={[
@@ -288,29 +291,29 @@ export default async function CustomersPage({
               href: bandHref('estimates'),
               amount: bar.estimates.amount,
               detail: bandDetail(bar.estimates),
-              bar: 'bg-[#5ec8e5]',
+              bar: MONEY_BAR.estimates.bar,
             },
             {
               key: 'overdue',
               href: bandHref('overdue'),
               amount: bar.overdue.amount,
               detail: bandDetail(bar.overdue),
-              bar: 'bg-[#d4652f]',
-              accent: 'text-[#d4652f]',
+              bar: MONEY_BAR.overdue.bar,
+              accent: MONEY_BAR.overdue.accent,
             },
             {
               key: 'open',
               href: bandHref('open'),
               amount: bar.open.amount,
               detail: bandDetail(bar.open),
-              bar: 'bg-[#c5c9ce]',
+              bar: MONEY_BAR.open.bar,
             },
             {
               key: 'paid',
               href: bandHref('paid'),
               amount: bar.paid.amount,
               detail: bandDetail(bar.paid),
-              bar: 'bg-[#2ca01c]',
+              bar: MONEY_BAR.paid.bar,
             },
           ]}
         />
@@ -363,7 +366,8 @@ export default async function CustomersPage({
               terms={termOptions}
               today={asOf}
               currency={currency}
-              className="bg-[#2ca01c] text-white hover:bg-[#248a18]"
+              portalInvite={portalInvite}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             />
           ) : null}
         </>
@@ -385,6 +389,7 @@ export default async function CustomersPage({
             isActive={customer.isActive}
             startEditing={canEdit && openEdit}
             clearEditHref={openEdit ? customerHref(customer.id) : undefined}
+            portalInvite={portalInvite}
           />
         ) : null
       }

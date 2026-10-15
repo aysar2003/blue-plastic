@@ -55,6 +55,11 @@ export type OrgFeatureFlags = {
    * tax, and tax reports stay hidden and the server will not apply tax.
    */
   enableTax: boolean
+  /**
+   * Customer self-service portal. When off, portal invites and /portal are
+   * refused; staff UI for portal users stays hidden.
+   */
+  enableCustomerPortal: boolean
   /** Apps visible in the launcher / header when enabled. */
   modules: Record<ModuleFlag, boolean>
 }
@@ -68,6 +73,7 @@ export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   allowDocumentDelete: true,
   showCreatorBrand: true,
   enableTax: true,
+  enableCustomerPortal: false,
   modules: {
     sales: true,
     purchases: true,
@@ -97,6 +103,7 @@ export const MODULE_KEY_TO_FLAG: Record<string, ModuleFlag | null> = {
   vendors: 'purchases',
   'bill-payments': 'purchases',
   stores: 'inventory',
+  barcodes: 'inventory',
   journals: 'accounting',
   periods: 'accounting',
   calendar: null,
@@ -112,6 +119,9 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
   if (typeof data.allowDocumentDelete === 'boolean') base.allowDocumentDelete = data.allowDocumentDelete
   if (typeof data.showCreatorBrand === 'boolean') base.showCreatorBrand = data.showCreatorBrand
   if (typeof data.enableTax === 'boolean') base.enableTax = data.enableTax
+  if (typeof data.enableCustomerPortal === 'boolean') {
+    base.enableCustomerPortal = data.enableCustomerPortal
+  }
 
   // Legacy single switch → both contact sides until the new keys are saved.
   if (typeof data.allowContactDelete === 'boolean') {
