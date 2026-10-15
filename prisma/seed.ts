@@ -42,6 +42,7 @@ const DEFAULT_PREFIX: Record<DocumentType, string> = {
   STORE_TICKET: 'TKT-',
   DELIVERY_NOTE: 'DN-',
   ASSEMBLY_BUILD: 'BLD-',
+  PROJECT: 'PRJ-',
 }
 
 const connectionString = process.env.DIRECT_URL || process.env.DATABASE_URL

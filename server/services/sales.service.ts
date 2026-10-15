@@ -30,6 +30,7 @@ import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import * as approvalService from '@/server/services/approval.service'
+import { resolveProjectId } from '@/server/services/project.service'
 import * as storeService from '@/server/services/store.service'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
 import { loadCodeForCalculation } from '@/server/services/tax.service'
@@ -83,7 +84,9 @@ const DOCUMENT_SELECT = {
   subtotal: true, discountAmount: true, taxTotal: true, total: true,
   currencyCode: true, depositAccountId: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
+  projectId: true,
   createdById: true,
+  project: { select: { id: true, number: true, name: true } },
   customer: {
     select: {
       id: true,
@@ -696,6 +699,7 @@ export async function create(
 
   return db.$transaction(async (tx) => {
     const customer = await requireCustomer(tx, ctx, input.customerId)
+    const projectId = await resolveProjectId(tx, ctx, input.projectId)
     const lines = await resolveLines(tx, ctx, input.lines)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency, documentDiscount(input))
@@ -731,10 +735,10 @@ export async function create(
     })
     if (clash) throw numberTaken()
 
-    // POS must post immediately. Maker-checker applies to desk sales only.
+    // POS must post immediately. Desk sales (incl. orders / estimates) may wait.
     const gate =
-      !isDraft && POSTS_A_JOURNAL[type] && !options?.pos
-        ? await approvalService.needsApproval(ctx, 'SALES_DOCUMENT', priced.total, tx)
+      !isDraft && !options?.pos
+        ? await approvalService.needsApproval(ctx, 'SALES_DOCUMENT', priced.total, tx, type)
         : { required: false, levels: 1, requireDifferentApprover: true }
     const holdForApproval = gate.required
 
@@ -762,6 +766,7 @@ export async function create(
         total: priced.total.toFixed(4),
         currencyCode: ctx.organization.baseCurrency,
         depositAccountId: input.depositAccountId ?? null,
+        projectId,
         createdById: ctx.userId,
         lines: {
           create: priced.lines.map((line) => ({
@@ -931,6 +936,7 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
     }
 
     const customer = await requireCustomer(tx, ctx, input.customerId)
+    const projectId = await resolveProjectId(tx, ctx, input.projectId)
     const lines = await resolveLines(tx, ctx, input.lines)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency, documentDiscount(input))
@@ -984,10 +990,9 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
     })
     if (clash) throw numberTaken()
 
-    const gate =
-      !input.saveAsDraft && POSTS_A_JOURNAL[existing.type]
-        ? await approvalService.needsApproval(ctx, 'SALES_DOCUMENT', priced.total, tx)
-        : { required: false, levels: 1, requireDifferentApprover: true }
+    const gate = !input.saveAsDraft
+      ? await approvalService.needsApproval(ctx, 'SALES_DOCUMENT', priced.total, tx, existing.type)
+      : { required: false, levels: 1, requireDifferentApprover: true }
     const holdForApproval = gate.required
 
     await tx.salesDocument.update({
@@ -1010,6 +1015,7 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
         taxTotal: priced.taxTotal.toFixed(4),
         total: priced.total.toFixed(4),
         depositAccountId: input.depositAccountId ?? null,
+        projectId,
         journalId: null,
         version: { increment: 1 },
         status: input.saveAsDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
@@ -1175,7 +1181,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     where: { id, orgId: ctx.orgId },
     select: {
       id: true, type: true, number: true, date: true, memo: true, customerId: true,
-      depositAccountId: true, journalId: true, discountAmount: true,
+      status: true, depositAccountId: true, journalId: true, discountAmount: true,
       lines: {
         orderBy: { lineNumber: 'asc' },
         select: {
@@ -1196,7 +1202,16 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     },
   })
   if (!document) throw notFound('Document')
-  if (!POSTS_A_JOURNAL[document.type]) return null
+  // Estimates / quotations / sales orders have no journal — approval only opens them.
+  if (!POSTS_A_JOURNAL[document.type]) {
+    if (document.status === 'PENDING_APPROVAL') {
+      await tx.salesDocument.update({
+        where: { id: document.id },
+        data: { status: 'OPEN' },
+      })
+    }
+    return null
+  }
   if (document.journalId) throw conflict(`${document.number} is already posted.`)
 
   for (const [index, line] of document.lines.entries()) {
@@ -1740,6 +1755,7 @@ export async function convertSalesDocument(
         type: true,
         status: true,
         customerId: true,
+        projectId: true,
         reference: true,
         memo: true,
         customerMessage: true,
@@ -1786,6 +1802,7 @@ export async function convertSalesDocument(
       customerMessage: source.customerMessage,
       paymentTermId: target === 'INVOICE' || target === 'SALES_ORDER' ? source.paymentTermId : null,
       depositAccountId: target === 'SALES_RECEIPT' ? depositAccountId : null,
+      projectId: source.projectId,
       discountKind: 'amount',
       discountValue: discount.greaterThan(0) ? discount.toString() : null,
       lines: source.lines.map((line) => ({

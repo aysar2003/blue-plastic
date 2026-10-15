@@ -42,7 +42,7 @@ export function PrintInkMenu({
   const run = (ink: PrintInk) => {
     rememberPrintInk(ink)
     if (printHref) {
-      window.location.href = withPrintInk(printHref, ink)
+      window.location.assign(withPrintInk(printHref, ink))
       return
     }
     printWithInk(ink)

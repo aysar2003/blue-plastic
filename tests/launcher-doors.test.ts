@@ -8,6 +8,7 @@ import { LAUNCHER_APPS } from '@/components/layout/launcher-apps'
 const DOOR_PAGE: Record<string, string> = {
   pos: 'app/(app)/pos/page.tsx',
   sales: 'app/(app)/sales/page.tsx',
+  projects: 'app/(app)/projects/page.tsx',
   customers: 'app/(app)/customers/page.tsx',
   purchases: 'app/(app)/purchases/page.tsx',
   vendors: 'app/(app)/vendors/page.tsx',
@@ -16,6 +17,7 @@ const DOOR_PAGE: Record<string, string> = {
   inventory: 'app/(app)/inventory/page.tsx',
   barcodes: 'app/(app)/barcodes/page.tsx',
   stores: 'app/(app)/stores/page.tsx',
+  approvals: 'app/(app)/approvals/page.tsx',
   accounting: 'app/(app)/accounting/page.tsx',
   journals: 'app/(app)/journals/page.tsx',
   reports: 'app/(app)/reports/page.tsx',
@@ -36,6 +38,7 @@ describe('launcher front doors', () => {
     const expected: Record<string, string> = {
       pos: '/pos',
       sales: '/sales',
+      projects: '/projects',
       customers: '/customers',
       purchases: '/purchases',
       vendors: '/vendors',
@@ -44,6 +47,7 @@ describe('launcher front doors', () => {
       inventory: '/inventory',
       barcodes: '/barcodes',
       stores: '/stores',
+      approvals: '/approvals',
       accounting: '/accounting',
       journals: '/journals',
       reports: '/reports',

@@ -133,6 +133,8 @@ export function BarcodesBoard({
                 Generate for all missing ({withoutBarcode})
               </Button>
             ) : null}
+            {/* File download — not a page navigation */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a
               href="/api/exports/barcodes"
               className={cn(buttonVariants({ variant: 'outline' }))}
@@ -272,6 +274,7 @@ export function BarcodesBoard({
               print
             </Link>{' '}
             or{' '}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- file download */}
             <a href="/api/exports/barcodes" className="underline-offset-4 hover:underline">
               Excel
             </a>

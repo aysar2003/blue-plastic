@@ -6,10 +6,13 @@ import {
   featureFlagsWithModules,
   MODULE_FLAG_LABELS,
   MODULE_FLAGS,
+  MODULE_FORM_KEYS,
+  modulesFromFormValues,
   parseModulesSelection,
   type ModuleFlag,
 } from '@/lib/feature-flags'
 import type { SetupInput } from '@/lib/validation/auth'
+import type { ReviewSignupRequestInput } from '@/lib/validation/signup-request'
 import type { OrgContext } from '@/server/auth/context'
 import { hashPassword } from '@/server/auth/password'
 import { db } from '@/server/db'
@@ -211,18 +214,7 @@ export async function listPendingSignupRequests(ctx: OrgContext): Promise<Signup
 /** Approve → create company + owner. Reject → no account, no books. */
 export async function reviewSignupRequest(
   ctx: OrgContext,
-  input: {
-    id: string
-    decision: 'approve' | 'reject'
-    note?: string
-    moduleSales?: boolean
-    modulePurchases?: boolean
-    moduleBanking?: boolean
-    moduleInventory?: boolean
-    modulePos?: boolean
-    moduleAccounting?: boolean
-    moduleReports?: boolean
-  },
+  input: ReviewSignupRequestInput,
 ) {
   if (!ctx.isSystemOwner) {
     throw forbidden('Only the system owner can approve company registrations.')
@@ -266,24 +258,9 @@ export async function reviewSignupRequest(
 
   // Owner may grant different apps than the applicant asked for (add or remove).
   const requested = parseModulesSelection(request.requestedModules)
-  const modules =
-    input.moduleSales !== undefined ||
-    input.modulePurchases !== undefined ||
-    input.moduleBanking !== undefined ||
-    input.moduleInventory !== undefined ||
-    input.modulePos !== undefined ||
-    input.moduleAccounting !== undefined ||
-    input.moduleReports !== undefined
-      ? {
-          sales: input.moduleSales ?? requested.sales,
-          purchases: input.modulePurchases ?? requested.purchases,
-          banking: input.moduleBanking ?? requested.banking,
-          inventory: input.moduleInventory ?? requested.inventory,
-          pos: input.modulePos ?? requested.pos,
-          accounting: input.moduleAccounting ?? requested.accounting,
-          reports: input.moduleReports ?? requested.reports,
-        }
-      : requested
+  const data = input as Record<string, unknown>
+  const hasOverride = MODULE_FLAGS.some((key) => data[MODULE_FORM_KEYS[key]] !== undefined)
+  const modules = hasOverride ? modulesFromFormValues(data) : requested
 
   const created = await db.$transaction(async (tx) => {
     const organization = await tx.organization.create({

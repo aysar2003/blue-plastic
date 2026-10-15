@@ -9,6 +9,7 @@ import {
   visibleHubApps,
   type HubApp,
 } from './module-hubs'
+import { PROJECT_HUB_APPS, type ProjectHubApp } from './project-apps'
 import { SALES_HUB_APPS, type SalesHubApp } from './sales-apps'
 
 /**
@@ -24,7 +25,7 @@ export type HeaderMenuItem = {
   permission?: Permission
 }
 
-function fromHub(apps: HubApp[] | SalesHubApp[]): HeaderMenuItem[] {
+function fromHub(apps: HubApp[] | SalesHubApp[] | ProjectHubApp[]): HeaderMenuItem[] {
   return apps.map((app) => ({
     label: app.label,
     href: app.href,
@@ -46,6 +47,7 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
     { label: 'Transfer to bank', href: '/banking/transfers/new', permission: 'bank:transact' },
   ],
   sales: fromHub(SALES_HUB_APPS),
+  projects: fromHub(PROJECT_HUB_APPS),
   purchases: fromHub(PURCHASE_HUB_APPS),
   banking: fromHub(BANKING_HUB_APPS),
   inventory: fromHub(INVENTORY_HUB_APPS),
@@ -125,6 +127,7 @@ export function menuForApp(
   // Hub lists already carry permissions; reuse the same filter.
   if (
     appKey === 'sales' ||
+    appKey === 'projects' ||
     appKey === 'purchases' ||
     appKey === 'banking' ||
     appKey === 'inventory' ||
@@ -135,17 +138,19 @@ export function menuForApp(
     const hubs =
       appKey === 'sales'
         ? SALES_HUB_APPS
-        : appKey === 'purchases'
-          ? PURCHASE_HUB_APPS
-          : appKey === 'banking'
-            ? BANKING_HUB_APPS
-            : appKey === 'inventory'
-              ? INVENTORY_HUB_APPS
-              : appKey === 'accounting'
-                ? ACCOUNTING_HUB_APPS
-                : appKey === 'settings'
-                  ? SETTINGS_HUB_APPS
-                  : HELP_HUB_APPS
+        : appKey === 'projects'
+          ? PROJECT_HUB_APPS
+          : appKey === 'purchases'
+            ? PURCHASE_HUB_APPS
+            : appKey === 'banking'
+              ? BANKING_HUB_APPS
+              : appKey === 'inventory'
+                ? INVENTORY_HUB_APPS
+                : appKey === 'accounting'
+                  ? ACCOUNTING_HUB_APPS
+                  : appKey === 'settings'
+                    ? SETTINGS_HUB_APPS
+                    : HELP_HUB_APPS
     return fromHub(visibleHubApps(hubs, permissions))
   }
 

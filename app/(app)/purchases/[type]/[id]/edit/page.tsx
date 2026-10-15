@@ -69,6 +69,7 @@ export default async function EditPurchasePage({
           paymentTermId: document.paymentTerm?.id ?? null,
           paymentAccountId: document.paymentAccount?.id ?? null,
           offsetCustomerId: document.offsetCustomer?.id ?? null,
+          projectId: document.projectId ?? null,
           lines: document.lines.map((line) => ({
             itemId: line.item?.id ?? null,
             expenseAccountId: line.expenseAccount?.id ?? null,

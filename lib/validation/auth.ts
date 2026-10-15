@@ -3,6 +3,7 @@ import { z } from 'zod'
 import {
   hasAnyModuleEnabled,
   MODULE_FLAGS,
+  MODULE_FORM_KEYS,
   modulesFromFormValues,
   type ModuleFlag,
 } from '@/lib/feature-flags'
@@ -19,6 +20,10 @@ const boolFlag = z
   .union([z.literal('true'), z.literal('false'), z.literal('on'), z.boolean()])
   .transform((v) => v === true || v === 'true' || v === 'on')
 
+const setupModuleFields = Object.fromEntries(
+  MODULE_FLAGS.map((key) => [MODULE_FORM_KEYS[key], boolFlag.default(false)]),
+) as Record<(typeof MODULE_FORM_KEYS)[ModuleFlag], z.ZodDefault<z.ZodType<boolean>>>
+
 /** First-run setup / public register: company, owner, and which apps they need. */
 export const setupSchema = z
   .object({
@@ -30,13 +35,7 @@ export const setupSchema = z
     password,
     confirmPassword: z.string(),
     // Unchecked boxes are omitted from FormData — treat missing as off.
-    moduleSales: boolFlag.default(false),
-    modulePurchases: boolFlag.default(false),
-    moduleBanking: boolFlag.default(false),
-    moduleInventory: boolFlag.default(false),
-    modulePos: boolFlag.default(false),
-    moduleAccounting: boolFlag.default(false),
-    moduleReports: boolFlag.default(false),
+    ...setupModuleFields,
   })
   .refine((v) => v.password === v.confirmPassword, {
     message: 'Passwords do not match',

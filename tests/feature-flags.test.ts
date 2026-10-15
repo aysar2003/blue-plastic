@@ -37,14 +37,25 @@ describe('feature flags', () => {
   })
 
   it('hides every launcher app that belongs to a switched-off module', () => {
+    // Older saves only had family flags — child apps inherit until Apps & features is saved again.
     const flags = parseFeatureFlags({ modules: { sales: false, inventory: false } })
     const hidden = LAUNCHER_APPS.filter((app) => !isModuleEnabled(flags, app.key)).map((app) => app.key)
-    expect(hidden.sort()).toEqual(['barcodes', 'customers', 'inventory', 'payments', 'sales', 'stores'])
+    expect(hidden.sort()).toEqual([
+      'barcodes',
+      'customers',
+      'inventory',
+      'payments',
+      'projects',
+      'sales',
+      'stores',
+    ])
   })
 
   it('never hides settings', () => {
     const allOff = parseFeatureFlags({
-      modules: { sales: false, purchases: false, banking: false, inventory: false, pos: false, accounting: false, reports: false },
+      modules: Object.fromEntries(
+        Object.keys(DEFAULT_FEATURE_FLAGS.modules).map((key) => [key, false]),
+      ),
     })
     expect(isModuleEnabled(allOff, 'settings')).toBe(true)
   })
@@ -53,18 +64,20 @@ describe('feature flags', () => {
     expect(parseModulesSelection({ sales: true, pos: false }).sales).toBe(true)
     expect(parseModulesSelection({ sales: true, pos: false }).pos).toBe(false)
     expect(hasAnyModuleEnabled(parseModulesSelection({ sales: false, purchases: false }))).toBe(true)
-    const formOff = modulesFromFormValues({
-      moduleSales: 'false',
-      modulePurchases: 'false',
-      moduleBanking: 'false',
-      moduleInventory: 'false',
-      modulePos: 'false',
-      moduleAccounting: 'false',
-      moduleReports: 'false',
-    })
+    const formOff = modulesFromFormValues({})
     expect(hasAnyModuleEnabled(formOff)).toBe(false)
     expect(featureFlagsWithModules({ ...DEFAULT_FEATURE_FLAGS.modules, sales: false }).modules.sales).toBe(
       false,
     )
+  })
+
+  it('turns each app on or off independently once saved', () => {
+    const flags = parseFeatureFlags({
+      modules: { sales: true, customers: false, projects: true, payments: false },
+    })
+    expect(isModuleEnabled(flags, 'sales')).toBe(true)
+    expect(isModuleEnabled(flags, 'customers')).toBe(false)
+    expect(isModuleEnabled(flags, 'projects')).toBe(true)
+    expect(isModuleEnabled(flags, 'payments')).toBe(false)
   })
 })

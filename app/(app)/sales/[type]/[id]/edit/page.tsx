@@ -75,6 +75,7 @@ export default async function EditSalesDocumentPage({
           customerMessage: document.customerMessage,
           paymentTermId: document.paymentTerm?.id ?? null,
           depositAccountId: document.depositAccount?.id ?? null,
+          projectId: document.projectId ?? null,
           discountAmount: document.discountAmount,
           lines: document.lines.map((line) => ({
             itemId: line.item?.id ?? null,

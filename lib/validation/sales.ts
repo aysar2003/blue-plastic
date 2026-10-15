@@ -57,6 +57,8 @@ export const salesDocumentSchema = z.object({
    * source on save matches QuickBooks linking the two papers.
    */
   convertedFromId: optionalId,
+  /** Optional Projects job this sale belongs to. */
+  projectId: optionalId,
   /** Whole-document discount on an invoice or a sales receipt. Blank means none. */
   discountKind: z.enum(['amount', 'percent']).default('percent'),
   discountValue: z

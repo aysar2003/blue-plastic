@@ -59,9 +59,9 @@ export default async function ApprovalsPage() {
       <Card className="mb-6 p-4 text-sm text-muted-foreground">
         <p className="font-medium text-foreground">How it works</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
-          <li>Staff save a sale or bill as usual (not as draft).</li>
-          <li>If the amount meets the policy floor, it waits here as “Awaiting approval”.</li>
-          <li>An authorised checker Approves (posts the journal) or Rejects (returns to draft).</li>
+          <li>Turn on the kinds of work you want to gate (invoices, sales orders, purchase orders, payments, transfers, customer credit…).</li>
+          <li>Staff save as usual (not as draft). Matching documents wait here as “Awaiting approval”.</li>
+          <li>A checker Approves (posts or opens the document) or Rejects (returns to draft). Use 2–3 levels when more than one person must sign off.</li>
         </ol>
       </Card>
 
@@ -180,16 +180,17 @@ export default async function ApprovalsPage() {
         <section>
           <h2 className="mb-3 text-sm font-semibold">Workflows &amp; rules</h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            Add as many named workflows as you need (e.g. “Invoices under 1,000 — 1 level”,
-            “Invoices 1,000+ — 2 levels”). First matching rule by priority wins. Amount band
-            is min ≤ amount &lt; max. Empty max = no ceiling. Different-person is SOX segregation
-            of duties.
+            Split Approvals by document kind (purchase order vs bill, sales order vs invoice),
+            amount band, and steps. First matching enabled rule by priority wins.
+            Amount band is min ≤ amount &lt; max. Empty max = no ceiling. Different-person is
+            SOX segregation of duties.
           </p>
           <ApprovalPoliciesForm
             policies={policies.map((p) => ({
               id: p.id,
               name: p.name,
               entityType: p.entityType,
+              documentKind: p.documentKind,
               enabled: p.enabled,
               minAmount: p.minAmount.toString(),
               maxAmount: p.maxAmount?.toString() ?? null,

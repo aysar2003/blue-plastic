@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { signIn } from '@/auth'
 import { isNavigationError } from '@/lib/db-error'
+import { MODULE_FORM_KEY_LIST } from '@/lib/feature-flags'
 import { setupSchema } from '@/lib/validation/auth'
 import { isAppError } from '@/server/errors'
 import { registerCompany } from '@/server/services/register.service'
@@ -24,15 +25,7 @@ export async function registerAction(
 ): Promise<RegisterState> {
   const raw = Object.fromEntries(formData) as Record<string, string>
   // Unchecked app boxes omit the key — force false so Zod does not keep stale defaults.
-  for (const key of [
-    'moduleSales',
-    'modulePurchases',
-    'moduleBanking',
-    'moduleInventory',
-    'modulePos',
-    'moduleAccounting',
-    'moduleReports',
-  ] as const) {
+  for (const key of MODULE_FORM_KEY_LIST) {
     raw[key] = formData.get(key) === 'true' || formData.get(key) === 'on' ? 'true' : 'false'
   }
   const values = { ...raw, password: '', confirmPassword: '' }

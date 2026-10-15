@@ -5,20 +5,13 @@ import {
   DEFAULT_FEATURE_FLAGS,
   MODULE_FLAG_LABELS,
   MODULE_FLAGS,
+  moduleActionFields as buildModuleActionFields,
   type ModuleFlag,
 } from '@/lib/feature-flags'
 
 /** Payload keys the Databases actions expect for company apps. */
 export function moduleActionFields(modules: Record<ModuleFlag, boolean>) {
-  return {
-    moduleSales: modules.sales,
-    modulePurchases: modules.purchases,
-    moduleBanking: modules.banking,
-    moduleInventory: modules.inventory,
-    modulePos: modules.pos,
-    moduleAccounting: modules.accounting,
-    moduleReports: modules.reports,
-  }
+  return buildModuleActionFields(modules)
 }
 
 export function allModulesOn(): Record<ModuleFlag, boolean> {

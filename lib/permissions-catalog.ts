@@ -71,6 +71,11 @@ export const PERMISSIONS = [
   'payment:void',
   'payment:approve',
 
+  // Projects (customer job folders)
+  'project:read',
+  'project:create',
+  'project:update',
+
   // Purchases
   'bill:read',
   'bill:create',
@@ -161,6 +166,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         label: 'Approve sales documents',
         hint: 'Maker-checker: post invoices and receipts waiting in Approvals',
       },
+    ],
+  },
+  {
+    id: 'projects',
+    label: 'Projects',
+    description: 'Customer job folders — estimates, orders, and invoices for a site.',
+    permissions: [
+      { key: 'project:read', label: 'View projects' },
+      { key: 'project:create', label: 'Create projects' },
+      { key: 'project:update', label: 'Edit projects and status' },
     ],
   },
   {

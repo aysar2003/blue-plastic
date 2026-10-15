@@ -129,6 +129,7 @@ export function BillForm({
   documentNumber,
   document,
   initialVendorId,
+  initialProjectId,
   neighbors,
   stores = [],
   stock = {},
@@ -148,6 +149,8 @@ export function BillForm({
   documentNumber: string
   /** Set when a vendor page opened this form, so the vendor is already chosen. */
   initialVendorId?: string
+  /** Set when the form was opened from a project job folder. */
+  initialProjectId?: string
   /** The saved document before this one, and the one after, in date then number order. */
   neighbors?: {
     previous: { id: string; number: string } | null
@@ -163,6 +166,7 @@ export function BillForm({
     paymentTermId: string | null
     paymentAccountId: string | null
     offsetCustomerId?: string | null
+    projectId?: string | null
     lines: {
       itemId: string | null
       expenseAccountId: string | null
@@ -184,6 +188,7 @@ export function BillForm({
 
   const [number, setNumber] = usePropState(documentNumber)
   const [vendorId, setVendorId] = useState(document?.vendorId ?? initialVendorId ?? '')
+  const [projectId] = useState(document?.projectId ?? initialProjectId ?? '')
   const [date, setDate] = useState(document?.date ?? today)
   const [reference, setReference] = useState(document?.reference ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
@@ -488,6 +493,7 @@ export function BillForm({
       paymentTermId,
       paymentAccountId: config.needsPaymentAccount && !payFromCustomer ? paymentAccountId : '',
       offsetCustomerId: payFromCustomer ? offsetCustomerId : '',
+      projectId,
       saveAsDraft: draft,
       lines: filled.map((line) => ({
         // A category line has no item and always a quantity of one; an item line

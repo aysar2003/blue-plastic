@@ -4,6 +4,7 @@ import {
   BookOpenIcon,
   CalendarRangeIcon,
   CircleHelpIcon,
+  ClipboardListIcon,
   DatabaseIcon,
   LayoutGridIcon,
   PackageIcon,
@@ -76,6 +77,19 @@ export const MODULES: NavModule[] = [
       { label: 'Customers', href: '/customers', permission: 'customer:read' },
       { label: 'Portal users', href: '/customers/portal-users', permission: 'customer:read' },
       { label: 'Reports', href: '/sales/reports', permission: 'report:read' },
+    ],
+  },
+  {
+    key: 'projects',
+    label: 'Projects',
+    href: '/projects',
+    icon: ClipboardListIcon,
+    permission: 'project:read',
+    owns: ['/projects'],
+    tabs: [
+      { label: 'Overview', href: '/projects' },
+      { label: 'All projects', href: '/projects/list', permission: 'project:read' },
+      { label: 'New', href: '/projects/new', permission: 'project:create' },
     ],
   },
   {

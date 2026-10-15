@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 
+import { MODULE_FORM_KEY_LIST } from '@/lib/feature-flags'
 import {
   documentTemplateSchema,
   organizationAccountingSchema,
@@ -143,13 +144,7 @@ export async function updateFeatureFlagsForm(
     'showCreatorBrand',
     'enableCustomerPortal',
     'enableDocumentApprovals',
-    'moduleSales',
-    'modulePurchases',
-    'moduleBanking',
-    'moduleInventory',
-    'modulePos',
-    'moduleAccounting',
-    'moduleReports',
+    ...MODULE_FORM_KEY_LIST,
   ] as const
   const values: Record<string, string> = {}
   for (const key of keys) {

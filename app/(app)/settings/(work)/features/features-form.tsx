@@ -4,7 +4,13 @@ import { useActionState } from 'react'
 
 import { updateFeatureFlagsForm } from '@/app/(app)/settings/(work)/organization/actions'
 import { idleState } from '@/components/forms/action-state'
-import { CREATOR_BRAND_NAME, type OrgFeatureFlags } from '@/lib/feature-flags'
+import {
+  CREATOR_BRAND_NAME,
+  MODULE_FLAG_LABELS,
+  MODULE_FLAGS,
+  MODULE_FORM_KEYS,
+  type OrgFeatureFlags,
+} from '@/lib/feature-flags'
 import { PRODUCT_NAME } from '@/lib/product-brand'
 
 function Toggle({
@@ -53,53 +59,20 @@ export function FeaturesForm({ flags }: { flags: OrgFeatureFlags }) {
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Apps — on / off</h3>
         <p className="text-xs text-muted-foreground">
-          Company apps for this organisation only. Turn an app off to hide it from Home and the
-          Apps menu for everyone here. The ERP system owner can also grant or revoke apps under
-          Databases → Limits — that is separate from this company page.
+          Each app or section can be turned on or off for this organisation. Turn one off to hide
+          it from Home and the Apps menu for everyone here. The ERP system owner can also grant or
+          revoke apps under Databases → Limits — that is separate from this company page.
         </p>
         <div className="grid gap-2 sm:grid-cols-2">
-          <Toggle
-            name="moduleSales"
-            label="Sales"
-            hint="Invoices, customers, payments"
-            defaultChecked={flags.modules.sales}
-          />
-          <Toggle
-            name="modulePurchases"
-            label="Purchases"
-            hint="Bills, vendors, expenses"
-            defaultChecked={flags.modules.purchases}
-          />
-          <Toggle
-            name="moduleBanking"
-            label="Banking"
-            hint="Accounts, transfers, deposits"
-            defaultChecked={flags.modules.banking}
-          />
-          <Toggle
-            name="moduleInventory"
-            label="Inventory"
-            hint="Products, stock, stores"
-            defaultChecked={flags.modules.inventory}
-          />
-          <Toggle
-            name="modulePos"
-            label="Point of Sale"
-            hint="Registers and till"
-            defaultChecked={flags.modules.pos}
-          />
-          <Toggle
-            name="moduleAccounting"
-            label="Accounting"
-            hint="Chart, journals, periods"
-            defaultChecked={flags.modules.accounting}
-          />
-          <Toggle
-            name="moduleReports"
-            label="Reports"
-            hint="Financial and operations reports"
-            defaultChecked={flags.modules.reports}
-          />
+          {MODULE_FLAGS.map((key) => (
+            <Toggle
+              key={key}
+              name={MODULE_FORM_KEYS[key]}
+              label={MODULE_FLAG_LABELS[key].label}
+              hint={MODULE_FLAG_LABELS[key].hint}
+              defaultChecked={flags.modules[key]}
+            />
+          ))}
         </div>
       </section>
 

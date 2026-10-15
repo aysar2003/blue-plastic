@@ -1,5 +1,11 @@
 import { z } from 'zod'
 
+import {
+  MODULE_FLAGS,
+  MODULE_FORM_KEYS,
+  modulesFromFormValues,
+  type ModuleFlag,
+} from '@/lib/feature-flags'
 import { countryCode, currencyCode, email, optionalText, requiredText } from './common'
 
 export const organizationUpdateSchema = z.object({
@@ -48,6 +54,10 @@ const boolFlag = z
   .union([z.literal('true'), z.literal('false'), z.literal('on'), z.boolean()])
   .transform((v) => v === true || v === 'true' || v === 'on')
 
+const moduleFeatureFields = Object.fromEntries(
+  MODULE_FLAGS.map((key) => [MODULE_FORM_KEYS[key], boolFlag.default(true)]),
+) as Record<(typeof MODULE_FORM_KEYS)[ModuleFlag], z.ZodDefault<z.ZodType<boolean>>>
+
 export const organizationFeaturesSchema = z.object({
   allowJournalDelete: boolFlag.default(true),
   allowCustomerDelete: boolFlag.default(true),
@@ -58,16 +68,18 @@ export const organizationFeaturesSchema = z.object({
   showCreatorBrand: boolFlag.default(true),
   enableCustomerPortal: boolFlag.default(false),
   enableDocumentApprovals: boolFlag.default(false),
-  moduleSales: boolFlag.default(true),
-  modulePurchases: boolFlag.default(true),
-  moduleBanking: boolFlag.default(true),
-  moduleInventory: boolFlag.default(true),
-  modulePos: boolFlag.default(true),
-  moduleAccounting: boolFlag.default(true),
-  moduleReports: boolFlag.default(true),
+  enableTax: boolFlag.optional(),
+  ...moduleFeatureFields,
 })
 
 export type OrganizationFeaturesInput = z.infer<typeof organizationFeaturesSchema>
+
+/** Read the modules map from a features form payload. */
+export function modulesFromFeaturesInput(
+  input: OrganizationFeaturesInput,
+): Record<ModuleFlag, boolean> {
+  return modulesFromFormValues(input as Record<string, unknown>)
+}
 
 const bankLine = z.object({
   name: optionalText(80),

@@ -49,6 +49,7 @@ export const createApprovalPolicy = action
     z.object({
       name: z.string().min(1).max(120),
       entityType: entityTypeSchema,
+      documentKind: z.string().max(40).nullable().optional(),
       enabled: z.boolean().optional(),
       minAmount: z.union([z.string(), z.number()]).optional(),
       maxAmount: z.union([z.string(), z.number(), z.null()]).optional(),
@@ -69,6 +70,7 @@ export const updateApprovalPolicy = action
     z.object({
       id: z.string().min(1),
       name: z.string().min(1).max(120),
+      documentKind: z.string().max(40).nullable().optional(),
       enabled: z.boolean(),
       minAmount: z.union([z.string(), z.number()]),
       maxAmount: z.union([z.string(), z.number(), z.null()]).optional(),

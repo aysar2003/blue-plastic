@@ -171,6 +171,7 @@ type DocumentSeed = {
   customerMessage: string | null
   paymentTermId: string | null
   depositAccountId: string | null
+  projectId?: string | null
   discountAmount?: string | null
   lines: {
     itemId: string | null
@@ -210,6 +211,7 @@ export function DocumentForm({
   documentNumber,
   initialCustomerId,
   initialStoreId,
+  initialProjectId,
   neighbors,
   stores = [],
   stock = {},
@@ -231,6 +233,8 @@ export function DocumentForm({
   initialCustomerId?: string
   /** Set when the form was opened from a store, so lines issue from that shelf. */
   initialStoreId?: string
+  /** Set when the form was opened from a project job folder. */
+  initialProjectId?: string
   /** The saved document before this one, and the one after, in date then number order. */
   neighbors?: {
     previous: { id: string; number: string } | null
@@ -284,6 +288,7 @@ export function DocumentForm({
 
   const [number, setNumber] = usePropState(documentNumber)
   const [customerId, setCustomerId] = useState(document?.customerId ?? initialCustomerId ?? '')
+  const [projectId] = useState(document?.projectId ?? initialProjectId ?? '')
   const [date, setDate] = useState(document?.date ?? today)
   const [reference, setReference] = useState(document?.reference ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
@@ -688,6 +693,7 @@ export function DocumentForm({
       customerMessage,
       paymentTermId,
       depositAccountId: config.needsDeposit ? depositAccountId : '',
+      projectId,
       saveAsDraft: draft,
       ...(convertedFromId && !document?.id ? { convertedFromId } : {}),
       ...(offersDocumentDiscount ? { discountKind, discountValue } : {}),

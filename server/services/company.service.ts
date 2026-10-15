@@ -4,7 +4,11 @@ import type { Prisma } from '@prisma/client'
 
 import { companyLimitStatus } from '@/lib/company-limits'
 import { MAX_SUB_COMPANIES } from '@/lib/company-group'
-import { featureFlagsWithModules, parseFeatureFlags } from '@/lib/feature-flags'
+import {
+  featureFlagsWithModules,
+  modulesFromFormValues,
+  parseFeatureFlags,
+} from '@/lib/feature-flags'
 import type {
   AttachSubCompanyInput,
   CreateCompanyInput,
@@ -56,15 +60,7 @@ export async function createCompany(ctx: OrgContext, input: CreateCompanyInput) 
     parentName = parent.name
   }
 
-  const modules = {
-    sales: input.moduleSales,
-    purchases: input.modulePurchases,
-    banking: input.moduleBanking,
-    inventory: input.moduleInventory,
-    pos: input.modulePos,
-    accounting: input.moduleAccounting,
-    reports: input.moduleReports,
-  }
+  const modules = modulesFromFormValues(input as Record<string, unknown>)
 
   return db.$transaction(async (tx) => {
     const organization = await tx.organization.create({
@@ -348,15 +344,7 @@ export async function updateCompanyLimits(ctx: OrgContext, input: UpdateCompanyL
   const current = parseFeatureFlags(organization.featureFlags)
   const nextFlags = {
     ...current,
-    modules: {
-      sales: input.moduleSales,
-      purchases: input.modulePurchases,
-      banking: input.moduleBanking,
-      inventory: input.moduleInventory,
-      pos: input.modulePos,
-      accounting: input.moduleAccounting,
-      reports: input.moduleReports,
-    },
+    modules: modulesFromFormValues(input as Record<string, unknown>),
   }
 
   const updated = await db.organization.update({

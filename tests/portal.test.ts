@@ -83,6 +83,8 @@ describe('customer portal access', () => {
 
 describe('afterSignInPath for portal', () => {
   it('exports a function that resolves a path string', async () => {
+    // Needs a live DB; hosted Supabase URLs are stripped in tests/setup unless ALLOW_DB_TESTS=1.
+    if (!process.env.DATABASE_URL) return
     // Without a DB user this returns the staff default; the CUSTOMER branch is
     // covered when loadCompanyAccess finds a CUSTOMER membership.
     await expect(afterSignInPath('missing-user')).resolves.toMatch(/^\/(dashboard|databases|portal)$/)

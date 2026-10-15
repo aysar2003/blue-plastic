@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest'
 
-import { DEFAULT_FEATURE_FLAGS } from '@/lib/feature-flags'
+import { DEFAULT_FEATURE_FLAGS, MODULE_FORM_KEYS, MODULE_FLAGS } from '@/lib/feature-flags'
 import { MAX_SUB_COMPANIES } from '@/lib/company-group'
 import type { OrgContext } from '@/server/auth/context'
 import { permissionsFor } from '@/server/auth/permissions'
@@ -20,15 +20,9 @@ import {
 /** Needs a real database; skipped when DATABASE_URL is not set. */
 const suite = process.env.DATABASE_URL ? describe : describe.skip
 
-const ALL_APPS = {
-  moduleSales: true,
-  modulePurchases: true,
-  moduleBanking: true,
-  moduleInventory: true,
-  modulePos: true,
-  moduleAccounting: true,
-  moduleReports: true,
-}
+const ALL_APPS = Object.fromEntries(
+  MODULE_FLAGS.map((key) => [MODULE_FORM_KEYS[key], true]),
+) as Record<string, boolean>
 
 const stamp = `grp-${Date.now().toString(36)}`
 const createdIds: string[] = []

@@ -53,6 +53,8 @@ export const purchaseDocumentSchema = z.object({
   paymentAccountId: optionalId,
   /** Settle an expense by crediting this customer's receivable. */
   offsetCustomerId: optionalId,
+  /** Optional Projects job this purchase belongs to. */
+  projectId: optionalId,
   saveAsDraft: z.coerce.boolean().default(false),
   lines: z.array(purchaseLineSchema).min(1, 'Add at least one line').max(200),
 })

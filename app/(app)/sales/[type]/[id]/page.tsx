@@ -172,6 +172,16 @@ export default async function SalesDocumentPage({
         <Detail label="Total" tone="money">
           <span className="tabular font-semibold">{formatMoney(document.total, currency)}</span>
         </Detail>
+        {document.project ? (
+          <Detail label="Project" tone="info">
+            <Link
+              href={`/projects/${document.project.id}`}
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              {document.project.number} · {document.project.name}
+            </Link>
+          </Detail>
+        ) : null}
         {config.type === 'INVOICE' ? (
           <Detail label="Outstanding" tone="sales">
             <span className="tabular font-semibold">{formatMoney(document.balance, currency)}</span>

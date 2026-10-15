@@ -17,7 +17,11 @@ import type { OrgContext } from '@/server/auth/context'
 import type { Permission } from '@/server/auth/permissions'
 import { db, type Tx } from '@/server/db'
 import { requestMeta, writeAudit } from '@/server/audit'
-import { APPROVAL_ENTITY_TYPES, entityTypeLabel } from '@/lib/approval-labels'
+import {
+  APPROVAL_ENTITY_TYPES,
+  entityTypeLabel,
+  isValidDocumentKind,
+} from '@/lib/approval-labels'
 
 const DEFAULT_ENTITY_TYPES = APPROVAL_ENTITY_TYPES
 
@@ -78,11 +82,25 @@ function parseAmount(raw: string | number | null | undefined, label: string): De
   return value
 }
 
+function normalizeDocumentKind(
+  entityType: ApprovalEntityType,
+  raw: string | null | undefined,
+): string | null {
+  const kind = raw?.trim() || null
+  if (!isValidDocumentKind(entityType, kind)) {
+    throw validation('That document kind does not belong to this family.', {
+      documentKind: ['Choose a kind for this family, or leave blank for all'],
+    })
+  }
+  return kind
+}
+
 export async function createPolicy(
   ctx: OrgContext,
   input: {
     name: string
     entityType: ApprovalEntityType
+    documentKind?: string | null
     enabled?: boolean
     minAmount?: string | number
     maxAmount?: string | number | null
@@ -93,6 +111,7 @@ export async function createPolicy(
 ) {
   const name = input.name.trim()
   if (!name) throw validation('Give the workflow a name.', { name: ['Required'] })
+  const documentKind = normalizeDocumentKind(input.entityType, input.documentKind)
   const minAmount = parseAmount(input.minAmount ?? 0, 'Minimum amount') ?? new Decimal(0)
   const maxAmount = parseAmount(input.maxAmount ?? null, 'Maximum amount')
   if (maxAmount && maxAmount.lessThanOrEqualTo(minAmount)) {
@@ -106,6 +125,7 @@ export async function createPolicy(
       orgId: ctx.orgId,
       name,
       entityType: input.entityType,
+      documentKind,
       enabled: input.enabled !== false,
       minAmount,
       maxAmount,
@@ -121,6 +141,7 @@ export async function updatePolicy(
   input: {
     id: string
     name: string
+    documentKind?: string | null
     enabled: boolean
     minAmount: string | number
     maxAmount?: string | number | null
@@ -136,6 +157,10 @@ export async function updatePolicy(
 
   const name = input.name.trim()
   if (!name) throw validation('Give the workflow a name.', { name: ['Required'] })
+  const documentKind =
+    input.documentKind === undefined
+      ? existing.documentKind
+      : normalizeDocumentKind(existing.entityType, input.documentKind)
   const minAmount = parseAmount(input.minAmount, 'Minimum amount') ?? new Decimal(0)
   const maxAmount = parseAmount(input.maxAmount ?? null, 'Maximum amount')
   if (maxAmount && maxAmount.lessThanOrEqualTo(minAmount)) {
@@ -148,6 +173,7 @@ export async function updatePolicy(
     where: { id: existing.id },
     data: {
       name,
+      documentKind,
       enabled: input.enabled,
       minAmount,
       maxAmount,
@@ -184,26 +210,34 @@ function amountInBand(value: Decimal, minAmount: Decimal, maxAmount: Decimal | n
 }
 
 /**
- * True when this posting must wait in the inbox instead of hitting the ledger.
+ * True when this document must wait in the inbox instead of posting / opening.
  * Picks the first matching enabled workflow (priority, then higher floor).
+ *
+ * `documentKind` narrows Sales/Purchases (e.g. SALES_ORDER, PURCHASE_ORDER).
+ * A rule with a blank kind matches every kind in the family; a specific kind
+ * only matches that subtype — so you can approve POs without holding every bill.
  */
 export async function needsApproval(
   ctx: OrgContext,
   entityType: ApprovalEntityType,
   amount: Decimal | string | number,
   tx: DbLike = db,
+  documentKind?: string | null,
 ): Promise<{ required: boolean; levels: number; requireDifferentApprover: boolean; policyId?: string }> {
   if (!approvalsEnabled(ctx)) {
     return { required: false, levels: 1, requireDifferentApprover: true }
   }
   await ensureDefaultPolicies(ctx, tx)
   const value = amount instanceof Decimal ? amount : new Decimal(amount || 0)
+  const kind = documentKind?.trim() || null
   const policies = await tx.approvalPolicy.findMany({
     where: { orgId: ctx.orgId, entityType, enabled: true },
     orderBy: [{ priority: 'asc' }, { minAmount: 'desc' }],
   })
 
   for (const policy of policies) {
+    // Specific rule only fires for that kind; blank rule covers the whole family.
+    if (policy.documentKind && policy.documentKind !== kind) continue
     if (!amountInBand(value, policy.minAmount, policy.maxAmount)) continue
     return {
       required: true,

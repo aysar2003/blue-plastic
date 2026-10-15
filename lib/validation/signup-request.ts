@@ -1,8 +1,20 @@
 import { z } from 'zod'
 
+import {
+  hasAnyModuleEnabled,
+  MODULE_FLAGS,
+  MODULE_FORM_KEYS,
+  modulesFromFormValues,
+  type ModuleFlag,
+} from '@/lib/feature-flags'
+
 const boolFlag = z
   .union([z.boolean(), z.literal('true'), z.literal('false'), z.literal('on')])
   .transform((v) => v === true || v === 'true' || v === 'on')
+
+const reviewModuleFields = Object.fromEntries(
+  MODULE_FLAGS.map((key) => [MODULE_FORM_KEYS[key], boolFlag.optional()]),
+) as Record<(typeof MODULE_FORM_KEYS)[ModuleFlag], z.ZodOptional<z.ZodType<boolean>>>
 
 /**
  * System owner reviews a public /register request.
@@ -13,28 +25,15 @@ export const reviewSignupRequestSchema = z
     id: z.string().cuid(),
     decision: z.enum(['approve', 'reject']),
     note: z.string().trim().max(500).optional(),
-    moduleSales: boolFlag.optional(),
-    modulePurchases: boolFlag.optional(),
-    moduleBanking: boolFlag.optional(),
-    moduleInventory: boolFlag.optional(),
-    modulePos: boolFlag.optional(),
-    moduleAccounting: boolFlag.optional(),
-    moduleReports: boolFlag.optional(),
+    ...reviewModuleFields,
   })
   .superRefine((v, ctx) => {
     if (v.decision !== 'approve') return
-    const keys = [
-      v.moduleSales,
-      v.modulePurchases,
-      v.moduleBanking,
-      v.moduleInventory,
-      v.modulePos,
-      v.moduleAccounting,
-      v.moduleReports,
-    ]
+    const data = v as Record<string, unknown>
+    const sent = MODULE_FLAGS.some((key) => data[MODULE_FORM_KEYS[key]] !== undefined)
     // When the owner sends an apps override, at least one must stay on.
-    if (keys.every((value) => value === undefined)) return
-    if (!keys.some((value) => value === true)) {
+    if (!sent) return
+    if (!hasAnyModuleEnabled(modulesFromFormValues(data))) {
       ctx.addIssue({
         code: 'custom',
         path: ['moduleSales'],

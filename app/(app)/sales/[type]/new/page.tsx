@@ -9,6 +9,7 @@ import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { peekDocumentNumber } from '@/server/sequences'
 import { loadFormOptions } from '@/server/services/sales-options'
+import * as projectService from '@/server/services/project.service'
 import * as salesService from '@/server/services/sales.service'
 import * as storeService from '@/server/services/store.service'
 
@@ -41,7 +42,11 @@ export default async function NewSalesDocumentPage({
     storeService.quantities(ctx),
     loadsSources ? salesService.listConvertibleSources(ctx) : Promise.resolve([]),
   ])
-  const requested = typeof query.customer === 'string' ? query.customer : undefined
+  const requestedProject = typeof query.project === 'string' ? query.project : undefined
+  const project = requestedProject
+    ? await projectService.peek(ctx, requestedProject).catch(() => null)
+    : null
+  const requested = typeof query.customer === 'string' ? query.customer : project?.customerId
   const initialCustomerId = options.customers.some((customer) => customer.id === requested)
     ? requested
     : undefined
@@ -73,6 +78,7 @@ export default async function NewSalesDocumentPage({
         documentNumber={documentNumber}
         initialCustomerId={initialCustomerId}
         initialStoreId={initialStoreId}
+        initialProjectId={project?.id}
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}

@@ -154,6 +154,16 @@ export default async function PurchaseDocumentPage({
         <Detail label="Total">
           <span className="tabular font-semibold">{formatMoney(document.total, currency)}</span>
         </Detail>
+        {document.project ? (
+          <Detail label="Project">
+            <Link
+              href={`/projects/${document.project.id}`}
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              {document.project.number} · {document.project.name}
+            </Link>
+          </Detail>
+        ) : null}
         {config.type === 'BILL' ? (
           <Detail label="Still owing">
             <span className="tabular font-semibold">{formatMoney(document.balance, currency)}</span>

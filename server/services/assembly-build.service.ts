@@ -103,7 +103,7 @@ export async function createInTx(
     }
   }
 
-  let storeId = input.storeId ?? null
+  const storeId = input.storeId ?? null
   if (storeId) {
     const store = await tx.store.findFirst({
       where: { id: storeId, orgId: ctx.orgId, isActive: true },

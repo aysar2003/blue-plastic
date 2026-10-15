@@ -57,6 +57,8 @@ export function FormLayoutPicker({
       const raw = window.localStorage.getItem(templateLookStorageKey(storageKey, option.id))
       next[option.id] = parseTemplateLook(raw, accent)
     }
+    // Sync preview looks from localStorage after mount / look edits.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is an external system
     setLooks(next)
   }, [options, storageKey, accent, lookTick])
 

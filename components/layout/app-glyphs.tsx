@@ -41,6 +41,8 @@ export type AppGlyphName =
   | 'help'
   | 'items'
   | 'barcodes'
+  | 'projects'
+  | 'approvals'
 
 const GLYPHS: Record<AppGlyphName, ReactNode> = {
   // A till: plum body, teal screen, a yellow ticket coming out of the top.
@@ -253,6 +255,34 @@ const GLYPHS: Record<AppGlyphName, ReactNode> = {
       <rect x="30" y="12" width="3" height="18" fill={C.plumDeep} />
       <rect x="35" y="12" width="2" height="18" fill={C.plumDeep} />
       <rect x="12" y="33" width="24" height="3" rx="1.5" fill={C.teal} />
+    </>
+  ),
+  // Job folder: teal body, amber tab, blue site pin.
+  projects: (
+    <>
+      <path d="M8 16h10l3 4h19a3 3 0 0 1 3 3v17a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V19a3 3 0 0 1 3-3Z" fill={C.teal} />
+      <path d="M8 16V13a3 3 0 0 1 3-3h8l2.5 3H8Z" fill={C.amber} />
+      <circle cx="24" cy="28" r="5.5" fill={C.blue} />
+      <path d="M24 33.5c0 0 6-5.2 6-9.2a6 6 0 1 0-12 0c0 4 6 9.2 6 9.2Z" fill={C.paper} opacity="0.95" />
+      <circle cx="24" cy="24.5" r="2.2" fill={C.blue} />
+    </>
+  ),
+  // Maker-checker: plum clipboard, teal check, amber stamp.
+  approvals: (
+    <>
+      <rect x="12" y="6" width="24" height="36" rx="4" fill={C.plum} />
+      <rect x="18" y="4" width="12" height="6" rx="2" fill={C.amber} />
+      <rect x="16" y="16" width="16" height="3" rx="1.5" fill={C.paper} opacity="0.85" />
+      <rect x="16" y="22" width="12" height="3" rx="1.5" fill={C.paper} opacity="0.7" />
+      <circle cx="32" cy="34" r="9" fill={C.teal} />
+      <path
+        d="M27.5 34.2l3 3 6.5-7"
+        fill="none"
+        stroke={C.paper}
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </>
   ),
 }

@@ -127,6 +127,17 @@ enum DocumentType {
   DELIVERY_NOTE
   /// Finished goods built from a bill of materials.
   ASSEMBLY_BUILD
+  /// Customer job / project folder (Odoo-style).
+  PROJECT
+}
+
+/// Lifecycle of a customer job (Projects app).
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  DONE
+  CANCELLED
 }
 
 /// Statement classification. Determines which financial statement an account
@@ -559,6 +570,7 @@ model Organization {
   posOrders         PosOrder[]
   approvalPolicies  ApprovalPolicy[]
   approvalRequests  ApprovalRequest[]
+  projects          Project[]
 
   @@index([parentOrgId])
   @@map("organizations")
@@ -601,6 +613,7 @@ model User {
   customerPortalUsers CustomerPortalUser[]
   approvalRequestsSubmitted ApprovalRequest[]  @relation("ApprovalSubmittedBy")
   approvalDecisions         ApprovalDecision[] @relation("ApprovalDecidedBy")
+  projectsCreated           Project[]          @relation("ProjectCreatedBy")
 
   @@map("users")
 }
@@ -1194,6 +1207,7 @@ model Customer {
   /// Expenses settled by reducing what this customer owes (or building a credit).
   offsetPurchases PurchaseDocument[] @relation("PurchaseOffsetCustomer")
   portalUsers  CustomerPortalUser[]
+  projects     Project[]
 
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
@@ -1803,6 +1817,43 @@ model TaxCodeRate {
 /// table.
 ///
 /// Totals are stored, not derived. They are what the customer was shown and what
+/// A customer job folder (Projects app). Groups estimates, orders, invoices,
+/// POs and bills for one site of work — not a task board.
+model Project {
+  id    String @id @default(cuid())
+  orgId String
+
+  number String
+  name   String
+
+  customerId String
+  /// Site / delivery address for the job, free text.
+  siteLocation String?
+  description  String?
+
+  status ProjectStatus @default(DRAFT)
+
+  startDate DateTime? @db.Date
+  endDate   DateTime? @db.Date
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy    User?        @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  salesDocuments    SalesDocument[]
+  purchaseDocuments PurchaseDocument[]
+
+  @@unique([orgId, number])
+  @@unique([id, orgId])
+  @@index([orgId, status, updatedAt(sort: Desc)])
+  @@index([orgId, customerId, updatedAt(sort: Desc)])
+  @@map("projects")
+}
+
 /// the ledger was told, and recomputing them later from prices that may since
 /// have changed would quietly restate a document that has already been sent.
 /// The **outstanding balance** is the opposite: always derived from applications,
@@ -1857,6 +1908,9 @@ model SalesDocument {
   /// Set on the invoice or sales receipt an estimate, quotation, or sales order became.
   convertedFromId String? @unique
 
+  /// Optional job this sale belongs to (Projects app).
+  projectId String?
+
   voidedAt   DateTime? @db.Timestamptz(6)
   voidReason String?
 
@@ -1875,6 +1929,7 @@ model SalesDocument {
   paymentTerm    PaymentTerm?        @relation(fields: [paymentTermId], references: [id], onDelete: SetNull)
   depositAccount LedgerAccount?      @relation("SalesDepositAccount", fields: [depositAccountId], references: [id], onDelete: Restrict)
   journal        Journal?            @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
   lines          SalesDocumentLine[]
 
   convertedFrom SalesDocument? @relation("EstimateConversion", fields: [convertedFromId], references: [id], onDelete: SetNull)
@@ -1893,6 +1948,7 @@ model SalesDocument {
   @@unique([id, orgId])
   @@index([orgId, type, status, date(sort: Desc)])
   @@index([orgId, customerId, date(sort: Desc)])
+  @@index([orgId, projectId, date(sort: Desc)])
   @@index([orgId, dueDate])
   @@index([orgId, deletedAt])
   @@map("sales_documents")
@@ -2086,6 +2142,9 @@ model PurchaseDocument {
   /// turned up.
   convertedFromId String?
 
+  /// Optional job this purchase belongs to (Projects app).
+  projectId String?
+
   voidedAt   DateTime? @db.Timestamptz(6)
   voidReason String?
 
@@ -2105,6 +2164,7 @@ model PurchaseDocument {
   paymentAccount LedgerAccount?         @relation("PurchasePaymentAccount", fields: [paymentAccountId], references: [id], onDelete: Restrict)
   offsetCustomer Customer?              @relation("PurchaseOffsetCustomer", fields: [offsetCustomerId], references: [id], onDelete: Restrict)
   journal        Journal?               @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  project        Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
   lines          PurchaseDocumentLine[]
 
   convertedFrom PurchaseDocument?  @relation("OrderConversion", fields: [convertedFromId], references: [id], onDelete: SetNull)
@@ -2118,6 +2178,7 @@ model PurchaseDocument {
   @@unique([id, orgId])
   @@index([orgId, type, status, date(sort: Desc)])
   @@index([orgId, vendorId, date(sort: Desc)])
+  @@index([orgId, projectId, date(sort: Desc)])
   @@index([orgId, offsetCustomerId, date(sort: Desc)])
   @@index([orgId, dueDate])
   @@index([convertedFromId])
@@ -2988,6 +3049,9 @@ model ApprovalPolicy {
   name       String
   entityType ApprovalEntityType
   enabled    Boolean            @default(true)
+  /// Narrow within a family: e.g. INVOICE, SALES_ORDER, PURCHASE_ORDER.
+  /// Null = every kind in that family (Sales, Purchases, …).
+  documentKind String?
   /// Inclusive floor in org currency.
   minAmount  Decimal            @default(0) @db.Decimal(19, 4)
   /// Exclusive ceiling. Null = unlimited.
@@ -3006,6 +3070,7 @@ model ApprovalPolicy {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId, entityType, enabled, priority])
+  @@index([orgId, entityType, documentKind])
   @@index([orgId, enabled])
   @@map("approval_policies")
 }

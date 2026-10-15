@@ -41,6 +41,7 @@ const SALES: Permission[] = [
   'invoice:update',
   'invoice:send',
   'payment:create',
+  'project:create',
   'pos:read',
   'pos:sell',
   'report:read',
@@ -68,6 +69,7 @@ const BOOKKEEPER: Permission[] = [
   'payment:create',
   'payment:update',
   'payment:void',
+  'project:create',
   'bill:create',
   'bill:update',
   'bill:void',
@@ -122,6 +124,7 @@ const ACCOUNTANT: Permission[] = [
   'pos:manage',
   'audit:read',
   'report:overview',
+  'project:update',
 ]
 
 const ADMIN: Permission[] = [

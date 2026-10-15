@@ -27,6 +27,7 @@ import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import * as approvalService from '@/server/services/approval.service'
+import { resolveProjectId } from '@/server/services/project.service'
 import * as storeService from '@/server/services/store.service'
 import { loadCodeForCalculation } from '@/server/services/tax.service'
 
@@ -43,6 +44,8 @@ const DOCUMENT_SELECT = {
   subtotal: true, taxTotal: true, total: true,
   currencyCode: true, paymentAccountId: true, offsetCustomerId: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
+  projectId: true,
+  project: { select: { id: true, number: true, name: true } },
   vendor: { select: { id: true, displayName: true, email: true, phone: true } },
   offsetCustomer: { select: { id: true, displayName: true, email: true, phone: true } },
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
@@ -428,6 +431,7 @@ async function createWithin(
 ) {
   {
     const { vendor, offsetCustomerId } = await resolvePurchaseParty(tx, ctx, type, input)
+    const projectId = await resolveProjectId(tx, ctx, input.projectId)
     const lines = await resolveLines(tx, ctx, input.lines, vendor.defaultExpenseAccountId)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency)
@@ -456,10 +460,10 @@ async function createWithin(
     })
     if (clash) throw numberTaken()
 
-    const gate =
-      !isDraft && PURCHASE_POSTS_A_JOURNAL[type]
-        ? await approvalService.needsApproval(ctx, 'PURCHASE_DOCUMENT', priced.total, tx)
-        : { required: false, levels: 1, requireDifferentApprover: true }
+    // Bills post to the ledger; purchase orders may still wait for approval to open.
+    const gate = !isDraft
+      ? await approvalService.needsApproval(ctx, 'PURCHASE_DOCUMENT', priced.total, tx, type)
+      : { required: false, levels: 1, requireDifferentApprover: true }
     const holdForApproval = gate.required
 
     const document = await tx.purchaseDocument.create({
@@ -482,6 +486,7 @@ async function createWithin(
         currencyCode: ctx.organization.baseCurrency,
         paymentAccountId: input.paymentAccountId ?? null,
         offsetCustomerId,
+        projectId,
         createdById: ctx.userId,
         lines: {
           create: priced.lines.map((line) => ({
@@ -558,6 +563,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
     }
 
     const { vendor, offsetCustomerId } = await resolvePurchaseParty(tx, ctx, existing.type, input)
+    const projectId = await resolveProjectId(tx, ctx, input.projectId)
 
     if (existing.type === 'EXPENSE' && !input.saveAsDraft) {
       await requireExpenseSettlement(tx, ctx, input.paymentAccountId, offsetCustomerId)
@@ -598,10 +604,9 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
     })
     if (numberClash) throw numberTaken()
 
-    const gate =
-      !input.saveAsDraft && PURCHASE_POSTS_A_JOURNAL[existing.type]
-        ? await approvalService.needsApproval(ctx, 'PURCHASE_DOCUMENT', priced.total, tx)
-        : { required: false, levels: 1, requireDifferentApprover: true }
+    const gate = !input.saveAsDraft
+      ? await approvalService.needsApproval(ctx, 'PURCHASE_DOCUMENT', priced.total, tx, existing.type)
+      : { required: false, levels: 1, requireDifferentApprover: true }
     const holdForApproval = gate.required
 
     await tx.purchaseDocument.update({
@@ -623,6 +628,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
         total: priced.total.toFixed(4),
         paymentAccountId: input.paymentAccountId ?? null,
         offsetCustomerId,
+        projectId,
         journalId: null,
         version: { increment: 1 },
         status: input.saveAsDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
@@ -684,7 +690,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     where: { id, orgId: ctx.orgId },
     select: {
       id: true, type: true, number: true, date: true, memo: true, vendorId: true,
-      paymentAccountId: true, offsetCustomerId: true, journalId: true,
+      status: true, paymentAccountId: true, offsetCustomerId: true, journalId: true,
       lines: {
         orderBy: { lineNumber: 'asc' },
         select: {
@@ -696,7 +702,16 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     },
   })
   if (!document) throw notFound('Document')
-  if (!PURCHASE_POSTS_A_JOURNAL[document.type]) return null
+  // Purchase orders have no journal — approval only opens them for receiving.
+  if (!PURCHASE_POSTS_A_JOURNAL[document.type]) {
+    if (document.status === 'PENDING_APPROVAL') {
+      await tx.purchaseDocument.update({
+        where: { id: document.id },
+        data: { status: 'OPEN' },
+      })
+    }
+    return null
+  }
   if (document.journalId) throw conflict(`${document.number} is already posted.`)
 
   for (const line of document.lines) {
@@ -1242,7 +1257,7 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
       where: { id: input.orderId, orgId: ctx.orgId, type: 'PURCHASE_ORDER' },
       select: {
         id: true, number: true, status: true, vendorId: true, reference: true, memo: true,
-        paymentTermId: true,
+        paymentTermId: true, projectId: true,
         lines: {
           orderBy: { lineNumber: 'asc' },
           select: {
@@ -1313,6 +1328,7 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
           input.memo ??
           [`Received against ${order.number}`, order.memo].filter(Boolean).join(' — '),
         paymentTermId: order.paymentTermId,
+        projectId: order.projectId,
         lines: order.lines
           .filter((line) => receiving.has(line.id))
           .map((line) => ({

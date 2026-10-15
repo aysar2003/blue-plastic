@@ -1,42 +1,24 @@
 import { z } from 'zod'
 
+import {
+  hasAnyModuleEnabled,
+  MODULE_FLAGS,
+  MODULE_FORM_KEYS,
+  modulesFromFormValues,
+  type ModuleFlag,
+} from '@/lib/feature-flags'
 import { currencyCode, requiredText } from './common'
 
 const boolFlag = z
   .union([z.boolean(), z.literal('true'), z.literal('false'), z.literal('on')])
   .transform((v) => v === true || v === 'true' || v === 'on')
 
-const companyModulesFields = {
-  moduleSales: boolFlag.default(true),
-  modulePurchases: boolFlag.default(true),
-  moduleBanking: boolFlag.default(true),
-  moduleInventory: boolFlag.default(true),
-  modulePos: boolFlag.default(true),
-  moduleAccounting: boolFlag.default(true),
-  moduleReports: boolFlag.default(true),
-} as const
+const companyModulesFields = Object.fromEntries(
+  MODULE_FLAGS.map((key) => [MODULE_FORM_KEYS[key], boolFlag.default(true)]),
+) as Record<(typeof MODULE_FORM_KEYS)[ModuleFlag], z.ZodDefault<z.ZodType<boolean>>>
 
-function requireAtLeastOneApp(
-  v: {
-    moduleSales: boolean
-    modulePurchases: boolean
-    moduleBanking: boolean
-    moduleInventory: boolean
-    modulePos: boolean
-    moduleAccounting: boolean
-    moduleReports: boolean
-  },
-  ctx: z.RefinementCtx,
-) {
-  const any =
-    v.moduleSales ||
-    v.modulePurchases ||
-    v.moduleBanking ||
-    v.moduleInventory ||
-    v.modulePos ||
-    v.moduleAccounting ||
-    v.moduleReports
-  if (!any) {
+function requireAtLeastOneApp(v: Record<string, unknown>, ctx: z.RefinementCtx) {
+  if (!hasAnyModuleEnabled(modulesFromFormValues(v))) {
     ctx.addIssue({
       code: 'custom',
       path: ['moduleSales'],

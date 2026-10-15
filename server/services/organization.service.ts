@@ -2,6 +2,7 @@ import 'server-only'
 
 import { parseDocumentTemplate, type DocumentTemplate } from '@/lib/document-template'
 import { parseFeatureFlags, type OrgFeatureFlags } from '@/lib/feature-flags'
+import { modulesFromFeaturesInput } from '@/lib/validation/organization'
 import type {
   DocumentTemplateInput,
   OrganizationAccountingInput,
@@ -199,15 +200,7 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       enableTax: previous.enableTax,
       enableCustomerPortal: input.enableCustomerPortal,
       enableDocumentApprovals: input.enableDocumentApprovals,
-      modules: {
-        sales: input.moduleSales,
-        purchases: input.modulePurchases,
-        banking: input.moduleBanking,
-        inventory: input.moduleInventory,
-        pos: input.modulePos,
-        accounting: input.moduleAccounting,
-        reports: input.moduleReports,
-      },
+      modules: modulesFromFeaturesInput(input),
     }
 
     const after = await tx.organization.update({
