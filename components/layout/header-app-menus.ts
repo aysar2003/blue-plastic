@@ -97,6 +97,10 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
     { label: 'Office · stores', href: '/stores', permission: 'inventory:read' },
     { label: 'Stock on hand', href: '/inventory/stock', permission: 'inventory:read' },
   ],
+  approvals: [
+    { label: 'Waiting', href: '/approvals', permission: 'invoice:approve' },
+    { label: 'Features (turn on)', href: '/settings/features', permission: 'org:update' },
+  ],
   reports: [
     { label: 'All reports', href: '/reports', permission: 'report:read' },
     { label: 'Profit and Loss', href: '/reports/profit-loss', permission: 'report:read' },

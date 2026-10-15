@@ -69,6 +69,30 @@ enum AuditAction {
   REVERSE
   CLOSE_PERIOD
   REOPEN_PERIOD
+  SUBMIT
+  APPROVE
+  REJECT
+}
+
+/// What kind of record sits in the approvals inbox (SOX / maker-checker).
+enum ApprovalEntityType {
+  SALES_DOCUMENT
+  PURCHASE_DOCUMENT
+  CUSTOMER_PAYMENT
+  BILL_PAYMENT
+  JOURNAL
+  INVENTORY_ADJUSTMENT
+  BANK_TRANSFER
+  DEPOSIT
+  CUSTOMER
+  VENDOR
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 /// Document families that draw from a numbering sequence. Values beyond JOURNAL
@@ -256,6 +280,8 @@ enum SalesDocumentType {
 enum SalesDocumentStatus {
   /// Not yet posted. Editable freely; invisible to the ledger.
   DRAFT
+  /// Submitted for maker-checker approval; not on the ledger yet.
+  PENDING_APPROVAL
   /// Posted and outstanding.
   OPEN
   /// Partly settled by payments or credits.
@@ -286,6 +312,8 @@ enum PurchaseDocumentType {
 
 enum PurchaseDocumentStatus {
   DRAFT
+  /// Submitted for maker-checker approval; not on the ledger yet.
+  PENDING_APPROVAL
   OPEN
   PARTIAL
   PAID
@@ -525,6 +553,8 @@ model Organization {
   posRegisters      PosRegister[]
   posSessions       PosSession[]
   posOrders         PosOrder[]
+  approvalPolicies  ApprovalPolicy[]
+  approvalRequests  ApprovalRequest[]
 
   @@index([parentOrgId])
   @@map("organizations")
@@ -565,6 +595,8 @@ model User {
   calendarEvents CalendarEvent[]
   posRegisters PosRegisterStaff[]
   customerPortalUsers CustomerPortalUser[]
+  approvalRequestsSubmitted ApprovalRequest[]  @relation("ApprovalSubmittedBy")
+  approvalDecisions         ApprovalDecision[] @relation("ApprovalDecidedBy")
 
   @@map("users")
 }
@@ -2940,6 +2972,91 @@ model ReportNote {
 
   @@unique([orgId, reportKey])
   @@map("report_notes")
+}
+
+/// Named approval workflow / rule (COSO / SOX maker-checker).
+/// Many rules per document family — first match by priority wins.
+/// Amount in [minAmount, maxAmount) needs this workflow; null max = no ceiling.
+model ApprovalPolicy {
+  id         String             @id @default(cuid())
+  orgId      String
+  /// Human name, e.g. "Large invoices" or "All bills".
+  name       String
+  entityType ApprovalEntityType
+  enabled    Boolean            @default(true)
+  /// Inclusive floor in org currency.
+  minAmount  Decimal            @default(0) @db.Decimal(19, 4)
+  /// Exclusive ceiling. Null = unlimited.
+  maxAmount  Decimal?           @db.Decimal(19, 4)
+  /// Lower number = checked first when several rules match the type.
+  priority   Int                @default(100)
+  /// Maker may not approve their own submission (SOX segregation of duties).
+  /// Owner/Admin may still self-approve when they are the only authorised person.
+  requireDifferentApprover Boolean @default(true)
+  /// Sequential approval steps (1 = classic maker-checker, 2–3 = escalation).
+  levels Int @default(1) @db.SmallInt
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, entityType, enabled, priority])
+  @@index([orgId, enabled])
+  @@map("approval_policies")
+}
+
+/// One submit → approve/reject cycle for a document or master record.
+model ApprovalRequest {
+  id         String                @id @default(cuid())
+  orgId      String
+  entityType ApprovalEntityType
+  entityId   String
+  /// Human label for the inbox (e.g. "Invoice INV-1042").
+  title      String
+  /// Deep link inside the app.
+  href       String
+  amount     Decimal?              @db.Decimal(19, 4)
+  currencyCode String?             @db.Char(3)
+  status     ApprovalRequestStatus @default(PENDING)
+  currentLevel Int                 @default(1) @db.SmallInt
+  requiredLevels Int               @default(1) @db.SmallInt
+  note       String?
+
+  submittedById String
+  submittedAt   DateTime @default(now()) @db.Timestamptz(6)
+  decidedAt     DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  submittedBy  User               @relation("ApprovalSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  decisions    ApprovalDecision[]
+
+  @@index([orgId, status, submittedAt])
+  @@index([orgId, entityType, entityId])
+  @@index([submittedById])
+  @@map("approval_requests")
+}
+
+model ApprovalDecision {
+  id        String @id @default(cuid())
+  requestId String
+  orgId     String
+  level     Int    @db.SmallInt
+  /// APPROVED or REJECTED for this level.
+  decision  ApprovalRequestStatus
+  note      String?
+  decidedById String
+  decidedAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  request   ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  decidedBy User            @relation("ApprovalDecidedBy", fields: [decidedById], references: [id], onDelete: Restrict)
+
+  @@index([requestId])
+  @@index([orgId, decidedAt])
+  @@map("approval_decisions")
 }
 
 /// A receipt or other paper kept against a bank line, a journal, or a purchase.

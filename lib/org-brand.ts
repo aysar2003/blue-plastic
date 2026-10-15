@@ -32,11 +32,23 @@ export function resolveBrandMark(
 
 export function orgLogoUrl(hasLogo: boolean, cacheKey?: string | number | Date | null): string | null {
   if (!hasLogo) return null
-  const v =
-    cacheKey instanceof Date
-      ? cacheKey.getTime()
-      : cacheKey != null && cacheKey !== ''
-        ? String(cacheKey)
-        : '1'
+  // Always emit a stable numeric cache buster — Date props crossing the
+  // server→client boundary can stringify as ISO on one side and getTime() on
+  // the other, which mismatches the logo <img src> and breaks hydration.
+  let v = '1'
+  if (cacheKey instanceof Date) {
+    v = String(cacheKey.getTime())
+  } else if (typeof cacheKey === 'number' && Number.isFinite(cacheKey)) {
+    v = String(cacheKey)
+  } else if (cacheKey != null && cacheKey !== '') {
+    const raw = String(cacheKey)
+    const asNum = Number(raw)
+    if (Number.isFinite(asNum) && /^\d+$/.test(raw)) {
+      v = raw
+    } else {
+      const parsed = Date.parse(raw)
+      v = Number.isNaN(parsed) ? raw : String(parsed)
+    }
+  }
   return `/api/organization/logo?v=${encodeURIComponent(v)}`
 }

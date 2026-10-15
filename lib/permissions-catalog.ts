@@ -26,6 +26,7 @@ export const PERMISSIONS = [
   'journal:read',
   'journal:create',
   'journal:post',
+  'journal:approve',
   'journal:reverse',
   'period:read',
   'period:close',
@@ -37,11 +38,13 @@ export const PERMISSIONS = [
   'customer:update',
   'customer:archive',
   'customer:delete',
+  'customer:approve',
   'vendor:read',
   'vendor:create',
   'vendor:update',
   'vendor:archive',
   'vendor:delete',
+  'vendor:approve',
   'item:read',
   'item:create',
   'item:update',
@@ -61,30 +64,36 @@ export const PERMISSIONS = [
   'invoice:update',
   'invoice:void',
   'invoice:send',
+  'invoice:approve',
   'payment:read',
   'payment:create',
   'payment:update',
   'payment:void',
+  'payment:approve',
 
   // Purchases
   'bill:read',
   'bill:create',
   'bill:update',
   'bill:void',
+  'bill:approve',
   'expense:read',
   'expense:create',
   'expense:update',
   'expense:void',
+  'expense:approve',
 
   // Banking
   'bank:read',
   'bank:transact',
   'bank:reconcile',
   'bank:import',
+  'bank:approve',
 
   // Inventory / stores
   'inventory:read',
   'inventory:adjust',
+  'inventory:approve',
 
   // Reporting
   'report:read',
@@ -147,6 +156,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'invoice:update', label: 'Edit sales documents' },
       { key: 'invoice:void', label: 'Void / delete sales documents' },
       { key: 'invoice:send', label: 'Send sales documents' },
+      {
+        key: 'invoice:approve',
+        label: 'Approve sales documents',
+        hint: 'Maker-checker: post invoices and receipts waiting in Approvals',
+      },
     ],
   },
   {
@@ -163,6 +177,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         label: 'Delete / merge customers',
         hint: 'Only the owner has this by default — grant it here for other users',
       },
+      { key: 'customer:approve', label: 'Approve new customers' },
       {
         key: 'portal:manage',
         label: 'Manage customer portal',
@@ -179,6 +194,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'bill:create', label: 'Create bills & receive goods' },
       { key: 'bill:update', label: 'Edit bills & purchase orders' },
       { key: 'bill:void', label: 'Void bills & purchase orders' },
+      { key: 'bill:approve', label: 'Approve bills & purchase documents' },
+      { key: 'expense:approve', label: 'Approve expenses / purchase receipts' },
     ],
   },
   {
@@ -195,6 +212,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         label: 'Delete / merge vendors',
         hint: 'Only the owner has this by default — grant it here for other users',
       },
+      { key: 'vendor:approve', label: 'Approve new vendors' },
     ],
   },
   {
@@ -206,6 +224,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'bank:transact', label: 'Transfers & deposits' },
       { key: 'bank:import', label: 'Import bank statements' },
       { key: 'bank:reconcile', label: 'Reconcile bank accounts' },
+      { key: 'bank:approve', label: 'Approve transfers & deposits' },
     ],
   },
   {
@@ -217,6 +236,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'payment:create', label: 'Record customer payments' },
       { key: 'payment:update', label: 'Edit customer payments' },
       { key: 'payment:void', label: 'Void customer payments' },
+      { key: 'payment:approve', label: 'Approve customer payments' },
     ],
   },
   {
@@ -242,6 +262,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     permissions: [
       { key: 'inventory:read', label: 'View stock & stores' },
       { key: 'inventory:adjust', label: 'Adjust, transfer & prepare tickets' },
+      { key: 'inventory:approve', label: 'Approve stock adjustments' },
     ],
   },
   {
@@ -268,6 +289,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'journal:read', label: 'View journals' },
       { key: 'journal:create', label: 'Create journal entries' },
       { key: 'journal:post', label: 'Post journals' },
+      { key: 'journal:approve', label: 'Approve journal entries' },
       { key: 'journal:reverse', label: 'Reverse journals' },
     ],
   },

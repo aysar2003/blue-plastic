@@ -95,8 +95,22 @@ const BOOKKEEPER: Permission[] = [
  * A bookkeeper does not get that snapshot with the role; an owner can grant
  * `report:overview` from the matrix.
  */
+/** Approvers (SOX checker) — Accountant and above by default. */
+const APPROVE: Permission[] = [
+  'invoice:approve',
+  'payment:approve',
+  'bill:approve',
+  'expense:approve',
+  'bank:approve',
+  'inventory:approve',
+  'journal:approve',
+  'customer:approve',
+  'vendor:approve',
+]
+
 const ACCOUNTANT: Permission[] = [
   ...BOOKKEEPER,
+  ...APPROVE,
   'account:create',
   'account:update',
   'account:archive',

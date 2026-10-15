@@ -142,6 +142,7 @@ export async function updateFeatureFlagsForm(
     'allowDocumentDelete',
     'showCreatorBrand',
     'enableCustomerPortal',
+    'enableDocumentApprovals',
     'moduleSales',
     'modulePurchases',
     'moduleBanking',

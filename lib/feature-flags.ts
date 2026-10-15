@@ -60,6 +60,12 @@ export type OrgFeatureFlags = {
    * refused; staff UI for portal users stays hidden.
    */
   enableCustomerPortal: boolean
+  /**
+   * Maker-checker approvals (SOX / COSO). When on, posting sales/purchases
+   * (and other gated transactions) wait in Approvals until an authorised
+   * checker posts them. POS till sales still post immediately.
+   */
+  enableDocumentApprovals: boolean
   /** Apps visible in the launcher / header when enabled. */
   modules: Record<ModuleFlag, boolean>
 }
@@ -74,6 +80,7 @@ export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   showCreatorBrand: true,
   enableTax: true,
   enableCustomerPortal: false,
+  enableDocumentApprovals: false,
   modules: {
     sales: true,
     purchases: true,
@@ -108,6 +115,7 @@ export const MODULE_KEY_TO_FLAG: Record<string, ModuleFlag | null> = {
   periods: 'accounting',
   calendar: null,
   databases: null,
+  approvals: null,
 }
 
 export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
@@ -121,6 +129,9 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
   if (typeof data.enableTax === 'boolean') base.enableTax = data.enableTax
   if (typeof data.enableCustomerPortal === 'boolean') {
     base.enableCustomerPortal = data.enableCustomerPortal
+  }
+  if (typeof data.enableDocumentApprovals === 'boolean') {
+    base.enableDocumentApprovals = data.enableDocumentApprovals
   }
 
   // Legacy single switch → both contact sides until the new keys are saved.

@@ -55,13 +55,28 @@ export async function AppShell({
     isCurrent: row.isCurrent,
   }))
 
+  // Letterhead fields only — never pass Prisma Date columns into the client
+  // shell (updatedAt etc. used to mismatch logo cache keys on hydrate).
+  const organization = {
+    name: ctx.organization.name,
+    legalName: ctx.organization.legalName,
+    addressLine1: ctx.organization.addressLine1,
+    addressLine2: ctx.organization.addressLine2,
+    city: ctx.organization.city,
+    region: ctx.organization.region,
+    postalCode: ctx.organization.postalCode,
+    country: ctx.organization.country,
+    phone: ctx.organization.phone,
+    email: ctx.organization.email,
+  }
+
   return (
     <ShellChrome
       orgName={ctx.organization.name}
-      organization={ctx.organization}
+      organization={organization}
       brandMark={ctx.organization.brandMark}
       hasLogo={ctx.organization.hasLogo}
-      logoVersion={ctx.organization.updatedAt}
+      logoVersion={ctx.organization.updatedAt.getTime()}
       baseCurrency={ctx.organization.baseCurrency}
       fiscalYearStartMonth={ctx.organization.fiscalYearStartMonth}
       roleLabel={ROLE_LABELS[ctx.role]}

@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     '*': ['./uploads/**'],
   },
+  // Dev: browsers open the app as 127.0.0.1 while `next dev` binds as localhost.
+  // Without this, Next blocks /_next chunks and the shell never hydrates — so
+  // every Apps chip and menu looks dead.
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   async redirects() {
     // Short staff URL advertised on the public product page.
     return [{ source: '/login', destination: '/sign-in', permanent: false }]

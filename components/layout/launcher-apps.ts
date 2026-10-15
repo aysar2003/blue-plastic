@@ -164,6 +164,17 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     blurb: 'Quantity by warehouse',
   },
   {
+    key: 'approvals',
+    label: 'Approvals',
+    href: '/approvals',
+    icon: 'clipboard',
+    glyph: 'journals',
+    permission: 'invoice:approve',
+    accent: '#B45309',
+    wash: '#FFEDD5',
+    blurb: 'Review and post',
+  },
+  {
     key: 'accounting',
     label: 'Accounting',
     href: '/accounting',

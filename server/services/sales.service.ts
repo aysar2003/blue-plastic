@@ -29,6 +29,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
+import * as approvalService from '@/server/services/approval.service'
 import * as storeService from '@/server/services/store.service'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
 import { loadCodeForCalculation } from '@/server/services/tax.service'
@@ -730,6 +731,13 @@ export async function create(
     })
     if (clash) throw numberTaken()
 
+    // POS must post immediately. Maker-checker applies to desk sales only.
+    const gate =
+      !isDraft && POSTS_A_JOURNAL[type] && !options?.pos
+        ? await approvalService.needsApproval(ctx, 'SALES_DOCUMENT', priced.total, tx)
+        : { required: false, levels: 1, requireDifferentApprover: true }
+    const holdForApproval = gate.required
+
     const document = await tx.salesDocument.create({
       data: {
         orgId: ctx.orgId,
@@ -744,7 +752,7 @@ export async function create(
             ? toDate(input.expiryDate)
             : null,
         paymentTermId: term?.id ?? null,
-        status: isDraft ? 'DRAFT' : 'OPEN',
+        status: isDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         reference: input.reference ?? null,
         memo: input.memo ?? null,
         customerMessage: input.customerMessage ?? null,
@@ -800,7 +808,18 @@ export async function create(
       })
     }
 
-    if (!isDraft && POSTS_A_JOURNAL[type]) {
+    if (holdForApproval) {
+      const cfg = salesByType(type)
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'SALES_DOCUMENT',
+        entityId: document.id,
+        title: `${cfg.singular} ${document.number}`,
+        href: `/sales/${cfg.slug}/${document.id}`,
+        amount: document.total,
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    } else if (!isDraft && POSTS_A_JOURNAL[type]) {
       await postDocument(tx, ctx, document.id)
     }
 
@@ -965,6 +984,12 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
     })
     if (clash) throw numberTaken()
 
+    const gate =
+      !input.saveAsDraft && POSTS_A_JOURNAL[existing.type]
+        ? await approvalService.needsApproval(ctx, 'SALES_DOCUMENT', priced.total, tx)
+        : { required: false, levels: 1, requireDifferentApprover: true }
+    const holdForApproval = gate.required
+
     await tx.salesDocument.update({
       where: { id },
       data: {
@@ -987,7 +1012,7 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
         depositAccountId: input.depositAccountId ?? null,
         journalId: null,
         version: { increment: 1 },
-        status: input.saveAsDraft ? 'DRAFT' : 'OPEN',
+        status: input.saveAsDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         lines: {
           create: priced.lines.map((line) => ({
             orgId: ctx.orgId,
@@ -1010,7 +1035,18 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
       },
     })
 
-    if (!input.saveAsDraft && POSTS_A_JOURNAL[existing.type]) {
+    if (holdForApproval) {
+      const cfg = salesByType(existing.type)
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'SALES_DOCUMENT',
+        entityId: id,
+        title: `${cfg.singular} ${number}`,
+        href: `/sales/${cfg.slug}/${id}`,
+        amount: priced.total,
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    } else if (!input.saveAsDraft && POSTS_A_JOURNAL[existing.type]) {
       await postDocument(tx, ctx, id)
     }
 

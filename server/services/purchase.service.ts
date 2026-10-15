@@ -26,6 +26,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
+import * as approvalService from '@/server/services/approval.service'
 import * as storeService from '@/server/services/store.service'
 import { loadCodeForCalculation } from '@/server/services/tax.service'
 
@@ -455,6 +456,12 @@ async function createWithin(
     })
     if (clash) throw numberTaken()
 
+    const gate =
+      !isDraft && PURCHASE_POSTS_A_JOURNAL[type]
+        ? await approvalService.needsApproval(ctx, 'PURCHASE_DOCUMENT', priced.total, tx)
+        : { required: false, levels: 1, requireDifferentApprover: true }
+    const holdForApproval = gate.required
+
     const document = await tx.purchaseDocument.create({
       data: {
         orgId: ctx.orgId,
@@ -466,7 +473,7 @@ async function createWithin(
         expiryDate:
           type === 'PURCHASE_ORDER' && input.expiryDate ? toDate(input.expiryDate) : null,
         paymentTermId: term?.id ?? null,
-        status: isDraft ? 'DRAFT' : 'OPEN',
+        status: isDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         reference: input.reference ?? null,
         memo: input.memo ?? null,
         subtotal: priced.subtotal.toFixed(4),
@@ -498,7 +505,18 @@ async function createWithin(
       select: { id: true, number: true, total: true, status: true },
     })
 
-    if (!isDraft && PURCHASE_POSTS_A_JOURNAL[type]) {
+    if (holdForApproval) {
+      const cfg = purchaseByType(type)
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'PURCHASE_DOCUMENT',
+        entityId: document.id,
+        title: `${cfg.singular} ${number}`,
+        href: `/purchases/${cfg.slug}/${document.id}`,
+        amount: document.total,
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    } else if (!isDraft && PURCHASE_POSTS_A_JOURNAL[type]) {
       await postDocument(tx, ctx, document.id)
     }
 
@@ -580,6 +598,12 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
     })
     if (numberClash) throw numberTaken()
 
+    const gate =
+      !input.saveAsDraft && PURCHASE_POSTS_A_JOURNAL[existing.type]
+        ? await approvalService.needsApproval(ctx, 'PURCHASE_DOCUMENT', priced.total, tx)
+        : { required: false, levels: 1, requireDifferentApprover: true }
+    const holdForApproval = gate.required
+
     await tx.purchaseDocument.update({
       where: { id },
       data: {
@@ -601,7 +625,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
         offsetCustomerId,
         journalId: null,
         version: { increment: 1 },
-        status: input.saveAsDraft ? 'DRAFT' : 'OPEN',
+        status: input.saveAsDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         lines: {
           create: priced.lines.map((line) => ({
             orgId: ctx.orgId,
@@ -623,7 +647,18 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
       },
     })
 
-    if (!input.saveAsDraft && PURCHASE_POSTS_A_JOURNAL[existing.type]) {
+    if (holdForApproval) {
+      const cfg = purchaseByType(existing.type)
+      await approvalService.submitRequest(tx, ctx, {
+        entityType: 'PURCHASE_DOCUMENT',
+        entityId: id,
+        title: `${cfg.singular} ${number}`,
+        href: `/purchases/${cfg.slug}/${id}`,
+        amount: priced.total,
+        currencyCode: ctx.organization.baseCurrency,
+        levels: gate.levels,
+      })
+    } else if (!input.saveAsDraft && PURCHASE_POSTS_A_JOURNAL[existing.type]) {
       await postDocument(tx, ctx, id)
     }
 

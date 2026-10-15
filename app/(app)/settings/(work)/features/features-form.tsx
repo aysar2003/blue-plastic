@@ -151,6 +151,22 @@ export function FeaturesForm({ flags }: { flags: OrgFeatureFlags }) {
       </section>
 
       <section className="space-y-3">
+        <h3 className="text-sm font-semibold">Approvals (maker-checker)</h3>
+        <p className="text-xs text-muted-foreground">
+          International segregation of duties (SOX / COSO): the person who enters a
+          sale or bill cannot post it alone. Documents wait in the Approvals app
+          until an authorised checker approves. Point of Sale still posts at the till.
+          Thresholds and which document families need approval are set under Approvals.
+        </p>
+        <Toggle
+          name="enableDocumentApprovals"
+          label="Require approval before posting"
+          hint="Sales invoices, bills, and other gated transactions stay off the ledger until approved."
+          defaultChecked={flags.enableDocumentApprovals}
+        />
+      </section>
+
+      <section className="space-y-3">
         <h3 className="text-sm font-semibold">Customer portal</h3>
         <p className="text-xs text-muted-foreground">
           Self-service login for customers — view-only balance, invoices, payments, and

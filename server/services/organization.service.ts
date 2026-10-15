@@ -198,6 +198,7 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       showCreatorBrand: input.showCreatorBrand,
       enableTax: previous.enableTax,
       enableCustomerPortal: input.enableCustomerPortal,
+      enableDocumentApprovals: input.enableDocumentApprovals,
       modules: {
         sales: input.moduleSales,
         purchases: input.modulePurchases,
