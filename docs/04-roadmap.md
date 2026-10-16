@@ -247,8 +247,9 @@ year-end close.
 
 ## Phase 11 — The practical gaps
 
-**Not started.** Written on 2026-09-01 after reviewing the system against what
-QuickBooks Online and Desktop actually give a small trading business day to day.
+**In progress** (started 2026-10-16). Written on 2026-09-01 after reviewing the
+system against what QuickBooks Online and Desktop actually give a small trading
+business day to day. Task detail: [phases/phase-11-practical-gaps.md](./phases/phase-11-practical-gaps.md).
 
 The selection rule was deliberate and narrow: **something a real business does
 every week, that this system either cannot do or makes somebody do by hand.** Not

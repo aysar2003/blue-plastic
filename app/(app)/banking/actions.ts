@@ -219,6 +219,7 @@ export async function suggestionsFor(importedId: string) {
   }))
 }
 
+/** Bank feed only — document attachments use `/attachments/actions`. */
 export async function attachLedgerFile(formData: FormData) {
   const { requireOrgContext } = await import('@/server/auth/context')
   const { storeLedgerFile } = await import('@/server/files/ledger-files')
@@ -226,12 +227,10 @@ export async function attachLedgerFile(formData: FormData) {
   const file = formData.get('file')
   if (!(file instanceof File) || file.size === 0) return
   const text = (value: FormDataEntryValue | null) => (typeof value === 'string' && value ? value : undefined)
-  await storeLedgerFile(ctx, file, {
-    importedTransactionId: text(formData.get('importedTransactionId')),
-    purchaseDocumentId: text(formData.get('purchaseDocumentId')),
-  })
+  const importedTransactionId = text(formData.get('importedTransactionId'))
+  if (!importedTransactionId) return
+  await storeLedgerFile(ctx, file, { importedTransactionId })
   revalidatePath('/banking/import')
-  revalidatePath('/purchases')
 }
 
 /* --- Reconciliation ------------------------------------------------------- */

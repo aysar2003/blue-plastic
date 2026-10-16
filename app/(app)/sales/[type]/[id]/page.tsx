@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { PencilIcon } from 'lucide-react'
 
+import { DocumentAttachments } from '@/components/data/document-attachments'
+import { DocumentHistory } from '@/components/data/document-history'
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { ConvertSalesDocumentActions } from '@/components/sales/document-actions'
@@ -17,7 +19,8 @@ import { formatMoney } from '@/lib/money'
 import { bySlug, byType, isSalesOrder, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
-import { trailFor } from '@/server/services/audit.service'
+import { listForSale } from '@/server/files/ledger-files'
+import { historyFor, trailFor } from '@/server/services/audit.service'
 import { loadDepositAccounts } from '@/server/services/sales-options'
 import * as salesService from '@/server/services/sales.service'
 
@@ -44,8 +47,10 @@ export default async function SalesDocumentPage({
     document.status !== 'VOID' &&
     document.status !== 'DECLINED' &&
     document.status !== 'CLOSED'
-  const [trail, deliveryNote, depositAccounts] = await Promise.all([
+  const [trail, history, papers, deliveryNote, depositAccounts] = await Promise.all([
     trailFor(ctx, document.id),
+    historyFor(ctx, document.id),
+    listForSale(ctx, document.id),
     config.type === 'INVOICE' || config.type === 'SALES_RECEIPT'
       ? db.deliveryNote.findFirst({
           where: { orgId: ctx.orgId, salesDocumentId: id, status: 'POSTED' },
@@ -143,6 +148,13 @@ export default async function SalesDocumentPage({
       />
 
       <RecordedBy trail={trail} timeZone={ctx.organization.timeZone} />
+
+      <DocumentAttachments
+        target={{ kind: 'sale', id }}
+        files={papers}
+        canEdit={canEdit}
+        hint="Signed copy, delivery note, or photo · PDF or image · 4 MB or smaller"
+      />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Detail
@@ -304,6 +316,8 @@ export default async function SalesDocumentPage({
           {config.posts ? 'Not posted to the ledger yet.' : config.effect}
         </p>
       )}
+
+      <DocumentHistory events={history} timeZone={ctx.organization.timeZone} />
     </>
   )
 }

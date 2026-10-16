@@ -15,10 +15,11 @@ import { formatDate, formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
-import { attachLedgerFile } from '@/app/(app)/banking/actions'
+import { DocumentAttachments } from '@/components/data/document-attachments'
+import { DocumentHistory } from '@/components/data/document-history'
 import { requireOrgContext } from '@/server/auth/context'
 import { listForPurchase } from '@/server/files/ledger-files'
-import { trailFor } from '@/server/services/audit.service'
+import { historyFor, trailFor } from '@/server/services/audit.service'
 import * as purchaseService from '@/server/services/purchase.service'
 
 export const metadata: Metadata = { title: 'Document' }
@@ -35,8 +36,11 @@ export default async function PurchaseDocumentPage({
   const ctx = await requireOrgContext('bill:read')
   const document = await purchaseService.get(ctx, id).catch(() => null)
   if (!document) notFound()
-  const trail = await trailFor(ctx, document.id)
-  const papers = config.type === 'EXPENSE' ? await listForPurchase(ctx, document.id) : []
+  const [trail, history, papers] = await Promise.all([
+    trailFor(ctx, document.id),
+    historyFor(ctx, document.id),
+    listForPurchase(ctx, document.id),
+  ])
 
   const currency = ctx.organization.baseCurrency
   const isOrder = config.type === 'PURCHASE_ORDER'
@@ -48,6 +52,7 @@ export default async function PurchaseDocumentPage({
   // with a payment or credit already applied to it.
   const canEdit =
     ctx.permissions.has('bill:update') && document.status !== 'VOID' && document.applications.length === 0
+  const canAttach = ctx.permissions.has('bill:update') && document.status !== 'VOID'
   // An order can be received against until nothing is outstanding. It used to be
   // "until a bill exists", which meant a part delivery closed the order for good.
   const canReceive =
@@ -121,23 +126,17 @@ export default async function PurchaseDocumentPage({
 
       <RecordedBy trail={trail} timeZone={ctx.organization.timeZone} />
 
-      {config.type === 'EXPENSE' ? (
-        <form action={attachLedgerFile} className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-primary/15 bg-primary/5 p-3">
-          <input type="hidden" name="purchaseDocumentId" value={id} />
-          <label className="text-sm font-medium text-primary">
-            Receipt
-            <input type="file" name="file" accept="application/pdf,image/*" required className="mt-1 block text-xs" />
-          </label>
-          <button type="submit" className={buttonVariants({ size: 'sm' })}>
-            Attach
-          </button>
-          {papers.map((paper) => (
-            <a key={paper.id} href={`/api/files/ledger/${paper.id}`} className="text-sm text-primary underline-offset-4 hover:underline">
-              {paper.originalName}
-            </a>
-          ))}
-        </form>
-      ) : null}
+      <DocumentAttachments
+        target={{ kind: 'purchase', id }}
+        files={papers}
+        canEdit={canAttach}
+        title={config.type === 'EXPENSE' ? 'Receipt & papers' : 'Attachments'}
+        hint={
+          config.type === 'EXPENSE'
+            ? 'Vendor receipt or photo · PDF or image · 4 MB or smaller'
+            : 'Vendor invoice, delivery note, or photo · PDF or image · 4 MB or smaller'
+        }
+      />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Detail label="Status">
@@ -339,6 +338,8 @@ export default async function PurchaseDocumentPage({
           {config.posts ? 'Not posted to the ledger yet.' : config.effect}
         </p>
       )}
+
+      <DocumentHistory events={history} timeZone={ctx.organization.timeZone} />
     </>
   )
 }

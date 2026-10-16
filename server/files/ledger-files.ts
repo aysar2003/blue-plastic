@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import type { OrgContext } from '@/server/auth/context'
@@ -17,6 +17,21 @@ const ALLOWED = new Map<string, string>([
   ['image/png', 'png'],
   ['image/webp', 'webp'],
 ])
+
+export type LedgerFileLink = {
+  importedTransactionId?: string
+  journalId?: string
+  purchaseDocumentId?: string
+  salesDocumentId?: string
+}
+
+export type LedgerFileRow = {
+  id: string
+  originalName: string
+  contentType: string
+  byteSize: number
+  createdAt: Date
+}
 
 function sniff(bytes: Buffer): { contentType: string; extension: string } | null {
   if (bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
@@ -34,16 +49,15 @@ function sniff(bytes: Buffer): { contentType: string; extension: string } | null
   return null
 }
 
-export async function storeLedgerFile(
-  ctx: OrgContext,
-  file: File,
-  link: { importedTransactionId?: string; journalId?: string; purchaseDocumentId?: string },
-) {
-  if (file.size <= 0 || file.size > MAX) throw validation('Attach a PDF or image of 4 MB or smaller.')
-  const bytes = Buffer.from(await file.arrayBuffer())
-  const sniffed = sniff(bytes)
-  if (!sniffed || !ALLOWED.has(sniffed.contentType)) {
-    throw validation('Attach a PDF, JPEG, PNG, or WebP.')
+async function resolveLink(ctx: OrgContext, link: LedgerFileLink): Promise<LedgerFileLink> {
+  const keys = [
+    link.importedTransactionId,
+    link.journalId,
+    link.purchaseDocumentId,
+    link.salesDocumentId,
+  ].filter(Boolean)
+  if (keys.length !== 1) {
+    throw validation('Attach the file to exactly one document.')
   }
 
   if (link.importedTransactionId) {
@@ -52,16 +66,54 @@ export async function storeLedgerFile(
       select: { id: true },
     })
     if (!row) throw notFound('Statement line')
+    return { importedTransactionId: row.id }
   }
+
+  if (link.journalId) {
+    const row = await db.journal.findFirst({
+      where: { id: link.journalId, orgId: ctx.orgId },
+      select: { id: true },
+    })
+    if (!row) throw notFound('Journal')
+    return { journalId: row.id }
+  }
+
   if (link.purchaseDocumentId) {
     const row = await db.purchaseDocument.findFirst({
-      where: { id: link.purchaseDocumentId, orgId: ctx.orgId },
+      where: { id: link.purchaseDocumentId, orgId: ctx.orgId, deletedAt: null },
       select: { id: true, journalId: true },
     })
     if (!row) throw notFound('Document')
-    link = { ...link, journalId: link.journalId ?? row.journalId ?? undefined }
+    return {
+      purchaseDocumentId: row.id,
+      journalId: row.journalId ?? undefined,
+    }
   }
 
+  const row = await db.salesDocument.findFirst({
+    where: { id: link.salesDocumentId!, orgId: ctx.orgId, deletedAt: null },
+    select: { id: true, journalId: true },
+  })
+  if (!row) throw notFound('Document')
+  return {
+    salesDocumentId: row.id,
+    journalId: row.journalId ?? undefined,
+  }
+}
+
+/**
+ * Store a PDF or image against a bank line, journal, sale, or purchase.
+ * Bytes are sniffed — the client Content-Type is ignored.
+ */
+export async function storeLedgerFile(ctx: OrgContext, file: File, rawLink: LedgerFileLink) {
+  if (file.size <= 0 || file.size > MAX) throw validation('Attach a PDF or image of 4 MB or smaller.')
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const sniffed = sniff(bytes)
+  if (!sniffed || !ALLOWED.has(sniffed.contentType)) {
+    throw validation('Attach a PDF, JPEG, PNG, or WebP.')
+  }
+
+  const link = await resolveLink(ctx, rawLink)
   const storageKey = `${ctx.orgId}/${randomBytes(16).toString('hex')}.${sniffed.extension}`
   await mkdir(path.join(/*turbopackIgnore: true*/ ROOT, ctx.orgId), { recursive: true })
   await writeFile(path.join(/*turbopackIgnore: true*/ ROOT, storageKey), bytes)
@@ -69,16 +121,17 @@ export async function storeLedgerFile(
   return db.ledgerFile.create({
     data: {
       orgId: ctx.orgId,
-      originalName: file.name.slice(0, 180) || `receipt.${sniffed.extension}`,
+      originalName: file.name.slice(0, 180) || `attachment.${sniffed.extension}`,
       contentType: sniffed.contentType,
       byteSize: bytes.length,
       storageKey,
       importedTransactionId: link.importedTransactionId ?? null,
       journalId: link.journalId ?? null,
       purchaseDocumentId: link.purchaseDocumentId ?? null,
+      salesDocumentId: link.salesDocumentId ?? null,
       createdById: ctx.userId,
     },
-    select: { id: true, originalName: true },
+    select: { id: true, originalName: true, contentType: true, byteSize: true, createdAt: true },
   })
 }
 
@@ -91,6 +144,21 @@ export async function readLedgerFile(ctx: OrgContext, id: string) {
   return { file, bytes }
 }
 
+export async function removeLedgerFile(ctx: OrgContext, id: string) {
+  const file = await db.ledgerFile.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: { id: true, storageKey: true },
+  })
+  if (!file) throw notFound('File')
+  await db.ledgerFile.delete({ where: { id: file.id } })
+  try {
+    await unlink(absolutePath(file.storageKey))
+  } catch {
+    // Missing file on disk should not block the DB delete.
+  }
+  return { id: file.id }
+}
+
 /** Refuse path traversal even if a storage key in the DB is ever corrupted. */
 function absolutePath(storageKey: string) {
   const full = path.resolve(/*turbopackIgnore: true*/ ROOT, storageKey)
@@ -101,10 +169,34 @@ function absolutePath(storageKey: string) {
   return full
 }
 
-export async function listForPurchase(ctx: OrgContext, purchaseDocumentId: string) {
+const LIST_SELECT = {
+  id: true,
+  originalName: true,
+  contentType: true,
+  byteSize: true,
+  createdAt: true,
+} as const
+
+export async function listForPurchase(ctx: OrgContext, purchaseDocumentId: string): Promise<LedgerFileRow[]> {
   return db.ledgerFile.findMany({
     where: { orgId: ctx.orgId, purchaseDocumentId },
-    select: { id: true, originalName: true, contentType: true },
+    select: LIST_SELECT,
+    orderBy: { createdAt: 'asc' },
+  })
+}
+
+export async function listForSale(ctx: OrgContext, salesDocumentId: string): Promise<LedgerFileRow[]> {
+  return db.ledgerFile.findMany({
+    where: { orgId: ctx.orgId, salesDocumentId },
+    select: LIST_SELECT,
+    orderBy: { createdAt: 'asc' },
+  })
+}
+
+export async function listForJournal(ctx: OrgContext, journalId: string): Promise<LedgerFileRow[]> {
+  return db.ledgerFile.findMany({
+    where: { orgId: ctx.orgId, journalId, purchaseDocumentId: null, salesDocumentId: null },
+    select: LIST_SELECT,
     orderBy: { createdAt: 'asc' },
   })
 }

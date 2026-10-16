@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 
 import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { DeleteButton } from '@/components/data/delete-record'
+import { DocumentAttachments } from '@/components/data/document-attachments'
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { neighborHrefs, RecordNav } from '@/components/forms/record-nav'
@@ -15,6 +16,7 @@ import { JOURNAL_SOURCE_LABELS, PERIOD_STATUS_LABELS } from '@/lib/accounting-la
 import { formatDate, formatDateTime, formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
+import { listForJournal } from '@/server/files/ledger-files'
 import { trailFor } from '@/server/services/audit.service'
 import * as journalService from '@/server/services/journal.service'
 import { ReverseDialog } from './reverse-dialog'
@@ -28,8 +30,9 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
   const journal = await journalService.get(ctx, id).catch(() => null)
   if (!journal) notFound()
   const isManual = journal.sourceType === 'MANUAL'
-  const [trail, neighbors] = await Promise.all([
+  const [trail, papers, neighbors] = await Promise.all([
     trailFor(ctx, journal.id),
+    listForJournal(ctx, journal.id),
     isManual ? journalService.neighbors(ctx, id) : Promise.resolve(undefined),
   ])
 
@@ -39,6 +42,7 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
     ctx.features.allowJournalDelete &&
     ctx.permissions.has('journal:reverse') &&
     journal.status !== 'DELETED'
+  const canAttach = isManual && ctx.permissions.has('journal:post') && journal.status !== 'DELETED'
   const lineCustomer = journal.lines.find((line) => line.customer)?.customer
   const lineVendor = journal.lines.find((line) => line.vendor)?.vendor
   const party = journal.source.partyName
@@ -96,6 +100,15 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
       />
 
       <RecordedBy trail={trail} timeZone={ctx.organization.timeZone} />
+
+      {isManual ? (
+        <DocumentAttachments
+          target={{ kind: 'journal', id }}
+          files={papers}
+          canEdit={canAttach}
+          hint="Supporting paper for this entry · PDF or image · 4 MB or smaller"
+        />
+      ) : null}
 
       {isManual && neighbors ? (
         <div className="mb-4 flex flex-wrap items-center gap-1 print:hidden">

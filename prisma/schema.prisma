@@ -2022,6 +2022,7 @@ model SalesDocument {
   deliveryNotes DeliveryNote[]
   storeTickets  StoreTicket[]
   posOrder      PosOrder?
+  files         LedgerFile[]
 
   @@unique([orgId, type, number])
   @@unique([id, orgId])
@@ -2252,6 +2253,7 @@ model PurchaseDocument {
 
   applications   PurchaseApplication[] @relation("AppliedToBill")
   creditsApplied PurchaseApplication[] @relation("AppliedFromVendorCredit")
+  files          LedgerFile[]
 
   @@unique([orgId, type, number])
   @@unique([id, orgId])
@@ -3207,7 +3209,7 @@ model ApprovalDecision {
   @@map("approval_decisions")
 }
 
-/// A receipt or other paper kept against a bank line, a journal, or a purchase.
+/// A receipt or other paper kept against a bank line, journal, sale, or purchase.
 model LedgerFile {
   id    String @id @default(cuid())
   orgId String
@@ -3220,6 +3222,7 @@ model LedgerFile {
   importedTransactionId String?
   journalId             String?
   purchaseDocumentId    String?
+  salesDocumentId       String?
 
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   createdById String?
@@ -3227,9 +3230,12 @@ model LedgerFile {
   organization        Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
   importedTransaction ImportedTransaction? @relation(fields: [importedTransactionId], references: [id], onDelete: Cascade)
   journal             Journal?             @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  purchaseDocument    PurchaseDocument?    @relation(fields: [purchaseDocumentId], references: [id], onDelete: Cascade)
+  salesDocument       SalesDocument?       @relation(fields: [salesDocumentId], references: [id], onDelete: Cascade)
 
   @@index([orgId, importedTransactionId])
   @@index([orgId, journalId])
   @@index([orgId, purchaseDocumentId])
+  @@index([orgId, salesDocumentId])
   @@map("ledger_files")
 }

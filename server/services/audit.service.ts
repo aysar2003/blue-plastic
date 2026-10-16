@@ -76,6 +76,29 @@ export async function trailFor(ctx: OrgContext, entityId: string): Promise<Trail
   return map.get(entityId) ?? { entered: null, changed: null }
 }
 
+/** Every audit event for one record — newest last, for the document history panel. */
+export async function historyFor(ctx: OrgContext, entityId: string): Promise<TrailEvent[]> {
+  if (!entityId) return []
+  const rows = await db.auditLog.findMany({
+    where: {
+      orgId: ctx.orgId,
+      entityId,
+      action: { in: [...TRAIL_ACTIONS] },
+    },
+    select: {
+      action: true,
+      at: true,
+      actor: { select: { name: true } },
+    },
+    orderBy: { at: 'asc' },
+  })
+  return rows.map((row) => ({
+    name: row.actor?.name ?? 'System',
+    action: row.action,
+    at: row.at,
+  }))
+}
+
 /**
  * Trash: every deletion, and nothing else.
  *

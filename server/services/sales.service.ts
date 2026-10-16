@@ -3,7 +3,7 @@ import type { DocumentType, Prisma, SalesDocumentType } from '@prisma/client'
 
 import { endOfMonth, isCalendarDate, startOfMonth, toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
 import { isCollectionOverdue } from '@/lib/invoice-overdue'
-import { Decimal, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
+import { Decimal, formatMoney, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
 import { isCashMethodName } from '@/lib/pos-payment'
 import { posPostedAccounts } from '@/lib/pos-register-posting'
@@ -30,6 +30,7 @@ import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import * as approvalService from '@/server/services/approval.service'
+import { subledgerBalances } from '@/server/services/contact.service'
 import { resolveProjectId } from '@/server/services/project.service'
 import * as storeService from '@/server/services/store.service'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
@@ -721,6 +722,8 @@ export async function create(
       throw validation('A document with no value has nothing to record.')
     }
 
+    await assertCreditLimit(tx, ctx, customer, type, isDraft, priced.total)
+
     const term = input.paymentTermId
       ? await tx.paymentTerm.findFirst({
           where: { id: input.paymentTermId, orgId: ctx.orgId },
@@ -957,6 +960,10 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
     ) {
       throw validation('A document with no value has nothing to record.')
     }
+
+    await assertCreditLimit(tx, ctx, customer, existing.type, isDraft, priced.total, {
+      excludeDocumentId: existing.id,
+    })
 
     const term = input.paymentTermId
       ? await tx.paymentTerm.findFirst({
@@ -1898,6 +1905,7 @@ async function requireCustomer(tx: Tx, ctx: OrgContext, customerId: string) {
       id: true,
       isActive: true,
       displayName: true,
+      creditLimit: true,
       paymentTerm: { select: { id: true, type: true, dueDays: true } },
     },
   })
@@ -1906,6 +1914,47 @@ async function requireCustomer(tx: Tx, ctx: OrgContext, customerId: string) {
     throw precondition(`${customer.displayName} is archived. Restore them before invoicing.`)
   }
   return customer
+}
+
+/**
+ * An invoice that would push the customer past their credit limit is refused.
+ * Estimates, quotations, orders and cash receipts do not consume the limit —
+ * only an open receivable does. Drafts are allowed so the clerk can save and
+ * come back; posting is when the check bites.
+ */
+async function assertCreditLimit(
+  tx: Tx,
+  ctx: OrgContext,
+  customer: { id: string; displayName: string; creditLimit: { toString(): string } | null },
+  type: SalesDocumentType,
+  isDraft: boolean,
+  invoiceTotal: Decimal,
+  options?: { excludeDocumentId?: string },
+) {
+  if (isDraft || type !== 'INVOICE') return
+  if (!customer.creditLimit) return
+  const limit = new Decimal(customer.creditLimit.toString())
+  if (limit.lessThanOrEqualTo(0)) return
+
+  const balances = await subledgerBalances(tx, ctx, 'customer', [customer.id])
+  let owed = balances.get(customer.id) ?? ZERO
+
+  // Editing an already-posted invoice: take its current open balance out of
+  // "owed" before adding the new total, so a same-size edit does not double-count.
+  if (options?.excludeDocumentId) {
+    const open = await outstandingBalances(tx, [options.excludeDocumentId])
+    owed = owed.minus(open.get(options.excludeDocumentId) ?? ZERO)
+  }
+
+  const projected = owed.plus(invoiceTotal)
+  if (projected.greaterThan(limit)) {
+    const currency = ctx.organization.baseCurrency
+    throw precondition(
+      `${customer.displayName} would owe ${formatMoney(projected, currency)} after this invoice, ` +
+        `which exceeds their credit limit of ${formatMoney(limit, currency)}. ` +
+        `Collect a payment, raise the limit, or save the invoice as a draft.`,
+    )
+  }
 }
 
 /**
