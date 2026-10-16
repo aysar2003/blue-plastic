@@ -155,6 +155,20 @@ enum AppAccessRequestStatus {
   REJECTED
 }
 
+/// What a recurring template posts when its schedule comes due (Phase 11.2).
+enum RecurringDocType {
+  JOURNAL
+  BILL
+  EXPENSE
+}
+
+enum RecurringFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
 /// Statement classification. Determines which financial statement an account
 /// appears on and its normal balance.
 enum AccountType {
@@ -585,9 +599,10 @@ model Organization {
   posOrders         PosOrder[]
   approvalPolicies  ApprovalPolicy[]
   approvalRequests  ApprovalRequest[]
-  projects          Project[]
-  projectTasks      ProjectTask[]
-  appAccessRequests AppAccessRequest[]
+  projects            Project[]
+  projectTasks        ProjectTask[]
+  appAccessRequests   AppAccessRequest[]
+  recurringTemplates  RecurringTemplate[]
 
   @@index([parentOrgId])
   @@map("organizations")
@@ -635,6 +650,7 @@ model User {
   projectTasksAssigned      ProjectTask[]      @relation("ProjectTaskAssignee")
   appAccessRequests         AppAccessRequest[] @relation("AppAccessRequestedBy")
   appAccessReviews          AppAccessRequest[] @relation("AppAccessReviewedBy")
+  recurringTemplatesCreated RecurringTemplate[] @relation("RecurringCreatedBy")
 
   @@map("users")
 }
@@ -1931,6 +1947,40 @@ model AppAccessRequest {
   @@index([status, createdAt(sort: Desc)])
   @@index([orgId, status, createdAt(sort: Desc)])
   @@map("app_access_requests")
+}
+
+/// A memorised bill, expense, or journal that posts on a schedule (Phase 11.2).
+model RecurringTemplate {
+  id    String @id @default(cuid())
+  orgId String
+
+  name      String
+  type      RecurringDocType
+  frequency RecurringFrequency
+  /// Every N weeks/months (1 = every period).
+  interval  Int @default(1)
+
+  nextRunOn DateTime  @db.Date
+  endOn     DateTime? @db.Date
+  isActive  Boolean   @default(true)
+
+  /// Create payload without `date` — ManualJournalInput or PurchaseDocumentInput shape.
+  payload Json
+
+  lastRunOn         DateTime? @db.Date
+  lastDocumentId    String?
+  lastDocumentKind  String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("RecurringCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, isActive, nextRunOn])
+  @@index([orgId, updatedAt(sort: Desc)])
+  @@map("recurring_templates")
 }
 
 /// the ledger was told, and recomputing them later from prices that may since

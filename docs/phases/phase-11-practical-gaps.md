@@ -21,7 +21,7 @@ Ordered by cost of living without it. Detail and exclusions live in
 | # | Task | Where | Status |
 | --- | --- | --- | --- |
 | 11.1 | Attachments on documents (PDF / photo on bills, invoices, POs, journals) | `LedgerFile`, `DocumentAttachments`, sales/purchase/journal detail | ✅ |
-| 11.2 | Recurring transactions (template + schedule) | TBD | ⛔ |
+| 11.2 | Recurring transactions (template + schedule) | `RecurringTemplate`, `/banking/recurring` | ✅ |
 | 11.3 | Email a document (invoice, statement, PO) | `invoice:send`, transport + template | ⛔ |
 | 11.4 | Progress invoicing from an estimate | Sales convert / estimate balance | ⛔ |
 | 11.5 | Billable expenses → pull onto next invoice | Purchase lines + sales | ⛔ |
@@ -65,3 +65,9 @@ Drafts still save so the clerk can collect payment or raise the limit.
 ### 11.9 Change history
 Sales and purchase detail pages show the audit events for that record (created /
 changed / posted / …) with who and when.
+
+### 11.2 Recurring transactions
+`RecurringTemplate` stores a named schedule (weekly / monthly / quarterly /
+yearly) and a create payload for a journal, bill, or expense. List, new, and
+edit live under Banking → Recurring. Occurrences are created on demand
+(**Create now** / **Create due**) — nothing posts on a timer yet.
