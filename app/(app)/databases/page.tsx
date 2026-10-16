@@ -1,10 +1,13 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { requireOrgContext } from '@/server/auth/context'
+import * as appAccessService from '@/server/services/app-access.service'
 import { listUserDatabases } from '@/server/services/backup-import.service'
 import { listPendingSignupRequests } from '@/server/services/register.service'
 
 import { DatabasesBoard } from './databases-board'
+import { PendingAppRequests } from './pending-app-requests'
 import { PendingSignups } from './pending-signups'
 
 export const metadata: Metadata = { title: 'My databases' }
@@ -22,12 +25,31 @@ export default async function DatabasesPage({
   const params = await searchParams
   const databases = await listUserDatabases(ctx)
   const pendingSignups = ctx.isSystemOwner ? await listPendingSignupRequests(ctx) : []
+  const pendingAppRequests = ctx.isSystemOwner ? await appAccessService.listPendingForOwner(ctx) : []
   const panel =
     params.create === '1' ? 'create' : params.import === '1' ? 'import' : null
 
   return (
     <div className="space-y-6">
+      {ctx.isSystemOwner ? (
+        <PendingAppRequests
+          timeZone={ctx.organization.timeZone}
+          requests={pendingAppRequests.map((row) => ({
+            ...row,
+            at: row.at.toISOString(),
+          }))}
+        />
+      ) : null}
       {ctx.isSystemOwner ? <PendingSignups requests={pendingSignups} /> : null}
+      {ctx.isSystemOwner ? (
+        <p className="text-sm text-muted-foreground">
+          <Link href="/databases/users" className="font-medium text-primary underline">
+            System users
+          </Link>
+          {' — '}
+          every staff login across companies. Reset a work password; the old one is never shown.
+        </p>
+      ) : null}
       <DatabasesBoard
         databases={databases}
         isSystemOwner={ctx.isSystemOwner}

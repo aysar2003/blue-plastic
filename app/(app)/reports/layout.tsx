@@ -1,3 +1,4 @@
+import { enforceModule } from '@/components/layout/module-gate'
 import { ReportSheet } from '@/components/reports/report-sheet'
 import { ReportTools } from '@/components/reports/report-tools'
 import { requireOrgContext } from '@/server/auth/context'
@@ -5,6 +6,7 @@ import { forbidden } from '@/server/errors'
 
 export default async function ReportsLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireOrgContext()
+  enforceModule(ctx, 'reports')
   // Each report page checks `report:read`. The business overview checks
   // `report:overview` on its own, so that capability can open its route
   // without unlocking the rest of the catalogue.

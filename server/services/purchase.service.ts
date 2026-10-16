@@ -2,7 +2,14 @@ import 'server-only'
 import type { DocumentType, Prisma, PurchaseDocumentType } from '@prisma/client'
 
 import { lineLabel } from '@/lib/purchase-board'
-import { toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
+import {
+  endOfMonth,
+  startOfMonth,
+  toCalendarDate,
+  toDate,
+  today,
+  type CalendarDate,
+} from '@/lib/date'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
@@ -84,12 +91,27 @@ export async function list(
     orgId: ctx.orgId,
     type,
     ...(options.vendorId ? { vendorId: options.vendorId } : {}),
-    ...(options.status === 'open' ? { status: { in: ['OPEN', 'PARTIAL'] } } : {}),
+    ...(options.status === 'open'
+      ? type === 'PURCHASE_ORDER'
+        ? { status: 'OPEN' as const }
+        : { status: { in: ['OPEN' as const, 'PARTIAL' as const] } }
+      : {}),
     ...(options.status === 'overdue'
       ? { status: { in: ['OPEN', 'PARTIAL'] }, dueDate: { lt: toDate(today(ctx.organization.timeZone)) } }
       : {}),
+    ...(options.status === 'notdue'
+      ? {
+          status: { in: ['OPEN', 'PARTIAL'] },
+          OR: [
+            { dueDate: null },
+            { dueDate: { gte: toDate(today(ctx.organization.timeZone)) } },
+          ],
+        }
+      : {}),
     ...(options.status === 'draft' ? { status: 'DRAFT' } : {}),
     ...(options.status === 'paid' ? { status: 'PAID' } : {}),
+    ...(options.status === 'closed' ? { status: 'CLOSED' } : {}),
+    ...(options.status === 'partial' ? { status: 'PARTIAL' } : {}),
     ...(options.from || options.to
       ? {
           date: {
@@ -401,6 +423,214 @@ export async function outstandingBalances(
   `
 
   return new Map(rows.map((row) => [row.id, new Decimal(row.total).minus(row.applied)]))
+}
+
+/** Figures for the bills home — same unpaid / overdue / paid split as invoices. */
+export async function billHome(ctx: OrgContext) {
+  const now = today(ctx.organization.timeZone)
+  const base = {
+    orgId: ctx.orgId,
+    type: 'BILL' as const,
+    deletedAt: null,
+  }
+
+  const [draftAgg, paidAgg, openRows] = await Promise.all([
+    db.purchaseDocument.aggregate({
+      where: { ...base, status: 'DRAFT' },
+      _sum: { total: true },
+      _count: true,
+    }),
+    db.purchaseDocument.aggregate({
+      where: { ...base, status: 'PAID' },
+      _sum: { total: true },
+      _count: true,
+    }),
+    // Only live payables need per-row balances — skip paid/draft history.
+    db.purchaseDocument.findMany({
+      where: { ...base, status: { in: ['OPEN', 'PARTIAL'] } },
+      select: { id: true, dueDate: true, total: true },
+    }),
+  ])
+
+  const balances = await outstandingBalances(
+    db,
+    openRows.map((row) => row.id),
+  )
+
+  let unpaid = ZERO
+  let overdue = ZERO
+  let notDue = ZERO
+  let unpaidCount = 0
+  let overdueCount = 0
+  let notDueCount = 0
+
+  for (const row of openRows) {
+    const owing = balances.get(row.id) ?? new Decimal(row.total.toString())
+    unpaid = unpaid.plus(owing)
+    unpaidCount += 1
+    const due = row.dueDate ? toCalendarDate(row.dueDate) : null
+    if (due && due < now) {
+      overdue = overdue.plus(owing)
+      overdueCount += 1
+    } else {
+      notDue = notDue.plus(owing)
+      notDueCount += 1
+    }
+  }
+
+  return {
+    unpaid: toMoneyString(unpaid, 2),
+    unpaidCount,
+    overdue: toMoneyString(overdue, 2),
+    overdueCount,
+    notDue: toMoneyString(notDue, 2),
+    notDueCount,
+    paid: toMoneyString(paidAgg._sum.total ?? 0, 2),
+    paidCount: paidAgg._count,
+    draftTotal: toMoneyString(draftAgg._sum.total ?? 0, 2),
+    draftCount: draftAgg._count,
+  }
+}
+
+/** Period totals for the expenses home (paid on the spot). */
+export async function expenseHome(ctx: OrgContext) {
+  const now = today(ctx.organization.timeZone)
+  const year = now.slice(0, 4)
+  const base = {
+    orgId: ctx.orgId,
+    type: 'EXPENSE' as const,
+    deletedAt: null,
+    status: { not: 'VOID' as const },
+  }
+  const between = (from: CalendarDate, to: CalendarDate) => ({
+    ...base,
+    date: { gte: toDate(from), lte: toDate(to) },
+  })
+  const tally = (where: Prisma.PurchaseDocumentWhereInput) =>
+    Promise.all([
+      db.purchaseDocument.aggregate({ where, _sum: { total: true } }),
+      db.purchaseDocument.count({ where }),
+    ])
+
+  const [todayRow, monthRow, yearRow, allRow] = await Promise.all([
+    tally(between(now, now)),
+    tally(between(startOfMonth(now), endOfMonth(now))),
+    tally(between(`${year}-01-01`, `${year}-12-31`)),
+    tally(base),
+  ])
+
+  const figure = (row: [(typeof todayRow)[0], number]) => ({
+    total: toMoneyString(row[0]._sum.total ?? 0, 2),
+    count: row[1],
+  })
+  const todayFigure = figure(todayRow)
+  const monthFigure = figure(monthRow)
+  const yearFigure = figure(yearRow)
+  const allFigure = figure(allRow)
+
+  return {
+    todayTotal: todayFigure.total,
+    todayCount: todayFigure.count,
+    monthTotal: monthFigure.total,
+    monthCount: monthFigure.count,
+    yearTotal: yearFigure.total,
+    yearCount: yearFigure.count,
+    allTotal: allFigure.total,
+    allCount: allFigure.count,
+  }
+}
+
+/** Open / applied / draft split for vendor credits. */
+export async function vendorCreditHome(ctx: OrgContext) {
+  const rows = await db.purchaseDocument.findMany({
+    where: { orgId: ctx.orgId, type: 'VENDOR_CREDIT', deletedAt: null, status: { not: 'VOID' } },
+    select: { status: true, total: true },
+  })
+
+  let open = ZERO
+  let applied = ZERO
+  let draftTotal = ZERO
+  let openCount = 0
+  let appliedCount = 0
+  let draftCount = 0
+
+  for (const row of rows) {
+    const amount = new Decimal(row.total.toString())
+    if (row.status === 'DRAFT') {
+      draftCount += 1
+      draftTotal = draftTotal.plus(amount)
+      continue
+    }
+    if (row.status === 'PAID' || row.status === 'CLOSED') {
+      appliedCount += 1
+      applied = applied.plus(amount)
+      continue
+    }
+    if (row.status === 'OPEN' || row.status === 'PARTIAL') {
+      openCount += 1
+      open = open.plus(amount)
+    }
+  }
+
+  return {
+    open: toMoneyString(open, 2),
+    openCount,
+    applied: toMoneyString(applied, 2),
+    appliedCount,
+    draftTotal: toMoneyString(draftTotal, 2),
+    draftCount,
+  }
+}
+
+/** Open / receiving / closed split for purchase orders. */
+export async function purchaseOrderHome(ctx: OrgContext) {
+  const rows = await db.purchaseDocument.findMany({
+    where: { orgId: ctx.orgId, type: 'PURCHASE_ORDER', deletedAt: null, status: { not: 'VOID' } },
+    select: { status: true, total: true },
+  })
+
+  let open = ZERO
+  let partial = ZERO
+  let closed = ZERO
+  let draftTotal = ZERO
+  let openCount = 0
+  let partialCount = 0
+  let closedCount = 0
+  let draftCount = 0
+
+  for (const row of rows) {
+    const amount = new Decimal(row.total.toString())
+    if (row.status === 'DRAFT') {
+      draftCount += 1
+      draftTotal = draftTotal.plus(amount)
+      continue
+    }
+    if (row.status === 'CLOSED') {
+      closedCount += 1
+      closed = closed.plus(amount)
+      continue
+    }
+    if (row.status === 'PARTIAL') {
+      partialCount += 1
+      partial = partial.plus(amount)
+      continue
+    }
+    if (row.status === 'OPEN') {
+      openCount += 1
+      open = open.plus(amount)
+    }
+  }
+
+  return {
+    open: toMoneyString(open, 2),
+    openCount,
+    partial: toMoneyString(partial, 2),
+    partialCount,
+    closed: toMoneyString(closed, 2),
+    closedCount,
+    draftTotal: toMoneyString(draftTotal, 2),
+    draftCount,
+  }
 }
 
 export async function create(

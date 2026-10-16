@@ -6,6 +6,8 @@ import { z } from 'zod'
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 
 import { MODULE_FORM_KEY_LIST } from '@/lib/feature-flags'
+import { requestAppsSchema } from '@/lib/validation/app-access'
+import { cuid } from '@/lib/validation/common'
 import {
   documentTemplateSchema,
   organizationAccountingSchema,
@@ -17,6 +19,7 @@ import { action, fail, ok } from '@/server/action'
 import { isAppError } from '@/server/errors'
 import { clearOrgLogo, storeOrgLogo } from '@/server/files/org-logo'
 import { requireOrgContext } from '@/server/auth/context'
+import * as appAccessService from '@/server/services/app-access.service'
 import * as organizationService from '@/server/services/organization.service'
 
 export const updateOrganization = action
@@ -153,6 +156,38 @@ export async function updateFeatureFlagsForm(
   const result = await updateFeatureFlags(values)
   return toFormState(result, 'Configuration saved.')
 }
+
+export const requestMoreApps = action
+  .requires('org:update')
+  .input(requestAppsSchema)
+  .handler(async (ctx, input) => {
+    const row = await appAccessService.requestApps(ctx, input)
+    revalidatePath('/settings/features')
+    revalidatePath('/databases')
+    return row
+  })
+
+export async function requestMoreAppsForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const values: Record<string, string> = { note: String(formData.get('note') ?? '') }
+  for (const key of MODULE_FORM_KEY_LIST) {
+    values[key] = formData.get(key) === 'true' || formData.get(key) === 'on' ? 'true' : 'false'
+  }
+  const result = await requestMoreApps(values)
+  return toFormState(result, 'App request sent. The system owner will review it.')
+}
+
+export const cancelAppAccessRequest = action
+  .requires('org:update')
+  .input(z.object({ id: cuid }))
+  .handler(async (ctx, input) => {
+    const row = await appAccessService.cancelPending(ctx, input.id)
+    revalidatePath('/settings/features')
+    revalidatePath('/databases')
+    return row
+  })
 
 export const updateEnableTax = action
   .requires('org:update')

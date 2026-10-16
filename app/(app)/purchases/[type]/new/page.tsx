@@ -36,11 +36,13 @@ export default async function NewPurchasePage({
   const vendorParam = query.vendor
   const requestedVendor = typeof vendorParam === 'string' ? vendorParam : undefined
   const requestedProject = typeof query.project === 'string' ? query.project : undefined
+  const emptyShelf = { stores: [] as Awaited<ReturnType<typeof storeService.quantities>>['stores'], byItem: {} as Awaited<ReturnType<typeof storeService.quantities>>['byItem'] }
   const [options, documentNumber, neighbors, shelf, project] = await Promise.all([
     loadPurchaseOptions(ctx),
     peekDocumentNumber(db, ctx.orgId, config.type),
     purchaseService.neighbors(ctx, config.type, null),
-    storeService.quantities(ctx),
+    // Stock is helpful but must not block creating a bill if the pool is busy.
+    storeService.quantities(ctx).catch(() => emptyShelf),
     requestedProject
       ? projectService.peek(ctx, requestedProject).catch(() => null)
       : Promise.resolve(null),
@@ -51,7 +53,6 @@ export default async function NewPurchasePage({
 
   return (
     <>
-
       <PageHeader title={`New ${config.singular.toLowerCase()}`} className="mb-2 pb-2" />
 
       <BillForm

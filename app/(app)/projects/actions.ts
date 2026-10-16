@@ -9,8 +9,16 @@ import {
   projectStatusSchema,
   projectUpdateSchema,
 } from '@/lib/validation/project'
+import {
+  moveProjectTaskSchema,
+  projectTaskSchema,
+  updateProjectTaskSchema,
+} from '@/lib/validation/project-task'
+import { cuid } from '@/lib/validation/common'
 import { action } from '@/server/action'
 import * as projectService from '@/server/services/project.service'
+import * as projectTaskService from '@/server/services/project-task.service'
+import { z } from 'zod'
 
 function revalidateProjects(id?: string) {
   revalidatePath('/projects')
@@ -60,4 +68,48 @@ export async function updateProjectForm(_prev: FormState, formData: FormData): P
 
 export async function setProjectStatusForm(_prev: FormState, formData: FormData): Promise<FormState> {
   return toFormState(await setProjectStatus(formValues(formData)), 'Status updated.')
+}
+
+export const createProjectTask = action
+  .requires('project:update')
+  .input(projectTaskSchema)
+  .handler(async (ctx, input) => {
+    const row = await projectTaskService.create(ctx, input)
+    revalidateProjects(row.projectId)
+    return row
+  })
+
+export const updateProjectTask = action
+  .requires('project:update')
+  .input(updateProjectTaskSchema)
+  .handler(async (ctx, input) => {
+    const { id, ...rest } = input
+    const row = await projectTaskService.update(ctx, id, rest)
+    revalidateProjects(row.projectId)
+    return row
+  })
+
+export const moveProjectTask = action
+  .requires('project:update')
+  .input(moveProjectTaskSchema)
+  .handler(async (ctx, input) => {
+    const row = await projectTaskService.move(ctx, input.id, input.stage)
+    revalidateProjects()
+    return row
+  })
+
+export const deleteProjectTask = action
+  .requires('project:update')
+  .input(z.object({ id: cuid }))
+  .handler(async (ctx, input) => {
+    const row = await projectTaskService.remove(ctx, input.id)
+    revalidateProjects()
+    return row
+  })
+
+export async function createProjectTaskForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  return toFormState(await createProjectTask(formValues(formData)), 'Task added.')
 }

@@ -31,7 +31,7 @@ export function CompanyAppsPicker({
   onChange,
   disabled = false,
   title = 'Apps for this company',
-  hint = 'Turn apps on or off. You can grant all, or only the ones this company may use — and change that later under Limits.',
+  hint = 'Pick the apps this company may use. They only see and open what you grant here. Later they can request more from Settings → Apps & features for you to approve.',
 }: {
   modules: Record<ModuleFlag, boolean>
   onChange: (next: Record<ModuleFlag, boolean>) => void

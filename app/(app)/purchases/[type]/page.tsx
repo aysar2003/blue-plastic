@@ -22,6 +22,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { DATE_PRESETS, presetRange, readDatePreset } from '@/lib/list-filters'
 import { formatMoney } from '@/lib/money'
+import { BillHome } from '@/components/purchases/bill-home'
+import { VendorCreditHome } from '@/components/purchases/vendor-credit-home'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { cn } from '@/lib/utils'
@@ -44,7 +46,15 @@ const BILL_FILTERS = [
   { value: '', label: 'All' },
   { value: 'open', label: 'Unpaid' },
   { value: 'overdue', label: 'Overdue' },
+  { value: 'notdue', label: 'Not due yet' },
   { value: 'paid', label: 'Paid' },
+  { value: 'draft', label: 'Drafts' },
+]
+
+const VENDOR_CREDIT_FILTERS = [
+  { value: '', label: 'All' },
+  { value: 'open', label: 'Open' },
+  { value: 'paid', label: 'Applied' },
   { value: 'draft', label: 'Drafts' },
 ]
 
@@ -66,7 +76,8 @@ export default async function PurchaseListPage({
 
   const ctx = await requireOrgContext('bill:read')
   const query = parseListQuery(search)
-  const statusOptions = config.type === 'BILL' ? BILL_FILTERS : null
+  const statusOptions =
+    config.type === 'BILL' ? BILL_FILTERS : config.type === 'VENDOR_CREDIT' ? VENDOR_CREDIT_FILTERS : null
   const statusRaw = typeof search.status === 'string' ? search.status : ''
   const status = statusOptions?.some((option) => option.value === statusRaw) ? statusRaw : undefined
   const vendorId = typeof search.vendorId === 'string' ? search.vendorId : undefined
@@ -74,18 +85,23 @@ export default async function PurchaseListPage({
   const range = presetRange(datePreset, today(ctx.organization.timeZone))
   const sort = readSort(search, SORTABLE, { sort: 'date', dir: 'desc' })
 
-  const page = await purchaseService.list(ctx, config.type, query, {
-    status,
-    vendorId,
-    ...sort,
-    from: range?.from,
-    to: range?.to,
-  })
+  const [page, billHome, creditHome] = await Promise.all([
+    purchaseService.list(ctx, config.type, query, {
+      status,
+      vendorId,
+      ...sort,
+      from: range?.from,
+      to: range?.to,
+    }),
+    config.type === 'BILL' ? purchaseService.billHome(ctx) : Promise.resolve(null),
+    config.type === 'VENDOR_CREDIT' ? purchaseService.vendorCreditHome(ctx) : Promise.resolve(null),
+  ])
   const trails = await trailsFor(ctx, page.rows.map((row) => row.id))
   const basePath = `/purchases/${config.slug}`
   const canEditDocuments = ctx.permissions.has('bill:update')
   const canDelete = ctx.features.allowDocumentDelete && ctx.permissions.has('bill:void')
   const canReceive = ctx.permissions.has('bill:create')
+  const canCreate = ctx.permissions.has('bill:create')
   const linkParams = {
     q: query.q,
     status: status || undefined,
@@ -98,7 +114,7 @@ export default async function PurchaseListPage({
   const currency = ctx.organization.baseCurrency
   const now = today(ctx.organization.timeZone)
 
-  const newButton = ctx.permissions.has('bill:create') ? (
+  const newButton = canCreate ? (
     <Link href={`/purchases/${config.slug}/new`} className={buttonVariants({ size: 'sm' })}>
       <PlusIcon /> New {config.singular.toLowerCase()}
     </Link>
@@ -106,7 +122,25 @@ export default async function PurchaseListPage({
 
   return (
     <>
-      <PageHeader title={config.plural} description={config.effect} actions={newButton} />
+      {billHome ? (
+        <BillHome
+          currency={currency}
+          canCreate={canCreate}
+          active={status ?? ''}
+          params={linkParams}
+          home={billHome}
+        />
+      ) : creditHome ? (
+        <VendorCreditHome
+          currency={currency}
+          canCreate={canCreate}
+          active={status ?? ''}
+          params={linkParams}
+          home={creditHome}
+        />
+      ) : (
+        <PageHeader title={config.plural} description={config.effect} actions={newButton} />
+      )}
 
       <div className="mb-3 flex flex-col gap-2">
         <FilterChips options={[...DATE_PRESETS]} active={datePreset} path={basePath} param="date" params={linkParams} />

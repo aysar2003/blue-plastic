@@ -342,9 +342,12 @@ export async function updateCompanyLimits(ctx: OrgContext, input: UpdateCompanyL
   }
 
   const current = parseFeatureFlags(organization.featureFlags)
+  const modules = modulesFromFormValues(input as Record<string, unknown>)
+  // Limits is the grant desk: what you tick becomes both granted and on.
   const nextFlags = {
     ...current,
-    modules: modulesFromFormValues(input as Record<string, unknown>),
+    grantedModules: modules,
+    modules,
   }
 
   const updated = await db.organization.update({

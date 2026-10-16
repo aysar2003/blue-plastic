@@ -34,12 +34,16 @@ export default async function NewSalesDocumentPage({
 
   const ctx = await requireOrgContext(config.createPermission)
   const loadsSources = config.type === 'INVOICE' || config.type === 'SALES_RECEIPT'
+  const emptyShelf = {
+    stores: [] as Awaited<ReturnType<typeof storeService.quantities>>['stores'],
+    byItem: {} as Awaited<ReturnType<typeof storeService.quantities>>['byItem'],
+  }
   const [options, query, documentNumber, neighbors, shelf, openSources] = await Promise.all([
     loadFormOptions(ctx),
     searchParams,
     peekDocumentNumber(db, ctx.orgId, config.type),
     salesService.neighbors(ctx, config.type, null),
-    storeService.quantities(ctx),
+    storeService.quantities(ctx).catch(() => emptyShelf),
     loadsSources ? salesService.listConvertibleSources(ctx) : Promise.resolve([]),
   ])
   const requestedProject = typeof query.project === 'string' ? query.project : undefined

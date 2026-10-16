@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isModuleEnabled, moduleForPath, type ModuleFlag } from '@/lib/feature-flags'
 import type { OrgContext } from '@/server/auth/context'
 import { precondition } from '@/server/errors'
 
@@ -7,6 +8,19 @@ import { precondition } from '@/server/errors'
  * Settings → Configuration switches are enforced here as well as in the UI, so a
  * hidden button is never the only thing standing between a user and a delete.
  */
+
+/** Refuse a page or action when this company was not granted the app, or turned it off. */
+export function assertModuleEnabled(ctx: OrgContext, moduleKey: ModuleFlag | string) {
+  if (!isModuleEnabled(ctx.features, moduleKey)) {
+    throw precondition('This app is not available for this company.')
+  }
+}
+
+/** Map a URL to its app and refuse when that app is off. */
+export function assertPathModuleEnabled(ctx: OrgContext, pathname: string) {
+  const module = moduleForPath(pathname)
+  if (module) assertModuleEnabled(ctx, module)
+}
 export function assertDocumentDeleteAllowed(ctx: OrgContext) {
   if (!ctx.features.allowDocumentDelete) {
     throw precondition('Document delete is turned off in Settings → Configuration.')

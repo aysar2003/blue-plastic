@@ -2,7 +2,11 @@ import 'server-only'
 import type { Prisma, Role } from '@prisma/client'
 
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
-import type { InviteUserInput, UpdateMemberRoleInput } from '@/lib/validation/user'
+import type {
+  InviteUserInput,
+  ResetMemberPasswordInput,
+  UpdateMemberRoleInput,
+} from '@/lib/validation/user'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { hashPassword } from '@/server/auth/password'
@@ -19,7 +23,16 @@ const MEMBER_SELECT = {
   canConnect: true,
   createdAt: true,
   acceptedAt: true,
-  user: { select: { id: true, name: true, email: true, image: true, lastLoginAt: true } },
+  user: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+      lastLoginAt: true,
+      isSystemOwner: true,
+    },
+  },
 } satisfies Prisma.MembershipSelect
 
 export type MemberRow = Prisma.MembershipGetPayload<{ select: typeof MEMBER_SELECT }>
@@ -348,6 +361,58 @@ export async function setCanConnect(ctx: OrgContext, membershipId: string, canCo
     )
 
     return after
+  })
+}
+
+/**
+ * Company admin sets a new temporary password for a member of this company.
+ * The old password is never read or returned — only the new one is shown once.
+ */
+export async function resetMemberPassword(ctx: OrgContext, input: ResetMemberPasswordInput) {
+  const meta = await requestMeta()
+  const passwordHash = await hashPassword(input.temporaryPassword)
+
+  return db.$transaction(async (tx) => {
+    const membership = await tx.membership.findFirst({
+      where: { id: input.membershipId, orgId: ctx.orgId, role: { not: 'CUSTOMER' } },
+      select: MEMBER_SELECT,
+    })
+    if (!membership) throw notFound('Member')
+
+    if (membership.user.id === ctx.userId) {
+      throw precondition('Change your own password under Settings → Your profile.')
+    }
+    if (membership.user.isSystemOwner && !ctx.isSystemOwner) {
+      throw forbidden('Only the system owner can reset that password.')
+    }
+
+    await tx.user.update({
+      where: { id: membership.user.id },
+      data: { passwordHash },
+    })
+    await tx.membership.update({
+      where: { id: membership.id },
+      data: { version: { increment: 1 } },
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Membership',
+        entityId: membership.id,
+        action: 'UPDATE',
+        after: { passwordReset: true, email: membership.user.email },
+      },
+      meta,
+    )
+
+    return {
+      id: membership.id,
+      temporaryPassword: input.temporaryPassword,
+      email: membership.user.email,
+      name: membership.user.name,
+    }
   })
 }
 

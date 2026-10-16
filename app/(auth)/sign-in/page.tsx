@@ -43,10 +43,10 @@ export default async function SignInPage({
     const canRegister = isSelfServeEnabled()
 
     return (
-    <div className="flex w-full max-w-sm flex-col gap-4">
-      <Card className="w-full border-border bg-card text-card-foreground shadow-sm">
-        <CardHeader>
-          <CardTitle>Company login</CardTitle>
+    <div className="mx-auto flex w-full max-w-sm flex-col gap-5">
+      <Card className="w-full border-border bg-card/95 text-card-foreground shadow-[0_20px_50px_-28px_var(--glow)] backdrop-blur-sm">
+        <CardHeader className="space-y-1.5 pb-4">
+          <CardTitle className="text-xl tracking-tight">Company login</CardTitle>
           <CardDescription>
             Enter your email and password to open the books.
           </CardDescription>
@@ -55,20 +55,22 @@ export default async function SignInPage({
           <SignInForm />
         </CardContent>
       </Card>
-      <p className="text-center text-sm text-muted-foreground">
-        Customer?{' '}
-        <Link href="/portal/login" className="font-medium text-primary underline">
-          Customer portal login
-        </Link>
-      </p>
-      {canRegister ? (
-        <p className="text-center text-sm text-muted-foreground">
-          New business?{' '}
-          <Link href="/register" className="font-medium text-primary underline">
-            Create your company
+      <div className="space-y-2 text-center text-sm text-muted-foreground">
+        <p>
+          Customer?{' '}
+          <Link href="/portal/login" className="font-medium text-primary underline-offset-4 hover:underline">
+            Customer portal login
           </Link>
         </p>
-      ) : null}
+        {canRegister ? (
+          <p>
+            New business?{' '}
+            <Link href="/register" className="font-medium text-primary underline-offset-4 hover:underline">
+              Create your company
+            </Link>
+          </p>
+        ) : null}
+      </div>
       <p className="text-center text-[0.6875rem] tracking-wide text-muted-foreground">
         <span className="font-medium text-foreground">{PRODUCT_NAME}</span>
         {showBrand ? (

@@ -3,6 +3,7 @@ import Link from 'next/link'
 
 import { FeaturesForm } from './features-form'
 import { requireOrgContext } from '@/server/auth/context'
+import * as appAccessService from '@/server/services/app-access.service'
 import * as organizationService from '@/server/services/organization.service'
 
 export const metadata: Metadata = { title: 'Apps & features' }
@@ -10,7 +11,10 @@ export const metadata: Metadata = { title: 'Apps & features' }
 export default async function FeaturesSettingsPage() {
   await requireOrgContext('org:update')
   const ctx = await requireOrgContext('org:read')
-  const flags = await organizationService.getFeatureFlags(ctx)
+  const [flags, requests] = await Promise.all([
+    organizationService.getFeatureFlags(ctx),
+    appAccessService.listForCompany(ctx),
+  ])
   const canManageUsers = ctx.permissions.has('user:read')
 
   return (
@@ -19,23 +23,33 @@ export default async function FeaturesSettingsPage() {
         <h2 className="text-base font-semibold">Apps & features</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Company settings for <span className="font-medium text-foreground">{ctx.organization.name}</span>{' '}
-          only — not the ERP system Limits under Databases. Other companies keep their own apps. Tax
-          on/off lives under{' '}
+          only — turn granted apps on or off, and request more from the system owner. Tax on/off
+          lives under{' '}
           <Link href="/settings/tax" className="font-medium text-primary underline">
             Settings → Tax
           </Link>
-          . To open apps for one person inside this company, use{' '}
+          . Per-person access is under{' '}
           {canManageUsers ? (
             <Link href="/settings/users" className="font-medium text-primary underline">
-              Settings → Users
+              Settings → Company users
             </Link>
           ) : (
-            'Settings → Users'
+            'Settings → Company users'
           )}
-          . Deletes stay soft (rows remain; balances and lists exclude them).
+          .
         </p>
       </div>
-      <FeaturesForm flags={flags} />
+      <FeaturesForm
+        flags={flags}
+        requests={requests.map((row) => ({
+          id: row.id,
+          status: row.status,
+          apps: row.apps,
+          note: row.note,
+          reviewNote: row.reviewNote,
+          at: row.at.toISOString(),
+        }))}
+      />
     </div>
   )
 }

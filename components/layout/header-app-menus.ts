@@ -92,6 +92,7 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
   ],
   databases: [
     { label: 'All databases', href: '/databases', permission: 'org:update' },
+    { label: 'System users', href: '/databases/users', permission: 'org:update' },
     { label: 'Create company', href: '/databases?create=1', permission: 'org:update' },
     { label: 'Import backup', href: '/databases?import=1', permission: 'org:update' },
   ],

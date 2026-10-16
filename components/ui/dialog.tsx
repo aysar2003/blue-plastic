@@ -14,17 +14,43 @@ import { cn } from '@/lib/utils'
  * the focus trap, the return of focus to whatever opened it, Escape, the scroll
  * lock, the portal, and the aria wiring. Those are the parts that are tedious to
  * write once and never written correctly nine times.
+ *
+ * Successive dialogs (a second window opened while another is open) stack above
+ * the first via a process-wide layer counter — standard nested-modal behaviour.
  */
 const Dialog = DialogPrimitive.Root
 const DialogTrigger = DialogPrimitive.Trigger
 const DialogClose = DialogPrimitive.Close
 
-function DialogOverlay({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
+let dialogLayer = 0
+
+function useDialogLayer(open: boolean | undefined) {
+  const [layer, setLayer] = React.useState(0)
+  React.useEffect(() => {
+    if (open === false) return
+    dialogLayer += 1
+    const current = dialogLayer
+    setLayer(current)
+    return () => {
+      dialogLayer = Math.max(0, dialogLayer - 1)
+    }
+  }, [open])
+  return layer
+}
+
+function DialogOverlay({
+  className,
+  style,
+  layer = 0,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Overlay> & { layer?: number }) {
+  const z = 50 + layer * 10
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
+      style={{ ...style, zIndex: z }}
       className={cn(
-        'fixed inset-0 z-50 bg-black/45 backdrop-blur-[1px]',
+        'fixed inset-0 bg-black/45 backdrop-blur-[1px]',
         'data-[state=open]:animate-in data-[state=open]:fade-in-0',
         'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
         className,
@@ -46,14 +72,18 @@ function DialogContent({
     lg: 'sm:max-w-2xl',
     xl: 'sm:max-w-4xl',
   }[size]
+  // Radix Content has data-state; treat mount as open for stacking.
+  const layer = useDialogLayer(true)
+  const z = 51 + layer * 10
 
   return (
     <DialogPrimitive.Portal>
-      <DialogOverlay />
+      <DialogOverlay layer={layer} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        style={{ zIndex: z }}
         className={cn(
-          'fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] -translate-x-1/2 sm:top-1/2 sm:-translate-y-1/2',
+          'fixed left-1/2 top-4 w-[calc(100%-2rem)] -translate-x-1/2 sm:top-1/2 sm:-translate-y-1/2',
           // A tall form scrolls inside the dialog rather than pushing the page,
           // so the header and the footer buttons stay where the user left them.
           'max-h-[calc(100svh-2rem)] overflow-y-auto rounded-md border bg-card p-5 text-card-foreground shadow-xl',

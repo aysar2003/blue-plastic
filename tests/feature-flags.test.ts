@@ -6,6 +6,8 @@ import {
   featureFlagsWithModules,
   hasAnyModuleEnabled,
   isModuleEnabled,
+  isModuleGranted,
+  modulesClampedToGrants,
   modulesFromFormValues,
   parseFeatureFlags,
   parseModulesSelection,
@@ -79,5 +81,37 @@ describe('feature flags', () => {
     expect(isModuleEnabled(flags, 'customers')).toBe(false)
     expect(isModuleEnabled(flags, 'projects')).toBe(true)
     expect(isModuleEnabled(flags, 'payments')).toBe(false)
+  })
+
+  it('treats older saves without grantedModules as fully granted for whatever was on', () => {
+    const flags = parseFeatureFlags({ modules: { sales: true, pos: false } })
+    expect(flags.grantedModules.sales).toBe(true)
+    expect(flags.grantedModules.pos).toBe(false)
+    expect(isModuleGranted(flags, 'sales')).toBe(true)
+    expect(isModuleGranted(flags, 'pos')).toBe(false)
+  })
+
+  it('refuses to enable an app the company was never granted', () => {
+    const flags = parseFeatureFlags({
+      grantedModules: { ...DEFAULT_FEATURE_FLAGS.grantedModules, sales: false },
+      modules: { ...DEFAULT_FEATURE_FLAGS.modules, sales: true },
+    })
+    expect(isModuleEnabled(flags, 'sales')).toBe(false)
+    const clamped = modulesClampedToGrants(
+      { ...DEFAULT_FEATURE_FLAGS.modules, sales: true },
+      { ...DEFAULT_FEATURE_FLAGS.grantedModules, sales: false },
+    )
+    expect(clamped.sales).toBe(false)
+  })
+
+  it('copies grants when the system owner sets modules at create time', () => {
+    const flags = featureFlagsWithModules({
+      ...DEFAULT_FEATURE_FLAGS.modules,
+      sales: true,
+      pos: false,
+    })
+    expect(flags.grantedModules.sales).toBe(true)
+    expect(flags.grantedModules.pos).toBe(false)
+    expect(flags.modules.pos).toBe(false)
   })
 })

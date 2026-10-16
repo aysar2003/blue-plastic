@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { contactDialogOptions, itemDialogOptions } from '@/app/(app)/quick-create/actions'
 import type { AccountOption } from '@/components/master-data/item-dialog'
 import type { AccountPickerOption } from '@/lib/account-options'
+import { moduleForPath } from '@/lib/feature-flags'
 import { cn } from '@/lib/utils'
 import { startNavigationProgress } from './navigation-progress'
 
@@ -99,10 +100,13 @@ type DialogData =
 export function QuickCreate({
   permissions,
   currency,
+  hiddenApps,
   trigger = 'header',
 }: {
   permissions: string[]
   currency: string
+  /** App keys switched off for this company — hide Create entries that open them. */
+  hiddenApps?: string[]
   /** `pill` is the full-width New button on the accounting list. */
   trigger?: 'header' | 'pill'
 }) {
@@ -110,10 +114,23 @@ export function QuickCreate({
   const [open, setOpen] = React.useState(false)
   const [dialog, setDialog] = React.useState<DialogData | null>(null)
   const allowed = React.useMemo(() => new Set(permissions), [permissions])
+  const blocked = React.useMemo(() => new Set(hiddenApps ?? []), [hiddenApps])
 
   const columns = COLUMNS.map((column) => ({
     ...column,
-    entries: column.entries.filter((entry) => !entry.permission || allowed.has(entry.permission)),
+    entries: column.entries.filter((entry) => {
+      if (entry.permission && !allowed.has(entry.permission)) return false
+      if ('href' in entry) {
+        const module = moduleForPath(entry.href)
+        if (module && blocked.has(module)) return false
+      }
+      if ('opens' in entry) {
+        if (entry.opens === 'customer' && blocked.has('customers')) return false
+        if (entry.opens === 'vendor' && blocked.has('vendors')) return false
+        if (entry.opens === 'item' && blocked.has('inventory')) return false
+      }
+      return true
+    }),
   })).filter((column) => column.entries.length > 0)
 
   async function choose(entry: Entry) {

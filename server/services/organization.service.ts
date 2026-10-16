@@ -1,7 +1,11 @@
 import 'server-only'
 
 import { parseDocumentTemplate, type DocumentTemplate } from '@/lib/document-template'
-import { parseFeatureFlags, type OrgFeatureFlags } from '@/lib/feature-flags'
+import {
+  modulesClampedToGrants,
+  parseFeatureFlags,
+  type OrgFeatureFlags,
+} from '@/lib/feature-flags'
 import { modulesFromFeaturesInput } from '@/lib/validation/organization'
 import type {
   DocumentTemplateInput,
@@ -188,6 +192,7 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
     if (!before) throw notFound('Organisation')
 
     // Keep company tax (Settings → Tax) separate from apps/deletes saved here.
+    // Grants stay owner-controlled; this page only turns granted apps on/off.
     const previous = parseFeatureFlags(before.featureFlags)
     const flags: OrgFeatureFlags = {
       allowJournalDelete: input.allowJournalDelete,
@@ -200,7 +205,8 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       enableTax: previous.enableTax,
       enableCustomerPortal: input.enableCustomerPortal,
       enableDocumentApprovals: input.enableDocumentApprovals,
-      modules: modulesFromFeaturesInput(input),
+      grantedModules: previous.grantedModules,
+      modules: modulesClampedToGrants(modulesFromFeaturesInput(input), previous.grantedModules),
     }
 
     const after = await tx.organization.update({

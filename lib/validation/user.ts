@@ -66,6 +66,22 @@ export type UpdateMemberRoleInput = z.infer<typeof updateMemberRoleSchema>
 
 export const membershipIdSchema = z.object({ membershipId: cuid })
 
+/** Company admin sets a new work password — never reads the old one. */
+export const resetMemberPasswordSchema = z.object({
+  membershipId: cuid,
+  temporaryPassword: password,
+})
+
+export type ResetMemberPasswordInput = z.infer<typeof resetMemberPasswordSchema>
+
+/** System owner sets a new work password for any login on the installation. */
+export const resetSystemUserPasswordSchema = z.object({
+  userId: cuid,
+  temporaryPassword: password,
+})
+
+export type ResetSystemUserPasswordInput = z.infer<typeof resetSystemUserPasswordSchema>
+
 export const updateProfileSchema = z.object({
   name: requiredText('Name', 120),
 })

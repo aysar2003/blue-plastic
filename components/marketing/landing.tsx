@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 
 import { AiDemoPlayer } from '@/components/marketing/ai-demo-player'
+import { ProductWordmark } from '@/components/marketing/product-wordmark'
 import { WebsiteShell } from '@/components/marketing/website-shell'
 import { AI_DEMO_VIDEOS } from '@/lib/ai-demo-videos'
 import {
@@ -30,7 +31,6 @@ import {
 import {
   PRODUCT_BUILDER,
   PRODUCT_KIND,
-  PRODUCT_MARK,
   PRODUCT_NAME,
   PRODUCT_TAGLINE,
 } from '@/lib/product-brand'
@@ -131,24 +131,6 @@ export function Landing({
   )
 }
 
-function Wordmark() {
-  return (
-    <Link href="/" className="group flex items-center gap-2.5">
-      <span className="grid size-9 place-items-center rounded-md bg-primary text-[13px] font-bold tracking-wide text-primary-foreground shadow-[0_8px_24px_-10px_var(--glow)]">
-        {PRODUCT_MARK}
-      </span>
-      <span className="leading-tight">
-        <span className="block text-[17px] font-semibold tracking-tight text-foreground">
-          {PRODUCT_NAME}
-        </span>
-        <span className="hidden text-[11px] font-semibold uppercase tracking-[0.16em] text-success sm:block">
-          {PRODUCT_KIND}
-        </span>
-      </span>
-    </Link>
-  )
-}
-
 function SiteHeader({
   signedIn,
   enterHref,
@@ -161,7 +143,7 @@ function SiteHeader({
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card/90 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-6 px-5 sm:px-8">
-        <Wordmark />
+        <ProductWordmark size="sm" />
 
         <nav className="hidden items-center gap-7 text-[14px] font-medium text-muted-foreground md:flex">
           <a className="transition-colors hover:text-foreground" href="#modules">
@@ -641,7 +623,7 @@ function SiteFooter({ contact }: { contact: MarketingContact }) {
   return (
     <footer className="border-t border-border py-10">
       <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-5 sm:px-8 md:flex-row md:items-center">
-        <Wordmark />
+        <ProductWordmark size="sm" />
         <div className="flex flex-wrap items-center gap-x-7 gap-y-2 text-[14px] text-muted-foreground">
           <a className="transition-colors hover:text-foreground" href="#tutorials">
             How to use

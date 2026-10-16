@@ -3,7 +3,6 @@ import { PlusIcon, ReceiptIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
 import { GiveFeedback } from '@/components/data/give-feedback'
-import { PageHeader } from '@/components/data/page-header'
 import { Pagination } from '@/components/data/pagination'
 import { PrintPageButton } from '@/components/data/print-page-button'
 import { QuerySelect } from '@/components/data/query-select'
@@ -11,6 +10,7 @@ import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { SearchInput } from '@/components/data/search-input'
 import { TableToolbar } from '@/components/data/table-toolbar'
 import { readSort } from '@/components/data/sortable-header'
+import { PurchaseOrderHome } from '@/components/purchases/purchase-order-home'
 import { PurchaseOrderTable } from '@/components/purchases/purchase-order-table'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -41,10 +41,16 @@ export async function PurchaseOrderScreen({
   const range = presetRange(datePreset, today(ctx.organization.timeZone))
   const vendorId = typeof search.vendorId === 'string' ? search.vendorId : ''
   const statusRaw = typeof search.status === 'string' ? search.status : ''
-  const status = statusRaw === 'open' || statusRaw === 'draft' ? statusRaw : undefined
+  const status =
+    statusRaw === 'open' ||
+    statusRaw === 'draft' ||
+    statusRaw === 'partial' ||
+    statusRaw === 'closed'
+      ? statusRaw
+      : undefined
   const sort = readSort(search, SORTABLE, { sort: 'date', dir: 'desc' })
 
-  const [page, vendors] = await Promise.all([
+  const [page, vendors, home] = await Promise.all([
     purchaseService.listOrderBoard(ctx, query, {
       status,
       vendorId: vendorId || undefined,
@@ -57,9 +63,11 @@ export async function PurchaseOrderScreen({
       select: { id: true, displayName: true },
       orderBy: { displayName: 'asc' },
     }),
+    purchaseService.purchaseOrderHome(ctx),
   ])
 
   const canCreate = ctx.permissions.has('bill:create')
+  const currency = ctx.organization.baseCurrency
   const hidden = {
     q: query.q,
     vendorId: vendorId || undefined,
@@ -71,33 +79,30 @@ export async function PurchaseOrderScreen({
 
   return (
     <>
-      <PageHeader
-        title="Purchase orders"
-        description="Orders placed with vendors. Nothing is posted until the goods are billed."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <GiveFeedback />
-            {canCreate ? (
-              <Link href="/purchases/purchase-orders/new" className={buttonVariants({ size: 'sm' })}>
-                <PlusIcon /> Add purchase order
-              </Link>
-            ) : null}
-            <PrintPageButton />
-            <TableToolbar
-              exportHref={`/api/exports/purchase-orders?${new URLSearchParams(
-                Object.entries({
-                  q: query.q,
-                  vendorId: vendorId || undefined,
-                  date: datePreset || undefined,
-                  status,
-                  sort: sort.sort,
-                  dir: sort.dir,
-                }).filter((entry): entry is [string, string] => Boolean(entry[1])),
-              ).toString()}`}
-            />
-          </div>
-        }
+      <PurchaseOrderHome
+        currency={currency}
+        canCreate={canCreate}
+        active={status ?? ''}
+        params={hidden}
+        home={home}
       />
+
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+        <GiveFeedback />
+        <PrintPageButton />
+        <TableToolbar
+          exportHref={`/api/exports/purchase-orders?${new URLSearchParams(
+            Object.entries({
+              q: query.q,
+              vendorId: vendorId || undefined,
+              date: datePreset || undefined,
+              status,
+              sort: sort.sort,
+              dir: sort.dir,
+            }).filter((entry): entry is [string, string] => Boolean(entry[1])),
+          ).toString()}`}
+        />
+      </div>
 
       <div className="mb-3 flex flex-wrap items-end gap-3">
         <QuerySelect

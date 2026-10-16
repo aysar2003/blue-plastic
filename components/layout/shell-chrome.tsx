@@ -1,8 +1,10 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 
+import { moduleForPath } from '@/lib/feature-flags'
 import { HeaderApps } from './app-launcher'
 import { ActiveAppLink, AppsBarToggle, useAppsBarHidden } from './apps-bar'
 import { AppMemoryProvider } from './app-memory'
@@ -122,8 +124,17 @@ export function ShellChrome({
   children,
 }: ShellChromeProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const { hidden: appsHidden, toggle: toggleAppsBar } = useAppsBarHidden()
   const current = moduleFor(pathname)
+
+  // Soft client guard: URLs for switched-off apps bounce home (layouts also refuse).
+  useEffect(() => {
+    const flag = moduleForPath(pathname)
+    if (flag && hiddenApps?.includes(flag)) {
+      router.replace('/dashboard')
+    }
+  }, [pathname, hiddenApps, router])
   const isHome = !current || current.key === 'dashboard'
   const isPos = pathname === '/pos' || pathname.startsWith('/pos/')
   const isHub = HUB_PATHS.has(pathname)
@@ -210,7 +221,13 @@ export function ShellChrome({
               />
             ) : null}
             {working ? <AppsBarToggle hidden={appsHidden} onToggle={toggleAppsBar} /> : null}
-            {working ? <QuickCreate permissions={permissions} currency={baseCurrency} /> : null}
+            {working ? (
+              <QuickCreate
+                permissions={permissions}
+                currency={baseCurrency}
+                hiddenApps={hiddenApps}
+              />
+            ) : null}
             {working ? <CommandPalette permissions={permissions} /> : null}
             {working ? <ShellMenus /> : null}
             {stockAlertsSlot}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { MoreHorizontalIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { ResetWorkPasswordDialog } from '@/components/settings/reset-work-password-dialog'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -16,13 +17,19 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ROLE_LABELS } from '@/lib/roles'
 import { EditMemberAccessDialog } from './edit-member-access-dialog'
-import { removeMember, setMemberStatus, updateMemberAccess } from './actions'
+import {
+  removeMember,
+  resetMemberPasswordForm,
+  setMemberStatus,
+  updateMemberAccess,
+} from './actions'
 
 export function MemberActions({
   membershipId,
   role,
   status,
   name,
+  email,
   permissionsOverride,
   roles,
   roleTemplates,
@@ -33,6 +40,7 @@ export function MemberActions({
   role: string
   status: string
   name: string
+  email: string
   permissionsOverride: string[]
   roles: string[]
   roleTemplates: Record<string, string[]>
@@ -42,6 +50,7 @@ export function MemberActions({
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [editOpen, setEditOpen] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
 
   const run = (fn: () => Promise<{ ok: boolean; error?: { message: string } }>, success: string) => {
     startTransition(async () => {
@@ -68,6 +77,9 @@ export function MemberActions({
             <>
               <DropdownMenuItem onSelect={() => setEditOpen(true)}>
                 Edit access…
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setResetOpen(true)}>
+                Reset password…
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Quick role</DropdownMenuLabel>
@@ -130,6 +142,17 @@ export function MemberActions({
           initialPermissions={permissionsOverride}
           roles={roles}
           roleTemplates={roleTemplates}
+        />
+      ) : null}
+
+      {canUpdate ? (
+        <ResetWorkPasswordDialog
+          open={resetOpen}
+          onOpenChange={setResetOpen}
+          title="Reset work password"
+          description={`Set a new temporary password for ${name} (${email}). The old password is never shown — only this new one, once.`}
+          hiddenFields={{ membershipId }}
+          formAction={resetMemberPasswordForm}
         />
       ) : null}
     </>

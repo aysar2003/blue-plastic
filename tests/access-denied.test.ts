@@ -40,7 +40,8 @@ describe('access denied copy', () => {
 
 describe('section names', () => {
   it('reads the tab or module from the path', () => {
-    expect(sectionLabel('/settings/users')).toBe('Users')
+    expect(sectionLabel('/settings/users')).toBe('Company users')
+    expect(sectionLabel('/databases/users')).toBe('System users')
     expect(sectionLabel('/reports/profit-loss')).toBe('Profit and Loss')
     expect(sectionLabel('/reports/business-overview?period=this-month')).toBe('Business overview')
     expect(sectionLabel('/customers')).toBe('Customers')
@@ -102,8 +103,8 @@ describe('forbidden action notices', () => {
 describe('access denied screen', () => {
   it('shows the Somali message, the English subtitle, and a way back to the dashboard', () => {
     const html = renderToStaticMarkup(createElement(AccessDenied))
-    expect(html).toContain('Ma haysatid ogolaansho aad ku isticmaasho qaybta Users')
-    expect(html).toContain("You don&#x27;t have permission to use Users")
+    expect(html).toContain('Ma haysatid ogolaansho aad ku isticmaasho qaybta Company users')
+    expect(html).toContain("You don&#x27;t have permission to use Company users")
     expect(html).toContain('Fadlan la xiriir milkiilaha ama maamulaha.')
     expect(html).toContain('Contact the owner or an admin.')
     expect(html).toContain('href="/dashboard"')

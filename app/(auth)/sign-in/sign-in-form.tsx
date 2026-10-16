@@ -6,6 +6,7 @@ import { Field, fieldProps } from '@/components/forms/field'
 import { FormError } from '@/components/forms/form-error'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { Input } from '@/components/ui/input'
+import { PRODUCT_NAME } from '@/lib/product-brand'
 import { signInAction, type SignInState } from './actions'
 
 const initialState: SignInState = {}
@@ -46,7 +47,7 @@ export function SignInForm() {
       </Field>
 
       <SubmitButton className="w-full" pendingLabel="Signing in…">
-        Sign in to SOM ERP
+        Sign in to {PRODUCT_NAME}
       </SubmitButton>
     </form>
   )

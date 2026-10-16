@@ -30,7 +30,7 @@ const ROLE_TEMPLATES = Object.fromEntries(
   ASSIGNABLE_ROLES.map((role) => [role, [...permissionsFor(role)]]),
 ) as Record<string, string[]>
 
-export const metadata: Metadata = { title: 'Users' }
+export const metadata: Metadata = { title: 'Company users' }
 
 export default async function UsersPage({
   searchParams,
@@ -68,11 +68,11 @@ export default async function UsersPage({
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Users"
+        title="Company users"
         description={
           ctx.isSystemOwner
-            ? 'Add people and choose their apps. Connect can be given only to an admin. Everyone else signs in straight to this company.'
-            : 'Add people, assign a ready-made role, or tick which apps each person may open — the same apps on the home screen.'
+            ? 'People in this company only. Connect can be given only to an admin. To see every login on the installation, open System users under Databases.'
+            : 'People in this company. Assign a role or tick which apps each person may open — the same apps on the home screen. You can reset a work password; the old one is never shown.'
         }
         actions={
           canInvite ? (
@@ -80,6 +80,14 @@ export default async function UsersPage({
           ) : undefined
         }
       />
+      {ctx.isSystemOwner ? (
+        <p className="-mt-2 text-sm text-muted-foreground">
+          <Link href="/databases/users" className="font-medium text-primary underline">
+            System users
+          </Link>{' '}
+          — every login across all companies (owner only).
+        </p>
+      ) : null}
       {ctx.permissions.has('org:update') ? (
         <p className="-mt-2 text-sm text-muted-foreground">
           To turn an app off for everyone, use{' '}
@@ -241,6 +249,7 @@ export default async function UsersPage({
                               role={member.role}
                               status={member.status}
                               name={member.user.name}
+                              email={member.user.email}
                               permissionsOverride={member.permissionsOverride}
                               roles={[...ASSIGNABLE_ROLES]}
                               roleTemplates={ROLE_TEMPLATES}

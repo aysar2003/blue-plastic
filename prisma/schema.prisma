@@ -140,6 +140,21 @@ enum ProjectStatus {
   CANCELLED
 }
 
+/// Kanban stage for a task on a project (Odoo-style Projects).
+enum ProjectTaskStage {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+/// Company asked the ERP owner for extra apps beyond the current grant.
+enum AppAccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 /// Statement classification. Determines which financial statement an account
 /// appears on and its normal balance.
 enum AccountType {
@@ -571,6 +586,8 @@ model Organization {
   approvalPolicies  ApprovalPolicy[]
   approvalRequests  ApprovalRequest[]
   projects          Project[]
+  projectTasks      ProjectTask[]
+  appAccessRequests AppAccessRequest[]
 
   @@index([parentOrgId])
   @@map("organizations")
@@ -614,6 +631,10 @@ model User {
   approvalRequestsSubmitted ApprovalRequest[]  @relation("ApprovalSubmittedBy")
   approvalDecisions         ApprovalDecision[] @relation("ApprovalDecidedBy")
   projectsCreated           Project[]          @relation("ProjectCreatedBy")
+  projectTasksCreated       ProjectTask[]      @relation("ProjectTaskCreatedBy")
+  projectTasksAssigned      ProjectTask[]      @relation("ProjectTaskAssignee")
+  appAccessRequests         AppAccessRequest[] @relation("AppAccessRequestedBy")
+  appAccessReviews          AppAccessRequest[] @relation("AppAccessReviewedBy")
 
   @@map("users")
 }
@@ -1846,12 +1867,70 @@ model Project {
 
   salesDocuments    SalesDocument[]
   purchaseDocuments PurchaseDocument[]
+  tasks             ProjectTask[]
 
   @@unique([orgId, number])
   @@unique([id, orgId])
   @@index([orgId, status, updatedAt(sort: Desc)])
   @@index([orgId, customerId, updatedAt(sort: Desc)])
   @@map("projects")
+}
+
+/// A task on a project — Odoo-style kanban card (to do → in progress → done).
+model ProjectTask {
+  id        String @id @default(cuid())
+  orgId     String
+  projectId String
+
+  name        String
+  description String?
+  stage       ProjectTaskStage @default(TODO)
+  /// Order within the stage column (lower = higher on the board).
+  sequence    Int              @default(0)
+
+  assigneeId String?
+  deadline   DateTime? @db.Date
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee     User?        @relation("ProjectTaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy    User?        @relation("ProjectTaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, projectId, stage, sequence])
+  @@index([orgId, assigneeId, stage])
+  @@map("project_tasks")
+}
+
+/// Company asks the ERP system owner for apps beyond the current grant.
+model AppAccessRequest {
+  id    String @id @default(cuid())
+  orgId String
+
+  /// Apps asked for. Shape: `Record<ModuleFlag, boolean>`.
+  requestedModules Json
+  note             String?
+
+  status AppAccessRequestStatus @default(PENDING)
+
+  requestedById String
+  reviewedAt    DateTime? @db.Timestamptz(6)
+  reviewedById  String?
+  reviewNote    String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  requestedBy  User         @relation("AppAccessRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy   User?        @relation("AppAccessReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([orgId, status, createdAt(sort: Desc)])
+  @@map("app_access_requests")
 }
 
 /// the ledger was told, and recomputing them later from prices that may since

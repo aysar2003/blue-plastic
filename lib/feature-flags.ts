@@ -54,7 +54,7 @@ export const MODULE_FLAGS: readonly ModuleFlag[] = [
 export const MODULE_FLAG_LABELS: Record<ModuleFlag, { label: string; hint: string }> = {
   pos: { label: 'Point of Sale', hint: 'Registers and till' },
   sales: { label: 'Sales', hint: 'Estimates, orders, invoices, receipts' },
-  projects: { label: 'Projects', hint: 'Customer job folders' },
+  projects: { label: 'Projects', hint: 'Jobs, tasks, and linked sales' },
   customers: { label: 'Customers', hint: 'Who you sell to' },
   purchases: { label: 'Purchases', hint: 'Bills, expenses, purchase orders' },
   vendors: { label: 'Vendors', hint: 'Who you buy from' },
@@ -123,7 +123,13 @@ export type OrgFeatureFlags = {
    * checker posts them. POS till sales still post immediately.
    */
   enableDocumentApprovals: boolean
-  /** Apps visible in the launcher / header when enabled. */
+  /**
+   * Apps the ERP system owner granted this company (create / Limits / approve).
+   * The company may turn granted apps off for its own screens, but cannot turn
+   * on an app that was never granted — that needs a request the owner accepts.
+   */
+  grantedModules: Record<ModuleFlag, boolean>
+  /** Apps visible in the launcher / header when enabled (subset of grants). */
   modules: Record<ModuleFlag, boolean>
 }
 
@@ -142,7 +148,51 @@ export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   enableTax: true,
   enableCustomerPortal: false,
   enableDocumentApprovals: false,
+  grantedModules: allModules(true),
   modules: allModules(true),
+}
+
+/**
+ * Path prefixes → app flag. Used to refuse URLs for apps this company may not use.
+ * Longer prefixes win when several match.
+ */
+export const MODULE_PATH_PREFIXES: readonly { prefix: string; module: ModuleFlag }[] = [
+  { prefix: '/pos', module: 'pos' },
+  { prefix: '/sales', module: 'sales' },
+  { prefix: '/projects', module: 'projects' },
+  { prefix: '/customers', module: 'customers' },
+  { prefix: '/purchases', module: 'purchases' },
+  { prefix: '/vendors', module: 'vendors' },
+  { prefix: '/banking', module: 'banking' },
+  { prefix: '/payments', module: 'payments' },
+  { prefix: '/bill-payments', module: 'bill-payments' },
+  { prefix: '/inventory', module: 'inventory' },
+  { prefix: '/items', module: 'inventory' },
+  { prefix: '/barcodes', module: 'barcodes' },
+  { prefix: '/stores', module: 'stores' },
+  { prefix: '/store', module: 'stores' },
+  { prefix: '/approvals', module: 'approvals' },
+  { prefix: '/accounting', module: 'accounting' },
+  { prefix: '/accounts', module: 'accounting' },
+  { prefix: '/journals', module: 'journals' },
+  { prefix: '/periods', module: 'periods' },
+  { prefix: '/reports', module: 'reports' },
+  { prefix: '/calendar', module: 'calendar' },
+  { prefix: '/databases', module: 'databases' },
+] as const
+
+/** Which app owns this pathname, if any (Settings / Help / Home are unowned). */
+export function moduleForPath(pathname: string): ModuleFlag | null {
+  const path = pathname.split(/[?#]/)[0] || '/'
+  let best: { module: ModuleFlag; length: number } | null = null
+  for (const entry of MODULE_PATH_PREFIXES) {
+    if (path === entry.prefix || path.startsWith(`${entry.prefix}/`)) {
+      if (!best || entry.prefix.length > best.length) {
+        best = { module: entry.module, length: entry.prefix.length }
+      }
+    }
+  }
+  return best?.module ?? null
 }
 
 /** Form field for a module flag: sales → moduleSales, bill-payments → moduleBillPayments. */
@@ -228,13 +278,36 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
     }
   }
 
+  // Grants: explicit map, or copy of modules for older companies (whatever was
+  // on when they last saved is treated as what the owner allowed).
+  if (data.grantedModules && typeof data.grantedModules === 'object') {
+    const granted = data.grantedModules as Record<string, unknown>
+    for (const key of MODULE_FLAGS) {
+      if (typeof granted[key] === 'boolean') base.grantedModules[key] = granted[key]
+    }
+  } else {
+    base.grantedModules = { ...base.modules }
+  }
+
+  // A module that was never granted cannot stay "on".
+  for (const key of MODULE_FLAGS) {
+    if (!base.grantedModules[key]) base.modules[key] = false
+  }
+
   return base
 }
 
 export function isModuleEnabled(flags: OrgFeatureFlags, moduleKey: string): boolean {
   const flag = MODULE_KEY_TO_FLAG[moduleKey]
   if (!flag) return true
-  return flags.modules[flag] !== false
+  return flags.grantedModules[flag] !== false && flags.modules[flag] !== false
+}
+
+/** True when the system owner has granted this app (whether or not the company left it on). */
+export function isModuleGranted(flags: OrgFeatureFlags, moduleKey: string): boolean {
+  const flag = MODULE_KEY_TO_FLAG[moduleKey]
+  if (!flag) return true
+  return flags.grantedModules[flag] !== false
 }
 
 /** Build a full modules map from checkboxes / JSON; missing keys stay on by default. */
@@ -257,10 +330,27 @@ export function hasAnyModuleEnabled(modules: Record<ModuleFlag, boolean>): boole
 export function featureFlagsWithModules(
   modules: Record<ModuleFlag, boolean>,
 ): OrgFeatureFlags {
+  const next = { ...DEFAULT_FEATURE_FLAGS.modules, ...modules }
   return {
     ...structuredClone(DEFAULT_FEATURE_FLAGS),
-    modules: { ...DEFAULT_FEATURE_FLAGS.modules, ...modules },
+    grantedModules: { ...next },
+    modules: { ...next },
   }
+}
+
+/**
+ * Company Apps & features save: only granted apps may be turned on; ungranted
+ * stay off. Grants themselves are never changed here.
+ */
+export function modulesClampedToGrants(
+  requested: Record<ModuleFlag, boolean>,
+  granted: Record<ModuleFlag, boolean>,
+): Record<ModuleFlag, boolean> {
+  const modules = { ...requested }
+  for (const key of MODULE_FLAGS) {
+    if (!granted[key]) modules[key] = false
+  }
+  return modules
 }
 
 export function modulesFromFormValues(

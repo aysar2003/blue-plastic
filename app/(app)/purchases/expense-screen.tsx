@@ -3,12 +3,12 @@ import { ReceiptIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
 import { GiveFeedback } from '@/components/data/give-feedback'
-import { PageHeader } from '@/components/data/page-header'
 import { Pagination } from '@/components/data/pagination'
 import { PrintPageButton } from '@/components/data/print-page-button'
 import { QuerySelect } from '@/components/data/query-select'
 import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { SearchInput } from '@/components/data/search-input'
+import { ExpenseHome } from '@/components/purchases/expense-home'
 import { ExpenseTable } from '@/components/purchases/expense-table'
 import { NewTransactionMenu } from '@/components/purchases/new-transaction-menu'
 import { buttonVariants } from '@/components/ui/button'
@@ -18,6 +18,7 @@ import { EXPENSE_KINDS, parseExpenseKind } from '@/lib/expense-kinds'
 import { DATE_PRESETS, listHref, presetRange, readDatePreset } from '@/lib/list-filters'
 import { requireOrgContext } from '@/server/auth/context'
 import { expenseRegister } from '@/server/services/expense-register'
+import * as purchaseService from '@/server/services/purchase.service'
 
 const PATH = '/purchases/expenses'
 
@@ -40,13 +41,16 @@ export async function ExpenseScreen({
   const statusRaw = typeof search.status === 'string' ? search.status : ''
   const status = statusRaw === 'open' || statusRaw === 'paid' ? statusRaw : undefined
 
-  const register = await expenseRegister(ctx, {
-    kind,
-    status,
-    q,
-    from: range?.from,
-    to: range?.to,
-  })
+  const [register, home] = await Promise.all([
+    expenseRegister(ctx, {
+      kind,
+      status,
+      q,
+      from: range?.from,
+      to: range?.to,
+    }),
+    purchaseService.expenseHome(ctx),
+  ])
 
   const hidden = {
     q,
@@ -56,25 +60,34 @@ export async function ExpenseScreen({
   }
   const canExpense = ctx.permissions.has('expense:create')
   const canBill = ctx.permissions.has('bill:create')
+  const currency = ctx.organization.baseCurrency
+  const homeActive =
+    dateRaw === 'today' || dateRaw === 'month' || dateRaw === 'year' || dateRaw === 'all'
+      ? dateRaw
+      : dateRaw === 'last3' || !dateRaw
+        ? 'all'
+        : dateRaw
 
   return (
     <>
-      <PageHeader
-        title="Expenses"
-        description="Bills, bill payments, purchase orders, and supplier credits. Totals follow the sign of each row."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <GiveFeedback />
-            {canExpense ? (
-              <Link href="/bill-payments/new" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-                Pay bills
-              </Link>
-            ) : null}
-            <NewTransactionMenu canBill={canBill} canExpense={canExpense} />
-            <PrintPageButton />
-          </div>
-        }
+      <ExpenseHome
+        currency={currency}
+        canCreate={canExpense}
+        active={homeActive}
+        params={hidden}
+        home={home}
       />
+
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+        <GiveFeedback />
+        {canExpense ? (
+          <Link href="/bill-payments/new" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Pay bills
+          </Link>
+        ) : null}
+        <NewTransactionMenu canBill={canBill} canExpense={canExpense} />
+        <PrintPageButton />
+      </div>
 
       <div className="mb-3 flex flex-wrap items-end gap-3">
         <QuerySelect

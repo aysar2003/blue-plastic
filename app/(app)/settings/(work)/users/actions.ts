@@ -5,7 +5,11 @@ import { z } from 'zod'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 import { cuid } from '@/lib/validation/common'
-import { inviteUserSchema, updateMemberRoleSchema } from '@/lib/validation/user'
+import {
+  inviteUserSchema,
+  resetMemberPasswordSchema,
+  updateMemberRoleSchema,
+} from '@/lib/validation/user'
 import { action } from '@/server/action'
 import * as membershipService from '@/server/services/membership.service'
 
@@ -57,6 +61,15 @@ export const removeMember = action
     return { id: input.membershipId }
   })
 
+export const resetMemberPassword = action
+  .requires('user:update')
+  .input(resetMemberPasswordSchema)
+  .handler(async (ctx, input) => {
+    const result = await membershipService.resetMemberPassword(ctx, input)
+    revalidatePath('/settings/users')
+    return result
+  })
+
 /* --- form adapters ------------------------------------------------------- */
 
 function parseInviteForm(raw: Record<string, FormDataEntryValue | undefined>) {
@@ -84,4 +97,22 @@ function parseInviteForm(raw: Record<string, FormDataEntryValue | undefined>) {
 export async function inviteUserForm(_prev: FormState, formData: FormData): Promise<FormState> {
   const result = await inviteUser(parseInviteForm(formValues(formData)))
   return toFormState(result, 'Member added.')
+}
+
+export async function resetMemberPasswordForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const raw = formValues(formData)
+  const result = await resetMemberPassword({
+    membershipId: raw.membershipId,
+    temporaryPassword: raw.temporaryPassword,
+  })
+  if (!result.ok) return toFormState(result, '')
+  return {
+    status: 'success',
+    message: `New password set for ${result.data.name}.`,
+    temporaryPassword: result.data.temporaryPassword,
+    created: { id: result.data.id, label: result.data.email },
+  }
 }

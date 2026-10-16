@@ -17,7 +17,9 @@ import { PROJECT_STATUS_LABELS } from '@/lib/validation/project'
 import { requireOrgContext } from '@/server/auth/context'
 import * as projectService from '@/server/services/project.service'
 
+import * as projectTaskService from '@/server/services/project-task.service'
 import { ProjectStatusForm } from './status-form'
+import { ProjectTaskBoard } from './task-board'
 
 export const metadata: Metadata = { title: 'Project' }
 
@@ -45,9 +47,11 @@ export default async function ProjectDetailPage({
   const ctx = await requireOrgContext('project:read')
   const project = await projectService.get(ctx, id).catch(() => null)
   if (!project) notFound()
+  const tasks = await projectTaskService.listForProject(ctx, project.id)
 
   const currency = ctx.organization.baseCurrency
-  const canCreateSales = ctx.permissions.has('invoice:create')
+  const canCreateSales =
+    ctx.permissions.has('invoice:create') && ctx.features.modules.sales && ctx.features.grantedModules.sales
   const canUpdate = ctx.permissions.has('project:update')
   const estimateHref = `/sales/estimates/new?project=${project.id}&customer=${project.customer.id}`
   const quotationHref = `/sales/quotations/new?project=${project.id}&customer=${project.customer.id}`
@@ -107,6 +111,8 @@ export default async function ProjectDetailPage({
       {project.description ? (
         <p className="mb-6 max-w-3xl text-sm text-muted-foreground">{project.description}</p>
       ) : null}
+
+      <ProjectTaskBoard projectId={project.id} tasks={tasks} canEdit={canUpdate} />
 
       <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <MoneyCard label="Quoted" value={formatMoney(project.totals.quoted, currency)} />
