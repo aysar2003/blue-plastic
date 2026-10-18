@@ -100,7 +100,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_item_account_mapping ON items;
 CREATE TRIGGER trg_item_account_mapping

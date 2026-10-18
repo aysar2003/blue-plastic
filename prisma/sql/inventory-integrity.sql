@@ -51,7 +51,7 @@ BEGIN
     'Stock movements cannot be changed. Record an adjustment instead.'
     USING ERRCODE = 'check_violation';
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_inventory_movement_immutable ON inventory_transactions;
 CREATE TRIGGER trg_inventory_movement_immutable
@@ -83,7 +83,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_movement_item_tracked ON inventory_transactions;
 CREATE TRIGGER trg_movement_item_tracked
@@ -143,7 +143,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_movement_continuity ON inventory_transactions;
 CREATE TRIGGER trg_movement_continuity

@@ -87,7 +87,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_application_target ON sales_applications;
 CREATE TRIGGER trg_application_target
@@ -141,7 +141,7 @@ BEGIN
 
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_document_totals ON sales_documents;
 CREATE CONSTRAINT TRIGGER trg_document_totals
@@ -213,7 +213,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_application_source ON sales_applications;
 CREATE TRIGGER trg_application_source

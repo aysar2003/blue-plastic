@@ -72,7 +72,7 @@ BEGIN
 
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_journal_balanced ON journal_lines;
 CREATE CONSTRAINT TRIGGER trg_journal_balanced
@@ -178,7 +178,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_journal_immutable ON journals;
 CREATE TRIGGER trg_journal_immutable
@@ -211,7 +211,7 @@ BEGIN
 
   RETURN COALESCE(NEW, OLD);
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_journal_line_immutable ON journal_lines;
 CREATE TRIGGER trg_journal_line_immutable
@@ -256,7 +256,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_journal_period_open ON journals;
 CREATE TRIGGER trg_journal_period_open
@@ -312,7 +312,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_journal_line_dimensions ON journal_lines;
 CREATE TRIGGER trg_journal_line_dimensions
@@ -355,7 +355,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_protect_system_accounts ON ledger_accounts;
 CREATE TRIGGER trg_protect_system_accounts
@@ -421,7 +421,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_account_classification ON ledger_accounts;
 CREATE TRIGGER trg_account_classification

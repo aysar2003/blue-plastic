@@ -83,7 +83,7 @@ BEGIN
 
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO public;
 
 DROP TRIGGER IF EXISTS trg_locked_year_periods ON accounting_periods;
 CREATE CONSTRAINT TRIGGER trg_locked_year_periods
