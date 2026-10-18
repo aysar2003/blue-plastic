@@ -11,10 +11,6 @@ const nextConfig: NextConfig = {
   // Without this, Next blocks /_next chunks and the shell never hydrates — so
   // every Apps chip and menu looks dead.
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
-  async redirects() {
-    // Short staff URL advertised on the public product page.
-    return [{ source: '/login', destination: '/sign-in', permanent: false }]
-  },
   experimental: {
     // `forbidden()` renders app/forbidden.tsx instead of the generic error page.
     authInterrupts: true,

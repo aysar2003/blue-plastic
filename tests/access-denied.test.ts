@@ -41,6 +41,7 @@ describe('access denied copy', () => {
 describe('section names', () => {
   it('reads the tab or module from the path', () => {
     expect(sectionLabel('/settings/users')).toBe('Company users')
+    expect(sectionLabel('/settings/user-history')).toBe('User history')
     expect(sectionLabel('/databases/users')).toBe('System users')
     expect(sectionLabel('/reports/profit-loss')).toBe('Profit and Loss')
     expect(sectionLabel('/reports/business-overview?period=this-month')).toBe('Business overview')

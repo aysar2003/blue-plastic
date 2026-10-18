@@ -55,7 +55,7 @@ describe('invitePortalUserSchema', () => {
 
 describe('portalLoginPath', () => {
   it('builds the branded company login URL', () => {
-    expect(portalLoginPath('org_abc')).toBe('/portal/login?company=org_abc')
+    expect(portalLoginPath('org_abc')).toBe('/login/portal?company=org_abc')
   })
 })
 

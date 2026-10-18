@@ -34,7 +34,8 @@ const BRAND_VARS = {
 } as CSSProperties
 
 /**
- * Applies Appearance → Website look to public pages (landing, login).
+ * Applies Appearance → Website look to the marketing site and auth marketing
+ * pages (register / setup). Login doors under `/login/*` use their own shells.
  * "system" inherits the active theme; "brand" restores the navy/cyan site.
  */
 export function WebsiteShell({

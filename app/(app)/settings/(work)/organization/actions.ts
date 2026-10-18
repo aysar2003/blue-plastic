@@ -5,7 +5,12 @@ import { z } from 'zod'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 
-import { MODULE_FORM_KEY_LIST } from '@/lib/feature-flags'
+import {
+  DOCUMENT_KIND_FORM_KEY_LIST,
+  MODULE_FLAGS,
+  MODULE_FORM_KEY_LIST,
+  type ModuleFlag,
+} from '@/lib/feature-flags'
 import { requestAppsSchema } from '@/lib/validation/app-access'
 import { cuid } from '@/lib/validation/common'
 import {
@@ -148,6 +153,7 @@ export async function updateFeatureFlagsForm(
     'enableCustomerPortal',
     'enableDocumentApprovals',
     ...MODULE_FORM_KEY_LIST,
+    ...DOCUMENT_KIND_FORM_KEY_LIST,
   ] as const
   const values: Record<string, string> = {}
   for (const key of keys) {
@@ -156,6 +162,26 @@ export async function updateFeatureFlagsForm(
   const result = await updateFeatureFlags(values)
   return toFormState(result, 'Configuration saved.')
 }
+
+/** Header Apps power switch — flip one granted module on/off without the full form. */
+export const toggleModuleFlag = action
+  .requires('org:update')
+  .input(
+    z.object({
+      module: z.enum(MODULE_FLAGS as unknown as [ModuleFlag, ...ModuleFlag[]]),
+      enabled: z.boolean(),
+    }),
+  )
+  .handler(async (ctx, input) => {
+    const flags = await organizationService.updateModuleEnabled(
+      ctx,
+      input.module,
+      input.enabled,
+    )
+    revalidatePath('/settings/features')
+    revalidatePath('/', 'layout')
+    return flags
+  })
 
 export const requestMoreApps = action
   .requires('org:update')

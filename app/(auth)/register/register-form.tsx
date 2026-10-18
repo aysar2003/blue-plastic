@@ -41,7 +41,7 @@ export function RegisterForm() {
           We will keep <span className="font-medium text-foreground">{v.email}</span> until a decision
           is made.
         </p>
-        <Link href="/sign-in" className="inline-block text-sm font-medium text-primary underline">
+        <Link href="/login/company" className="inline-block text-sm font-medium text-primary underline">
           Back to sign in
         </Link>
       </div>

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 
 /** Ends the session and returns to the branded portal login (or generic). */
 export function PortalSignOutButton({
-  callbackUrl = '/portal/login',
+  callbackUrl = '/login/portal',
   label = 'Sign out',
 }: {
   callbackUrl?: string

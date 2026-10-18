@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: 'Inventory' }
 
 export default async function InventoryHubPage() {
   const ctx = await requireOrgContext('item:read')
-  const apps = visibleHubApps(INVENTORY_HUB_APPS, ctx.permissions)
+  const apps = visibleHubApps(INVENTORY_HUB_APPS, ctx.permissions, ctx.features, 'inventory')
   const currency = ctx.organization.baseCurrency
   const canStock = ctx.permissions.has('inventory:read')
 
@@ -26,7 +26,7 @@ export default async function InventoryHubPage() {
     <AppLauncher
       eyebrow={ctx.organization.name}
       title="Inventory"
-      subtitle="Products, what is on the shelf, and the counts that disagree."
+      subtitle="Products, what is on the shelf, and the counts that disagree."
       apps={apps}
       insights={
         stock

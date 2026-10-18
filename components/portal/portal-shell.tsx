@@ -27,7 +27,7 @@ export function PortalShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const signOutHref = `/portal/login?company=${encodeURIComponent(orgId)}`
+  const signOutHref = `/login/portal?company=${encodeURIComponent(orgId)}`
 
   return (
     <div data-portal-shell className="min-h-svh overflow-x-clip bg-background text-foreground">

@@ -1,3 +1,8 @@
+import {
+  isDocumentKindEnabled,
+  SALES_HUB_KIND,
+  type OrgFeatureFlags,
+} from '@/lib/feature-flags'
 import type { Permission } from '@/server/auth/permissions'
 import type { LauncherIcon } from './launcher-apps'
 
@@ -209,7 +214,15 @@ export const SALES_REPORT_APPS: SalesReportApp[] = [
 
 export function salesAppsForPermissions(
   permissions: ReadonlySet<string> | Iterable<string>,
+  features?: OrgFeatureFlags,
 ): SalesHubApp[] {
   const allowed = permissions instanceof Set ? permissions : new Set(permissions)
-  return SALES_HUB_APPS.filter((app) => !app.permission || allowed.has(app.permission))
+  return SALES_HUB_APPS.filter((app) => {
+    if (app.permission && !allowed.has(app.permission)) return false
+    if (features) {
+      const kind = SALES_HUB_KIND[app.key]
+      if (kind && !isDocumentKindEnabled(features, 'sales', kind)) return false
+    }
+    return true
+  })
 }

@@ -11,8 +11,8 @@ import type { NextAuthConfig } from 'next-auth'
  */
 export const authConfig = {
   pages: {
-    signIn: '/sign-in',
-    error: '/sign-in',
+    signIn: '/login',
+    error: '/login',
   },
   session: {
     strategy: 'jwt',
@@ -35,7 +35,7 @@ export const authConfig = {
       const isPublic =
         pathname === '/' ||
         pathname === '/sign-in' ||
-        pathname === '/login' ||
+        pathname.startsWith('/login') ||
         pathname === '/setup' ||
         pathname === '/register' ||
         pathname === '/portal/login' ||

@@ -21,7 +21,7 @@ export default async function RegisterPage() {
   return withDatabasePage(async () => {
     const empty = await needsSetup()
     if (!empty && !isSelfServeEnabled()) {
-      redirect('/sign-in')
+      redirect('/login/company')
     }
 
     return (
@@ -40,7 +40,7 @@ export default async function RegisterPage() {
         </Card>
         <p className="text-center text-sm text-muted-foreground">
           Already have a company?{' '}
-          <Link href="/sign-in" className="font-medium text-primary underline">
+          <Link href="/login/company" className="font-medium text-primary underline">
             Sign in
           </Link>
         </p>

@@ -97,6 +97,13 @@ export default async function UsersPage({
           .
         </p>
       ) : null}
+      <p className="-mt-2 text-sm text-muted-foreground">
+        Sign-in, sign-out, and work for the last year:{' '}
+        <Link href="/settings/user-history" className="font-medium text-primary underline">
+          Settings → User history
+        </Link>
+        .
+      </p>
 
       <div className="flex flex-wrap items-center gap-3">
         <SearchInput placeholder="Search by name or email" />
@@ -179,6 +186,12 @@ export default async function UsersPage({
                         <span className="block text-xs text-muted-foreground">
                           {member.user.email}
                         </span>
+                        <Link
+                          href={`/settings/user-history?userId=${member.user.id}`}
+                          className="mt-0.5 inline-block text-xs font-medium text-primary underline"
+                        >
+                          History
+                        </Link>
                       </TableCell>
                       <TableCell>
                         <span className="block">{ROLE_LABELS[member.role]}</span>

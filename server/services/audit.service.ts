@@ -1,7 +1,13 @@
 import 'server-only'
 import type { Prisma } from '@prisma/client'
 
-import { presentTrashEntry } from '@/lib/trash-log'
+import { uniqueReasons } from '@/lib/delete-reasons'
+import {
+  isHiddenFromTrash,
+  presentTrashEntry,
+  trashOrigin,
+  trashRestoreCapability,
+} from '@/lib/trash-log'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -113,11 +119,6 @@ export async function list(ctx: OrgContext, query: ListQuery) {
   const where: Prisma.AuditLogWhereInput = {
     orgId: ctx.orgId,
     action: 'DELETE',
-    // Restored or cleared rows leave Trash; ledger soft-deletes stay in the database.
-    AND: [
-      { NOT: { after: { path: ['restored'], equals: true } } },
-      { NOT: { after: { path: ['cleared'], equals: true } } },
-    ],
     ...(needle.length
       ? {
           OR: needle.flatMap((value) => [
@@ -136,26 +137,68 @@ export async function list(ctx: OrgContext, query: ListQuery) {
       : {}),
   }
 
-  const [rows, total] = await Promise.all([
-    db.auditLog.findMany({
-      where,
-      select: {
-        id: true,
-        entity: true,
-        at: true,
-        before: true,
-        after: true,
-        actor: { select: { name: true, email: true } },
-      },
-      orderBy: { at: 'desc' },
-      ...paginate(query),
-    }),
-    db.auditLog.count({ where }),
-  ])
+  // Load then drop restored/cleared in memory — Prisma JSON NOT-equals excludes
+  // rows whose `after` object simply lacks those keys (SQL NULL).
+  const rows = await db.auditLog.findMany({
+    where,
+    select: {
+      id: true,
+      entity: true,
+      at: true,
+      before: true,
+      after: true,
+      actor: { select: { name: true, email: true } },
+    },
+    orderBy: { at: 'desc' },
+  })
+
+  const visible = rows.filter((row) => !isHiddenFromTrash(row.after))
+  const { skip, take } = paginate(query)
+  const page = visible.slice(skip, skip + take)
 
   return paged(
-    rows.map((row) => presentTrashEntry(row)),
-    total,
+    page.map((row) => {
+      const entry = presentTrashEntry(row)
+      const origin = trashOrigin(row.entity, row.before)
+      const restore = trashRestoreCapability(row.entity)
+      return {
+        ...entry,
+        originLabel: origin?.label ?? null,
+        originHref: origin?.href ?? null,
+        canRestore: restore.canRestore,
+        cannotRestoreReason: restore.cannotRestoreReason,
+      }
+    }),
+    visible.length,
     query,
   )
+}
+
+/**
+ * Distinct delete reasons recently written in this org, newest first.
+ * Used to suggest prior wording when someone deletes again.
+ */
+export async function listDeleteReasons(ctx: OrgContext, limit = 24): Promise<string[]> {
+  const rows = await db.auditLog.findMany({
+    where: { orgId: ctx.orgId, action: 'DELETE' },
+    select: { after: true, at: true },
+    orderBy: { at: 'desc' },
+    take: 200,
+  })
+
+  const reasons: string[] = []
+  for (const row of rows) {
+    if (isHiddenFromTrash(row.after)) continue
+    const entry = presentTrashEntry({
+      id: 'x',
+      entity: 'Item',
+      at: row.at,
+      before: null,
+      after: row.after,
+      actor: null,
+    })
+    if (entry.reason) reasons.push(entry.reason)
+  }
+
+  return uniqueReasons(reasons).slice(0, limit)
 }

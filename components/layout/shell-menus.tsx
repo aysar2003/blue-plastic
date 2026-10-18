@@ -25,6 +25,7 @@ const GEAR = [
   { href: '/settings/accounts', label: 'Default accounts' },
   { href: '/settings/tax', label: 'Tax' },
   { href: '/settings/users', label: 'Users' },
+  { href: '/settings/user-history', label: 'User history' },
   { href: '/settings/appearance', label: 'Appearance' },
   { href: '/databases', label: 'Databases' },
   { href: '/settings/activity', label: 'Trash' },

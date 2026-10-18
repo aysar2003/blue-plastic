@@ -66,15 +66,17 @@ export async function GET(request: Request) {
     // the itemised statement of the same invoices.
     const filter =
       asked.view === 'invoices' ? { ...asked, view: 'detail' as const, type: 'invoice' as const } : asked
-    const [statement, org] = await Promise.all([
+    const [statement, org, template] = await Promise.all([
       receivables.statement(ctx, customerId, settings.range),
       organizationService.get(ctx),
+      organizationService.getDocumentTemplate(ctx),
     ])
     const entries = visibleEntries(statement.entries, filter, settings.asOf)
     const currency = ctx.organization.baseCurrency
     const company = letterheadOf(org)
     const bytes = renderCustomerStatementPdf({
       ink,
+      template,
       orgName: company.name,
       orgAddress: company.address ? [company.address] : [],
       orgPhone: company.phone,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { presentTrashEntry } from './trash-log'
+import { presentTrashEntry, trashOrigin, trashRestoreCapability } from './trash-log'
 
 const at = new Date('2026-10-10T12:00:00.000Z')
 
@@ -57,5 +57,33 @@ describe('presentTrashEntry', () => {
     expect(entry.kind).toBe('Journal')
     expect(entry.name).toBe('JE-00012, JE-00013')
     expect(entry.reason).toBe('Wrong month')
+  })
+
+  it('keeps a written reason even when it looks like a database id', () => {
+    const entry = presentTrashEntry({
+      id: 'log-4',
+      entity: 'SalesDocument',
+      at,
+      before: { number: 'INV-1', type: 'INVOICE' },
+      after: { deletedAt: at.toISOString(), reason: 'cm9abc123def456ghi789jkl01' },
+      actor: { name: 'Amina', email: 'amina@example.com' },
+    })
+
+    expect(entry.reason).toBe('cm9abc123def456ghi789jkl01')
+  })
+
+  it('points an invoice back to the sales invoices list', () => {
+    expect(trashOrigin('SalesDocument', { type: 'INVOICE', number: 'INV-1' })).toEqual({
+      label: 'Sales · Invoices',
+      href: '/sales/invoices',
+    })
+  })
+})
+
+describe('trashRestoreCapability', () => {
+  it('allows invoices and blocks deposits', () => {
+    expect(trashRestoreCapability('SalesDocument').canRestore).toBe(true)
+    expect(trashRestoreCapability('Deposit').canRestore).toBe(false)
+    expect(trashRestoreCapability('Deposit').cannotRestoreReason).toMatch(/Deposits/)
   })
 })

@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation'
 import { CornerDownLeftIcon, SearchIcon } from 'lucide-react'
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import {
+  documentKindForPath,
+  isDocumentKindEnabled,
+  moduleForPath,
+  type OrgFeatureFlags,
+} from '@/lib/feature-flags'
 import { addLineFromKeyboard, focusNextInGrid, moveListRow, saveFromKeyboard } from '@/lib/keyboard'
 import { formatKeys, SHORTCUTS, type Shortcut } from '@/lib/shortcuts'
 import { cn } from '@/lib/utils'
@@ -32,7 +38,15 @@ const SEQUENCE_TIMEOUT = 900
  * Keys are ignored while the user is typing into a field — a bookkeeper entering
  * a customer called "Gigi" should not be navigated away mid-word.
  */
-export function CommandPalette({ permissions }: { permissions: string[] }) {
+export function CommandPalette({
+  permissions,
+  hiddenApps,
+  features,
+}: {
+  permissions: string[]
+  hiddenApps?: string[]
+  features?: OrgFeatureFlags
+}) {
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
@@ -47,38 +61,57 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
   }, [open])
 
   const allowed = React.useMemo(() => new Set(permissions), [permissions])
+  const blocked = React.useMemo(() => new Set(hiddenApps ?? []), [hiddenApps])
+
+  const pathAllowed = React.useCallback(
+    (href: string) => {
+      const module = moduleForPath(href)
+      if (module && blocked.has(module)) return false
+      if (features) {
+        const kind = documentKindForPath(href)
+        if (kind && !isDocumentKindEnabled(features, kind.family, kind.kind)) return false
+      }
+      return true
+    },
+    [blocked, features],
+  )
 
   const commands = React.useMemo<Command[]>(() => {
     const permitted = (permission?: string) => !permission || allowed.has(permission)
     const shortcutFor = (href: string): Shortcut | undefined =>
       SHORTCUTS.find((shortcut) => shortcut.href === href)
 
-    const navigation: Command[] = MODULES.filter((entry) => permitted(entry.permission)).flatMap(
-      (entry) => {
-        const tabs = (entry.tabs ?? []).filter((tab) => permitted(tab.permission))
-        if (tabs.length === 0) {
-          return [
-            {
-              id: entry.href,
-              label: entry.label,
-              group: 'Go to',
-              href: entry.href,
-              keys: shortcutFor(entry.href)?.keys,
-            },
-          ]
-        }
-        return tabs.map((tab) => ({
-          id: `${entry.key}:${tab.href}`,
-          label: `${entry.label} · ${tab.label}`,
-          group: 'Go to',
-          href: tab.href,
-          keys: shortcutFor(tab.href)?.keys,
-        }))
-      },
-    )
+    const navigation: Command[] = MODULES.filter(
+      (entry) => permitted(entry.permission) && pathAllowed(entry.href),
+    ).flatMap((entry) => {
+      const tabs = (entry.tabs ?? []).filter(
+        (tab) => permitted(tab.permission) && pathAllowed(tab.href),
+      )
+      if (tabs.length === 0) {
+        return [
+          {
+            id: entry.href,
+            label: entry.label,
+            group: 'Go to',
+            href: entry.href,
+            keys: shortcutFor(entry.href)?.keys,
+          },
+        ]
+      }
+      return tabs.map((tab) => ({
+        id: `${entry.key}:${tab.href}`,
+        label: `${entry.label} · ${tab.label}`,
+        group: 'Go to',
+        href: tab.href,
+        keys: shortcutFor(tab.href)?.keys,
+      }))
+    })
 
     const creates: Command[] = SHORTCUTS.filter(
-      (shortcut) => shortcut.group === 'Create' && permitted(shortcut.permission),
+      (shortcut) =>
+        shortcut.group === 'Create' &&
+        permitted(shortcut.permission) &&
+        pathAllowed(shortcut.href),
     ).map((shortcut) => ({
       id: shortcut.href,
       label: shortcut.label,
@@ -88,7 +121,7 @@ export function CommandPalette({ permissions }: { permissions: string[] }) {
     }))
 
     return [...creates, ...navigation]
-  }, [allowed])
+  }, [allowed, pathAllowed])
 
   const needle = query.trim()
   if (needle.length < 2 && remote.length > 0) setRemote([])

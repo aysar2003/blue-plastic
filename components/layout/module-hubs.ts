@@ -1,3 +1,9 @@
+import {
+  INVENTORY_HUB_KIND,
+  isDocumentKindEnabled,
+  PURCHASE_HUB_KIND,
+  type OrgFeatureFlags,
+} from '@/lib/feature-flags'
 import type { Permission } from '@/server/auth/permissions'
 import type { LauncherIcon } from './launcher-apps'
 
@@ -585,6 +591,16 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     blurb: 'Roles, apps & who can sign in',
   },
   {
+    key: 'user-history',
+    label: 'User history',
+    href: '/settings/user-history',
+    icon: 'clock',
+    permission: 'user:read',
+    accent: '#0E7490',
+    wash: '#CFFAFE',
+    blurb: 'Sign-in, sign-out & work for one year',
+  },
+  {
     key: 'templates',
     label: 'Templates',
     href: '/settings/templates',
@@ -649,7 +665,7 @@ export const SETTINGS_HUB_SECTIONS: { label: string; blurb: string; keys: string
   {
     label: 'People & access',
     blurb: 'Who works in this company and your own login.',
-    keys: ['users', 'profile'],
+    keys: ['users', 'user-history', 'profile'],
   },
   {
     label: 'Data & companies',
@@ -691,7 +707,20 @@ export const HELP_HUB_APPS: HubApp[] = [
 export function visibleHubApps(
   apps: HubApp[],
   permissions: ReadonlySet<string> | Iterable<string>,
+  features?: OrgFeatureFlags,
+  family?: 'purchases' | 'inventory',
 ): HubApp[] {
   const allowed = permissions instanceof Set ? permissions : new Set(permissions)
-  return apps.filter((app) => !app.permission || allowed.has(app.permission))
+  return apps.filter((app) => {
+    if (app.permission && !allowed.has(app.permission)) return false
+    if (features && family === 'purchases') {
+      const kind = PURCHASE_HUB_KIND[app.key]
+      if (kind && !isDocumentKindEnabled(features, 'purchases', kind)) return false
+    }
+    if (features && family === 'inventory') {
+      const kind = INVENTORY_HUB_KIND[app.key]
+      if (kind && !isDocumentKindEnabled(features, 'inventory', kind)) return false
+    }
+    return true
+  })
 }

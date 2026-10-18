@@ -4,6 +4,73 @@
 @custom-variant dark (&:is(.dark *, .ink *, .som *, .odoo-dark *, .quick-dark *));
 
 /*
+ * Login doors keep their own light/dark tokens. Without this, html.som (and
+ * other night themes) paint inputs and labels with the books palette.
+ */
+.login-light {
+  color-scheme: light;
+  --background: #eef6fb;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #0891b2;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #ecfeff;
+  --accent-foreground: #0e7490;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #dbeafe;
+  --input: #cbd5e1;
+  --ring: #22d3ee;
+}
+
+.login-dark {
+  color-scheme: dark;
+  --background: #070b14;
+  --foreground: #e2e8f0;
+  --card: #0b1220;
+  --card-foreground: #f8fafc;
+  --popover: #0b1220;
+  --popover-foreground: #f8fafc;
+  --primary: #22d3ee;
+  --primary-foreground: #070b14;
+  --secondary: #141c2c;
+  --secondary-foreground: #e2e8f0;
+  --muted: #141c2c;
+  --muted-foreground: #94a3b8;
+  --accent: rgb(34 211 238 / 12%);
+  --accent-foreground: #67e8f9;
+  --destructive: #f87171;
+  --destructive-foreground: #450a0a;
+  --border: rgb(255 255 255 / 12%);
+  --input: rgb(255 255 255 / 14%);
+  --ring: #22d3ee;
+}
+
+/* Portal door — sky primary on the same navy desk. */
+.login-dark.login-portal {
+  --primary: #38bdf8;
+  --primary-foreground: #070b14;
+  --accent: rgb(56 189 248 / 14%);
+  --accent-foreground: #7dd3fc;
+  --ring: #38bdf8;
+}
+
+.login-light.login-portal {
+  --primary: #0284c7;
+  --primary-foreground: #ffffff;
+  --accent: #e0f2fe;
+  --accent-foreground: #0369a1;
+  --ring: #38bdf8;
+}
+
+/*
  * The visual system.
  *
  * Odoo is the reference, and what is worth taking from it is not the purple —

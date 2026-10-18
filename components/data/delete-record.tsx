@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useId, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2Icon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { listDeleteReasons } from '@/app/(app)/settings/(work)/activity/actions'
 import { Field } from '@/components/forms/field'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -16,6 +17,14 @@ import { deleteDeposit, deleteTransfer } from '@/app/(app)/banking/actions'
 import { deleteAdjustment } from '@/app/(app)/inventory/actions'
 import { deleteJournal } from '@/app/(app)/journals/actions'
 import { deleteItem } from '@/app/(app)/items/actions'
+import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
+import {
+  DELETE_REASONS_KEY,
+  filterDeleteReasons,
+  parseDeleteReasons,
+  rememberDeleteReason,
+  uniqueReasons,
+} from '@/lib/delete-reasons'
 
 /**
  * Deleting a record, wherever it lives.
@@ -128,20 +137,46 @@ export function DeleteMenuItem(target: DeleteTarget) {
 
 function DeleteDialog({ target, onClose }: { target: DeleteTarget; onClose: () => void }) {
   const router = useRouter()
+  const listId = useId()
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [orgReasons, setOrgReasons] = useState<string[]>([])
   const [isPending, startTransition] = useTransition()
+  const stored = useBrowserStore(DELETE_REASONS_KEY)
+  const localReasons = parseDeleteReasons(stored)
+  const suggestions = filterDeleteReasons(uniqueReasons([...localReasons, ...orgReasons]), reason).slice(
+    0,
+    8,
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    void listDeleteReasons(undefined).then((result) => {
+      if (cancelled || !result.ok) return
+      setOrgReasons(result.data)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const run = () =>
     startTransition(async () => {
       setError(null)
+      const trimmed = reason.trim()
 
       const result = (await DELETE[target.kind]({
         id: target.id,
-        reason: reason.trim() || undefined,
+        reason: trimmed || undefined,
       })) as Result
 
       if (result.ok) {
+        if (trimmed) {
+          writeBrowserStore(
+            DELETE_REASONS_KEY,
+            JSON.stringify(rememberDeleteReason(localReasons, trimmed)),
+          )
+        }
         toast.success(`${target.number} deleted.`)
         onClose()
         if (target.redirectTo) router.push(target.redirectTo)
@@ -179,11 +214,33 @@ function DeleteDialog({ target, onClose }: { target: DeleteTarget; onClose: () =
         <Field name="delete-reason" label="Reason" hint="Optional. Kept on the record.">
           <Input
             id="delete-reason"
+            list={listId}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             placeholder="Entered twice"
             autoFocus
+            autoComplete="off"
           />
+          <datalist id={listId}>
+            {uniqueReasons([...localReasons, ...orgReasons]).map((entry) => (
+              <option key={entry} value={entry} />
+            ))}
+          </datalist>
+          {suggestions.length > 0 ? (
+            <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Previously used reasons">
+              {suggestions.map((entry) => (
+                <li key={entry}>
+                  <button
+                    type="button"
+                    className="rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                    onClick={() => setReason(entry)}
+                  >
+                    {entry}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </Field>
 
         <div className="mt-5 flex justify-end gap-2">

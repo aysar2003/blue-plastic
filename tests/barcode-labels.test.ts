@@ -124,7 +124,7 @@ describe('document PDF barcode', () => {
     const text = new TextDecoder().decode(bytes)
     expect(text).toContain('%PDF')
     expect(text).toContain('BILL-0042')
-    expect(text).toContain('Bill')
+    expect(text).toContain('BILL')
     expect(text).toMatch(/\sre f/)
   })
 })

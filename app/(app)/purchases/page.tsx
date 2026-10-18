@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: 'Purchases' }
  */
 export default async function PurchasesHubPage() {
   const ctx = await requireOrgContext('bill:read')
-  const apps = visibleHubApps(PURCHASE_HUB_APPS, ctx.permissions)
+  const apps = visibleHubApps(PURCHASE_HUB_APPS, ctx.permissions, ctx.features, 'purchases')
   const currency = ctx.organization.baseCurrency
   const now = today(ctx.organization.timeZone)
 

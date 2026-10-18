@@ -3,8 +3,12 @@ import { describe, expect, it } from 'vitest'
 import { LAUNCHER_APPS } from '@/components/layout/launcher-apps'
 import {
   DEFAULT_FEATURE_FLAGS,
+  documentKindForPath,
+  documentKindFormKey,
+  documentKindsFromFormValues,
   featureFlagsWithModules,
   hasAnyModuleEnabled,
+  isDocumentKindEnabled,
   isModuleEnabled,
   isModuleGranted,
   modulesClampedToGrants,
@@ -113,5 +117,52 @@ describe('feature flags', () => {
     expect(flags.grantedModules.sales).toBe(true)
     expect(flags.grantedModules.pos).toBe(false)
     expect(flags.modules.pos).toBe(false)
+  })
+
+  it('defaults every document kind on and reads overrides', () => {
+    expect(parseFeatureFlags(null).documentKinds.sales.INVOICE).toBe(true)
+    expect(parseFeatureFlags(null).documentKinds.purchases.BILL).toBe(true)
+    expect(parseFeatureFlags(null).documentKinds.inventory.products).toBe(true)
+    const flags = parseFeatureFlags({
+      documentKinds: {
+        sales: { ESTIMATE: false, INVOICE: true },
+        purchases: { BILL: false },
+        inventory: { adjustments: false },
+      },
+    })
+    expect(isDocumentKindEnabled(flags, 'sales', 'ESTIMATE')).toBe(false)
+    expect(isDocumentKindEnabled(flags, 'sales', 'INVOICE')).toBe(true)
+    expect(isDocumentKindEnabled(flags, 'sales', 'QUOTATION')).toBe(true)
+    expect(isDocumentKindEnabled(flags, 'purchases', 'BILL')).toBe(false)
+    expect(isDocumentKindEnabled(flags, 'inventory', 'adjustments')).toBe(false)
+    expect(isDocumentKindEnabled(flags, 'inventory', 'products')).toBe(true)
+  })
+
+  it('maps paths to document kinds and builds form keys', () => {
+    expect(documentKindForPath('/sales/estimates/new')).toEqual({
+      family: 'sales',
+      kind: 'ESTIMATE',
+    })
+    expect(documentKindForPath('/purchases/bills')).toEqual({
+      family: 'purchases',
+      kind: 'BILL',
+    })
+    expect(documentKindForPath('/inventory/adjustments/new')).toEqual({
+      family: 'inventory',
+      kind: 'adjustments',
+    })
+    expect(documentKindForPath('/sales')).toBeNull()
+    expect(documentKindFormKey('sales', 'INVOICE')).toBe('kindSales_INVOICE')
+    const fromForm = documentKindsFromFormValues({
+      kindSales_INVOICE: 'true',
+      kindSales_ESTIMATE: 'false',
+      kindPurchases_BILL: 'on',
+      kindInventory_products: 'true',
+      kindInventory_adjustments: false,
+    })
+    expect(fromForm.sales.INVOICE).toBe(true)
+    expect(fromForm.sales.ESTIMATE).toBe(false)
+    expect(fromForm.purchases.BILL).toBe(true)
+    expect(fromForm.inventory.adjustments).toBe(false)
   })
 })

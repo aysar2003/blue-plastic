@@ -3,11 +3,11 @@
 import { AuthError } from 'next-auth'
 
 import { signIn } from '@/auth'
-import { afterSignInPath } from '@/lib/after-sign-in'
+import { LOGIN_PORTAL, WRONG_DOOR } from '@/lib/login-paths'
 import { portalLoginPath } from '@/lib/portal-login'
 import { signInSchema } from '@/lib/validation/auth'
 import { email as emailSchema } from '@/lib/validation/common'
-import { db } from '@/server/db'
+import { verifyCredentials } from '@/server/auth/verify-credentials'
 import * as portalService from '@/server/services/portal.service'
 
 export type PortalSignInState = {
@@ -17,9 +17,11 @@ export type PortalSignInState = {
   redirectTo?: string
 }
 
+const GENERIC =
+  'That email address and password do not match an active portal login.'
+
 /**
- * Same credentials provider as staff sign-in; customers land on `/portal`.
- * Failures stay generic so the form cannot enumerate accounts.
+ * Same credentials as staff/company doors; only CUSTOMER audience may enter.
  */
 export async function portalSignInAction(
   _prev: PortalSignInState,
@@ -39,23 +41,24 @@ export async function portalSignInAction(
     return { fieldErrors }
   }
 
-  try {
-    const email = parsed.data.email.trim().toLowerCase()
-    const user = await db.user.findUnique({
-      where: { email },
-      select: { id: true },
-    })
-    const redirectTo = user ? await afterSignInPath(user.id) : '/portal'
+  const verified = await verifyCredentials(parsed.data.email, parsed.data.password)
+  if (!verified) {
+    return { error: GENERIC }
+  }
+  if (verified.audience !== 'portal') {
+    return { error: WRONG_DOOR.portal }
+  }
 
+  try {
     await signIn('credentials', {
       email: parsed.data.email,
       password: parsed.data.password,
-      redirectTo,
+      redirectTo: '/portal',
     })
     return {}
   } catch (error) {
     if (error instanceof AuthError) {
-      return { error: 'That email address and password do not match an active portal login.' }
+      return { error: GENERIC }
     }
     throw error
   }
@@ -81,6 +84,7 @@ export async function resolvePortalCompanyAction(
     const path = portalLoginPath(company.orgId)
     return { redirectTo: `${path}&email=${encodeURIComponent(email)}` }
   }
-  // No company found — client shows password on the generic page.
-  return { redirectTo: `/portal/login?email=${encodeURIComponent(email)}&step=password` }
+  return {
+    redirectTo: `${LOGIN_PORTAL}?email=${encodeURIComponent(email)}&step=password`,
+  }
 }

@@ -3,8 +3,15 @@ import 'server-only'
 import { purchaseByType } from '@/lib/purchase-types'
 import { byType as salesByType } from '@/lib/sales-types'
 import { letterheadOf } from '@/lib/letterhead'
+import { formatMoney } from '@/lib/money'
 import type { PrintInk } from '@/lib/print-ink'
-import { presentTrashEntry } from '@/lib/trash-log'
+import {
+  isHiddenFromTrash,
+  presentTrashEntry,
+  trashOrigin,
+  trashRestoreCapability,
+  TRASH_RESTORABLE,
+} from '@/lib/trash-log'
 import { toCalendarDate } from '@/lib/date'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -63,31 +70,429 @@ function isCleared(after: unknown): boolean {
 }
 
 function isGoneFromTrash(after: unknown): boolean {
-  return isRestored(after) || isCleared(after)
+  return isHiddenFromTrash(after)
 }
 
-/** DELETE audit rows still sitting in Trash (not restored, not cleared). */
-function activeTrashWhere(orgId: string) {
-  return {
-    orgId,
-    action: 'DELETE' as const,
-    AND: [
-      { NOT: { after: { path: ['restored'], equals: true } } },
-      { NOT: { after: { path: ['cleared'], equals: true } } },
-    ],
+/** Reason stamped on the soft-deleted row when the audit line omitted it. */
+async function rowDeleteReason(
+  ctx: OrgContext,
+  entity: string,
+  entityId: string,
+): Promise<string | null> {
+  const pick = (value: string | null | undefined) => {
+    const trimmed = value?.trim()
+    return trimmed || null
+  }
+
+  // Soft-deleted models hide behind `deletedAt: null` unless we ask for both.
+  const withDeleted = { id: entityId, orgId: ctx.orgId, deletedAt: undefined }
+
+  switch (entity) {
+    case 'SalesDocument': {
+      const row = await db.salesDocument.findFirst({
+        where: withDeleted,
+        select: { deleteReason: true },
+      })
+      return pick(row?.deleteReason)
+    }
+    case 'PurchaseDocument': {
+      const row = await db.purchaseDocument.findFirst({
+        where: withDeleted,
+        select: { deleteReason: true },
+      })
+      return pick(row?.deleteReason)
+    }
+    case 'Journal': {
+      const row = await db.journal.findFirst({
+        where: { id: entityId, orgId: ctx.orgId },
+        select: { deleteReason: true },
+      })
+      return pick(row?.deleteReason)
+    }
+    case 'CustomerPayment': {
+      const row = await db.customerPayment.findFirst({
+        where: withDeleted,
+        select: { deleteReason: true },
+      })
+      return pick(row?.deleteReason)
+    }
+    case 'BillPayment': {
+      const row = await db.billPayment.findFirst({
+        where: withDeleted,
+        select: { deleteReason: true },
+      })
+      return pick(row?.deleteReason)
+    }
+    case 'BankTransfer': {
+      const row = await db.bankTransfer.findFirst({
+        where: withDeleted,
+        select: { deleteReason: true },
+      })
+      return pick(row?.deleteReason)
+    }
+    case 'Deposit': {
+      const row = await db.deposit.findFirst({
+        where: withDeleted,
+        select: { deleteReason: true },
+      })
+      return pick(row?.deleteReason)
+    }
+    case 'InventoryAdjustment': {
+      const row = await db.inventoryAdjustment.findFirst({
+        where: withDeleted,
+        select: { deleteReason: true },
+      })
+      return pick(row?.deleteReason)
+    }
+    case 'AssemblyBuild': {
+      const row = await db.assemblyBuild.findFirst({
+        where: withDeleted,
+        select: { deleteReason: true },
+      })
+      return pick(row?.deleteReason)
+    }
+    case 'Item': {
+      const row = await db.item.findFirst({
+        where: withDeleted,
+        select: { deleteReason: true },
+      })
+      return pick(row?.deleteReason)
+    }
+    default:
+      return null
   }
 }
 
-const RESTORABLE = new Set([
-  'Journal',
-  'SalesDocument',
-  'PurchaseDocument',
-  'CustomerPayment',
-  'BillPayment',
-  'BankTransfer',
-  'InventoryAdjustment',
-  'AssemblyBuild',
-])
+type SnapshotField = { label: string; value: string }
+
+function auditBeforeSnapshot(before: Record<string, unknown>): SnapshotField[] {
+  return Object.entries(before)
+    .filter(([key]) => !/id$/i.test(key) && key !== 'applicationsReleased')
+    .map(([key, value]) => ({
+      label: key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()),
+      value:
+        value == null
+          ? null
+          : typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+            ? String(value)
+            : Array.isArray(value)
+              ? value.map(String).join(', ')
+              : null,
+    }))
+    .filter((field): field is SnapshotField => Boolean(field.value))
+}
+
+function moneyLabel(amount: { toString(): string }, currency: string) {
+  return formatMoney(amount.toString(), currency)
+}
+
+/**
+ * Rebuild the deleted record as form fields for Trash detail.
+ * The audit `before` blob only keeps a few keys; the soft-deleted row still has the paper.
+ */
+async function formSnapshot(
+  ctx: OrgContext,
+  entity: string,
+  entityId: string,
+): Promise<SnapshotField[]> {
+  const currencyFallback = ctx.organization.baseCurrency
+
+  // Soft-delete extension hides these unless `deletedAt` is mentioned.
+  const withDeleted = { id: entityId, orgId: ctx.orgId, deletedAt: undefined }
+
+  if (entity === 'SalesDocument') {
+    const document = await db.salesDocument.findFirst({
+      where: withDeleted,
+      select: {
+        number: true,
+        type: true,
+        status: true,
+        date: true,
+        dueDate: true,
+        currencyCode: true,
+        subtotal: true,
+        discountAmount: true,
+        taxTotal: true,
+        total: true,
+        customerMessage: true,
+        memo: true,
+        customer: { select: { displayName: true, email: true } },
+        lines: {
+          orderBy: { lineNumber: 'asc' },
+          select: {
+            quantity: true,
+            description: true,
+            unitPrice: true,
+            amount: true,
+            item: { select: { sku: true, name: true } },
+          },
+        },
+      },
+    })
+    if (!document) return []
+    const currency = document.currencyCode || currencyFallback
+    const fields: SnapshotField[] = [
+      { label: 'Number', value: document.number },
+      { label: 'Type', value: document.type },
+      { label: 'Status', value: document.status },
+      { label: 'Customer', value: document.customer.displayName },
+      ...(document.customer.email
+        ? [{ label: 'Customer email', value: document.customer.email }]
+        : []),
+      { label: 'Date', value: toCalendarDate(document.date) },
+      ...(document.dueDate ? [{ label: 'Due date', value: toCalendarDate(document.dueDate) }] : []),
+      { label: 'Currency', value: currency },
+      ...document.lines.map((line, index) => ({
+        label: `Line ${index + 1}`,
+        value: [
+          line.quantity.toString(),
+          '×',
+          line.description ?? line.item?.name ?? 'Line',
+          line.item?.sku ? `(${line.item.sku})` : null,
+          '=',
+          moneyLabel(line.amount, currency),
+        ]
+          .filter(Boolean)
+          .join(' '),
+      })),
+      { label: 'Subtotal', value: moneyLabel(document.subtotal, currency) },
+      ...(document.discountAmount.toString() !== '0'
+        ? [{ label: 'Discount', value: moneyLabel(document.discountAmount, currency) }]
+        : []),
+      ...(document.taxTotal.toString() !== '0'
+        ? [{ label: 'Tax', value: moneyLabel(document.taxTotal, currency) }]
+        : []),
+      { label: 'Total', value: moneyLabel(document.total, currency) },
+      ...(document.customerMessage
+        ? [{ label: 'Message', value: document.customerMessage }]
+        : []),
+      ...(document.memo ? [{ label: 'Memo', value: document.memo }] : []),
+    ]
+    return fields
+  }
+
+  if (entity === 'PurchaseDocument') {
+    const document = await db.purchaseDocument.findFirst({
+      where: withDeleted,
+      select: {
+        number: true,
+        type: true,
+        status: true,
+        date: true,
+        dueDate: true,
+        currencyCode: true,
+        subtotal: true,
+        taxTotal: true,
+        total: true,
+        memo: true,
+        vendor: { select: { displayName: true, email: true } },
+        lines: {
+          orderBy: { lineNumber: 'asc' },
+          select: {
+            quantity: true,
+            description: true,
+            amount: true,
+            item: { select: { sku: true, name: true } },
+          },
+        },
+      },
+    })
+    if (!document) return []
+    const currency = document.currencyCode || currencyFallback
+    return [
+      { label: 'Number', value: document.number },
+      { label: 'Type', value: document.type },
+      { label: 'Status', value: document.status },
+      { label: 'Vendor', value: document.vendor.displayName },
+      ...(document.vendor.email ? [{ label: 'Vendor email', value: document.vendor.email }] : []),
+      { label: 'Date', value: toCalendarDate(document.date) },
+      ...(document.dueDate ? [{ label: 'Due date', value: toCalendarDate(document.dueDate) }] : []),
+      ...document.lines.map((line, index) => ({
+        label: `Line ${index + 1}`,
+        value: [
+          line.quantity.toString(),
+          '×',
+          line.description ?? line.item?.name ?? 'Line',
+          '=',
+          moneyLabel(line.amount, currency),
+        ].join(' '),
+      })),
+      { label: 'Subtotal', value: moneyLabel(document.subtotal, currency) },
+      { label: 'Total', value: moneyLabel(document.total, currency) },
+      ...(document.memo ? [{ label: 'Memo', value: document.memo }] : []),
+    ]
+  }
+
+  if (entity === 'Journal') {
+    const journal = await db.journal.findFirst({
+      where: { id: entityId, orgId: ctx.orgId },
+      select: {
+        journalNumber: true,
+        date: true,
+        memo: true,
+        lines: {
+          orderBy: { lineNumber: 'asc' },
+          select: {
+            debit: true,
+            credit: true,
+            description: true,
+            account: { select: { code: true, name: true } },
+          },
+        },
+      },
+    })
+    if (!journal) return []
+    return [
+      { label: 'Number', value: journal.journalNumber },
+      { label: 'Date', value: toCalendarDate(journal.date) },
+      ...(journal.memo ? [{ label: 'Memo', value: journal.memo }] : []),
+      ...journal.lines.map((line) => ({
+        label: `${line.account.code} ${line.account.name}`,
+        value: `Dr ${line.debit.toString()} / Cr ${line.credit.toString()}${
+          line.description ? ` — ${line.description}` : ''
+        }`,
+      })),
+    ]
+  }
+
+  if (entity === 'CustomerPayment') {
+    const payment = await db.customerPayment.findFirst({
+      where: withDeleted,
+      select: {
+        number: true,
+        date: true,
+        amount: true,
+        currencyCode: true,
+        memo: true,
+        customer: { select: { displayName: true } },
+      },
+    })
+    if (!payment) return []
+    const currency = payment.currencyCode || currencyFallback
+    return [
+      { label: 'Number', value: payment.number },
+      { label: 'Customer', value: payment.customer.displayName },
+      { label: 'Date', value: toCalendarDate(payment.date) },
+      { label: 'Amount', value: moneyLabel(payment.amount, currency) },
+      ...(payment.memo ? [{ label: 'Memo', value: payment.memo }] : []),
+    ]
+  }
+
+  if (entity === 'BillPayment') {
+    const payment = await db.billPayment.findFirst({
+      where: withDeleted,
+      select: {
+        number: true,
+        date: true,
+        amount: true,
+        currencyCode: true,
+        memo: true,
+        vendor: { select: { displayName: true } },
+      },
+    })
+    if (!payment) return []
+    const currency = payment.currencyCode || currencyFallback
+    return [
+      { label: 'Number', value: payment.number },
+      { label: 'Vendor', value: payment.vendor.displayName },
+      { label: 'Date', value: toCalendarDate(payment.date) },
+      { label: 'Amount', value: moneyLabel(payment.amount, currency) },
+      ...(payment.memo ? [{ label: 'Memo', value: payment.memo }] : []),
+    ]
+  }
+
+  if (entity === 'BankTransfer') {
+    const transfer = await db.bankTransfer.findFirst({
+      where: withDeleted,
+      select: {
+        number: true,
+        date: true,
+        amount: true,
+        currencyCode: true,
+        memo: true,
+        reference: true,
+        fromAccount: { select: { code: true, name: true } },
+        toAccount: { select: { code: true, name: true } },
+      },
+    })
+    if (!transfer) return []
+    const currency = transfer.currencyCode || currencyFallback
+    return [
+      { label: 'Number', value: transfer.number },
+      { label: 'Date', value: toCalendarDate(transfer.date) },
+      {
+        label: 'From',
+        value: `${transfer.fromAccount.code} — ${transfer.fromAccount.name}`,
+      },
+      { label: 'To', value: `${transfer.toAccount.code} — ${transfer.toAccount.name}` },
+      { label: 'Amount', value: moneyLabel(transfer.amount, currency) },
+      ...(transfer.reference ? [{ label: 'Reference', value: transfer.reference }] : []),
+      ...(transfer.memo ? [{ label: 'Memo', value: transfer.memo }] : []),
+    ]
+  }
+
+  if (entity === 'Deposit') {
+    const deposit = await db.deposit.findFirst({
+      where: withDeleted,
+      select: {
+        number: true,
+        date: true,
+        total: true,
+        currencyCode: true,
+        memo: true,
+        reference: true,
+        bankAccount: { select: { code: true, name: true } },
+      },
+    })
+    if (!deposit) return []
+    const currency = deposit.currencyCode || currencyFallback
+    return [
+      { label: 'Number', value: deposit.number },
+      { label: 'Date', value: toCalendarDate(deposit.date) },
+      {
+        label: 'Bank account',
+        value: `${deposit.bankAccount.code} — ${deposit.bankAccount.name}`,
+      },
+      { label: 'Total', value: moneyLabel(deposit.total, currency) },
+      ...(deposit.reference ? [{ label: 'Reference', value: deposit.reference }] : []),
+      ...(deposit.memo ? [{ label: 'Memo', value: deposit.memo }] : []),
+    ]
+  }
+
+  if (entity === 'InventoryAdjustment') {
+    const adjustment = await db.inventoryAdjustment.findFirst({
+      where: withDeleted,
+      select: {
+        number: true,
+        date: true,
+        memo: true,
+        reason: true,
+      },
+    })
+    if (!adjustment) return []
+    return [
+      { label: 'Number', value: adjustment.number },
+      { label: 'Date', value: toCalendarDate(adjustment.date) },
+      ...(adjustment.reason ? [{ label: 'Adjustment reason', value: adjustment.reason }] : []),
+      ...(adjustment.memo ? [{ label: 'Memo', value: adjustment.memo }] : []),
+    ]
+  }
+
+  if (entity === 'Item') {
+    const item = await db.item.findFirst({
+      where: withDeleted,
+      select: { name: true, sku: true, description: true },
+    })
+    if (!item) return []
+    return [
+      { label: 'Name', value: item.name },
+      ...(item.sku ? [{ label: 'SKU', value: item.sku }] : []),
+      ...(item.description ? [{ label: 'Description', value: item.description }] : []),
+    ]
+  }
+
+  return []
+}
 
 /** One trash line with its papers — for the detail screen. */
 export async function get(ctx: OrgContext, id: string) {
@@ -96,19 +501,24 @@ export async function get(ctx: OrgContext, id: string) {
   const files = await listTrashFiles(ctx, id)
   if (isCleared(row.after)) throw notFound('Trash entry')
 
+  const reason = entry.reason ?? (await rowDeleteReason(ctx, row.entity, row.entityId))
   const restored = isRestored(row.after)
+  const before = afterRecord(row.before) ?? {}
+  const fromRow = await formSnapshot(ctx, row.entity, row.entityId)
+  const snapshot = fromRow.length > 0 ? fromRow : auditBeforeSnapshot(before)
+
   return {
     ...entry,
+    reason,
     entity: row.entity,
     entityId: row.entityId,
+    origin: trashOrigin(row.entity, row.before),
+    snapshot,
     restored,
-    canRestore: !restored && RESTORABLE.has(row.entity),
-    cannotRestoreReason:
-      row.entity === 'Deposit'
-        ? 'Deposits cannot be restored — the payments they banked were released.'
-        : !RESTORABLE.has(row.entity)
-          ? 'This kind of record cannot be restored from Trash.'
-          : null,
+    canRestore: !restored && trashRestoreCapability(row.entity).canRestore,
+    cannotRestoreReason: restored
+      ? null
+      : trashRestoreCapability(row.entity).cannotRestoreReason,
     files: files.map((file) => ({
       ...file,
       createdAt: file.createdAt.toISOString(),
@@ -138,7 +548,7 @@ export async function restore(
       'A deleted deposit cannot be restored — the payments it banked were released and are no longer linked. Enter a new deposit from undeposited funds instead.',
     )
   }
-  if (!RESTORABLE.has(row.entity)) {
+  if (!TRASH_RESTORABLE.has(row.entity)) {
     throw precondition('This kind of record cannot be restored from Trash.')
   }
 
@@ -239,10 +649,11 @@ export async function clearOne(ctx: OrgContext, id: string): Promise<{ count: nu
  */
 export async function clearAll(ctx: OrgContext): Promise<{ count: number }> {
   const rows = await db.auditLog.findMany({
-    where: activeTrashWhere(ctx.orgId),
+    where: { orgId: ctx.orgId, action: 'DELETE' },
     select: { id: true, after: true },
   })
-  const count = await markCleared(ctx, rows)
+  const active = rows.filter((row) => !isGoneFromTrash(row.after))
+  const count = await markCleared(ctx, active)
   return { count }
 }
 
@@ -263,7 +674,10 @@ export async function renderPdf(
   const ink = options?.ink ?? 'color'
   const row = await loadDeleteLog(ctx, id)
   const entry = presentTrashEntry(row)
-  const org = await organizationService.get(ctx)
+  const [org, template] = await Promise.all([
+    organizationService.get(ctx),
+    organizationService.getDocumentTemplate(ctx),
+  ])
   const company = letterheadOf(org)
   const letterhead = {
     orgName: company.name,
@@ -281,18 +695,23 @@ export async function renderPdf(
         date: true,
         createdAt: true,
         dueDate: true,
+        reference: true,
         currencyCode: true,
         subtotal: true,
         discountAmount: true,
         taxTotal: true,
         total: true,
         customerMessage: true,
+        paymentTerm: { select: { name: true } },
         customer: {
           select: {
             displayName: true,
             email: true,
+            phone: true,
             billingLine1: true,
+            billingLine2: true,
             billingCity: true,
+            billingRegion: true,
           },
         },
         lines: {
@@ -302,7 +721,7 @@ export async function renderPdf(
             description: true,
             unitPrice: true,
             amount: true,
-            item: { select: { sku: true, name: true } },
+            item: { select: { sku: true, name: true, unitOfMeasure: true } },
           },
         },
       },
@@ -312,18 +731,26 @@ export async function renderPdf(
       const currency = document.currencyCode || ctx.organization.baseCurrency
       const bytes = renderSalesDocumentPdf({
         ink,
+        template,
         ...letterhead,
-        title: `${config.singular} (deleted)`,
+        title: config.singular,
         number: document.number,
         date: document.date,
         createdAt: document.createdAt,
         timeZone: org.timeZone,
         dueDate: document.dueDate,
         customerName: document.customer.displayName,
-        customerAddress: [document.customer.billingLine1, document.customer.billingCity].filter(
-          (part): part is string => Boolean(part),
-        ),
+        customerAddress: [
+          document.customer.billingLine1,
+          document.customer.billingLine2,
+          document.customer.billingCity,
+          document.customer.billingRegion,
+        ].filter((part): part is string => Boolean(part)),
         customerEmail: document.customer.email,
+        customerPhone: document.customer.phone,
+        reference: document.reference,
+        paymentTerm: document.paymentTerm?.name ?? null,
+        status: 'DELETED',
         currency,
         lines: document.lines.map((line) => ({
           quantity: line.quantity.toString(),
@@ -331,6 +758,7 @@ export async function renderPdf(
           description: line.description ?? line.item?.name ?? 'Line',
           unitPrice: line.unitPrice.toString(),
           amount: line.amount.toString(),
+          unitOfMeasure: line.item?.unitOfMeasure ?? null,
         })),
         subtotal: document.subtotal.toString(),
         discountAmount: document.discountAmount.toString(),
@@ -351,6 +779,7 @@ export async function renderPdf(
         date: true,
         createdAt: true,
         dueDate: true,
+        reference: true,
         currencyCode: true,
         subtotal: true,
         taxTotal: true,
@@ -366,7 +795,7 @@ export async function renderPdf(
             description: true,
             unitPrice: true,
             amount: true,
-            item: { select: { sku: true, name: true } },
+            item: { select: { sku: true, name: true, unitOfMeasure: true } },
           },
         },
       },
@@ -376,8 +805,10 @@ export async function renderPdf(
       const currency = document.currencyCode || ctx.organization.baseCurrency
       const bytes = renderSalesDocumentPdf({
         ink,
+        template,
+        partyLabel: 'Vendor',
         ...letterhead,
-        title: `${config.singular} (deleted)`,
+        title: config.singular,
         number: document.number,
         date: document.date,
         createdAt: document.createdAt,
@@ -386,6 +817,9 @@ export async function renderPdf(
         customerName: document.vendor.displayName,
         customerAddress: [],
         customerEmail: document.vendor.email,
+        customerPhone: document.vendor.phone,
+        reference: document.reference,
+        status: 'DELETED',
         currency,
         lines: document.lines.map((line) => ({
           quantity: line.quantity.toString(),
@@ -393,6 +827,7 @@ export async function renderPdf(
           description: line.description ?? line.item?.name ?? 'Line',
           unitPrice: line.unitPrice.toString(),
           amount: line.amount.toString(),
+          unitOfMeasure: line.item?.unitOfMeasure ?? null,
         })),
         subtotal: document.subtotal.toString(),
         discountAmount: '0',
@@ -436,6 +871,7 @@ export async function renderPdf(
       ]
       const bytes = renderTrashRecordPdf({
         ink,
+        template,
         ...letterhead,
         kind: entry.kind,
         name: journal.journalNumber,
@@ -464,6 +900,7 @@ export async function renderPdf(
     if (payment) {
       const bytes = renderTrashRecordPdf({
         ink,
+        template,
         ...letterhead,
         kind: entry.kind,
         name: payment.number,
@@ -497,6 +934,7 @@ export async function renderPdf(
     if (payment) {
       const bytes = renderTrashRecordPdf({
         ink,
+        template,
         ...letterhead,
         kind: entry.kind,
         name: payment.number,
@@ -532,6 +970,7 @@ export async function renderPdf(
     if (transfer) {
       const bytes = renderTrashRecordPdf({
         ink,
+        template,
         ...letterhead,
         kind: 'Transfer',
         name: transfer.number,
@@ -571,6 +1010,7 @@ export async function renderPdf(
     if (deposit) {
       const bytes = renderTrashRecordPdf({
         ink,
+        template,
         ...letterhead,
         kind: 'Deposit',
         name: deposit.number,
@@ -615,6 +1055,7 @@ export async function renderPdf(
     if (adjustment) {
       const bytes = renderTrashRecordPdf({
         ink,
+        template,
         ...letterhead,
         kind: 'Stock adjustment',
         name: adjustment.number,
@@ -659,7 +1100,8 @@ export async function renderPdf(
   }
 
   const bytes = renderTrashRecordPdf({
-        ink,
+    ink,
+    template,
     ...letterhead,
     kind: entry.kind,
     name: entry.name,

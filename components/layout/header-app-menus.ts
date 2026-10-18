@@ -1,3 +1,4 @@
+import type { OrgFeatureFlags } from '@/lib/feature-flags'
 import type { Permission } from '@/server/auth/permissions'
 import {
   ACCOUNTING_HUB_APPS,
@@ -10,7 +11,7 @@ import {
   type HubApp,
 } from './module-hubs'
 import { PROJECT_HUB_APPS, type ProjectHubApp } from './project-apps'
-import { SALES_HUB_APPS, type SalesHubApp } from './sales-apps'
+import { SALES_HUB_APPS, salesAppsForPermissions, type SalesHubApp } from './sales-apps'
 
 /**
  * What opens under a top Apps chip on click.
@@ -121,40 +122,45 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
 export function menuForApp(
   appKey: string,
   permissions: ReadonlySet<string> | Iterable<string>,
+  features?: OrgFeatureFlags,
 ): HeaderMenuItem[] {
   const items = STATIC_MENUS[appKey]
   if (!items) return []
 
+  if (appKey === 'sales') {
+    return fromHub(salesAppsForPermissions(permissions, features))
+  }
+  if (appKey === 'purchases') {
+    return fromHub(visibleHubApps(PURCHASE_HUB_APPS, permissions, features, 'purchases'))
+  }
+  if (appKey === 'inventory') {
+    return fromHub(visibleHubApps(INVENTORY_HUB_APPS, permissions, features, 'inventory'))
+  }
+
   // Hub lists already carry permissions; reuse the same filter.
   if (
-    appKey === 'sales' ||
     appKey === 'projects' ||
-    appKey === 'purchases' ||
     appKey === 'banking' ||
-    appKey === 'inventory' ||
     appKey === 'accounting' ||
     appKey === 'settings' ||
     appKey === 'help'
   ) {
     const hubs =
-      appKey === 'sales'
-        ? SALES_HUB_APPS
-        : appKey === 'projects'
-          ? PROJECT_HUB_APPS
-          : appKey === 'purchases'
-            ? PURCHASE_HUB_APPS
-            : appKey === 'banking'
-              ? BANKING_HUB_APPS
-              : appKey === 'inventory'
-                ? INVENTORY_HUB_APPS
-                : appKey === 'accounting'
-                  ? ACCOUNTING_HUB_APPS
-                  : appKey === 'settings'
-                    ? SETTINGS_HUB_APPS
-                    : HELP_HUB_APPS
+      appKey === 'projects'
+        ? PROJECT_HUB_APPS
+        : appKey === 'banking'
+          ? BANKING_HUB_APPS
+          : appKey === 'accounting'
+            ? ACCOUNTING_HUB_APPS
+            : appKey === 'settings'
+              ? SETTINGS_HUB_APPS
+              : HELP_HUB_APPS
     return fromHub(visibleHubApps(hubs, permissions))
   }
 
   const allowed = permissions instanceof Set ? permissions : new Set(permissions)
-  return items.filter((item) => !item.permission || allowed.has(item.permission))
+  return items.filter((item) => {
+    if (item.permission && !allowed.has(item.permission)) return false
+    return true
+  })
 }

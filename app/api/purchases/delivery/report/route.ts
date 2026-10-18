@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { letterheadOf } from '@/lib/letterhead'
 import { parsePrintInk } from '@/lib/print-ink'
 import { requireOrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
@@ -22,9 +23,10 @@ export async function GET(request: Request) {
       filterRaw === 'outstanding' || filterRaw === 'delivered' ? filterRaw : 'all'
     const vendorId = url.searchParams.get('vendorId') ?? undefined
 
-    const [orders, org] = await Promise.all([
+    const [orders, org, template] = await Promise.all([
       delivery.detailReport(ctx, { filter, vendorId }),
       organizationService.get(ctx),
+      organizationService.getDocumentTemplate(ctx),
     ])
 
     const filterLabel =
@@ -34,12 +36,17 @@ export async function GET(request: Request) {
           ? 'Delivered orders'
           : 'All purchase orders'
 
+    const company = letterheadOf(org)
     const bytes = renderDeliveryReportPdf({
-      orgName: org.legalName ?? org.name,
+      orgName: company.name,
+      orgAddress: company.address ? [company.address] : [],
+      orgPhone: company.phone,
+      orgEmail: company.email,
       currency: ctx.organization.baseCurrency,
       filterLabel,
       orders,
       ink,
+      template,
     })
 
     return new NextResponse(Buffer.from(bytes), {

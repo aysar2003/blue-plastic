@@ -62,7 +62,7 @@ export async function registerAction(
     })
   } catch (error) {
     if (error instanceof AuthError) {
-      redirect('/sign-in')
+      redirect('/login/company')
     }
     throw error
   }

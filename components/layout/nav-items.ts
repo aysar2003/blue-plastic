@@ -230,6 +230,7 @@ export const MODULES: NavModule[] = [
       { label: 'Payment terms', href: '/settings/payment-terms' },
       { label: 'Tax', href: '/settings/tax', permission: 'tax:read' },
       { label: 'Company users', href: '/settings/users', permission: 'user:read' },
+      { label: 'User history', href: '/settings/user-history', permission: 'user:read' },
       { label: 'Templates', href: '/settings/templates', permission: 'org:read' },
       { label: 'Appearance', href: '/settings/appearance' },
       { label: 'Your profile', href: '/settings/profile' },

@@ -28,6 +28,7 @@ import {
   whatsappUrl,
   type MarketingContact,
 } from '@/lib/marketing-site'
+import { LOGIN_COMPANY, LOGIN_DOORS, LOGIN_HUB } from '@/lib/login-paths'
 import {
   PRODUCT_BUILDER,
   PRODUCT_KIND,
@@ -36,7 +37,8 @@ import {
 } from '@/lib/product-brand'
 
 /**
- * Public front of SOM ERP.
+ * Public marketing website (`/`) — separate from SOM ERP login doors
+ * (`/login/staff`, `/login/company`, `/login/portal`).
  *
  * Colours follow Appearance → Website look:
  * - Match system: same tokens as the signed-in desk
@@ -124,6 +126,7 @@ export function Landing({
         <Workflow />
         <Tutorials />
         <Contact contact={contact} />
+        <SignInDoors signedIn={signedIn} />
         <Cta enterHref={enterHref} enterLabel={enterLabel} />
       </main>
       <SiteFooter contact={contact} />
@@ -155,18 +158,18 @@ function SiteHeader({
           <a className="transition-colors hover:text-foreground" href="#contact">
             Contact
           </a>
-          <Link className="transition-colors hover:text-foreground" href="/login">
-            Login
-          </Link>
+          <a className="transition-colors hover:text-foreground" href="#sign-in">
+            Sign in
+          </a>
         </nav>
 
         <div className="flex items-center gap-2">
           {!signedIn ? (
             <Link
               className="hidden h-9 items-center rounded-md px-3 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:inline-flex"
-              href="/sign-in"
+              href={LOGIN_COMPANY}
             >
-              Sign in
+              Company login
             </Link>
           ) : null}
           <Link
@@ -572,6 +575,55 @@ function Contact({ contact }: { contact: MarketingContact }) {
   )
 }
 
+function SignInDoors({ signedIn }: { signedIn: boolean }) {
+  if (signedIn) return null
+
+  return (
+    <section id="sign-in" className="border-t border-border py-20 sm:py-24">
+      <div className="mx-auto max-w-6xl px-5 sm:px-8">
+        <div className="max-w-2xl">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-success">
+            SOM ERP login
+          </p>
+          <h2 className="mt-3 text-[2rem] font-bold tracking-[-0.02em] text-foreground sm:text-[2.3rem]">
+            Three doors — go straight to yours
+          </h2>
+          <p className="mt-4 text-[16px] leading-[1.65] text-muted-foreground">
+            The marketing site stays on this page. Sign-in lives on its own URLs so staff, company
+            users, and customers each open the right door without a detour.
+          </p>
+        </div>
+
+        <div className="mt-10 grid gap-4 sm:grid-cols-3">
+          {LOGIN_DOORS.map((door) => (
+            <Link
+              key={door.href}
+              href={door.href}
+              className="group flex flex-col rounded-lg border border-border bg-card p-5 transition-colors hover:border-primary/40 hover:bg-secondary/40"
+            >
+              <span className="text-[15px] font-semibold text-foreground">{door.title}</span>
+              <span className="mt-2 flex-1 text-[14px] leading-relaxed text-muted-foreground">
+                {door.description}
+              </span>
+              <span className="mt-4 font-mono text-[12px] text-success">{door.path}</span>
+              <span className="mt-3 text-[13px] font-medium text-primary group-hover:underline">
+                Open {door.short.toLowerCase()} login →
+              </span>
+            </Link>
+          ))}
+        </div>
+
+        <p className="mt-6 text-[13px] text-muted-foreground">
+          All options:{' '}
+          <Link href={LOGIN_HUB} className="font-mono text-success hover:underline">
+            {LOGIN_HUB}
+          </Link>
+        </p>
+      </div>
+    </section>
+  )
+}
+
 function Cta({ enterHref, enterLabel }: { enterHref: string; enterLabel: string }) {
   return (
     <section className="border-t border-border py-20 sm:py-24">
@@ -602,15 +654,15 @@ function Cta({ enterHref, enterLabel }: { enterHref: string; enterLabel: string 
               </Link>
               <Link
                 className="inline-flex h-11 items-center justify-center rounded-md border border-border px-6 text-[15px] font-medium text-foreground transition-colors hover:bg-secondary"
-                href="/sign-in"
+                href={LOGIN_COMPANY}
               >
-                Sign in
+                Company login
               </Link>
             </div>
             <p className="mt-6 text-[13px] text-muted-foreground">
               Create: <span className="font-mono text-success">/register</span>
               <span className="mx-2 text-border">·</span>
-              Sign in: <span className="font-mono text-success">/sign-in</span>
+              Company: <span className="font-mono text-success">{LOGIN_COMPANY}</span>
             </p>
           </div>
         </div>
@@ -631,9 +683,15 @@ function SiteFooter({ contact }: { contact: MarketingContact }) {
           <a className="transition-colors hover:text-foreground" href="#contact">
             Contact
           </a>
-          <Link className="transition-colors hover:text-foreground" href="/login">
-            Login
-          </Link>
+          {LOGIN_DOORS.map((door) => (
+            <Link
+              key={door.href}
+              className="transition-colors hover:text-foreground"
+              href={door.href}
+            >
+              {door.short}
+            </Link>
+          ))}
           <a className="transition-colors hover:text-foreground" href={telUrl(contact.phone)}>
             {contact.phone}
           </a>

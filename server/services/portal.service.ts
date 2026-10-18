@@ -155,7 +155,7 @@ export type InvitePortalUserResult = {
 
 /**
  * Staff: create a portal login.
- * - password → ACTIVE + temp password; customer uses `/portal/login?company=…`
+ * - password → ACTIVE + temp password; customer uses `/login/portal?company=…`
  * - link → INVITED; customer opens `/portal/accept?token=…` and chooses a password
  */
 export async function invitePortalUser(

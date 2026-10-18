@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { signOut } from 'next-auth/react'
 import { DatabaseIcon, LogOutIcon, PaletteIcon, PieChartIcon, UserIcon } from 'lucide-react'
 
+import { signOutWithHistory } from '@/app/(app)/auth/actions'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -82,7 +82,12 @@ export function UserMenu({
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={() => signOut({ callbackUrl: '/sign-in' })}>
+        <DropdownMenuItem
+          variant="destructive"
+          onSelect={() => {
+            void signOutWithHistory(showDatabases ? '/login/staff' : '/login/company')
+          }}
+        >
           <LogOutIcon />
           Sign out
         </DropdownMenuItem>

@@ -8,9 +8,9 @@ import { getOrgContext } from '@/server/auth/context'
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   return withDatabasePage(async () => {
     const ctx = await getOrgContext()
-    if (!ctx) redirect('/portal/login')
+    if (!ctx) redirect('/login/portal')
     if (ctx.role !== 'CUSTOMER') redirect('/dashboard')
-    // Use ?error=… so /portal/login does not bounce a stuck CUSTOMER session
+    // Use ?error=… so portal login does not bounce a stuck CUSTOMER session
     // back here (login → /portal → login forever → “Rendering…”).
     if (!ctx.portalCustomerId) {
       redirect(`${portalLoginPath(ctx.orgId)}&error=unavailable`)

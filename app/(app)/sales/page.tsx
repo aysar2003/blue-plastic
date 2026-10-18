@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: 'Sales' }
  */
 export default async function SalesHubPage() {
   const ctx = await requireOrgContext('invoice:read')
-  const apps = salesAppsForPermissions(ctx.permissions)
+  const apps = salesAppsForPermissions(ctx.permissions, ctx.features)
   const currency = ctx.organization.baseCurrency
   const now = today(ctx.organization.timeZone)
 

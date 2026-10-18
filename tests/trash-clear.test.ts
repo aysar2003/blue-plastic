@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest'
 
+import { isHiddenFromTrash } from '@/lib/trash-log'
 import { deleteJournals, restoreJournals } from '@/server/accounting/deletion'
 import { postJournal } from '@/server/accounting/posting'
 import { db, type Tx } from '@/server/db'
@@ -81,17 +82,11 @@ suite('trash restore and clear', () => {
         },
       })
 
-      const active = await tx.auditLog.findMany({
-        where: {
-          orgId: fixture.ctx.orgId,
-          action: 'DELETE',
-          AND: [
-            { NOT: { after: { path: ['restored'], equals: true } } },
-            { NOT: { after: { path: ['cleared'], equals: true } } },
-          ],
-        },
-        select: { id: true },
+      const deletes = await tx.auditLog.findMany({
+        where: { orgId: fixture.ctx.orgId, action: 'DELETE' },
+        select: { id: true, after: true },
       })
+      const active = deletes.filter((row) => !isHiddenFromTrash(row.after))
 
       expect(active.map((row) => row.id)).not.toContain(log!.id)
 

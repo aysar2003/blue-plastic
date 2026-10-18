@@ -270,7 +270,8 @@ export async function restoreSoftDeletedDocument(
       entityId: input.id,
       action: 'RESTORE',
       before: { number: input.number, status: 'DELETED', ...input.before },
-      after: { deletedAt: null },
+      // Keep number/type on `after` so User history can open the live record.
+      after: { number: input.number, deletedAt: null, ...input.before },
     },
     meta,
   )

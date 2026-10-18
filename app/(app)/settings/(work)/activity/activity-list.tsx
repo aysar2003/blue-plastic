@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2Icon, Trash2Icon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { apiGet } from '@/lib/api'
 import { formatDateTime } from '@/lib/date'
 import { ClearAllTrashButton } from './clear-trash-button'
+import { RestoreTrashButton } from './restore-button'
 
 type TrashRow = {
   id: string
@@ -22,6 +23,10 @@ type TrashRow = {
   kind: string
   name: string | null
   reason: string | null
+  originLabel: string | null
+  originHref: string | null
+  canRestore: boolean
+  cannotRestoreReason: string | null
 }
 
 type TrashPage = { rows: TrashRow[]; total: number; page: number; pageCount: number }
@@ -33,6 +38,7 @@ export function ActivityList({
   timeZone: string
   canClear?: boolean
 }) {
+  const queryClient = useQueryClient()
   const [draft, setDraft] = useState('')
   const [q, setQ] = useState('')
   const { data, isPending, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
@@ -43,6 +49,10 @@ export function ActivityList({
         apiGet<TrashPage>('/api/audit-logs', { page: pageParam, pageSize: 25, ...(q ? { q } : {}) }),
       getNextPageParam: (last) => (last.page < last.pageCount ? last.page + 1 : undefined),
     })
+
+  function afterRestore() {
+    void queryClient.invalidateQueries({ queryKey: ['trash'] })
+  }
 
   const toolbar = (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -118,56 +128,69 @@ export function ActivityList({
               <TableHead>When</TableHead>
               <TableHead>Who</TableHead>
               <TableHead>Deleted</TableHead>
+              <TableHead>Came from</TableHead>
               <TableHead>Reason</TableHead>
-              <TableHead className="w-48">View / restore</TableHead>
+              <TableHead className="w-28">Open</TableHead>
+              <TableHead className="w-[1%] whitespace-nowrap text-right">Restore</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell className="whitespace-nowrap text-muted-foreground tabular">
-                  {formatDateTime(new Date(row.at), timeZone)}
-                </TableCell>
-                <TableCell>
-                  <span className="block font-medium">{row.who}</span>
-                  {row.email ? (
-                    <span className="block text-xs text-muted-foreground">{row.email}</span>
-                  ) : null}
-                </TableCell>
-                <TableCell>
-                  <Link
-                    href={`/settings/activity/${row.id}`}
-                    className="block font-medium text-primary underline-offset-4 hover:underline"
-                  >
-                    {row.kind}
-                  </Link>
-                  {row.name ? <span className="block text-sm text-muted-foreground">{row.name}</span> : null}
-                </TableCell>
-                <TableCell className="max-w-xs text-muted-foreground">{row.reason ?? '—'}</TableCell>
-                <TableCell className="space-x-2 whitespace-nowrap text-sm">
-                  <Link
-                    href={`/settings/activity/${row.id}`}
-                    className="text-primary underline-offset-4 hover:underline"
-                  >
-                    View
-                  </Link>
-                  <a
-                    href={`/api/trash/${row.id}/pdf`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary underline-offset-4 hover:underline"
-                  >
-                    PDF
-                  </a>
-                  <Link
-                    href={`/settings/activity/${row.id}`}
-                    className="text-primary underline-offset-4 hover:underline"
-                  >
-                    Restore
-                  </Link>
-                </TableCell>
-              </TableRow>
-            ))}
+            {rows.map((row) => {
+              const label = row.name ? `${row.kind} ${row.name}` : row.kind
+              return (
+                <TableRow key={row.id}>
+                  <TableCell className="whitespace-nowrap text-muted-foreground tabular">
+                    {formatDateTime(new Date(row.at), timeZone)}
+                  </TableCell>
+                  <TableCell>
+                    <span className="block font-medium">{row.who}</span>
+                    {row.email ? (
+                      <span className="block text-xs text-muted-foreground">{row.email}</span>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/settings/activity/${row.id}`}
+                      className="block font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      {row.kind}
+                    </Link>
+                    {row.name ? (
+                      <span className="block text-sm text-muted-foreground">{row.name}</span>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="max-w-[12rem] text-sm text-muted-foreground">
+                    {row.originHref && row.originLabel ? (
+                      <Link
+                        href={row.originHref}
+                        className="text-primary underline-offset-4 hover:underline"
+                      >
+                        {row.originLabel}
+                      </Link>
+                    ) : (
+                      '—'
+                    )}
+                  </TableCell>
+                  <TableCell className="max-w-xs text-muted-foreground">{row.reason ?? '—'}</TableCell>
+                  <TableCell className="whitespace-nowrap text-sm">
+                    <Link
+                      href={`/settings/activity/${row.id}`}
+                      className="font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      Open form →
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <RestoreTrashButton
+                      id={row.id}
+                      label={label}
+                      disabledReason={row.canRestore ? null : row.cannotRestoreReason}
+                      onRestored={afterRestore}
+                    />
+                  </TableCell>
+                </TableRow>
+              )
+            })}
           </TableBody>
         </Table>
 

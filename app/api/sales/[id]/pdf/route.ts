@@ -24,9 +24,10 @@ export async function GET(
 
     const ink = parsePrintInk(new URL(request.url).searchParams.get('ink'))
 
-    const [document, org] = await Promise.all([
+    const [document, org, template] = await Promise.all([
       salesService.get(ctx, id),
       organizationService.get(ctx),
+      organizationService.getDocumentTemplate(ctx),
     ])
 
     // Portal logins may only download their own customer's documents.
@@ -38,6 +39,7 @@ export async function GET(
 
     const bytes = renderSalesDocumentPdf({
       ink,
+      template,
       orgName: company.name,
       orgAddress: company.address ? [company.address] : [],
       orgPhone: company.phone,
@@ -49,10 +51,17 @@ export async function GET(
       timeZone: org.timeZone,
       dueDate: document.dueDate,
       customerName: document.customer.displayName,
-      customerAddress: [document.customer.billingLine1, document.customer.billingCity].filter(
-        (part): part is string => Boolean(part),
-      ),
+      customerAddress: [
+        document.customer.billingLine1,
+        document.customer.billingLine2,
+        document.customer.billingCity,
+        document.customer.billingRegion,
+      ].filter((part): part is string => Boolean(part)),
       customerEmail: document.customer.email,
+      customerPhone: document.customer.phone,
+      reference: document.reference,
+      paymentTerm: document.paymentTerm?.name ?? null,
+      status: document.status,
       currency,
       lines: document.lines.map((line) => ({
         quantity: line.quantity,
@@ -60,6 +69,7 @@ export async function GET(
         description: line.description ?? line.item?.name ?? 'Line',
         unitPrice: line.unitPrice,
         amount: line.amount,
+        unitOfMeasure: line.item?.unitOfMeasure ?? null,
       })),
       subtotal: document.subtotal,
       discountAmount: document.discountAmount,

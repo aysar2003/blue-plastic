@@ -4,7 +4,12 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 
-import { moduleForPath } from '@/lib/feature-flags'
+import {
+  documentKindForPath,
+  isDocumentKindEnabled,
+  moduleForPath,
+  type OrgFeatureFlags,
+} from '@/lib/feature-flags'
 import { HeaderApps } from './app-launcher'
 import { ActiveAppLink, AppsBarToggle, useAppsBarHidden } from './apps-bar'
 import { AppMemoryProvider } from './app-memory'
@@ -48,6 +53,10 @@ type ShellChromeProps = {
   showCompanyReports?: boolean
   /** Launcher app keys switched off in Settings → Configuration. */
   hiddenApps?: string[]
+  /** Full company feature flags (modules + nested document kinds). */
+  features?: OrgFeatureFlags
+  /** Show header per-app on/off (needs org:update). */
+  canManageModules?: boolean
   /** Creator credit — off via Settings → Features. */
   showCreatorBrand?: boolean
   /** Streamed server slot; null when the user lacks inventory:read. */
@@ -116,6 +125,8 @@ export function ShellChrome({
   showDatabases = false,
   showCompanyReports = false,
   hiddenApps,
+  features,
+  canManageModules = false,
   showCreatorBrand = true,
   stockAlertsSlot,
   balanceAlertsSlot,
@@ -128,13 +139,20 @@ export function ShellChrome({
   const { hidden: appsHidden, toggle: toggleAppsBar } = useAppsBarHidden()
   const current = moduleFor(pathname)
 
-  // Soft client guard: URLs for switched-off apps bounce home (layouts also refuse).
+  // Soft client guard: URLs for switched-off apps / document kinds bounce home.
   useEffect(() => {
     const flag = moduleForPath(pathname)
     if (flag && hiddenApps?.includes(flag)) {
       router.replace('/dashboard')
+      return
     }
-  }, [pathname, hiddenApps, router])
+    if (features) {
+      const kind = documentKindForPath(pathname)
+      if (kind && !isDocumentKindEnabled(features, kind.family, kind.kind)) {
+        router.replace('/dashboard')
+      }
+    }
+  }, [pathname, hiddenApps, features, router])
   const isHome = !current || current.key === 'dashboard'
   const isPos = pathname === '/pos' || pathname.startsWith('/pos/')
   const isHub = HUB_PATHS.has(pathname)
@@ -226,9 +244,16 @@ export function ShellChrome({
                 permissions={permissions}
                 currency={baseCurrency}
                 hiddenApps={hiddenApps}
+                features={features}
               />
             ) : null}
-            {working ? <CommandPalette permissions={permissions} /> : null}
+            {working ? (
+              <CommandPalette
+                permissions={permissions}
+                hiddenApps={hiddenApps}
+                features={features}
+              />
+            ) : null}
             {working ? <ShellMenus /> : null}
             {stockAlertsSlot}
             {balanceAlertsSlot}
@@ -248,7 +273,14 @@ export function ShellChrome({
             hidden={appsHidden}
             className="shell-apps relative z-30 border-b border-border/70 bg-card/85 px-4 py-1.5 print:hidden sm:px-6"
           >
-            {appsHidden ? null : <HeaderApps permissions={permissions} hidden={hiddenApps} />}
+            {appsHidden ? null : (
+              <HeaderApps
+                permissions={permissions}
+                hidden={hiddenApps}
+                features={features}
+                canManageModules={canManageModules}
+              />
+            )}
           </div>
         ) : null}
 

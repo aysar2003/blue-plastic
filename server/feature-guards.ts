@@ -1,6 +1,12 @@
 import 'server-only'
 
-import { isModuleEnabled, moduleForPath, type ModuleFlag } from '@/lib/feature-flags'
+import {
+  documentKindForPath,
+  isDocumentKindEnabled,
+  isModuleEnabled,
+  moduleForPath,
+  type ModuleFlag,
+} from '@/lib/feature-flags'
 import type { OrgContext } from '@/server/auth/context'
 import { precondition } from '@/server/errors'
 
@@ -20,6 +26,21 @@ export function assertModuleEnabled(ctx: OrgContext, moduleKey: ModuleFlag | str
 export function assertPathModuleEnabled(ctx: OrgContext, pathname: string) {
   const module = moduleForPath(pathname)
   if (module) assertModuleEnabled(ctx, module)
+  const kind = documentKindForPath(pathname)
+  if (kind && !isDocumentKindEnabled(ctx.features, kind.family, kind.kind)) {
+    throw precondition('This document type is turned off in Settings → Apps & features.')
+  }
+}
+
+/** Refuse when a nested document kind is off under Apps & features. */
+export function assertDocumentKindEnabled(
+  ctx: OrgContext,
+  family: 'sales' | 'purchases' | 'inventory',
+  kind: string,
+) {
+  if (!isDocumentKindEnabled(ctx.features, family, kind)) {
+    throw precondition('This document type is turned off in Settings → Apps & features.')
+  }
 }
 export function assertDocumentDeleteAllowed(ctx: OrgContext) {
   if (!ctx.features.allowDocumentDelete) {

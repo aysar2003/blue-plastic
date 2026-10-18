@@ -43,7 +43,7 @@ export async function setupAction(_prev: SetupState, formData: FormData): Promis
   } catch (error) {
     if (error instanceof AuthError) {
       // The organisation exists; only the automatic sign-in failed.
-      redirect('/sign-in')
+      redirect('/login/staff')
     }
     throw error
   }

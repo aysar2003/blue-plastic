@@ -3,8 +3,12 @@
  *
  * The log names the record the way a person knows it — an invoice number, a
  * customer name — and nothing else. The Trash detail screen holds restore and
- * PDF; this presenter stays display-only.
+ * PDF; this presenter stays display-only. Origin (where it lived in the books)
+ * is resolved separately so list rows stay free of live links.
  */
+
+import { PURCHASE_TYPES } from '@/lib/purchase-types'
+import { SALES_TYPES } from '@/lib/sales-types'
 
 const KIND: Record<string, string> = {
   SalesDocument: 'Sale',
@@ -84,10 +88,63 @@ function nameOf(before: Record<string, unknown> | null): string | null {
   return text(before.memo)
 }
 
+/** Delete reasons are free text — never drop them as if they were row ids. */
+function reasonText(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
 function reasonOf(after: unknown): string | null {
   const record = recordOf(after)
   if (!record) return null
-  return text(record.reason) ?? text(record.deleteReason)
+  return reasonText(record.reason) ?? reasonText(record.deleteReason)
+}
+
+/**
+ * Restored or cleared DELETE rows leave Trash.
+ *
+ * Do not express this with Prisma `NOT: { after: { path, equals: true } }` —
+ * in PostgreSQL that becomes `NOT (json->>'x' = 'true')`, and a missing key
+ * yields NULL, so every ordinary delete is dropped from the list.
+ */
+export function isHiddenFromTrash(after: unknown): boolean {
+  const record = recordOf(after)
+  if (!record) return false
+  return record.restored === true || record.cleared === true
+}
+
+/** Entity kinds that Trash can put back into the working books. */
+export const TRASH_RESTORABLE = new Set([
+  'Journal',
+  'SalesDocument',
+  'PurchaseDocument',
+  'CustomerPayment',
+  'BillPayment',
+  'BankTransfer',
+  'InventoryAdjustment',
+  'AssemblyBuild',
+])
+
+/** Whether a Trash row may offer Restore, and why not when it cannot. */
+export function trashRestoreCapability(entity: string): {
+  canRestore: boolean
+  cannotRestoreReason: string | null
+} {
+  if (entity === 'Deposit') {
+    return {
+      canRestore: false,
+      cannotRestoreReason:
+        'Deposits cannot be restored — the payments they banked were released.',
+    }
+  }
+  if (!TRASH_RESTORABLE.has(entity)) {
+    return {
+      canRestore: false,
+      cannotRestoreReason: 'This kind of record cannot be restored from Trash.',
+    }
+  }
+  return { canRestore: true, cannotRestoreReason: null }
 }
 
 export type TrashEntry = {
@@ -98,6 +155,43 @@ export type TrashEntry = {
   kind: string
   name: string | null
   reason: string | null
+}
+
+/** Where the deleted record lived in the working books (list, not the dead row). */
+export type TrashOrigin = {
+  label: string
+  href: string
+}
+
+const ENTITY_ORIGIN: Record<string, TrashOrigin> = {
+  Journal: { label: 'Accounting · Journals', href: '/journals' },
+  CustomerPayment: { label: 'Payments · All payments', href: '/payments' },
+  BillPayment: { label: 'Bill payments', href: '/bill-payments' },
+  BankTransfer: { label: 'Banking', href: '/banking' },
+  Deposit: { label: 'Banking', href: '/banking' },
+  InventoryAdjustment: { label: 'Inventory · Adjust stock', href: '/inventory/adjustments/new' },
+  AssemblyBuild: { label: 'Inventory · Build assemblies', href: '/inventory/builds/new' },
+  Customer: { label: 'Customers', href: '/customers' },
+  Vendor: { label: 'Vendors', href: '/vendors' },
+  Item: { label: 'Inventory · Products', href: '/items' },
+  LedgerAccount: { label: 'Accounting · Chart of accounts', href: '/accounts' },
+  Membership: { label: 'Settings · Company users', href: '/settings/users' },
+}
+
+export function trashOrigin(entity: string, before: unknown): TrashOrigin | null {
+  const record = recordOf(before)
+  const type = text(record?.type)
+
+  if (entity === 'SalesDocument' && type) {
+    const cfg = SALES_TYPES.find((entry) => entry.type === type)
+    if (cfg) return { label: `Sales · ${cfg.plural}`, href: `/sales/${cfg.slug}` }
+  }
+  if (entity === 'PurchaseDocument' && type) {
+    const cfg = PURCHASE_TYPES.find((entry) => entry.type === type)
+    if (cfg) return { label: `Purchases · ${cfg.plural}`, href: `/purchases/${cfg.slug}` }
+  }
+
+  return ENTITY_ORIGIN[entity] ?? null
 }
 
 export function presentTrashEntry(row: {

@@ -1,9 +1,12 @@
 import { z } from 'zod'
 
 import {
+  DOCUMENT_KIND_FORM_KEY_LIST,
   MODULE_FLAGS,
   MODULE_FORM_KEYS,
+  documentKindsFromFormValues,
   modulesFromFormValues,
+  type DocumentKindsFlags,
   type ModuleFlag,
 } from '@/lib/feature-flags'
 import { countryCode, currencyCode, email, optionalText, requiredText } from './common'
@@ -58,6 +61,10 @@ const moduleFeatureFields = Object.fromEntries(
   MODULE_FLAGS.map((key) => [MODULE_FORM_KEYS[key], boolFlag.default(true)]),
 ) as Record<(typeof MODULE_FORM_KEYS)[ModuleFlag], z.ZodDefault<z.ZodType<boolean>>>
 
+const documentKindFeatureFields = Object.fromEntries(
+  DOCUMENT_KIND_FORM_KEY_LIST.map((key) => [key, boolFlag.default(true)]),
+) as Record<string, z.ZodDefault<z.ZodType<boolean>>>
+
 export const organizationFeaturesSchema = z.object({
   allowJournalDelete: boolFlag.default(true),
   allowCustomerDelete: boolFlag.default(true),
@@ -70,6 +77,7 @@ export const organizationFeaturesSchema = z.object({
   enableDocumentApprovals: boolFlag.default(false),
   enableTax: boolFlag.optional(),
   ...moduleFeatureFields,
+  ...documentKindFeatureFields,
 })
 
 export type OrganizationFeaturesInput = z.infer<typeof organizationFeaturesSchema>
@@ -79,6 +87,13 @@ export function modulesFromFeaturesInput(
   input: OrganizationFeaturesInput,
 ): Record<ModuleFlag, boolean> {
   return modulesFromFormValues(input as Record<string, unknown>)
+}
+
+/** Read nested document kinds from a features form payload. */
+export function documentKindsFromFeaturesInput(
+  input: OrganizationFeaturesInput,
+): DocumentKindsFlags {
+  return documentKindsFromFormValues(input as Record<string, unknown>)
 }
 
 const bankLine = z.object({

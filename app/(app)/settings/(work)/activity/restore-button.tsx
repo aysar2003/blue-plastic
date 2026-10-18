@@ -12,10 +12,13 @@ export function RestoreTrashButton({
   id,
   label,
   disabledReason,
+  onRestored,
 }: {
   id: string
   label: string
   disabledReason?: string | null
+  /** Called after a successful restore (e.g. refresh the Trash list). */
+  onRestored?: () => void
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -42,6 +45,7 @@ export function RestoreTrashButton({
             return
           }
           toast.success(`${result.data.number} restored.`)
+          onRestored?.()
           router.push(result.data.href)
           router.refresh()
         })

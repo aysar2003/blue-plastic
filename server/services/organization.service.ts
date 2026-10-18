@@ -4,9 +4,13 @@ import { parseDocumentTemplate, type DocumentTemplate } from '@/lib/document-tem
 import {
   modulesClampedToGrants,
   parseFeatureFlags,
+  type ModuleFlag,
   type OrgFeatureFlags,
 } from '@/lib/feature-flags'
-import { modulesFromFeaturesInput } from '@/lib/validation/organization'
+import {
+  documentKindsFromFeaturesInput,
+  modulesFromFeaturesInput,
+} from '@/lib/validation/organization'
 import type {
   DocumentTemplateInput,
   OrganizationAccountingInput,
@@ -207,6 +211,7 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       enableDocumentApprovals: input.enableDocumentApprovals,
       grantedModules: previous.grantedModules,
       modules: modulesClampedToGrants(modulesFromFeaturesInput(input), previous.grantedModules),
+      documentKinds: documentKindsFromFeaturesInput(input),
     }
 
     const after = await tx.organization.update({
@@ -224,6 +229,56 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
         action: 'UPDATE',
         before: { featureFlags: before.featureFlags },
         after: { featureFlags: after.featureFlags },
+      },
+      meta,
+    )
+    return parseFeatureFlags(after.featureFlags)
+  })
+}
+
+/** Header / quick power: flip one granted app on or off. Preserves nested kinds. */
+export async function updateModuleEnabled(
+  ctx: OrgContext,
+  module: ModuleFlag,
+  enabled: boolean,
+) {
+  const meta = await requestMeta()
+
+  return db.$transaction(async (tx) => {
+    const before = await tx.organization.findUnique({
+      where: { id: ctx.orgId },
+      select: { featureFlags: true },
+    })
+    if (!before) throw notFound('Organisation')
+
+    const previous = parseFeatureFlags(before.featureFlags)
+    if (!previous.grantedModules[module]) {
+      throw precondition('This app was not granted to this company.')
+    }
+
+    const flags: OrgFeatureFlags = {
+      ...previous,
+      modules: modulesClampedToGrants(
+        { ...previous.modules, [module]: enabled },
+        previous.grantedModules,
+      ),
+    }
+
+    const after = await tx.organization.update({
+      where: { id: ctx.orgId },
+      data: { featureFlags: flags },
+      select: { featureFlags: true },
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Organization',
+        entityId: ctx.orgId,
+        action: 'UPDATE',
+        before: { modules: previous.modules },
+        after: { modules: flags.modules },
       },
       meta,
     )

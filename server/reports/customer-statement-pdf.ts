@@ -7,9 +7,19 @@ import {
   statementFilterCaption,
   type StatementFilter,
 } from '@/lib/customer-statement'
+import {
+  DEFAULT_DOCUMENT_TEMPLATE,
+  type DocumentTemplate,
+} from '@/lib/document-template'
 import { Decimal, formatMoney } from '@/lib/money'
-import { ODOO_PDF } from '@/lib/odoo-brand'
-import { odooPdfLetterhead, odooPdfTableHead, odooPdfTotalBand } from '@/lib/odoo-pdf'
+import {
+  merchantAccent,
+  merchantPdfInk,
+  merchantPdfLetterhead,
+  merchantPdfMuted,
+  merchantPdfTableHead,
+  merchantPdfTotalBand,
+} from '@/lib/merchant-pdf'
 import { buildTextPdf, PDF_PAGE, type PdfRow } from '@/lib/pdf-text'
 import type { PrintInk } from '@/lib/print-ink'
 import type { StatementEntry } from '@/server/services/receivables.service'
@@ -33,39 +43,56 @@ export type StatementPdfInput = {
   ledger: boolean
   entries: StatementEntry[]
   ink?: PrintInk
+  template?: DocumentTemplate | null
 }
 
 /**
- * The statement as a PDF file, the same rows the screen is showing — Odoo letterhead.
+ * Statement PDF — same merchant letterhead / accent as invoice Print + PDF.
  */
 export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array {
+  const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
+  const accent = merchantAccent(template)
+  const inkColor = merchantPdfInk()
+  const muted = merchantPdfMuted()
   const money = (value: Decimal.Value) => formatMoney(value, input.currency)
   const rows: PdfRow[] = []
-  const line = (text: string, options: { bold?: boolean; size?: number; height?: number; x?: number } = {}) => {
+  const line = (
+    text: string,
+    options: { bold?: boolean; size?: number; height?: number; x?: number; color?: readonly [number, number, number] } = {},
+  ) => {
     rows.push({
       size: options.size ?? 10,
       height: options.height ?? 14,
-      runs: [{ text, x: options.x ?? PDF_PAGE.left, bold: options.bold, color: ODOO_PDF.ink }],
+      runs: [
+        {
+          text,
+          x: options.x ?? PDF_PAGE.left,
+          bold: options.bold,
+          color: options.color ?? inkColor,
+        },
+      ],
     })
   }
 
   rows.push(
-    ...odooPdfLetterhead({
+    ...merchantPdfLetterhead({
       orgName: input.orgName,
       orgAddress: input.orgAddress,
       orgPhone: input.orgPhone,
       orgEmail: input.orgEmail,
-      title: 'Customer statement',
-      subtitle: input.customerName,
+      accent,
     }),
   )
 
-  for (const part of input.address) line(part, { size: 9, height: 12 })
-  if (input.email) line(input.email, { size: 9, height: 12 })
+  line('CUSTOMER STATEMENT', { bold: true, size: 14, height: 18, color: accent })
+  line(input.customerName, { bold: true, size: 11, height: 14 })
+
+  for (const part of input.address) line(part, { size: 9, height: 12, color: muted })
+  if (input.email) line(input.email, { size: 9, height: 12, color: muted })
   line(`${formatDate(input.from)} to ${formatDate(input.to)}`, { size: 9, height: 16 })
   line(STATEMENT_VIEW_LABELS[input.filter.view], { size: 9, height: 12 })
   const caption = statementFilterCaption(input.filter)
-  if (caption) line(caption, { size: 8, height: 14 })
+  if (caption) line(caption, { size: 8, height: 14, color: muted })
 
   line(
     `Opening ${input.opening}    Debit ${input.charges}    Credit ${input.credits}    Amount due ${input.closing}`,
@@ -81,7 +108,6 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
     'Credit',
     input.ledger ? 'Balance' : 'Balance due',
   ]
-  // Date · Doc · Desc · Due · Debit · Credit · Balance — money columns right-aligned.
   const cols: { x: number; align?: 'left' | 'right' }[] = [
     { x: PDF_PAGE.left },
     { x: 95 },
@@ -92,17 +118,18 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
     { x: PDF_PAGE.right, align: 'right' },
   ]
   rows.push(
-    odooPdfTableHead(
+    merchantPdfTableHead(
       head.map((label, index) => ({
         text: label,
         x: cols[index]!.x,
         align: cols[index]!.align,
       })),
+      accent,
     ),
   )
 
   if (input.ledger) {
-    rows.push(amountRow(['', '', 'Balance brought forward', '', '', '', input.opening], cols, true))
+    rows.push(amountRow(['', '', 'Balance brought forward', '', '', '', input.opening], cols, true, inkColor))
   }
 
   for (const entry of input.entries) {
@@ -116,17 +143,17 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
       entry.credit.isZero() ? '' : money(entry.credit),
       money(input.ledger ? entry.balance : signedOpen(entry)),
     ]
-    rows.push(amountRow(cells, cols, false))
+    rows.push(amountRow(cells, cols, false, inkColor))
 
     if (input.filter.view === 'detail' && entry.lines.length > 0) {
       rows.push({
         size: 8,
         height: 12,
         runs: [
-          { text: 'Name', x: 110, bold: true, color: ODOO_PDF.purple },
-          { text: 'Qty', x: 360, bold: true, color: ODOO_PDF.purple },
-          { text: 'Price', x: 450, align: 'right', bold: true, color: ODOO_PDF.purple },
-          { text: 'Amount', x: PDF_PAGE.right, align: 'right', bold: true, color: ODOO_PDF.purple },
+          { text: 'Name', x: 110, bold: true, color: accent },
+          { text: 'Qty', x: 360, bold: true, color: accent },
+          { text: 'Price', x: 450, align: 'right', bold: true, color: accent },
+          { text: 'Amount', x: PDF_PAGE.right, align: 'right', bold: true, color: accent },
         ],
       })
       for (const item of entry.lines) {
@@ -134,15 +161,15 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
           size: 8,
           height: 12,
           runs: [
-            { text: clip(item.description, 42), x: 110, color: ODOO_PDF.ink },
-            { text: item.quantity ? plainQty(item.quantity) : '', x: 360, color: ODOO_PDF.ink },
+            { text: clip(item.description, 42), x: 110, color: inkColor },
+            { text: item.quantity ? plainQty(item.quantity) : '', x: 360, color: inkColor },
             {
               text: item.rate ? money(item.rate) : '',
               x: 450,
               align: 'right',
-              color: ODOO_PDF.ink,
+              color: inkColor,
             },
-            { text: money(item.amount), x: PDF_PAGE.right, align: 'right', color: ODOO_PDF.ink },
+            { text: money(item.amount), x: PDF_PAGE.right, align: 'right', color: inkColor },
           ],
         })
       }
@@ -150,8 +177,10 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
   }
 
   rows.push(
-    odooPdfTotalBand(
-      input.ledger ? `Amount due ${input.closing}` : `Rows shown ${input.entries.length}`,
+    merchantPdfTotalBand(
+      input.ledger ? 'Amount due' : 'Rows shown',
+      input.ledger ? input.closing : String(input.entries.length),
+      accent,
     ),
   )
 
@@ -162,6 +191,7 @@ function amountRow(
   cells: string[],
   cols: { x: number; align?: 'left' | 'right' }[],
   bold: boolean,
+  color: readonly [number, number, number],
 ): PdfRow {
   return {
     size: 8,
@@ -171,16 +201,16 @@ function amountRow(
       x: cols[index]!.x,
       align: cols[index]!.align,
       bold,
-      color: ODOO_PDF.ink,
+      color,
     })),
   }
 }
 
 function clip(value: string, length: number): string {
-  return value.length > length ? `${value.slice(0, length - 3)}...` : value
+  return value.length <= length ? value : `${value.slice(0, length - 1)}…`
 }
 
-function plainQty(value: string): string {
-  const amount = new Decimal(value)
-  return amount.mod(1).isZero() ? amount.toFixed(0) : amount.toFixed(2)
+function plainQty(value: Decimal.Value): string {
+  const n = Number(value)
+  return Number.isFinite(n) ? String(n) : String(value)
 }

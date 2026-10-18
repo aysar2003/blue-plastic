@@ -24,9 +24,10 @@ export async function GET(
 
     const ink = parsePrintInk(new URL(request.url).searchParams.get('ink'))
 
-    const [rows, org] = await Promise.all([
+    const [rows, org, template] = await Promise.all([
       purchaseService.getMany(ctx, [id]),
       organizationService.get(ctx),
+      organizationService.getDocumentTemplate(ctx),
     ])
     const document = rows[0]
     if (!document) {
@@ -39,6 +40,8 @@ export async function GET(
 
     const bytes = renderSalesDocumentPdf({
       ink,
+      template,
+      partyLabel: 'Vendor',
       orgName: company.name,
       orgAddress: company.address ? [company.address] : [],
       orgPhone: company.phone,
@@ -50,10 +53,16 @@ export async function GET(
       timeZone: org.timeZone,
       dueDate: document.dueDate,
       customerName: document.customer.displayName,
-      customerAddress: [document.customer.billingLine1, document.customer.billingCity].filter(
-        (part): part is string => Boolean(part),
-      ),
+      customerAddress: [
+        document.customer.billingLine1,
+        document.customer.billingLine2,
+        document.customer.billingCity,
+        document.customer.billingRegion,
+      ].filter((part): part is string => Boolean(part)),
       customerEmail: document.customer.email,
+      customerPhone: document.customer.phone,
+      reference: document.reference,
+      status: document.status,
       currency,
       lines: document.lines.map((line) => ({
         quantity: line.quantity,
@@ -61,6 +70,7 @@ export async function GET(
         description: line.description ?? line.item?.name ?? 'Line',
         unitPrice: line.unitPrice,
         amount: line.amount,
+        unitOfMeasure: line.item?.unitOfMeasure ?? null,
       })),
       subtotal: document.subtotal,
       discountAmount: document.discountAmount,

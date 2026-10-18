@@ -18,7 +18,7 @@ export default async function AcceptPortalInvitePage({
   const params = await searchParams
   const token = typeof params.token === 'string' ? params.token : ''
   const peek = token ? await portalService.peekPortalInvite(token) : null
-  const loginHref = peek ? portalLoginPath(peek.orgId) : '/portal/login'
+  const loginHref = peek ? portalLoginPath(peek.orgId) : '/login/portal'
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-background px-4 py-10 text-foreground">

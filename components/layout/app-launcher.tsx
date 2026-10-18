@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from 'react'
 import Link from 'next/link'
 import { AppGlyph, isAppGlyph, type AppGlyphName } from '@/components/layout/app-glyphs'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeftRightIcon,
@@ -25,6 +25,7 @@ import {
   PackageIcon,
   PaletteIcon,
   PercentIcon,
+  PowerIcon,
   ReceiptIcon,
   RotateCcwIcon,
   ScaleIcon,
@@ -37,7 +38,10 @@ import {
   UsersIcon,
   WalletIcon,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
+import { toggleModuleFlag } from '@/app/(app)/settings/(work)/organization/actions'
+import { MODULE_KEY_TO_FLAG, type OrgFeatureFlags } from '@/lib/feature-flags'
 import { cn } from '@/lib/utils'
 import { menuForApp } from './header-app-menus'
 import { APP_ALSO, appsForPermissions, type LauncherApp, type LauncherIcon } from './launcher-apps'
@@ -112,13 +116,37 @@ function appIsCurrent(pathname: string, href: string, also: string[] = []) {
  * One click on a chip opens its destination list; pick an item from there.
  * Nothing opens on hover. Apps with no children still go straight to the hub.
  * The Apps button opens the full app list the same way.
+ *
+ * Company admins (org:update) also see a compact power control to turn an app
+ * on or off without opening Settings → Apps & features.
  */
-export function HeaderApps({ permissions, hidden }: { permissions: string[]; hidden?: string[] }) {
+export function HeaderApps({
+  permissions,
+  hidden,
+  features,
+  canManageModules = false,
+}: {
+  permissions: string[]
+  hidden?: string[]
+  features?: OrgFeatureFlags
+  canManageModules?: boolean
+}) {
   const pathname = usePathname()
+  const router = useRouter()
+  const [pendingKey, setPendingKey] = useState<string | null>(null)
+  const [toggling, startToggle] = useTransition()
   const apps = useMemo(() => {
     const all = appsForPermissions(permissions)
+    // Admins see granted-but-off apps (muted) so they can turn them back on here.
+    if (canManageModules && features) {
+      return all.filter((app) => {
+        const flag = MODULE_KEY_TO_FLAG[app.key]
+        if (!flag) return true
+        return features.grantedModules[flag] !== false
+      })
+    }
     return hidden && hidden.length > 0 ? all.filter((app) => !hidden.includes(app.key)) : all
-  }, [permissions, hidden])
+  }, [permissions, hidden, canManageModules, features])
   const home = pathname === '/dashboard'
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [openPath, setOpenPath] = useState(pathname)
@@ -127,6 +155,22 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
     setOpenKey(null)
   }
   const navRef = useRef<HTMLElement>(null)
+
+  function onToggleModule(appKey: string, enabled: boolean) {
+    const flag = MODULE_KEY_TO_FLAG[appKey]
+    if (!flag) return
+    setPendingKey(appKey)
+    startToggle(async () => {
+      const result = await toggleModuleFlag({ module: flag, enabled })
+      setPendingKey(null)
+      if (!result.ok) {
+        toast.error(result.error.message)
+        return
+      }
+      toast.success(enabled ? 'App turned on.' : 'App turned off.')
+      router.refresh()
+    })
+  }
 
   useEffect(() => {
     if (!openKey) return
@@ -200,16 +244,27 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
       {apps.map((app) => {
         const Icon = ICONS[app.icon]
         const current = appIsCurrent(pathname, app.href, APP_ALSO[app.key])
-        const children = menuForApp(app.key, permissions)
+        const children = menuForApp(app.key, permissions, features)
         const hasMenu = children.length > 0
         const open = openKey === app.key && hasMenu
+        const moduleFlag = MODULE_KEY_TO_FLAG[app.key]
+        const moduleOn = moduleFlag
+          ? features
+            ? features.modules[moduleFlag] !== false && features.grantedModules[moduleFlag] !== false
+            : !hidden?.includes(app.key)
+          : true
+        const showPower = canManageModules && Boolean(moduleFlag)
         return (
-          <div key={app.key} className="relative">
+          <div
+            key={app.key}
+            className={cn('relative inline-flex items-center', !moduleOn && 'opacity-55')}
+          >
             <AppChipLink
               app={app}
               current={current}
               hasMenu={hasMenu}
               open={open}
+              disabled={!moduleOn && canManageModules}
               onToggleMenu={() =>
                 setOpenKey((key) => (key === app.key ? null : app.key))
               }
@@ -229,7 +284,27 @@ export function HeaderApps({ permissions, hidden }: { permissions: string[]; hid
                 />
               ) : null}
             </AppChipLink>
-            {hasMenu ? (
+            {showPower ? (
+              <button
+                type="button"
+                title={moduleOn ? `Turn off ${app.label}` : `Turn on ${app.label}`}
+                aria-label={moduleOn ? `Turn off ${app.label}` : `Turn on ${app.label}`}
+                disabled={toggling && pendingKey === app.key}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onToggleModule(app.key, !moduleOn)
+                }}
+                className={cn(
+                  'ml-0.5 grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground',
+                  moduleOn && 'text-primary',
+                  toggling && pendingKey === app.key && 'opacity-50',
+                )}
+              >
+                <PowerIcon className="size-3" aria-hidden />
+              </button>
+            ) : null}
+            {hasMenu && moduleOn ? (
               <div
                 role="menu"
                 aria-label={`${app.label} apps`}
@@ -287,6 +362,7 @@ function AppChipLink({
   current,
   hasMenu,
   open,
+  disabled,
   onToggleMenu,
   onDone,
   children,
@@ -295,11 +371,23 @@ function AppChipLink({
   current: boolean
   hasMenu: boolean
   open: boolean
+  disabled?: boolean
   onToggleMenu: () => void
   onDone: () => void
   children: ReactNode
 }) {
   const activeClass = (current || open) && 'bg-card text-foreground shadow-sm ring-1 ring-border dark:text-foreground'
+
+  if (disabled) {
+    return (
+      <span
+        title={`${app.label} is off — use the power button to turn it on`}
+        className={cn(chipClass, 'cursor-default opacity-80')}
+      >
+        {children}
+      </span>
+    )
+  }
 
   if (hasMenu) {
     return (

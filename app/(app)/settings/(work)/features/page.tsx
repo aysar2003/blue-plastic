@@ -23,8 +23,8 @@ export default async function FeaturesSettingsPage() {
         <h2 className="text-base font-semibold">Apps & features</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Company settings for <span className="font-medium text-foreground">{ctx.organization.name}</span>{' '}
-          only — turn granted apps on or off, and request more from the system owner. Tax on/off
-          lives under{' '}
+          only — expand each app to manage nested features and document types. Tax on/off lives
+          under{' '}
           <Link href="/settings/tax" className="font-medium text-primary underline">
             Settings → Tax
           </Link>
@@ -41,6 +41,7 @@ export default async function FeaturesSettingsPage() {
       </div>
       <FeaturesForm
         flags={flags}
+        canManageUsers={canManageUsers}
         requests={requests.map((row) => ({
           id: row.id,
           status: row.status,

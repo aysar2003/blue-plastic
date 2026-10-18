@@ -10,7 +10,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { contactDialogOptions, itemDialogOptions } from '@/app/(app)/quick-create/actions'
 import type { AccountOption } from '@/components/master-data/item-dialog'
 import type { AccountPickerOption } from '@/lib/account-options'
-import { moduleForPath } from '@/lib/feature-flags'
+import {
+  documentKindForPath,
+  isDocumentKindEnabled,
+  moduleForPath,
+  type OrgFeatureFlags,
+} from '@/lib/feature-flags'
 import { cn } from '@/lib/utils'
 import { startNavigationProgress } from './navigation-progress'
 
@@ -101,12 +106,15 @@ export function QuickCreate({
   permissions,
   currency,
   hiddenApps,
+  features,
   trigger = 'header',
 }: {
   permissions: string[]
   currency: string
   /** App keys switched off for this company — hide Create entries that open them. */
   hiddenApps?: string[]
+  /** Nested document kinds from Apps & features. */
+  features?: OrgFeatureFlags
   /** `pill` is the full-width New button on the accounting list. */
   trigger?: 'header' | 'pill'
 }) {
@@ -123,11 +131,22 @@ export function QuickCreate({
       if ('href' in entry) {
         const module = moduleForPath(entry.href)
         if (module && blocked.has(module)) return false
+        if (features) {
+          const kind = documentKindForPath(entry.href)
+          if (kind && !isDocumentKindEnabled(features, kind.family, kind.kind)) return false
+        }
       }
       if ('opens' in entry) {
         if (entry.opens === 'customer' && blocked.has('customers')) return false
         if (entry.opens === 'vendor' && blocked.has('vendors')) return false
         if (entry.opens === 'item' && blocked.has('inventory')) return false
+        if (
+          entry.opens === 'item' &&
+          features &&
+          !isDocumentKindEnabled(features, 'inventory', 'products')
+        ) {
+          return false
+        }
       }
       return true
     }),

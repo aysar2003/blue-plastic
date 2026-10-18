@@ -10,11 +10,17 @@ import { requireOrgContext } from '@/server/auth/context'
 import type { Permission } from '@/server/auth/permissions'
 import { forbidden, isAppError } from '@/server/errors'
 import { removeTrashFile, storeTrashFiles } from '@/server/files/trash-files'
+import * as auditService from '@/server/services/audit.service'
 import * as trashService from '@/server/services/trash.service'
 
 function isUpload(value: FormDataEntryValue): value is File {
   return value instanceof File && value.size > 0 && value.name !== ''
 }
+
+/** Prior delete reasons for the delete dialog suggestions. */
+export const listDeleteReasons = action.handler(async (ctx) => {
+  return auditService.listDeleteReasons(ctx)
+})
 
 export async function attachTrashFile(
   formData: FormData,
@@ -62,6 +68,7 @@ export const restoreTrashEntry = action
     const result = await trashService.restore(ctx, input.id)
     revalidatePath('/settings/activity')
     revalidatePath(`/settings/activity/${input.id}`)
+    revalidatePath('/settings/user-history')
     revalidatePath('/journals')
     revalidatePath('/sales')
     revalidatePath('/purchases')
