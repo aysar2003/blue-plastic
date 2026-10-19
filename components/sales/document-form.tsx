@@ -212,6 +212,7 @@ export function DocumentForm({
   initialCustomerId,
   initialStoreId,
   initialProjectId,
+  projects = [],
   neighbors,
   stores = [],
   stock = {},
@@ -235,6 +236,8 @@ export function DocumentForm({
   initialStoreId?: string
   /** Set when the form was opened from a project job folder. */
   initialProjectId?: string
+  /** Open jobs this sale can belong to. */
+  projects?: { id: string; label: string; customerId: string }[]
   /** The saved document before this one, and the one after, in date then number order. */
   neighbors?: {
     previous: { id: string; number: string } | null
@@ -288,7 +291,7 @@ export function DocumentForm({
 
   const [number, setNumber] = usePropState(documentNumber)
   const [customerId, setCustomerId] = useState(document?.customerId ?? initialCustomerId ?? '')
-  const [projectId] = useState(document?.projectId ?? initialProjectId ?? '')
+  const [projectId, setProjectId] = useState(document?.projectId ?? initialProjectId ?? '')
   const [date, setDate] = useState(document?.date ?? today)
   const [reference, setReference] = useState(document?.reference ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
@@ -335,6 +338,7 @@ export function DocumentForm({
           : ''
       setNumber(documentNumber)
       setCustomerId(document.customerId)
+      setProjectId(document.projectId ?? '')
       setDate(document.date)
       setReference(document.reference ?? '')
       setMemo(document.memo ?? '')
@@ -365,6 +369,7 @@ export function DocumentForm({
       return
     }
     setCustomerId(initialCustomerId ?? '')
+    setProjectId(initialProjectId ?? '')
     setDate(today)
     setReference('')
     setMemo('')
@@ -394,6 +399,7 @@ export function DocumentForm({
       )
       if (afterSave.current === 'new' && !document?.id) {
         setCustomerId(initialCustomerId ?? '')
+        setProjectId(initialProjectId ?? '')
         setDate(today)
         setReference('')
         setMemo('')
@@ -679,6 +685,10 @@ export function DocumentForm({
       setConvertedFromId(null)
       setConvertedFromLabel(null)
     }
+    if (projectId) {
+      const job = projects.find((row) => row.id === projectId)
+      if (job && job.customerId !== id) setProjectId('')
+    }
   }
 
   const payloadInput = useRef<HTMLInputElement>(null)
@@ -741,6 +751,9 @@ export function DocumentForm({
     showTax,
     customerId,
     setCustomerId: changeCustomer,
+    projectId,
+    setProjectId,
+    projects,
     date,
     setDate,
     reference,
@@ -1005,6 +1018,27 @@ function TemplateThumb({ kind, active }: { kind: SalesFormTemplateId; active: bo
   )
 }
 
+function ProjectField({ props }: { props: LayoutProps }) {
+  if (props.projects.length === 0 && !props.projectId) return null
+  const options = props.projects.filter(
+    (row) => !props.customerId || row.customerId === props.customerId || row.id === props.projectId,
+  )
+  return (
+    <Field name="projectId" label="Project" error={props.state.fieldErrors?.projectId}>
+      <EntityPicker
+        id="projectId"
+        options={options}
+        value={props.projectId || null}
+        onChange={(next) => props.setProjectId(next ?? '')}
+        placeholder="Link a job"
+        clearable
+        emptyMessage="No projects for this customer"
+        error={props.state.fieldErrors?.projectId}
+      />
+    </Field>
+  )
+}
+
 type LayoutProps = {
   config: SalesTypeConfig
   state: FormState
@@ -1029,6 +1063,9 @@ type LayoutProps = {
   showTax: boolean
   customerId: string
   setCustomerId: (value: string) => void
+  projectId: string
+  setProjectId: (value: string) => void
+  projects: { id: string; label: string; customerId: string }[]
   date: string
   setDate: (value: string) => void
   reference: string
@@ -1108,6 +1145,8 @@ function HeaderFields({
             error={state.fieldErrors?.customerId}
           />
         </Field>
+
+        <ProjectField props={props} />
 
         <Field name="date" label="Date" required error={state.fieldErrors?.date}>
           <DateField
@@ -1309,6 +1348,7 @@ function InvoiceLayout(props: LayoutProps) {
               <Field name="customerEmail" label="Email">
                 <Input id="customerEmail" value={customer?.email ?? ''} readOnly placeholder="No email on this customer" />
               </Field>
+              <ProjectField props={props} />
             </div>
             {customer?.billingAddress || customer?.shippingAddress ? (
               <div className="grid gap-2 md:grid-cols-2">

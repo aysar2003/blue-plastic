@@ -23,6 +23,10 @@
 # misc
 .DS_Store
 *.pem
+cookies.txt
+lint-out.txt
+tsc-out.txt
+test-out.txt
 
 # debug
 npm-debug.log*

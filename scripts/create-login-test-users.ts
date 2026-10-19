@@ -8,7 +8,7 @@
  * Safe to re-run (idempotent).
  */
 import { PrismaPg } from '@prisma/adapter-pg'
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 try {
@@ -109,14 +109,14 @@ async function main() {
     throw new Error('No organisation found. Run setup or seed first.')
   }
 
-  const flags =
+  const flags: Record<string, unknown> =
     org.featureFlags && typeof org.featureFlags === 'object' && !Array.isArray(org.featureFlags)
       ? { ...(org.featureFlags as Record<string, unknown>) }
       : {}
   flags.enableCustomerPortal = true
   await db.organization.update({
     where: { id: org.id },
-    data: { featureFlags: flags },
+    data: { featureFlags: flags as Prisma.InputJsonValue },
   })
 
   const passwordHash = await bcrypt.hash(PASSWORD, 12)

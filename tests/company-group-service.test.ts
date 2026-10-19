@@ -157,12 +157,9 @@ suite('company group service', () => {
       )
       expect(scope.companies[0]?.id).toBe(main.id)
 
-      // Cleanup via service (children first).
-      for (const org of [sub2, sub1, main]) {
-        await deleteCompany(ctx, { orgId: org.id, confirmName: org.name })
-        const idx = createdIds.indexOf(org.id)
-        if (idx >= 0) createdIds.splice(idx, 1)
-      }
+      await expect(
+        deleteCompany(ctx, { orgId: sub2.id, confirmName: sub2.name }),
+      ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' })
     },
     120_000,
   )
@@ -199,8 +196,8 @@ suite('company group service', () => {
     })
     expect(row?.parentOrgId).toBe(main.id)
 
-    await deleteCompany(ctx, { orgId: standalone.id, confirmName: standalone.name })
-    await deleteCompany(ctx, { orgId: main.id, confirmName: main.name })
-    createdIds.length = 0
+    await expect(
+      deleteCompany(ctx, { orgId: standalone.id, confirmName: standalone.name }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' })
   }, 120_000)
 })

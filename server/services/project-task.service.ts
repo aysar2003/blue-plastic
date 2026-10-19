@@ -9,6 +9,20 @@ import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, validation } from '@/server/errors'
 
+async function requireAssignee(ctx: OrgContext, assigneeId: string | null | undefined) {
+  if (!assigneeId) return null
+  const member = await db.membership.findFirst({
+    where: { orgId: ctx.orgId, userId: assigneeId },
+    select: { userId: true },
+  })
+  if (!member) {
+    throw validation('That person is not on this company.', {
+      assigneeId: ['Choose someone on this company'],
+    })
+  }
+  return member.userId
+}
+
 const SELECT = {
   id: true,
   projectId: true,
@@ -46,6 +60,7 @@ export async function listForProject(ctx: OrgContext, projectId: string) {
 
 export async function create(ctx: OrgContext, input: ProjectTaskInput) {
   const project = await requireProject(ctx, input.projectId)
+  const assigneeId = await requireAssignee(ctx, input.assigneeId)
   const meta = await requestMeta()
 
   const max = await db.projectTask.aggregate({
@@ -62,7 +77,7 @@ export async function create(ctx: OrgContext, input: ProjectTaskInput) {
         description: input.description ?? null,
         stage: input.stage,
         sequence: (max._max.sequence ?? 0) + 1,
-        assigneeId: input.assigneeId ?? null,
+        assigneeId,
         deadline: input.deadline ? toDate(input.deadline) : null,
         createdById: ctx.userId,
       },
@@ -97,6 +112,7 @@ export async function update(
   })
   if (!existing) throw notFound('Task')
 
+  const assigneeId = await requireAssignee(ctx, input.assigneeId)
   const meta = await requestMeta()
   return db.$transaction(async (tx) => {
     const row = await tx.projectTask.update({
@@ -105,7 +121,7 @@ export async function update(
         name: input.name,
         description: input.description ?? null,
         stage: input.stage,
-        assigneeId: input.assigneeId ?? null,
+        assigneeId,
         deadline: input.deadline ? toDate(input.deadline) : null,
       },
       select: SELECT,
@@ -136,7 +152,7 @@ export async function move(ctx: OrgContext, id: string, stage: ProjectTaskStage)
   })
   if (!existing) throw notFound('Task')
   if (existing.stage === stage) {
-    return { id: existing.id, stage }
+    return { id: existing.id, projectId: existing.projectId, stage }
   }
 
   const max = await db.projectTask.aggregate({
@@ -149,7 +165,7 @@ export async function move(ctx: OrgContext, id: string, stage: ProjectTaskStage)
     const row = await tx.projectTask.update({
       where: { id: existing.id },
       data: { stage, sequence: (max._max.sequence ?? 0) + 1 },
-      select: { id: true, stage: true, name: true },
+      select: { id: true, projectId: true, stage: true, name: true },
     })
     await writeAudit(
       tx,
@@ -170,7 +186,7 @@ export async function move(ctx: OrgContext, id: string, stage: ProjectTaskStage)
 export async function remove(ctx: OrgContext, id: string) {
   const existing = await db.projectTask.findFirst({
     where: { id, orgId: ctx.orgId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, projectId: true },
   })
   if (!existing) throw notFound('Task')
   if (!existing.name.trim()) throw validation('Task name is required.')
@@ -190,5 +206,5 @@ export async function remove(ctx: OrgContext, id: string) {
       meta,
     )
   })
-  return { id: existing.id }
+  return { id: existing.id, projectId: existing.projectId }
 }

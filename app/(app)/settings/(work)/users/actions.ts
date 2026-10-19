@@ -36,7 +36,7 @@ export const updateMemberRole = updateMemberAccess
 
 export const setMemberStatus = action
   .requires('user:update')
-  .input(z.object({ membershipId: cuid, status: z.enum(['ACTIVE', 'SUSPENDED']) }))
+  .input(z.object({ membershipId: cuid, status: z.enum(['ACTIVE', 'INVITED', 'SUSPENDED']) }))
   .handler(async (ctx, input) => {
     await membershipService.setStatus(ctx, input.membershipId, input.status)
     revalidatePath('/settings/users')

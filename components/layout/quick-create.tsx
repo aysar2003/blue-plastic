@@ -72,6 +72,7 @@ const COLUMNS: { heading: string; entries: Entry[] }[] = [
     entries: [
       { label: 'Journal entry', href: '/journals/new', permission: 'journal:create' },
       { label: 'Inventory adjustment', href: '/inventory/adjustments/new', permission: 'inventory:adjust' },
+      { label: 'Project', href: '/projects/new', permission: 'project:create' },
       { label: 'Add product or service', opens: 'item', permission: 'item:create' },
       { label: 'Add account', href: '/accounts', permission: 'account:create' },
     ],
@@ -129,8 +130,8 @@ export function QuickCreate({
     entries: column.entries.filter((entry) => {
       if (entry.permission && !allowed.has(entry.permission)) return false
       if ('href' in entry) {
-        const module = moduleForPath(entry.href)
-        if (module && blocked.has(module)) return false
+        const appModule = moduleForPath(entry.href)
+        if (appModule && blocked.has(appModule)) return false
         if (features) {
           const kind = documentKindForPath(entry.href)
           if (kind && !isDocumentKindEnabled(features, kind.family, kind.kind)) return false

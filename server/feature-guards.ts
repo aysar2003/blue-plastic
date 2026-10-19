@@ -24,8 +24,8 @@ export function assertModuleEnabled(ctx: OrgContext, moduleKey: ModuleFlag | str
 
 /** Map a URL to its app and refuse when that app is off. */
 export function assertPathModuleEnabled(ctx: OrgContext, pathname: string) {
-  const module = moduleForPath(pathname)
-  if (module) assertModuleEnabled(ctx, module)
+  const appModule = moduleForPath(pathname)
+  if (appModule) assertModuleEnabled(ctx, appModule)
   const kind = documentKindForPath(pathname)
   if (kind && !isDocumentKindEnabled(ctx.features, kind.family, kind.kind)) {
     throw precondition('This document type is turned off in Settings → Apps & features.')

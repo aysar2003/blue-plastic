@@ -15,7 +15,7 @@ import { appsOpenFor } from '@/lib/member-apps'
 import { readSort, SortableHeader } from '@/components/data/sortable-header'
 import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
-import { ASSIGNABLE_ROLES, ROLE_LABELS } from '@/lib/roles'
+import { ASSIGNABLE_ROLES, membershipStatusLabel, ROLE_LABELS } from '@/lib/roles'
 import { effectivePermissions, permissionsFor } from '@/server/auth/permissions'
 import * as membershipService from '@/server/services/membership.service'
 import { ConnectToggle } from './connect-toggle'
@@ -230,10 +230,10 @@ export default async function UsersPage({
                               ? 'success'
                               : member.status === 'SUSPENDED'
                                 ? 'destructive'
-                                : 'secondary'
+                                : 'warning'
                           }
                         >
-                          {member.status.toLowerCase()}
+                          {membershipStatusLabel(member.status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">

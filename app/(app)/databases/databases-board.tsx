@@ -416,7 +416,8 @@ export function DatabasesBoard({
 
   const missingCount = inspected?.filter((c) => c.status === 'missing').length ?? 0
   const presentCount = inspected?.filter((c) => c.status === 'present').length ?? 0
-  const canDeleteAny = isSystemOwner && databases.length > 1
+  // Company database delete is disabled — Trash soft-delete + Clear Trash purge instead.
+  const canDeleteAny = false
   const showPicker =
     !createOpen && !panelOpen && !deleteTarget && !restoreTarget && !limitsTarget
 

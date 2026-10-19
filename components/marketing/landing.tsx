@@ -21,6 +21,7 @@ import { AiDemoPlayer } from '@/components/marketing/ai-demo-player'
 import { ProductWordmark } from '@/components/marketing/product-wordmark'
 import { WebsiteShell } from '@/components/marketing/website-shell'
 import { AI_DEMO_VIDEOS } from '@/lib/ai-demo-videos'
+import { STORE_PATH } from '@/lib/al-furaat-site'
 import {
   DEFAULT_MARKETING_CONTACT,
   mailtoUrl,
@@ -429,8 +430,6 @@ function Tutorials() {
 }
 
 function Contact({ contact }: { contact: MarketingContact }) {
-  const officeLine = `${contact.address}, ${contact.city}, ${contact.region}`
-  const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(officeLine)}`
   const waHref = whatsappUrl(
     contact.whatsappE164,
     `Assalaamu calaykum ${contact.contactName}. Waxaan ka imid website-ka ${PRODUCT_NAME} — waxaan jeclaan lahaa inaan kala hadlo nidaamka xisaabaadka, tababarka, ama furitaanka database shirkadeed.`,
@@ -456,25 +455,7 @@ function Contact({ contact }: { contact: MarketingContact }) {
       term: 'Email',
       detail: contact.email,
       href: mailtoUrl(contact.email, `${PRODUCT_NAME} support`),
-      hint: 'Personal',
-    },
-    ...(contact.secondaryEmail
-      ? [
-          {
-            icon: Mail,
-            term: 'Company email',
-            detail: contact.secondaryEmail,
-            href: mailtoUrl(contact.secondaryEmail, `${PRODUCT_NAME} inquiry`),
-            hint: 'Office',
-          },
-        ]
-      : []),
-    {
-      icon: MapPin,
-      term: 'Office',
-      detail: officeLine,
-      href: mapsHref,
-      hint: 'Open map',
+      hint: 'Product support',
     },
   ]
 
@@ -494,8 +475,8 @@ function Contact({ contact }: { contact: MarketingContact }) {
           <div className="relative grid gap-10 px-6 py-10 sm:px-10 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:items-end lg:gap-14">
             <SectionHeading
               eyebrow="Contact · La soo xiriir"
-              title={contact.companyName}
-              body={`${contact.contactName} — call, WhatsApp, or email when you need help with SOM ERP, training, or a new company database.`}
+              title={`${PRODUCT_NAME} support`}
+              body={`${contact.contactName} — help with SOM ERP, training, or a new company database. For the plumbing shop in Kismaayo, visit Al Furaat Plastic Center.`}
             />
 
             <div className="flex flex-wrap gap-3">
@@ -515,13 +496,13 @@ function Contact({ contact }: { contact: MarketingContact }) {
                 <Phone className="size-4" />
                 Call
               </a>
-              <a
+              <Link
                 className="inline-flex h-12 items-center gap-2 rounded-lg border border-border bg-background/70 px-6 text-[15px] font-medium text-foreground backdrop-blur transition-colors hover:border-primary/40 hover:bg-accent/50"
-                href={mailtoUrl(contact.email, `${PRODUCT_NAME} support`)}
+                href={STORE_PATH}
               >
-                <Mail className="size-4" />
-                Email
-              </a>
+                <MapPin className="size-4" />
+                Al Furaat shop
+              </Link>
             </div>
           </div>
 
@@ -547,7 +528,7 @@ function Contact({ contact }: { contact: MarketingContact }) {
               )
               const className =
                 'erp-contact-card group flex items-start gap-3.5 rounded-xl border border-border/80 bg-card/90 px-4 py-4 shadow-[0_1px_0_color-mix(in_oklab,var(--foreground)_4%,transparent)] transition-[transform,border-color,background-color] hover:-translate-y-0.5 hover:border-primary/45 hover:bg-accent/40'
-              return href ? (
+              return (
                 <a
                   key={`${term}-${detail}`}
                   href={href}
@@ -558,14 +539,6 @@ function Contact({ contact }: { contact: MarketingContact }) {
                 >
                   {body}
                 </a>
-              ) : (
-                <div
-                  key={`${term}-${detail}`}
-                  className={className}
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  {body}
-                </div>
               )
             })}
           </dl>
@@ -697,9 +670,13 @@ function SiteFooter({ contact }: { contact: MarketingContact }) {
           </a>
         </div>
         <p className="text-[13px] text-muted-foreground">
-          &copy; {new Date().getFullYear()} {contact.companyName}
+          &copy; {new Date().getFullYear()} {PRODUCT_NAME}
           <span className="mx-1.5 text-border">·</span>
-          {PRODUCT_NAME} · {PRODUCT_BUILDER}
+          {PRODUCT_BUILDER}
+          <span className="mx-1.5 text-border">·</span>
+          <Link href={STORE_PATH} className="hover:text-foreground">
+            Al Furaat shop
+          </Link>
         </p>
       </div>
     </footer>

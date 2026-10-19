@@ -11,7 +11,7 @@ export async function searchBooks(ctx: OrgContext, query: string): Promise<Searc
   if (q.length < 2) return []
 
   const contains = { contains: q, mode: 'insensitive' as const }
-  const [customers, vendors, sales, purchases, journals] = await Promise.all([
+  const [customers, vendors, sales, purchases, journals, projects] = await Promise.all([
     ctx.permissions.has('customer:read')
       ? db.customer.findMany({
           where: { orgId: ctx.orgId, displayName: contains },
@@ -47,6 +47,16 @@ export async function searchBooks(ctx: OrgContext, query: string): Promise<Searc
           take: 5,
         })
       : [],
+    ctx.permissions.has('project:read')
+      ? db.project.findMany({
+          where: {
+            orgId: ctx.orgId,
+            OR: [{ number: contains }, { name: contains }, { siteLocation: contains }],
+          },
+          select: { id: true, number: true, name: true },
+          take: 5,
+        })
+      : [],
   ])
 
   const hits: SearchHit[] = [
@@ -63,6 +73,11 @@ export async function searchBooks(ctx: OrgContext, query: string): Promise<Searc
       group: 'Purchases',
     })),
     ...journals.map((row) => ({ label: row.journalNumber, href: `/journals/${row.id}`, group: 'Journals' })),
+    ...projects.map((row) => ({
+      label: `${row.number} · ${row.name}`,
+      href: `/projects/${row.id}`,
+      group: 'Projects',
+    })),
     ...HELP_TOPICS.filter((topic) => `${topic.title} ${topic.text}`.toLowerCase().includes(q.toLowerCase())).map(
       (topic) => ({ label: topic.title, href: topic.href, group: 'Help' }),
     ),

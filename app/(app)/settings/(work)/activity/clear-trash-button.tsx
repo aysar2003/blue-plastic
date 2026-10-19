@@ -23,7 +23,7 @@ export function ClearAllTrashButton({ disabled }: { disabled?: boolean }) {
       onClick={() => {
         if (
           !window.confirm(
-            'Clear all of Trash? Every item leaves this list and cannot be restored from here. Soft-deleted entries stay out of the company books.',
+            'Clear all of Trash? Soft-deleted records are permanently removed from the database and cannot be restored.',
           )
         ) {
           return
@@ -65,7 +65,7 @@ export function ClearTrashEntryButton({ id, label }: { id: string; label: string
       onClick={() => {
         if (
           !window.confirm(
-            `Clear ${label} from Trash? It cannot be restored from here afterwards.`,
+            `Clear ${label} from Trash? It is permanently removed from the database and cannot be restored.`,
           )
         ) {
           return

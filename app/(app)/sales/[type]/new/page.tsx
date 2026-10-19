@@ -83,6 +83,7 @@ export default async function NewSalesDocumentPage({
         initialCustomerId={initialCustomerId}
         initialStoreId={initialStoreId}
         initialProjectId={project?.id}
+        projects={options.projects}
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}

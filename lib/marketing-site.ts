@@ -1,8 +1,8 @@
 /**
- * Public marketing site copy: company contact and how-to lessons.
+ * Public SOM ERP marketing site — product support contact and how-to lessons.
  *
- * Contact defaults match the primary Al Furaat organisation. The landing page
- * prefers live values from the database when they are present.
+ * Company / shop details for Al Furaat Plastic Center live in
+ * `lib/al-furaat-site.ts` and the `/al-furaat` storefront.
  */
 
 export type MarketingContact = {
@@ -27,15 +27,16 @@ export type TutorialLesson = {
   steps: string[]
 }
 
+/** Support contact for the SOM ERP product — not the retail shop. */
 export const DEFAULT_MARKETING_CONTACT: MarketingContact = {
-  companyName: 'AL FURAAT GROUP OF COMPANY',
+  companyName: 'SOM ERP',
   contactName: 'Abdisalam Abdullahi Mohamed',
   phone: '252615785686',
   email: 'aysaryare@gmail.com',
-  secondaryEmail: 'info@furaat.so',
-  address: 'Furaat Store, ee ka soo horjeeda Isbitaalka Kismaayo',
-  city: 'Kismaayo',
-  region: 'Somalia',
+  secondaryEmail: undefined,
+  address: 'Product support',
+  city: 'Somalia',
+  region: 'Online',
   whatsappE164: '252615785686',
 }
 

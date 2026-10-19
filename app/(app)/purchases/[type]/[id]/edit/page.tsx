@@ -80,6 +80,7 @@ export default async function EditPurchasePage({
             storeId: line.storeId,
           })),
         }}
+        projects={options.projects}
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}

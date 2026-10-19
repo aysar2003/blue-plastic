@@ -292,7 +292,7 @@ export async function createInstance(ctx: OrgContext, id: string) {
     href = `/purchases/${slug}/${created.id}`
   }
 
-  let next = advanceDate(runOn, row.frequency, row.interval)
+  const next = advanceDate(runOn, row.frequency, row.interval)
   let stillActive = true
   if (row.endOn && next > toCalendarDate(row.endOn)) {
     stillActive = false

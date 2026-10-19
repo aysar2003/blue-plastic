@@ -10,14 +10,18 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate } from '@/lib/date'
+import { isDocumentKindEnabled, isModuleEnabled } from '@/lib/feature-flags'
 import { formatMoney } from '@/lib/money'
 import { purchaseByType } from '@/lib/purchase-types'
 import { byType as salesByType, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { PROJECT_STATUS_LABELS } from '@/lib/validation/project'
+import type { Permission } from '@/server/auth/permissions'
 import { requireOrgContext } from '@/server/auth/context'
 import * as projectService from '@/server/services/project.service'
 
 import * as projectTaskService from '@/server/services/project-task.service'
+import * as userHistoryService from '@/server/services/user-history.service'
+import { DeleteProjectButton } from './delete-button'
 import { ProjectStatusForm } from './status-form'
 import { ProjectTaskBoard } from './task-board'
 
@@ -47,15 +51,61 @@ export default async function ProjectDetailPage({
   const ctx = await requireOrgContext('project:read')
   const project = await projectService.get(ctx, id).catch(() => null)
   if (!project) notFound()
-  const tasks = await projectTaskService.listForProject(ctx, project.id)
+  const [tasks, members] = await Promise.all([
+    projectTaskService.listForProject(ctx, project.id),
+    userHistoryService.listMembers(ctx),
+  ])
 
   const currency = ctx.organization.baseCurrency
-  const canCreateSales =
-    ctx.permissions.has('invoice:create') && ctx.features.modules.sales && ctx.features.grantedModules.sales
+  const salesOn = isModuleEnabled(ctx.features, 'sales')
+  const purchasesOn = isModuleEnabled(ctx.features, 'purchases')
+  const canCreateSales = ctx.permissions.has('invoice:create') && salesOn
+  const canCreatePurchases =
+    (ctx.permissions.has('bill:create') || ctx.permissions.has('expense:create')) && purchasesOn
   const canUpdate = ctx.permissions.has('project:update')
-  const estimateHref = `/sales/estimates/new?project=${project.id}&customer=${project.customer.id}`
-  const quotationHref = `/sales/quotations/new?project=${project.id}&customer=${project.customer.id}`
-  const orderHref = `/sales/sales-orders/new?project=${project.id}&customer=${project.customer.id}`
+  const job = `project=${project.id}&customer=${project.customer.id}`
+  const salesLinks = [
+    {
+      href: `/sales/estimates/new?${job}`,
+      label: 'New estimate',
+      kind: 'ESTIMATE',
+      primary: true,
+    },
+    { href: `/sales/quotations/new?${job}`, label: 'New quotation', kind: 'QUOTATION' },
+    { href: `/sales/sales-orders/new?${job}`, label: 'New sales order', kind: 'SALES_ORDER' },
+    { href: `/sales/invoices/new?${job}`, label: 'New invoice', kind: 'INVOICE' },
+    { href: `/sales/sales-receipts/new?${job}`, label: 'New sales receipt', kind: 'SALES_RECEIPT' },
+  ].filter((link) => isDocumentKindEnabled(ctx.features, 'sales', link.kind))
+  const purchaseLinkOptions: {
+    href: string
+    label: string
+    kind: 'PURCHASE_ORDER' | 'BILL' | 'EXPENSE'
+    permission: Permission
+  }[] = [
+    {
+      href: `/purchases/purchase-orders/new?project=${project.id}`,
+      label: 'New purchase order',
+      kind: 'PURCHASE_ORDER',
+      permission: 'bill:create',
+    },
+    {
+      href: `/purchases/bills/new?project=${project.id}`,
+      label: 'New bill',
+      kind: 'BILL',
+      permission: 'bill:create',
+    },
+    {
+      href: `/purchases/expenses/new?project=${project.id}`,
+      label: 'New expense',
+      kind: 'EXPENSE',
+      permission: 'expense:create',
+    },
+  ]
+  const purchaseLinks = purchaseLinkOptions.filter(
+    (link) =>
+      ctx.permissions.has(link.permission) &&
+      isDocumentKindEnabled(ctx.features, 'purchases', link.kind),
+  )
 
   return (
     <>
@@ -64,24 +114,10 @@ export default async function ProjectDetailPage({
         description={`${project.customer.displayName}${project.siteLocation ? ` · ${project.siteLocation}` : ''}`}
         actions={
           <>
-            {canCreateSales ? (
-              <>
-                <Link href={estimateHref} className={buttonVariants({ size: 'sm' })}>
-                  <PlusIcon /> New estimate
-                </Link>
-                <Link
-                  href={quotationHref}
-                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                >
-                  New quotation
-                </Link>
-                <Link
-                  href={orderHref}
-                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                >
-                  New sales order
-                </Link>
-              </>
+            {canCreateSales && salesLinks[0] ? (
+              <Link href={salesLinks[0].href} className={buttonVariants({ size: 'sm' })}>
+                <PlusIcon /> {salesLinks[0].label}
+              </Link>
             ) : null}
             {canUpdate ? (
               <Link
@@ -91,6 +127,7 @@ export default async function ProjectDetailPage({
                 <PencilIcon /> Edit
               </Link>
             ) : null}
+            {canUpdate ? <DeleteProjectButton id={project.id} name={project.name} /> : null}
           </>
         }
       />
@@ -106,32 +143,49 @@ export default async function ProjectDetailPage({
           </span>
         ) : null}
         {canUpdate ? <ProjectStatusForm id={project.id} status={project.status} /> : null}
+        <Link
+          href={`/customers/${project.customer.id}`}
+          className="text-sm text-primary hover:underline"
+        >
+          {project.customer.displayName}
+        </Link>
       </div>
 
       {project.description ? (
         <p className="mb-6 max-w-3xl text-sm text-muted-foreground">{project.description}</p>
       ) : null}
 
-      <ProjectTaskBoard projectId={project.id} tasks={tasks} canEdit={canUpdate} />
+      <ProjectTaskBoard
+        projectId={project.id}
+        tasks={tasks}
+        members={members}
+        canEdit={canUpdate}
+      />
 
-      <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <MoneyCard label="Quoted" value={formatMoney(project.totals.quoted, currency)} />
         <MoneyCard label="Ordered" value={formatMoney(project.totals.ordered, currency)} />
         <MoneyCard label="Invoiced" value={formatMoney(project.totals.invoiced, currency)} />
         <MoneyCard label="POs" value={formatMoney(project.totals.purchaseOrders, currency)} />
         <MoneyCard label="Billed" value={formatMoney(project.totals.billed, currency)} />
+        <MoneyCard label="Profit" value={formatMoney(project.totals.profit, currency)} />
       </div>
 
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Sales</h2>
           {canCreateSales ? (
-            <Link
-              href={estimateHref}
-              className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-            >
-              New estimate
-            </Link>
+            <div className="flex flex-wrap gap-1">
+              {salesLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
           ) : null}
         </div>
         {project.sales.length === 0 ? (
@@ -183,7 +237,22 @@ export default async function ProjectDetailPage({
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold">Purchases</h2>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Purchases</h2>
+          {canCreatePurchases ? (
+            <div className="flex flex-wrap gap-1">
+              {purchaseLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          ) : null}
+        </div>
         {project.purchases.length === 0 ? (
           <p className="text-sm text-muted-foreground">No purchase documents linked yet.</p>
         ) : (

@@ -78,7 +78,7 @@ export const restoreTrashEntry = action
     return result
   })
 
-/** Empty the whole Trash list. Owner/admin only — restore is no longer offered. */
+/** Empty Trash and permanently purge soft-deleted rows from the database. */
 export const clearAllTrash = action
   .requires('org:update')
   .input(z.object({}))
@@ -88,7 +88,7 @@ export const clearAllTrash = action
     return result
   })
 
-/** Remove one Trash line permanently from the list. */
+/** Clear one Trash line and permanently purge its soft-deleted row. */
 export const clearTrashEntry = action
   .requires('org:update')
   .input(z.object({ id: cuid }))

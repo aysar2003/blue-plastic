@@ -239,7 +239,7 @@ export async function updateRole(ctx: OrgContext, membershipId: string, role: Ro
 export async function setStatus(
   ctx: OrgContext,
   membershipId: string,
-  status: 'ACTIVE' | 'SUSPENDED',
+  status: 'ACTIVE' | 'INVITED' | 'SUSPENDED',
 ) {
   const meta = await requestMeta()
 
@@ -251,10 +251,10 @@ export async function setStatus(
     if (!before) throw notFound('Member')
 
     if (before.user.id === ctx.userId) {
-      throw precondition('You cannot suspend your own access.')
+      throw precondition('You cannot change your own access.')
     }
     if (before.role === 'OWNER') {
-      throw forbidden('The owner cannot be suspended. Transfer ownership first.')
+      throw forbidden('The owner cannot be set pending or suspended. Transfer ownership first.')
     }
 
     const after = await tx.membership.update({

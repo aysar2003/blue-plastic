@@ -20,7 +20,7 @@ vi.mock('@/lib/after-sign-in', () => ({
 }))
 
 vi.mock('next/navigation', () => ({
-  redirect: (...args: unknown[]) => redirect(...args),
+  redirect: (url: string) => redirect(url),
 }))
 
 describe('resumeOrClearSession', () => {

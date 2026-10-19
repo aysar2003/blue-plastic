@@ -87,6 +87,7 @@ export default async function EditSalesDocumentPage({
             storeId: line.storeId,
           })),
         }}
+        projects={options.projects}
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}

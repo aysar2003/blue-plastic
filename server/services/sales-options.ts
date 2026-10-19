@@ -6,6 +6,7 @@ import { positionsOf } from '@/server/accounting/inventory'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { selectableAccounts } from '@/server/services/account.service'
+import { listForPicker as listProjects } from '@/server/services/project.service'
 
 /**
  * Everything the document form needs to render, in one round trip.
@@ -14,7 +15,7 @@ import { selectableAccounts } from '@/server/services/account.service'
  * it is not a place to discover what exists.
  */
 export async function loadFormOptions(ctx: OrgContext) {
-  const [customers, items, taxCodes, chart, terms] = await Promise.all([
+  const [customers, items, taxCodes, chart, terms, projects] = await Promise.all([
     db.customer.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: {
@@ -80,6 +81,7 @@ export async function loadFormOptions(ctx: OrgContext) {
       select: { id: true, name: true, type: true, dueDays: true },
       orderBy: [{ isDefault: 'desc' }, { dueDays: 'asc' }],
     }),
+    listProjects(ctx),
   ])
 
   // Stock on hand, so choosing a tracked item on an invoice line shows what is
@@ -159,6 +161,7 @@ export async function loadFormOptions(ctx: OrgContext) {
       showBalance: true,
     }),
     terms,
+    projects,
   }
 }
 

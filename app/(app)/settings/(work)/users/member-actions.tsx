@@ -101,20 +101,42 @@ export function MemberActions({
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() =>
-                  run(
-                    () =>
-                      setMemberStatus({
-                        membershipId,
-                        status: status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE',
-                      }),
-                    status === 'ACTIVE' ? `${name} suspended.` : `${name} restored.`,
-                  )
-                }
-              >
-                {status === 'ACTIVE' ? 'Suspend access' : 'Restore access'}
-              </DropdownMenuItem>
+              {status !== 'INVITED' ? (
+                <DropdownMenuItem
+                  onSelect={() =>
+                    run(
+                      () => setMemberStatus({ membershipId, status: 'INVITED' }),
+                      `${name} is pending.`,
+                    )
+                  }
+                >
+                  Set pending
+                </DropdownMenuItem>
+              ) : null}
+              {status !== 'ACTIVE' ? (
+                <DropdownMenuItem
+                  onSelect={() =>
+                    run(
+                      () => setMemberStatus({ membershipId, status: 'ACTIVE' }),
+                      `${name} is active.`,
+                    )
+                  }
+                >
+                  Activate
+                </DropdownMenuItem>
+              ) : null}
+              {status !== 'SUSPENDED' ? (
+                <DropdownMenuItem
+                  onSelect={() =>
+                    run(
+                      () => setMemberStatus({ membershipId, status: 'SUSPENDED' }),
+                      `${name} suspended.`,
+                    )
+                  }
+                >
+                  Suspend access
+                </DropdownMenuItem>
+              ) : null}
             </>
           ) : null}
 
@@ -123,7 +145,10 @@ export function MemberActions({
               {canUpdate ? <DropdownMenuSeparator /> : null}
               <DropdownMenuItem
                 variant="destructive"
-                onSelect={() => run(() => removeMember({ membershipId }), `${name} removed.`)}
+                onSelect={() => {
+                  if (!window.confirm(`Remove ${name} from this company?`)) return
+                  run(() => removeMember({ membershipId }), `${name} removed.`)
+                }}
               >
                 Remove from organisation
               </DropdownMenuItem>

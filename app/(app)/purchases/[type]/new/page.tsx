@@ -74,6 +74,7 @@ export default async function NewPurchasePage({
         documentNumber={documentNumber}
         initialVendorId={initialVendorId}
         initialProjectId={project?.id}
+        projects={options.projects}
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}

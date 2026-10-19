@@ -13,7 +13,7 @@ import { db } from '@/server/db'
 
 export const metadata: Metadata = { title: 'Projects' }
 
-const BOARD: ProjectStatus[] = ['DRAFT', 'ACTIVE', 'ON_HOLD', 'DONE']
+const BOARD: ProjectStatus[] = ['DRAFT', 'ACTIVE', 'ON_HOLD', 'DONE', 'CANCELLED']
 
 function statusVariant(status: ProjectStatus) {
   switch (status) {
@@ -38,7 +38,7 @@ export default async function ProjectsHubPage() {
   const canCreate = ctx.permissions.has('project:create')
 
   const projects = await db.project.findMany({
-    where: { orgId: ctx.orgId, status: { not: 'CANCELLED' } },
+    where: { orgId: ctx.orgId },
     select: {
       id: true,
       number: true,
@@ -71,7 +71,7 @@ export default async function ProjectsHubPage() {
         }
       />
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         {BOARD.map((status) => {
           const column = projects.filter((row) => row.status === status)
           return (

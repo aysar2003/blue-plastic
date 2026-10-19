@@ -17,7 +17,6 @@ import type {
 } from '@/lib/validation/company'
 import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
 import type { OrgContext } from '@/server/auth/context'
-import { allowCompanyWipe } from '@/server/company-wipe'
 import { db } from '@/server/db'
 import { conflict, forbidden, notFound, precondition, validation } from '@/server/errors'
 import { createDefaultSequences } from '@/server/sequences'
@@ -238,73 +237,16 @@ export async function attachSubCompany(ctx: OrgContext, input: AttachSubCompanyI
 }
 
 /**
- * Permanently remove a company and every row that belongs to it.
- * Download a backup first — Import can recreate the company (master data) later.
+ * Company database delete is disabled. Soft-delete → Trash still works; use
+ * Clear Trash to permanently remove soft-deleted rows from PostgreSQL.
  */
-export async function deleteCompany(ctx: OrgContext, input: DeleteCompanyInput) {
-  if (!ctx.isSystemOwner) {
-    throw forbidden('Only the system owner can delete a company database.')
-  }
-
-  const organization = await db.organization.findUnique({
-    where: { id: input.orgId },
-    select: {
-      id: true,
-      name: true,
-      parentOrgId: true,
-      _count: { select: { children: true } },
-    },
-  })
-  if (!organization) throw notFound('Company')
-
-  const typed = input.confirmName.trim()
-  if (typed.toLowerCase() !== organization.name.trim().toLowerCase()) {
-    throw validation('Type the company name exactly to confirm deletion.')
-  }
-
-  if (organization._count.children > 0) {
-    throw precondition(
-      'Remove or reassign sub-companies before deleting this main company.',
-    )
-  }
-
-  const total = await db.organization.count()
-  if (total <= 1) {
-    throw precondition('This is the only company on the system. It cannot be deleted.')
-  }
-
-  const fallback = await db.organization.findFirst({
-    where: { id: { not: organization.id } },
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true },
-  })
-  if (!fallback) throw precondition('No other company remains to open after deletion.')
-
-  await db.$transaction(async (tx) => {
-    await allowCompanyWipe(tx)
-    await tx.journal.updateMany({ where: { orgId: organization.id }, data: { reversalOfId: null } })
-    await tx.ledgerAccount.updateMany({ where: { orgId: organization.id }, data: { parentId: null } })
-    await tx.salesDocument.updateMany({
-      where: { orgId: organization.id },
-      data: { convertedFromId: null },
-    })
-    await tx.purchaseDocument.updateMany({
-      where: { orgId: organization.id },
-      data: { convertedFromId: null },
-    })
-    await tx.user.updateMany({
-      where: { homeOrgId: organization.id },
-      data: { homeOrgId: fallback.id },
-    })
-    await tx.organization.delete({ where: { id: organization.id } })
-  })
-
-  return {
-    deletedId: organization.id,
-    deletedName: organization.name,
-    switchToOrgId: ctx.orgId === organization.id ? fallback.id : null,
-    switchToName: fallback.name,
-  }
+export async function deleteCompany(
+  _ctx: OrgContext,
+  _input: DeleteCompanyInput,
+): Promise<{ deletedName: string; switchToOrgId: string | null }> {
+  throw precondition(
+    'Deleting a company database is not allowed. Soft-deleted records go to Trash; Clear Trash removes them from the database.',
+  )
 }
 
 const LIMIT_SELECT = {

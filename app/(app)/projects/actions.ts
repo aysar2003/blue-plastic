@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 import {
+  projectIdSchema,
   projectSchema,
   projectStatusSchema,
   projectUpdateSchema,
@@ -63,7 +64,12 @@ export async function createProjectForm(_prev: FormState, formData: FormData): P
 }
 
 export async function updateProjectForm(_prev: FormState, formData: FormData): Promise<FormState> {
-  return toFormState(await updateProject(formValues(formData)), 'Project updated.')
+  const result = await updateProject(formValues(formData))
+  if (result.ok) {
+    revalidateProjects(result.data.id)
+    redirect(`/projects/${result.data.id}`)
+  }
+  return toFormState(result, 'Project updated.')
 }
 
 export async function setProjectStatusForm(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -89,12 +95,21 @@ export const updateProjectTask = action
     return row
   })
 
+export const deleteProject = action
+  .requires('project:update')
+  .input(projectIdSchema)
+  .handler(async (ctx, input) => {
+    const row = await projectService.remove(ctx, input.id)
+    revalidateProjects()
+    return row
+  })
+
 export const moveProjectTask = action
   .requires('project:update')
   .input(moveProjectTaskSchema)
   .handler(async (ctx, input) => {
     const row = await projectTaskService.move(ctx, input.id, input.stage)
-    revalidateProjects()
+    revalidateProjects(row.projectId)
     return row
   })
 
@@ -103,7 +118,7 @@ export const deleteProjectTask = action
   .input(z.object({ id: cuid }))
   .handler(async (ctx, input) => {
     const row = await projectTaskService.remove(ctx, input.id)
-    revalidateProjects()
+    revalidateProjects(row.projectId)
     return row
   })
 
@@ -112,4 +127,11 @@ export async function createProjectTaskForm(
   formData: FormData,
 ): Promise<FormState> {
   return toFormState(await createProjectTask(formValues(formData)), 'Task added.')
+}
+
+export async function updateProjectTaskForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  return toFormState(await updateProjectTask(formValues(formData)), 'Task saved.')
 }

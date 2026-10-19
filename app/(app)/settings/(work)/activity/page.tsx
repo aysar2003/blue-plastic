@@ -15,7 +15,7 @@ export default async function ActivityPage() {
       <p className="text-sm text-muted-foreground">
         Every deleted transaction — invoices, sales papers, bills, expenses, payments, transfers,
         journals, and more. Open a row to view the PDF, restore it to the books, or upload supporting
-        files. Clear Trash empties this list; soft-deleted entries stay out of the company books.
+        files. Clear Trash permanently removes soft-deleted records from the database.
       </p>
       <QueryProvider>
         <ActivityList timeZone={ctx.organization.timeZone} canClear={canClear} />

@@ -30,7 +30,8 @@ function useDialogLayer(open: boolean | undefined) {
     if (open === false) return
     dialogLayer += 1
     const current = dialogLayer
-    setLayer(current)
+    // Nested dialogs need a mount-time layer; defer so render is not cascading.
+    queueMicrotask(() => setLayer(current))
     return () => {
       dialogLayer = Math.max(0, dialogLayer - 1)
     }

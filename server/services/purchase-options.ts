@@ -7,6 +7,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { selectableAccounts } from '@/server/services/account.service'
 import { subledgerBalances } from '@/server/services/contact.service'
+import { listForPicker as listProjects } from '@/server/services/project.service'
 import { ITEM_GROUPS } from '@/server/services/sales-options'
 
 function mailingAddress(vendor: {
@@ -29,7 +30,7 @@ function mailingAddress(vendor: {
 
 /** Everything the bill form needs, in one round trip. */
 export async function loadPurchaseOptions(ctx: OrgContext) {
-  const [vendors, customers, items, taxCodes, chart, terms] = await Promise.all([
+  const [vendors, customers, items, taxCodes, chart, terms, projects] = await Promise.all([
     db.vendor.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: {
@@ -77,6 +78,7 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
       select: { id: true, name: true, type: true, dueDays: true },
       orderBy: [{ isDefault: 'desc' }, { dueDays: 'asc' }],
     }),
+    listProjects(ctx),
   ])
 
   const trackedIds = items.filter((item) => item.type === 'INVENTORY').map((item) => item.id)
@@ -147,5 +149,6 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
       preferTypes: ['EXPENSE'],
     }),
     terms,
+    projects,
   }
 }

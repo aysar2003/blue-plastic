@@ -43,6 +43,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: ['g', 'p'], label: 'Profit and Loss', href: '/reports/profit-loss', permission: 'report:read', group: 'Go to' },
   { keys: ['g', 'f'], label: 'Balance Sheet', href: '/reports/balance-sheet', permission: 'report:read', group: 'Go to' },
   { keys: ['g', 't'], label: 'Trial Balance', href: '/reports/trial-balance', permission: 'report:read', group: 'Go to' },
+  { keys: ['g', 'z'], label: 'Projects', href: '/projects', permission: 'project:read', group: 'Go to' },
   { keys: ['g', 's'], label: 'Settings', href: '/settings', permission: 'org:read', group: 'Go to' },
   { keys: ['g', 'h'], label: 'Help', href: '/help', group: 'Go to' },
 
@@ -62,6 +63,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: ['c', 't'], label: 'New transfer', href: '/banking/transfers/new', permission: 'bank:transact', group: 'Create' },
   { keys: ['c', 'j'], label: 'New journal entry', href: '/journals/new', permission: 'journal:create', group: 'Create' },
   { keys: ['c', 'n'], label: 'Adjust stock', href: '/inventory/adjustments/new', permission: 'inventory:adjust', group: 'Create' },
+  { keys: ['c', 'k'], label: 'New project', href: '/projects/new', permission: 'project:create', group: 'Create' },
 ]
 
 /** Shortcuts that are not navigation, listed for the help page only. */

@@ -83,7 +83,14 @@ const SYSTEM_USER_SELECT = {
       id: true,
       role: true,
       status: true,
-      organization: { select: { id: true, name: true } },
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          parentOrgId: true,
+          parent: { select: { id: true, name: true } },
+        },
+      },
     },
     orderBy: { organization: { name: 'asc' as const } },
   },
@@ -172,5 +179,144 @@ export async function adminResetPassword(ctx: OrgContext, input: ResetSystemUser
       email: user.email,
       name: user.name,
     }
+  })
+}
+
+export type SystemUserStatus = 'ACTIVE' | 'INVITED' | 'SUSPENDED'
+
+/**
+ * Set pending / active / suspended on every staff membership this login has,
+ * except company owners (ownership must be transferred first).
+ */
+export async function setSystemUserStatus(
+  ctx: OrgContext,
+  userId: string,
+  status: SystemUserStatus,
+) {
+  if (!ctx.isSystemOwner) {
+    throw forbidden('Only the system owner can change a login across companies.')
+  }
+  if (userId === ctx.userId) {
+    throw precondition('You cannot change your own access from here.')
+  }
+
+  const meta = await requestMeta()
+
+  return db.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isSystemOwner: true,
+        memberships: {
+          where: { role: { not: 'CUSTOMER' } },
+          select: { id: true, role: true, status: true },
+        },
+      },
+    })
+    if (!user) throw notFound('User')
+    if (user.isSystemOwner) {
+      throw forbidden('The system owner cannot be set pending or suspended.')
+    }
+
+    const staff = user.memberships.filter((row) => row.role !== 'OWNER')
+    if (staff.length === 0) {
+      throw precondition(
+        user.memberships.some((row) => row.role === 'OWNER')
+          ? 'This person owns a company. Transfer ownership first.'
+          : 'This person has no company membership to change.',
+      )
+    }
+
+    await tx.membership.updateMany({
+      where: { id: { in: staff.map((row) => row.id) } },
+      data: { status, version: { increment: 1 } },
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'User',
+        entityId: user.id,
+        action: status === 'ACTIVE' ? 'RESTORE' : 'ARCHIVE',
+        before: { memberships: user.memberships.map((row) => row.status) },
+        after: { status, email: user.email },
+      },
+      meta,
+    )
+
+    return { id: user.id, name: user.name, email: user.email, status }
+  })
+}
+
+/**
+ * Remove a login from the installation. Company owners and the system owner stay.
+ * Calendar / approval history that still names this person blocks the delete.
+ */
+export async function deleteSystemUser(ctx: OrgContext, userId: string) {
+  if (!ctx.isSystemOwner) {
+    throw forbidden('Only the system owner can delete a login.')
+  }
+  if (userId === ctx.userId) {
+    throw precondition('You cannot delete your own login.')
+  }
+
+  const meta = await requestMeta()
+
+  return db.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isSystemOwner: true,
+        memberships: {
+          where: { role: 'OWNER' },
+          select: { organization: { select: { name: true } } },
+        },
+        _count: {
+          select: {
+            calendarEvents: true,
+            approvalRequestsSubmitted: true,
+            approvalDecisions: true,
+          },
+        },
+      },
+    })
+    if (!user) throw notFound('User')
+    if (user.isSystemOwner) {
+      throw forbidden('The system owner cannot be deleted.')
+    }
+    const owned = user.memberships[0]?.organization.name
+    if (owned) {
+      throw precondition(`This person owns ${owned}. Transfer ownership first.`)
+    }
+    if (user._count.calendarEvents > 0) {
+      throw precondition('This person created calendar events. Suspend them instead of deleting.')
+    }
+    if (user._count.approvalRequestsSubmitted > 0 || user._count.approvalDecisions > 0) {
+      throw precondition('This person took part in approvals. Suspend them instead of deleting.')
+    }
+
+    await tx.appAccessRequest.deleteMany({ where: { requestedById: user.id } })
+    await tx.user.delete({ where: { id: user.id } })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'User',
+        entityId: user.id,
+        action: 'DELETE',
+        before: { email: user.email, name: user.name },
+      },
+      meta,
+    )
+
+    return { id: user.id, name: user.name, email: user.email }
   })
 }

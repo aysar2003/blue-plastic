@@ -65,8 +65,8 @@ export function CommandPalette({
 
   const pathAllowed = React.useCallback(
     (href: string) => {
-      const module = moduleForPath(href)
-      if (module && blocked.has(module)) return false
+      const appModule = moduleForPath(href)
+      if (appModule && blocked.has(appModule)) return false
       if (features) {
         const kind = documentKindForPath(href)
         if (kind && !isDocumentKindEnabled(features, kind.family, kind.kind)) return false

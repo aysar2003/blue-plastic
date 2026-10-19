@@ -42,3 +42,14 @@ export const ASSIGNABLE_ROLES: Role[] = [
   'STORE_KEEPER',
   'VIEWER',
 ]
+
+/** MembershipStatus labels — INVITED is shown as pending in the users lists. */
+export const MEMBERSHIP_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Active',
+  INVITED: 'Pending',
+  SUSPENDED: 'Suspended',
+}
+
+export function membershipStatusLabel(status: string) {
+  return MEMBERSHIP_STATUS_LABELS[status] ?? status.toLowerCase()
+}

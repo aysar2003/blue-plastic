@@ -9,6 +9,14 @@ let pathname = '/sales/invoices'
 
 vi.mock('next/navigation', () => ({
   usePathname: () => pathname,
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    prefetch: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+  }),
 }))
 
 vi.mock('next/link', () => ({
@@ -21,6 +29,10 @@ vi.mock('next/link', () => ({
     children: ReactNode
     title?: string
   }) => createElement('a', { href, title }, children),
+}))
+
+vi.mock('@/app/(app)/settings/(work)/organization/actions', () => ({
+  toggleModuleFlag: vi.fn(),
 }))
 
 const { ActiveAppLink, AppsBarToggle, useAppsBarHidden, APPS_BAR_STORAGE_KEY } = await import(

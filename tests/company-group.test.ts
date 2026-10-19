@@ -5,6 +5,7 @@ import {
   applyGroupReportView,
   companyGroupKind,
   companyGroupLabel,
+  groupUserCompanies,
 } from '@/lib/company-group'
 
 describe('company group', () => {
@@ -43,5 +44,56 @@ describe('company group', () => {
       title: 'SAFA · combined',
       orgIds: ['main', 'sub'],
     })
+  })
+
+  it('groups a person’s companies under the main they belong to', () => {
+    const grouped = groupUserCompanies([
+      {
+        role: 'OWNER',
+        status: 'ACTIVE',
+        organization: {
+          id: 'main',
+          name: 'AL FURAAT GROUP OF COMPANY',
+          parentOrgId: null,
+          parent: null,
+        },
+      },
+      {
+        role: 'OWNER',
+        status: 'ACTIVE',
+        organization: {
+          id: 'sub',
+          name: 'AL FURAAT HARDWARE',
+          parentOrgId: 'main',
+          parent: { id: 'main', name: 'AL FURAAT GROUP OF COMPANY' },
+        },
+      },
+      {
+        role: 'ADMIN',
+        status: 'INVITED',
+        organization: {
+          id: 'golden',
+          name: 'GOLDEN',
+          parentOrgId: null,
+          parent: null,
+        },
+      },
+    ])
+    expect(grouped).toEqual([
+      {
+        rootId: 'main',
+        name: 'AL FURAAT GROUP OF COMPANY',
+        companyCount: 2,
+        role: 'OWNER',
+        status: 'ACTIVE',
+      },
+      {
+        rootId: 'golden',
+        name: 'GOLDEN',
+        companyCount: 1,
+        role: 'ADMIN',
+        status: 'INVITED',
+      },
+    ])
   })
 })

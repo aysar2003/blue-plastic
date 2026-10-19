@@ -9,7 +9,7 @@ import type { ProjectInput } from '@/lib/validation/project'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
-import { notFound, validation } from '@/server/errors'
+import { notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 
 const LIST_SELECT = {
@@ -171,9 +171,14 @@ export async function get(ctx: OrgContext, id: string) {
 
   const quoted = sumTotals(sales, new Set(['ESTIMATE', 'QUOTATION']))
   const ordered = sumTotals(sales, new Set(['SALES_ORDER']))
-  const invoiced = sumTotals(sales, new Set(['INVOICE', 'SALES_RECEIPT']))
+  const invoiced = sumTotals(sales, new Set(['INVOICE', 'SALES_RECEIPT'])).minus(
+    sumTotals(sales, new Set(['CREDIT_MEMO', 'REFUND_RECEIPT'])),
+  )
   const purchaseOrders = sumTotals(purchases, new Set(['PURCHASE_ORDER']))
-  const billed = sumTotals(purchases, new Set(['BILL', 'EXPENSE']))
+  const billed = sumTotals(purchases, new Set(['BILL', 'EXPENSE'])).minus(
+    sumTotals(purchases, new Set(['VENDOR_CREDIT'])),
+  )
+  const profit = invoiced.minus(billed)
 
   return {
     id: project.id,
@@ -194,6 +199,7 @@ export async function get(ctx: OrgContext, id: string) {
       invoiced: invoiced.toFixed(4),
       purchaseOrders: purchaseOrders.toFixed(4),
       billed: billed.toFixed(4),
+      profit: profit.toFixed(4),
     },
     sales: sales.map((row) => ({
       ...row,
@@ -356,4 +362,67 @@ export async function peek(ctx: OrgContext, id: string) {
   })
   if (!project) throw notFound('Project')
   return project
+}
+
+/** Open jobs for document forms — cancelled work stays off the picker. */
+export async function listForPicker(ctx: OrgContext) {
+  if (!ctx.permissions.has('project:read')) return []
+  const rows = await db.project.findMany({
+    where: { orgId: ctx.orgId, status: { not: 'CANCELLED' } },
+    select: {
+      id: true,
+      number: true,
+      name: true,
+      customerId: true,
+      status: true,
+    },
+    orderBy: [{ updatedAt: 'desc' }],
+    take: 2000,
+  })
+  return rows.map((row) => ({
+    id: row.id,
+    label: `${row.number} · ${row.name}`,
+    customerId: row.customerId,
+    status: row.status,
+  }))
+}
+
+/**
+ * Remove an unused job folder. Linked sales or purchases must be cleared first
+ * so the documents keep a customer they can still name.
+ */
+export async function remove(ctx: OrgContext, id: string) {
+  const meta = await requestMeta()
+  return db.$transaction(async (tx) => {
+    const project = await tx.project.findFirst({
+      where: { id, orgId: ctx.orgId },
+      select: { id: true, number: true, name: true },
+    })
+    if (!project) throw notFound('Project')
+
+    const [sales, purchases] = await Promise.all([
+      tx.salesDocument.count({ where: { orgId: ctx.orgId, projectId: id } }),
+      tx.purchaseDocument.count({ where: { orgId: ctx.orgId, projectId: id } }),
+    ])
+    if (sales > 0 || purchases > 0) {
+      throw precondition(
+        'This project still has sales or purchases. Unlink or delete those documents first, or mark the project Cancelled.',
+      )
+    }
+
+    await tx.project.delete({ where: { id } })
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Project',
+        entityId: id,
+        action: 'DELETE',
+        before: { number: project.number, name: project.name },
+        after: { deleted: true },
+      },
+      meta,
+    )
+    return project
+  })
 }

@@ -91,3 +91,87 @@ export function applyGroupReportView(
     title: scope.title,
   }
 }
+
+/** A staff membership, used to collapse companies into their group on Users. */
+export type UserCompanyMembership = {
+  role: string
+  status: string
+  organization: {
+    id: string
+    name: string
+    parentOrgId: string | null
+    parent: { id: string; name: string } | null
+  }
+}
+
+export type GroupedUserCompany = {
+  rootId: string
+  name: string
+  companyCount: number
+  role: string
+  status: string
+}
+
+const ROLE_RANK: Record<string, number> = {
+  OWNER: 0,
+  ADMIN: 1,
+  ACCOUNTANT: 2,
+  BOOKKEEPER: 3,
+  SALES: 4,
+  STORE_KEEPER: 5,
+  VIEWER: 6,
+  CUSTOM: 7,
+}
+
+function strongerRole(a: string, b: string) {
+  return (ROLE_RANK[a] ?? 99) <= (ROLE_RANK[b] ?? 99) ? a : b
+}
+
+function louderStatus(a: string, b: string) {
+  if (a === 'SUSPENDED' || b === 'SUSPENDED') return 'SUSPENDED'
+  if (a === 'INVITED' || b === 'INVITED') return 'INVITED'
+  return 'ACTIVE'
+}
+
+/**
+ * Collapse a person's companies into main + sub groups, so related companies
+ * sit together instead of listing every database on the users table.
+ */
+export function groupUserCompanies(
+  memberships: UserCompanyMembership[],
+): GroupedUserCompany[] {
+  const groups = new Map<
+    string,
+    { name: string; companyIds: Set<string>; role: string; status: string }
+  >()
+
+  for (const membership of memberships) {
+    const org = membership.organization
+    const rootId = org.parentOrgId ?? org.id
+    const name = org.parent?.name ?? org.name
+    const existing = groups.get(rootId)
+    if (!existing) {
+      groups.set(rootId, {
+        name,
+        companyIds: new Set([org.id]),
+        role: membership.role,
+        status: membership.status,
+      })
+      continue
+    }
+    existing.companyIds.add(org.id)
+    if (!org.parentOrgId) existing.name = org.name
+    existing.role = strongerRole(existing.role, membership.role)
+    existing.status = louderStatus(existing.status, membership.status)
+  }
+
+  return [...groups.entries()]
+    .map(([rootId, group]) => ({
+      rootId,
+      name: group.name,
+      companyCount: group.companyIds.size,
+      role: group.role,
+      status: group.status,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}

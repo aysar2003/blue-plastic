@@ -11,8 +11,9 @@ import { SearchInput } from '@/components/data/search-input'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { groupUserCompanies } from '@/lib/company-group'
 import { formatDateTime } from '@/lib/date'
-import { ROLE_LABELS } from '@/lib/roles'
+import { membershipStatusLabel, ROLE_LABELS } from '@/lib/roles'
 import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
 import * as userService from '@/server/services/user.service'
@@ -20,6 +21,16 @@ import { SystemUserActions } from './system-user-actions'
 import type { Role } from '@prisma/client'
 
 export const metadata: Metadata = { title: 'System users' }
+
+function overallMembershipStatus(statuses: string[]) {
+  if (statuses.length === 0) return null
+  if (statuses.every((status) => status === 'SUSPENDED')) return 'SUSPENDED'
+  if (statuses.every((status) => status === 'INVITED' || status === 'SUSPENDED')) return 'INVITED'
+  if (statuses.every((status) => status === 'ACTIVE')) return 'ACTIVE'
+  if (statuses.includes('INVITED')) return 'INVITED'
+  if (statuses.includes('SUSPENDED')) return 'SUSPENDED'
+  return 'ACTIVE'
+}
 
 /**
  * Installation-wide staff logins. System owner only.
@@ -41,7 +52,7 @@ export default async function SystemUsersPage({
     <div className="space-y-4">
       <PageHeader
         title="System users"
-        description="Every staff login on this installation. You can set a new work password — the old one is never shown or retrieved. Company members are managed under Settings → Company users."
+        description="Every staff login on this installation. Related companies are grouped. You can set a person pending, delete a login, or set a new work password — the old one is never shown."
       />
       <p className="-mt-2 text-sm text-muted-foreground">
         <Link href="/settings/users" className="font-medium text-primary underline">
@@ -75,13 +86,18 @@ export default async function SystemUsersPage({
                 <TableRow>
                   <TableHead>Person</TableHead>
                   <TableHead>Companies</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Last signed in</TableHead>
-                  <TableHead className="w-[1%] whitespace-nowrap text-right">Password</TableHead>
+                  <TableHead className="w-[1%] whitespace-nowrap text-right">Access</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((user) => {
                   const isSelf = user.id === ctx.userId
+                  const groups = groupUserCompanies(user.memberships)
+                  const ownsCompany = user.memberships.some((row) => row.role === 'OWNER')
+                  const hasStaffMembership = user.memberships.some((row) => row.role !== 'OWNER')
+                  const overallStatus = overallMembershipStatus(user.memberships.map((row) => row.status))
                   return (
                     <TableRow key={user.id}>
                       <TableCell>
@@ -99,23 +115,38 @@ export default async function SystemUsersPage({
                         <span className="block text-xs text-muted-foreground">{user.email}</span>
                       </TableCell>
                       <TableCell>
-                        {user.memberships.length === 0 ? (
+                        {groups.length === 0 ? (
                           <span className="text-xs text-muted-foreground">No company membership</span>
                         ) : (
-                          <div className="flex max-w-md flex-col gap-1">
-                            {user.memberships.map((membership) => (
-                              <span key={membership.id} className="text-sm">
-                                <span className="font-medium">{membership.organization.name}</span>
+                          <div className="flex max-w-sm flex-col gap-1.5">
+                            {groups.map((group) => (
+                              <span key={group.rootId} className="text-sm">
+                                <span className="font-medium">{group.name}</span>
                                 <span className="text-muted-foreground">
-                                  {' '}
-                                  · {ROLE_LABELS[membership.role as Role] ?? membership.role}
-                                  {membership.status !== 'ACTIVE'
-                                    ? ` · ${membership.status.toLowerCase()}`
-                                    : ''}
+                                  {group.companyCount > 1 ? ` · ${group.companyCount} companies` : ''}
+                                  {' · '}
+                                  {ROLE_LABELS[group.role as Role] ?? group.role}
                                 </span>
                               </span>
                             ))}
                           </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {overallStatus ? (
+                          <Badge
+                            variant={
+                              overallStatus === 'ACTIVE'
+                                ? 'success'
+                                : overallStatus === 'SUSPENDED'
+                                  ? 'destructive'
+                                  : 'warning'
+                            }
+                          >
+                            {membershipStatusLabel(overallStatus)}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
@@ -129,6 +160,10 @@ export default async function SystemUsersPage({
                           name={user.name}
                           email={user.email}
                           isSelf={isSelf}
+                          isSystemOwner={user.isSystemOwner}
+                          ownsCompany={ownsCompany}
+                          hasStaffMembership={hasStaffMembership}
+                          status={overallStatus}
                         />
                       </TableCell>
                     </TableRow>

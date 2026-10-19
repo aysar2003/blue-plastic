@@ -66,6 +66,26 @@ export const PROJECT_HUB_APPS: ProjectHubApp[] = [
     wash: '#DBEAFE',
     blurb: 'Bill the customer',
   },
+  {
+    key: 'purchase-orders',
+    label: 'Purchase orders',
+    href: '/purchases/purchase-orders',
+    icon: 'receipt',
+    permission: 'bill:read',
+    accent: '#7C3AED',
+    wash: '#EDE9FE',
+    blurb: 'Buy for the job',
+  },
+  {
+    key: 'bills',
+    label: 'Bills',
+    href: '/purchases/bills',
+    icon: 'book',
+    permission: 'bill:read',
+    accent: '#BE185D',
+    wash: '#FCE7F3',
+    blurb: 'Vendor costs',
+  },
 ]
 
 export function projectAppsForPermissions(

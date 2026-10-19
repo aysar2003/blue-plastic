@@ -4,6 +4,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/dashboard' }))
 
+vi.mock('@/app/(app)/settings/(work)/organization/actions', () => ({
+  toggleModuleFlag: vi.fn(),
+}))
+
 import { AppLauncher } from '@/components/layout/app-launcher'
 import { LAUNCHER_APPS } from '@/components/layout/launcher-apps'
 

@@ -130,6 +130,7 @@ export function BillForm({
   document,
   initialVendorId,
   initialProjectId,
+  projects = [],
   neighbors,
   stores = [],
   stock = {},
@@ -151,6 +152,8 @@ export function BillForm({
   initialVendorId?: string
   /** Set when the form was opened from a project job folder. */
   initialProjectId?: string
+  /** Open jobs this purchase can belong to. */
+  projects?: { id: string; label: string; customerId?: string }[]
   /** The saved document before this one, and the one after, in date then number order. */
   neighbors?: {
     previous: { id: string; number: string } | null
@@ -188,7 +191,7 @@ export function BillForm({
 
   const [number, setNumber] = usePropState(documentNumber)
   const [vendorId, setVendorId] = useState(document?.vendorId ?? initialVendorId ?? '')
-  const [projectId] = useState(document?.projectId ?? initialProjectId ?? '')
+  const [projectId, setProjectId] = useState(document?.projectId ?? initialProjectId ?? '')
   const [date, setDate] = useState(document?.date ?? today)
   const [reference, setReference] = useState(document?.reference ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
@@ -636,6 +639,21 @@ export function BillForm({
               />
             </Field>
           </div>
+
+          {projects.length > 0 || projectId ? (
+            <Field name="projectId" label="Project" error={state.fieldErrors?.projectId}>
+              <EntityPicker
+                id="projectId"
+                options={projects}
+                value={projectId || null}
+                onChange={(next) => setProjectId(next ?? '')}
+                placeholder="Link a job"
+                clearable
+                emptyMessage="No open projects"
+                error={state.fieldErrors?.projectId}
+              />
+            </Field>
+          ) : null}
 
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {owed ? (

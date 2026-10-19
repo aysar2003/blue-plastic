@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 
 import { isHiddenFromTrash } from '@/lib/trash-log'
 import { deleteJournals, restoreJournals } from '@/server/accounting/deletion'
+import { purgeDeletedEntity } from '@/server/accounting/purge-deleted'
 import { postJournal } from '@/server/accounting/posting'
 import { db, type Tx } from '@/server/db'
 import { CODE, inRolledBackTransaction, makeOrg, type Fixture } from './ledger-helpers'
@@ -48,7 +49,7 @@ suite('trash restore and clear', () => {
     })
   })
 
-  it('marks a trash DELETE row cleared so it leaves the active trash filter', async () => {
+  it('hard-purges a soft-deleted journal when Trash is cleared', async () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)
       const journal = await postRent(tx, fixture, '55')
@@ -64,6 +65,8 @@ suite('trash restore and clear', () => {
         select: { id: true, after: true },
       })
       expect(log).not.toBeNull()
+
+      await purgeDeletedEntity(tx, fixture.ctx, 'Journal', journal.id)
 
       const previous =
         log!.after && typeof log!.after === 'object' && !Array.isArray(log!.after)
@@ -90,12 +93,11 @@ suite('trash restore and clear', () => {
 
       expect(active.map((row) => row.id)).not.toContain(log!.id)
 
-      // Clearing trash does not resurrect the journal.
       const journalAfter = await tx.journal.findUnique({
         where: { id: journal.id },
-        select: { status: true },
+        select: { id: true },
       })
-      expect(journalAfter?.status).toBe('DELETED')
+      expect(journalAfter).toBeNull()
     })
   })
 })

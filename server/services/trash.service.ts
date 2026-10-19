@@ -13,6 +13,7 @@ import {
   TRASH_RESTORABLE,
 } from '@/lib/trash-log'
 import { toCalendarDate } from '@/lib/date'
+import { purgeDeletedEntity, trashPurgeOrder } from '@/server/accounting/purge-deleted'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, precondition } from '@/server/errors'
@@ -631,29 +632,49 @@ async function markCleared(
 }
 
 /**
- * Remove one Trash line. Soft-deleted ledger rows stay in the database; the
- * entry leaves Trash and can no longer be restored from here.
+ * Remove one Trash line and permanently delete its soft-deleted books row
+ * from PostgreSQL. Soft-delete → Trash still works; Clear is the hard purge.
  */
 export async function clearOne(ctx: OrgContext, id: string): Promise<{ count: number }> {
   const row = await loadDeleteLog(ctx, id)
   if (isGoneFromTrash(row.after)) {
     throw precondition('That trash entry is already gone.')
   }
+
+  await db.$transaction(
+    async (tx) => {
+      await purgeDeletedEntity(tx, ctx, row.entity, row.entityId)
+    },
+    { timeout: 60_000 },
+  )
+
   const count = await markCleared(ctx, [{ id: row.id, after: row.after }])
   return { count }
 }
 
 /**
- * Empty Trash for this company. Soft-deleted books stay out of reports; only
- * the Trash list and its uploaded papers are cleared.
+ * Empty Trash for this company and permanently remove soft-deleted books rows
+ * from PostgreSQL. Soft-delete → Trash still works; Clear is the hard purge.
  */
 export async function clearAll(ctx: OrgContext): Promise<{ count: number }> {
   const rows = await db.auditLog.findMany({
     where: { orgId: ctx.orgId, action: 'DELETE' },
-    select: { id: true, after: true },
+    select: { id: true, entity: true, entityId: true, after: true },
   })
-  const active = rows.filter((row) => !isGoneFromTrash(row.after))
-  const count = await markCleared(ctx, active)
+  const active = rows
+    .filter((row) => !isGoneFromTrash(row.after))
+    .sort((a, b) => trashPurgeOrder(a.entity) - trashPurgeOrder(b.entity))
+
+  let count = 0
+  for (const row of active) {
+    await db.$transaction(
+      async (tx) => {
+        await purgeDeletedEntity(tx, ctx, row.entity, row.entityId)
+      },
+      { timeout: 60_000 },
+    )
+    count += await markCleared(ctx, [{ id: row.id, after: row.after }])
+  }
   return { count }
 }
 
