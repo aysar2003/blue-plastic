@@ -1,4 +1,4 @@
-import { calendarDateInZone, toCalendarDate, toDate } from '@/lib/date'
+import { formatLongTransactionDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { isProposal, printSheetLinePad, STATUS_LABELS, type SalesTypeConfig } from '@/lib/sales-types'
 import { CUSTOMER_CREDIT, FORM_SHEET } from '@/lib/credit-brand'
@@ -327,21 +327,7 @@ export function InvoiceSheet({
 }
 
 export function longDate(iso: string, instant?: Date | null, timeZone?: string | null): string {
-  const zone = timeZone || 'UTC'
-  const day = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'UTC',
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  }).format(toDate(iso))
-  if (!(instant instanceof Date) || Number.isNaN(instant.getTime())) return day
-  if (calendarDateInZone(instant, zone) !== iso) return day
-  const time = new Intl.DateTimeFormat('en-US', {
-    timeZone: zone,
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(instant)
-  return `${day}, ${time}`
+  return formatLongTransactionDate(iso, instant, timeZone || 'UTC')
 }
 
 function lineLabel(line: {

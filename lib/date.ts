@@ -194,3 +194,33 @@ export function formatTransactionDate(
   }
   return formatDate(date, locale)
 }
+
+/**
+ * Same wording as the on-screen MerchantInvoice paper ("20 October 2026, 7:35 PM")
+ * so PDF download and Print stay one document.
+ */
+export function formatLongTransactionDate(
+  date: CalendarDate,
+  instant?: Date | null,
+  timeZone = 'UTC',
+): string {
+  const day = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'UTC',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(toDate(date))
+  if (
+    !(instant instanceof Date) ||
+    Number.isNaN(instant.getTime()) ||
+    calendarDateInZone(instant, timeZone) !== date
+  ) {
+    return day
+  }
+  const time = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(instant)
+  return `${day}, ${time}`
+}
