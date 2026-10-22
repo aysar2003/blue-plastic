@@ -409,7 +409,9 @@ export async function statement(
       journalDate: { gte: from, lte: to },
       account: { subtype: 'ACCOUNTS_RECEIVABLE' },
       journal: {
-        status: { notIn: ['DRAFT', 'DELETED'] },
+        // REVERSED originals and their REVERSAL mirrors are not statement rows —
+        // the live invoice / payment / expense already carries the balance.
+        status: { notIn: ['DRAFT', 'DELETED', 'REVERSED'] },
         salesDocuments: { none: {} },
         customerPayments: { none: {} },
         purchaseDocuments: { none: {} },
@@ -420,6 +422,7 @@ export async function statement(
             }
           : {}),
         // Document-backed source types always belong on the document/payment/expense row.
+        // REVERSAL points at a journal id, not a document id, so it must be listed too.
         sourceType: {
           notIn: [
             'INVOICE',
@@ -428,6 +431,7 @@ export async function statement(
             'REFUND_RECEIPT',
             'CUSTOMER_PAYMENT',
             'EXPENSE',
+            'REVERSAL',
           ],
         },
       },

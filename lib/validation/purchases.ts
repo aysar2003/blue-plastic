@@ -61,6 +61,17 @@ export const purchaseDocumentSchema = z.object({
 
 export type PurchaseDocumentInput = z.infer<typeof purchaseDocumentSchema>
 
+/**
+ * A posted purchase line is either a product from the item list or a category
+ * that names an expense account. Description text and a number, with neither,
+ * is not a purchase — it used to post to Uncategorised Expense.
+ */
+export function unnamedPurchaseLineIndexes(
+  lines: { itemId?: string | null; expenseAccountId?: string | null }[],
+): number[] {
+  return lines.flatMap((line, index) => (line.itemId || line.expenseAccountId ? [] : [index]))
+}
+
 export const convertOrderSchema = z.object({ id: cuid, date: calendarDate })
 
 export const billPaymentSchema = z.object({
@@ -111,6 +122,11 @@ export const receiveOrderSchema = z.object({
             }
             return next === '' || next === '.' ? '0' : next
           }),
+        /**
+         * Shelf for this line on this receipt. Blank keeps the purchase order's
+         * store. Different lines may name different stores on the same receipt.
+         */
+        storeId: optionalId,
       }),
     )
     .min(1, 'Enter a quantity against at least one line')

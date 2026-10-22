@@ -13,6 +13,40 @@ export type CustomerPaper = {
   originalName: string
 }
 
+export function PartyPromiseDates({
+  agreementDate,
+  balanceDate,
+  balanceTime,
+  reminderDays,
+}: {
+  agreementDate: string | null
+  balanceDate: string | null
+  balanceTime: string | null
+  reminderDays: number | null
+}) {
+  if (!agreementDate && !balanceTime && !balanceDate && !reminderDays) return null
+  return (
+    <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+      <div>
+        <dt className="text-xs text-muted-foreground">Agreement date</dt>
+        <dd>{agreementDate ? formatDate(agreementDate) : '—'}</dd>
+      </div>
+      <div>
+        <dt className="text-xs text-muted-foreground">Balance time</dt>
+        <dd>{balanceTime ?? '—'}</dd>
+      </div>
+      <div>
+        <dt className="text-xs text-muted-foreground">Balance date</dt>
+        <dd>{balanceDate ? formatDate(balanceDate) : '—'}</dd>
+      </div>
+      <div>
+        <dt className="text-xs text-muted-foreground">Reminder</dt>
+        <dd>{reminderDays ? `${reminderDays} days before` : '—'}</dd>
+      </div>
+    </dl>
+  )
+}
+
 /** The portrait, the agreement date, and the debt papers stored with a customer. */
 export function CustomerPapers({
   customerId,
@@ -44,52 +78,46 @@ export function CustomerPapers({
           className="size-16 shrink-0 rounded-md object-cover"
         />
       ) : null}
-      <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
-        <div>
-          <dt className="text-xs text-muted-foreground">Agreement date</dt>
-          <dd>{agreementDate ? formatDate(agreementDate) : '—'}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Balance time</dt>
-          <dd>{balanceTime ?? '—'}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Balance date</dt>
-          <dd>{balanceDate ? formatDate(balanceDate) : '—'}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Reminder</dt>
-          <dd>{reminderDays ? `${reminderDays} days before` : '—'}</dd>
-        </div>
-        {papers.length > 0 ? (
-          <div className="sm:col-span-2">
-            <dt className="text-xs text-muted-foreground">Agreement papers</dt>
-            <dd>
-              <ul className="space-y-1">
-                {papers.map((paper) => (
-                  <li key={paper.id} className="flex items-center gap-2">
-                    <a
-                      href={`/api/customers/${customerId}/files/${paper.id}`}
-                      className="text-[#0b4f6c] underline-offset-4 hover:underline"
-                    >
-                      {paper.originalName}
-                    </a>
-                    {canEdit ? <RemoveFile customerId={customerId} fileId={paper.id} /> : null}
-                  </li>
-                ))}
-              </ul>
-            </dd>
-          </div>
+      <div className="space-y-2">
+        <PartyPromiseDates
+          agreementDate={agreementDate}
+          balanceDate={balanceDate}
+          balanceTime={balanceTime}
+          reminderDays={reminderDays}
+        />
+        {papers.length > 0 || (photo && canEdit) ? (
+          <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+            {papers.length > 0 ? (
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-muted-foreground">Agreement papers</dt>
+                <dd>
+                  <ul className="space-y-1">
+                    {papers.map((paper) => (
+                      <li key={paper.id} className="flex items-center gap-2">
+                        <a
+                          href={`/api/customers/${customerId}/files/${paper.id}`}
+                          className="text-[#0b4f6c] underline-offset-4 hover:underline"
+                        >
+                          {paper.originalName}
+                        </a>
+                        {canEdit ? <RemoveFile customerId={customerId} fileId={paper.id} /> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            ) : null}
+            {photo && canEdit ? (
+              <div>
+                <dt className="text-xs text-muted-foreground">Photo</dt>
+                <dd>
+                  <RemoveFile customerId={customerId} fileId={photo.id} label="Remove photo" />
+                </dd>
+              </div>
+            ) : null}
+          </dl>
         ) : null}
-        {photo && canEdit ? (
-          <div>
-            <dt className="text-xs text-muted-foreground">Photo</dt>
-            <dd>
-              <RemoveFile customerId={customerId} fileId={photo.id} label="Remove photo" />
-            </dd>
-          </div>
-        ) : null}
-      </dl>
+      </div>
     </div>
   )
 }

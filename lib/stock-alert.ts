@@ -3,6 +3,7 @@ export type StockAlert = {
   itemId: string
   name: string
   quantity: string
+  unitOfMeasure: string | null
   reorderPoint: string | null
   kind: 'out' | 'limit'
 }

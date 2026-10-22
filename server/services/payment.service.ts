@@ -2,7 +2,9 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 
 import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
+import { isCollectionOverdue, overdueClock, partyFromContact } from '@/lib/invoice-overdue'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
+import { allocatePaymentToInvoices, sortInvoicesForAllocation } from '@/lib/payment-allocate'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { PaymentInput } from '@/lib/validation/sales'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
@@ -131,28 +133,90 @@ export async function get(ctx: OrgContext, id: string) {
   }
 }
 
-/** The invoices a payment could still be put against, oldest first. */
-export async function openInvoicesFor(ctx: OrgContext, customerId: string) {
-  const invoices = await db.salesDocument.findMany({
-    where: {
-      orgId: ctx.orgId,
-      customerId,
-      type: 'INVOICE',
-      status: { in: ['OPEN', 'PARTIAL'] },
-    },
-    select: { id: true, number: true, date: true, dueDate: true, total: true },
-    orderBy: { date: 'asc' },
-  })
+type AllocatableRow = {
+  id: string
+  number: string
+  date: Date
+  dueDate: Date | null
+  total: string
+  balance: string
+  overdue: boolean
+}
 
-  const balances = await outstandingBalances(db, invoices.map((invoice) => invoice.id))
+/** Open invoices for a customer, overdue first, then oldest remaining. */
+export async function openInvoicesFor(ctx: OrgContext, customerId: string, client: Tx | typeof db = db) {
+  return loadAllocatableInvoices(client, ctx, customerId)
+}
 
-  return invoices
-    .map((invoice) => ({
-      ...invoice,
-      total: invoice.total.toString(),
-      balance: toMoneyString(balances.get(invoice.id) ?? ZERO, 2),
-    }))
+async function loadAllocatableInvoices(
+  client: Tx | typeof db,
+  ctx: OrgContext,
+  customerId: string,
+): Promise<AllocatableRow[]> {
+  const [invoices, customer] = await Promise.all([
+    client.salesDocument.findMany({
+      where: {
+        orgId: ctx.orgId,
+        customerId,
+        type: 'INVOICE',
+        status: { in: ['OPEN', 'PARTIAL'] },
+      },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        dueDate: true,
+        promisedDate: true,
+        excludeFromOverdue: true,
+        total: true,
+        status: true,
+      },
+      orderBy: { date: 'asc' },
+    }),
+    client.customer.findFirst({
+      where: { id: customerId, orgId: ctx.orgId },
+      select: { balanceDate: true, agreementDate: true, balanceTime: true },
+    }),
+  ])
+
+  const balances = await outstandingBalances(client, invoices.map((invoice) => invoice.id))
+  const clock = overdueClock(ctx.organization.timeZone)
+  const party = partyFromContact(customer)
+
+  const rows = invoices
+    .map((invoice) => {
+      const balance = toMoneyString(balances.get(invoice.id) ?? ZERO, 2)
+      return {
+        id: invoice.id,
+        number: invoice.number,
+        date: invoice.date,
+        dueDate: invoice.dueDate,
+        total: invoice.total.toString(),
+        balance,
+        overdue: isCollectionOverdue(
+          {
+            status: invoice.status,
+            dueDate: invoice.dueDate,
+            promisedDate: invoice.promisedDate,
+            excludeFromOverdue: invoice.excludeFromOverdue,
+            date: invoice.date,
+            ...party,
+          },
+          clock.asOf,
+          clock,
+        ),
+      }
+    })
     .filter((invoice) => Number(invoice.balance) > 0)
+
+  return sortInvoicesForAllocation(rows)
+}
+
+function applicationsFromOpen(amount: Decimal, invoices: AllocatableRow[]) {
+  return allocatePaymentToInvoices(amount, invoices).map((row) => ({
+    invoiceId: row.invoiceId,
+    amount: new Decimal(row.amount),
+  }))
 }
 
 /**
@@ -196,18 +260,63 @@ export async function invoicesForEdit(ctx: OrgContext, paymentId: string) {
     })
   }
 
-  return [...byId.values()].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-  )
+  const extraIds = [...byId.keys()].filter((id) => !open.some((row) => row.id === id))
+  const extraOverdue = new Map<string, boolean>()
+  if (extraIds.length > 0) {
+    const [docs, customer] = await Promise.all([
+      db.salesDocument.findMany({
+        where: { id: { in: extraIds }, orgId: ctx.orgId },
+        select: {
+          id: true,
+          dueDate: true,
+          promisedDate: true,
+          excludeFromOverdue: true,
+          date: true,
+        },
+      }),
+      db.customer.findFirst({
+        where: { id: payment.customer.id, orgId: ctx.orgId },
+        select: { balanceDate: true, agreementDate: true, balanceTime: true },
+      }),
+    ])
+    const clock = overdueClock(ctx.organization.timeZone)
+    const party = partyFromContact(customer)
+    for (const doc of docs) {
+      extraOverdue.set(
+        doc.id,
+        isCollectionOverdue(
+          {
+            status: 'OPEN',
+            dueDate: doc.dueDate,
+            promisedDate: doc.promisedDate,
+            excludeFromOverdue: doc.excludeFromOverdue,
+            date: doc.date,
+            ...party,
+          },
+          clock.asOf,
+          clock,
+        ),
+      )
+    }
+  }
+
+  const rows = [...byId.values()].map((invoice) => {
+    const match = open.find((row) => row.id === invoice.id)
+    return {
+      ...invoice,
+      overdue: match?.overdue ?? extraOverdue.get(invoice.id) ?? false,
+    }
+  })
+  return sortInvoicesForAllocation(rows)
 }
 
 /**
  * Record money received.
  *
- * A payment is its own document, not a flag on an invoice. It may settle several
- * invoices, part of one, or none at all — unapplied cash stays on the balance
- * sheet as a customer credit, which is where it belongs until someone decides
- * what it was for.
+ * A payment is its own document, not a flag on an invoice. Entered applications
+ * are kept. When none are given, the amount settles overdue invoices first, then
+ * the oldest remaining ones. Leftover after every open invoice stays as a
+ * customer credit.
  */
 export async function create(ctx: OrgContext, input: PaymentInput) {
   const meta = await requestMeta()
@@ -232,9 +341,13 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
     }
 
     const amount = new Decimal(input.amount)
-    const applications = input.applications
+    let applications = input.applications
       .map((application) => ({ ...application, amount: new Decimal(application.amount) }))
       .filter((application) => application.amount.greaterThan(0))
+
+    if (applications.length === 0) {
+      applications = applicationsFromOpen(amount, await loadAllocatableInvoices(tx, ctx, customer.id))
+    }
 
     const appliedTotal = applications.reduce((sum, a) => sum.plus(a.amount), ZERO)
     if (appliedTotal.greaterThan(amount)) {
@@ -417,11 +530,11 @@ export async function update(ctx: OrgContext, id: string, input: PaymentInput) {
     }
 
     const amount = new Decimal(input.amount)
-    const applications = input.applications
+    let applications = input.applications
       .map((application) => ({ ...application, amount: new Decimal(application.amount) }))
       .filter((application) => application.amount.greaterThan(0))
 
-    const appliedTotal = applications.reduce((sum, a) => sum.plus(a.amount), ZERO)
+    let appliedTotal = applications.reduce((sum, a) => sum.plus(a.amount), ZERO)
     if (appliedTotal.greaterThan(amount)) {
       throw validation(
         `You are applying ${toMoneyString(appliedTotal, 2)} of a ${toMoneyString(amount, 2)} payment. ` +
@@ -449,6 +562,14 @@ export async function update(ctx: OrgContext, id: string, input: PaymentInput) {
 
     const previousInvoiceIds = existing.applications.map((application) => application.invoiceId)
     await tx.salesApplication.deleteMany({ where: { paymentId: id } })
+    for (const invoiceId of previousInvoiceIds) {
+      await refreshStatus(tx, invoiceId)
+    }
+
+    if (applications.length === 0) {
+      applications = applicationsFromOpen(amount, await loadAllocatableInvoices(tx, ctx, customer.id))
+      appliedTotal = applications.reduce((sum, a) => sum.plus(a.amount), ZERO)
+    }
 
     if (ledgerChanged && existing.journalId) {
       await reverseJournal(tx, ctx, existing.journalId, {

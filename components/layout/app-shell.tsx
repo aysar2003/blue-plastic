@@ -89,7 +89,6 @@ export async function AppShell({
       showCompanyReports={showCompanyReports}
       hiddenApps={hiddenApps}
       features={ctx.features}
-      canManageModules={ctx.permissions.has('org:update')}
       showCreatorBrand={ctx.features.showCreatorBrand}
       stockAlertsSlot={stockAlertsSlot}
       balanceAlertsSlot={balanceAlertsSlot}

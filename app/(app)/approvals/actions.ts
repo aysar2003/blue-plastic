@@ -31,6 +31,8 @@ export const decideApproval = action
   .handler(async (ctx, input) => {
     const result = await approvalService.decide(ctx, input)
     revalidatePath('/approvals')
+    revalidatePath('/approvals/approved')
+    revalidatePath('/approvals/workflows')
     revalidatePath('/sales', 'layout')
     revalidatePath('/purchases', 'layout')
     revalidatePath('/payments', 'layout')
@@ -56,11 +58,13 @@ export const createApprovalPolicy = action
       priority: z.coerce.number().int().min(1).max(9999).optional(),
       requireDifferentApprover: z.boolean().optional(),
       levels: z.coerce.number().int().min(1).max(3).optional(),
+      approverUserIds: z.array(z.string().min(1)).optional(),
     }),
   )
   .handler(async (ctx, input) => {
     const policy = await approvalService.createPolicy(ctx, input)
     revalidatePath('/approvals')
+    revalidatePath('/approvals/workflows')
     return policy
   })
 
@@ -77,11 +81,13 @@ export const updateApprovalPolicy = action
       priority: z.coerce.number().int().min(1).max(9999),
       requireDifferentApprover: z.boolean(),
       levels: z.coerce.number().int().min(1).max(3),
+      approverUserIds: z.array(z.string().min(1)).optional(),
     }),
   )
   .handler(async (ctx, input) => {
     const policy = await approvalService.updatePolicy(ctx, input)
     revalidatePath('/approvals')
+    revalidatePath('/approvals/workflows')
     return policy
   })
 
@@ -91,5 +97,21 @@ export const deleteApprovalPolicy = action
   .handler(async (ctx, input) => {
     const result = await approvalService.deletePolicy(ctx, input.id)
     revalidatePath('/approvals')
+    revalidatePath('/approvals/workflows')
+    return result
+  })
+
+export const installApprovalPack = action
+  .requires('org:update')
+  .input(
+    z.object({
+      packKey: z.enum(['standard', 'amount-bands']),
+    }),
+  )
+  .handler(async (ctx, input) => {
+    const result = await approvalService.installPack(ctx, input.packKey)
+    revalidatePath('/approvals')
+    revalidatePath('/approvals/approved')
+    revalidatePath('/approvals/workflows')
     return result
   })

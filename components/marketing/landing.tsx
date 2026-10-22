@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 
 import { AiDemoPlayer } from '@/components/marketing/ai-demo-player'
+import { PricingLeadForm } from '@/components/marketing/pricing-lead-form'
 import { ProductWordmark } from '@/components/marketing/product-wordmark'
 import { WebsiteShell } from '@/components/marketing/website-shell'
 import { AI_DEMO_VIDEOS } from '@/lib/ai-demo-videos'
@@ -125,6 +126,7 @@ export function Landing({
         <Hero enterHref={enterHref} enterLabel={enterLabel} />
         <Modules />
         <Workflow />
+        <Pricing signedIn={signedIn} />
         <Tutorials />
         <Contact contact={contact} />
         <SignInDoors signedIn={signedIn} />
@@ -152,6 +154,9 @@ function SiteHeader({
         <nav className="hidden items-center gap-7 text-[14px] font-medium text-muted-foreground md:flex">
           <a className="transition-colors hover:text-foreground" href="#modules">
             Modules
+          </a>
+          <a className="transition-colors hover:text-foreground" href="#pricing">
+            Pricing
           </a>
           <a className="transition-colors hover:text-foreground" href="#tutorials">
             How to use
@@ -409,6 +414,70 @@ function Workflow() {
             </li>
           ))}
         </ol>
+      </div>
+    </section>
+  )
+}
+
+function Pricing({ signedIn }: { signedIn: boolean }) {
+  return (
+    <section id="pricing" className="scroll-mt-20 border-t border-border py-20 sm:py-28">
+      <div className="mx-auto max-w-6xl px-5 sm:px-8">
+        <SectionHeading
+          eyebrow="For companies"
+          title="Start with a free trial. Keep the company when rent is set."
+          body="Every new company on SOM ERP gets 14 days to run the books. After the trial, the system owner extends rent and seats. No card required on this page."
+        />
+
+        <div className="mt-12 grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+            <article className="rounded-xl border border-primary/30 bg-card p-5 shadow-sm">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-success">
+                Free trial
+              </p>
+              <h3 className="mt-2 text-xl font-bold text-foreground">14 days</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Full company database — sales, purchases, inventory, POS, and reports. Staff
+                lose open access when the trial ends until rent is extended.
+              </p>
+              <ul className="mt-4 space-y-1.5 text-sm text-muted-foreground">
+                <li>· Separate books per company</li>
+                <li>· Invite your team</li>
+                <li>· Backup and restore</li>
+              </ul>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {!signedIn ? (
+                  <Link
+                    href={LOGIN_COMPANY}
+                    className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                  >
+                    Start free trial
+                  </Link>
+                ) : null}
+                <Link
+                  href={signedIn ? '/databases?create=1' : '/register'}
+                  className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-medium text-foreground hover:bg-secondary"
+                >
+                  {signedIn ? 'Create company' : 'Request a company'}
+                </Link>
+              </div>
+            </article>
+
+            <article className="rounded-xl border border-border bg-card/70 p-5">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                After trial
+              </p>
+              <h3 className="mt-2 text-xl font-bold text-foreground">Paid rent</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Agree seats, apps, and an end date with the system owner. Upload the signed
+                agreement on the company card. When the agreement ends, the company can be
+                removed cleanly.
+              </p>
+            </article>
+          </div>
+
+          <PricingLeadForm />
+        </div>
       </div>
     </section>
   )

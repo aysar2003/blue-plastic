@@ -90,8 +90,14 @@ export function CustomerActions({
   }
   const [isPending, startTransition] = useTransition()
   const links = useMemo(
-    () => customerContactMenu(customerId, { canInvoice, canPay, canReport }),
-    [customerId, canInvoice, canPay, canReport],
+    () =>
+      customerContactMenu(customerId, {
+        canInvoice,
+        canPay,
+        canReport,
+        linkedVendorId: contact?.linkedVendorId,
+      }),
+    [customerId, canInvoice, canPay, canReport, contact?.linkedVendorId],
   )
   const primary = links.find((action) => action.label === 'Create invoice') ?? links[0]
   const rest = links.filter((action) => action !== primary)

@@ -63,7 +63,7 @@ export function BillHome({
             What you owe vendors
           </h1>
           <p className="mt-1 max-w-md text-sm text-primary-foreground/80">
-            Unpaid stays on payables. Overdue uses the due date. Pay from Bill payments when you settle.
+            Unpaid stays on payables. Overdue uses the promise written when the vendor was registered (balance date and time). The bill due date stays for work due.
           </p>
         </div>
         {canCreate ? (

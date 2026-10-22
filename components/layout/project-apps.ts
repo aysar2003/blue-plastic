@@ -86,6 +86,55 @@ export const PROJECT_HUB_APPS: ProjectHubApp[] = [
     wash: '#FCE7F3',
     blurb: 'Vendor costs',
   },
+  {
+    key: 'reports',
+    label: 'Reports',
+    href: '/projects/reports',
+    icon: 'trending',
+    permission: 'report:read',
+    accent: '#7C2D12',
+    wash: '#FFEDD5',
+    blurb: 'Jobs and profit',
+  },
+]
+
+export const PROJECT_REPORT_APPS: ProjectHubApp[] = [
+  {
+    key: 'project-list',
+    label: 'Project List',
+    href: '/reports/project-list',
+    icon: 'clipboard',
+    accent: '#0369A1',
+    wash: '#E0F2FE',
+    blurb: 'Every job folder',
+  },
+  {
+    key: 'project-profitability',
+    label: 'Project Profitability',
+    href: '/reports/project-profitability',
+    icon: 'trending',
+    accent: '#0F766E',
+    wash: '#CCFBF1',
+    blurb: 'Income against cost',
+  },
+  {
+    key: 'sales-by-customer',
+    label: 'Sales by Customer Summary',
+    href: '/reports/sales-by-customer',
+    icon: 'users',
+    accent: '#0369A1',
+    wash: '#E0F2FE',
+    blurb: 'Who the jobs billed',
+  },
+  {
+    key: 'purchases-by-vendor',
+    label: 'Purchases by Vendor Summary',
+    href: '/reports/purchases-by-vendor',
+    icon: 'building',
+    accent: '#C2410C',
+    wash: '#FFEDD5',
+    blurb: 'What the jobs cost',
+  },
 ]
 
 export function projectAppsForPermissions(

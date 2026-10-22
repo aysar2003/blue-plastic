@@ -28,6 +28,7 @@ export default async function DatabasesPage({
   const pendingAppRequests = ctx.isSystemOwner ? await appAccessService.listPendingForOwner(ctx) : []
   const panel =
     params.create === '1' ? 'create' : params.import === '1' ? 'import' : null
+  const limitsOrgId = typeof params.limits === 'string' ? params.limits : null
 
   return (
     <div className="space-y-6">
@@ -47,7 +48,8 @@ export default async function DatabasesPage({
             System users
           </Link>
           {' — '}
-          every staff login across companies. Reset a work password; the old one is never shown.
+          every staff login across companies. Open a company card for that company’s users and
+          details.
         </p>
       ) : null}
       <DatabasesBoard
@@ -55,6 +57,7 @@ export default async function DatabasesPage({
         isSystemOwner={ctx.isSystemOwner}
         canConnect={ctx.canConnect}
         initialPanel={panel}
+        initialLimitsOrgId={limitsOrgId}
       />
     </div>
   )

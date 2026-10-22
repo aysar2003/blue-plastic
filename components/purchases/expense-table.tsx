@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ChevronDownIcon } from 'lucide-react'
 
+import { PackActions } from '@/components/data/pack-actions'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import {
@@ -17,16 +18,25 @@ import type { ExpenseRegisterRow } from '@/lib/expense-kinds'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 
+const PACK_SLUG: Record<string, string> = {
+  BILL: 'bills',
+  EXPENSE: 'expenses',
+  PURCHASE_ORDER: 'purchase-orders',
+  VENDOR_CREDIT: 'vendor-credits',
+}
+
 export function ExpenseTable({
   rows,
   currency,
   totals,
   canEdit,
+  listParams,
 }: {
   rows: ExpenseRegisterRow[]
   currency: string
   totals: { subtotal: string; tax: string; total: string }
   canEdit: boolean
+  listParams: Record<string, string | undefined>
 }) {
   const [selected, setSelected] = useState<string[]>([])
   const allOn = rows.length > 0 && selected.length === rows.length
@@ -59,7 +69,33 @@ export function ExpenseTable({
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
   }
 
+  const packable = rows.filter((row) => selected.includes(row.id) && row.kind in PACK_SLUG)
+  const slugs = new Set(packable.map((row) => PACK_SLUG[row.kind]))
+  const slug = slugs.size === 1 ? PACK_SLUG[packable[0]!.kind] : 'expenses'
+  const one = packable.length === 1 ? packable[0] : null
+
   return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2.5 print:hidden">
+        <PackActions
+          area="purchases"
+          slug={slug}
+          selectedIds={packable.map((row) => row.id)}
+          partyId={listParams.vendorId}
+          partyParam="vendorId"
+          listParams={listParams}
+          exportSlug={slug}
+          one={
+            one
+              ? {
+                  id: one.id,
+                  href: one.href,
+                  printHref: `/purchases/${PACK_SLUG[one.kind]}/${one.id}/print`,
+                }
+              : null
+          }
+        />
+      </div>
     <Table>
       <TableHeader>
         <TableRow>
@@ -146,5 +182,6 @@ export function ExpenseTable({
         </TableRow>
       </TableFooter>
     </Table>
+    </div>
   )
 }

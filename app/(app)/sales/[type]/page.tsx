@@ -1,28 +1,15 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { FileTextIcon, PlusIcon } from 'lucide-react'
+import { PlusIcon } from 'lucide-react'
 
-import { ClickableRow } from '@/components/data/clickable-row'
-import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
-import { Pagination } from '@/components/data/pagination'
-import { ScrollSheet } from '@/components/data/scroll-sheet'
-import { RowActions } from '@/components/data/row-actions'
-import { SearchInput } from '@/components/data/search-input'
-import { TableToolbar } from '@/components/data/table-toolbar'
-import { readSort, SortableHeader } from '@/components/data/sortable-header'
-import { FilterChips } from '@/components/data/filter-chips'
-import { EnteredByToggle } from '@/components/data/entered-by-toggle'
-import { EnteredByCell, EnteredByHead } from '@/components/data/recorded-by'
-import { Badge } from '@/components/ui/badge'
+import { readSort } from '@/components/data/sortable-header'
 import { buttonVariants } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatDate, formatTransactionDate, toCalendarDate, toDate, today } from '@/lib/date'
-import { DATE_PRESETS, isDatePreset, presetRange, readDatePreset } from '@/lib/list-filters'
+import { formatTransactionDate, toCalendarDate, toDate, today } from '@/lib/date'
+import { isCollectionOverdue, overdueClock, partyFromContact } from '@/lib/invoice-overdue'
+import { isDatePreset, presetRange, readDatePreset } from '@/lib/list-filters'
 import { formatMoney } from '@/lib/money'
-import { ConvertSalesDocumentActions } from '@/components/sales/document-actions'
 import { EstimateHome } from '@/components/sales/estimate-home'
 import { EstimateRegister } from '@/components/sales/estimate-register'
 import { InvoiceHome } from '@/components/sales/invoice-home'
@@ -31,8 +18,8 @@ import { ReceiptHome } from '@/components/sales/receipt-home'
 import { ReceiptRegister } from '@/components/sales/receipt-register'
 import { SalesOrderHome } from '@/components/sales/sales-order-home'
 import { SalesOrderRegister } from '@/components/sales/sales-order-register'
-import { bySlug, isProposal, isSalesOrder, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
-import { cn } from '@/lib/utils'
+import { SalesSheetRegister } from '@/components/sales/sales-sheet-register'
+import { bySlug, isProposal, isSalesOrder, STATUS_LABELS } from '@/lib/sales-types'
 import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
 import { trailsFor } from '@/server/services/audit.service'
@@ -158,7 +145,7 @@ export default async function SalesListPage({
         ? salesService.estimateHome(ctx, config.type as 'ESTIMATE' | 'QUOTATION')
         : Promise.resolve(null),
       isSalesOrder(config.type) ? salesService.salesOrderHome(ctx) : Promise.resolve(null),
-      dashboard ? salesService.customerChoices(ctx) : Promise.resolve([]),
+      salesService.customerChoices(ctx),
       (isSalesOrder(config.type) || isProposal(config.type)) &&
       ctx.permissions.has('invoice:create')
         ? loadDepositAccounts(ctx)
@@ -168,6 +155,7 @@ export default async function SalesListPage({
   const currency = ctx.organization.baseCurrency
   const timeZone = ctx.organization.timeZone
   const now = today(timeZone)
+  const clock = overdueClock(timeZone)
 
   const basePath = `/sales/${config.slug}`
   const customers = choices.map((customer) => ({ value: customer.id, label: customer.displayName }))
@@ -179,7 +167,6 @@ export default async function SalesListPage({
     sort: sort.sort,
     dir: sort.dir,
   }
-  const narrowed = Boolean(query.q || status || datePreset)
 
   const canCreate = ctx.permissions.has(config.createPermission)
   const canCreateInvoice = ctx.permissions.has('invoice:create')
@@ -240,13 +227,20 @@ export default async function SalesListPage({
             const due = row.dueDate ? toCalendarDate(row.dueDate) : null
             const promisedDate = row.promisedDate ? toCalendarDate(row.promisedDate) : null
             const open = row.status === 'OPEN' || row.status === 'PARTIAL'
-            const collectionDue = promisedDate ?? due
-            const overdue = Boolean(
-              open &&
-                !row.excludeFromOverdue &&
-                collectionDue &&
-                collectionDue < now,
+            const party = partyFromContact(row.customer)
+            const overdue = isCollectionOverdue(
+              {
+                status: row.status,
+                dueDate: due,
+                promisedDate,
+                excludeFromOverdue: row.excludeFromOverdue,
+                date: toCalendarDate(row.date),
+                ...party,
+              },
+              now,
+              clock,
             )
+            const collectionDue = promisedDate ?? party.partyBalanceDate ?? party.partyAgreementDate ?? due
             const days =
               overdue && collectionDue
                 ? Math.round((toDate(now).getTime() - toDate(collectionDue).getTime()) / 86_400_000)
@@ -264,7 +258,9 @@ export default async function SalesListPage({
               amount: formatMoney(row.total, currency),
               balance: formatMoney(row.balance, currency),
               statusText: overdue
-                ? `Overdue ${days} ${days === 1 ? 'day' : 'days'}`
+                ? days > 0
+                  ? `Overdue ${days} ${days === 1 ? 'day' : 'days'}`
+                  : 'Overdue'
                 : (STATUS_LABELS[row.status] ?? row.status),
               overdue,
               href: `${basePath}/${row.id}`,
@@ -436,145 +432,31 @@ export default async function SalesListPage({
         />
       ) : null}
 
-      {invoiceHome || receiptHome || estimateHome || orderHome ? null : <div className="mb-3 flex flex-col gap-2">
-        <FilterChips options={[...DATE_PRESETS]} active={datePreset} path={basePath} param="date" params={linkParams} />
-        {statusOptions ? (
-          <FilterChips options={statusOptions} active={status ?? ''} path={basePath} param="status" params={linkParams} />
-        ) : null}
-      </div>}
-
-      {invoiceHome || receiptHome || estimateHome || orderHome ? null : <>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <SearchInput placeholder="Search number, reference or customer" />
-        <EnteredByToggle />
-        <TableToolbar exportHref={`/api/exports/${config.slug}?${new URLSearchParams(
-          Object.entries(linkParams).filter((entry): entry is [string, string] => Boolean(entry[1])),
-        ).toString()}`} />
-      </div>
-
-      {page.total === 0 ? (
-        <EmptyState
-          icon={FileTextIcon}
-          title={narrowed ? `No ${config.plural.toLowerCase()} match` : `No ${config.plural.toLowerCase()} yet`}
-          description={narrowed ? 'Try a different search or filter.' : config.effect}
-          action={!narrowed ? newButton : undefined}
+      {invoiceHome || receiptHome || estimateHome || orderHome ? null : (
+        <SalesSheetRegister
+          customers={customers}
+          basePath={basePath}
+          params={linkParams}
+          sort={sort}
+          canCreate={canCreate}
+          singular={config.singular}
+          plural={config.plural}
+          exportSlug={config.slug}
+          rows={page.rows.map((row) => ({
+            id: row.id,
+            number: row.number,
+            date: formatTransactionDate(toCalendarDate(row.date), row.createdAt, timeZone),
+            customer: row.customer.displayName,
+            amount: formatMoney(row.total, currency),
+            status: row.status,
+            href: `${basePath}/${row.id}`,
+            editHref: canEditDocuments && row.status !== 'VOID' ? `${basePath}/${row.id}/edit` : null,
+            printHref: `${basePath}/${row.id}/print`,
+            canDelete,
+            trail: trails.get(row.id),
+          }))}
         />
-      ) : (
-        <Card className="overflow-hidden p-0">
-          <ScrollSheet>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableHeader column="number" label="Number" state={sort} basePath={basePath} params={linkParams} className="w-32" />
-                <SortableHeader column="date" label="Date" state={sort} basePath={basePath} params={linkParams} className="w-44" defaultDirection="desc" />
-                <SortableHeader column="customer" label="Customer" state={sort} basePath={basePath} params={linkParams} />
-                {config.type === 'INVOICE' ? (
-                  <SortableHeader column="dueDate" label="Due" state={sort} basePath={basePath} params={linkParams} className="w-28" />
-                ) : null}
-                <SortableHeader column="total" label="Total" state={sort} basePath={basePath} params={linkParams} className="w-32" numeric defaultDirection="desc" />
-                {config.type === 'INVOICE' ? (
-                  <TableHead className="numeric w-32">Outstanding</TableHead>
-                ) : null}
-                <SortableHeader column="status" label="Status" state={sort} basePath={basePath} params={linkParams} className="w-28" />
-                <EnteredByHead />
-                <TableHead className="w-10 print:hidden" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {page.rows.map((row) => {
-                const overdue =
-                  row.dueDate &&
-                  toCalendarDate(row.dueDate) < now &&
-                  (row.status === 'OPEN' || row.status === 'PARTIAL')
-
-                return (
-                  <ClickableRow
-                    key={row.id}
-                    href={`/sales/${config.slug}/${row.id}`}
-                    title={`Open ${config.singular.toLowerCase()} ${row.number}`}
-                  >
-                    <TableCell>
-                      <Link
-                        href={`/sales/${config.slug}/${row.id}`}
-                        className="tabular font-medium underline-offset-4 hover:underline"
-                      >
-                        {row.number}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                      {formatTransactionDate(toCalendarDate(row.date), row.createdAt, timeZone)}
-                    </TableCell>
-                    <TableCell>{row.customer.displayName}</TableCell>
-                    {config.type === 'INVOICE' ? (
-                      <TableCell
-                        className={cn(
-                          'tabular whitespace-nowrap',
-                          overdue ? 'font-medium text-destructive' : 'text-muted-foreground',
-                        )}
-                      >
-                        {row.dueDate ? formatDate(toCalendarDate(row.dueDate)) : '—'}
-                      </TableCell>
-                    ) : null}
-                    <TableCell className="numeric tabular">{formatMoney(row.total, currency)}</TableCell>
-                    {config.type === 'INVOICE' ? (
-                      <TableCell className="numeric tabular font-medium">
-                        {Number(row.balance) === 0 ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          formatMoney(row.balance, currency)
-                        )}
-                      </TableCell>
-                    ) : null}
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANTS[row.status] ?? 'secondary'}>
-                        {STATUS_LABELS[row.status] ?? row.status}
-                      </Badge>
-                    </TableCell>
-                    <EnteredByCell trail={trails.get(row.id)} />
-                    <TableCell className="print:hidden">
-                      <div className="flex items-center justify-end gap-1">
-                        {isProposal(config.type) &&
-                        canCreateInvoice &&
-                        !row.convertedTo &&
-                        row.status !== 'VOID' &&
-                        row.status !== 'DECLINED' &&
-                        row.status !== 'CLOSED' ? (
-                          <ConvertSalesDocumentActions
-                            id={row.id}
-                            number={row.number}
-                            sourceType={config.type as 'ESTIMATE' | 'QUOTATION'}
-                            today={convertToday}
-                            depositAccounts={depositAccounts}
-                            variant="outline"
-                            compact
-                          />
-                        ) : null}
-                        <RowActions
-                          actions={[
-                            { label: 'Open', href: `${basePath}/${row.id}`, icon: 'open' as const },
-                            ...(canEditDocuments && row.status !== 'VOID'
-                              ? [{ label: 'Edit', href: `${basePath}/${row.id}/edit`, icon: 'edit' as const }]
-                              : []),
-                            { label: 'Print', href: `${basePath}/${row.id}/print`, icon: 'print' as const },
-                          ]}
-                          onDelete={
-                            canDelete
-                              ? { kind: 'sales', id: row.id, number: row.number }
-                              : undefined
-                          }
-                        />
-                      </div>
-                    </TableCell>
-                  </ClickableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          </ScrollSheet>
-          <Pagination total={page.total} />
-        </Card>
       )}
-      </>}
     </>
   )
 }

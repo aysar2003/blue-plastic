@@ -366,6 +366,7 @@ export async function listAssemblies(ctx: OrgContext) {
       id: true,
       name: true,
       sku: true,
+      unitOfMeasure: true,
       inventoryAccountId: true,
       bomParents: {
         orderBy: { sortOrder: 'asc' },
@@ -378,6 +379,7 @@ export async function listAssemblies(ctx: OrgContext) {
               sku: true,
               type: true,
               isActive: true,
+              unitOfMeasure: true,
               inventoryAccountId: true,
             },
           },
@@ -411,6 +413,7 @@ export async function listAssemblies(ctx: OrgContext) {
           id: b.component.id,
           label: b.component.sku ? `${b.component.name} (${b.component.sku})` : b.component.name,
           quantity: b.quantity.toString(),
+          unitOfMeasure: b.component.unitOfMeasure,
           onHand: (position?.quantity ?? ZERO).toFixed(4),
           averageCost: (position?.averageCost ?? ZERO).toFixed(6),
           byStore: shelf.byItem[b.component.id] ?? {},
@@ -423,6 +426,7 @@ export async function listAssemblies(ctx: OrgContext) {
     return {
       id: row.id,
       label: row.sku ? `${row.name} (${row.sku})` : row.name,
+      unitOfMeasure: row.unitOfMeasure,
       onHand: (assemblyPos?.quantity ?? ZERO).toFixed(4),
       averageCost: (assemblyPos?.averageCost ?? ZERO).toFixed(6),
       estimatedCost: estimated.toFixed(6),

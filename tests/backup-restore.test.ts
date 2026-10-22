@@ -5,7 +5,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { permissionsFor } from '@/server/auth/permissions'
 import { db } from '@/server/db'
 import { DEFAULT_FEATURE_FLAGS } from '@/lib/feature-flags'
-import { allowCompanyWipe } from '@/server/company-wipe'
+import { wipeCompanyBooks } from '@/server/company-wipe'
 import { companyBackup } from '@/server/services/backup.service'
 import { replaceCompanyFromBackup } from '@/server/services/backup-restore.service'
 import { createDefaultSequences } from '@/server/sequences'
@@ -27,9 +27,7 @@ async function cleanup() {
   orgId = null
   try {
     await db.$transaction(async (tx) => {
-      await allowCompanyWipe(tx)
-      await tx.journal.updateMany({ where: { orgId: id }, data: { reversalOfId: null } })
-      await tx.ledgerAccount.updateMany({ where: { orgId: id }, data: { parentId: null } })
+      await wipeCompanyBooks(tx, id)
       await tx.organization.delete({ where: { id } })
     })
   } catch {

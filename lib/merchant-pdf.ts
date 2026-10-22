@@ -5,6 +5,7 @@
 
 import {
   DEFAULT_DOCUMENT_TEMPLATE,
+  DEFAULT_VENDOR_ACCENT,
   type DocumentTemplate,
 } from '@/lib/document-template'
 import { PDF_PAGE, type PdfRgb, type PdfRow, type PdfRun } from '@/lib/pdf-text'
@@ -34,8 +35,15 @@ export function accentWashRgb(accent: PdfRgb): PdfRgb {
   ] as const
 }
 
-export function merchantAccent(template?: DocumentTemplate | null): PdfRgb {
-  return hexToPdfRgb(template?.accent ?? DEFAULT_DOCUMENT_TEMPLATE.accent)
+export function merchantAccent(
+  template?: DocumentTemplate | null,
+  side: 'customer' | 'vendor' = 'customer',
+): PdfRgb {
+  const hex =
+    side === 'vendor'
+      ? template?.vendorAccent || DEFAULT_VENDOR_ACCENT
+      : template?.accent ?? DEFAULT_DOCUMENT_TEMPLATE.accent
+  return hexToPdfRgb(hex)
 }
 
 /**

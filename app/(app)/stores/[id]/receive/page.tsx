@@ -33,7 +33,7 @@ export default async function StoreReceivePage({ params }: { params: Promise<{ i
   })
   const rows = raw.map((row) => ({
     ...row,
-    receiveHref: `${row.receiveHref}?return=${encodeURIComponent(returnTo)}`,
+    receiveHref: `${row.receiveHref}?return=${encodeURIComponent(returnTo)}&store=${encodeURIComponent(id)}`,
   }))
   const currency = ctx.organization.baseCurrency
   const canReceive = ctx.permissions.has('bill:create')

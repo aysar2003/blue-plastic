@@ -35,9 +35,9 @@ export function BalanceAlerts({ alerts }: { alerts: BalanceAlert[] }) {
         ) : (
           <ul className="max-h-80 overflow-auto py-1">
             {alerts.map((alert) => (
-              <li key={alert.customerId}>
+              <li key={alert.id}>
                 <DropdownMenuItem asChild className="items-start px-3 py-2">
-                  <Link href={`/customers?id=${alert.customerId}`} className="flex flex-col gap-0.5">
+                  <Link href={alert.href} className="flex flex-col gap-0.5">
                     <span className="font-medium">{alert.name}</span>
                     <span className="text-xs text-muted-foreground">
                       {alert.kind === 'reached'

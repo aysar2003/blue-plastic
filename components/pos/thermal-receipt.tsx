@@ -34,6 +34,7 @@ export type ThermalReceiptData = {
     id: string
     name: string
     quantity: string
+    unitOfMeasure?: string | null
     unitPrice: string
     discountPercent: string | null
     amount: string
@@ -216,7 +217,9 @@ export function ThermalReceipt({
               <p style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{line.name}</p>
               <div className="flex justify-between gap-2">
                 <span>
-                  {trimQty(line.quantity)} x {money(line.unitPrice)}
+                  {trimQty(line.quantity)}
+                  {line.unitOfMeasure?.trim() ? ` ${line.unitOfMeasure.trim()}` : ' Pcs'} x{' '}
+                  {money(line.unitPrice)}
                   {line.discountPercent && Number(line.discountPercent) > 0
                     ? ` -${trimQty(line.discountPercent)}%`
                     : ''}

@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatDate, formatDateTime } from '@/lib/date'
+import { formatQty } from '@/lib/quantity'
 import { cn } from '@/lib/utils'
 import type { KeeperPickJob } from '@/server/services/inventory.service'
 
@@ -146,7 +147,9 @@ export function StoreKeeperPicks({
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="tabular text-sm font-semibold">{line.quantity}</span>
+                        <span className="tabular text-sm font-semibold">
+                          {formatQty(line.quantity, line.unitOfMeasure)}
+                        </span>
                         <Link
                           href={line.printHref}
                           className={buttonVariants({ variant: 'ghost', size: 'sm' })}

@@ -173,6 +173,9 @@ export function MyTemplatesPanel({
       const result = await updateDocumentTemplate({
         accent,
         terms: currentDocument.terms,
+        footerTitle: currentDocument.footerTitle,
+        footerNote: currentDocument.footerNote,
+        footerLayout: currentDocument.footerLayout,
         showClassicPaper: currentDocument.showClassicPaper,
         banks: currentDocument.banks,
       })
@@ -200,6 +203,9 @@ export function MyTemplatesPanel({
         const result = await updateDocumentTemplate({
           accent: item.document!.accent,
           terms: item.document!.terms,
+          footerTitle: item.document!.footerTitle,
+          footerNote: item.document!.footerNote,
+          footerLayout: item.document!.footerLayout,
           showClassicPaper: item.document!.showClassicPaper,
           banks: item.document!.banks,
         })

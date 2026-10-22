@@ -38,6 +38,22 @@ describe('company limits', () => {
     )
     expect(status.openBlocked).toBe(false)
     expect(status.rentNote).toBe('Monthly')
+    expect(status.onTrial).toBe(false)
+  })
+
+  it('marks free trial while rent note says trial', () => {
+    const status = companyLimitStatus(
+      {
+        accessRestricted: false,
+        rentExpiresAt: '2026-10-26T00:00:00.000Z',
+        maxUsers: null,
+        rentNote: 'Free trial',
+      },
+      new Date('2026-10-12T00:00:00.000Z'),
+    )
+    expect(status.onTrial).toBe(true)
+    expect(status.daysLeft).toBe(14)
+    expect(status.openBlocked).toBe(false)
   })
 
   it('detects seat cap', () => {

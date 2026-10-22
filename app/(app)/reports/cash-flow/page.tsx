@@ -5,6 +5,7 @@ import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 import { PageHeader } from '@/components/data/page-header'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { ClickableRow } from '@/components/reports/clickable-row'
+import { ReportEntityFilters } from '@/components/reports/report-entity-filters'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate } from '@/lib/date'
@@ -12,9 +13,13 @@ import { formatMoney, type Money } from '@/lib/money'
 import { REPORT_DRILL_LINK } from '@/lib/report-drill'
 import { requireOrgContext } from '@/server/auth/context'
 import { FigureChart, INCOME_COLOR, NET_COLOR } from '@/components/reports/figure-chart'
+import type { ReportFilterKind } from '@/server/reports/catalogue'
 import { cashFlow, type CashFlowLine } from '@/server/reports/statements'
+import { loadFilterOptions } from '../filter-options'
 import { ReportControls } from '../report-controls'
-import { readSettings, type SearchParams } from '../params'
+import { readEntityFilters, readSettings, type SearchParams } from '../params'
+
+const CF_FILTERS: ReportFilterKind[] = ['customer', 'vendor', 'item', 'account', 'store']
 
 export const metadata: Metadata = { title: 'Statement of Cash Flows' }
 
@@ -22,9 +27,16 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
   const ctx = await requireOrgContext('report:read')
   const query = await searchParams
   const settings = readSettings(query, ctx.organization)
+  const filters = readEntityFilters(query)
   const currency = ctx.organization.baseCurrency
+  const filtered = Boolean(
+    filters.customerId || filters.vendorId || filters.itemId || filters.accountId || filters.storeId,
+  )
 
-  const report = await cashFlow(ctx.orgId, settings.range)
+  const [report, filterOptions] = await Promise.all([
+    cashFlow(ctx.orgId, settings.range, { filters }),
+    loadFilterOptions(ctx.orgId, CF_FILTERS),
+  ])
   const detail = (accountId: string) =>
     `/reports/transaction-detail?account=${accountId}&period=custom&from=${settings.range.from}&to=${settings.range.to}&back=/reports/cash-flow`
   const profitAndLoss = `/reports/profit-loss?period=custom&from=${settings.range.from}&to=${settings.range.to}`
@@ -53,6 +65,14 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
         comparison={settings.comparison}
         controls={{ mode: 'range', exportAs: 'cash-flow' }}
       />
+
+      <ReportEntityFilters kinds={CF_FILTERS} values={filters} options={filterOptions} />
+      {filtered ? (
+        <p className="mb-3 text-sm text-muted-foreground">
+          Showing only journals that match the filters above — the cash-flow check may not
+          reconcile until filters are cleared.
+        </p>
+      ) : null}
 
       <div className="mb-4">
         <FigureChart

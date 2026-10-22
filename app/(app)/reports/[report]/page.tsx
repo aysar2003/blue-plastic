@@ -2,12 +2,15 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
+import { MemorizeReportButton } from '@/components/reports/memorize-report-button'
+import { ReportEntityFilters } from '@/components/reports/report-entity-filters'
 import { ReportTable } from '@/components/reports/report-table'
 import { formatDate } from '@/lib/date'
 import { PERIOD_LABELS } from '@/lib/report-periods'
 import { requireOrgContext } from '@/server/auth/context'
 import { tableReport, TABLE_REPORTS } from '@/server/reports/catalogue'
-import { readSettings, type SearchParams } from '../params'
+import { loadFilterOptions } from '../filter-options'
+import { readEntityFilters, readSettings, type SearchParams } from '../params'
 import { ReportControls } from '../report-controls'
 
 /**
@@ -44,8 +47,18 @@ export default async function TableReportPage({
   if (!definition) notFound()
 
   const ctx = await requireOrgContext('report:read')
-  const settings = readSettings(await searchParams, ctx.organization)
-  const table = await definition.build({ ctx, range: settings.range, asOf: settings.asOf })
+  const query = await searchParams
+  const settings = readSettings(query, ctx.organization)
+  const filters = readEntityFilters(query)
+  const table = await definition.build({
+    ctx,
+    range: settings.range,
+    asOf: settings.asOf,
+    filters,
+  })
+
+  const kinds = definition.filterKinds ?? []
+  const filterOptions = kinds.length > 0 ? await loadFilterOptions(ctx.orgId, kinds) : null
 
   return (
     <>
@@ -59,6 +72,7 @@ export default async function TableReportPage({
                 settings.range.to,
               )}${settings.period === 'custom' ? '' : ` — ${PERIOD_LABELS[settings.period]}`}.`
         }
+        actions={<MemorizeReportButton title={definition.title} />}
       />
 
       <ReportControls
@@ -70,6 +84,10 @@ export default async function TableReportPage({
         comparison={settings.comparison}
         controls={{ mode: definition.mode, exportAs: definition.key }}
       />
+
+      {filterOptions ? (
+        <ReportEntityFilters kinds={kinds} values={filters} options={filterOptions} />
+      ) : null}
 
       <ReportTable
         table={table}

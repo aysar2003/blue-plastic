@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ChevronDownIcon } from 'lucide-react'
 
 import { DeleteMenuItem } from '@/components/data/delete-record'
+import { PackActions, packLinks } from '@/components/data/pack-actions'
 import { EnteredByToggle } from '@/components/data/entered-by-toggle'
 import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { SearchInput } from '@/components/data/search-input'
@@ -76,6 +77,16 @@ export function SalesOrderRegister({
   const one = chosen.length === 1 ? chosen[0] : null
   const statusLabel = statusOptions.find((option) => option.value === status)?.label ?? 'All'
   const dateLabel = dateOptions.find((option) => option.value === date)?.label ?? 'All dates'
+  const pack = {
+    area: 'sales' as const,
+    slug: 'sales-orders',
+    selectedIds: selected,
+    partyId: params.customer,
+    listParams: params,
+    exportSlug: 'sales-orders',
+    one: one ? { id: one.id, href: one.href, printHref: one.printHref } : null,
+  }
+  const links = packLinks(pack)
 
   const toggleAll = () => setSelected(allOn ? [] : visible)
   const toggle = (id: string) =>
@@ -90,31 +101,38 @@ export function SalesOrderRegister({
             <ChevronDownIcon className="size-4 text-muted-foreground" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            {one ? (
+            {links.canPack ? (
               <DropdownMenuItem asChild>
-                <Link href={one.href}>View/Edit</Link>
+                <Link href={links.viewHref}>{one ? 'View/Edit' : 'View papers'}</Link>
               </DropdownMenuItem>
             ) : (
               <DropdownMenuItem disabled>View/Edit</DropdownMenuItem>
             )}
-            {one ? (
+            {links.canPack ? (
               <DropdownMenuItem asChild>
-                <Link href={one.printHref}>Print</Link>
+                <Link href={links.printHref}>Print</Link>
               </DropdownMenuItem>
             ) : (
               <DropdownMenuItem disabled>Print</DropdownMenuItem>
+            )}
+            {links.canPack ? (
+              <DropdownMenuItem asChild>
+                <Link href={links.pdfHref}>PDF</Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled>PDF</DropdownMenuItem>
             )}
             {one && one.canDelete ? (
               <DeleteMenuItem kind="sales" id={one.id} number={one.number} redirectTo={basePath} />
             ) : null}
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>
-              {chosen.length === 0
-                ? 'Select rows for batch actions'
-                : `${chosen.length} selected`}
+            <DropdownMenuItem asChild>
+              <Link href={links.excelHref}>Excel</Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <PackActions {...pack} />
 
         <DropdownMenu>
           <DropdownMenuTrigger className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm">

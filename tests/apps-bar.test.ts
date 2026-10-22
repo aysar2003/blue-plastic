@@ -31,10 +31,6 @@ vi.mock('next/link', () => ({
   }) => createElement('a', { href, title }, children),
 }))
 
-vi.mock('@/app/(app)/settings/(work)/organization/actions', () => ({
-  toggleModuleFlag: vi.fn(),
-}))
-
 const { ActiveAppLink, AppsBarToggle, useAppsBarHidden, APPS_BAR_STORAGE_KEY } = await import(
   '@/components/layout/apps-bar'
 )

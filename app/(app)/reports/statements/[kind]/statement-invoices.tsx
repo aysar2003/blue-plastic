@@ -3,13 +3,14 @@ import Link from 'next/link'
 
 import { InvoiceSheet, longDate, type InvoiceSheetOrganization, type SheetDocument } from '@/components/sales/invoice-sheet'
 import { MerchantInvoice } from '@/components/sales/merchant-invoice'
-import { SheetMarks } from '@/components/sales/sheet-marks'
-import { FORM_SHEET } from '@/lib/credit-brand'
-import { type DocumentTemplate } from '@/lib/document-template'
-import { toCalendarDate, type CalendarDate } from '@/lib/date'
-import { Decimal, formatMoney, ZERO } from '@/lib/money'
+import { accentWash, DEFAULT_DOCUMENT_TEMPLATE, paperAccent, type DocumentTemplate } from '@/lib/document-template'
+import { type CalendarDate } from '@/lib/date'
+import { letterheadOf } from '@/lib/letterhead'
+import { Decimal } from '@/lib/money'
 import { purchaseByType } from '@/lib/purchase-types'
 import { byType } from '@/lib/sales-types'
+
+import { SummaryTable, type SummaryRow } from './summary-table'
 
 /**
  * The two invoice papers, kept apart on purpose.
@@ -38,6 +39,7 @@ export function StatementInvoices({
   printedBy,
   subject = 'invoice',
   documentHref,
+  ledgerRows,
 }: {
   organization: InvoiceSheetOrganization
   baseCurrency: string
@@ -67,19 +69,18 @@ export function StatementInvoices({
   printedBy?: string
   /** Override the per-document open link (portal uses `/portal/invoices/:id`). */
   documentHref?: (document: SheetDocument) => string
+  /**
+   * Summary only. Every movement on the account — bill, payment, expense,
+   * journal — so the running balance starts at the brought forward and misses nothing.
+   */
+  ledgerRows?: SummaryRow[]
 }) {
-  const brand = FORM_SHEET.band
-  const brandAccent = FORM_SHEET.accent
-  const brandSoft = FORM_SHEET.wash
-  const money = (value: Decimal | string) => formatMoney(value, baseCurrency)
-  const totals = documents.reduce(
-    (sum, document) => ({
-      total: sum.total.plus(document.total),
-      paid: sum.paid.plus(document.amountApplied),
-      due: sum.due.plus(document.balance),
-    }),
-    { total: ZERO, paid: ZERO, due: ZERO },
+  const company = letterheadOf(organization)
+  const accent = paperAccent(
+    template ?? DEFAULT_DOCUMENT_TEMPLATE,
+    subject === 'bill' ? 'vendor' : 'customer',
   )
+  const wash = accentWash(accent)
   const period = allDates ? 'All dates' : `${longDate(from)} – ${longDate(to)}`
 
   const noun =
@@ -102,97 +103,63 @@ export function StatementInvoices({
       </p>
 
       {part === 'summary' ? (
-      <article className="invoice-sheet relative min-h-[920px] overflow-hidden bg-white text-[#1f1f23] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:min-h-0 print:shadow-none">
-        <div className="px-8 py-4 text-white sm:px-12" style={{ background: brand }}>
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-white/80">{noun.title}</p>
-          <h1 className="text-xl font-semibold tracking-wide sm:text-2xl">
-            {organization.legalName ?? organization.name}
+      <article className="invoice-sheet merchant-invoice relative overflow-hidden bg-white text-[13px] text-[#1f2933] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:shadow-none">
+        <div className="flex items-start justify-between gap-6 px-8 pb-4 pt-6">
+          <h1 className="text-3xl font-black tracking-tight" style={{ color: accent }}>
+            {company.name}
           </h1>
+          <div className="text-right text-[11px] leading-5 text-[#3d4c5c]">
+            {company.phone ? <p>TEL: {company.phone}</p> : null}
+            {company.email ? <p>EMAIL: {company.email}</p> : null}
+            {company.address ? <p>ADDR: {company.address}</p> : null}
+          </div>
         </div>
-        <SheetMarks />
-
-        <div className="relative px-8 pb-24 pt-10 sm:px-12">
-          <div className="flex justify-end">
-            <div className="max-w-md text-right">
-              <p className="text-xl font-bold uppercase tracking-[0.18em]" style={{ color: brandAccent }}>
-                {noun.summary}
-              </p>
-              <p className="mt-1 text-sm text-[#5C6B7A]">{period}</p>
-              {caption ? <p className="text-sm text-[#5C6B7A]">{caption}</p> : null}
-            </div>
-          </div>
-
-          <dl className="mt-10 grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-            <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
+        <div className="grid gap-6 px-8 sm:grid-cols-[minmax(0,1fr)_16rem]">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>
               {noun.party}
-            </dt>
-            <dd className="text-[#5C6B7A]">
-              <span className="text-[#3d4c5c]">{customer.displayName}</span>
-              {customer.companyName && customer.companyName !== customer.displayName ? (
-                <span className="mt-0.5 block">{customer.companyName}</span>
-              ) : null}
-              {customer.address.map((line) => (
-                <span key={line} className="block">
-                  {line}
-                </span>
-              ))}
-              {customer.email ? <span className="block">{customer.email}</span> : null}
-            </dd>
-            <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
-              {noun.title}
-            </dt>
-            <dd className="text-[#5C6B7A]">{documents.length}</dd>
-          </dl>
-
-          <div className="mt-8">
-            <div
-              className="grid grid-cols-[6.5rem_minmax(0,1fr)_6.5rem_6.5rem_6.5rem_6.5rem] px-2 py-2 text-[13px] font-medium text-white"
-              style={{ background: brand }}
-            >
-              <span>Date</span>
-              <span>{noun.column}</span>
-              <span>Due</span>
-              <span className="text-right">Debit</span>
-              <span className="text-right">Credit</span>
-              <span className="text-right">Balance</span>
-            </div>
-            {documents.map((document, index) => (
-              <div
-                key={document.id}
-                className="grid min-h-8 grid-cols-[6.5rem_minmax(0,1fr)_6.5rem_6.5rem_6.5rem_6.5rem] items-center px-2 py-1 text-[13px] text-[#3d4c5c]"
-                style={{ background: index % 2 === 0 ? '#ffffff' : brandSoft }}
-              >
-                <span className="tabular">{shortDate(toCalendarDate(document.date))}</span>
-                <span className="truncate pr-2">
-                  <a href={`#invoice-${document.id}`} className="underline-offset-4 hover:underline print:no-underline">
-                    {document.number}
-                  </a>
-                </span>
-                <span className="tabular">{document.dueDate ? shortDate(toCalendarDate(document.dueDate)) : '—'}</span>
-                <span className="tabular text-right">{money(document.total)}</span>
-                <span className="tabular text-right">{money(document.amountApplied)}</span>
-                <span className="tabular text-right font-medium" style={{ color: brandAccent }}>
-                  {money(document.balance)}
-                </span>
-              </div>
+            </p>
+            <p className="mt-1 text-sm font-semibold">{customer.displayName}</p>
+            {customer.companyName && customer.companyName !== customer.displayName ? (
+              <p className="text-[12px] text-[#3d4c5c]">{customer.companyName}</p>
+            ) : null}
+            {customer.address.map((line) => (
+              <p key={line} className="text-[12px] text-[#3d4c5c]">{line}</p>
             ))}
-            <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_6.5rem_6.5rem_6.5rem_6.5rem] border-t-2 px-2 py-2 text-[13px] font-bold" style={{ borderColor: brandAccent, color: brandAccent }}>
-              <span />
-              <span>Total</span>
-              <span />
-              <span className="tabular text-right">{money(totals.total)}</span>
-              <span className="tabular text-right">{money(totals.paid)}</span>
-              <span className="tabular text-right">{money(totals.due)}</span>
-            </div>
+            <p className="mt-3 text-[12px] leading-relaxed text-[#3d4c5c]">
+              {noun.summary}. {period}. {count}. Debit adds the amount. Credit is what was paid, and it comes off the current balance.
+            </p>
+            {caption ? <p className="mt-2 text-[12px] text-[#5C6B7A]">{caption}</p> : null}
           </div>
-
-          <dl className="ml-auto mt-6 w-72 space-y-1.5 text-sm text-[#5C6B7A]">
-            <div className="flex items-baseline justify-between gap-6 border-t border-border pt-2 font-bold" style={{ color: brandAccent }}>
-              <dt>Account balance at {shortDate(to)}</dt>
-              <dd className="tabular">{money(closing)}</dd>
-            </div>
-            <p className="text-xs">Everything owed on the account, including anything outside this period.</p>
-          </dl>
+          <div className="text-right">
+            <p className="text-lg font-black tracking-wide" style={{ color: accent }}>
+              {noun.summary.toUpperCase()}
+            </p>
+            <p className="mt-1 text-[12px] text-[#3d4c5c]">{period}</p>
+          </div>
+        </div>
+        <div className="px-8 pb-8">
+          <SummaryTable
+            rows={
+              ledgerRows ??
+              documents.map((document) => ({
+                id: document.id,
+                number: document.number,
+                date: document.date.toISOString(),
+                dueDate: document.dueDate ? document.dueDate.toISOString() : null,
+                amount: document.total.toString(),
+                debit: document.total.toString(),
+                credit: document.amountApplied.toString(),
+              }))
+            }
+            currency={baseCurrency}
+            accent={accent}
+            wash={wash}
+            numberLabel={noun.column}
+            closing={closing.toString()}
+            opening={opening?.toString() ?? '0'}
+            asOf={to}
+          />
         </div>
       </article>
       ) : null}
@@ -257,11 +224,5 @@ export function StatementInvoices({
       })
         : null}
     </div>
-  )
-}
-
-function shortDate(iso: string): string {
-  return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' }).format(
-    new Date(`${iso}T00:00:00Z`),
   )
 }

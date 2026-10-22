@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { DocumentActions } from '@/components/print/document-actions'
 import { DocumentBarcode } from '@/components/print/document-barcode'
 import { formatDate, formatDateTime, toCalendarDate } from '@/lib/date'
-import { Decimal } from '@/lib/money'
+import { formatQty } from '@/lib/quantity'
 import { requireOrgContext } from '@/server/auth/context'
 import * as organizationService from '@/server/services/organization.service'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
@@ -28,7 +28,7 @@ export default async function PrintStoreTicketPage({
   ])
   if (!ticket) notFound()
 
-  const qty = new Decimal(ticket.quantity.toString()).toFixed(2)
+  const qty = formatQty(ticket.quantity.toString(), ticket.item.unitOfMeasure)
   const date = toCalendarDate(ticket.date)
   const issued = formatDateTime(ticket.createdAt, organization.timeZone)
   const originLabel =

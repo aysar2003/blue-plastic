@@ -92,7 +92,7 @@ describe('statement opening period', () => {
 describe('invoice by invoice', () => {
   it('reads the view from the URL and keeps unknown views on the grouped statement', () => {
     expect(readStatementFilter({ view: 'invoices' }).view).toBe('invoices')
-    expect(readStatementFilter({ view: 'nonsense' }).view).toBe('regular')
+    expect(readStatementFilter({ view: 'nonsense' }).view).toBe('detail')
   })
 
   it('prints only invoices, still narrowed by the balance filter', () => {
@@ -153,7 +153,7 @@ describe('invoice by invoice', () => {
     expect(html).toContain('Invoice summary')
     expect(html).toContain('>Debit<')
     expect(html).toContain('>Credit<')
-    expect(html).toContain('>Balance<')
+    expect(html).toContain('>Current balance<')
     expect(html).not.toContain('>Paid<')
     expect(html).not.toContain('data-invoice-page')
     expect(html.match(/class="invoice-sheet /g)).toHaveLength(1)
@@ -167,10 +167,13 @@ describe('invoice by invoice', () => {
     const billHtml = renderToStaticMarkup(
       createElement(StatementInvoices, { ...paper, documents, part: 'summary', subject: 'bill' }),
     )
-    expect(invoiceHtml).toContain('var(--primary)')
-    expect(billHtml).toContain('var(--primary)')
+    expect(invoiceHtml).toContain('#1eb8ae')
+    expect(billHtml).toContain('#0e7490')
     expect(billHtml).toContain('Bill summary')
     expect(invoiceHtml).toContain('Invoice summary')
+    expect(invoiceHtml).toContain('>Amount<')
+    expect(invoiceHtml).toContain('>Total<')
+    expect(billHtml).toContain('>Current balance<')
   })
 
   it('prints every invoice on the single-invoice sheet, each on its own page, with no summary', () => {

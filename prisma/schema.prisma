@@ -598,14 +598,64 @@ model Organization {
   posSessions       PosSession[]
   posOrders         PosOrder[]
   approvalPolicies  ApprovalPolicy[]
+  approvalPolicyApprovers ApprovalPolicyApprover[]
   approvalRequests  ApprovalRequest[]
   projects            Project[]
   projectTasks        ProjectTask[]
   appAccessRequests   AppAccessRequest[]
   recurringTemplates  RecurringTemplate[]
+  companyAgreements   CompanyAgreement[]
+  budgets             Budget[]
 
   @@index([parentOrgId])
   @@map("organizations")
+}
+
+enum CompanyAgreementStatus {
+  DRAFT
+  ACTIVE
+  ENDED
+}
+
+/// Contract / rent agreement papers for a company database (system owner desk).
+model CompanyAgreement {
+  id     String @id @default(cuid())
+  orgId  String
+
+  title  String
+  status CompanyAgreementStatus @default(DRAFT)
+  startsOn DateTime? @db.Date
+  endsOn   DateTime? @db.Date
+  notes    String?
+
+  originalName String?
+  contentType  String?
+  byteSize     Int?
+  /// Path under uploads/. Never a public URL.
+  storageKey   String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status])
+  @@map("company_agreements")
+}
+
+/// Public website lead (Pricing / contact form). System owner follows up.
+model MarketingLead {
+  id          String   @id @default(cuid())
+  name        String
+  email       String
+  phone       String?
+  companyName String?
+  message     String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@map("marketing_leads")
 }
 
 // ---------------------------------------------------------------------------
@@ -645,6 +695,7 @@ model User {
   customerPortalUsers CustomerPortalUser[]
   approvalRequestsSubmitted ApprovalRequest[]  @relation("ApprovalSubmittedBy")
   approvalDecisions         ApprovalDecision[] @relation("ApprovalDecidedBy")
+  approvalPoliciesAssigned  ApprovalPolicyApprover[]
   projectsCreated           Project[]          @relation("ProjectCreatedBy")
   projectTasksCreated       ProjectTask[]      @relation("ProjectTaskCreatedBy")
   projectTasksAssigned      ProjectTask[]      @relation("ProjectTaskAssignee")
@@ -924,6 +975,7 @@ model LedgerAccount {
   posChangeOrders   PosOrder[]            @relation("PosChangeAccount")
   posOrderDeposits  PosOrder[]            @relation("PosOrderDeposit")
   posCashMoveCounterparties PosCashMovement[] @relation("PosCashMoveCounterparty")
+  budgetLines               BudgetLine[]
 
   @@unique([orgId, code])
   @@unique([orgId, systemKey])
@@ -1133,6 +1185,8 @@ model JournalLine {
   @@unique([journalId, lineNumber])
   /// The index the general ledger, trial balance and every report leans on.
   @@index([orgId, accountId, journalDate, id])
+  /// Date-range statements (P&L, cash flow) filter by org + date without an account.
+  @@index([orgId, journalDate])
   @@index([journalId])
   @@index([orgId, customerId])
   @@index([orgId, vendorId])
@@ -1246,6 +1300,11 @@ model Customer {
   portalUsers  CustomerPortalUser[]
   projects     Project[]
 
+  /// Same trading party on the purchase side (e.g. Mall Group as customer and supplier).
+  /// One customer ↔ one vendor. Cleared if the vendor is removed.
+  linkedVendorId String? @unique
+  linkedVendor   Vendor?  @relation("CustomerVendorLink", fields: [linkedVendorId], references: [id], onDelete: SetNull)
+
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
   @@unique([id, orgId])
@@ -1329,6 +1388,15 @@ model Vendor {
   notes    String?
   isActive Boolean @default(true)
 
+  /// The day the payable was agreed. Overdue reads this when no balance date was written.
+  agreementDate DateTime? @db.Date
+  /// The day the vendor balance falls due. Kept so overdue can find the registration promise.
+  balanceDate   DateTime? @db.Date
+  /// Clock time of the balance, as entered on the registration form.
+  balanceTime   String?
+  /// How many days before the balance time the warning appears. 3, 5, or 7.
+  reminderDays  Int?      @db.SmallInt
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -1341,6 +1409,8 @@ model Vendor {
   importedLines         ImportedTransaction[]
   bankRules             BankRule[]
   calendarEvents        CalendarEvent[]
+  /// Reverse of Customer.linkedVendorId — same party as a customer.
+  linkedCustomer        Customer? @relation("CustomerVendorLink")
 
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
@@ -2015,6 +2085,12 @@ model SalesDocument {
   reference       String?
   memo            String?
   customerMessage String?
+  /// Nature / section of work on a quotation or estimate (e.g. foundation works
+  /// on a construction job). Printed with the customer name so each priced part
+  /// of a project is labeled clearly.
+  workScope       String?
+  /// Place the work is done. Printed below Sales person on the quotation paper.
+  workSite        String?
 
   subtotal Decimal @default(0) @db.Decimal(19, 4)
   discountAmount Decimal @default(0) @db.Decimal(19, 4)
@@ -3125,6 +3201,43 @@ model WorkspaceBookmark {
   @@map("workspace_bookmarks")
 }
 
+/// Named budget covering a date range (QBD-style Budget vs Actual).
+model Budget {
+  id    String @id @default(cuid())
+  orgId String
+
+  name      String
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  notes     String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  lines        BudgetLine[]
+
+  @@index([orgId, startDate, endDate])
+  @@map("budgets")
+}
+
+model BudgetLine {
+  id       String @id @default(cuid())
+  orgId    String
+  budgetId String
+  accountId String
+
+  /// Planned amount for this account over the budget's date range.
+  amount Decimal @db.Decimal(19, 4)
+
+  budget  Budget        @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  account LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([budgetId, accountId])
+  @@index([orgId, budgetId])
+  @@map("budget_lines")
+}
+
 /// When a bank description contains this text, suggest this payee and category.
 model BankRule {
   id    String @id @default(cuid())
@@ -3194,16 +3307,41 @@ model ApprovalPolicy {
   requireDifferentApprover Boolean @default(true)
   /// Sequential approval steps (1 = classic maker-checker, 2–3 = escalation).
   levels Int @default(1) @db.SmallInt
+  /// READY = installed from a pack (Odoo / QBO style). CUSTOM = built here.
+  source   String  @default("CUSTOM")
+  /// Pack key when source is READY, e.g. "standard" or "amount-bands".
+  packKey  String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  organization Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  approvers    ApprovalPolicyApprover[]
+  requests     ApprovalRequest[]
 
   @@index([orgId, entityType, enabled, priority])
   @@index([orgId, entityType, documentKind])
   @@index([orgId, enabled])
   @@map("approval_policies")
+}
+
+/// People allowed to decide a workflow. Empty list = anyone with the Approve permission.
+model ApprovalPolicyApprover {
+  id       String @id @default(cuid())
+  orgId    String
+  policyId String
+  userId   String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  policy       ApprovalPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, userId])
+  @@index([orgId])
+  @@index([userId])
+  @@map("approval_policy_approvers")
 }
 
 /// One submit → approve/reject cycle for a document or master record.
@@ -3222,6 +3360,8 @@ model ApprovalRequest {
   currentLevel Int                 @default(1) @db.SmallInt
   requiredLevels Int               @default(1) @db.SmallInt
   note       String?
+  /// Workflow that gated this document. Null on older rows or after the rule was deleted.
+  policyId   String?
 
   submittedById String
   submittedAt   DateTime @default(now()) @db.Timestamptz(6)
@@ -3232,11 +3372,13 @@ model ApprovalRequest {
 
   organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   submittedBy  User               @relation("ApprovalSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  policy       ApprovalPolicy?    @relation(fields: [policyId], references: [id], onDelete: SetNull)
   decisions    ApprovalDecision[]
 
   @@index([orgId, status, submittedAt])
   @@index([orgId, entityType, entityId])
   @@index([submittedById])
+  @@index([policyId])
   @@map("approval_requests")
 }
 

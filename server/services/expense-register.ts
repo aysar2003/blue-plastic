@@ -46,6 +46,7 @@ export async function expenseRegister(
     from?: CalendarDate
     to?: CalendarDate
     q?: string
+    vendorId?: string
   } = {},
 ): Promise<ExpenseRegister> {
   const kinds = options.kind ? [options.kind] : [...DOCUMENT_KINDS, 'BILL_PAYMENT' as const]
@@ -70,6 +71,7 @@ export async function expenseRegister(
             type: { in: documentTypes },
             ...(statuses ? { status: { in: statuses } } : {}),
             ...(date ? { date } : {}),
+            ...(options.vendorId ? { vendorId: options.vendorId } : {}),
             ...(q
               ? {
                   OR: [
@@ -101,6 +103,7 @@ export async function expenseRegister(
             orgId: ctx.orgId,
             ...(statuses ? { status: { in: statuses } } : {}),
             ...(date ? { date } : {}),
+            ...(options.vendorId ? { vendorId: options.vendorId } : {}),
             ...(q
               ? {
                   OR: [

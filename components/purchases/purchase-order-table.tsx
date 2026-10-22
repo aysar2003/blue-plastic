@@ -1,10 +1,11 @@
 'use client'
 
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import Link from 'next/link'
 import { ChevronDownIcon } from 'lucide-react'
 
 import { ColumnBand } from '@/components/data/column-band'
+import { PackActions } from '@/components/data/pack-actions'
 import { TableColumnCustomize } from '@/components/data/table-column-customize'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
@@ -84,11 +85,13 @@ export function PurchaseOrderTable({
   currency,
   canEdit,
   canReceive,
+  listParams,
 }: {
   rows: PurchaseOrderBoardRow[]
   currency: string
   canEdit: boolean
   canReceive: boolean
+  listParams: Record<string, string | undefined>
 }) {
   const { prefs, visible, toggle, reorder } = useTableColumnPrefs('bpc.poColumns', COLUMNS, PO_DEFAULT_HIDDEN)
   const shown = new Set(visible.map((column) => column.id as ColumnId))
@@ -96,16 +99,50 @@ export function PurchaseOrderTable({
     COLUMNS.filter((column) => shown.has(column.id)),
     PO_MAIN_IDS,
   )
-  const span = mainColumns.length + 1
+  const span = mainColumns.length + 2
+  const [selected, setSelected] = useState<string[]>([])
+  const ids = rows.map((row) => row.id)
+  const allOn = ids.length > 0 && ids.every((id) => selected.includes(id))
+  const chosen = rows.filter((row) => selected.includes(row.id))
+  const one = chosen.length === 1 ? chosen[0] : null
+  const toggleRow = (id: string) =>
+    setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
 
   return (
     <div>
-      <div className="mb-3 flex justify-end print:hidden">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 print:hidden">
+        <PackActions
+          area="purchases"
+          slug="purchase-orders"
+          selectedIds={selected}
+          partyId={listParams.vendorId}
+          partyParam="vendorId"
+          listParams={listParams}
+          exportSlug="purchase-orders"
+          one={
+            one
+              ? {
+                  id: one.id,
+                  href: `/purchases/purchase-orders/${one.id}`,
+                  printHref: `/purchases/purchase-orders/${one.id}/print`,
+                }
+              : null
+          }
+        />
         <TableColumnCustomize columns={COLUMNS} prefs={prefs} onToggle={toggle} onReorder={reorder} />
       </div>
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-10 print:hidden">
+              <input
+                type="checkbox"
+                aria-label="Select all"
+                checked={allOn}
+                onChange={() => setSelected(allOn ? [] : ids)}
+                className="size-3.5 accent-[#2ca01c]"
+              />
+            </TableHead>
             {mainColumns.map((column) => (
               <TableHead key={column.id} className={NUMERIC.has(column.id) ? 'numeric' : undefined}>
                 {column.label}
@@ -155,7 +192,16 @@ export function PurchaseOrderTable({
             const receivable = canReceive && row.status !== 'VOID' && row.status !== 'DRAFT' && row.status !== 'CLOSED'
             return (
               <Fragment key={row.id}>
-              <TableRow className={extraColumns.length > 0 ? 'border-b-0' : undefined}>
+              <TableRow className={extraColumns.length > 0 ? 'border-b-0' : undefined} data-state={selected.includes(row.id) ? 'selected' : undefined}>
+                <TableCell className="print:hidden">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${row.number}`}
+                    checked={selected.includes(row.id)}
+                    onChange={() => toggleRow(row.id)}
+                    className="size-3.5 accent-[#2ca01c]"
+                  />
+                </TableCell>
                 {mainColumns.map((column) => (
                   <TableCell
                     key={column.id}

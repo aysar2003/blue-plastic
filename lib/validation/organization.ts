@@ -98,12 +98,16 @@ export function documentKindsFromFeaturesInput(
 
 const bankLine = z.object({
   name: optionalText(80),
-  account: optionalText(40),
+  account: optionalText(64),
 })
 
 export const documentTemplateSchema = z.object({
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Choose a colour'),
+  vendorAccent: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Choose a colour').optional(),
   terms: optionalText(2000),
+  footerTitle: optionalText(80),
+  footerNote: optionalText(2000),
+  footerLayout: z.enum(['side', 'bottom', 'band']).default('side'),
   showClassicPaper: boolFlag.default(false),
   banks: z.array(bankLine).max(6).default([]),
 })

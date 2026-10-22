@@ -13,6 +13,7 @@ describe('report sheet templates (row density)', () => {
       'standard',
       'compact',
       'plain',
+      'lined',
     ])
   })
 
@@ -24,6 +25,7 @@ describe('report sheet templates (row density)', () => {
     expect(parseReportSheetTemplate('compact')).toBe('compact')
     expect(parseReportSheetTemplate('plain')).toBe('plain')
     expect(parseReportSheetTemplate('standard')).toBe('standard')
+    expect(parseReportSheetTemplate('lined')).toBe('lined')
     expect(parseReportSheetTemplate(null)).toBe(DEFAULT_REPORT_SHEET_TEMPLATE)
     expect(parseReportSheetTemplate(undefined)).toBe(DEFAULT_REPORT_SHEET_TEMPLATE)
     expect(parseReportSheetTemplate('nope')).toBe(DEFAULT_REPORT_SHEET_TEMPLATE)

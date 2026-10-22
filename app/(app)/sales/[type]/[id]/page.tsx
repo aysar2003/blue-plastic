@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { PencilIcon } from 'lucide-react'
 
+import { ApprovalTrailPanel } from '@/components/approvals/approval-trail-panel'
 import { DocumentAttachments } from '@/components/data/document-attachments'
 import { DocumentHistory } from '@/components/data/document-history'
 import { PageHeader } from '@/components/data/page-header'
@@ -317,6 +318,7 @@ export default async function SalesDocumentPage({
         </p>
       )}
 
+      <ApprovalTrailPanel entityType="SALES_DOCUMENT" entityId={document.id} />
       <DocumentHistory events={history} timeZone={ctx.organization.timeZone} />
     </>
   )

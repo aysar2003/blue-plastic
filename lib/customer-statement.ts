@@ -113,7 +113,9 @@ export function readStatementFilter(
   const status = one(query.status)
   const totals = one(query.totals)
   return {
-    view: (STATEMENT_VIEWS as readonly string[]).includes(view ?? '') ? (view as StatementView) : 'regular',
+    // Itemised "Statement" is the default so expenses, bills and invoices show
+    // qty / price / amount lines and open the document — not a bare journal row.
+    view: (STATEMENT_VIEWS as readonly string[]).includes(view ?? '') ? (view as StatementView) : 'detail',
     type: (STATEMENT_TYPES as readonly string[]).includes(type ?? '')
       ? (type as StatementType)
       : 'all',

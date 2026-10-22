@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation'
 import { InteractiveGrid } from '@/components/data/interactive-grid'
 import { PageHeader } from '@/components/data/page-header'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
+import { LinkedPartyCard } from '@/components/contacts/linked-party-card'
 import { StatementFilters } from '@/components/reports/statement-filters'
 import { StatementSend } from '@/components/reports/statement-send'
 import { buttonVariants } from '@/components/ui/button'
@@ -27,6 +28,7 @@ import { requireOrgContext } from '@/server/auth/context'
 import { generalLedger } from '@/server/accounting/balances'
 import { resolveSources, sourceFor } from '@/server/services/journal-sources'
 import { db } from '@/server/db'
+import * as contactService from '@/server/services/contact.service'
 import * as payables from '@/server/services/payables.service'
 import * as receivables from '@/server/services/receivables.service'
 import * as accountService from '@/server/services/account.service'
@@ -38,6 +40,7 @@ import { ReportControls } from '../../report-controls'
 import { CustomerStatement, forwardBalances, statementEmailBody } from './customer-statement'
 import { StatementInvoices } from './statement-invoices'
 import { StatementPicker } from './statement-picker'
+import { SummaryToolbar } from './summary-table'
 
 /**
  * Statements.
@@ -203,7 +206,12 @@ export default async function StatementPage({
 
   const controls = (
     <>
-      <StatementKindSwitch kind={kind as Kind} query={query} />
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 print:hidden">
+        <StatementKindSwitch kind={kind as Kind} query={query} />
+        {customerFilter?.view === 'summary' || vendorFilter?.view === 'summary' ? (
+          <SummaryToolbar numberLabel={kind === 'vendor' ? 'Bill' : 'Invoice'} />
+        ) : null}
+      </div>
       <div className="mb-4 flex flex-wrap items-end gap-3 print:hidden">{picker}</div>
       <div className="print:hidden">
         <ReportControls
@@ -285,7 +293,10 @@ export default async function StatementPage({
   if (kind === 'customer') {
     const customer = customers.find((row) => row.id === subjectId)
     if (!customer || !customerFilter) notFound()
-    const statement = await receivables.statement(ctx, subjectId, settings.range)
+    const [statement, linkedContact] = await Promise.all([
+      receivables.statement(ctx, subjectId, settings.range),
+      contactService.getCustomer(ctx, subjectId).catch(() => null),
+    ])
     const entries = visibleEntries(statement.entries, customerFilter, settings.asOf)
     const charges = statement.entries.reduce((sum, entry) => sum.plus(entry.charge), ZERO)
     const credits = statement.entries.reduce((sum, entry) => sum.plus(entry.credit), ZERO)
@@ -335,6 +346,24 @@ export default async function StatementPage({
             actions={
               <PrintButton
                 paper="invoices"
+                excelHref={`/api/statements/export?party=customer&${new URLSearchParams({
+                  customerId: subjectId,
+                  ...Object.fromEntries(
+                    ['period', 'from', 'to', 'asOf'].flatMap((key) => {
+                      const value = one(query[key])
+                      return value ? [[key, value]] : []
+                    }),
+                  ),
+                }).toString()}`}
+                pdfHref={`/api/statements/customer?${new URLSearchParams({
+                  customerId: subjectId,
+                  ...Object.fromEntries(
+                    ['period', 'from', 'to', 'asOf', 'view', 'type', 'status'].flatMap((key) => {
+                      const value = one(query[key])
+                      return value ? [[key, value]] : []
+                    }),
+                  ),
+                }).toString()}`}
                 filename={`invoices-${customer.displayName
                   .toLowerCase()
                   .replace(/[^a-z0-9]+/g, '-')
@@ -371,6 +400,7 @@ export default async function StatementPage({
             paper={customerFilter.view === 'classic' ? 'classic' : 'merchant'}
             template={template}
             printedBy={ctx.user.name}
+            ledgerRows={customerFilter.view === 'summary' ? toLedgerRows(statement.entries) : undefined}
           />
         </>
       )
@@ -413,6 +443,7 @@ export default async function StatementPage({
           actions={
             <StatementSend
               pdfHref={`/api/statements/customer?${pdfParams.toString()}`}
+              excelHref={`/api/statements/export?party=customer&${pdfParams.toString()}`}
               filename={filename}
               defaultTo={customer.email ?? ''}
               defaultSubject={`Statement from ${ctx.organization.name}`}
@@ -422,6 +453,14 @@ export default async function StatementPage({
           }
         />
         {controls}
+        {linkedContact?.linkedParty ? (
+          <LinkedPartyCard
+            className="mb-4"
+            party={linkedContact.linkedParty}
+            ownBalance={linkedContact.balance}
+            currency={currency}
+          />
+        ) : null}
         <CustomerStatement
           currency={currency}
           customer={{
@@ -447,7 +486,10 @@ export default async function StatementPage({
   } else if (kind === 'vendor') {
     const vendor = vendors.find((row) => row.id === subjectId)
     if (!vendor || !vendorFilter) notFound()
-    const statement = await payables.vendorStatement(ctx, subjectId, settings.range)
+    const [statement, linkedVendor] = await Promise.all([
+      payables.vendorStatement(ctx, subjectId, settings.range),
+      contactService.getVendor(ctx, subjectId).catch(() => null),
+    ])
     const entries = visibleVendorEntries(statement.entries, vendorFilter, settings.asOf)
     const charges = statement.entries.reduce((sum, entry) => sum.plus(entry.charge), ZERO)
     const credits = statement.entries.reduce((sum, entry) => sum.plus(entry.credit), ZERO)
@@ -497,6 +539,24 @@ export default async function StatementPage({
             actions={
               <PrintButton
                 paper="bills"
+                excelHref={`/api/statements/export?party=vendor&${new URLSearchParams({
+                  vendorId: subjectId,
+                  ...Object.fromEntries(
+                    ['period', 'from', 'to', 'asOf'].flatMap((key) => {
+                      const value = one(query[key])
+                      return value ? [[key, value]] : []
+                    }),
+                  ),
+                }).toString()}`}
+                pdfHref={`/api/statements/vendor?${new URLSearchParams({
+                  vendorId: subjectId,
+                  ...Object.fromEntries(
+                    ['period', 'from', 'to', 'asOf', 'view', 'type', 'status'].flatMap((key) => {
+                      const value = one(query[key])
+                      return value ? [[key, value]] : []
+                    }),
+                  ),
+                }).toString()}`}
                 filename={`bills-${vendor.displayName
                   .toLowerCase()
                   .replace(/[^a-z0-9]+/g, '-')
@@ -534,6 +594,7 @@ export default async function StatementPage({
             template={template}
             printedBy={ctx.user.name}
             subject="bill"
+            ledgerRows={vendorFilter.view === 'summary' ? toLedgerRows(statement.entries) : undefined}
           />
         </>
       )
@@ -559,6 +620,29 @@ export default async function StatementPage({
           actions={
             <PrintButton
               paper="vendor statement"
+              excelHref={`/api/statements/export?party=vendor&${new URLSearchParams({
+                vendorId: subjectId,
+                ...Object.fromEntries(
+                  ['period', 'from', 'to', 'asOf'].flatMap((key) => {
+                    const value = one(query[key])
+                    return value ? [[key, value]] : []
+                  }),
+                ),
+              }).toString()}`}
+              pdfHref={`/api/statements/vendor?${new URLSearchParams({
+                vendorId: subjectId,
+                ...Object.fromEntries(
+                  ['period', 'from', 'to', 'asOf', 'view', 'type', 'status'].flatMap((key) => {
+                    const value = one(query[key])
+                    return value ? [[key, value]] : []
+                  }),
+                ),
+              }).toString()}`}
+              filename={`vendor-statement-${vendor.displayName
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, '')
+                .slice(0, 40) || 'vendor'}.pdf`}
               defaultTo={vendor.email ?? ''}
               defaultSubject={`Vendor statement from ${ctx.organization.name}`}
               defaultBody={vendorBody}
@@ -568,6 +652,14 @@ export default async function StatementPage({
           }
         />
         {controls}
+        {linkedVendor?.linkedParty ? (
+          <LinkedPartyCard
+            className="mb-4"
+            party={linkedVendor.linkedParty}
+            ownBalance={linkedVendor.balance}
+            currency={currency}
+          />
+        ) : null}
         <CustomerStatement
           currency={currency}
           customer={{
@@ -643,6 +735,15 @@ export default async function StatementPage({
         actions={
           <PrintButton
             paper="account statement"
+            excelHref={`/api/statements/export?party=account&${new URLSearchParams({
+              accountId: subjectId,
+              ...Object.fromEntries(
+                ['period', 'from', 'to', 'asOf'].flatMap((key) => {
+                  const value = one(query[key])
+                  return value ? [[key, value]] : []
+                }),
+              ),
+            }).toString()}`}
             defaultSubject={`${TITLES[kind as Kind]} — ${subjectName}`}
             defaultBody={[
               TITLES[kind as Kind],
@@ -729,6 +830,45 @@ export default async function StatementPage({
   )
 }
 
+const LEDGER_KIND: Record<string, string> = {
+  INVOICE: 'Invoice',
+  CREDIT_MEMO: 'Credit',
+  PAYMENT: 'Payment',
+  SALES_RECEIPT: 'Receipt',
+  REFUND_RECEIPT: 'Refund',
+  EXPENSE: 'Expense',
+  JOURNAL: 'Journal',
+  BILL: 'Bill',
+  VENDOR_CREDIT: 'Credit',
+  PURCHASE_ORDER: 'Order',
+  ESTIMATE: 'Estimate',
+  QUOTATION: 'Quotation',
+}
+
+/** Every movement on the summary, labelled, in statement order. */
+function toLedgerRows(
+  entries: {
+    id: string
+    kind: string
+    number: string
+    date: Date
+    dueDate: Date | null
+    original: { toString(): string }
+    charge: { toString(): string }
+    credit: { toString(): string }
+  }[],
+) {
+  return entries.map((entry) => ({
+    id: entry.id,
+    number: `${LEDGER_KIND[entry.kind] ?? entry.kind} ${entry.number}`.trim(),
+    date: entry.date.toISOString(),
+    dueDate: entry.dueDate ? entry.dueDate.toISOString() : null,
+    amount: entry.original.toString(),
+    debit: entry.charge.toString(),
+    credit: entry.credit.toString(),
+  }))
+}
+
 /** Customer, vendor, or account — the three statement types, picked in place. */
 function StatementKindSwitch({ kind, query }: { kind: Kind; query: SearchParams }) {
   const params = new URLSearchParams()
@@ -740,7 +880,7 @@ function StatementKindSwitch({ kind, query }: { kind: Kind; query: SearchParams 
   const suffix = params.toString()
 
   return (
-    <div role="group" aria-label="Statement type" className="mb-4 flex flex-wrap gap-1.5 print:hidden">
+    <div role="group" aria-label="Statement type" className="flex flex-wrap gap-1.5">
       {KINDS.map((key) => (
         <Link
           key={key}

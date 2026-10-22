@@ -80,6 +80,8 @@ export function ReportTable({
       timeZone={timeZone}
       showTotal={!table.totals && !grouped}
       customizable
+      searchable
+      searchPlaceholder="Find customer, item, number…"
       footers={explicit}
       note={table.note}
     />

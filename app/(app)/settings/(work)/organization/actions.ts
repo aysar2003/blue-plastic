@@ -270,7 +270,11 @@ export async function updateDocumentTemplateForm(
   }))
   const result = await updateDocumentTemplate({
     accent: String(formData.get('accent') ?? ''),
+    vendorAccent: String(formData.get('vendorAccent') ?? ''),
     terms: String(formData.get('terms') ?? ''),
+    footerTitle: String(formData.get('footerTitle') ?? ''),
+    footerNote: String(formData.get('footerNote') ?? ''),
+    footerLayout: String(formData.get('footerLayout') ?? 'side'),
     showClassicPaper: formData.get('showClassicPaper') === 'true' ? 'true' : 'false',
     banks,
   })

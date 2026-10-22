@@ -42,6 +42,7 @@ export async function GET(
       ink,
       template,
       partyLabel: 'Vendor',
+      paper: 'vendor',
       orgName: company.name,
       orgAddress: company.address ? [company.address] : [],
       orgPhone: company.phone,
@@ -62,7 +63,9 @@ export async function GET(
       customerEmail: document.customer.email,
       customerPhone: document.customer.phone,
       reference: document.reference,
+      paymentTerm: document.paymentTerm?.name ?? null,
       status: document.status,
+      createdByName: document.createdByName,
       currency,
       lines: document.lines.map((line) => ({
         quantity: line.quantity,

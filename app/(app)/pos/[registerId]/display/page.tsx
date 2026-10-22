@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react'
 
 import { ODOO } from '@/lib/odoo-brand'
 import { PRODUCT_NAME } from '@/lib/product-brand'
+import { formatQty } from '@/lib/quantity'
 
 type DisplayState = {
   orgName: string
   customerName: string | null
   total: string
-  lines: { name: string; quantity: number; amount: string }[]
+  lines: { name: string; quantity: number; amount: string; unitOfMeasure?: string | null }[]
 }
 
 /**
@@ -66,7 +67,7 @@ export default function PosCustomerDisplayPage() {
               {state.lines.map((line, index) => (
                 <li key={`${line.name}-${index}`} className="flex justify-between gap-4 text-lg">
                   <span>
-                    {line.quantity} × {line.name}
+                    {formatQty(line.quantity, line.unitOfMeasure)} × {line.name}
                   </span>
                   <span className="tabular font-medium">{line.amount}</span>
                 </li>

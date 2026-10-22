@@ -60,7 +60,7 @@ export default async function PaymentsPage({
     <>
       <PageHeader
         title="Payments received"
-        description="Each payment is its own document. It may settle several invoices, part of one, or none at all — unapplied money stays as a customer credit."
+        description="Leave Apply empty to settle overdue invoices first, then the oldest remaining ones. Choose amounts yourself when the payment is for specific papers. Leftover after every open invoice stays as a customer credit."
         actions={newButton}
       />
 

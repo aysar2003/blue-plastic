@@ -144,6 +144,8 @@ export async function get(ctx: OrgContext, id: string) {
         date: true,
         status: true,
         total: true,
+        workScope: true,
+        workSite: true,
         customer: { select: { displayName: true } },
       },
       orderBy: [{ date: 'desc' }, { number: 'desc' }],
@@ -357,6 +359,7 @@ export async function peek(ctx: OrgContext, id: string) {
       number: true,
       name: true,
       customerId: true,
+      siteLocation: true,
       customer: { select: { displayName: true } },
     },
   })
@@ -374,6 +377,7 @@ export async function listForPicker(ctx: OrgContext) {
       number: true,
       name: true,
       customerId: true,
+      siteLocation: true,
       status: true,
     },
     orderBy: [{ updatedAt: 'desc' }],
@@ -383,6 +387,7 @@ export async function listForPicker(ctx: OrgContext) {
     id: row.id,
     label: `${row.number} · ${row.name}`,
     customerId: row.customerId,
+    siteLocation: row.siteLocation,
     status: row.status,
   }))
 }

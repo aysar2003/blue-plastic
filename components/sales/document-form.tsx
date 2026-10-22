@@ -72,6 +72,7 @@ import {
 import { formatDate, isCalendarDate } from '@/lib/date'
 import { dueDateFor } from '@/lib/payment-terms'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
+import { resolveUnit } from '@/lib/quantity'
 import {
   byType,
   customerPaperTotalLabel,
@@ -106,6 +107,8 @@ export type ItemOption = {
   sku?: string | null
   /** Package barcode — searchable on invoice/receipt lines the same way as at the till. */
   barcode?: string | null
+  /** Piece / meter / kg — shown next to qty everywhere. */
+  unitOfMeasure?: string | null
   /** GROUP members expanded onto the form when the group is chosen. */
   components?: {
     itemId: string
@@ -169,6 +172,8 @@ type DocumentSeed = {
   reference: string | null
   memo: string | null
   customerMessage: string | null
+  workScope?: string | null
+  workSite?: string | null
   paymentTermId: string | null
   depositAccountId: string | null
   projectId?: string | null
@@ -212,6 +217,7 @@ export function DocumentForm({
   initialCustomerId,
   initialStoreId,
   initialProjectId,
+  initialWorkSite,
   projects = [],
   neighbors,
   stores = [],
@@ -236,8 +242,10 @@ export function DocumentForm({
   initialStoreId?: string
   /** Set when the form was opened from a project job folder. */
   initialProjectId?: string
+  /** Site on the linked project, used until the user types a work site. */
+  initialWorkSite?: string
   /** Open jobs this sale can belong to. */
-  projects?: { id: string; label: string; customerId: string }[]
+  projects?: { id: string; label: string; customerId: string; siteLocation?: string | null }[]
   /** The saved document before this one, and the one after, in date then number order. */
   neighbors?: {
     previous: { id: string; number: string } | null
@@ -296,6 +304,13 @@ export function DocumentForm({
   const [reference, setReference] = useState(document?.reference ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
   const [customerMessage, setCustomerMessage] = useState(document?.customerMessage ?? '')
+  const [workScope, setWorkScope] = useState(document?.workScope ?? '')
+  const [workSite, setWorkSite] = useState(
+    document?.workSite ??
+      initialWorkSite ??
+      projects.find((row) => row.id === (document?.projectId ?? initialProjectId))?.siteLocation ??
+      '',
+  )
   const [paymentTermId, setPaymentTermId] = useState(document?.paymentTermId ?? '')
   const [depositAccountId, setDepositAccountId] = useState(
     document?.depositAccountId ?? depositAccounts[0]?.id ?? '',
@@ -343,6 +358,8 @@ export function DocumentForm({
       setReference(document.reference ?? '')
       setMemo(document.memo ?? '')
       setCustomerMessage(document.customerMessage ?? '')
+      setWorkScope(document.workScope ?? '')
+      setWorkSite(document.workSite ?? '')
       setPaymentTermId(document.paymentTermId ?? '')
       setDepositAccountId(document.depositAccountId ?? depositAccounts[0]?.id ?? '')
       setDiscountKind(restoredDiscount > 0 ? 'amount' : 'percent')
@@ -374,6 +391,12 @@ export function DocumentForm({
     setReference('')
     setMemo('')
     setCustomerMessage('')
+    setWorkScope('')
+    setWorkSite(
+      initialWorkSite ??
+        projects.find((row) => row.id === initialProjectId)?.siteLocation ??
+        '',
+    )
     setPaymentTermId('')
     setDepositAccountId(depositAccounts[0]?.id ?? '')
     setDiscountKind('percent')
@@ -404,6 +427,12 @@ export function DocumentForm({
         setReference('')
         setMemo('')
         setCustomerMessage('')
+        setWorkScope('')
+        setWorkSite(
+          initialWorkSite ??
+            projects.find((row) => row.id === initialProjectId)?.siteLocation ??
+            '',
+        )
         setPaymentTermId('')
         setDepositAccountId(depositAccounts[0]?.id ?? '')
         setDiscountKind('percent')
@@ -442,15 +471,23 @@ export function DocumentForm({
   )
   const itemOptions = useMemo(
     () =>
-      items.map((item) => ({
-        id: item.id,
-        label: item.label,
-        group: item.group,
-        hint:
-          [item.barcode, item.sku, item.onHand != null ? `${item.onHand} on hand` : null]
-            .filter(Boolean)
-            .join(' · ') || undefined,
-      })),
+      items.map((item) => {
+        const unit = resolveUnit(item.unitOfMeasure)
+        return {
+          id: item.id,
+          label: item.label,
+          group: item.group,
+          unitOfMeasure: item.unitOfMeasure ?? null,
+          hint:
+            [
+              item.barcode,
+              item.sku,
+              item.onHand != null ? `${item.onHand} ${unit} on hand` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || undefined,
+        }
+      }),
     [items],
   )
   /**
@@ -676,6 +713,8 @@ export function DocumentForm({
     if (applied.reference && !reference) setReference(applied.reference)
     if (applied.memo && !memo) setMemo(applied.memo)
     if (applied.customerMessage && !customerMessage) setCustomerMessage(applied.customerMessage)
+    if (applied.workScope && !workScope) setWorkScope(applied.workScope)
+    if (applied.workSite && !workSite) setWorkSite(applied.workSite)
     if (applied.paymentTermId) setPaymentTermId(applied.paymentTermId)
   }
 
@@ -701,6 +740,8 @@ export function DocumentForm({
       reference,
       memo,
       customerMessage,
+      workScope,
+      workSite,
       paymentTermId,
       depositAccountId: config.needsDeposit ? depositAccountId : '',
       projectId,
@@ -752,7 +793,12 @@ export function DocumentForm({
     customerId,
     setCustomerId: changeCustomer,
     projectId,
-    setProjectId,
+    setProjectId: (id: string) => {
+      setProjectId(id)
+      if (!id) return
+      const site = projects.find((row) => row.id === id)?.siteLocation
+      if (site) setWorkSite((current) => current.trim() ? current : site)
+    },
     projects,
     date,
     setDate,
@@ -762,6 +808,10 @@ export function DocumentForm({
     setMemo,
     customerMessage,
     setCustomerMessage,
+    workScope,
+    setWorkScope,
+    workSite,
+    setWorkSite,
     paymentTermId,
     setPaymentTermId,
     depositAccountId,
@@ -1043,7 +1093,13 @@ type LayoutProps = {
   config: SalesTypeConfig
   state: FormState
   customers: CustomerOption[]
-  itemOptions: { id: string; label: string; group?: string; hint?: string }[]
+  itemOptions: {
+    id: string
+    label: string
+    group?: string
+    hint?: string
+    unitOfMeasure?: string | null
+  }[]
   /** Item ids whose type is Discount — line amount reduces the document. */
   discountItemIds: Set<string>
   paymentItemIds: Set<string>
@@ -1065,7 +1121,7 @@ type LayoutProps = {
   setCustomerId: (value: string) => void
   projectId: string
   setProjectId: (value: string) => void
-  projects: { id: string; label: string; customerId: string }[]
+  projects: { id: string; label: string; customerId: string; siteLocation?: string | null }[]
   date: string
   setDate: (value: string) => void
   reference: string
@@ -1074,6 +1130,10 @@ type LayoutProps = {
   setMemo: (value: string) => void
   customerMessage: string
   setCustomerMessage: (value: string) => void
+  workScope: string
+  setWorkScope: (value: string) => void
+  workSite: string
+  setWorkSite: (value: string) => void
   paymentTermId: string
   setPaymentTermId: (value: string) => void
   depositAccountId: string
@@ -1288,24 +1348,63 @@ function TotalsBlock({ props }: { props: LayoutProps }) {
 }
 
 function NotesFields({ props }: { props: LayoutProps }) {
+  const showWorkScope = isProposal(props.config.type)
+  const customerName =
+    props.customers.find((row) => row.id === props.customerId)?.label ?? ''
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      <Field name="customerMessage" label="Message" error={props.state.fieldErrors?.customerMessage}>
-        <Input
-          {...fieldProps('customerMessage', props.state.fieldErrors?.customerMessage)}
-          value={props.customerMessage}
-          onChange={(event) => props.setCustomerMessage(event.target.value)}
-          placeholder="Thank you for your business"
-        />
-      </Field>
-      <Field name="memo" label="Memo" error={props.state.fieldErrors?.memo}>
-        <Input
-          {...fieldProps('memo', props.state.fieldErrors?.memo)}
-          value={props.memo}
-          onChange={(event) => props.setMemo(event.target.value)}
-          placeholder="Internal note"
-        />
-      </Field>
+    <div className="grid gap-2">
+      {showWorkScope ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Field
+            name="workSite"
+            label="Work site"
+            hint="Magaca ama nooca goobta shaqada. Waxaa ka soo muuqda hoosta Sales person."
+            error={props.state.fieldErrors?.workSite}
+          >
+            <Input
+              {...fieldProps('workSite', props.state.fieldErrors?.workSite)}
+              value={props.workSite}
+              onChange={(event) => props.setWorkSite(event.target.value)}
+              placeholder="e.g. Alanley villa, Site A, Warehouse 2"
+            />
+          </Field>
+          <Field
+            name="workScope"
+            label="Work / job section"
+            hint="Nooca shaqada ama qaybta mashruuca. Waxaa lagu daabacaa quotation-ka magaca macmiilka."
+            error={props.state.fieldErrors?.workScope}
+          >
+            <Input
+              {...fieldProps('workScope', props.state.fieldErrors?.workScope)}
+              value={props.workScope}
+              onChange={(event) => props.setWorkScope(event.target.value)}
+              placeholder={
+                customerName
+                  ? `e.g. Foundation works — ${customerName}`
+                  : 'e.g. Foundation works, Electrical, Phase 2'
+              }
+            />
+          </Field>
+        </div>
+      ) : null}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field name="customerMessage" label="Message" error={props.state.fieldErrors?.customerMessage}>
+          <Input
+            {...fieldProps('customerMessage', props.state.fieldErrors?.customerMessage)}
+            value={props.customerMessage}
+            onChange={(event) => props.setCustomerMessage(event.target.value)}
+            placeholder="Thank you for your business"
+          />
+        </Field>
+        <Field name="memo" label="Memo" error={props.state.fieldErrors?.memo}>
+          <Input
+            {...fieldProps('memo', props.state.fieldErrors?.memo)}
+            value={props.memo}
+            onChange={(event) => props.setMemo(event.target.value)}
+            placeholder="Internal note"
+          />
+        </Field>
+      </div>
     </div>
   )
 }
@@ -1537,7 +1636,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
             <tr className="ledger-head text-[12px] font-semibold uppercase tracking-wide">
               <th className="w-44 px-2 py-2 text-left">Item</th>
               <th className="px-2 py-2 text-left">Description</th>
-              <th className="w-16 px-2 py-2 text-center">Qty</th>
+              <th className="w-24 px-2 py-2 text-center">Qty</th>
               <th className="w-28 px-2 py-2 text-right">Rate</th>
               <th className="w-28 px-2 py-2 text-right">Amount</th>
               {props.stores.length > 0 ? <th className="w-40 px-2 py-2 text-left">Store</th> : null}
@@ -1567,14 +1666,28 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                   />
                 </td>
                 <td className="px-1 py-1">
-                  <Input
-                    aria-label={`Quantity, line ${index + 1}`}
-                    inputMode="decimal"
-                    readOnly={props.subtotalItemIds.has(line.itemId)}
-                    className={cn(lineInput, 'tabular text-center')}
-                    value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
-                    onChange={(event) => props.update(line.key, { quantity: event.target.value })}
-                  />
+                  <div className="flex items-center gap-1">
+                    <Input
+                      aria-label={`Quantity, line ${index + 1}`}
+                      inputMode="decimal"
+                      readOnly={props.subtotalItemIds.has(line.itemId)}
+                      className={cn(lineInput, 'min-w-0 flex-1 tabular text-center')}
+                      value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
+                      onChange={(event) => props.update(line.key, { quantity: event.target.value })}
+                    />
+                    {line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
+                      <span
+                        className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
+                        title={resolveUnit(
+                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
+                        )}
+                      >
+                        {resolveUnit(
+                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
+                        )}
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="px-1 py-1">
                   <Input
@@ -2056,7 +2169,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
               <th className="px-1.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide">
                 Description
               </th>
-              <th className="w-14 px-1.5 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide">
+              <th className="w-24 px-1.5 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide">
                 Qty
               </th>
               <th className="w-24 px-1.5 py-1.5 text-right text-[11px] font-semibold uppercase tracking-wide">
@@ -2115,14 +2228,28 @@ function StripedLines({ props }: { props: LayoutProps }) {
                   ) : null}
                 </td>
                 <td className="px-1 py-1">
-                  <Input
-                    aria-label={`Quantity, line ${index + 1}`}
-                    inputMode="decimal"
-                    readOnly={props.subtotalItemIds.has(line.itemId)}
-                    className={cn(sheetLineInput, 'tabular text-center')}
-                    value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
-                    onChange={(event) => props.update(line.key, { quantity: event.target.value })}
-                  />
+                  <div className="flex items-center gap-1">
+                    <Input
+                      aria-label={`Quantity, line ${index + 1}`}
+                      inputMode="decimal"
+                      readOnly={props.subtotalItemIds.has(line.itemId)}
+                      className={cn(sheetLineInput, 'min-w-0 flex-1 tabular text-center')}
+                      value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
+                      onChange={(event) => props.update(line.key, { quantity: event.target.value })}
+                    />
+                    {line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
+                      <span
+                        className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
+                        title={resolveUnit(
+                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
+                        )}
+                      >
+                        {resolveUnit(
+                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
+                        )}
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="px-1 py-1">
                   <Input

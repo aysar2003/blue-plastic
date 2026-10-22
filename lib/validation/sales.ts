@@ -50,6 +50,10 @@ export const salesDocumentSchema = z.object({
   reference: optionalText(60),
   memo: optionalText(1000),
   customerMessage: optionalText(1000),
+  /** Nature / section of work — printed on quotations and estimates. */
+  workScope: optionalText(200),
+  /** Place the work is done — printed below Sales person. */
+  workSite: optionalText(200),
   depositAccountId: optionalId,
   saveAsDraft: z.coerce.boolean().default(false),
   /**

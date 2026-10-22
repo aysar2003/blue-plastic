@@ -18,9 +18,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { DateField } from '@/components/ui/date-field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { resolveUnit } from '@/lib/quantity'
 
 type StoreOption = { id: string; name: string; isOffice: boolean }
-type ItemOption = { id: string; label: string; onHand: string }
+type ItemOption = { id: string; label: string; onHand: string; unitOfMeasure?: string | null }
 
 export function StoreTransferForm({
   stores,
@@ -149,15 +150,27 @@ export function StoreTransferForm({
             ) : null}
           </Field>
 
-          <Field name="quantity" label="Quantity" required error={e?.quantity}>
-            <Input
-              {...fieldProps('quantity', e?.quantity)}
-              inputMode="decimal"
-              className="tabular"
-              value={quantity}
-              onChange={(event) => setQuantity(event.target.value)}
-              placeholder="0"
-            />
+          <Field
+            name="quantity"
+            label={item ? `Quantity (${resolveUnit(item.unitOfMeasure)})` : 'Quantity'}
+            required
+            error={e?.quantity}
+          >
+            <div className="relative">
+              <Input
+                {...fieldProps('quantity', e?.quantity)}
+                inputMode="decimal"
+                className="tabular pr-10"
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.value)}
+                placeholder="0"
+              />
+              {item ? (
+                <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[0.65rem] font-medium uppercase text-muted-foreground">
+                  {resolveUnit(item.unitOfMeasure)}
+                </span>
+              ) : null}
+            </div>
           </Field>
 
           <Field name="memo" label="Memo" error={e?.memo}>

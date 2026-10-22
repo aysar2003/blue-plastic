@@ -45,6 +45,7 @@ export default async function NewAdjustmentPage({
           id: item.itemId,
           label: item.sku ? `${item.sku} — ${item.name}` : item.name,
           sku: item.sku,
+          unitOfMeasure: item.unitOfMeasure,
           onHand: item.quantity.toFixed(2),
           averageCost: item.averageCost.toFixed(6),
         }))}

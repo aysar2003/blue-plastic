@@ -548,7 +548,7 @@ export async function getTicket(ctx: OrgContext, id: string) {
       createdById: true,
       store: { select: { id: true, name: true } },
       toStore: { select: { id: true, name: true } },
-      item: { select: { id: true, name: true, sku: true, barcode: true } },
+      item: { select: { id: true, name: true, sku: true, barcode: true, unitOfMeasure: true } },
       salesDocument: {
         select: {
           id: true,

@@ -1,7 +1,10 @@
 import 'server-only'
 
+import type { Prisma } from '@prisma/client'
+
 import { withoutBusinessOverview } from '@/lib/business-overview-access'
 import { startOfMonth, today } from '@/lib/date'
+import { documentOverdueOr, overdueClock } from '@/lib/invoice-overdue'
 import { Decimal, formatMoney } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -70,7 +73,7 @@ export async function feed(ctx: OrgContext) {
 }
 
 export async function tasks(ctx: OrgContext) {
-  const day = today(ctx.organization.timeZone)
+  const clock = overdueClock(ctx.organization.timeZone)
   const [pendingBank, overdueInvoices, openBills] = await Promise.all([
     db.importedTransaction.count({ where: { orgId: ctx.orgId, status: 'PENDING' } }),
     db.salesDocument.count({
@@ -79,15 +82,12 @@ export async function tasks(ctx: OrgContext) {
         type: 'INVOICE',
         status: { in: ['OPEN', 'PARTIAL'] },
         excludeFromOverdue: false,
-        OR: [
-          { promisedDate: { lt: new Date(`${day}T00:00:00.000Z`) } },
-          {
-            AND: [
-              { promisedDate: null },
-              { dueDate: { lt: new Date(`${day}T00:00:00.000Z`) } },
-            ],
-          },
-        ],
+        OR: documentOverdueOr({
+          asOf: clock.asOfDate,
+          nowTime: clock.nowTime,
+          party: 'customer',
+          withPromisedDate: true,
+        }) as Prisma.SalesDocumentWhereInput[],
       },
     }),
     db.purchaseDocument.count({

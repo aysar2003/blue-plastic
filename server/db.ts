@@ -105,9 +105,21 @@ function createClient() {
  * The dev-mode global is what stops Next.js's module re-evaluation from opening a
  * new pool on every file save until Postgres refuses the connections.
  */
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient
+  prismaSchema?: string
+}
 
-const getClient = (): PrismaClient => (globalForPrisma.prisma ??= createClient())
+/** Bump when `prisma generate` adds models the cached client does not know. */
+const PRISMA_SCHEMA = 'approval-workflow-approvers'
+
+const getClient = (): PrismaClient => {
+  if (globalForPrisma.prismaSchema !== PRISMA_SCHEMA) {
+    globalForPrisma.prisma = undefined
+    globalForPrisma.prismaSchema = PRISMA_SCHEMA
+  }
+  return (globalForPrisma.prisma ??= createClient())
+}
 
 export const db: PrismaClient = new Proxy({} as PrismaClient, {
   get(_target, property) {

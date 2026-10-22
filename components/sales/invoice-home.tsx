@@ -65,7 +65,7 @@ export function InvoiceHome({
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-primary-foreground">What customers owe</h1>
           <p className="mt-1 max-w-md text-sm text-primary-foreground/80">
-            Unpaid is still on the books. Overdue uses the due date or a payment promise; Un overdue drops an invoice from this list without changing the books.
+            Unpaid is still on the books. Overdue uses the promise written when the customer was registered (balance date and time). The invoice due date stays for work due. Un overdue drops an invoice from this list without changing the books.
           </p>
         </div>
         {canCreate ? (

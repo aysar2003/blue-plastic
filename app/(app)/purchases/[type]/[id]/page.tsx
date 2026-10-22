@@ -15,6 +15,7 @@ import { formatDate, formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
+import { ApprovalTrailPanel } from '@/components/approvals/approval-trail-panel'
 import { DocumentAttachments } from '@/components/data/document-attachments'
 import { DocumentHistory } from '@/components/data/document-history'
 import { requireOrgContext } from '@/server/auth/context'
@@ -339,6 +340,7 @@ export default async function PurchaseDocumentPage({
         </p>
       )}
 
+      <ApprovalTrailPanel entityType="PURCHASE_DOCUMENT" entityId={document.id} />
       <DocumentHistory events={history} timeZone={ctx.organization.timeZone} />
     </>
   )

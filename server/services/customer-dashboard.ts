@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { addDays, toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
+import { overdueClock } from '@/lib/invoice-overdue'
 import { Decimal } from '@/lib/money'
 import { byType } from '@/lib/sales-types'
 import type { OrgContext } from '@/server/auth/context'
@@ -34,6 +35,9 @@ export async function customerMoneyBar(ctx: OrgContext, asOf: CalendarDate) {
         promisedDate: Date | null
         excludeFromOverdue: boolean
         date: Date
+        partyBalanceDate: Date | null
+        partyAgreementDate: Date | null
+        partyBalanceTime: string | null
       }[]
     >`
       SELECT d."customerId"                          AS "customerId",
@@ -48,8 +52,12 @@ export async function customerMoneyBar(ctx: OrgContext, asOf: CalendarDate) {
              d."dueDate"                             AS due,
              d."promisedDate"                        AS "promisedDate",
              d."excludeFromOverdue"                  AS "excludeFromOverdue",
-             d.date                                  AS date
+             d.date                                  AS date,
+             c."balanceDate"                         AS "partyBalanceDate",
+             c."agreementDate"                       AS "partyAgreementDate",
+             c."balanceTime"                         AS "partyBalanceTime"
         FROM sales_documents d
+        JOIN customers c ON c.id = d."customerId"
        WHERE d."orgId" = ${ctx.orgId}
          AND d."deletedAt" IS NULL
          AND d.type::text IN ('INVOICE', 'ESTIMATE', 'QUOTATION', 'CREDIT_MEMO')
@@ -69,11 +77,12 @@ export async function customerMoneyBar(ctx: OrgContext, asOf: CalendarDate) {
     `,
     db.customer.findMany({
       where: { orgId: ctx.orgId, isActive: true },
-      select: { id: true },
+      select: { id: true, balanceDate: true, agreementDate: true, balanceTime: true },
     }),
   ])
 
   const ledger = await subledgerBalances(db, ctx, 'customer', people.map((person) => person.id))
+  const byId = new Map(people.map((person) => [person.id, person]))
 
   return customerBands(
     documents.map((row) => ({
@@ -84,6 +93,9 @@ export async function customerMoneyBar(ctx: OrgContext, asOf: CalendarDate) {
       applied: row.applied,
       due: row.due ? toCalendarDate(row.due) : null,
       promisedDate: row.promisedDate ? toCalendarDate(row.promisedDate) : null,
+      partyBalanceDate: row.partyBalanceDate ? toCalendarDate(row.partyBalanceDate) : null,
+      partyAgreementDate: row.partyAgreementDate ? toCalendarDate(row.partyAgreementDate) : null,
+      partyBalanceTime: row.partyBalanceTime,
       excludeFromOverdue: row.excludeFromOverdue,
       date: toCalendarDate(row.date),
     })),
@@ -95,7 +107,17 @@ export async function customerMoneyBar(ctx: OrgContext, asOf: CalendarDate) {
     })),
     asOf,
     addDays(asOf, -30),
-    [...ledger.entries()].map(([customerId, balance]) => ({ customerId, balance: balance.toString() })),
+    [...ledger.entries()].map(([customerId, balance]) => {
+      const person = byId.get(customerId)
+      return {
+        customerId,
+        balance: balance.toString(),
+        partyBalanceDate: person?.balanceDate ? toCalendarDate(person.balanceDate) : null,
+        partyAgreementDate: person?.agreementDate ? toCalendarDate(person.agreementDate) : null,
+        partyBalanceTime: person?.balanceTime ?? null,
+      }
+    }),
+    overdueClock(ctx.organization.timeZone),
   )
 }
 
@@ -173,9 +195,21 @@ export async function customerActivity(ctx: OrgContext, customerId: string): Pro
         account: { subtype: 'ACCOUNTS_RECEIVABLE' },
         journal: {
           deletedAt: null,
+          status: { notIn: ['DRAFT', 'DELETED', 'REVERSED'] },
           salesDocuments: { none: {} },
           customerPayments: { none: {} },
           purchaseDocuments: { none: {} },
+          sourceType: {
+            notIn: [
+              'INVOICE',
+              'CREDIT_MEMO',
+              'SALES_RECEIPT',
+              'REFUND_RECEIPT',
+              'CUSTOMER_PAYMENT',
+              'EXPENSE',
+              'REVERSAL',
+            ],
+          },
         },
       },
       select: {

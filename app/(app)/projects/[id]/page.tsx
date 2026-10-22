@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { PencilIcon, PlusIcon } from 'lucide-react'
+import { PencilIcon, PlusIcon, PrinterIcon } from 'lucide-react'
 import type { ProjectStatus } from '@prisma/client'
 
 import { PageHeader } from '@/components/data/page-header'
@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatDate } from '@/lib/date'
 import { isDocumentKindEnabled, isModuleEnabled } from '@/lib/feature-flags'
 import { formatMoney } from '@/lib/money'
+import { printableProjectQuotations } from '@/lib/project-quotations'
 import { purchaseByType } from '@/lib/purchase-types'
 import { byType as salesByType, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { PROJECT_STATUS_LABELS } from '@/lib/validation/project'
@@ -63,6 +64,8 @@ export default async function ProjectDetailPage({
   const canCreatePurchases =
     (ctx.permissions.has('bill:create') || ctx.permissions.has('expense:create')) && purchasesOn
   const canUpdate = ctx.permissions.has('project:update')
+  const quotations = printableProjectQuotations(project.sales)
+  const canPrintQuotations = quotations.length > 0 && ctx.permissions.has('invoice:read')
   const job = `project=${project.id}&customer=${project.customer.id}`
   const salesLinks = [
     {
@@ -117,6 +120,14 @@ export default async function ProjectDetailPage({
             {canCreateSales && salesLinks[0] ? (
               <Link href={salesLinks[0].href} className={buttonVariants({ size: 'sm' })}>
                 <PlusIcon /> {salesLinks[0].label}
+              </Link>
+            ) : null}
+            {canPrintQuotations ? (
+              <Link
+                href={`/projects/${project.id}/quotations/print`}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              >
+                <PrinterIcon /> Print all quotations
               </Link>
             ) : null}
             {canUpdate ? (
@@ -174,19 +185,27 @@ export default async function ProjectDetailPage({
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Sales</h2>
-          {canCreateSales ? (
-            <div className="flex flex-wrap gap-1">
-              {salesLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-          ) : null}
+          <div className="flex flex-wrap gap-1">
+            {canPrintQuotations ? (
+              <Link
+                href={`/projects/${project.id}/quotations/print`}
+                className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+              >
+                <PrinterIcon /> Print all quotations
+              </Link>
+            ) : null}
+            {canCreateSales
+              ? salesLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                  >
+                    {link.label}
+                  </Link>
+                ))
+              : null}
+          </div>
         </div>
         {project.sales.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -199,14 +218,25 @@ export default async function ProjectDetailPage({
                 <TableRow>
                   <TableHead>Number</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead>Work / job</TableHead>
+                  <TableHead>Work site</TableHead>
+                  <TableHead>Client</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="w-24 text-right">Print</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {project.sales.map((row) => {
                   const config = salesByType(row.type)
+                  const canPrint =
+                    row.type === 'QUOTATION' ||
+                    row.type === 'ESTIMATE' ||
+                    row.type === 'INVOICE' ||
+                    row.type === 'SALES_ORDER' ||
+                    row.type === 'SALES_RECEIPT' ||
+                    row.type === 'CREDIT_MEMO'
                   return (
                     <TableRow key={row.id}>
                       <TableCell>
@@ -218,6 +248,15 @@ export default async function ProjectDetailPage({
                         </Link>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{config.singular}</TableCell>
+                      <TableCell className="max-w-[14rem] truncate text-muted-foreground">
+                        {row.workScope || '—'}
+                      </TableCell>
+                      <TableCell className="max-w-[12rem] truncate text-muted-foreground">
+                        {row.workSite || project.siteLocation || '—'}
+                      </TableCell>
+                      <TableCell className="max-w-[10rem] truncate">
+                        {row.customer.displayName}
+                      </TableCell>
                       <TableCell>{formatDate(row.date)}</TableCell>
                       <TableCell>
                         <Badge variant={STATUS_VARIANTS[row.status] ?? 'secondary'}>
@@ -226,6 +265,19 @@ export default async function ProjectDetailPage({
                       </TableCell>
                       <TableCell className="text-right tabular">
                         {formatMoney(row.total, currency)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {canPrint ? (
+                          <Link
+                            href={`/sales/${config.slug}/${row.id}/print`}
+                            className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                            title={`Print ${config.singular.toLowerCase()}`}
+                          >
+                            <PrinterIcon /> Print
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   )

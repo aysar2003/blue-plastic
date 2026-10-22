@@ -335,7 +335,8 @@ export async function vendorStatement(
       journalDate: { gte: from, lte: to },
       account: { subtype: 'ACCOUNTS_PAYABLE' },
       journal: {
-        status: { notIn: ['DRAFT', 'DELETED'] },
+        // Same rule as receivables: the bill / expense / payment row is the statement line.
+        status: { notIn: ['DRAFT', 'DELETED', 'REVERSED'] },
         purchaseDocuments: { none: {} },
         billPayments: { none: {} },
         ...(coveredJournalIds.length > 0 ? { id: { notIn: coveredJournalIds } } : {}),
@@ -345,7 +346,7 @@ export async function vendorStatement(
             }
           : {}),
         sourceType: {
-          notIn: ['BILL', 'VENDOR_CREDIT', 'EXPENSE', 'BILL_PAYMENT'],
+          notIn: ['BILL', 'VENDOR_CREDIT', 'EXPENSE', 'BILL_PAYMENT', 'REVERSAL'],
         },
       },
     },

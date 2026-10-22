@@ -18,6 +18,8 @@ export function customerContactMenu(
     selectHref?: string
     /** When set, an Edit link appears right after Open. */
     editHref?: string
+    /** Linked supplier (same trading party). */
+    linkedVendorId?: string | null
   },
 ): { type: 'link'; label: string; href: string }[] {
   const id = encodeURIComponent(customerId)
@@ -58,6 +60,17 @@ export function customerContactMenu(
       { type: 'link', label: 'Sales by item', href: `/reports/sales-by-item` },
     )
   }
+  if (options.linkedVendorId) {
+    const vendorId = encodeURIComponent(options.linkedVendorId)
+    links.push(
+      { type: 'link', label: 'Linked supplier', href: `/vendors?id=${vendorId}` },
+      {
+        type: 'link',
+        label: 'Supplier statement',
+        href: `/reports/statements/vendor?vendorId=${vendorId}`,
+      },
+    )
+  }
   links.push({ type: 'link', label: 'Item list', href: '/items' })
   links.push({
     type: 'link',
@@ -84,6 +97,8 @@ export function vendorContactMenu(
     selectHref?: string
     /** When set, an Edit link appears right after Open. */
     editHref?: string
+    /** Linked customer (same trading party). */
+    linkedCustomerId?: string | null
   },
 ): { type: 'link'; label: string; href: string }[] {
   const id = encodeURIComponent(vendorId)
@@ -128,6 +143,17 @@ export function vendorContactMenu(
       { type: 'link', label: 'Statement', href: `/reports/statements/vendor?vendorId=${id}` },
       { type: 'link', label: 'Unpaid bills', href: `/reports/unpaid-bills` },
       { type: 'link', label: 'Purchases by item', href: `/reports/purchases-by-item` },
+    )
+  }
+  if (options.linkedCustomerId) {
+    const customerId = encodeURIComponent(options.linkedCustomerId)
+    links.push(
+      { type: 'link', label: 'Linked customer', href: `/customers?id=${customerId}` },
+      {
+        type: 'link',
+        label: 'Customer statement',
+        href: `/reports/statements/customer?customerId=${customerId}`,
+      },
     )
   }
   links.push({ type: 'link', label: 'Item list', href: '/items' })

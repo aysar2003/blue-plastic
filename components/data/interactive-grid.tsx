@@ -3,12 +3,13 @@
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import type { AccountType } from '@prisma/client'
-import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon, GripVerticalIcon } from 'lucide-react'
+import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon, GripVerticalIcon, SearchIcon } from 'lucide-react'
 
 import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { ColumnBand } from '@/components/data/column-band'
 import { TableColumnCustomize } from '@/components/data/table-column-customize'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate, formatDateTime, isCalendarDate } from '@/lib/date'
 import {
@@ -151,6 +152,8 @@ export function InteractiveGrid({
   totalLabel = 'Total',
   footers = [],
   customizable = false,
+  searchable = false,
+  searchPlaceholder = 'Find in this report…',
   note,
 }: {
   storageKey: string
@@ -164,6 +167,9 @@ export function InteractiveGrid({
   totalLabel?: string
   footers?: InteractiveFooter[]
   customizable?: boolean
+  /** Client-side find across visible cell text (QBD-style filter box). */
+  searchable?: boolean
+  searchPlaceholder?: string
   note?: string
 }) {
   const idsKey = columns.map((column) => column.id).join('|')
@@ -188,6 +194,7 @@ export function InteractiveGrid({
   }, [baseLayout, liveWidth])
   const [sort, setSort] = useState<GridSort | null>(initialSort)
   const [dragId, setDragId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
   const shellRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(0)
 
@@ -207,16 +214,28 @@ export function InteractiveGrid({
     .map((id) => byId.get(id))
     .filter((column): column is InteractiveColumn => Boolean(column))
 
+  const filteredRows = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!searchable || !needle) return rows
+    return rows.filter((row) => {
+      if (row.emphasis) return true
+      return columns.some((column) => {
+        const value = row.cells[column.id]?.value
+        return value != null && String(value).toLowerCase().includes(needle)
+      })
+    })
+  }, [rows, query, searchable, columns])
+
   const sortedRows = useMemo(() => {
-    if (!sort) return rows
+    if (!sort) return filteredRows
     const column = byId.get(sort.id)
     const numeric = isFigure(column?.kind)
-    return [...rows].sort((a, b) => {
+    return [...filteredRows].sort((a, b) => {
       const left = a.cells[sort.id]
       const right = b.cells[sort.id]
       return compareSortValues(left?.sort ?? left?.value, right?.sort ?? right?.value, sort.dir, numeric)
     })
-  }, [rows, sort, byId])
+  }, [filteredRows, sort, byId])
 
   const totalFooter = useMemo<InteractiveFooter | null>(() => {
     if (!showTotal) return null
@@ -227,12 +246,12 @@ export function InteractiveGrid({
       any = true
       cells[column.id] = {
         value: sumAmounts(
-          rows.filter((row) => !row.excludeFromTotal).map((row) => row.cells[column.id]?.value),
+          filteredRows.filter((row) => !row.excludeFromTotal).map((row) => row.cells[column.id]?.value),
         ),
       }
     }
     return any ? { id: '__total', label: totalLabel, cells } : null
-  }, [showTotal, columns, rows, totalLabel])
+  }, [showTotal, columns, filteredRows, totalLabel])
 
   const renderedFooters = [...(totalFooter ? [totalFooter] : []), ...footers]
 
@@ -291,16 +310,42 @@ export function InteractiveGrid({
   const shareWeights = columnShareWeights(main, preferred, viewportWidth)
   const shareTotal = shareWeights.reduce((sum, weight) => sum + weight, 0) || 1
 
+  const findActive = searchable && query.trim().length > 0
+  const matchCount = filteredRows.filter((row) => !row.emphasis).length
+
   return (
     <div ref={shellRef} className="w-full min-w-0 max-w-full">
-      {customizable ? (
-        <div className="mb-2 flex justify-end print:hidden">
-          <TableColumnCustomize
-            columns={columns.map((column) => ({ id: column.id, label: column.label }))}
-            prefs={layout}
-            onToggle={toggleColumn}
-            onReorder={reorder}
-          />
+      {customizable || searchable ? (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 print:hidden">
+          {searchable ? (
+            <div className="relative min-w-[14rem] flex-1 max-w-md">
+              <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={searchPlaceholder}
+                className="h-8 pl-8"
+                aria-label="Find in this report"
+              />
+            </div>
+          ) : (
+            <div />
+          )}
+          <div className="flex items-center gap-3">
+            {findActive ? (
+              <span className="text-xs text-muted-foreground">
+                {matchCount} match{matchCount === 1 ? '' : 'es'}
+              </span>
+            ) : null}
+            {customizable ? (
+              <TableColumnCustomize
+                columns={columns.map((column) => ({ id: column.id, label: column.label }))}
+                prefs={layout}
+                onToggle={toggleColumn}
+                onReorder={reorder}
+              />
+            ) : null}
+          </div>
         </div>
       ) : null}
 

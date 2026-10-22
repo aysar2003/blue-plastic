@@ -293,8 +293,23 @@ export async function remove(ctx: OrgContext, membershipId: string) {
     if (membership.user.id === ctx.userId) {
       throw precondition('You cannot remove yourself from the organisation.')
     }
-    if (membership.role === 'OWNER') {
+    if (membership.role === 'OWNER' && !ctx.isSystemOwner) {
       throw forbidden('The owner cannot be removed. Transfer ownership first.')
+    }
+    if (membership.role === 'OWNER' && ctx.isSystemOwner) {
+      const remaining = await tx.membership.count({
+        where: {
+          orgId: ctx.orgId,
+          id: { not: membershipId },
+          status: { in: ['ACTIVE', 'INVITED'] },
+          role: { not: 'CUSTOMER' },
+        },
+      })
+      if (remaining === 0) {
+        throw precondition(
+          'Cannot remove the last user on this company. Delete the company database instead, or invite someone first.',
+        )
+      }
     }
 
     await tx.membership.delete({ where: { id: membershipId } })

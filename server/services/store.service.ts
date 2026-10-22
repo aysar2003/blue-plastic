@@ -283,6 +283,7 @@ export type StoreLine = {
   itemId: string
   name: string
   sku: string | null
+  unitOfMeasure: string | null
   quantity: Decimal
   averageCost: Decimal
   value: Decimal
@@ -359,7 +360,7 @@ export async function dashboard(ctx: OrgContext, id: string, view: StoreView = '
     quantities(ctx),
     db.item.findMany({
       where: { orgId: ctx.orgId, type: 'INVENTORY', deletedAt: null, isActive: true },
-      select: { id: true, name: true, sku: true },
+      select: { id: true, name: true, sku: true, unitOfMeasure: true },
       orderBy: { name: 'asc' },
     }),
     valuation(db as unknown as Tx, ctx.orgId),
@@ -384,6 +385,7 @@ export async function dashboard(ctx: OrgContext, id: string, view: StoreView = '
       itemId: item.id,
       name: item.name,
       sku: item.sku,
+      unitOfMeasure: item.unitOfMeasure,
       quantity,
       averageCost: cost,
       value: quantity.times(cost),
@@ -403,6 +405,7 @@ export async function dashboard(ctx: OrgContext, id: string, view: StoreView = '
       itemId: item.id,
       name: item.name,
       sku: item.sku,
+      unitOfMeasure: item.unitOfMeasure,
       quantity,
       averageCost: cost,
       value: quantity.times(cost),

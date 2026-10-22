@@ -20,7 +20,7 @@ describe('vendor statement filters', () => {
     expect(readVendorFilter({ view: 'arrow' }).view).toBe('arrow')
     expect(readVendorFilter({ view: 'invoices' }).view).toBe('invoices')
     expect(readVendorFilter({ view: 'summary' }).view).toBe('summary')
-    expect(readVendorFilter({ view: 'group' }).view).toBe('regular')
+    expect(readVendorFilter({ view: 'group' }).view).toBe('detail')
     const bill = {
       kind: 'BILL' as const,
       openAmount: new Decimal('1800'),

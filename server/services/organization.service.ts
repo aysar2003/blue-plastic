@@ -337,7 +337,11 @@ export async function updateDocumentTemplate(ctx: OrgContext, input: DocumentTem
   const meta = await requestMeta()
   const template: DocumentTemplate = parseDocumentTemplate({
     accent: input.accent,
+    vendorAccent: input.vendorAccent,
     terms: input.terms ?? '',
+    footerTitle: input.footerTitle ?? '',
+    footerNote: input.footerNote ?? '',
+    footerLayout: input.footerLayout,
     showClassicPaper: input.showClassicPaper,
     banks: input.banks
       .map((bank) => ({ name: bank.name ?? '', account: bank.account ?? '' }))

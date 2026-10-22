@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
+import { ApprovalTrailPanel } from '@/components/approvals/approval-trail-panel'
 import { PageHeader } from '@/components/data/page-header'
 import { PaymentForm } from '@/components/sales/payment-form'
 import { toCalendarDate, today } from '@/lib/date'
@@ -52,9 +53,11 @@ export default async function EditPaymentPage({ params }: { params: Promise<{ id
             date: invoice.date.toISOString(),
             dueDate: invoice.dueDate?.toISOString() ?? null,
             balance: invoice.balance,
+            overdue: invoice.overdue,
           })),
         }}
       />
+      <ApprovalTrailPanel entityType="CUSTOMER_PAYMENT" entityId={payment.id} />
     </>
   )
 }

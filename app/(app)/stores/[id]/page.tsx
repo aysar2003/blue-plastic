@@ -23,7 +23,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatDate, formatDateTime, toCalendarDate } from '@/lib/date'
-import { Decimal, formatMoney, ZERO } from '@/lib/money'
+import { formatMoney, ZERO } from '@/lib/money'
+import { formatQty } from '@/lib/quantity'
 import { cn } from '@/lib/utils'
 import { requireOrgContext } from '@/server/auth/context'
 import * as inventoryService from '@/server/services/inventory.service'
@@ -401,7 +402,7 @@ export default async function StoreDashboardPage({
                     </TableCell>
                     <TableCell>{ticket.sellerName ?? '—'}</TableCell>
                     <TableCell className="numeric tabular">
-                      {new Decimal(ticket.quantity.toString()).toFixed(2)}
+                      {formatQty(ticket.quantity.toString(), ticket.item.unitOfMeasure)}
                     </TableCell>
                     <TableCell>
                       {ticket.origin === 'SALE' ? (
@@ -632,7 +633,11 @@ export default async function StoreDashboardPage({
                       <>
                         {board.storeColumns.map((store) => (
                           <TableCell key={store.id} className="numeric">
-                            <QtyCell tracked quantity={item.storeQty?.[store.id] ?? '0.00'} />
+                            <QtyCell
+                              tracked
+                              quantity={item.storeQty?.[store.id] ?? '0.00'}
+                              unitOfMeasure={item.unitOfMeasure}
+                            />
                           </TableCell>
                         ))}
                         <TableCell
@@ -642,7 +647,7 @@ export default async function StoreDashboardPage({
                             item.quantity.isZero() && 'text-muted-foreground',
                           )}
                         >
-                          {item.quantity.toFixed(2)}
+                          {formatQty(item.quantity.toFixed(2), item.unitOfMeasure)}
                         </TableCell>
                       </>
                     ) : (
@@ -653,7 +658,7 @@ export default async function StoreDashboardPage({
                           item.quantity.isZero() && 'text-muted-foreground',
                         )}
                       >
-                        {item.quantity.toFixed(2)}
+                        {formatQty(item.quantity.toFixed(2), item.unitOfMeasure)}
                       </TableCell>
                     )}
                     <TableCell className="numeric tabular text-muted-foreground">

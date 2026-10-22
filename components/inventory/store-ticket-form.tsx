@@ -19,10 +19,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { DateField } from '@/components/ui/date-field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { resolveUnit } from '@/lib/quantity'
 import type { StockByStore } from '@/lib/store-stock'
 
 type StoreOption = { id: string; name: string; isOffice: boolean }
-type ItemOption = { id: string; label: string; onHand: string }
+type ItemOption = { id: string; label: string; onHand: string; unitOfMeasure?: string | null }
 
 type Line = { key: number; itemId: string; quantity: string }
 
@@ -219,14 +220,29 @@ export function StoreTicketForm({
                           {inStore ?? '—'}
                         </td>
                         <td className="px-3 py-2 align-top">
-                          <Input
-                            inputMode="decimal"
-                            className="tabular text-right"
-                            value={line.quantity}
-                            onChange={(event) => updateLine(line.key, { quantity: event.target.value })}
-                            placeholder="0"
-                            aria-invalid={lineQtyError ? true : undefined}
-                          />
+                          <div className="relative">
+                            <Input
+                              inputMode="decimal"
+                              className="tabular pr-10 text-right"
+                              value={line.quantity}
+                              onChange={(event) => updateLine(line.key, { quantity: event.target.value })}
+                              placeholder="0"
+                              aria-label={
+                                item
+                                  ? `Quantity (${resolveUnit(item.unitOfMeasure)})`
+                                  : 'Quantity'
+                              }
+                              aria-invalid={lineQtyError ? true : undefined}
+                            />
+                            {item ? (
+                              <span
+                                className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[0.65rem] font-medium uppercase text-muted-foreground"
+                                title={resolveUnit(item.unitOfMeasure)}
+                              >
+                                {resolveUnit(item.unitOfMeasure)}
+                              </span>
+                            ) : null}
+                          </div>
                           {lineQtyError ? (
                             <p className="mt-1 text-xs text-destructive">{lineQtyError[0]}</p>
                           ) : null}

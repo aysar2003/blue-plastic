@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
+import { ApprovalTrailPanel } from '@/components/approvals/approval-trail-panel'
 import { PageHeader } from '@/components/data/page-header'
 import { DocumentForm } from '@/components/sales/document-form'
 import { toCalendarDate, today } from '@/lib/date'
@@ -73,6 +74,8 @@ export default async function EditSalesDocumentPage({
           reference: document.reference,
           memo: document.memo,
           customerMessage: document.customerMessage,
+          workScope: document.workScope,
+          workSite: document.workSite,
           paymentTermId: document.paymentTerm?.id ?? null,
           depositAccountId: document.depositAccount?.id ?? null,
           projectId: document.projectId ?? null,
@@ -92,6 +95,7 @@ export default async function EditSalesDocumentPage({
         stores={shelf.stores}
         stock={shelf.byItem}
       />
+      <ApprovalTrailPanel entityType="SALES_DOCUMENT" entityId={document.id} />
     </>
   )
 }

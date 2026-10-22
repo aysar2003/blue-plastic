@@ -59,6 +59,7 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
       where: { orgId: ctx.orgId, isActive: true },
       select: {
         id: true, name: true, sku: true, purchaseCost: true, type: true,
+        unitOfMeasure: true,
         purchaseDescription: true, description: true, purchaseTaxCodeId: true,
         expenseAccountId: true,
       },
@@ -118,6 +119,7 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
     items: items.map((item) => ({
       id: item.id,
       label: item.sku ? `${item.sku} — ${item.name}` : item.name,
+      unitOfMeasure: item.unitOfMeasure,
       price: item.purchaseCost?.toString() ?? null,
       description: item.purchaseDescription ?? item.description ?? item.name,
       taxCodeId: ctx.features.enableTax ? item.purchaseTaxCodeId : null,

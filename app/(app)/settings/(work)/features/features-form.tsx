@@ -302,12 +302,19 @@ const APP_NESTED: Partial<
     </div>
   ),
   approvals: (flags) => (
-    <SwitchRow
-      name="enableDocumentApprovals"
-      label="Require approval before posting"
-      hint="Sales invoices, bills, and other gated transactions stay off the ledger until approved. POS still posts at the till."
-      defaultChecked={flags.enableDocumentApprovals}
-    />
+    <>
+      <SwitchRow
+        name="enableDocumentApprovals"
+        label="Require approval before posting"
+        hint="Gated documents wait in Approvals until an assigned checker posts them. POS still posts at the till."
+        defaultChecked={flags.enableDocumentApprovals}
+      />
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        <DeepLink href="/approvals">Pending</DeepLink>
+        <DeepLink href="/approvals/approved">All approved</DeepLink>
+        <DeepLink href="/approvals/workflows">Workflows</DeepLink>
+      </div>
+    </>
   ),
   accounting: (flags) => (
     <>

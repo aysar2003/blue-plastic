@@ -3,7 +3,7 @@
  * Same key the report toolbar and chart of accounts already use.
  */
 
-export type ReportSheetTemplateId = 'standard' | 'compact' | 'plain'
+export type ReportSheetTemplateId = 'standard' | 'compact' | 'plain' | 'lined'
 
 export const REPORT_SHEET_TEMPLATE_KEY = 'bpc.reportTemplate'
 
@@ -27,11 +27,16 @@ export const REPORT_SHEET_TEMPLATES: {
     label: 'Plain',
     blurb: 'No band colours — a flat white sheet.',
   },
+  {
+    id: 'lined',
+    label: 'Lined',
+    blurb: 'A line under each row. Add another style by extending this list.',
+  },
 ]
 
 export const DEFAULT_REPORT_SHEET_TEMPLATE: ReportSheetTemplateId = 'standard'
 
 export function parseReportSheetTemplate(raw: string | null | undefined): ReportSheetTemplateId {
-  if (raw === 'compact' || raw === 'plain' || raw === 'standard') return raw
+  if (raw === 'compact' || raw === 'plain' || raw === 'standard' || raw === 'lined') return raw
   return DEFAULT_REPORT_SHEET_TEMPLATE
 }

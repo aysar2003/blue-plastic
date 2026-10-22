@@ -10,10 +10,15 @@ import {
   today,
   type CalendarDate,
 } from '@/lib/date'
+import { documentOverdueOr, isCollectionOverdue, overdueClock, partyFromContact } from '@/lib/invoice-overdue'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
-import type { PurchaseDocumentInput, ReceiveOrderInput } from '@/lib/validation/purchases'
+import {
+  unnamedPurchaseLineIndexes,
+  type PurchaseDocumentInput,
+  type ReceiveOrderInput,
+} from '@/lib/validation/purchases'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
@@ -53,7 +58,17 @@ const DOCUMENT_SELECT = {
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
   projectId: true,
   project: { select: { id: true, number: true, name: true } },
-  vendor: { select: { id: true, displayName: true, email: true, phone: true } },
+  vendor: {
+    select: {
+      id: true,
+      displayName: true,
+      email: true,
+      phone: true,
+      balanceDate: true,
+      agreementDate: true,
+      balanceTime: true,
+    },
+  },
   offsetCustomer: { select: { id: true, displayName: true, email: true, phone: true } },
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
   paymentAccount: { select: { id: true, code: true, name: true } },
@@ -81,32 +96,51 @@ export async function list(
   options: {
     status?: string
     vendorId?: string
+    ids?: string[]
     sort?: string
     dir?: 'asc' | 'desc'
     from?: CalendarDate
     to?: CalendarDate
   } = {},
 ) {
+  const selected = options.ids?.filter(Boolean) ?? []
   const where: Prisma.PurchaseDocumentWhereInput = {
     orgId: ctx.orgId,
     type,
-    ...(options.vendorId ? { vendorId: options.vendorId } : {}),
+    ...(selected.length ? { id: { in: selected } } : {}),
+    ...(selected.length ? {} : options.vendorId ? { vendorId: options.vendorId } : {}),
     ...(options.status === 'open'
       ? type === 'PURCHASE_ORDER'
         ? { status: 'OPEN' as const }
         : { status: { in: ['OPEN' as const, 'PARTIAL' as const] } }
       : {}),
     ...(options.status === 'overdue'
-      ? { status: { in: ['OPEN', 'PARTIAL'] }, dueDate: { lt: toDate(today(ctx.organization.timeZone)) } }
+      ? (() => {
+          const clock = overdueClock(ctx.organization.timeZone)
+          return {
+            status: { in: ['OPEN' as const, 'PARTIAL' as const] },
+            OR: documentOverdueOr({
+              asOf: clock.asOfDate,
+              nowTime: clock.nowTime,
+              party: 'vendor',
+            }) as Prisma.PurchaseDocumentWhereInput[],
+          }
+        })()
       : {}),
     ...(options.status === 'notdue'
-      ? {
-          status: { in: ['OPEN', 'PARTIAL'] },
-          OR: [
-            { dueDate: null },
-            { dueDate: { gte: toDate(today(ctx.organization.timeZone)) } },
-          ],
-        }
+      ? (() => {
+          const clock = overdueClock(ctx.organization.timeZone)
+          return {
+            status: { in: ['OPEN' as const, 'PARTIAL' as const] },
+            NOT: {
+              OR: documentOverdueOr({
+                asOf: clock.asOfDate,
+                nowTime: clock.nowTime,
+                party: 'vendor',
+              }) as Prisma.PurchaseDocumentWhereInput[],
+            },
+          }
+        })()
       : {}),
     ...(options.status === 'draft' ? { status: 'DRAFT' } : {}),
     ...(options.status === 'paid' ? { status: 'PAID' } : {}),
@@ -232,6 +266,15 @@ export async function listOrderBoard(
       attachments: attachments.get(row.id) ?? 0,
     })),
   }
+}
+
+/** Names for the vendor filter on a purchase list. */
+export async function vendorChoices(ctx: OrgContext) {
+  return db.vendor.findMany({
+    where: { orgId: ctx.orgId, isActive: true },
+    select: { id: true, displayName: true },
+    orderBy: { displayName: 'asc' },
+  })
 }
 
 export async function get(ctx: OrgContext, id: string) {
@@ -427,7 +470,8 @@ export async function outstandingBalances(
 
 /** Figures for the bills home — same unpaid / overdue / paid split as invoices. */
 export async function billHome(ctx: OrgContext) {
-  const now = today(ctx.organization.timeZone)
+  const clock = overdueClock(ctx.organization.timeZone)
+  const now = clock.asOf
   const base = {
     orgId: ctx.orgId,
     type: 'BILL' as const,
@@ -448,7 +492,12 @@ export async function billHome(ctx: OrgContext) {
     // Only live payables need per-row balances — skip paid/draft history.
     db.purchaseDocument.findMany({
       where: { ...base, status: { in: ['OPEN', 'PARTIAL'] } },
-      select: { id: true, dueDate: true, total: true },
+      select: {
+        id: true,
+        dueDate: true,
+        total: true,
+        vendor: { select: { balanceDate: true, agreementDate: true, balanceTime: true } },
+      },
     }),
   ])
 
@@ -468,8 +517,7 @@ export async function billHome(ctx: OrgContext) {
     const owing = balances.get(row.id) ?? new Decimal(row.total.toString())
     unpaid = unpaid.plus(owing)
     unpaidCount += 1
-    const due = row.dueDate ? toCalendarDate(row.dueDate) : null
-    if (due && due < now) {
+    if (isCollectionOverdue({ ...row, ...partyFromContact(row.vendor) }, now, clock)) {
       overdue = overdue.plus(owing)
       overdueCount += 1
     } else {
@@ -662,11 +710,11 @@ async function createWithin(
   {
     const { vendor, offsetCustomerId } = await resolvePurchaseParty(tx, ctx, type, input)
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
+    const isDraft = input.saveAsDraft === true
+    assertNamedPurchaseLines(isDraft, input.lines)
     const lines = await resolveLines(tx, ctx, input.lines, vendor.defaultExpenseAccountId)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency)
-
-    const isDraft = input.saveAsDraft === true
     if (priced.total.isZero() && !isDraft && type !== 'PURCHASE_ORDER') {
       throw validation('A document with no value has nothing to record.')
     }
@@ -799,6 +847,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
       await requireExpenseSettlement(tx, ctx, input.paymentAccountId, offsetCustomerId)
     }
 
+    assertNamedPurchaseLines(input.saveAsDraft === true, input.lines)
     const lines = await resolveLines(tx, ctx, input.lines, vendor.defaultExpenseAccountId)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency)
@@ -1392,7 +1441,10 @@ export type ReceivableLine = {
   itemId: string | null
   itemName: string | null
   sku: string | null
+  unitOfMeasure: string | null
   isTracked: boolean
+  /** Store named on the purchase order line — the planned shelf, not a lock. */
+  storeId: string | null
   description: string | null
   unitPrice: string
   ordered: string
@@ -1418,9 +1470,9 @@ export async function receivableOrder(
       lines: {
         orderBy: { lineNumber: 'asc' },
         select: {
-          id: true, lineNumber: true, itemId: true, description: true,
+          id: true, lineNumber: true, itemId: true, storeId: true, description: true,
           quantity: true, quantityReceived: true, unitPrice: true,
-          item: { select: { name: true, sku: true, type: true } },
+          item: { select: { name: true, sku: true, type: true, unitOfMeasure: true } },
         },
       },
     },
@@ -1436,7 +1488,9 @@ export async function receivableOrder(
       itemId: line.itemId,
       itemName: line.item?.name ?? null,
       sku: line.item?.sku ?? null,
+      unitOfMeasure: line.item?.unitOfMeasure ?? null,
       isTracked: line.item?.type === 'INVENTORY' || line.item?.type === 'INVENTORY_ASSEMBLY',
+      storeId: line.storeId,
       description: line.description,
       unitPrice: line.unitPrice.toString(),
       ordered: ordered.toFixed(2),
@@ -1513,7 +1567,7 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
     }
 
     const byId = new Map(order.lines.map((line) => [line.id, line]))
-    const receiving = new Map<string, Decimal>()
+    const receiving = new Map<string, { quantity: Decimal; storeId: string | null }>()
 
     for (const request of input.lines) {
       const line = byId.get(request.lineId)
@@ -1539,11 +1593,36 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
         )
       }
 
-      receiving.set(line.id, quantity)
+      // Per line: this receipt may put item A in one store and item B in another.
+      receiving.set(line.id, {
+        quantity,
+        storeId: request.storeId ?? line.storeId,
+      })
     }
 
     if (receiving.size === 0) {
       throw validation('Enter a quantity against at least one line.')
+    }
+
+    const receiveStoreIds = [
+      ...new Set(
+        [...receiving.values()]
+          .map((entry) => entry.storeId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ]
+    if (receiveStoreIds.length > 0) {
+      const known = new Set(
+        (
+          await tx.store.findMany({
+            where: { orgId: ctx.orgId, isActive: true, id: { in: receiveStoreIds } },
+            select: { id: true },
+          })
+        ).map((store) => store.id),
+      )
+      for (const storeId of receiveStoreIds) {
+        if (!known.has(storeId)) throw notFound('Store')
+      }
     }
 
     const bill = await createWithin(
@@ -1561,16 +1640,19 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
         projectId: order.projectId,
         lines: order.lines
           .filter((line) => receiving.has(line.id))
-          .map((line) => ({
-            itemId: line.itemId,
-            storeId: line.storeId,
-            expenseAccountId: line.expenseAccountId,
-            description: line.description,
-            quantity: receiving.get(line.id)!.toString(),
-            unitPrice: line.unitPrice.toString(),
-            discountPercent: line.discountPercent?.toString() ?? null,
-            taxCodeId: line.taxCodeId,
-          })),
+          .map((line) => {
+            const entry = receiving.get(line.id)!
+            return {
+              itemId: line.itemId,
+              storeId: entry.storeId,
+              expenseAccountId: line.expenseAccountId,
+              description: line.description,
+              quantity: entry.quantity.toString(),
+              unitPrice: line.unitPrice.toString(),
+              discountPercent: line.discountPercent?.toString() ?? null,
+              taxCodeId: line.taxCodeId,
+            }
+          }),
       } as PurchaseDocumentInput,
       meta,
     )
@@ -1580,10 +1662,10 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
       data: { convertedFromId: order.id },
     })
 
-    for (const [lineId, quantity] of receiving) {
+    for (const [lineId, entry] of receiving) {
       await tx.purchaseDocumentLine.update({
         where: { id: lineId },
-        data: { quantityReceived: { increment: quantity.toFixed(4) } },
+        data: { quantityReceived: { increment: entry.quantity.toFixed(4) } },
       })
     }
 
@@ -1591,7 +1673,7 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
     // is still owed rather than disappearing off the list of live orders.
     const outstanding = order.lines.reduce((total, line) => {
       const received = new Decimal(line.quantityReceived.toString()).plus(
-        receiving.get(line.id) ?? 0,
+        receiving.get(line.id)?.quantity ?? 0,
       )
       return total.plus(Decimal.max(new Decimal(line.quantity.toString()).minus(received), 0))
     }, new Decimal(0))
@@ -1778,6 +1860,7 @@ async function requireCustomer(tx: Tx, ctx: OrgContext, customerId: string) {
       billingPostalCode: true,
       billingCountry: true,
       paymentTermId: true,
+      linkedVendorId: true,
     },
   })
   if (!customer) throw notFound('Customer')
@@ -1828,15 +1911,33 @@ async function resolvePurchaseParty(
 async function ensureVendorForCustomer(tx: Tx, ctx: OrgContext, customerId: string) {
   const customer = await requireCustomer(tx, ctx, customerId)
 
+  const vendorSelect = {
+    id: true,
+    isActive: true,
+    displayName: true,
+    defaultExpenseAccountId: true,
+    paymentTerm: { select: { id: true, type: true, dueDays: true } },
+  } as const
+
+  // Prefer an explicit customer ↔ supplier link over a same-name match.
+  if (customer.linkedVendorId) {
+    const linked = await tx.vendor.findFirst({
+      where: { id: customer.linkedVendorId, orgId: ctx.orgId },
+      select: vendorSelect,
+    })
+    if (linked) {
+      if (!linked.isActive) {
+        throw precondition(
+          `${linked.displayName} is the linked supplier but is archived. Restore the vendor before settling against this customer.`,
+        )
+      }
+      return linked
+    }
+  }
+
   const existing = await tx.vendor.findFirst({
     where: { orgId: ctx.orgId, displayName: customer.displayName },
-    select: {
-      id: true,
-      isActive: true,
-      displayName: true,
-      defaultExpenseAccountId: true,
-      paymentTerm: { select: { id: true, type: true, dueDays: true } },
-    },
+    select: vendorSelect,
   })
   if (existing) {
     if (!existing.isActive) {
@@ -1844,10 +1945,15 @@ async function ensureVendorForCustomer(tx: Tx, ctx: OrgContext, customerId: stri
         `${existing.displayName} exists as an archived vendor. Restore the vendor before settling against this customer.`,
       )
     }
+    // Remember the match so statements and contact pages stay connected.
+    await tx.customer.update({
+      where: { id: customerId },
+      data: { linkedVendorId: existing.id },
+    })
     return existing
   }
 
-  return tx.vendor.create({
+  const created = await tx.vendor.create({
     data: {
       orgId: ctx.orgId,
       displayName: customer.displayName,
@@ -1866,14 +1972,33 @@ async function ensureVendorForCustomer(tx: Tx, ctx: OrgContext, customerId: stri
       billingCountry: customer.billingCountry,
       paymentTermId: customer.paymentTermId,
     },
-    select: {
-      id: true,
-      isActive: true,
-      displayName: true,
-      defaultExpenseAccountId: true,
-      paymentTerm: { select: { id: true, type: true, dueDays: true } },
-    },
+    select: vendorSelect,
   })
+  await tx.customer.update({
+    where: { id: customerId },
+    data: { linkedVendorId: created.id },
+  })
+  return created
+}
+
+/**
+ * Posted purchases must name a product or an expense category. A free-typed
+ * description and an amount are not an item — accepting them posts
+ * Uncategorised Expense for money that was never categorised.
+ */
+function assertNamedPurchaseLines(isDraft: boolean, lines: PurchaseDocumentInput['lines']) {
+  if (isDraft) return
+  const unnamed = unnamedPurchaseLineIndexes(lines)
+  if (unnamed.length === 0) return
+  throw validation(
+    'Every posted line must be a product from the item list, or a category with an expense account. Typed text and an amount are not a purchase.',
+    {
+      lines: unnamed.map((index) => {
+        const name = lines[index]?.description?.trim() || `Line ${index + 1}`
+        return `${name}: choose a product or an expense category`
+      }),
+    },
+  )
 }
 
 /**

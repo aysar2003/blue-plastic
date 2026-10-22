@@ -47,6 +47,49 @@ describe('customer money bar', () => {
     expect(bands.overdue.amount).toBe('0.00')
   })
 
+  it('takes overdue from the registration promise and leaves work due on the invoice', () => {
+    const bands = customerBands(
+      [
+        {
+          customerId: 'a',
+          type: 'INVOICE',
+          status: 'OPEN',
+          total: '200',
+          applied: '0',
+          due: '2026-09-01',
+          partyBalanceDate: '2026-12-01',
+          date: '2026-08-01',
+        },
+        {
+          customerId: 'b',
+          type: 'INVOICE',
+          status: 'OPEN',
+          total: '80',
+          applied: '0',
+          due: '2026-12-01',
+          partyBalanceDate: '2026-09-01',
+          date: '2026-08-15',
+        },
+      ],
+      [],
+      AS_OF,
+      FROM,
+    )
+
+    expect(bands.overdue).toMatchObject({ amount: '80.00', count: 1, customerIds: ['b'] })
+    expect(bands.open).toMatchObject({ amount: '200.00', count: 1, customerIds: ['a'] })
+  })
+
+  it('marks an opening balance overdue when the registration promise has passed', () => {
+    const bands = customerBands([], [], AS_OF, FROM, [
+      { customerId: 'a', balance: '500', partyBalanceDate: '2026-09-01' },
+    ])
+
+    expect(bands.overdue.amount).toBe('500.00')
+    expect(bands.overdue.customerIds).toEqual(['a'])
+    expect(bands.open.amount).toBe('0.00')
+  })
+
   it('labels open balances even when credit memos are the only open documents', () => {
     const bands = customerBands(
       [

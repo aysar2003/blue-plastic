@@ -92,13 +92,15 @@ export function negativeStockWarning(onHand: number, selling: number, storeName:
 }
 
 /** 12 → "12", 2.5 → "2.50", -3 → "−3" (true minus sign). */
-export function formatStockQty(value: number): string {
+export function formatStockQty(value: number, unit?: string | null): string {
   const text = Math.abs(value).toFixed(value % 1 === 0 ? 0 : 2)
-  return value < 0 ? `\u2212${text}` : text
+  const signed = value < 0 ? `\u2212${text}` : text
+  const label = unit?.trim()
+  return label ? `${signed} ${label}` : signed
 }
 
 /** Hover / screen-reader text for the bare number, e.g. "Xafiiska after this sale: −9 (on hand −7)". */
-export function stockWarningTitle(warning: StockWarning): string {
+export function stockWarningTitle(warning: StockWarning, unit?: string | null): string {
   const where = warning.storeName ? `${warning.storeName} after this sale` : 'After this sale'
-  return `${where}: ${formatStockQty(warning.after)} (on hand ${formatStockQty(warning.onHand)})`
+  return `${where}: ${formatStockQty(warning.after, unit)} (on hand ${formatStockQty(warning.onHand, unit)})`
 }

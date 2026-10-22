@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
+import { ApprovalTrailPanel } from '@/components/approvals/approval-trail-panel'
 import { DeleteButton } from '@/components/data/delete-record'
 import { DocumentAttachments } from '@/components/data/document-attachments'
 import { PageHeader } from '@/components/data/page-header'
@@ -249,6 +250,8 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
         keeping the row for history. Reverse posts an equal opposite entry. Configuration → Settings
         controls whether Delete is offered.
       </p>
+
+      <ApprovalTrailPanel entityType="JOURNAL" entityId={journal.id} />
     </>
   )
 }

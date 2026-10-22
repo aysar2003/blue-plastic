@@ -12,18 +12,21 @@
 import type { ApprovalEntityType, ApprovalRequestStatus } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/client'
 
-import { forbidden, notFound, precondition, validation } from '@/server/errors'
+import { forbidden, isAppError, notFound, precondition, validation } from '@/server/errors'
 import type { OrgContext } from '@/server/auth/context'
 import type { Permission } from '@/server/auth/permissions'
 import { db, type Tx } from '@/server/db'
 import { requestMeta, writeAudit } from '@/server/audit'
-import {
-  APPROVAL_ENTITY_TYPES,
-  entityTypeLabel,
-  isValidDocumentKind,
-} from '@/lib/approval-labels'
+import { isValidDocumentKind } from '@/lib/approval-labels'
+import { approvalPack, isFamilyWideKindRule } from '@/lib/approval-templates'
+import { paged, paginate, type ListQuery } from '@/lib/validation/common'
 
-const DEFAULT_ENTITY_TYPES = APPROVAL_ENTITY_TYPES
+const POLICY_WITH_APPROVERS = {
+  approvers: {
+    include: { user: { select: { id: true, name: true, email: true } } },
+    orderBy: { createdAt: 'asc' as const },
+  },
+} as const
 
 const APPROVE_PERMISSION: Partial<Record<ApprovalEntityType, Permission>> = {
   SALES_DOCUMENT: 'invoice:approve',
@@ -44,35 +47,47 @@ export function approvalsEnabled(ctx: OrgContext): boolean {
 
 type DbLike = Tx | typeof db
 
-/** Seed one default workflow per family if the company has none for that type. */
+/**
+ * First visit: install the standard checker pack (invoices, bills, payments…)
+ * instead of a catch-all on every document family. Existing companies keep
+ * whatever they already saved.
+ */
 export async function ensureDefaultPolicies(ctx: OrgContext, tx: DbLike = db) {
-  for (const entityType of DEFAULT_ENTITY_TYPES) {
-    const count = await tx.approvalPolicy.count({
-      where: { orgId: ctx.orgId, entityType },
-    })
-    if (count > 0) continue
-    await tx.approvalPolicy.create({
-      data: {
-        orgId: ctx.orgId,
-        name: `${entityTypeLabel(entityType)} — default`,
-        entityType,
-        enabled: true,
-        minAmount: new Decimal(0),
-        maxAmount: null,
-        priority: 100,
-        requireDifferentApprover: true,
-        levels: 1,
-      },
-    })
-  }
+  const count = await tx.approvalPolicy.count({ where: { orgId: ctx.orgId } })
+  if (count > 0) return
+  await installPack(ctx, 'standard', { disableCatchAll: false, tx })
 }
 
 export async function listPolicies(ctx: OrgContext) {
   await ensureDefaultPolicies(ctx)
   return db.approvalPolicy.findMany({
     where: { orgId: ctx.orgId },
+    include: POLICY_WITH_APPROVERS,
     orderBy: [{ entityType: 'asc' }, { priority: 'asc' }, { minAmount: 'desc' }],
   })
+}
+
+/** Active company users a rule can be restricted to. */
+export async function listAssignableApprovers(ctx: OrgContext) {
+  const rows = await db.membership.findMany({
+    where: {
+      orgId: ctx.orgId,
+      status: 'ACTIVE',
+      role: { not: 'CUSTOMER' },
+    },
+    select: {
+      userId: true,
+      role: true,
+      user: { select: { id: true, name: true, email: true } },
+    },
+    orderBy: { user: { name: 'asc' } },
+  })
+  return rows.map((row) => ({
+    id: row.user.id,
+    name: row.user.name,
+    email: row.user.email,
+    role: row.role,
+  }))
 }
 
 function parseAmount(raw: string | number | null | undefined, label: string): Decimal | null {
@@ -95,6 +110,38 @@ function normalizeDocumentKind(
   return kind
 }
 
+async function replaceApprovers(
+  tx: DbLike,
+  ctx: OrgContext,
+  policyId: string,
+  userIds: string[] | undefined,
+) {
+  if (userIds === undefined) return
+  const unique = [...new Set(userIds.map((id) => id.trim()).filter(Boolean))]
+  if (unique.length === 0) {
+    await tx.approvalPolicyApprover.deleteMany({ where: { orgId: ctx.orgId, policyId } })
+    return
+  }
+  const members = await tx.membership.findMany({
+    where: {
+      orgId: ctx.orgId,
+      userId: { in: unique },
+      status: 'ACTIVE',
+      role: { not: 'CUSTOMER' },
+    },
+    select: { userId: true },
+  })
+  const allowed = new Set(members.map((row) => row.userId))
+  const missing = unique.filter((id) => !allowed.has(id))
+  if (missing.length > 0) {
+    throw validation('Choose people who belong to this company.')
+  }
+  await tx.approvalPolicyApprover.deleteMany({ where: { orgId: ctx.orgId, policyId } })
+  await tx.approvalPolicyApprover.createMany({
+    data: unique.map((userId) => ({ orgId: ctx.orgId, policyId, userId })),
+  })
+}
+
 export async function createPolicy(
   ctx: OrgContext,
   input: {
@@ -107,6 +154,9 @@ export async function createPolicy(
     priority?: number
     requireDifferentApprover?: boolean
     levels?: number
+    approverUserIds?: string[]
+    source?: string
+    packKey?: string | null
   },
 ) {
   const name = input.name.trim()
@@ -119,20 +169,30 @@ export async function createPolicy(
   }
   const levels = Math.min(3, Math.max(1, Math.floor(input.levels ?? 1)))
   const priority = Math.max(1, Math.floor(input.priority ?? 100))
+  const source = input.source === 'READY' ? 'READY' : 'CUSTOM'
 
-  return db.approvalPolicy.create({
-    data: {
-      orgId: ctx.orgId,
-      name,
-      entityType: input.entityType,
-      documentKind,
-      enabled: input.enabled !== false,
-      minAmount,
-      maxAmount,
-      priority,
-      requireDifferentApprover: input.requireDifferentApprover !== false,
-      levels,
-    },
+  return db.$transaction(async (tx) => {
+    const policy = await tx.approvalPolicy.create({
+      data: {
+        orgId: ctx.orgId,
+        name,
+        entityType: input.entityType,
+        documentKind,
+        enabled: input.enabled !== false,
+        minAmount,
+        maxAmount,
+        priority,
+        requireDifferentApprover: input.requireDifferentApprover !== false,
+        levels,
+        source,
+        packKey: source === 'READY' ? (input.packKey ?? null) : null,
+      },
+    })
+    await replaceApprovers(tx, ctx, policy.id, input.approverUserIds)
+    return tx.approvalPolicy.findFirstOrThrow({
+      where: { id: policy.id },
+      include: POLICY_WITH_APPROVERS,
+    })
   })
 }
 
@@ -148,6 +208,7 @@ export async function updatePolicy(
     priority: number
     requireDifferentApprover: boolean
     levels: number
+    approverUserIds?: string[]
   },
 ) {
   const existing = await db.approvalPolicy.findFirst({
@@ -169,19 +230,104 @@ export async function updatePolicy(
   const levels = Math.min(3, Math.max(1, Math.floor(input.levels)))
   const priority = Math.max(1, Math.floor(input.priority))
 
-  return db.approvalPolicy.update({
-    where: { id: existing.id },
-    data: {
-      name,
-      documentKind,
-      enabled: input.enabled,
-      minAmount,
-      maxAmount,
-      priority,
-      requireDifferentApprover: input.requireDifferentApprover,
-      levels,
-    },
+  return db.$transaction(async (tx) => {
+    await tx.approvalPolicy.update({
+      where: { id: existing.id },
+      data: {
+        name,
+        documentKind,
+        enabled: input.enabled,
+        minAmount,
+        maxAmount,
+        priority,
+        requireDifferentApprover: input.requireDifferentApprover,
+        levels,
+      },
+    })
+    await replaceApprovers(tx, ctx, existing.id, input.approverUserIds)
+    return tx.approvalPolicy.findFirstOrThrow({
+      where: { id: existing.id },
+      include: POLICY_WITH_APPROVERS,
+    })
   })
+}
+
+export async function installPack(
+  ctx: OrgContext,
+  packKey: string,
+  options: { disableCatchAll?: boolean; tx?: DbLike } = {},
+) {
+  const pack = approvalPack(packKey)
+  if (!pack) throw validation('Unknown ready-made workflow.')
+  const tx = options.tx ?? db
+  const disableCatchAll = options.disableCatchAll !== false
+
+  const run = async (client: DbLike) => {
+    if (disableCatchAll) {
+      const familyWide = await client.approvalPolicy.findMany({
+        where: { orgId: ctx.orgId, documentKind: null },
+        select: { id: true, entityType: true, documentKind: true },
+      })
+      const ids = familyWide.filter((row) => isFamilyWideKindRule(row)).map((row) => row.id)
+      if (ids.length > 0) {
+        await client.approvalPolicy.updateMany({
+          where: { orgId: ctx.orgId, id: { in: ids } },
+          data: { enabled: false },
+        })
+      }
+    }
+
+    for (const rule of pack.rules) {
+      const minAmount = new Decimal(rule.minAmount)
+      const maxAmount = rule.maxAmount == null ? null : new Decimal(rule.maxAmount)
+      const existing = await client.approvalPolicy.findFirst({
+        where: {
+          orgId: ctx.orgId,
+          entityType: rule.entityType,
+          documentKind: rule.documentKind,
+          minAmount,
+          maxAmount,
+        },
+      })
+      if (existing) {
+        await client.approvalPolicy.update({
+          where: { id: existing.id },
+          data: {
+            name: rule.name,
+            enabled: true,
+            priority: rule.priority,
+            levels: rule.levels,
+            requireDifferentApprover: rule.requireDifferentApprover,
+            source: 'READY',
+            packKey: pack.key,
+          },
+        })
+        continue
+      }
+      await client.approvalPolicy.create({
+        data: {
+          orgId: ctx.orgId,
+          name: rule.name,
+          entityType: rule.entityType,
+          documentKind: rule.documentKind,
+          enabled: true,
+          minAmount,
+          maxAmount,
+          priority: rule.priority,
+          requireDifferentApprover: rule.requireDifferentApprover,
+          levels: rule.levels,
+          source: 'READY',
+          packKey: pack.key,
+        },
+      })
+    }
+
+    await releasePendingNoLongerGated(ctx, client)
+    return { packKey: pack.key, name: pack.name, rules: pack.rules.length }
+  }
+
+  if (options.tx) return run(tx)
+  return db.$transaction(async (inner) => run(inner))
 }
 
 export async function deletePolicy(ctx: OrgContext, id: string) {
@@ -250,6 +396,69 @@ export async function needsApproval(
   return { required: false, levels: 1, requireDifferentApprover: true }
 }
 
+async function requestDocumentKind(
+  client: DbLike,
+  orgId: string,
+  entityType: ApprovalEntityType,
+  entityId: string,
+): Promise<string | null> {
+  if (entityType === 'SALES_DOCUMENT') {
+    const row = await client.salesDocument.findFirst({
+      where: { id: entityId, orgId },
+      select: { type: true },
+    })
+    return row?.type ?? null
+  }
+  if (entityType === 'PURCHASE_DOCUMENT') {
+    const row = await client.purchaseDocument.findFirst({
+      where: { id: entityId, orgId },
+      select: { type: true },
+    })
+    return row?.type ?? null
+  }
+  return null
+}
+
+/** Open/post papers still waiting under a family-wide rule that a ready-made set turned off. */
+async function releasePendingNoLongerGated(ctx: OrgContext, client: DbLike) {
+  const pending = await client.approvalRequest.findMany({
+    where: { orgId: ctx.orgId, status: 'PENDING' },
+    select: { id: true, entityType: true, entityId: true, amount: true },
+  })
+  const now = new Date()
+  for (const request of pending) {
+    const kind = await requestDocumentKind(client, ctx.orgId, request.entityType, request.entityId)
+    if (
+      (request.entityType === 'SALES_DOCUMENT' || request.entityType === 'PURCHASE_DOCUMENT') &&
+      kind == null
+    ) {
+      await client.approvalRequest.update({
+        where: { id: request.id },
+        data: { status: 'CANCELLED', decidedAt: now },
+      })
+      continue
+    }
+    const gate = await needsApproval(ctx, request.entityType, request.amount ?? 0, client, kind)
+    if (gate.required) continue
+    try {
+      await postApprovedEntity(client, ctx, request.entityType, request.entityId)
+    } catch (error) {
+      if (isAppError(error) && (error.code === 'NOT_FOUND' || error.code === 'CONFLICT')) {
+        await client.approvalRequest.update({
+          where: { id: request.id },
+          data: { status: 'CANCELLED', decidedAt: now },
+        })
+        continue
+      }
+      throw error
+    }
+    await client.approvalRequest.update({
+      where: { id: request.id },
+      data: { status: 'APPROVED', decidedAt: now },
+    })
+  }
+}
+
 export async function submitRequest(
   tx: DbLike,
   ctx: OrgContext,
@@ -262,6 +471,8 @@ export async function submitRequest(
     currencyCode?: string | null
     note?: string | null
     levels?: number
+    documentKind?: string | null
+    policyId?: string | null
   },
 ) {
   await tx.approvalRequest.updateMany({
@@ -281,6 +492,18 @@ export async function submitRequest(
         ? input.amount
         : new Decimal(input.amount)
 
+  let policyId = input.policyId ?? null
+  if (!policyId) {
+    const gate = await needsApproval(
+      ctx,
+      input.entityType,
+      amount ?? 0,
+      tx,
+      input.documentKind,
+    )
+    policyId = gate.policyId ?? null
+  }
+
   const request = await tx.approvalRequest.create({
     data: {
       orgId: ctx.orgId,
@@ -295,6 +518,7 @@ export async function submitRequest(
       requiredLevels: input.levels ?? 1,
       note: input.note ?? null,
       submittedById: ctx.userId,
+      policyId,
     },
   })
 
@@ -318,18 +542,42 @@ export async function submitRequest(
   return request
 }
 
+const REQUEST_INCLUDE = {
+  submittedBy: { select: { id: true, name: true, email: true } },
+  policy: { include: POLICY_WITH_APPROVERS },
+  decisions: {
+    orderBy: { level: 'asc' as const },
+    include: { decidedBy: { select: { id: true, name: true } } },
+  },
+} as const
+
 export async function listPending(ctx: OrgContext) {
   return db.approvalRequest.findMany({
     where: { orgId: ctx.orgId, status: 'PENDING' },
     orderBy: { submittedAt: 'desc' },
-    include: {
-      submittedBy: { select: { id: true, name: true, email: true } },
-      decisions: {
-        orderBy: { level: 'asc' },
-        include: { decidedBy: { select: { id: true, name: true } } },
-      },
-    },
+    include: REQUEST_INCLUDE,
   })
+}
+
+/** Every submit / decide cycle for one paper, newest first. */
+export async function listForEntity(
+  ctx: OrgContext,
+  entityType: ApprovalEntityType,
+  entityId: string,
+) {
+  return db.approvalRequest.findMany({
+    where: { orgId: ctx.orgId, entityType, entityId },
+    orderBy: { submittedAt: 'desc' },
+    include: REQUEST_INCLUDE,
+  })
+}
+
+export async function counts(ctx: OrgContext) {
+  const [pending, approved] = await Promise.all([
+    db.approvalRequest.count({ where: { orgId: ctx.orgId, status: 'PENDING' } }),
+    db.approvalRequest.count({ where: { orgId: ctx.orgId, status: 'APPROVED' } }),
+  ])
+  return { pending, approved }
 }
 
 export async function listRecent(ctx: OrgContext, take = 40) {
@@ -337,14 +585,40 @@ export async function listRecent(ctx: OrgContext, take = 40) {
     where: { orgId: ctx.orgId, status: { in: ['APPROVED', 'REJECTED', 'CANCELLED'] } },
     orderBy: { decidedAt: 'desc' },
     take,
-    include: {
-      submittedBy: { select: { id: true, name: true, email: true } },
-      decisions: {
-        orderBy: { level: 'asc' },
-        include: { decidedBy: { select: { id: true, name: true } } },
-      },
-    },
+    include: REQUEST_INCLUDE,
   })
+}
+
+export async function listDecided(
+  ctx: OrgContext,
+  query: ListQuery,
+  status: ApprovalRequestStatus | 'ALL' = 'APPROVED',
+) {
+  const where = {
+    orgId: ctx.orgId,
+    status:
+      status === 'ALL'
+        ? { in: ['APPROVED', 'REJECTED'] as ApprovalRequestStatus[] }
+        : status,
+    ...(query.q
+      ? {
+          OR: [
+            { title: { contains: query.q, mode: 'insensitive' as const } },
+            { submittedBy: { name: { contains: query.q, mode: 'insensitive' as const } } },
+          ],
+        }
+      : {}),
+  }
+  const [rows, total] = await Promise.all([
+    db.approvalRequest.findMany({
+      where,
+      orderBy: { decidedAt: 'desc' },
+      include: REQUEST_INCLUDE,
+      ...paginate(query),
+    }),
+    db.approvalRequest.count({ where }),
+  ])
+  return paged(rows, total, query)
 }
 
 function canDecide(ctx: OrgContext, entityType: ApprovalEntityType): boolean {
@@ -355,6 +629,40 @@ function canDecide(ctx: OrgContext, entityType: ApprovalEntityType): boolean {
 
 function maySelfApprove(ctx: OrgContext): boolean {
   return ctx.role === 'OWNER' || ctx.role === 'ADMIN'
+}
+
+export function decisionGate(
+  ctx: OrgContext,
+  request: {
+    entityType: ApprovalEntityType
+    submittedById: string
+    policy: {
+      requireDifferentApprover: boolean
+      approvers: { userId: string }[]
+    } | null
+  },
+  decision: 'APPROVED' | 'REJECTED' = 'APPROVED',
+): { ok: boolean; reason: string | null } {
+  if (!canDecide(ctx, request.entityType)) {
+    return { ok: false, reason: 'You are not allowed to approve this type of document.' }
+  }
+  const assigned = request.policy?.approvers ?? []
+  if (assigned.length > 0 && !assigned.some((row) => row.userId === ctx.userId) && !maySelfApprove(ctx)) {
+    return { ok: false, reason: 'This workflow is assigned to other users.' }
+  }
+  const requireDifferent = request.policy?.requireDifferentApprover ?? true
+  if (
+    decision === 'APPROVED' &&
+    requireDifferent &&
+    request.submittedById === ctx.userId &&
+    !maySelfApprove(ctx)
+  ) {
+    return {
+      ok: false,
+      reason: 'You submitted this — another person must approve.',
+    }
+  }
+  return { ok: true, reason: null }
 }
 
 export async function decide(
@@ -370,27 +678,27 @@ export async function decide(
   return db.$transaction(async (tx) => {
     const request = await tx.approvalRequest.findFirst({
       where: { id: input.requestId, orgId: ctx.orgId },
+      include: { policy: { include: { approvers: true } } },
     })
     if (!request) throw notFound('Approval request')
     if (request.status !== 'PENDING') {
       throw precondition('This request has already been decided.')
     }
-    if (!canDecide(ctx, request.entityType)) {
-      throw forbidden('You are not allowed to approve this type of document.')
+
+    let policy = request.policy
+    if (!policy) {
+      const policies = await tx.approvalPolicy.findMany({
+        where: { orgId: ctx.orgId, entityType: request.entityType, enabled: true },
+        include: { approvers: true },
+        orderBy: [{ priority: 'asc' }, { minAmount: 'desc' }],
+      })
+      const amount = request.amount ?? new Decimal(0)
+      policy = policies.find((row) => amountInBand(amount, row.minAmount, row.maxAmount)) ?? null
     }
 
-    const policies = await tx.approvalPolicy.findMany({
-      where: { orgId: ctx.orgId, entityType: request.entityType, enabled: true },
-      orderBy: [{ priority: 'asc' }, { minAmount: 'desc' }],
-    })
-    const amount = request.amount ?? new Decimal(0)
-    const matched = policies.find((p) => amountInBand(amount, p.minAmount, p.maxAmount))
-    const requireDifferent = matched?.requireDifferentApprover ?? true
-
-    if (requireDifferent && request.submittedById === ctx.userId && !maySelfApprove(ctx)) {
-      throw forbidden(
-        'Segregation of duties: the person who submitted cannot approve. Ask another authorised user.',
-      )
+    const gate = decisionGate(ctx, { ...request, policy }, input.decision)
+    if (!gate.ok) {
+      throw forbidden(gate.reason ?? 'You are not allowed to decide this request.')
     }
 
     const decisionStatus: ApprovalRequestStatus = input.decision
@@ -469,7 +777,7 @@ export async function decide(
 }
 
 async function revertEntityToDraft(
-  tx: Tx,
+  tx: DbLike,
   ctx: OrgContext,
   entityType: ApprovalEntityType,
   entityId: string,
@@ -543,7 +851,7 @@ async function revertEntityToDraft(
 }
 
 async function postApprovedEntity(
-  tx: Tx,
+  tx: DbLike,
   ctx: OrgContext,
   entityType: ApprovalEntityType,
   entityId: string,

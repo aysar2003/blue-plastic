@@ -25,5 +25,19 @@ describe('document template', () => {
     ])
     expect(template.showClassicPaper).toBe(true)
     expect(template.terms).toBe('Pay in 30 days')
+    expect(template.footerLayout).toBe('side')
+  })
+
+  it('keeps a footer title, note, and layout', () => {
+    const template = parseDocumentTemplate({
+      footerTitle: 'Akoonka shirkadda',
+      footerNote: 'Magaca: AL FURAAT\nLaanta: Kismaayo',
+      footerLayout: 'band',
+      banks: [{ name: 'Salaam Bank', account: '1234567890' }],
+    })
+    expect(template.footerTitle).toBe('Akoonka shirkadda')
+    expect(template.footerNote).toContain('Kismaayo')
+    expect(template.footerLayout).toBe('band')
+    expect(parseDocumentTemplate({ footerLayout: 'nope' }).footerLayout).toBe('side')
   })
 })

@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { formatQty } from '@/lib/quantity'
 import type { StockAlert } from '@/lib/stock-alert'
 
 /** Out of stock, and products that have reached the reorder limit. */
@@ -46,8 +47,8 @@ export function StockAlerts({ alerts, total }: { alerts: StockAlert[]; total: nu
                     <span className="font-medium">{alert.name}</span>
                     <span className={alert.kind === 'out' ? 'text-xs font-medium text-[#9f1239]' : 'text-xs text-[#C2410C]'}>
                       {alert.kind === 'out'
-                        ? `Out of stock · ${alert.quantity} on hand`
-                        : `Reached the limit of ${alert.reorderPoint} · ${alert.quantity} on hand`}
+                        ? `Out of stock · ${formatQty(alert.quantity, alert.unitOfMeasure)} on hand`
+                        : `Reached the limit of ${formatQty(alert.reorderPoint, alert.unitOfMeasure)} · ${formatQty(alert.quantity, alert.unitOfMeasure)} on hand`}
                     </span>
                   </Link>
                 </DropdownMenuItem>

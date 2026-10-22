@@ -5,7 +5,8 @@ import {
   DEFAULT_DOCUMENT_TEMPLATE,
   type DocumentTemplate,
 } from '@/lib/document-template'
-import { formatMoney } from '@/lib/money'
+import { formatMoney, ZERO } from '@/lib/money'
+import { hasPreviousQuotations } from '@/lib/project-quotations'
 import {
   accentWashRgb,
   merchantAccent,
@@ -17,21 +18,10 @@ import {
 } from '@/lib/merchant-pdf'
 import { buildTextPdf, pdfBarcodeRow, PDF_PAGE, type PdfRow } from '@/lib/pdf-text'
 import type { PrintInk } from '@/lib/print-ink'
+import { SALES_TYPES } from '@/lib/sales-types'
+import { PURCHASE_TYPES } from '@/lib/purchase-types'
 
-/** Column edges matching the merchant print sheet (No / Item / Qty / Rate / Amount). */
-const COL = {
-  no: PDF_PAGE.left,
-  item: 70,
-  qty: 360,
-  rate: 450,
-  amount: PDF_PAGE.right,
-} as const
-
-/**
- * Sales / purchase document PDF — same paper as browser Print (MerchantInvoice).
- * Accent, banks, and terms come from Settings → Templates.
- */
-export function renderSalesDocumentPdf(input: {
+export type SalesDocumentPdfInput = {
   orgName: string
   orgAddress: string[]
   orgPhone: string | null
@@ -49,6 +39,14 @@ export function renderSalesDocumentPdf(input: {
   customerPhone?: string | null
   reference?: string | null
   paymentTerm?: string | null
+  /** Nature / section of work on a quotation or estimate. */
+  workScope?: string | null
+  /** Place the work is done — printed below Sales person on the paper. */
+  workSite?: string | null
+  /** Sum of earlier project quotations. Grand total then includes this paper. */
+  previousQuotationsTotal?: string | null
+  /** Project quotation pack: skip customer leftover / paid-balance bands. */
+  hideAccountBalance?: boolean
   status?: string | null
   currency: string
   lines: {
@@ -69,19 +67,44 @@ export function renderSalesDocumentPdf(input: {
   /** Settings → Templates. Defaults to the merchant teal paper. */
   template?: DocumentTemplate | null
   partyLabel?: string
-}): Uint8Array {
+  /** Vendor papers use the vendor colour from Settings → Templates. */
+  paper?: 'customer' | 'vendor'
+  /** Who entered the document — same line as MerchantInvoice print. */
+  createdByName?: string | null
+}
+
+/** Column edges matching the merchant print sheet (No / Item / Qty / Rate / Amount). */
+const COL = {
+  no: PDF_PAGE.left,
+  item: 70,
+  qty: 360,
+  rate: 450,
+  amount: PDF_PAGE.right,
+} as const
+
+/**
+ * Sales / purchase document PDF — same paper as browser Print (MerchantInvoice).
+ * Accent, banks, and terms come from Settings → Templates.
+ */
+export function renderSalesDocumentPdf(input: SalesDocumentPdfInput): Uint8Array {
+  return buildTextPdf(salesDocumentPdfRows(input), { ink: input.ink })
+}
+
+function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
-  const accent = merchantAccent(template)
+  const accent = merchantAccent(template, input.paper ?? 'customer')
   const wash = accentWashRgb(accent)
   const ink = merchantPdfInk()
   const muted = merchantPdfMuted()
   const money = (value: string) => formatMoney(value, input.currency)
   const rows: PdfRow[] = []
+  const foot: PdfRow[] = []
+  let target = rows
   const line = (
     text: string,
     options: { bold?: boolean; size?: number; height?: number; color?: readonly [number, number, number]; x?: number } = {},
   ) => {
-    rows.push({
+    target.push({
       size: options.size ?? 10,
       height: options.height ?? 14,
       runs: [
@@ -121,27 +144,96 @@ export function renderSalesDocumentPdf(input: {
     }),
   )
 
+  // Same two-column paper as MerchantInvoice print: party + meta left, title +
+  // barcode + status + date right. PDF used to stack everything and print raw
+  // OPEN instead of UNPAID, so download and screen looked like two papers.
   const party = input.partyLabel ?? 'Bill to'
-  line(party.toUpperCase(), { bold: true, size: 8, height: 12, color: accent })
-  line(input.customerName, { bold: true, size: 11, height: 14 })
-  for (const part of input.customerAddress.map(cleanPart).filter(Boolean)) {
-    line(part, { size: 9, height: 12, color: muted })
-  }
-  if (input.customerPhone) line(`Phone ${input.customerPhone}`, { size: 9, height: 12, color: muted })
-  if (input.customerEmail) line(input.customerEmail, { size: 9, height: 12, color: muted })
-  if (input.reference) line(`Reference ${input.reference}`, { size: 9, height: 12, color: muted })
-  if (input.paymentTerm) line(`Payment ${input.paymentTerm}`, { size: 9, height: 12, color: muted })
+  const vendorPaper = (input.paper ?? 'customer') === 'vendor' || party.toLowerCase() === 'vendor'
+  const words = vendorPaper
+    ? { reference: 'Vendor ref', date: 'Bill date', person: 'Entered by', order: 'Reference' }
+    : { reference: 'Cust P.O no', date: 'Invoice date', person: 'Sales person', order: 'Sales order' }
+  const addressParts = input.customerAddress
+    .map(cleanPart)
+    .filter(Boolean)
+    .filter((part) => part.toLowerCase() !== input.customerName.trim().toLowerCase())
+  const addressLine = addressParts.join(', ')
+  const status = paperStatusLabel(input.status, input.balance)
+  const statusColor =
+    status === 'PAID' ? ([0.016, 0.471, 0.341] as const) : status === 'UNPAID' ? ([0.745, 0.071, 0.235] as const) : accent
 
-  rows.push({ height: 8, runs: [] })
-  line(input.title.toUpperCase(), { bold: true, size: 14, height: 18, color: accent })
-  line(input.number, { bold: true, size: 11, height: 14 })
+  rows.push({
+    size: 8,
+    height: 12,
+    runs: [
+      { text: party.toUpperCase(), x: PDF_PAGE.left, bold: true, color: accent },
+      { text: input.title.toUpperCase(), x: PDF_PAGE.right, align: 'right', bold: true, color: accent },
+    ],
+  })
+  rows.push({
+    size: 11,
+    height: 14,
+    runs: [
+      { text: input.customerName, x: PDF_PAGE.left, bold: true, color: ink },
+      { text: input.number, x: PDF_PAGE.right, align: 'right', bold: true, color: ink },
+    ],
+  })
 
   const numberBarcode = pdfBarcodeRow(input.number, { align: 'right', height: 36 })
   if (numberBarcode) rows.push(numberBarcode)
 
-  if (input.status) line(input.status.toUpperCase(), { bold: true, size: 9, height: 14, color: accent })
-  line(`Date ${date}`, { size: 9, height: 12 })
-  if (due) line(`Due ${formatDate(due)}`, { size: 9, height: 14 })
+  const metaLeft: { label: string; value: string }[] = [
+    { label: words.reference, value: input.reference?.trim() || '—' },
+    { label: 'Due date', value: due ? formatDate(due) : '—' },
+    { label: 'Payment', value: input.paymentTerm?.trim() || '—' },
+    { label: 'Address', value: addressLine || '—' },
+    { label: 'Phone', value: input.customerPhone?.trim() || '—' },
+    { label: words.order, value: input.reference?.trim() || '—' },
+    { label: words.person, value: input.createdByName?.trim() || '—' },
+  ]
+  if (input.workSite?.trim()) metaLeft.push({ label: 'Work site', value: input.workSite.trim() })
+  if (input.workScope?.trim()) {
+    metaLeft.push({
+      label: 'Work / job',
+      value: `${input.workScope.trim()} · Client: ${input.customerName}`,
+    })
+  }
+  if (input.customerEmail?.trim()) metaLeft.push({ label: 'Email', value: input.customerEmail.trim() })
+
+  const metaRight: { text: string; color?: readonly [number, number, number]; bold?: boolean }[] = [
+    { text: status, color: statusColor, bold: true },
+    { text: words.date.toUpperCase(), color: accent, bold: true },
+    { text: date },
+  ]
+
+  const metaRows = Math.max(metaLeft.length, metaRight.length)
+  for (let i = 0; i < metaRows; i++) {
+    const left = metaLeft[i]
+    const right = metaRight[i]
+    const runs: {
+      text: string
+      x: number
+      align?: 'left' | 'right'
+      bold?: boolean
+      color?: readonly [number, number, number]
+    }[] = []
+    if (left) {
+      runs.push({
+        text: `${left.label}  ${left.value}`.slice(0, 62),
+        x: PDF_PAGE.left,
+        color: muted,
+      })
+    }
+    if (right) {
+      runs.push({
+        text: right.text,
+        x: PDF_PAGE.right,
+        align: 'right',
+        bold: right.bold,
+        color: right.color ?? ink,
+      })
+    }
+    rows.push({ size: 9, height: 12, runs })
+  }
 
   rows.push({ height: 8, runs: [] })
   rows.push(
@@ -159,7 +251,7 @@ export function renderSalesDocumentPdf(input: {
 
   input.lines.forEach((row, index) => {
     const item = lineItemLabel(row)
-    const uom = row.unitOfMeasure?.trim() || 'Pcs'
+    const uom = row.unitOfMeasure?.trim() || 'Pcs' // keep Pcs fallback for blank item unit
     rows.push({
       size: 9,
       height: 14,
@@ -181,34 +273,44 @@ export function renderSalesDocumentPdf(input: {
   })
 
   rows.push({ height: 12, runs: [] })
+  target = foot
 
   if (template.banks.length > 0) {
     line('BANK DETAILS', { bold: true, size: 8, height: 12, color: accent })
     for (const bank of template.banks) {
       line(`${bank.name}  ${bank.account}`, { size: 9, height: 12 })
     }
-    rows.push({ height: 8, runs: [] })
+    foot.push({ height: 8, runs: [] })
   }
 
-  rows.push(merchantPdfTotalBand('Subtotal', money(input.subtotal), accent))
+  foot.push(merchantPdfTotalBand('Subtotal', money(input.subtotal), accent))
   if (Number(input.discountAmount) > 0) {
-    rows.push(merchantPdfTotalBand('Discount', money(input.discountAmount), accent))
+    foot.push(merchantPdfTotalBand('Discount', money(input.discountAmount), accent))
   }
   if (Number(input.taxTotal) > 0) {
-    rows.push(merchantPdfTotalBand('Tax', money(input.taxTotal), accent))
+    foot.push(merchantPdfTotalBand('Tax', money(input.taxTotal), accent))
   }
-  rows.push(merchantPdfTotalBand('Grand total', money(input.total), accent))
-  if (input.amountApplied && Number(input.amountApplied) > 0) {
-    rows.push(merchantPdfTotalBand('Paid amount', money(input.amountApplied), accent))
-    if (input.balance) {
-      rows.push(merchantPdfTotalBand('Balance', money(input.balance), accent))
+  if (hasPreviousQuotations(input.previousQuotationsTotal)) {
+    const prior = input.previousQuotationsTotal as string
+    foot.push(merchantPdfTotalBand('This quotation', money(input.total), accent))
+    foot.push(merchantPdfTotalBand('Previous quotations', money(prior), accent))
+    foot.push(
+      merchantPdfTotalBand('Grand total', money(ZERO.plus(prior).plus(input.total).toFixed(4)), accent),
+    )
+  } else {
+    foot.push(merchantPdfTotalBand('Grand total', money(input.total), accent))
+  }
+  if (!input.hideAccountBalance) {
+    if (input.amountApplied && Number(input.amountApplied) > 0) {
+      foot.push(merchantPdfTotalBand('Paid amount', money(input.amountApplied), accent))
     }
-  } else if (input.balance && Number(input.balance) > 0) {
-    rows.push(merchantPdfTotalBand('Balance', money(input.balance), accent))
+    if (input.balance != null && input.balance !== '') {
+      foot.push(merchantPdfTotalBand('Balance', money(input.balance), accent))
+    }
   }
 
   if (template.terms.trim()) {
-    rows.push({ height: 12, runs: [] })
+    foot.push({ height: 12, runs: [] })
     line('TERMS & CONDITIONS', { bold: true, size: 8, height: 12, color: accent })
     for (const part of template.terms.split('\n').map((part) => part.trim()).filter(Boolean)) {
       line(part, { size: 8, height: 11, color: muted })
@@ -216,11 +318,169 @@ export function renderSalesDocumentPdf(input: {
   }
 
   if (input.message) {
-    rows.push({ height: 8, runs: [] })
+    foot.push({ height: 8, runs: [] })
     line(input.message, { size: 9, height: 14 })
   }
 
+  return [...rows, ...foot]
+}
+
+/** A saved sales or purchase paper, ready to draw as PDF. */
+export type PackableSheetDocument = {
+  type: string
+  number: string
+  date: Date | string
+  createdAt?: Date | null
+  dueDate?: Date | string | null
+  customer: {
+    displayName: string
+    billingLine1?: string | null
+    billingLine2?: string | null
+    billingCity?: string | null
+    billingRegion?: string | null
+    email?: string | null
+    phone?: string | null
+  }
+  reference?: string | null
+  paymentTerm?: { name: string } | null
+  workScope?: string | null
+  workSite?: string | null
+  project?: { siteLocation?: string | null } | null
+  status?: string | null
+  currencyCode: string
+  createdByName?: string | null
+  lines: {
+    quantity: string
+    description?: string | null
+    unitPrice: string
+    amount: string
+    item?: { sku?: string | null; name?: string | null; unitOfMeasure?: string | null } | null
+  }[]
+  subtotal: string
+  discountAmount: string
+  taxTotal: string
+  total: string
+  amountApplied?: string
+  balance?: string
+  customerMessage?: string | null
+}
+
+export function salesDetailToPdfInput(
+  document: PackableSheetDocument,
+  shared: Pick<SalesDocumentPdfInput, 'ink' | 'template' | 'orgName' | 'orgAddress' | 'orgPhone' | 'orgEmail'> & {
+    timeZone?: string | null
+  },
+  extras: Partial<
+    Pick<SalesDocumentPdfInput, 'hideAccountBalance' | 'previousQuotationsTotal' | 'partyLabel' | 'paper' | 'title'>
+  > = {},
+): SalesDocumentPdfInput {
+  const title = extras.title ?? paperTitle(document.type)
+  return {
+    ...shared,
+    timeZone: shared.timeZone ?? undefined,
+    title,
+    number: document.number,
+    date: document.date,
+    createdAt: document.createdAt,
+    dueDate: document.dueDate,
+    customerName: document.customer.displayName,
+    customerAddress: [
+      document.customer.billingLine1,
+      document.customer.billingLine2,
+      document.customer.billingCity,
+      document.customer.billingRegion,
+    ].filter((part): part is string => Boolean(part)),
+    customerEmail: document.customer.email ?? null,
+    customerPhone: document.customer.phone ?? null,
+    reference: document.reference,
+    paymentTerm: document.paymentTerm?.name ?? null,
+    workScope: document.workScope,
+    workSite: document.workSite || document.project?.siteLocation || null,
+    status: document.status,
+    currency: document.currencyCode,
+    createdByName: document.createdByName,
+    lines: document.lines.map((line) => ({
+      quantity: line.quantity,
+      sku: line.item?.sku ?? null,
+      description: line.description ?? line.item?.name ?? 'Line',
+      unitPrice: line.unitPrice,
+      amount: line.amount,
+      unitOfMeasure: line.item?.unitOfMeasure ?? null,
+    })),
+    subtotal: document.subtotal,
+    discountAmount: document.discountAmount,
+    taxTotal: document.taxTotal,
+    total: document.total,
+    amountApplied: document.amountApplied,
+    balance: document.balance,
+    message: document.customerMessage,
+    hideAccountBalance: extras.hideAccountBalance,
+    previousQuotationsTotal: extras.previousQuotationsTotal,
+    partyLabel: extras.partyLabel,
+    paper: extras.paper,
+  }
+}
+
+function paperTitle(type: string): string {
+  return (
+    SALES_TYPES.find((config) => config.type === type)?.singular ??
+    PURCHASE_TYPES.find((config) => config.type === type)?.singular ??
+    type
+  )
+}
+
+/**
+ * Several original papers in one PDF. Oldest first. Running totals match the
+ * project quotation pack when asked for.
+ */
+export function renderDocumentPackPdf(input: {
+  ink?: PrintInk
+  documents: SalesDocumentPdfInput[]
+  runningTotals?: boolean
+}): Uint8Array {
+  const rows: PdfRow[] = []
+  let previous = ZERO
+  input.documents.forEach((document, index) => {
+    if (index > 0) rows.push({ pageBreak: true, runs: [] })
+    const previousQuotationsTotal = previous.toFixed(4)
+    previous = previous.plus(document.total)
+    rows.push(
+      ...salesDocumentPdfRows({
+        ...document,
+        hideAccountBalance: input.runningTotals ? true : document.hideAccountBalance,
+        previousQuotationsTotal:
+          input.runningTotals && hasPreviousQuotations(previousQuotationsTotal)
+            ? previousQuotationsTotal
+            : document.previousQuotationsTotal,
+      }),
+    )
+  })
   return buildTextPdf(rows, { ink: input.ink })
+}
+
+/**
+ * One PDF for every quotation on a project — the same paper as a single
+ * quotation, oldest first. Later papers add the previous quotations' totals.
+ */
+export function renderProjectQuotationsPdf(input: {
+  ink?: PrintInk
+  template?: DocumentTemplate | null
+  orgName: string
+  orgAddress: string[]
+  orgPhone: string | null
+  orgEmail: string | null
+  projectNumber: string
+  projectName: string
+  siteLocation?: string | null
+  customerName: string
+  currency: string
+  quotations: SalesDocumentPdfInput[]
+}): Uint8Array {
+  return renderDocumentPackPdf({
+    ink: input.ink,
+    runningTotals: true,
+    documents: input.quotations,
+  })
 }
 
 function lineItemLabel(row: { sku: string | null; description: string }): string {
@@ -242,5 +502,15 @@ function cleanPart(value: string): string {
 
 function trimNumber(value: string): string {
   const n = Number(value)
-  return Number.isFinite(n) ? String(n) : value
+  if (!Number.isFinite(n)) return value
+  return n.toFixed(2)
+}
+
+/** Match MerchantInvoice: OPEN/PARTIAL with a balance reads UNPAID, not the ledger status. */
+function paperStatusLabel(status: string | null | undefined, balance: string | null | undefined): string {
+  if (!status) return ''
+  if (status === 'PAID') return 'PAID'
+  const owed = balance != null && Number(balance) > 0.004
+  if (owed || status === 'OPEN' || status === 'PARTIAL') return 'UNPAID'
+  return status.replaceAll('_', ' ').toUpperCase()
 }

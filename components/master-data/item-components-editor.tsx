@@ -6,12 +6,14 @@ import { PlusIcon, Trash2Icon } from 'lucide-react'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { resolveUnit } from '@/lib/quantity'
 
 export type ComponentRow = { itemId: string; quantity: string }
 export type CatalogItem = {
   id: string
   label: string
   type?: string
+  unitOfMeasure?: string | null
   averageCost?: string | null
 }
 
@@ -53,7 +55,9 @@ export function ItemComponentsEditor({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
+            {rows.map((row, index) => {
+              const picked = catalog.find((item) => item.id === row.itemId)
+              return (
               <tr key={index} className="border-t border-border">
                 <td className="px-2 py-1">
                   <EntityPicker
@@ -66,12 +70,24 @@ export function ItemComponentsEditor({
                   />
                 </td>
                 <td className="px-2 py-1">
-                  <Input
-                    value={row.quantity}
-                    onChange={(event) => setRow(index, { quantity: event.target.value })}
-                    inputMode="decimal"
-                    className="h-8 tabular"
-                  />
+                  <div className="relative">
+                    <Input
+                      value={row.quantity}
+                      onChange={(event) => setRow(index, { quantity: event.target.value })}
+                      inputMode="decimal"
+                      className="h-8 tabular pr-9"
+                      aria-label={
+                        picked
+                          ? `Quantity (${resolveUnit(picked.unitOfMeasure)})`
+                          : 'Quantity'
+                      }
+                    />
+                    {picked ? (
+                      <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-[0.6rem] font-medium uppercase text-muted-foreground">
+                        {resolveUnit(picked.unitOfMeasure)}
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="px-1 py-1">
                   <Button
@@ -86,7 +102,8 @@ export function ItemComponentsEditor({
                   </Button>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>

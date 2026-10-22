@@ -3,11 +3,13 @@ import type { Metadata } from 'next'
 import { readSort } from '@/components/data/sortable-header'
 import { PageHeader } from '@/components/data/page-header'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
+import { ReportEntityFilters } from '@/components/reports/report-entity-filters'
 import { STATEMENT_SORT_COLUMNS, StatementTable } from '@/components/reports/statement-table'
 import { Card } from '@/components/ui/card'
 import { formatDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
+import type { ReportFilterKind } from '@/server/reports/catalogue'
 import { profitAndLoss } from '@/server/reports/statements'
 import { ReportNote } from '@/components/reports/report-note'
 import {
@@ -19,14 +21,18 @@ import {
 } from '@/components/reports/figure-chart'
 import * as workspace from '@/server/services/workspace.service'
 import { groupReportScope } from '@/server/services/company-group.service'
+import { loadFilterOptions } from '../filter-options'
 import { GroupReportBanner } from '../group-report-banner'
 import { ReportControls } from '../report-controls'
 import {
   COMPARISON_LABELS,
+  readEntityFilters,
   readSettings,
   settingsToQuery,
   type SearchParams,
 } from '../params'
+
+const PL_FILTERS: ReportFilterKind[] = ['customer', 'vendor', 'item', 'account', 'store']
 
 export const metadata: Metadata = { title: 'Profit and Loss' }
 
@@ -38,6 +44,7 @@ export default async function ProfitAndLossPage({
   const ctx = await requireOrgContext('report:read')
   const query = await searchParams
   const settings = readSettings(query, ctx.organization)
+  const filters = readEntityFilters(query)
   const currency = ctx.organization.baseCurrency
   const sort = readSort(query, STATEMENT_SORT_COLUMNS, { sort: 'detail', dir: 'asc' })
   const linkParams = {
@@ -47,14 +54,24 @@ export default async function ProfitAndLossPage({
     asOf: settings.asOf,
     basis: settings.basis,
     compare: settings.comparison === 'none' ? undefined : settings.comparison,
+    ...(filters.customerId ? { customerId: filters.customerId } : {}),
+    ...(filters.vendorId ? { vendorId: filters.vendorId } : {}),
+    ...(filters.itemId ? { itemId: filters.itemId } : {}),
+    ...(filters.accountId ? { accountId: filters.accountId } : {}),
+    ...(filters.storeId ? { storeId: filters.storeId } : {}),
   }
+  const filtered = Boolean(
+    filters.customerId || filters.vendorId || filters.itemId || filters.accountId || filters.storeId,
+  )
 
-  const [report, note, groupScope] = await Promise.all([
+  const [report, note, groupScope, filterOptions] = await Promise.all([
     profitAndLoss(ctx.orgId, { ...settings.range, basis: settings.basis }, {
       comparison: settings.comparisonRange,
+      filters,
     }),
     workspace.readReportNote(ctx, 'profit-loss'),
     groupReportScope(ctx),
+    loadFilterOptions(ctx.orgId, PL_FILTERS),
   ])
   const showGroup = groupScope.companies.length >= 2
 
@@ -125,6 +142,13 @@ export default async function ProfitAndLossPage({
         comparison={settings.comparison}
         controls={{ mode: 'range', basis: true, comparison: true, exportAs: 'profit-loss' }}
       />
+
+      <ReportEntityFilters kinds={PL_FILTERS} values={filters} options={filterOptions} />
+      {filtered ? (
+        <p className="mb-3 text-sm text-muted-foreground">
+          Showing only journals that match the filters above — not the full company books.
+        </p>
+      ) : null}
 
       <div className="mb-4">
         <FigureChart

@@ -6,6 +6,7 @@ import { JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
 import { letterheadLines } from '@/lib/letterhead'
 import { toCalendarDate, today } from '@/lib/date'
 import { presetRange, readDatePreset } from '@/lib/list-filters'
+import { parsePackIds } from '@/lib/document-pack'
 import { bySlug } from '@/lib/sales-types'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -64,9 +65,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
     ]
 
     // --- Sales and purchase documents, keyed by their URL slug ---------------
+    const ids = parsePackIds(url.searchParams.get('ids'))
+    const picked = ids.length > 0
     const salesConfig = bySlug(list)
     if (salesConfig) {
-      const page = await salesService.list(ctx, salesConfig.type, { ...ALL, q }, { status, customerId, sort, dir, ...span })
+      const page = await salesService.list(ctx, salesConfig.type, { ...ALL, q: picked ? undefined : q }, {
+        status: picked ? undefined : status,
+        customerId: picked ? undefined : customerId,
+        ids,
+        sort,
+        dir,
+        ...(picked ? {} : span),
+      })
       const rows: CsvCell[][] = heading(salesConfig.plural)
       rows.push(['Number', 'Date', 'Due', 'Customer', 'Reference', 'Status', 'Total', 'Outstanding', 'Deposit to'])
       for (const row of page.rows) {
@@ -89,12 +99,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
     const purchaseConfig = purchaseBySlug(list)
     if (purchaseConfig) {
       const vendorId = url.searchParams.get('vendorId') ?? undefined
-      const page = await purchaseService.list(ctx, purchaseConfig.type, { ...ALL, q }, {
-        status,
-        vendorId,
+      const page = await purchaseService.list(ctx, purchaseConfig.type, { ...ALL, q: picked ? undefined : q }, {
+        status: picked ? undefined : status,
+        vendorId: picked ? undefined : vendorId,
+        ids,
         sort,
         dir,
-        ...span,
+        ...(picked ? {} : span),
       })
       const rows: CsvCell[][] = heading(purchaseConfig.plural)
       rows.push(['Number', 'Date', 'Due', 'Vendor', 'Their reference', 'Status', 'Total', 'Owing'])

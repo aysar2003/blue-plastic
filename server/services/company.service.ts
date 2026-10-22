@@ -17,6 +17,7 @@ import type {
 } from '@/lib/validation/company'
 import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
 import type { OrgContext } from '@/server/auth/context'
+import { wipeCompanyBooks } from '@/server/company-wipe'
 import { db } from '@/server/db'
 import { conflict, forbidden, notFound, precondition, validation } from '@/server/errors'
 import { createDefaultSequences } from '@/server/sequences'
@@ -62,6 +63,9 @@ export async function createCompany(ctx: OrgContext, input: CreateCompanyInput) 
   const modules = modulesFromFormValues(input as Record<string, unknown>)
 
   return db.$transaction(async (tx) => {
+    const trialEnds = new Date()
+    trialEnds.setUTCDate(trialEnds.getUTCDate() + 14)
+
     const organization = await tx.organization.create({
       data: {
         name,
@@ -69,6 +73,8 @@ export async function createCompany(ctx: OrgContext, input: CreateCompanyInput) 
         fiscalYearStartMonth: input.fiscalYearStartMonth,
         timeZone: ctx.organization.timeZone,
         parentOrgId,
+        rentExpiresAt: trialEnds,
+        rentNote: 'Free trial',
         featureFlags: featureFlagsWithModules(modules) as unknown as Prisma.InputJsonValue,
       },
       select: { id: true, name: true, baseCurrency: true, parentOrgId: true },
@@ -237,16 +243,65 @@ export async function attachSubCompany(ctx: OrgContext, input: AttachSubCompanyI
 }
 
 /**
- * Company database delete is disabled. Soft-delete → Trash still works; use
- * Clear Trash to permanently remove soft-deleted rows from PostgreSQL.
+ * Permanently remove a company database and all cascaded books.
+ * Soft-delete → Trash for individual records is unchanged. System owner only;
+ * type the company name to confirm. Sub-companies must be deleted or detached first.
  */
 export async function deleteCompany(
-  _ctx: OrgContext,
-  _input: DeleteCompanyInput,
+  ctx: OrgContext,
+  input: DeleteCompanyInput,
 ): Promise<{ deletedName: string; switchToOrgId: string | null }> {
-  throw precondition(
-    'Deleting a company database is not allowed. Soft-deleted records go to Trash; Clear Trash removes them from the database.',
+  if (!ctx.isSystemOwner) {
+    throw forbidden('Only the system owner can delete a company database.')
+  }
+
+  const organization = await db.organization.findUnique({
+    where: { id: input.orgId },
+    select: {
+      id: true,
+      name: true,
+      _count: { select: { children: true } },
+    },
+  })
+  if (!organization) throw notFound('Company')
+
+  const typed = input.confirmName.trim().toLowerCase()
+  if (typed !== organization.name.trim().toLowerCase()) {
+    throw validation('Type the company name exactly to confirm delete.', {
+      confirmName: ['Type the company name exactly to confirm delete.'],
+    })
+  }
+
+  if (organization._count.children > 0) {
+    throw precondition(
+      'This company still has sub-companies. Delete or detach them first.',
+    )
+  }
+
+  const otherMembership = await db.membership.findFirst({
+    where: {
+      userId: ctx.userId,
+      orgId: { not: organization.id },
+      status: 'ACTIVE',
+      role: { not: 'CUSTOMER' },
+    },
+    select: { orgId: true },
+    orderBy: { acceptedAt: 'desc' },
+  })
+
+  await db.$transaction(
+    async (tx) => {
+      await wipeCompanyBooks(tx, organization.id)
+      await tx.organization.delete({ where: { id: organization.id } })
+    },
+    { timeout: 120_000 },
   )
+
+  return {
+    deletedName: organization.name,
+    switchToOrgId:
+      ctx.orgId === organization.id ? (otherMembership?.orgId ?? null) : null,
+  }
 }
 
 const LIMIT_SELECT = {

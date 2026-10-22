@@ -132,6 +132,9 @@ export const customerSchema = z.object({
     .union([z.literal('true'), z.literal('false'), z.literal('on'), z.boolean(), z.literal('')])
     .optional()
     .transform((value) => value === true || value === 'true' || value === 'on'),
+
+  /** Vendor that is the same party (supplier side). Empty clears the link. */
+  linkedVendorId: optionalId,
 })
 
 export type CustomerInput = z.infer<typeof customerSchema>
@@ -142,6 +145,14 @@ export const vendorSchema = z.object({
   defaultExpenseAccountId: optionalId,
   openingBalance: optionalMoney,
   openingBalanceDate: optionalDate,
+  /** The day the payable agreement was signed. */
+  agreementDate: optionalDate,
+  /** Clock time of the opening balance. */
+  balanceTime: optionalTime,
+  /** Days before the balance time that the top warning should appear. */
+  reminderDays,
+  /** Customer that is the same party (receivable side). Empty clears the link. */
+  linkedCustomerId: optionalId,
 })
 
 export type VendorInput = z.infer<typeof vendorSchema>

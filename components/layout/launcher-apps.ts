@@ -183,7 +183,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     permission: 'invoice:approve',
     accent: '#B45309',
     wash: '#FFEDD5',
-    blurb: 'Review and post',
+    blurb: 'Pending, print, and post',
   },
   {
     key: 'accounting',

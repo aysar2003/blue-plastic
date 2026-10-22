@@ -51,6 +51,8 @@ export type AppliedSource = {
   reference: string | null
   memo: string | null
   customerMessage: string | null
+  workScope: string | null
+  workSite: string | null
   paymentTermId: string | null
   lines: PickedSourceLine[]
 }
@@ -60,6 +62,7 @@ type SourceLineDetail = {
   itemId: string | null
   itemName: string | null
   itemSku: string | null
+  unitOfMeasure?: string | null
   description: string | null
   quantity: string
   unitPrice: string
@@ -76,6 +79,8 @@ type SourceDetail = {
   reference: string | null
   memo: string | null
   customerMessage: string | null
+  workScope: string | null
+  workSite: string | null
   paymentTermId: string | null
   lines: SourceLineDetail[]
 }
@@ -163,6 +168,8 @@ export function FromSourcePicker({
       reference: detail.reference,
       memo: detail.memo,
       customerMessage: detail.customerMessage,
+      workScope: detail.workScope,
+      workSite: detail.workSite,
       paymentTermId: detail.paymentTermId,
       lines: picked.map((line) => ({
         itemId: line.itemId ?? '',
@@ -288,7 +295,12 @@ export function FromSourcePicker({
                             <span className="block text-xs text-muted-foreground">{line.itemName}</span>
                           ) : null}
                         </td>
-                        <td className="px-2 py-2 text-right tabular">{Number(line.quantity)}</td>
+                        <td className="px-2 py-2 text-right tabular">
+                          {Number(line.quantity)}
+                          <span className="ml-1 text-[0.65rem] font-medium uppercase text-muted-foreground">
+                            {line.unitOfMeasure?.trim() || 'Pcs'}
+                          </span>
+                        </td>
                         <td className="px-2 py-2 text-right tabular">
                           {formatMoney(line.unitPrice, currency)}
                         </td>

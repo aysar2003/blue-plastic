@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Fragment, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 
@@ -55,8 +55,6 @@ type ShellChromeProps = {
   hiddenApps?: string[]
   /** Full company feature flags (modules + nested document kinds). */
   features?: OrgFeatureFlags
-  /** Show header per-app on/off (needs org:update). */
-  canManageModules?: boolean
   /** Creator credit — off via Settings → Features. */
   showCreatorBrand?: boolean
   /** Streamed server slot; null when the user lacks inventory:read. */
@@ -126,7 +124,6 @@ export function ShellChrome({
   showCompanyReports = false,
   hiddenApps,
   features,
-  canManageModules = false,
   showCreatorBrand = true,
   stockAlertsSlot,
   balanceAlertsSlot,
@@ -255,9 +252,15 @@ export function ShellChrome({
               />
             ) : null}
             {working ? <ShellMenus /> : null}
-            {stockAlertsSlot}
-            {balanceAlertsSlot}
-            {calendarAlertsSlot}
+            {stockAlertsSlot != null ? (
+              <Fragment key="shell-stock-alerts">{stockAlertsSlot}</Fragment>
+            ) : null}
+            {balanceAlertsSlot != null ? (
+              <Fragment key="shell-balance-alerts">{balanceAlertsSlot}</Fragment>
+            ) : null}
+            {calendarAlertsSlot != null ? (
+              <Fragment key="shell-calendar-alerts">{calendarAlertsSlot}</Fragment>
+            ) : null}
             <UserMenu
               user={user}
               roleLabel={roleLabel}
@@ -278,7 +281,6 @@ export function ShellChrome({
                 permissions={permissions}
                 hidden={hiddenApps}
                 features={features}
-                canManageModules={canManageModules}
               />
             )}
           </div>

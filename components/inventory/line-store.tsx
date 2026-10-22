@@ -2,6 +2,7 @@
 
 import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { NativeSelect } from '@/components/ui/native-select'
+import { formatQty } from '@/lib/quantity'
 import { shortStockNote, type StockByStore, type StockWarning, type StoreChoice } from '@/lib/store-stock'
 import { cn } from '@/lib/utils'
 
@@ -69,7 +70,19 @@ export function storeQtyClass(quantity: string) {
   return ''
 }
 
-export function QtyCell({ quantity, tracked }: { quantity: string; tracked: boolean }) {
+export function QtyCell({
+  quantity,
+  tracked,
+  unitOfMeasure,
+}: {
+  quantity: string
+  tracked: boolean
+  unitOfMeasure?: string | null
+}) {
   if (!tracked) return <span className="text-muted-foreground">—</span>
-  return <span className={cn('tabular', storeQtyClass(quantity))}>{quantity}</span>
+  return (
+    <span className={cn('tabular', storeQtyClass(quantity))}>
+      {unitOfMeasure !== undefined ? formatQty(quantity, unitOfMeasure) : quantity}
+    </span>
+  )
 }

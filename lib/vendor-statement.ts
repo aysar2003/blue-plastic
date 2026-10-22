@@ -66,7 +66,7 @@ export function readVendorFilter(query: Record<string, string | string[] | undef
   const status = one(query.status)
   const totals = one(query.totals)
   return {
-    view: (STATEMENT_VIEWS as readonly string[]).includes(view ?? '') ? (view as StatementView) : 'regular',
+    view: (STATEMENT_VIEWS as readonly string[]).includes(view ?? '') ? (view as StatementView) : 'detail',
     type: (VENDOR_STATEMENT_TYPES as readonly string[]).includes(type ?? '') ? (type as VendorStatementType) : 'all',
     status: (VENDOR_STATEMENT_STATUSES as readonly string[]).includes(status ?? '')
       ? (status as VendorStatementStatus)

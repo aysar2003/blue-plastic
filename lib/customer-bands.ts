@@ -1,6 +1,6 @@
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import type { CalendarDate } from '@/lib/date'
-import { collectionDueDate } from '@/lib/invoice-overdue'
+import { isCollectionOverdue, type OverdueClock } from '@/lib/invoice-overdue'
 
 /**
  * The money bar on the customer list.
@@ -18,10 +18,14 @@ export type SalesBandDocument = {
   status: string
   total: string
   applied: string
-  /** Due date, or the document date when the invoice has no due date. */
+  /** Work due date on the invoice — kept for display, not for overdue. */
   due: CalendarDate | null
-  /** Payment promise date — overrides due for overdue banding when set. */
+  /** Later payment promise on the paper — overrides the registration promise. */
   promisedDate?: CalendarDate | null
+  /** Balance date written when the customer was registered. */
+  partyBalanceDate?: CalendarDate | null
+  partyAgreementDate?: CalendarDate | null
+  partyBalanceTime?: string | null
   /** Cleared from overdue / collections (“un overdue”). */
   excludeFromOverdue?: boolean
   date: CalendarDate
@@ -49,6 +53,9 @@ export type CustomerLedgerBalance = {
   customerId: string
   /** Natural receivables balance: positive means the customer owes the business. */
   balance: string
+  partyBalanceDate?: CalendarDate | null
+  partyAgreementDate?: CalendarDate | null
+  partyBalanceTime?: string | null
 }
 
 const money = (value: Decimal) => toMoneyString(value, 2)
@@ -71,11 +78,13 @@ export function customerBands(
    * still appears on the bar.
    */
   balances: CustomerLedgerBalance[] = [],
+  clock?: OverdueClock,
 ): Record<BandKey, CustomerBand> {
   const estimates = { amount: ZERO, count: 0, ids: new Set<string>() }
   const overdue = { amount: ZERO, count: 0, ids: new Set<string>(), byCustomer: new Map<string, Decimal>() }
   const open = { amount: ZERO, count: 0, credits: 0, ids: new Set<string>() }
   const paid = { amount: ZERO, count: 0, ids: new Set<string>() }
+  const openInvoices = new Set<string>()
 
   for (const row of documents) {
     if (
@@ -99,8 +108,23 @@ export function customerBands(
     }
 
     if (row.type !== 'INVOICE') continue
-    const due = collectionDueDate(row) ?? row.date
-    if (!row.excludeFromOverdue && due < asOf) {
+    openInvoices.add(row.customerId)
+    if (
+      isCollectionOverdue(
+        {
+          status: row.status,
+          dueDate: row.due,
+          promisedDate: row.promisedDate,
+          partyBalanceDate: row.partyBalanceDate,
+          partyAgreementDate: row.partyAgreementDate,
+          partyBalanceTime: row.partyBalanceTime,
+          excludeFromOverdue: row.excludeFromOverdue,
+          date: row.date,
+        },
+        asOf,
+        clock,
+      )
+    ) {
       overdue.amount = overdue.amount.plus(balance)
       overdue.count += 1
       push(overdue.ids, row.customerId)
@@ -128,9 +152,28 @@ export function customerBands(
     const owing = new Set<string>()
     for (const row of balances) {
       const late = overdue.byCustomer.get(row.customerId) ?? ZERO
-      const now = new Decimal(row.balance).minus(late)
-      if (!now.greaterThan(0)) continue
-      current = current.plus(now)
+      const leftover = new Decimal(row.balance).minus(late)
+      if (!leftover.greaterThan(0)) continue
+      const partyOverdue =
+        !openInvoices.has(row.customerId) &&
+        isCollectionOverdue(
+          {
+            status: 'OPEN',
+            partyBalanceDate: row.partyBalanceDate,
+            partyAgreementDate: row.partyAgreementDate,
+            partyBalanceTime: row.partyBalanceTime,
+          },
+          asOf,
+          clock,
+        )
+      if (partyOverdue) {
+        overdue.amount = overdue.amount.plus(leftover)
+        overdue.count += 1
+        push(overdue.ids, row.customerId)
+        overdue.byCustomer.set(row.customerId, late.plus(leftover))
+        continue
+      }
+      current = current.plus(leftover)
       owing.add(row.customerId)
       push(open.ids, row.customerId)
     }
@@ -176,7 +219,10 @@ export function customerBands(
 
 export function bandDetail(band: CustomerBand): string {
   if (band.key === 'estimates') return countPhrase(band.count, 'estimate', 'estimates')
-  if (band.key === 'overdue') return countPhrase(band.count, 'overdue invoice', 'overdue invoices')
+  if (band.key === 'overdue') {
+    if (band.count === 0) return countPhrase(band.holders, 'overdue balance', 'overdue balances')
+    return countPhrase(band.count, 'overdue invoice', 'overdue invoices')
+  }
   if (band.key === 'paid') return countPhrase(band.count, 'recently paid', 'recently paid')
   // Open amount often comes from ledger balances when invoice count is 0 —
   // never label the tile with only credits when holders carry the figure.

@@ -20,12 +20,24 @@ import { Input } from '@/components/ui/input'
 import type { AccountPickerOption } from '@/lib/account-options'
 import { NativeSelect } from '@/components/ui/native-select'
 import { formatDate, toCalendarDate } from '@/lib/date'
-import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
+import { formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
+import { allocatePaymentToInvoices, sortInvoicesForAllocation } from '@/lib/payment-allocate'
 import { PAYMENT_METHOD_LABELS } from '@/lib/sales-types'
 import { savePaymentForm } from '@/app/(app)/sales/actions'
 
-type OpenInvoice = { id: string; number: string; date: string; dueDate: string | null; balance: string }
+type OpenInvoice = {
+  id: string
+  number: string
+  date: string
+  dueDate: string | null
+  balance: string
+  overdue?: boolean
+}
 type Option = { id: string; label: string }
+
+function orderedInvoices(rows: OpenInvoice[]): OpenInvoice[] {
+  return sortInvoicesForAllocation(rows.map((row) => ({ ...row, overdue: Boolean(row.overdue) })))
+}
 
 export type PaymentFormValues = {
   id: string
@@ -43,10 +55,9 @@ export type PaymentFormValues = {
 /**
  * Recording money received — or editing a payment already on the books.
  *
- * The payment is entered first and applied second, in that order, because that is
- * what actually happened: the money arrived, and then someone decided what it was
- * for. Anything left unapplied stays on the balance sheet as a customer credit
- * rather than being forced onto an invoice it may not belong to.
+ * Two ways: type the amount and leave Apply empty, and the payment settles
+ * overdue invoices first then the oldest remaining ones; or fill Apply yourself
+ * for specific papers. Leftover after every open invoice stays as a credit.
  */
 export function PaymentForm({
   customers,
@@ -82,7 +93,7 @@ export function PaymentForm({
   const [reference, setReference] = useState(payment?.reference ?? '')
   const [memo, setMemo] = useState(payment?.memo ?? '')
 
-  const [invoices, setInvoices] = useState<OpenInvoice[]>(payment?.invoices ?? [])
+  const [invoices, setInvoices] = useState<OpenInvoice[]>(() => orderedInvoices(payment?.invoices ?? []))
   const [applied, setApplied] = useState<Record<string, string>>(() => {
     if (!payment) return {}
     return Object.fromEntries(payment.applications.map((row) => [row.invoiceId, row.amount]))
@@ -120,7 +131,7 @@ export function PaymentForm({
       setInvoices([])
       return
     }
-    startLoading(async () => setInvoices(await loadOpenInvoices(id)))
+    startLoading(async () => setInvoices(orderedInvoices(await loadOpenInvoices(id))))
   }
 
   useEffect(() => {
@@ -128,12 +139,24 @@ export function PaymentForm({
     let cancel = false
     startLoading(async () => {
       const rows = await loadOpenInvoices(initialCustomerId)
-      if (!cancel) setInvoices(rows)
+      if (!cancel) setInvoices(orderedInvoices(rows))
     })
     return () => {
       cancel = true
     }
   }, [payment, initialCustomerId, loadOpenInvoices])
+
+  const suggested = useMemo(
+    () =>
+      allocatePaymentToInvoices(parseMoneyInput(amount) ?? ZERO, invoices).reduce<Record<string, string>>(
+        (next, row) => {
+          next[row.invoiceId] = row.amount
+          return next
+        },
+        {},
+      ),
+    [amount, invoices],
+  )
 
   const totals = useMemo(() => {
     const received = parseMoneyInput(amount) ?? ZERO
@@ -141,21 +164,20 @@ export function PaymentForm({
       (sum, value) => sum.plus(parseMoneyInput(value) ?? ZERO),
       ZERO,
     )
-    return { received, appliedTotal, unapplied: received.minus(appliedTotal) }
-  }, [amount, applied])
-
-  /** Oldest first, until the money runs out — how a remittance is usually meant. */
-  const autoApply = () => {
-    let remaining = parseMoneyInput(amount) ?? ZERO
-    const next: Record<string, string> = {}
-    for (const invoice of invoices) {
-      if (remaining.lessThanOrEqualTo(0)) break
-      const balance = new Decimal(invoice.balance)
-      const take = Decimal.min(balance, remaining)
-      next[invoice.id] = take.toFixed(2)
-      remaining = remaining.minus(take)
+    const usingAuto = appliedTotal.isZero()
+    const previewTotal = usingAuto
+      ? Object.values(suggested).reduce((sum, value) => sum.plus(value), ZERO)
+      : appliedTotal
+    return {
+      received,
+      appliedTotal: previewTotal,
+      unapplied: received.minus(previewTotal),
+      usingAuto,
     }
-    setApplied(next)
+  }, [amount, applied, suggested])
+
+  const autoApply = () => {
+    setApplied(suggested)
   }
 
   const payload = JSON.stringify({
@@ -285,7 +307,7 @@ export function PaymentForm({
           <div className="panel-head">
             <span className="text-sm font-semibold">Outstanding invoices</span>
             <Button type="button" variant="outline" size="sm" onClick={autoApply} disabled={invoices.length === 0}>
-              Apply oldest first
+              Apply overdue first
             </Button>
           </div>
 
@@ -293,44 +315,56 @@ export function PaymentForm({
             <p className="p-6 text-sm text-muted-foreground">Loading…</p>
           ) : invoices.length === 0 ? (
             <p className="p-6 text-sm text-muted-foreground">
-              Nothing outstanding. The payment will sit as an unapplied credit until it is put against an
-              invoice — which is where it belongs until someone decides what it was for.
+              Nothing outstanding. The payment reduces the customer balance and sits as a credit until an
+              invoice is raised.
             </p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Invoice</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Due</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Outstanding</th>
-                  <th className="w-36 px-3 py-2 text-right text-xs font-medium text-muted-foreground">Apply</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((invoice) => (
-                  <tr key={invoice.id} className="border-b last:border-0">
-                    <td className="tabular px-3 py-2 font-medium">{invoice.number}</td>
-                    <td className="tabular px-3 py-2 text-muted-foreground">
-                      {invoice.dueDate ? formatDate(toCalendarDate(new Date(invoice.dueDate))) : '—'}
-                    </td>
-                    <td className="tabular px-3 py-2 text-right">
-                      {formatMoney(invoice.balance, currency)}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <Input
-                        aria-label={`Apply to ${invoice.number}`}
-                        inputMode="decimal"
-                        className="tabular text-right"
-                        value={applied[invoice.id] ?? ''}
-                        onChange={(event) =>
-                          setApplied((current) => ({ ...current, [invoice.id]: event.target.value }))
-                        }
-                      />
-                    </td>
+            <>
+              <p className="border-b px-3 py-2 text-xs text-muted-foreground">
+                Leave Apply empty to settle overdue invoices first, then the oldest remaining ones. Fill a
+                line only when this payment is for a specific paper.
+              </p>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Invoice</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Due</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Outstanding</th>
+                    <th className="w-36 px-3 py-2 text-right text-xs font-medium text-muted-foreground">Apply</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {invoices.map((invoice) => (
+                    <tr key={invoice.id} className="border-b last:border-0">
+                      <td className="tabular px-3 py-2 font-medium">{invoice.number}</td>
+                      <td className="tabular px-3 py-2 text-muted-foreground">
+                        {invoice.dueDate ? formatDate(toCalendarDate(new Date(invoice.dueDate))) : '—'}
+                        {invoice.overdue ? (
+                          <span className="ml-2 text-[0.7rem] font-semibold uppercase tracking-wide text-[#c2410c]">
+                            Overdue
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="tabular px-3 py-2 text-right">
+                        {formatMoney(invoice.balance, currency)}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          aria-label={`Apply to ${invoice.number}`}
+                          inputMode="decimal"
+                          className="tabular text-right"
+                          value={applied[invoice.id] ?? ''}
+                          placeholder={totals.usingAuto ? (suggested[invoice.id] ?? '') : ''}
+                          onChange={(event) =>
+                            setApplied((current) => ({ ...current, [invoice.id]: event.target.value }))
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
 
           <div className="flex flex-wrap justify-end gap-8 border-t p-3 text-sm">

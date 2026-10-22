@@ -23,7 +23,10 @@ export type SheetDocument = {
   amountApplied: string
   balance: string
   customerMessage: string | null
+  workScope?: string | null
+  workSite?: string | null
   createdByName?: string | null
+  project?: { siteLocation?: string | null } | null
   paymentTerm: { name: string } | null
   customer: {
     displayName: string
@@ -193,6 +196,27 @@ export function InvoiceSheet({
               <dd className="text-[#5C6B7A]">{longDate(toCalendarDate(document.expiryDate))}</dd>
             </>
           ) : null}
+          {document.workSite || document.project?.siteLocation ? (
+            <>
+              <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
+                Work site
+              </dt>
+              <dd className="text-[#5C6B7A]">{document.workSite || document.project?.siteLocation}</dd>
+            </>
+          ) : null}
+          {document.workScope ? (
+            <>
+              <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
+                Work / job
+              </dt>
+              <dd className="text-[#5C6B7A]">
+                {document.workScope}
+                <span className="mt-0.5 block text-[12px]">
+                  Client: {document.customer.displayName}
+                </span>
+              </dd>
+            </>
+          ) : null}
           {document.reference ? (
             <>
               <dt className="font-bold uppercase tracking-[0.12em]" style={{ color: brandAccent }}>
@@ -233,7 +257,11 @@ export function InvoiceSheet({
                 <span className="truncate pr-3">
                   {line.blank ? '' : lineLabel(line)}
                 </span>
-                <span className="tabular text-right">{line.blank ? '' : trimNumber(line.quantity)}</span>
+                <span className="tabular text-right">
+                  {line.blank
+                    ? ''
+                    : `${trimNumber(line.quantity)}${line.item?.unitOfMeasure?.trim() ? ` ${line.item.unitOfMeasure.trim()}` : ' Pcs'}`}
+                </span>
                 <span className="tabular text-right">{line.blank ? '' : money(line.unitPrice)}</span>
                 <span className="tabular text-right font-medium" style={{ color: brandAccent }}>
                   {line.blank ? '' : money(line.amount)}

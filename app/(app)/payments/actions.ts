@@ -27,5 +27,6 @@ export async function openInvoicesForCustomer(customerId: string) {
     date: invoice.date.toISOString(),
     dueDate: invoice.dueDate?.toISOString() ?? null,
     balance: invoice.balance,
+    overdue: invoice.overdue,
   }))
 }

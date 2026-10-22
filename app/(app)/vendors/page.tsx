@@ -10,6 +10,8 @@ import {
 } from '@/components/contacts/contact-center'
 import { ContactMoneyBar } from '@/components/contacts/contact-money-bar'
 import { ImportDialog } from '@/components/master-data/import-dialog'
+import { LinkedPartyCard } from '@/components/contacts/linked-party-card'
+import { PartyPromiseDates } from '@/components/customers/customer-papers'
 import { NewContactButton } from '@/components/master-data/contact-dialog'
 import { VendorActions } from '@/components/vendors/vendor-actions'
 import { readSort } from '@/components/data/sortable-header'
@@ -400,7 +402,15 @@ export default async function VendorsPage({
       archivedHref={archivedHref}
       archivedLabel={includeInactive ? 'Hide archived' : 'Archived'}
       transactions={transactions}
-      reports={reports}
+      reports={[
+        ...reports,
+        ...(vendor?.linkedParty && canReport
+          ? [
+              { label: 'Linked customer', href: vendor.linkedParty.href },
+              { label: 'Customer statement', href: vendor.linkedParty.statementHref },
+            ]
+          : []),
+      ]}
       excelHref={exportHref}
       wordTitle={vendor ? vendor.displayName : 'Vendors'}
       wordRows={wordRows}
@@ -411,6 +421,29 @@ export default async function VendorsPage({
       canReport={canReport}
       canArchive={canArchive}
       canEdit={canEdit}
+      profileExtra={
+        vendor ? (
+          <>
+            {vendor.linkedParty ? (
+              <LinkedPartyCard
+                party={vendor.linkedParty}
+                ownBalance={vendor.balance}
+                currency={currency}
+              />
+            ) : null}
+            {vendor.agreementDate || vendor.balanceDate || vendor.balanceTime || vendor.reminderDays ? (
+              <div className="mt-3 border-t pt-3">
+                <PartyPromiseDates
+                  agreementDate={vendor.agreementDate}
+                  balanceDate={vendor.balanceDate}
+                  balanceTime={vendor.balanceTime}
+                  reminderDays={vendor.reminderDays}
+                />
+              </div>
+            ) : null}
+          </>
+        ) : null
+      }
     />
   )
 }

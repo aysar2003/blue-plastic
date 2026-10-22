@@ -16,7 +16,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatDate, formatDateTime, toCalendarDate } from '@/lib/date'
-import { Decimal } from '@/lib/money'
+import { formatQty } from '@/lib/quantity'
 import { cn } from '@/lib/utils'
 import { requireOrgContext } from '@/server/auth/context'
 import * as inventoryService from '@/server/services/inventory.service'
@@ -177,7 +177,7 @@ export default async function StoreTicketsPage({
                       ) : null}
                     </TableCell>
                     <TableCell className="numeric tabular">
-                      {new Decimal(ticket.quantity.toString()).toFixed(2)}
+                      {formatQty(ticket.quantity.toString(), ticket.item.unitOfMeasure)}
                     </TableCell>
                     <TableCell>
                       {ticket.status === 'VOID' ? (

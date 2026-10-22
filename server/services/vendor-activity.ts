@@ -58,8 +58,12 @@ export async function vendorActivity(ctx: OrgContext, vendorId: string): Promise
         account: { subtype: 'ACCOUNTS_PAYABLE' },
         journal: {
           deletedAt: null,
+          status: { notIn: ['DRAFT', 'DELETED', 'REVERSED'] },
           purchaseDocuments: { none: {} },
           billPayments: { none: {} },
+          sourceType: {
+            notIn: ['BILL', 'VENDOR_CREDIT', 'EXPENSE', 'BILL_PAYMENT', 'REVERSAL'],
+          },
         },
       },
       select: {

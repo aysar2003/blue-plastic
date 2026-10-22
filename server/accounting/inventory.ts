@@ -327,6 +327,7 @@ export async function valuation(tx: Tx, orgId: string) {
       itemId: string
       name: string
       sku: string | null
+      unitOfMeasure: string | null
       quantity: string
       value: string
       salesPrice: string | null
@@ -336,6 +337,7 @@ export async function valuation(tx: Tx, orgId: string) {
     SELECT i.id             AS "itemId",
            i.name           AS "name",
            i.sku            AS "sku",
+           i."unitOfMeasure" AS "unitOfMeasure",
            COALESCE(t."runningQuantity", 0) AS "quantity",
            COALESCE(t."runningValue", 0)    AS "value",
            i."salesPrice"   AS "salesPrice",
@@ -361,6 +363,7 @@ export async function valuation(tx: Tx, orgId: string) {
       itemId: row.itemId,
       name: row.name,
       sku: row.sku,
+      unitOfMeasure: row.unitOfMeasure,
       quantity,
       value,
       averageCost: quantity.isZero() ? ZERO : value.dividedBy(quantity).toDecimalPlaces(6),

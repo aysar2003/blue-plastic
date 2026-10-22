@@ -26,7 +26,14 @@ import { saveAdjustmentForm } from '@/app/(app)/inventory/actions'
 import { StockCountExcelTools } from '@/components/inventory/stock-count-excel'
 import type { StockCountImportLine } from '@/lib/stock-count-sheet'
 
-type ItemOption = { id: string; label: string; onHand: string; averageCost: string; sku?: string | null }
+type ItemOption = {
+  id: string
+  label: string
+  onHand: string
+  averageCost: string
+  sku?: string | null
+  unitOfMeasure?: string | null
+}
 type StoreOption = { id: string; label: string; isOffice?: boolean }
 type Line = { key: number; itemId: string; counted: string; description: string }
 type AdjustMode = 'count' | 'damage' | 'cost'
@@ -345,7 +352,16 @@ export function AdjustmentForm({
                       />
                     </td>
                     <td className="tabular px-3 py-3 text-right text-muted-foreground">
-                      {item?.onHand ?? '—'}
+                      {item ? (
+                        <>
+                          {item.onHand}{' '}
+                          <span className="text-xs font-medium uppercase">
+                            {item.unitOfMeasure?.trim() || 'Pcs'}
+                          </span>
+                        </>
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td className="px-2 py-2">
                       <Input

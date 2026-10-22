@@ -652,6 +652,9 @@ export async function dashboard(ctx: PortalContext) {
         email: true,
         phone: true,
         mobile: true,
+        balanceDate: true,
+        agreementDate: true,
+        balanceTime: true,
       },
     }),
     subledgerBalances(db, ctx, 'customer', [customerId]),
@@ -687,6 +690,7 @@ export async function dashboard(ctx: PortalContext) {
   ])
 
   if (!customer) throw notFound('Customer')
+  const { balanceDate, agreementDate, balanceTime, ...publicCustomer } = customer
 
   const balance = balances.get(customerId) ?? ZERO
   let overdue = ZERO
@@ -703,8 +707,12 @@ export async function dashboard(ctx: PortalContext) {
         dueDate: invoice.dueDate ? toCalendarDate(invoice.dueDate) : null,
         promisedDate: invoice.promisedDate ? toCalendarDate(invoice.promisedDate) : null,
         excludeFromOverdue: invoice.excludeFromOverdue,
+        partyBalanceDate: balanceDate ? toCalendarDate(balanceDate) : null,
+        partyAgreementDate: agreementDate ? toCalendarDate(agreementDate) : null,
+        partyBalanceTime: balanceTime,
       },
       asOf,
+      { timeZone: ctx.organization.timeZone },
     )
     if (overdueFlag) {
       overdue = overdue.plus(remaining)
@@ -718,7 +726,7 @@ export async function dashboard(ctx: PortalContext) {
   const currency = ctx.organization.baseCurrency
   const balanceCopy = describeCustomerBalance(balance, currency)
   return {
-    customer,
+    customer: publicCustomer,
     asOf,
     balance: toMoneyString(balance, 2),
     balanceLabel: balanceCopy.amountLabel,
@@ -739,6 +747,10 @@ export async function dashboard(ctx: PortalContext) {
 export async function listInvoices(ctx: PortalContext, query: ListQuery) {
   const customerId = ctx.portalCustomerId
   const asOf = today(ctx.organization.timeZone)
+  const party = await db.customer.findFirst({
+    where: { id: customerId, orgId: ctx.orgId },
+    select: { balanceDate: true, agreementDate: true, balanceTime: true },
+  })
 
   const where: Prisma.SalesDocumentWhereInput = {
     orgId: ctx.orgId,
@@ -790,8 +802,12 @@ export async function listInvoices(ctx: PortalContext, query: ListQuery) {
             dueDate: row.dueDate ? toCalendarDate(row.dueDate) : null,
             promisedDate: row.promisedDate ? toCalendarDate(row.promisedDate) : null,
             excludeFromOverdue: row.excludeFromOverdue,
+            partyBalanceDate: party?.balanceDate ? toCalendarDate(party.balanceDate) : null,
+            partyAgreementDate: party?.agreementDate ? toCalendarDate(party.agreementDate) : null,
+            partyBalanceTime: party?.balanceTime ?? null,
           },
           asOf,
+          { timeZone: ctx.organization.timeZone },
         )
       return {
         id: row.id,

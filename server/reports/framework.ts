@@ -67,59 +67,151 @@ export type ReportRange = {
 export async function accountFigures(
   orgId: string,
   range: ReportRange,
-  options: { client?: Tx; excludeClosing?: boolean } = {},
+  options: {
+    client?: Tx
+    excludeClosing?: boolean
+    /**
+     * Profit and loss only needs period movement. Scanning the whole ledger for
+     * opening/closing on every P&L (including the shell chart) was the main
+     * latency source once journal_lines passed ~100k rows.
+     */
+    movementOnly?: boolean
+    /**
+     * Limit to these journals (customer / vendor / item / store filter).
+     * `null` / omitted = whole books. Empty array = no matching journals.
+     */
+    journalIds?: string[] | null
+  } = {},
 ): Promise<AccountFigures[]> {
   const client = options.client ?? db
   const from = toDate(range.from)
   const to = toDate(range.to)
   const excludeClosing = options.excludeClosing ?? false
+  const movementOnly = options.movementOnly ?? false
+  const cash = range.basis === 'cash'
+  const scopeAll = options.journalIds == null
+  const journalIds = options.journalIds ?? []
 
-  const rows =
-    range.basis === 'cash'
+  // Aggregate lines first (date-bounded), then left-join accounts so empty
+  // accounts still appear. The old shape joined every line onto every account
+  // and filtered dates in CASE expressions — fine at 12 lines, painful at 100k.
+  const rows = movementOnly
+    ? cash
       ? await client.$queryRaw<RawFigures[]>`
+          WITH lines AS (
+            SELECT l."accountId",
+                   SUM(l.debit - l.credit) AS movement
+              FROM journal_lines l
+              INNER JOIN journals j
+                ON j.id = l."journalId"
+               AND j.status NOT IN ('DRAFT', 'DELETED')
+               AND (${excludeClosing} = false OR j."isClosingEntry" = false)
+               AND (${scopeAll} OR j.id = ANY(${journalIds}))
+               AND EXISTS (
+                     SELECT 1 FROM journal_lines cl
+                       JOIN ledger_accounts ca ON ca.id = cl."accountId"
+                      WHERE cl."journalId" = j.id
+                        AND ca.subtype IN ('BANK', 'UNDEPOSITED_FUNDS', 'CREDIT_CARD')
+                   )
+             WHERE l."orgId" = ${orgId}
+               AND l."journalDate" BETWEEN ${from} AND ${to}
+             GROUP BY l."accountId"
+          )
           SELECT a.id AS "accountId", a.code, a.name, a.type::text AS "type",
                  a.subtype::text AS "subtype", a."parentId",
-                 COALESCE(SUM(CASE WHEN l."journalDate" BETWEEN ${from} AND ${to}
-                                   THEN l.debit - l.credit ELSE 0 END), 0) AS movement,
-                 COALESCE(SUM(CASE WHEN l."journalDate" <= ${to}
-                                   THEN l.debit - l.credit ELSE 0 END), 0) AS closing,
-                 COALESCE(SUM(CASE WHEN l."journalDate" < ${from}
-                                   THEN l.debit - l.credit ELSE 0 END), 0) AS opening
+                 COALESCE(lines.movement, 0) AS movement,
+                 0::numeric AS closing,
+                 0::numeric AS opening
             FROM ledger_accounts a
-            LEFT JOIN journal_lines l
-              ON l."accountId" = a.id AND l."orgId" = a."orgId"
-            LEFT JOIN journals j
-              ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
-             AND (${excludeClosing} = false OR j."isClosingEntry" = false)
-             AND EXISTS (
-                   SELECT 1 FROM journal_lines cl
-                     JOIN ledger_accounts ca ON ca.id = cl."accountId"
-                    WHERE cl."journalId" = j.id
-                      AND ca.subtype IN ('BANK', 'UNDEPOSITED_FUNDS', 'CREDIT_CARD')
-                 )
+            LEFT JOIN lines ON lines."accountId" = a.id
            WHERE a."orgId" = ${orgId}
-             AND (l.id IS NULL OR j.id IS NOT NULL)
-           GROUP BY a.id, a.code, a.name, a.type, a.subtype, a."parentId"
            ORDER BY a.code
         `
       : await client.$queryRaw<RawFigures[]>`
+          WITH lines AS (
+            SELECT l."accountId",
+                   SUM(l.debit - l.credit) AS movement
+              FROM journal_lines l
+              INNER JOIN journals j
+                ON j.id = l."journalId"
+               AND j.status NOT IN ('DRAFT', 'DELETED')
+               AND (${excludeClosing} = false OR j."isClosingEntry" = false)
+               AND (${scopeAll} OR j.id = ANY(${journalIds}))
+             WHERE l."orgId" = ${orgId}
+               AND l."journalDate" BETWEEN ${from} AND ${to}
+             GROUP BY l."accountId"
+          )
           SELECT a.id AS "accountId", a.code, a.name, a.type::text AS "type",
                  a.subtype::text AS "subtype", a."parentId",
-                 COALESCE(SUM(CASE WHEN l."journalDate" BETWEEN ${from} AND ${to}
-                                   THEN l.debit - l.credit ELSE 0 END), 0) AS movement,
-                 COALESCE(SUM(CASE WHEN l."journalDate" <= ${to}
-                                   THEN l.debit - l.credit ELSE 0 END), 0) AS closing,
-                 COALESCE(SUM(CASE WHEN l."journalDate" < ${from}
-                                   THEN l.debit - l.credit ELSE 0 END), 0) AS opening
+                 COALESCE(lines.movement, 0) AS movement,
+                 0::numeric AS closing,
+                 0::numeric AS opening
             FROM ledger_accounts a
-            LEFT JOIN journal_lines l
-              ON l."accountId" = a.id AND l."orgId" = a."orgId"
-            LEFT JOIN journals j
-              ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
-             AND (${excludeClosing} = false OR j."isClosingEntry" = false)
+            LEFT JOIN lines ON lines."accountId" = a.id
            WHERE a."orgId" = ${orgId}
-             AND (l.id IS NULL OR j.id IS NOT NULL)
-           GROUP BY a.id, a.code, a.name, a.type, a.subtype, a."parentId"
+           ORDER BY a.code
+        `
+    : cash
+      ? await client.$queryRaw<RawFigures[]>`
+          WITH lines AS (
+            SELECT l."accountId",
+                   SUM(CASE WHEN l."journalDate" BETWEEN ${from} AND ${to}
+                            THEN l.debit - l.credit ELSE 0 END) AS movement,
+                   SUM(l.debit - l.credit) AS closing,
+                   SUM(CASE WHEN l."journalDate" < ${from}
+                            THEN l.debit - l.credit ELSE 0 END) AS opening
+              FROM journal_lines l
+              INNER JOIN journals j
+                ON j.id = l."journalId"
+               AND j.status NOT IN ('DRAFT', 'DELETED')
+               AND (${excludeClosing} = false OR j."isClosingEntry" = false)
+               AND (${scopeAll} OR j.id = ANY(${journalIds}))
+               AND EXISTS (
+                     SELECT 1 FROM journal_lines cl
+                       JOIN ledger_accounts ca ON ca.id = cl."accountId"
+                      WHERE cl."journalId" = j.id
+                        AND ca.subtype IN ('BANK', 'UNDEPOSITED_FUNDS', 'CREDIT_CARD')
+                   )
+             WHERE l."orgId" = ${orgId}
+               AND l."journalDate" <= ${to}
+             GROUP BY l."accountId"
+          )
+          SELECT a.id AS "accountId", a.code, a.name, a.type::text AS "type",
+                 a.subtype::text AS "subtype", a."parentId",
+                 COALESCE(lines.movement, 0) AS movement,
+                 COALESCE(lines.closing, 0) AS closing,
+                 COALESCE(lines.opening, 0) AS opening
+            FROM ledger_accounts a
+            LEFT JOIN lines ON lines."accountId" = a.id
+           WHERE a."orgId" = ${orgId}
+           ORDER BY a.code
+        `
+      : await client.$queryRaw<RawFigures[]>`
+          WITH lines AS (
+            SELECT l."accountId",
+                   SUM(CASE WHEN l."journalDate" BETWEEN ${from} AND ${to}
+                            THEN l.debit - l.credit ELSE 0 END) AS movement,
+                   SUM(l.debit - l.credit) AS closing,
+                   SUM(CASE WHEN l."journalDate" < ${from}
+                            THEN l.debit - l.credit ELSE 0 END) AS opening
+              FROM journal_lines l
+              INNER JOIN journals j
+                ON j.id = l."journalId"
+               AND j.status NOT IN ('DRAFT', 'DELETED')
+               AND (${excludeClosing} = false OR j."isClosingEntry" = false)
+               AND (${scopeAll} OR j.id = ANY(${journalIds}))
+             WHERE l."orgId" = ${orgId}
+               AND l."journalDate" <= ${to}
+             GROUP BY l."accountId"
+          )
+          SELECT a.id AS "accountId", a.code, a.name, a.type::text AS "type",
+                 a.subtype::text AS "subtype", a."parentId",
+                 COALESCE(lines.movement, 0) AS movement,
+                 COALESCE(lines.closing, 0) AS closing,
+                 COALESCE(lines.opening, 0) AS opening
+            FROM ledger_accounts a
+            LEFT JOIN lines ON lines."accountId" = a.id
+           WHERE a."orgId" = ${orgId}
            ORDER BY a.code
         `
 

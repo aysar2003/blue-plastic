@@ -4,6 +4,7 @@ import { Suspense } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeftIcon } from 'lucide-react'
 
+import { closeTopDialog } from '@/lib/dialog-stack'
 import { normalizeHref, parentOf, popScreen, readTrail, writeTrail } from '@/lib/nav-trail'
 import { startNavigationProgress } from './navigation-progress'
 
@@ -46,6 +47,10 @@ function HistoryBackInner() {
     <button
       type="button"
       onClick={() => {
+        // Nested form (customer / item / …) on top of another form: close it
+        // first and stay on the screen underneath.
+        if (closeTopDialog()) return
+
         const { target, trail } = popScreen(readTrail(), href)
         const next = stayInPosHub(pathname, target ?? parentOf(pathname))
         writeTrail(trail.length > 0 ? trail : [normalizeHref(next)])

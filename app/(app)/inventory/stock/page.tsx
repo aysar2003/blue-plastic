@@ -222,6 +222,9 @@ export default async function InventoryPage({
                     </TableCell>
                     <TableCell className="numeric tabular">
                       {item.quantity.toFixed(2)}
+                      <span className="ml-1 text-xs font-medium uppercase text-muted-foreground">
+                        {item.unitOfMeasure?.trim() || 'Pcs'}
+                      </span>
                       {item.quantity.lessThanOrEqualTo(0) ? (
                         <Badge variant="destructive" className="ml-2">
                           Out of stock

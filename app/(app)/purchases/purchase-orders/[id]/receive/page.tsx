@@ -11,6 +11,7 @@ import { formatDate, toCalendarDate, today } from '@/lib/date'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
 import * as purchaseService from '@/server/services/purchase.service'
+import * as storeService from '@/server/services/store.service'
 
 export const metadata: Metadata = { title: 'Receive items' }
 
@@ -33,8 +34,12 @@ export default async function ReceiveOrderPage({
   const { id } = await params
   const query = await searchParams
   const returnTo = typeof query.return === 'string' && query.return.startsWith('/') ? query.return : null
+  const preferredStoreId = typeof query.store === 'string' ? query.store : null
 
-  const order = await purchaseService.receivableOrder(ctx, id).catch(() => null)
+  const [order, stores] = await Promise.all([
+    purchaseService.receivableOrder(ctx, id).catch(() => null),
+    storeService.columns(ctx),
+  ])
   if (!order) notFound()
 
   return (
@@ -93,6 +98,8 @@ export default async function ReceiveOrderPage({
             lines={order.lines}
             today={today(ctx.organization.timeZone)}
             currency={ctx.organization.baseCurrency}
+            stores={stores}
+            preferredStoreId={preferredStoreId}
           />
         </>
       )}

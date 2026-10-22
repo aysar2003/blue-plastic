@@ -113,6 +113,7 @@ export async function resolveSources(
           select: {
             id: true, type: true, number: true,
             vendor: { select: { id: true, displayName: true } },
+            offsetCustomer: { select: { id: true, displayName: true } },
           },
         })
       : [],
@@ -208,11 +209,13 @@ export async function resolveSources(
 
   for (const document of purchaseDocuments) {
     const slug = PURCHASE_SLUG[document.type] ?? 'bills'
+    const offset = document.offsetCustomer
     resolved.set(key(document.type, document.id), {
       number: document.number,
       href: `/purchases/${slug}/${document.id}`,
-      partyName: document.vendor.displayName,
-      partyHref: `/vendors/${document.vendor.id}`,
+      // Customer-settled expenses belong on the customer, not the shadow vendor.
+      partyName: offset?.displayName ?? document.vendor.displayName,
+      partyHref: offset ? `/customers?id=${offset.id}` : `/vendors/${document.vendor.id}`,
     })
   }
 

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { PencilIcon } from 'lucide-react'
 
+import { ApprovalTrailPanel } from '@/components/approvals/approval-trail-panel'
 import { DeleteButton } from '@/components/data/delete-record'
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
@@ -241,6 +242,8 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
           .
         </p>
       ) : null}
+
+      <ApprovalTrailPanel entityType="CUSTOMER_PAYMENT" entityId={payment.id} />
     </>
   )
 }

@@ -83,8 +83,14 @@ export function VendorActions({
   }
   const [isPending, startTransition] = useTransition()
   const links = useMemo(
-    () => vendorContactMenu(vendorId, { canBill, canPay, canReport }),
-    [vendorId, canBill, canPay, canReport],
+    () =>
+      vendorContactMenu(vendorId, {
+        canBill,
+        canPay,
+        canReport,
+        linkedCustomerId: contact?.linkedCustomerId,
+      }),
+    [vendorId, canBill, canPay, canReport, contact?.linkedCustomerId],
   )
   const primary = links.find((action) => action.label === 'Enter bills') ?? links[0]
   const rest = links.filter((action) => action !== primary)

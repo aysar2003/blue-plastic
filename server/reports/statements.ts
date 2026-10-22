@@ -6,6 +6,7 @@ import { keepChartFamily, linkColonParents, nestChartRows } from '@/lib/chart-tr
 import type { CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
 import type { Tx } from '@/server/db'
+import type { ReportEntityFilters } from '@/server/reports/catalogue'
 import {
   accountFigures,
   CASH_SUBTYPES,
@@ -15,6 +16,7 @@ import {
   type AccountFigures,
   type ReportRange,
 } from './framework'
+import { journalsForEntityFilters } from './statement-scope'
 
 export type StatementRow = {
   accountId: string
@@ -76,21 +78,41 @@ export type ProfitAndLoss = {
 export async function profitAndLoss(
   orgId: string,
   range: ReportRange,
-  options: { client?: Tx; comparison?: ReportRange } = {},
+  options: {
+    client?: Tx
+    comparison?: ReportRange
+    filters?: ReportEntityFilters
+  } = {},
 ): Promise<ProfitAndLoss> {
+  const journalIds = await journalsForEntityFilters(orgId, options.filters, {
+    client: options.client,
+  })
   // The year-end closing entry is left out: it zeroes the nominal accounts at the
   // year end, and counting it would report a closed year as having earned nothing.
-  const figures = await accountFigures(orgId, range, {
-    client: options.client,
-    excludeClosing: true,
-  })
+  const figures = narrowByAccount(
+    await accountFigures(orgId, range, {
+      client: options.client,
+      excludeClosing: true,
+      movementOnly: true,
+      journalIds,
+    }),
+    options.filters?.accountId,
+  )
   // The comparison inherits the basis unless it names its own, so a cash-basis
   // report cannot quietly compare itself against an accrual-basis period.
   const comparisonFigures = options.comparison
-    ? await accountFigures(
-        orgId,
-        { ...options.comparison, basis: options.comparison.basis ?? range.basis },
-        { client: options.client, excludeClosing: true },
+    ? narrowByAccount(
+        await accountFigures(
+          orgId,
+          { ...options.comparison, basis: options.comparison.basis ?? range.basis },
+          {
+            client: options.client,
+            excludeClosing: true,
+            movementOnly: true,
+            journalIds,
+          },
+        ),
+        options.filters?.accountId,
       )
     : null
 
@@ -168,6 +190,46 @@ function netIncomeOf(figures: AccountFigures[]): Decimal {
  * names), keep zero-balance parents that still have children on the sheet, and
  * order each section as a tree.
  */
+/** Keep one account and its parents so the statement tree still nests. */
+function narrowByAccount(
+  figures: AccountFigures[],
+  accountId: string | undefined,
+): AccountFigures[] {
+  if (!accountId) return figures
+  const byId = new Map(figures.map((row) => [row.accountId, row]))
+  if (!byId.has(accountId)) {
+    return figures.map((row) => ({
+      ...row,
+      movement: ZERO,
+      closing: ZERO,
+      opening: ZERO,
+    }))
+  }
+  const keep = new Set<string>()
+  let cursor: string | null | undefined = accountId
+  while (cursor) {
+    keep.add(cursor)
+    cursor = byId.get(cursor)?.parentId
+  }
+  // Children of the picked account (and their children) stay so a parent filter
+  // still shows the detail underneath.
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const row of figures) {
+      if (row.parentId && keep.has(row.parentId) && !keep.has(row.accountId)) {
+        keep.add(row.accountId)
+        grew = true
+      }
+    }
+  }
+  return figures.map((row) =>
+    keep.has(row.accountId)
+      ? row
+      : { ...row, movement: ZERO, closing: ZERO, opening: ZERO },
+  )
+}
+
 function nestStatementRows(
   figures: AccountFigures[],
   amountOf: (row: AccountFigures) => Decimal,
@@ -266,12 +328,22 @@ export type BalanceSheet = {
 export async function balanceSheet(
   orgId: string,
   asOf: CalendarDate,
-  options: { client?: Tx; basis?: 'accrual' | 'cash' } = {},
+  options: {
+    client?: Tx
+    basis?: 'accrual' | 'cash'
+    filters?: ReportEntityFilters
+  } = {},
 ): Promise<BalanceSheet> {
-  const figures = await accountFigures(
-    orgId,
-    { from: '1900-01-01', to: asOf, basis: options.basis },
-    { client: options.client },
+  const journalIds = await journalsForEntityFilters(orgId, options.filters, {
+    client: options.client,
+  })
+  const figures = narrowByAccount(
+    await accountFigures(
+      orgId,
+      { from: '1900-01-01', to: asOf, basis: options.basis },
+      { client: options.client, journalIds },
+    ),
+    options.filters?.accountId,
   )
 
   const sections = BALANCE_GROUPS.map((group) => {
@@ -395,12 +467,19 @@ export type CashFlow = {
 export async function cashFlow(
   orgId: string,
   range: ReportRange,
-  options: { client?: Tx } = {},
+  options: { client?: Tx; filters?: ReportEntityFilters } = {},
 ): Promise<CashFlow> {
-  const figures = await accountFigures(orgId, range, {
+  const journalIds = await journalsForEntityFilters(orgId, options.filters, {
     client: options.client,
-    excludeClosing: true,
   })
+  const figures = narrowByAccount(
+    await accountFigures(orgId, range, {
+      client: options.client,
+      excludeClosing: true,
+      journalIds,
+    }),
+    options.filters?.accountId,
+  )
 
   const isCash = (row: AccountFigures) => CASH_SUBTYPES.includes(row.subtype)
   const cashAccounts = figures.filter(isCash)

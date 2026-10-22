@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { readSettings, type SearchParams } from '@/app/(app)/reports/params'
+import { readEntityFilters, readSettings, type SearchParams } from '@/app/(app)/reports/params'
 import { ACCOUNT_SUBTYPE_LABELS, ACCOUNT_TYPE_LABELS } from '@/lib/accounting-labels'
 import { formatDate } from '@/lib/date'
 import { letterheadLines } from '@/lib/letterhead'
@@ -64,6 +64,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ repo
         ctx,
         range: settings.range,
         asOf: settings.asOf,
+        filters: readEntityFilters(query),
       })
 
       const rows: CsvCell[][] = [
@@ -104,7 +105,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ repo
       [],
     ]
 
-    const rows = await build(report as ReportKey, ctx.orgId, settings, heading, ctx)
+    const rows = await build(
+      report as ReportKey,
+      ctx.orgId,
+      settings,
+      heading,
+      ctx,
+      readEntityFilters(query),
+    )
     return csvResponse(`${report}-${settings.range.to}.csv`, rows)
   } catch (error) {
     if (isAppError(error)) {
@@ -121,11 +129,13 @@ async function build(
   settings: ReturnType<typeof readSettings>,
   heading: (title: string) => CsvCell[][],
   ctx: OrgContext,
+  filters: ReturnType<typeof readEntityFilters> = {},
 ): Promise<CsvCell[][]> {
   switch (report) {
     case 'profit-loss': {
       const data = await profitAndLoss(orgId, { ...settings.range, basis: settings.basis }, {
         comparison: settings.comparisonRange,
+        filters,
       })
       const compare = Boolean(settings.comparisonRange)
 
@@ -167,7 +177,7 @@ async function build(
     }
 
     case 'balance-sheet': {
-      const data = await balanceSheet(orgId, settings.asOf, { basis: settings.basis })
+      const data = await balanceSheet(orgId, settings.asOf, { basis: settings.basis, filters })
       const rows: CsvCell[][] = heading('Balance sheet')
       rows.push(['Section', 'Code', 'Account', 'Type', 'Detail type', 'Amount'])
 
@@ -195,7 +205,7 @@ async function build(
     }
 
     case 'cash-flow': {
-      const data = await cashFlow(orgId, settings.range)
+      const data = await cashFlow(orgId, settings.range, { filters })
       const rows: CsvCell[][] = heading('Statement of cash flows (indirect method)')
       rows.push(['Section', 'Movement', 'Amount'])
       rows.push(['Operating activities', 'Net income', data.netIncome])

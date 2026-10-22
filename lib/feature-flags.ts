@@ -64,7 +64,7 @@ export const MODULE_FLAG_LABELS: Record<ModuleFlag, { label: string; hint: strin
   inventory: { label: 'Inventory', hint: 'Products and stock' },
   barcodes: { label: 'Barcodes', hint: 'Labels and printing' },
   stores: { label: 'Store', hint: 'Quantity by warehouse' },
-  approvals: { label: 'Approvals', hint: 'Maker-checker inbox' },
+  approvals: { label: 'Approvals', hint: 'Pending inbox, workflows, and posting' },
   accounting: { label: 'Accounting', hint: 'Chart of accounts hub' },
   journals: { label: 'Journals', hint: 'Manual ledger entries' },
   periods: { label: 'Periods', hint: 'Close the books' },

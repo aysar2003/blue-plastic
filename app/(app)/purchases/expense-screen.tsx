@@ -11,6 +11,7 @@ import { SearchInput } from '@/components/data/search-input'
 import { ExpenseHome } from '@/components/purchases/expense-home'
 import { ExpenseTable } from '@/components/purchases/expense-table'
 import { NewTransactionMenu } from '@/components/purchases/new-transaction-menu'
+import { VendorFilter } from '@/components/purchases/vendor-filter'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { formatDate, today } from '@/lib/date'
@@ -40,16 +41,19 @@ export async function ExpenseScreen({
   const kind = parseExpenseKind(typeof search.kind === 'string' ? search.kind : '')
   const statusRaw = typeof search.status === 'string' ? search.status : ''
   const status = statusRaw === 'open' || statusRaw === 'paid' ? statusRaw : undefined
+  const vendorId = typeof search.vendorId === 'string' ? search.vendorId : undefined
 
-  const [register, home] = await Promise.all([
+  const [register, home, vendors] = await Promise.all([
     expenseRegister(ctx, {
       kind,
       status,
       q,
+      vendorId,
       from: range?.from,
       to: range?.to,
     }),
     purchaseService.expenseHome(ctx),
+    purchaseService.vendorChoices(ctx),
   ])
 
   const hidden = {
@@ -57,6 +61,7 @@ export async function ExpenseScreen({
     kind: kind || undefined,
     status,
     date: dateRaw,
+    vendorId,
   }
   const canExpense = ctx.permissions.has('expense:create')
   const canBill = ctx.permissions.has('bill:create')
@@ -90,6 +95,7 @@ export async function ExpenseScreen({
       </div>
 
       <div className="mb-3 flex flex-wrap items-end gap-3">
+        <VendorFilter vendors={vendors.map((vendor) => ({ value: vendor.id, label: vendor.displayName }))} />
         <QuerySelect
           label=""
           param="kind"
@@ -147,6 +153,7 @@ export async function ExpenseScreen({
               currency={ctx.organization.baseCurrency}
               totals={register.totals}
               canEdit={ctx.permissions.has('bill:update') || ctx.permissions.has('expense:update')}
+              listParams={hidden}
             />
           </ScrollSheet>
           <Pagination total={register.rows.length} />

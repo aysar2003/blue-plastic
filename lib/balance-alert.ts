@@ -3,7 +3,8 @@ import type { CalendarDate } from '@/lib/date'
 export type BalanceAlertKind = 'reminder' | 'reached'
 
 export type BalanceAlert = {
-  customerId: string
+  id: string
+  href: string
   name: string
   amount: string
   kind: BalanceAlertKind

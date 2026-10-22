@@ -2,7 +2,7 @@ import 'server-only'
 import type { DocumentType, Prisma, SalesDocumentType } from '@prisma/client'
 
 import { endOfMonth, isCalendarDate, startOfMonth, toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
-import { isCollectionOverdue } from '@/lib/invoice-overdue'
+import { documentOverdueOr, isCollectionOverdue, overdueClock, partyFromContact } from '@/lib/invoice-overdue'
 import { Decimal, formatMoney, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
 import { isCashMethodName } from '@/lib/pos-payment'
@@ -81,13 +81,13 @@ const SEQUENCE_FOR: Record<SalesDocumentType, DocumentType> = {
 const DOCUMENT_SELECT = {
   id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true,
   promisedDate: true, promiseNote: true, excludeFromOverdue: true,
-  status: true, reference: true, memo: true, customerMessage: true,
+  status: true, reference: true, memo: true, customerMessage: true, workScope: true, workSite: true,
   subtotal: true, discountAmount: true, taxTotal: true, total: true,
   currencyCode: true, depositAccountId: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
   projectId: true,
   createdById: true,
-  project: { select: { id: true, number: true, name: true } },
+  project: { select: { id: true, number: true, name: true, siteLocation: true } },
   customer: {
     select: {
       id: true,
@@ -99,6 +99,9 @@ const DOCUMENT_SELECT = {
       billingCity: true,
       billingRegion: true,
       salesPerson: true,
+      balanceDate: true,
+      agreementDate: true,
+      balanceTime: true,
     },
   },
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
@@ -126,34 +129,39 @@ export async function list(
   options: {
     status?: string
     customerId?: string
+    ids?: string[]
     sort?: string
     dir?: 'asc' | 'desc'
     from?: CalendarDate
     to?: CalendarDate
   } = {},
 ) {
+  const selected = options.ids?.filter(Boolean) ?? []
   const where: Prisma.SalesDocumentWhereInput = {
     orgId: ctx.orgId,
     type,
-    ...(options.customerId ? { customerId: options.customerId } : {}),
+    ...(selected.length ? { id: { in: selected } } : {}),
+    ...(selected.length ? {} : options.customerId ? { customerId: options.customerId } : {}),
     ...(options.status === 'open' ? { status: { in: ['OPEN', 'PARTIAL'] } } : {}),
     ...(options.status === 'overdue'
       ? (() => {
-          const asOf = toDate(today(ctx.organization.timeZone))
+          const clock = overdueClock(ctx.organization.timeZone)
           return {
             status: { in: ['OPEN' as const, 'PARTIAL' as const] },
             excludeFromOverdue: false,
-            OR: [
-              { promisedDate: { lt: asOf } },
-              { AND: [{ promisedDate: null }, { dueDate: { lt: asOf } }] },
-            ],
+            OR: documentOverdueOr({
+              asOf: clock.asOfDate,
+              nowTime: clock.nowTime,
+              party: 'customer',
+              withPromisedDate: true,
+            }) as Prisma.SalesDocumentWhereInput[],
           }
         })()
       : {}),
     ...(options.status === 'draft' ? { status: 'DRAFT' } : {}),
     ...(options.status === 'notdue'
       ? (() => {
-          const asOf = toDate(today(ctx.organization.timeZone))
+          const clock = overdueClock(ctx.organization.timeZone)
           return {
             status: { in: ['OPEN' as const, 'PARTIAL' as const] },
             OR: [
@@ -162,15 +170,14 @@ export async function list(
                 AND: [
                   { excludeFromOverdue: false },
                   {
-                    OR: [
-                      { promisedDate: { gte: asOf } },
-                      {
-                        AND: [
-                          { promisedDate: null },
-                          { OR: [{ dueDate: null }, { dueDate: { gte: asOf } }] },
-                        ],
-                      },
-                    ],
+                    NOT: {
+                      OR: documentOverdueOr({
+                        asOf: clock.asOfDate,
+                        nowTime: clock.nowTime,
+                        party: 'customer',
+                        withPromisedDate: true,
+                      }) as Prisma.SalesDocumentWhereInput[],
+                    },
                   },
                 ],
               },
@@ -244,7 +251,8 @@ export async function list(
  * already settled. Drafts have not been sent.
  */
 export async function invoiceHome(ctx: OrgContext) {
-  const now = today(ctx.organization.timeZone)
+  const clock = overdueClock(ctx.organization.timeZone)
+  const now = clock.asOf
   const rows = await db.salesDocument.findMany({
     where: { orgId: ctx.orgId, type: 'INVOICE', deletedAt: null, status: { not: 'VOID' } },
     select: {
@@ -254,8 +262,18 @@ export async function invoiceHome(ctx: OrgContext) {
       promisedDate: true,
       excludeFromOverdue: true,
       total: true,
+      customerId: true,
     },
   })
+  const openRows = rows.filter((row) => row.status === 'OPEN' || row.status === 'PARTIAL')
+  const partyByCustomer = new Map(
+    (
+      await db.customer.findMany({
+        where: { orgId: ctx.orgId, id: { in: [...new Set(openRows.map((row) => row.customerId))] } },
+        select: { id: true, balanceDate: true, agreementDate: true, balanceTime: true },
+      })
+    ).map((person) => [person.id, person]),
+  )
   const openIds = rows.filter((row) => row.status === 'OPEN' || row.status === 'PARTIAL').map((row) => row.id)
   const balances = await outstandingBalances(db, openIds)
 
@@ -285,7 +303,7 @@ export async function invoiceHome(ctx: OrgContext) {
     const owing = balances.get(row.id) ?? new Decimal(row.total.toString())
     unpaid = unpaid.plus(owing)
     unpaidCount += 1
-    if (isCollectionOverdue(row, now)) {
+    if (isCollectionOverdue({ ...row, ...partyFromContact(partyByCustomer.get(row.customerId)) }, now, clock)) {
       overdue = overdue.plus(owing)
       overdueCount += 1
     } else {
@@ -763,6 +781,8 @@ export async function create(
         reference: input.reference ?? null,
         memo: input.memo ?? null,
         customerMessage: input.customerMessage ?? null,
+        workScope: input.workScope ?? null,
+        workSite: input.workSite ?? null,
         subtotal: priced.subtotal.toFixed(4),
         discountAmount: priced.discountAmount.toFixed(4),
         taxTotal: priced.taxTotal.toFixed(4),
@@ -1017,6 +1037,8 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
         reference: input.reference ?? null,
         memo: input.memo ?? null,
         customerMessage: input.customerMessage ?? null,
+        workScope: input.workScope ?? null,
+        workSite: input.workSite ?? null,
         subtotal: priced.subtotal.toFixed(4),
         discountAmount: priced.discountAmount.toFixed(4),
         taxTotal: priced.taxTotal.toFixed(4),
@@ -1665,6 +1687,8 @@ export async function getConvertibleSource(ctx: OrgContext, id: string) {
       reference: true,
       memo: true,
       customerMessage: true,
+      workScope: true,
+      workSite: true,
       paymentTermId: true,
       discountAmount: true,
       customer: { select: { displayName: true } },
@@ -1680,7 +1704,7 @@ export async function getConvertibleSource(ctx: OrgContext, id: string) {
           taxCodeId: true,
           storeId: true,
           amount: true,
-          item: { select: { name: true, sku: true } },
+          item: { select: { name: true, sku: true, unitOfMeasure: true } },
         },
       },
     },
@@ -1698,6 +1722,8 @@ export async function getConvertibleSource(ctx: OrgContext, id: string) {
     reference: row.reference,
     memo: row.memo,
     customerMessage: row.customerMessage,
+    workScope: row.workScope,
+    workSite: row.workSite,
     paymentTermId: row.paymentTermId,
     discountAmount: row.discountAmount.toString(),
     lines: row.lines.map((line) => ({
@@ -1705,6 +1731,7 @@ export async function getConvertibleSource(ctx: OrgContext, id: string) {
       itemId: line.itemId,
       itemName: line.item?.name ?? null,
       itemSku: line.item?.sku ?? null,
+      unitOfMeasure: line.item?.unitOfMeasure ?? null,
       description: line.description,
       quantity: line.quantity.toString(),
       unitPrice: line.unitPrice.toString(),
@@ -1766,6 +1793,8 @@ export async function convertSalesDocument(
         reference: true,
         memo: true,
         customerMessage: true,
+        workScope: true,
+        workSite: true,
         paymentTermId: true,
         discountAmount: true,
         convertedTo: { select: { number: true, type: true } },
@@ -1807,6 +1836,8 @@ export async function convertSalesDocument(
       reference: source.reference,
       memo: source.memo,
       customerMessage: source.customerMessage,
+      workScope: source.workScope,
+      workSite: source.workSite,
       paymentTermId: target === 'INVOICE' || target === 'SALES_ORDER' ? source.paymentTermId : null,
       depositAccountId: target === 'SALES_RECEIPT' ? depositAccountId : null,
       projectId: source.projectId,

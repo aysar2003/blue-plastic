@@ -8,6 +8,7 @@ import { DocumentActions } from '@/components/print/document-actions'
  */
 export function StatementSend({
   pdfHref,
+  excelHref,
   filename,
   defaultTo,
   defaultSubject,
@@ -15,6 +16,7 @@ export function StatementSend({
   whatsappPhone,
 }: {
   pdfHref: string
+  excelHref?: string
   filename: string
   defaultTo: string
   defaultSubject: string
@@ -25,6 +27,7 @@ export function StatementSend({
     <DocumentActions
       paper="statement"
       pdfHref={pdfHref}
+      excelHref={excelHref}
       filename={filename}
       defaultTo={defaultTo}
       defaultSubject={defaultSubject}

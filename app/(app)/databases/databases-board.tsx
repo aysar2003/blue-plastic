@@ -52,6 +52,8 @@ export type DatabaseListRow = {
   maxUsers: number | null
   rentNote: string | null
   rentExpired: boolean
+  onTrial: boolean
+  daysLeft: number | null
   openBlocked: boolean
   activeUsers: number
   modules: Record<ModuleFlag, boolean>
@@ -79,12 +81,15 @@ export function DatabasesBoard({
   isSystemOwner,
   canConnect,
   initialPanel = null,
+  initialLimitsOrgId = null,
 }: {
   databases: DatabaseListRow[]
   isSystemOwner: boolean
   canConnect: boolean
   /** Open create or import from a deep link (?create=1 / ?import=1). */
   initialPanel?: 'create' | 'import' | null
+  /** Open limits for a company (?limits=orgId). */
+  initialLimitsOrgId?: string | null
 }) {
   const router = useRouter()
   const { update } = useSession()
@@ -92,7 +97,11 @@ export function DatabasesBoard({
   const [panelOpen, setPanelOpen] = useState(initialPanel === 'import')
   const [createOpen, setCreateOpen] = useState(initialPanel === 'create')
   const [deleteTarget, setDeleteTarget] = useState<DatabaseListRow | null>(null)
-  const [limitsTarget, setLimitsTarget] = useState<DatabaseListRow | null>(null)
+  const [limitsTarget, setLimitsTarget] = useState<DatabaseListRow | null>(() =>
+    initialLimitsOrgId
+      ? (databases.find((row) => row.id === initialLimitsOrgId) ?? null)
+      : null,
+  )
   const [restoreTarget, setRestoreTarget] = useState<Inspected | null>(null)
   const [confirmName, setConfirmName] = useState('')
   const [newName, setNewName] = useState('')
@@ -416,8 +425,7 @@ export function DatabasesBoard({
 
   const missingCount = inspected?.filter((c) => c.status === 'missing').length ?? 0
   const presentCount = inspected?.filter((c) => c.status === 'present').length ?? 0
-  // Company database delete is disabled — Trash soft-delete + Clear Trash purge instead.
-  const canDeleteAny = false
+  const canDeleteAny = isSystemOwner
   const showPicker =
     !createOpen && !panelOpen && !deleteTarget && !restoreTarget && !limitsTarget
 

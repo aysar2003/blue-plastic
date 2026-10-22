@@ -99,11 +99,17 @@ CREATE CONSTRAINT TRIGGER trg_journal_balanced
 -- REVERSED, only when the stamp is cleared and nothing else about the row moves.
 CREATE OR REPLACE FUNCTION forbid_posted_journal_mutation() RETURNS trigger AS $$
 BEGIN
-  IF TG_OP = 'DELETE' THEN
-    -- Company wipe / restore: the whole organisation is being removed.
-    IF current_setting('app.allow_company_wipe', true) = 'on' THEN
+  -- Company wipe / restore: the whole organisation is being removed in this
+  -- transaction. Delete is required for CASCADE. Update is required first, to
+  -- clear reversalOfId on posted journals (ON DELETE RESTRICT on that self-FK).
+  IF current_setting('app.allow_company_wipe', true) = 'on' THEN
+    IF TG_OP = 'DELETE' THEN
       RETURN OLD;
     END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
     IF OLD.status <> 'DRAFT' THEN
       RAISE EXCEPTION
         'Journal % is posted and cannot be deleted. Post a reversal instead.', OLD."journalNumber"
@@ -191,8 +197,11 @@ CREATE OR REPLACE FUNCTION forbid_posted_line_mutation() RETURNS trigger AS $$
 DECLARE
   v_status text;
 BEGIN
-  IF TG_OP = 'DELETE' AND current_setting('app.allow_company_wipe', true) = 'on' THEN
-    RETURN OLD;
+  IF current_setting('app.allow_company_wipe', true) = 'on' THEN
+    IF TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    END IF;
+    RETURN NEW;
   END IF;
 
   SELECT status::text INTO v_status

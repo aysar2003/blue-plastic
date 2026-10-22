@@ -36,6 +36,7 @@ export default async function NewStoreTicketPage({
     id: item.itemId,
     label: item.name,
     onHand: item.quantity.toFixed(2),
+    unitOfMeasure: item.unitOfMeasure,
   }))
   const initialItemId = items.some((item) => item.id === itemParam) ? itemParam : undefined
 

@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { AppGlyph, isAppGlyph, type AppGlyphName } from '@/components/layout/app-glyphs'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeftRightIcon,
@@ -25,7 +25,6 @@ import {
   PackageIcon,
   PaletteIcon,
   PercentIcon,
-  PowerIcon,
   ReceiptIcon,
   RotateCcwIcon,
   ScaleIcon,
@@ -38,14 +37,13 @@ import {
   UsersIcon,
   WalletIcon,
 } from 'lucide-react'
-import { toast } from 'sonner'
 
-import { toggleModuleFlag } from '@/app/(app)/settings/(work)/organization/actions'
-import { MODULE_KEY_TO_FLAG, type OrgFeatureFlags } from '@/lib/feature-flags'
+import type { OrgFeatureFlags } from '@/lib/feature-flags'
 import { cn } from '@/lib/utils'
 import { menuForApp } from './header-app-menus'
 import { APP_ALSO, appsForPermissions, type LauncherApp, type LauncherIcon } from './launcher-apps'
 import { useAppDoor, useAppMemoryControls } from './app-memory'
+import { ReportsMenuPanel } from './reports-menu-panel'
 
 const ICONS: Record<LauncherIcon, LucideIcon> = {
   receipt: ReceiptIcon,
@@ -116,37 +114,22 @@ function appIsCurrent(pathname: string, href: string, also: string[] = []) {
  * One click on a chip opens its destination list; pick an item from there.
  * Nothing opens on hover. Apps with no children still go straight to the hub.
  * The Apps button opens the full app list the same way.
- *
- * Company admins (org:update) also see a compact power control to turn an app
- * on or off without opening Settings → Apps & features.
+ * Turn apps on/off in Settings → Apps & features.
  */
 export function HeaderApps({
   permissions,
   hidden,
   features,
-  canManageModules = false,
 }: {
   permissions: string[]
   hidden?: string[]
   features?: OrgFeatureFlags
-  canManageModules?: boolean
 }) {
   const pathname = usePathname()
-  const router = useRouter()
-  const [pendingKey, setPendingKey] = useState<string | null>(null)
-  const [toggling, startToggle] = useTransition()
   const apps = useMemo(() => {
     const all = appsForPermissions(permissions)
-    // Admins see granted-but-off apps (muted) so they can turn them back on here.
-    if (canManageModules && features) {
-      return all.filter((app) => {
-        const flag = MODULE_KEY_TO_FLAG[app.key]
-        if (!flag) return true
-        return features.grantedModules[flag] !== false
-      })
-    }
     return hidden && hidden.length > 0 ? all.filter((app) => !hidden.includes(app.key)) : all
-  }, [permissions, hidden, canManageModules, features])
+  }, [permissions, hidden])
   const home = pathname === '/dashboard'
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [openPath, setOpenPath] = useState(pathname)
@@ -155,22 +138,6 @@ export function HeaderApps({
     setOpenKey(null)
   }
   const navRef = useRef<HTMLElement>(null)
-
-  function onToggleModule(appKey: string, enabled: boolean) {
-    const flag = MODULE_KEY_TO_FLAG[appKey]
-    if (!flag) return
-    setPendingKey(appKey)
-    startToggle(async () => {
-      const result = await toggleModuleFlag({ module: flag, enabled })
-      setPendingKey(null)
-      if (!result.ok) {
-        toast.error(result.error.message)
-        return
-      }
-      toast.success(enabled ? 'App turned on.' : 'App turned off.')
-      router.refresh()
-    })
-  }
 
   useEffect(() => {
     if (!openKey) return
@@ -247,24 +214,13 @@ export function HeaderApps({
         const children = menuForApp(app.key, permissions, features)
         const hasMenu = children.length > 0
         const open = openKey === app.key && hasMenu
-        const moduleFlag = MODULE_KEY_TO_FLAG[app.key]
-        const moduleOn = moduleFlag
-          ? features
-            ? features.modules[moduleFlag] !== false && features.grantedModules[moduleFlag] !== false
-            : !hidden?.includes(app.key)
-          : true
-        const showPower = canManageModules && Boolean(moduleFlag)
         return (
-          <div
-            key={app.key}
-            className={cn('relative inline-flex items-center', !moduleOn && 'opacity-55')}
-          >
+          <div key={app.key} className="relative inline-flex items-center">
             <AppChipLink
               app={app}
               current={current}
               hasMenu={hasMenu}
               open={open}
-              disabled={!moduleOn && canManageModules}
               onToggleMenu={() =>
                 setOpenKey((key) => (key === app.key ? null : app.key))
               }
@@ -284,66 +240,63 @@ export function HeaderApps({
                 />
               ) : null}
             </AppChipLink>
-            {showPower ? (
-              <button
-                type="button"
-                title={moduleOn ? `Turn off ${app.label}` : `Turn on ${app.label}`}
-                aria-label={moduleOn ? `Turn off ${app.label}` : `Turn on ${app.label}`}
-                disabled={toggling && pendingKey === app.key}
-                onClick={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  onToggleModule(app.key, !moduleOn)
-                }}
-                className={cn(
-                  'ml-0.5 grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground',
-                  moduleOn && 'text-primary',
-                  toggling && pendingKey === app.key && 'opacity-50',
-                )}
-              >
-                <PowerIcon className="size-3" aria-hidden />
-              </button>
-            ) : null}
-            {hasMenu && moduleOn ? (
+            {hasMenu ? (
               <div
                 role="menu"
                 aria-label={`${app.label} apps`}
                 hidden={!open}
                 className={cn(
                   'absolute left-0 top-full z-50 min-w-[13.5rem] pt-1.5',
+                  app.key === 'reports' && 'min-w-[18rem]',
                   !open && 'pointer-events-none',
                 )}
               >
-                <ul className="max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-border bg-popover py-1.5 text-popover-foreground shadow-[0_8px_28px_-8px_rgba(15,23,42,0.28)] ring-1 ring-black/5">
-                  <li>
-                    <Link
-                      href={app.href}
-                      role="menuitem"
-                      onClick={() => setOpenKey(null)}
-                      className="block px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted"
-                    >
-                      {app.label} home
-                    </Link>
-                  </li>
-                  <li className="my-1 border-t border-border" aria-hidden />
-                  {children.map((item) => (
-                    <li key={`${app.key}-${item.href}-${item.label}`}>
+                {app.key === 'reports' ? (
+                  <div className="rounded-xl border border-border bg-popover shadow-[0_8px_28px_-8px_rgba(15,23,42,0.28)] ring-1 ring-black/5">
+                    <div className="border-b border-border px-3 py-1.5">
                       <Link
-                        href={item.href}
+                        href={app.href}
                         role="menuitem"
                         onClick={() => setOpenKey(null)}
-                        className="block px-3 py-1.5 hover:bg-muted"
+                        className="block text-xs font-bold text-foreground hover:underline"
                       >
-                        <span className="block text-xs font-semibold text-foreground">{item.label}</span>
-                        {item.blurb ? (
-                          <span className="block text-[0.65rem] leading-snug text-muted-foreground">
-                            {item.blurb}
-                          </span>
-                        ) : null}
+                        Reports home
+                      </Link>
+                    </div>
+                    <ReportsMenuPanel items={children} onDone={() => setOpenKey(null)} />
+                  </div>
+                ) : (
+                  <ul className="max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-border bg-popover py-1.5 text-popover-foreground shadow-[0_8px_28px_-8px_rgba(15,23,42,0.28)] ring-1 ring-black/5">
+                    <li>
+                      <Link
+                        href={app.href}
+                        role="menuitem"
+                        onClick={() => setOpenKey(null)}
+                        className="block px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted"
+                      >
+                        {app.label} home
                       </Link>
                     </li>
-                  ))}
-                </ul>
+                    <li className="my-1 border-t border-border" aria-hidden />
+                    {children.map((item) => (
+                      <li key={`${app.key}-${item.href ?? item.label}-${item.label}`}>
+                        <Link
+                          href={item.href ?? app.href}
+                          role="menuitem"
+                          onClick={() => setOpenKey(null)}
+                          className="block px-3 py-1.5 hover:bg-muted"
+                        >
+                          <span className="block text-xs font-semibold text-foreground">{item.label}</span>
+                          {item.blurb ? (
+                            <span className="block text-[0.65rem] leading-snug text-muted-foreground">
+                              {item.blurb}
+                            </span>
+                          ) : null}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             ) : null}
           </div>
@@ -362,7 +315,6 @@ function AppChipLink({
   current,
   hasMenu,
   open,
-  disabled,
   onToggleMenu,
   onDone,
   children,
@@ -371,23 +323,11 @@ function AppChipLink({
   current: boolean
   hasMenu: boolean
   open: boolean
-  disabled?: boolean
   onToggleMenu: () => void
   onDone: () => void
   children: ReactNode
 }) {
   const activeClass = (current || open) && 'bg-card text-foreground shadow-sm ring-1 ring-border dark:text-foreground'
-
-  if (disabled) {
-    return (
-      <span
-        title={`${app.label} is off — use the power button to turn it on`}
-        className={cn(chipClass, 'cursor-default opacity-80')}
-      >
-        {children}
-      </span>
-    )
-  }
 
   if (hasMenu) {
     return (

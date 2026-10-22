@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/table'
 import { formatTransactionDate, toCalendarDate } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
+import { formatQty, resolveUnit } from '@/lib/quantity'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import * as inventoryService from '@/server/services/inventory.service'
@@ -49,7 +50,7 @@ export default async function ItemMovementsPage({
 
   const item = await db.item.findFirst({
     where: { id: itemId, orgId: ctx.orgId, type: 'INVENTORY' },
-    select: { id: true, name: true, sku: true, reorderPoint: true },
+    select: { id: true, name: true, sku: true, reorderPoint: true, unitOfMeasure: true },
   })
   if (!item) notFound()
 
@@ -85,9 +86,13 @@ export default async function ItemMovementsPage({
 
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <MetricCard
-          label="On hand"
+          label={`On hand (${resolveUnit(item.unitOfMeasure)})`}
           tone="stock"
-          value={latest ? latest.runningQuantity.toFixed(2) : '0.00'}
+          value={
+            latest
+              ? formatQty(latest.runningQuantity.toFixed(2), item.unitOfMeasure)
+              : formatQty('0.00', item.unitOfMeasure)
+          }
         />
         <MetricCard
           label="Average cost"
@@ -150,7 +155,7 @@ export default async function ItemMovementsPage({
                   </TableCell>
                   <TableCell className="numeric tabular">
                     {movement.quantity.isPositive() ? '+' : ''}
-                    {movement.quantity.toFixed(2)}
+                    {formatQty(movement.quantity.toFixed(2), item.unitOfMeasure)}
                   </TableCell>
                   <TableCell className="numeric tabular text-muted-foreground">
                     {formatMoney(movement.unitCost, currency)}
@@ -159,7 +164,7 @@ export default async function ItemMovementsPage({
                     {formatMoney(movement.value, currency)}
                   </TableCell>
                   <TableCell className="numeric tabular font-medium">
-                    {movement.runningQuantity.toFixed(2)}
+                    {formatQty(movement.runningQuantity.toFixed(2), item.unitOfMeasure)}
                   </TableCell>
                   <TableCell className="numeric tabular font-medium">
                     {formatMoney(movement.runningValue, currency)}
@@ -174,7 +179,7 @@ export default async function ItemMovementsPage({
                     On hand · average cost · total cost
                   </TableCell>
                   <TableCell className="numeric tabular font-semibold">
-                    {latest.runningQuantity.toFixed(2)}
+                    {formatQty(latest.runningQuantity.toFixed(2), item.unitOfMeasure)}
                   </TableCell>
                   <TableCell className="numeric tabular font-semibold">
                     {formatMoney(latest.runningValue, currency)}

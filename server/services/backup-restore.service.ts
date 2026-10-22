@@ -4,7 +4,7 @@ import { createHash, randomBytes } from 'crypto'
 
 import type { CompanyBackup } from '@/lib/backup-format'
 import type { OrgContext } from '@/server/auth/context'
-import { allowCompanyWipe } from '@/server/company-wipe'
+import { wipeCompanyBooks } from '@/server/company-wipe'
 import { db, type Tx } from '@/server/db'
 import { forbidden, notFound, validation } from '@/server/errors'
 
@@ -132,16 +132,7 @@ export async function replaceCompanyFromBackup(
 
   await db.$transaction(
     async (tx) => {
-      // Break self-FKs that can block CASCADE deletes.
-      await allowCompanyWipe(tx)
-      await tx.journal.updateMany({ where: { orgId: target.id }, data: { reversalOfId: null } })
-      await tx.ledgerAccount.updateMany({ where: { orgId: target.id }, data: { parentId: null } })
-      await tx.salesDocument.updateMany({ where: { orgId: target.id }, data: { convertedFromId: null } })
-      await tx.purchaseDocument.updateMany({
-        where: { orgId: target.id },
-        data: { convertedFromId: null },
-      })
-
+      await wipeCompanyBooks(tx, target.id)
       await tx.organization.delete({ where: { id: target.id } })
 
       await tx.organization.create({
@@ -500,6 +491,10 @@ export async function insertBackupRows(
         paymentTermId: map(row.paymentTermId),
         defaultExpenseAccountId: map(row.defaultExpenseAccountId ?? row.payableAccountId),
         notes: strOrNull(row.notes),
+        agreementDate: dateOrNull(row.agreementDate),
+        balanceDate: dateOrNull(row.balanceDate),
+        balanceTime: strOrNull(row.balanceTime),
+        reminderDays: row.reminderDays != null ? num(row.reminderDays) : null,
       })),
       skipDuplicates: true,
     })

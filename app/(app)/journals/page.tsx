@@ -135,11 +135,16 @@ export default async function JournalsPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((journal) => (
+              {rows.map((journal) => {
+                const openHref = journal.source.href ?? `/journals/${journal.id}`
+                const openTitle = journal.source.number
+                  ? `Open ${journal.source.number}`
+                  : `Open journal ${journal.journalNumber}`
+                return (
                 <ClickableRow
                   key={journal.id}
-                  href={`/journals/${journal.id}`}
-                  title={`Open journal ${journal.journalNumber}`}
+                  href={openHref}
+                  title={openTitle}
                 >
                   <TableCell>
                     <Link
@@ -224,7 +229,7 @@ export default async function JournalsPage({
                     />
                   </TableCell>
                 </ClickableRow>
-              ))}
+              )})}
             </TableBody>
           </Table>
           </ScrollSheet>

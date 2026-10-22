@@ -18,8 +18,8 @@ import type { OrgContext } from '@/server/auth/context'
 import { permissionsFor } from '@/server/auth/permissions'
 import { businessOverview } from '@/server/services/business-overview'
 
-function hrefs(items: { href: string }[]) {
-  return items.map((item) => item.href)
+function hrefs(items: { href?: string }[]) {
+  return items.map((item) => item.href).filter((href): href is string => Boolean(href))
 }
 
 function overviewLinks(permissions: Iterable<string>) {

@@ -2,12 +2,14 @@
 
 import { useSyncExternalStore } from 'react'
 
+import { DocumentAccountFooter } from '@/components/sales/document-account-footer'
 import { DocumentBarcode } from '@/components/print/document-barcode'
 import { longDate, type SheetDocument } from '@/components/sales/invoice-sheet'
-import { accentWash, type DocumentTemplate } from '@/lib/document-template'
+import { accentWash, paperAccent, type DocumentTemplate } from '@/lib/document-template'
 import { letterheadOf, type LetterheadSource } from '@/lib/letterhead'
 import { toCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
+import { hasPreviousQuotations } from '@/lib/project-quotations'
 import { STATUS_LABELS } from '@/lib/sales-types'
 
 /** Cached so getSnapshot stays referentially stable (React forbids a fresh value each read). */
@@ -63,6 +65,8 @@ export function MerchantInvoice({
   baseCurrency,
   previousBalance,
   currentBalance,
+  previousQuotationsTotal,
+  hideAccountBalance = false,
   printedBy,
   words,
   ledger = false,
@@ -85,6 +89,10 @@ export function MerchantInvoice({
   previousBalance?: string | null
   /** Account balance after this paper. Falls back to the document balance. */
   currentBalance?: string | null
+  /** Sum of earlier project quotations. The grand total then includes this paper. */
+  previousQuotationsTotal?: string | null
+  /** Project quotation pack: no customer A/R or leftover balance — only the running quote total. */
+  hideAccountBalance?: boolean
   printedBy?: string | null
   /** Statement / portal: Debit = invoice total, Credit = payments, Balance = remaining. */
   ledger?: boolean
@@ -97,14 +105,16 @@ export function MerchantInvoice({
     reference: 'Cust P.O no',
     order: 'Sales order',
   }
-  const accent = template.accent
+  const accent = paperAccent(template, words?.party === 'Vendor' ? 'vendor' : 'customer')
   const wash = accentWash(accent)
   const company = letterheadOf(organization)
   const currency = document.currencyCode || baseCurrency
   const money = (value: Parameters<typeof formatMoney>[0]) => formatMoney(value, currency)
   const customer = document.customer
   const address = [customer.billingLine1, customer.billingLine2, customer.billingCity, customer.billingRegion]
-    .filter(Boolean)
+    .filter((part): part is string => Boolean(part))
+    .map((part) => part.trim())
+    .filter((part) => part.toLowerCase() !== customer.displayName.trim().toLowerCase())
     .join(', ')
   const owed = Number(document.balance) > 0.004
   const status =
@@ -117,6 +127,10 @@ export function MerchantInvoice({
   const debit = new Decimal(document.total)
   const credit = new Decimal(document.amountApplied || 0)
   const accountBalance = prior.plus(debit).minus(credit)
+  const priorQuotes = hasPreviousQuotations(previousQuotationsTotal)
+  const runningQuoteTotal = priorQuotes
+    ? new Decimal(previousQuotationsTotal as string).plus(document.total)
+    : debit
 
   return (
     <article
@@ -150,6 +164,12 @@ export function MerchantInvoice({
             <Meta label="Phone" value={customer.phone || '—'} />
             <Meta label={label.order} value={document.reference || '—'} />
             <Meta label={label.person} value={document.createdByName || '—'} />
+            {document.workSite || document.project?.siteLocation ? (
+              <Meta label="Work site" value={document.workSite || document.project?.siteLocation || '—'} />
+            ) : null}
+            {document.workScope ? (
+              <Meta label="Work / job" value={`${document.workScope} · Client: ${customer.displayName}`} />
+            ) : null}
           </dl>
         </div>
         <div className="text-right">
@@ -190,7 +210,7 @@ export function MerchantInvoice({
             <span className="tabular">{line.lineNumber}</span>
             <span className="truncate pr-2">{line.description || line.item?.name || line.item?.sku || ''}</span>
             <span className="tabular text-right">
-              {trimNumber(line.quantity)} {line.item?.unitOfMeasure || 'Pcs'}
+              {trimNumber(line.quantity)} {line.item?.unitOfMeasure?.trim() || 'Pcs'}
             </span>
             <span className="tabular text-right">{money(line.unitPrice)}</span>
             <span className="tabular text-right font-medium">{money(line.amount)}</span>
@@ -200,21 +220,10 @@ export function MerchantInvoice({
 
       <div className="grid gap-6 px-8 py-6 sm:grid-cols-[minmax(0,1fr)_16rem]">
         <div className="space-y-4 text-[12px]">
-          {template.banks.length > 0 ? (
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>
-                Bank details
-              </p>
-              <dl className="mt-1 space-y-0.5">
-                {template.banks.map((bank) => (
-                  <div key={`${bank.name}-${bank.account}`} className="flex justify-between gap-4">
-                    <dt>{bank.name}</dt>
-                    <dd className="tabular">{bank.account}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
+          {template.footerLayout === 'side' ? (
+            <DocumentAccountFooter template={template} accent={accent} />
           ) : null}
+          {hideAccountBalance ? null : (
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>
               {label.account}
@@ -260,6 +269,7 @@ export function MerchantInvoice({
               </dl>
             )}
           </div>
+          )}
           {template.terms ? (
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>
@@ -286,15 +296,35 @@ export function MerchantInvoice({
             </>
           ) : (
             <>
-              <Total label="Grand total" value={money(document.total)} accent={accent} strong />
-              {credit.greaterThan('0.004') ? (
-                <Total label="Paid amount" value={money(document.amountApplied)} accent={accent} />
-              ) : null}
-              <Total label="Balance" value={money(document.balance)} accent={accent} strong />
+              {priorQuotes ? (
+                <>
+                  <Total label="This quotation" value={money(document.total)} accent={accent} />
+                  <Total
+                    label="Previous quotations"
+                    value={money(previousQuotationsTotal as string)}
+                    accent={accent}
+                  />
+                  <Total label="Grand total" value={money(runningQuoteTotal)} accent={accent} strong />
+                </>
+              ) : (
+                <Total label="Grand total" value={money(document.total)} accent={accent} strong />
+              )}
+              {hideAccountBalance ? null : (
+                <>
+                  {credit.greaterThan('0.004') ? (
+                    <Total label="Paid amount" value={money(document.amountApplied)} accent={accent} />
+                  ) : null}
+                  <Total label="Balance" value={money(document.balance)} accent={accent} strong />
+                </>
+              )}
             </>
           )}
         </dl>
       </div>
+
+      {template.footerLayout !== 'side' ? (
+        <DocumentAccountFooter template={template} accent={accent} />
+      ) : null}
 
       <div className="flex justify-between gap-4 border-t px-8 py-3 text-[10px] text-[#5C6B7A]">
         <p>Printed on: {printedOn}</p>

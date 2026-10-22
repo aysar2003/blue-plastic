@@ -171,6 +171,7 @@ export async function PurchaseOrderScreen({
               currency={ctx.organization.baseCurrency}
               canEdit={ctx.permissions.has('bill:update')}
               canReceive={ctx.permissions.has('bill:create')}
+              listParams={hidden}
               rows={page.rows.map((row) => ({
                 id: row.id,
                 number: row.number,

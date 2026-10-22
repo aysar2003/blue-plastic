@@ -16,6 +16,10 @@ export type CompanyLimitStatus = {
   maxUsers: number | null
   rentNote: string | null
   rentExpired: boolean
+  /** Active free trial (rent note Free trial and not yet expired). */
+  onTrial: boolean
+  /** Whole days left on rent/trial; null when no end date. */
+  daysLeft: number | null
   /** Staff cannot open when restricted or rent expired. */
   openBlocked: boolean
   blockReason: string | null
@@ -47,12 +51,23 @@ export function companyLimitStatus(
       : 'Rent for this company has ended.'
   }
 
+  const onTrial =
+    !rentExpired &&
+    expires != null &&
+    (rentNote?.toLowerCase().includes('trial') ?? false)
+  const daysLeft =
+    expires == null
+      ? null
+      : Math.max(0, Math.ceil((expires.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
+
   return {
     accessRestricted,
     rentExpiresAt: expires ? expires.toISOString() : null,
     maxUsers,
     rentNote,
     rentExpired,
+    onTrial,
+    daysLeft,
     openBlocked: accessRestricted || rentExpired,
     blockReason,
   }

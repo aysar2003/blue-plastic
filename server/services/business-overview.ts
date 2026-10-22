@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { addDays, addMonths, endOfMonth, startOfMonth, toDate, today, type CalendarDate } from '@/lib/date'
+import { addDays, addMonths, clockInZone, endOfMonth, startOfMonth, toDate, today, type CalendarDate } from '@/lib/date'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -21,6 +21,7 @@ function changePercent(current: Decimal, prior: Decimal): string | null {
 export async function businessOverview(ctx: OrgContext) {
   assertPermission(ctx, 'report:overview')
   const now = today(ctx.organization.timeZone)
+  const nowTime = clockInZone(new Date(), ctx.organization.timeZone)
   const year = now.slice(0, 4)
   const yearStart = `${year}-01-01`
   const yearEnd = `${year}-12-31`
@@ -55,9 +56,23 @@ export async function businessOverview(ctx: OrgContext) {
       bankAccounts(ctx),
       db.$queryRaw<{ unpaid: string; overdue: string }[]>`
         SELECT COALESCE(SUM(d.total - COALESCE(a.applied, 0)), 0)::text AS unpaid,
-               COALESCE(SUM(CASE WHEN d."dueDate" IS NOT NULL AND d."dueDate" < ${toDate(now)}
-                                 THEN d.total - COALESCE(a.applied, 0) ELSE 0 END), 0)::text AS overdue
+               COALESCE(SUM(CASE
+                 WHEN d."excludeFromOverdue" THEN 0
+                 WHEN d."promisedDate" IS NOT NULL AND d."promisedDate" < ${toDate(now)}
+                   THEN d.total - COALESCE(a.applied, 0)
+                 WHEN d."promisedDate" IS NULL AND c."balanceDate" IS NOT NULL AND (
+                      c."balanceDate" < ${toDate(now)}
+                      OR (c."balanceDate" = ${toDate(now)} AND c."balanceTime" IS NOT NULL AND c."balanceTime" <= ${nowTime})
+                 ) THEN d.total - COALESCE(a.applied, 0)
+                 WHEN d."promisedDate" IS NULL AND c."balanceDate" IS NULL AND c."agreementDate" IS NOT NULL
+                      AND c."agreementDate" < ${toDate(now)}
+                   THEN d.total - COALESCE(a.applied, 0)
+                 WHEN d."promisedDate" IS NULL AND c."balanceDate" IS NULL AND c."agreementDate" IS NULL
+                      AND d."dueDate" IS NOT NULL AND d."dueDate" < ${toDate(now)}
+                   THEN d.total - COALESCE(a.applied, 0)
+                 ELSE 0 END), 0)::text AS overdue
           FROM sales_documents d
+          JOIN customers c ON c.id = d."customerId"
           LEFT JOIN LATERAL (
             SELECT SUM(amount) AS applied FROM sales_applications WHERE "invoiceId" = d.id
           ) a ON true

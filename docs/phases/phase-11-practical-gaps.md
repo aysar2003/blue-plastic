@@ -25,7 +25,7 @@ Ordered by cost of living without it. Detail and exclusions live in
 | 11.3 | Email a document (invoice, statement, PO) | `invoice:send`, transport + template | ⛔ |
 | 11.4 | Progress invoicing from an estimate | Sales convert / estimate balance | ⛔ |
 | 11.5 | Billable expenses → pull onto next invoice | Purchase lines + sales | ⛔ |
-| 11.6 | Aged detail reports (per document) | AR/AP aging | ⛔ |
+| 11.6 | Aged detail reports (per document) | AR/AP aging detail catalogue reports | ✅ |
 
 ### 11b — Control and correctness
 

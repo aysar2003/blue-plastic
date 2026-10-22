@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/data/empty-state'
 import { SortableHeader, type SortState } from '@/components/data/sortable-header'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Decimal, formatMoney } from '@/lib/money'
+import { formatQty } from '@/lib/quantity'
 import { REPORT_DRILL_LINK } from '@/lib/report-drill'
 import type { RankedRow } from '@/server/reports/business'
 
@@ -27,7 +28,7 @@ export function RankedTable({
   basePath,
   linkParams,
 }: {
-  rows: (RankedRow & { quantity?: Decimal })[]
+  rows: (RankedRow & { quantity?: Decimal; unitOfMeasure?: string | null })[]
   total: Decimal
   currency: string
   nameHeader: string
@@ -87,7 +88,9 @@ export function RankedTable({
             <TableCell className="numeric tabular text-muted-foreground">{row.count}</TableCell>
             {quantities ? (
               <TableCell className="numeric tabular text-muted-foreground">
-                {row.quantity?.toDecimalPlaces(2).toString() ?? '—'}
+                {row.quantity
+                  ? formatQty(row.quantity.toDecimalPlaces(2).toString(), row.unitOfMeasure)
+                  : '—'}
               </TableCell>
             ) : null}
             <TableCell className="numeric tabular">

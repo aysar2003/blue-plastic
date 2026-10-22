@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useMemo, useState, type KeyboardEvent } from 'react'
 
 import { ODOO } from '@/lib/odoo-brand'
+import { formatQty } from '@/lib/quantity'
 
 const PAGE_SIZE = 7
 
@@ -18,7 +19,7 @@ export type PosOrderListRow = {
   time: string
   status: 'ongoing' | 'paid'
   note: string
-  lines: { name: string; quantity: number; amount: string }[]
+  lines: { name: string; quantity: number; amount: string; unitOfMeasure?: string | null }[]
   canDelete: boolean
   receiptHref: string | null
 }
@@ -294,7 +295,10 @@ export function PosOrdersBoard({
                   <li key={`${line.name}-${index}`} className="flex items-baseline justify-between gap-3 text-sm">
                     <span className="min-w-0 truncate">
                       {line.name}
-                      <span style={{ color: muted }}> × {line.quantity}</span>
+                      <span style={{ color: muted }}>
+                        {' '}
+                        × {formatQty(line.quantity, line.unitOfMeasure)}
+                      </span>
                     </span>
                     <span className="tabular">{line.amount}</span>
                   </li>

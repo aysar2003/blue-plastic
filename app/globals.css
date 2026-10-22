@@ -2441,11 +2441,33 @@ a.report-drill-link:hover {
 
   [data-invoice-page] {
     break-after: page;
-    break-inside: avoid;
+    break-inside: auto;
   }
 
   [data-invoice-page]:last-of-type {
     break-after: auto;
+  }
+
+  /* A fixed paper height plus page margins spilled a blank second page. */
+  html,
+  body {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  /* One page style for the whole print. A sheet on a named page, then the
+   * app's leftover box on the default page, printed a blank page after it. */
+  body:has(.invoice-sheet),
+  body:has(.merchant-invoice) {
+    page: invoice;
+  }
+
+  .invoice-sheet,
+  .merchant-invoice {
+    min-height: 0 !important;
+    height: auto !important;
+    break-after: avoid !important;
+    page-break-after: avoid !important;
   }
 
   body:has(.invoice-sheet) .company-print-letterhead,
@@ -2494,6 +2516,14 @@ a.report-drill-link:hover {
     position: static !important;
     overflow: visible !important;
     max-height: none !important;
+  }
+
+  /* The sheet is the page. Forcing it static let the corner marks flow as
+   * extra blocks and print a blank page after the statement. */
+  .invoice-sheet,
+  .merchant-invoice {
+    position: relative !important;
+    overflow: hidden !important;
   }
 
   /* Rows should not be split across a page break. */

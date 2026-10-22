@@ -233,10 +233,11 @@ export default async function TransactionDetailPage({
               sourceType: entry.sourceType as JournalSourceType,
               sourceId: entry.sourceId,
             })
-            // The row's Type opens the journal entry; Number offers the source
-            // document when there is one, falling back to the journal.
+            // Prefer the source document (expense, bill, invoice…) so a click
+            // opens the transaction the books know — not only the journal behind it.
             const journalHref = `/journals/${entry.journalId}`
             const docHref = source.href ?? null
+            const openHref = docHref ?? journalHref
             const docNumber = source.number ?? null
             const baseLabel =
               JOURNAL_SOURCE_LABELS[entry.sourceType as JournalSourceType] ?? entry.sourceType
@@ -259,10 +260,10 @@ export default async function TransactionDetailPage({
                 : source.partyHref
             const cells: InteractiveRow['cells'] = {
               date: { value: entry.recordedAt.toISOString() },
-              type: { value: typeLabel, href: journalHref },
+              type: { value: typeLabel, href: openHref },
               number: {
                 value: docNumber ?? entry.journalNumber,
-                href: docHref ?? journalHref,
+                href: openHref,
                 badge: entry.status === 'REVERSED' ? 'reversed' : null,
               },
               name: parts.name ? { value: parts.name, href: nameHref } : { value: null },

@@ -303,7 +303,7 @@ function StatementRows({
           </Link>
         </TableCell>
       </ClickableRow>
-      {mode === 'detail' && entry.lines.length > 0 ? (
+      {(mode === 'detail' || showItemBand(entry)) && entry.lines.length > 0 ? (
         <TableRow className={tint}>
           <TableCell colSpan={10} className="bg-slate-50/80 px-3 py-2">
             <table className="w-full border-separate border-spacing-0 overflow-hidden rounded-md text-xs">
@@ -318,10 +318,18 @@ function StatementRows({
               <tbody>
                 {entry.lines.map((item, index) => (
                   <tr key={`${entry.id}-${index}`} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
-                    <td className="px-2 py-1 text-slate-800">{item.description}</td>
+                    <td className="px-2 py-1 text-slate-800">
+                      <Link href={entry.href} className="underline-offset-4 hover:underline">
+                        {item.description}
+                      </Link>
+                    </td>
                     <td className="numeric tabular px-2 py-1 text-right">{item.quantity ? plainQty(item.quantity) : ''}</td>
                     <td className="numeric tabular px-2 py-1 text-right">{item.rate ? money(item.rate) : ''}</td>
-                    <td className="numeric tabular px-2 py-1 text-right font-medium">{money(item.amount)}</td>
+                    <td className="numeric tabular px-2 py-1 text-right font-medium">
+                      <Link href={entry.href} className="underline-offset-4 hover:underline">
+                        {money(item.amount)}
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -440,6 +448,11 @@ function kindTint(kind: string | undefined): string {
   return KIND_TINT[kind ?? ''] ?? 'bg-muted/30 hover:bg-muted/50'
 }
 
+/** Bills and expenses always show their item grid — even on the one-row view. */
+function showItemBand(entry: PaperEntry): boolean {
+  return entry.kind === 'EXPENSE' || entry.kind === 'BILL' || entry.kind === 'VENDOR_CREDIT'
+}
+
 function transactionName(kind: string | undefined, books: 'customer' | 'vendor'): string {
   if (!kind) return '—'
   if (kind === 'PAYMENT') return books === 'vendor' ? 'Bill payment' : 'Customer payment'
@@ -479,7 +492,14 @@ export function statementEmailBody(input: {
     ]
       .filter(Boolean)
       .join('  ')
-    if (input.filter.view !== 'detail' || entry.lines.length === 0) return [row]
+    const kind = String(entry.kind ?? '')
+    const showLines =
+      entry.lines.length > 0 &&
+      (input.filter.view === 'detail' ||
+        kind === 'EXPENSE' ||
+        kind === 'BILL' ||
+        kind === 'VENDOR_CREDIT')
+    if (!showLines) return [row]
     const items = [
       '    Name  Qty  Price  Amount',
       ...entry.lines.map(

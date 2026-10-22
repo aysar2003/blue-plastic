@@ -41,7 +41,9 @@ const one = (value: string | string[] | undefined): string | undefined =>
 export function readSettings(
   query: SearchParams,
   organization: { timeZone: string; fiscalYearStartMonth: number },
-  fallback: PeriodKey = 'this-fiscal-year',
+  // Default to this month — a full fiscal year over ~40k sales lines / 100k
+  // journal lines is the usual cause of “reports feel stuck”.
+  fallback: PeriodKey = 'this-month',
 ): ReportSettings {
   const now = today(organization.timeZone)
 
@@ -95,6 +97,28 @@ export function readSettings(
           ? priorYear(range)
           : undefined,
     asOf: asOfParam && isCalendarDate(asOfParam) ? asOfParam : defaultAsOf,
+  }
+}
+
+/** Entity narrowing from the URL — shared by every catalogue table report. */
+export function readEntityFilters(query: SearchParams): {
+  customerId?: string
+  vendorId?: string
+  itemId?: string
+  accountId?: string
+  storeId?: string
+} {
+  const customerId = one(query.customerId)
+  const vendorId = one(query.vendorId)
+  const itemId = one(query.itemId)
+  const accountId = one(query.accountId)
+  const storeId = one(query.storeId)
+  return {
+    ...(customerId ? { customerId } : {}),
+    ...(vendorId ? { vendorId } : {}),
+    ...(itemId ? { itemId } : {}),
+    ...(accountId ? { accountId } : {}),
+    ...(storeId ? { storeId } : {}),
   }
 }
 

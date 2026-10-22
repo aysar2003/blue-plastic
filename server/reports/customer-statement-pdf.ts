@@ -30,6 +30,8 @@ export type StatementPdfInput = {
   orgPhone: string | null
   orgEmail: string | null
   customerName: string
+  /** Paper title. Vendor statements use their own. */
+  heading?: string
   address: string[]
   email: string | null
   currency: string
@@ -84,7 +86,7 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
     }),
   )
 
-  line('CUSTOMER STATEMENT', { bold: true, size: 14, height: 18, color: accent })
+  line(input.heading ?? 'CUSTOMER STATEMENT', { bold: true, size: 14, height: 18, color: accent })
   line(input.customerName, { bold: true, size: 11, height: 14 })
 
   for (const part of input.address) line(part, { size: 9, height: 12, color: muted })
@@ -145,7 +147,14 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
     ]
     rows.push(amountRow(cells, cols, false, inkColor))
 
-    if (input.filter.view === 'detail' && entry.lines.length > 0) {
+    const kind = entry.kind as string
+    const showLines =
+      entry.lines.length > 0 &&
+      (input.filter.view === 'detail' ||
+        kind === 'EXPENSE' ||
+        kind === 'BILL' ||
+        kind === 'VENDOR_CREDIT')
+    if (showLines) {
       rows.push({
         size: 8,
         height: 12,

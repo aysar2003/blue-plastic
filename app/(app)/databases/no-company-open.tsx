@@ -1,6 +1,7 @@
 'use client'
 
 import { useLayoutEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   CheckIcon,
   DatabaseIcon,
@@ -34,6 +35,8 @@ export type CompanyOpenRow = {
   maxUsers: number | null
   rentNote: string | null
   rentExpired: boolean
+  onTrial?: boolean
+  daysLeft?: number | null
   openBlocked: boolean
   activeUsers: number
   modules?: Record<string, boolean>
@@ -185,6 +188,13 @@ function limitBadges(row: CompanyOpenRow) {
       label: 'Rent ended',
       className: 'bg-amber-400/20 text-amber-300 ring-1 ring-inset ring-amber-400/50',
     })
+  } else if (row.onTrial) {
+    badges.push({
+      key: 'trial',
+      label:
+        row.daysLeft != null ? `Trial · ${row.daysLeft}d` : 'Trial',
+      className: 'bg-sky-400/20 text-sky-300 ring-1 ring-inset ring-sky-400/50',
+    })
   } else if (row.rentExpiresAt) {
     const day = new Date(row.rentExpiresAt).toLocaleDateString()
     badges.push({
@@ -228,6 +238,7 @@ function CompanyCard({
   canDelete,
   canManageLimits,
   onSelect,
+  onEnter,
   onOpen,
   onDelete,
   onLimits,
@@ -240,6 +251,7 @@ function CompanyCard({
   canDelete: boolean
   canManageLimits: boolean
   onSelect: () => void
+  onEnter: () => void
   onOpen: () => void
   onDelete: () => void
   onLimits?: () => void
@@ -255,12 +267,15 @@ function CompanyCard({
         'relative flex min-h-[8.5rem] flex-col rounded-lg border bg-card p-4 pl-[1.05rem] transition',
         row.isCurrent && 'border-primary/30 bg-muted/50',
         selected && !row.isCurrent && 'ring-1 ring-border',
-        canOpen && !staffBlocked && 'cursor-pointer hover:border-primary/35 hover:bg-muted/30',
-        (!canOpen || staffBlocked) && 'opacity-80',
+        'cursor-pointer hover:border-primary/35 hover:bg-muted/30',
+        staffBlocked && 'opacity-80',
         // Last so Main / Sub / Solo left colour is never overridden.
         mark.stripe,
       )}
-      onClick={onSelect}
+      onClick={() => {
+        onSelect()
+        onEnter()
+      }}
       onDoubleClick={() => {
         if (canOpen && !staffBlocked) onOpen()
       }}
@@ -386,6 +401,7 @@ export function NoCompanyOpen({
   onDelete,
   onLimits,
 }: Props) {
+  const router = useRouter()
   const [selectedId, setSelectedId] = useState<string | null>(
     () => databases.find((row) => row.isCurrent)?.id ?? databases[0]?.id ?? null,
   )
@@ -405,6 +421,7 @@ export function NoCompanyOpen({
       canDelete={canDelete}
       canManageLimits={canManageLimits}
       onSelect={() => setSelectedId(row.id)}
+      onEnter={() => router.push(`/databases/${row.id}`)}
       onOpen={() => onOpen(row.id, row.isCurrent)}
       onDelete={() => onDelete(row)}
       onLimits={onLimits ? () => onLimits(row) : undefined}
@@ -435,8 +452,8 @@ export function NoCompanyOpen({
             My databases
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Every company on this system. A main company sits above its subs. Connect opens one set
-            of books. Staff never see this list.
+            Every company on this system. Click a card to open full company details and users.
+            Connect opens the books. Staff never see this list.
           </p>
           {databases.length > 0 ? (
             <p className="mt-2 flex flex-wrap items-center gap-2 text-xs">

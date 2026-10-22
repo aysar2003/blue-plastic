@@ -23,6 +23,7 @@ import { NativeSelect } from '@/components/ui/native-select'
 import type { AccountPickerOption } from '@/lib/account-options'
 import { formatDate, isCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
+import { resolveUnit } from '@/lib/quantity'
 import { dueDateFor, type PaymentTermShape } from '@/lib/payment-terms'
 import { FORM_SHEET, VENDOR_CREDIT } from '@/lib/credit-brand'
 import { defaultPurchaseLineRows, type PurchaseTypeConfig } from '@/lib/purchase-types'
@@ -58,6 +59,7 @@ export type PurchaseItemOption = {
   group?: string
   /** Stock on hand, for tracked items. */
   onHand?: string | null
+  unitOfMeasure?: string | null
 }
 export type Option = { id: string; label: string } & Partial<PaymentTermShape>
 export type TaxOption = Option & { rate: number; isInclusive: boolean }
@@ -387,12 +389,16 @@ export function BillForm({
   /** Grouped by kind, with stock on hand beside anything tracked. */
   const itemOptions = useMemo(
     () =>
-      items.map((item) => ({
-        id: item.id,
-        label: item.label,
-        group: item.group,
-        hint: item.onHand != null ? `${item.onHand} on hand` : undefined,
-      })),
+      items.map((item) => {
+        const unit = resolveUnit(item.unitOfMeasure)
+        return {
+          id: item.id,
+          label: item.label,
+          group: item.group,
+          unitOfMeasure: item.unitOfMeasure ?? null,
+          hint: item.onHand != null ? `${item.onHand} ${unit} on hand` : undefined,
+        }
+      }),
     [items],
   )
   const taxById = useMemo(() => new Map(taxCodes.map((code) => [code.id, code])), [taxCodes])
@@ -474,11 +480,18 @@ export function BillForm({
     )
   }
 
-  const filled = lines.filter((line) =>
-    line.kind === 'category'
-      ? line.expenseAccountId || line.description || parseMoneyInput(line.unitPrice)?.greaterThan(0)
-      : line.itemId || line.description || parseMoneyInput(line.unitPrice)?.greaterThan(0),
-  )
+  const lineTouched = (line: Line) =>
+    Boolean(line.description.trim()) ||
+    Boolean(parseMoneyInput(line.unitPrice)?.greaterThan(0)) ||
+    (line.kind === 'item' && line.quantity.trim() !== '' && Number(line.quantity) !== 0)
+
+  const lineNamed = (line: Line) =>
+    line.kind === 'item' ? Boolean(line.itemId) : Boolean(line.expenseAccountId)
+
+  // A touched row with no product and no expense account is a typed mistake
+  // (text and a number). It must not be saved as Uncategorised Expense.
+  const stray = lines.filter((line) => lineTouched(line) && !lineNamed(line))
+  const filled = lines.filter((line) => lineNamed(line) && lineTouched(line))
 
   const payFromCustomer = isExpense && paymentSource === 'customer'
   const selectedCustomer = customers.find((customer) => customer.id === offsetCustomerId)
@@ -498,7 +511,7 @@ export function BillForm({
       offsetCustomerId: payFromCustomer ? offsetCustomerId : '',
       projectId,
       saveAsDraft: draft,
-      lines: filled.map((line) => ({
+      lines: (draft ? lines.filter((line) => lineNamed(line) || lineTouched(line)) : filled).map((line) => ({
         // A category line has no item and always a quantity of one; an item line
         // takes its account from the item, not from this form.
         itemId: line.kind === 'item' ? line.itemId : '',
@@ -513,7 +526,7 @@ export function BillForm({
 
   const hasParty = payFromCustomer ? offsetCustomerId !== '' : vendorId !== ''
   const canSave = hasParty && filled.length > 0 && totals.total.greaterThan(0)
-  const canDraft = hasParty && filled.length > 0
+  const canDraft = hasParty && lines.some((line) => lineNamed(line) || lineTouched(line))
   const term = terms.find((row) => row.id === paymentTermId)
   const due =
     isCalendarDate(date) && term?.type
@@ -527,7 +540,17 @@ export function BillForm({
   return (
     <form
       action={formAction}
-      onSubmit={() => {
+      onSubmit={(event) => {
+        if (!saveAsDraft.current && stray.length > 0) {
+          event.preventDefault()
+          const sample = stray.find((line) => line.description.trim())?.description.trim()
+          toast.error(
+            sample
+              ? `"${sample}" is not a product or an expense category. Choose one from the list, or clear the line.`
+              : 'A line has an amount but no product or expense category. Choose one from the list, or clear the line.',
+          )
+          return
+        }
         if (payloadInput.current) payloadInput.current.value = payloadFor(saveAsDraft.current)
       }}
       className="space-y-2"
@@ -847,7 +870,7 @@ export function BillForm({
                 >
                 <th className="w-44 px-2 py-2 text-left">Item</th>
                 <th className="px-2 py-2 text-left">Description</th>
-                <th className="w-16 px-2 py-2 text-center">Qty</th>
+                <th className="w-24 px-2 py-2 text-center">Qty</th>
                 <th className="w-28 px-2 py-2 text-right">Rate</th>
                 {showTax ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
                 <th className="w-28 px-2 py-2 text-right">Amount</th>
@@ -884,13 +907,23 @@ export function BillForm({
                       />
                     </td>
                     <td className="px-2 py-1.5">
-                      <Input
-                        aria-label="Quantity"
-                        inputMode="decimal"
-                        className="tabular text-right"
-                        value={line.quantity}
-                        onChange={(event) => update(line.key, { quantity: event.target.value })}
-                      />
+                      <div className="flex items-center gap-1">
+                        <Input
+                          aria-label="Quantity"
+                          inputMode="decimal"
+                          className="min-w-0 flex-1 tabular text-right"
+                          value={line.quantity}
+                          onChange={(event) => update(line.key, { quantity: event.target.value })}
+                        />
+                        {line.itemId ? (
+                          <span
+                            className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
+                            title={resolveUnit(itemById.get(line.itemId)?.unitOfMeasure)}
+                          >
+                            {resolveUnit(itemById.get(line.itemId)?.unitOfMeasure)}
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-2 py-1.5">
                       <Input

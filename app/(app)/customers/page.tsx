@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { CustomerActions } from '@/components/customers/customer-actions'
 import { CustomerPapers } from '@/components/customers/customer-papers'
 import { ContactMoneyBar } from '@/components/contacts/contact-money-bar'
+import { LinkedPartyCard } from '@/components/contacts/linked-party-card'
 import {
   ContactCenter,
   isActivitySort,
@@ -396,7 +397,15 @@ export default async function CustomersPage({
       archivedHref={archivedHref}
       archivedLabel={includeInactive ? 'Hide archived' : 'Archived'}
       transactions={transactions}
-      reports={reports}
+      reports={[
+        ...reports,
+        ...(customer?.linkedParty && canReport
+          ? [
+              { label: 'Linked supplier', href: customer.linkedParty.href },
+              { label: 'Supplier statement', href: customer.linkedParty.statementHref },
+            ]
+          : []),
+      ]}
       excelHref={exportHref}
       wordTitle={customer ? customer.displayName : 'Customers'}
       wordRows={wordRows}
@@ -409,15 +418,24 @@ export default async function CustomersPage({
       canEdit={canEdit}
       profileExtra={
         customer ? (
-          <CustomerPapers
-            customerId={customer.id}
-            agreementDate={customer.agreementDate}
-            balanceDate={customer.balanceDate}
-            balanceTime={customer.balanceTime}
-            reminderDays={customer.reminderDays}
-            files={customer.files}
-            canEdit={canEdit}
-          />
+          <>
+            {customer.linkedParty ? (
+              <LinkedPartyCard
+                party={customer.linkedParty}
+                ownBalance={customer.balance}
+                currency={currency}
+              />
+            ) : null}
+            <CustomerPapers
+              customerId={customer.id}
+              agreementDate={customer.agreementDate}
+              balanceDate={customer.balanceDate}
+              balanceTime={customer.balanceTime}
+              reminderDays={customer.reminderDays}
+              files={customer.files}
+              canEdit={canEdit}
+            />
+          </>
         ) : null
       }
     />

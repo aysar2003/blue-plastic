@@ -73,13 +73,53 @@ export function TemplateForm({ template, canEdit }: { template: DocumentTemplate
                   />
                 </Field>
                 <p className="pb-2 font-mono text-xs text-muted-foreground">{draft.accent}</p>
+                <Field name="vendorAccent" label="Vendor colour" error={e?.vendorAccent}>
+                  <Input
+                    {...fieldProps('vendorAccent', e?.vendorAccent)}
+                    type="color"
+                    value={draft.vendorAccent || '#0e7490'}
+                    disabled={!editing}
+                    className="h-9 w-16 p-1"
+                    onChange={(event) => setDraft({ ...draft, vendorAccent: event.target.value })}
+                  />
+                </Field>
+                <p className="pb-2 font-mono text-xs text-muted-foreground">
+                  {draft.vendorAccent || '#0e7490'}
+                </p>
               </div>
 
               <div className="space-y-2">
-                <p className="text-sm font-medium">Bank details</p>
+                <p className="text-sm font-medium">Account block</p>
                 <p className="text-xs text-muted-foreground">
-                  Printed on the left of the bill. Hormud, Somtel, Premier Wallet, or any account you collect with.
+                  Printed at the bottom of every invoice and bill. Up to six accounts, plus a note for the branch or the name on the account.
                 </p>
+                <Field name="footerTitle" label="Heading" error={e?.footerTitle}>
+                  <Input
+                    {...fieldProps('footerTitle', e?.footerTitle)}
+                    value={draft.footerTitle}
+                    disabled={!editing}
+                    placeholder="Account"
+                    onChange={(event) => setDraft({ ...draft, footerTitle: event.target.value })}
+                  />
+                </Field>
+                <Field name="footerLayout" label="Where it sits" error={e?.footerLayout}>
+                  <select
+                    {...fieldProps('footerLayout', e?.footerLayout)}
+                    value={draft.footerLayout}
+                    disabled={!editing}
+                    className="h-9 w-full rounded-md border border-input bg-card px-2 text-sm"
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        footerLayout: event.target.value as DocumentTemplate['footerLayout'],
+                      })
+                    }
+                  >
+                    <option value="side">Left of the totals</option>
+                    <option value="bottom">Full row under the totals</option>
+                    <option value="band">Coloured strip at the bottom</option>
+                  </select>
+                </Field>
                 {SLOTS.map((slot, index) => (
                   <div key={slot} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
                     <Input
@@ -112,6 +152,18 @@ export function TemplateForm({ template, canEdit }: { template: DocumentTemplate
                   </div>
                 ))}
               </div>
+
+              <Field name="footerNote" label="Note under the accounts" error={e?.footerNote}>
+                <textarea
+                  {...fieldProps('footerNote', e?.footerNote)}
+                  value={draft.footerNote}
+                  disabled={!editing}
+                  rows={3}
+                  placeholder="Name on the account, branch, or anything else the customer should see."
+                  className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+                  onChange={(event) => setDraft({ ...draft, footerNote: event.target.value })}
+                />
+              </Field>
 
               <Field name="terms" label="Terms and conditions" error={e?.terms}>
                 <textarea

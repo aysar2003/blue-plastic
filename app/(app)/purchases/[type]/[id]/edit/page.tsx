@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
+import { ApprovalTrailPanel } from '@/components/approvals/approval-trail-panel'
 import { PageHeader } from '@/components/data/page-header'
 import { BillForm } from '@/components/purchases/bill-form'
 import { toCalendarDate, today } from '@/lib/date'
@@ -85,6 +86,7 @@ export default async function EditPurchasePage({
         stores={shelf.stores}
         stock={shelf.byItem}
       />
+      <ApprovalTrailPanel entityType="PURCHASE_DOCUMENT" entityId={document.id} />
     </>
   )
 }

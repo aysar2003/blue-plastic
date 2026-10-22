@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ChevronDownIcon } from 'lucide-react'
 
 import { DeleteMenuItem } from '@/components/data/delete-record'
+import { PackActions, packLinks } from '@/components/data/pack-actions'
 import { EnteredByToggle } from '@/components/data/entered-by-toggle'
 import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { SearchInput } from '@/components/data/search-input'
@@ -92,6 +93,15 @@ export function EstimateRegister({
   const one = chosen.length === 1 ? chosen[0] : null
   const statusLabel = statusOptions.find((option) => option.value === status)?.label ?? 'All'
   const dateLabel = dateOptions.find((option) => option.value === date)?.label ?? 'All dates'
+  const links = packLinks({
+    area: 'sales',
+    slug: exportSlug,
+    selectedIds: selected,
+    partyId: params.customer,
+    listParams: params,
+    exportSlug,
+    one: one ? { id: one.id, href: one.href, printHref: one.printHref } : null,
+  })
 
   const toggleAll = () => setSelected(allOn ? [] : visible)
   const toggle = (id: string) =>
@@ -106,35 +116,46 @@ export function EstimateRegister({
             <ChevronDownIcon className="size-4 text-muted-foreground" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            {one ? (
+            {links.canPack ? (
               <DropdownMenuItem asChild>
-                <Link href={one.href}>View/Edit</Link>
+                <Link href={links.viewHref}>{one ? 'View/Edit' : 'View papers'}</Link>
               </DropdownMenuItem>
             ) : (
               <DropdownMenuItem disabled>View/Edit</DropdownMenuItem>
             )}
-            {one ? (
+            {links.canPack ? (
               <DropdownMenuItem asChild>
-                <Link href={one.printHref}>Print</Link>
+                <Link href={links.printHref}>Print</Link>
               </DropdownMenuItem>
             ) : (
               <DropdownMenuItem disabled>Print</DropdownMenuItem>
+            )}
+            {links.canPack ? (
+              <DropdownMenuItem asChild>
+                <Link href={links.pdfHref}>PDF</Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled>PDF</DropdownMenuItem>
             )}
             {one && one.canDelete ? (
               <DeleteMenuItem kind="sales" id={one.id} number={one.number} redirectTo={basePath} />
             ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link
-                href={`/api/exports/${exportSlug}?${new URLSearchParams(
-                  Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1])),
-                )}`}
-              >
-                Export this list
-              </Link>
+              <Link href={links.excelHref}>Excel</Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <PackActions
+          area="sales"
+          slug={exportSlug}
+          selectedIds={selected}
+          partyId={params.customer}
+          listParams={params}
+          exportSlug={exportSlug}
+          one={one ? { id: one.id, href: one.href, printHref: one.printHref } : null}
+        />
 
         <DropdownMenu>
           <DropdownMenuTrigger className="inline-flex min-w-28 items-center justify-between gap-3 rounded-md border bg-card px-3 py-1.5 text-sm">

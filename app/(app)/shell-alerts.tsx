@@ -11,7 +11,7 @@ import * as inventoryService from '@/server/services/inventory.service'
 export function stockAlertsSlot(ctx: OrgContext) {
   if (!ctx.permissions.has('inventory:read')) return null
   return (
-    <Suspense fallback={<StockAlerts alerts={[]} total={0} />}>
+    <Suspense key="stock-alerts" fallback={<StockAlerts alerts={[]} total={0} />}>
       <StockAlertsLoader ctx={ctx} />
     </Suspense>
   )
@@ -20,7 +20,7 @@ export function stockAlertsSlot(ctx: OrgContext) {
 export function balanceAlertsSlot(ctx: OrgContext) {
   if (!ctx.permissions.has('customer:read')) return null
   return (
-    <Suspense fallback={<BalanceAlerts alerts={[]} />}>
+    <Suspense key="balance-alerts" fallback={<BalanceAlerts alerts={[]} />}>
       <BalanceAlertsLoader ctx={ctx} />
     </Suspense>
   )
@@ -29,7 +29,7 @@ export function balanceAlertsSlot(ctx: OrgContext) {
 export function calendarAlertsSlot(ctx: OrgContext) {
   if (!ctx.permissions.has('calendar:read')) return null
   return (
-    <Suspense fallback={<CalendarAlerts alerts={[]} />}>
+    <Suspense key="calendar-alerts" fallback={<CalendarAlerts alerts={[]} />}>
       <CalendarAlertsLoader ctx={ctx} />
     </Suspense>
   )

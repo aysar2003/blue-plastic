@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
@@ -38,11 +39,19 @@ export default async function PayablesAgingPage({
         title="A/P Aging Summary"
         description={`Unpaid bills as at ${formatDate(asOf)}, bucketed by how long they have been due.`}
         actions={
-          <PrintButton
-            paper="A/P aging"
-            defaultSubject={`A/P Aging — ${ctx.organization.name}`}
-            defaultBody={`A/P Aging Summary\n${ctx.organization.name}\nAs at ${formatDate(asOf)}`}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/reports/ap-aging-detail"
+              className="text-sm text-primary underline-offset-2 hover:underline"
+            >
+              Open detail
+            </Link>
+            <PrintButton
+              paper="A/P aging"
+              defaultSubject={`A/P Aging — ${ctx.organization.name}`}
+              defaultBody={`A/P Aging Summary\n${ctx.organization.name}\nAs at ${formatDate(asOf)}`}
+            />
+          </div>
         }
       />
 

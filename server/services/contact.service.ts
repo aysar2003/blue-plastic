@@ -30,6 +30,13 @@ const OPTIONAL_CONTACT_FIELDS = [
   'billingRegion', 'billingPostalCode', 'billingCountry', 'paymentTermId', 'notes',
 ] as const
 
+const LINKED_PARTY_SELECT = {
+  id: true,
+  displayName: true,
+  companyName: true,
+  isActive: true,
+} as const
+
 const CUSTOMER_SELECT = {
   id: true, displayName: true, companyName: true, firstName: true, lastName: true,
   email: true, phone: true, mobile: true, taxRegistrationNumber: true,
@@ -39,6 +46,7 @@ const CUSTOMER_SELECT = {
   shippingPostalCode: true, shippingCountry: true,
   paymentTermId: true, creditLimit: true, notes: true, salesPerson: true, isActive: true, createdAt: true,
   agreementDate: true, balanceDate: true, balanceTime: true, reminderDays: true,
+  linkedVendorId: true,
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
 } satisfies Prisma.CustomerSelect
 
@@ -52,9 +60,23 @@ const VENDOR_SELECT = {
   billingLine1: true, billingLine2: true, billingCity: true, billingRegion: true,
   billingPostalCode: true, billingCountry: true,
   paymentTermId: true, defaultExpenseAccountId: true, notes: true, isActive: true, createdAt: true,
+  agreementDate: true, balanceDate: true, balanceTime: true, reminderDays: true,
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
   defaultExpenseAccount: { select: { id: true, code: true, name: true } },
 } satisfies Prisma.VendorSelect
+
+export type LinkedParty = {
+  id: string
+  displayName: string
+  companyName: string | null
+  isActive: boolean
+  /** Subledger balance for the other side (AR for customer, AP for vendor). */
+  balance: string
+  href: string
+  statementHref: string
+  /** customer = linked from a vendor; vendor = linked supplier from a customer. */
+  side: Side
+}
 
 /* --- Reading -------------------------------------------------------------- */
 
@@ -197,7 +219,7 @@ export async function listVendors(
     return paged(
       slice.flatMap((person) => {
         const row = byId.get(person.id)
-        return row ? [{ ...row, balance: toMoneyString(person.balance, 2) }] : []
+        return row ? [{ ...presentVendor(row), balance: toMoneyString(person.balance, 2) }] : []
       }),
       people.length,
       query,
@@ -217,7 +239,7 @@ export async function listVendors(
   const balances = await subledgerBalances(db, ctx, 'vendor', rows.map((r) => r.id))
 
   return paged(
-    rows.map((row) => ({ ...row, balance: toMoneyString(balances.get(row.id) ?? 0, 2) })),
+    rows.map((row) => ({ ...presentVendor(row), balance: toMoneyString(balances.get(row.id) ?? 0, 2) })),
     total,
     query,
   )
@@ -229,26 +251,71 @@ export async function getCustomer(ctx: OrgContext, id: string) {
     select: {
       ...CUSTOMER_SELECT,
       files: { select: CUSTOMER_FILE_SELECT, orderBy: { createdAt: 'asc' as const } },
+      linkedVendor: { select: LINKED_PARTY_SELECT },
     },
   })
   if (!customer) throw notFound('Customer')
 
   const balances = await subledgerBalances(db, ctx, 'customer', [id])
+  const linkedParty = await presentLinkedParty(ctx, 'vendor', customer.linkedVendor)
+  const { linkedVendor: _linkedVendor, ...row } = customer
   return {
-    ...presentCustomer(customer),
+    ...presentCustomer(row),
     balance: toMoneyString(balances.get(id) ?? 0, 2),
+    linkedVendorId: customer.linkedVendorId,
+    linkedParty,
   }
 }
 
 export async function getVendor(ctx: OrgContext, id: string) {
   const vendor = await db.vendor.findFirst({
     where: { id, orgId: ctx.orgId },
-    select: VENDOR_SELECT,
+    select: {
+      ...VENDOR_SELECT,
+      linkedCustomer: { select: LINKED_PARTY_SELECT },
+    },
   })
   if (!vendor) throw notFound('Vendor')
 
   const balances = await subledgerBalances(db, ctx, 'vendor', [id])
-  return { ...vendor, balance: toMoneyString(balances.get(id) ?? 0, 2) }
+  const linkedParty = await presentLinkedParty(ctx, 'customer', vendor.linkedCustomer)
+  const { linkedCustomer: _linkedCustomer, ...row } = vendor
+  return {
+    ...presentVendor(row),
+    linkedCustomerId: linkedParty?.id ?? null,
+    balance: toMoneyString(balances.get(id) ?? 0, 2),
+    linkedParty,
+  }
+}
+
+/** Active contacts on the other side, for the link picker on the edit form. */
+export async function listLinkTargets(ctx: OrgContext, side: Side) {
+  if (side === 'customer') {
+    const rows = await db.vendor.findMany({
+      where: { orgId: ctx.orgId, isActive: true },
+      select: { id: true, displayName: true, companyName: true },
+      orderBy: { displayName: 'asc' },
+      take: 500,
+    })
+    return rows.map((row) => ({
+      id: row.id,
+      label: row.companyName && row.companyName !== row.displayName
+        ? `${row.displayName} — ${row.companyName}`
+        : row.displayName,
+    }))
+  }
+  const rows = await db.customer.findMany({
+    where: { orgId: ctx.orgId, isActive: true },
+    select: { id: true, displayName: true, companyName: true },
+    orderBy: { displayName: 'asc' },
+    take: 500,
+  })
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.companyName && row.companyName !== row.displayName
+      ? `${row.displayName} — ${row.companyName}`
+      : row.displayName,
+  }))
 }
 
 /**
@@ -315,6 +382,7 @@ export async function createCustomer(ctx: OrgContext, input: CustomerInput) {
   const meta = await requestMeta()
 
   return db.$transaction(async (tx) => {
+    const linkedVendorId = await resolveLinkedVendorId(tx, ctx, input.linkedVendorId ?? null)
     const customer = await tx.customer.create({
       data: {
         orgId: ctx.orgId,
@@ -331,6 +399,7 @@ export async function createCustomer(ctx: OrgContext, input: CustomerInput) {
         balanceDate: input.openingBalanceDate ? toDate(input.openingBalanceDate) : null,
         balanceTime: input.balanceTime ?? null,
         reminderDays: input.reminderDays ?? null,
+        linkedVendorId,
       },
       select: { id: true, displayName: true },
     })
@@ -376,9 +445,15 @@ export async function createVendor(ctx: OrgContext, input: VendorInput) {
         orgId: ctx.orgId,
         ...pickContact(input),
         defaultExpenseAccountId: input.defaultExpenseAccountId ?? null,
+        agreementDate: input.agreementDate ? toDate(input.agreementDate) : null,
+        balanceDate: input.openingBalanceDate ? toDate(input.openingBalanceDate) : null,
+        balanceTime: input.balanceTime ?? null,
+        reminderDays: input.reminderDays ?? null,
       },
       select: { id: true, displayName: true },
     })
+
+    await applyVendorCustomerLink(tx, ctx, vendor.id, input.linkedCustomerId ?? null)
 
     await writeAudit(
       tx,
@@ -447,6 +522,7 @@ export async function updateCustomer(ctx: OrgContext, input: CustomerInput & { i
   const meta = await requestMeta()
 
   return db.$transaction(async (tx) => {
+    const linkedVendorId = await resolveLinkedVendorId(tx, ctx, input.linkedVendorId ?? null, input.id)
     const after = await tx.customer.update({
       where: { id: input.id },
       data: {
@@ -463,6 +539,7 @@ export async function updateCustomer(ctx: OrgContext, input: CustomerInput & { i
         balanceDate: input.openingBalanceDate ? toDate(input.openingBalanceDate) : null,
         balanceTime: input.balanceTime ?? null,
         reminderDays: input.reminderDays ?? null,
+        linkedVendorId,
       },
       select: { id: true, displayName: true },
     })
@@ -491,11 +568,16 @@ export async function updateVendor(ctx: OrgContext, input: VendorInput & { id: s
   const meta = await requestMeta()
 
   return db.$transaction(async (tx) => {
+    await applyVendorCustomerLink(tx, ctx, input.id, input.linkedCustomerId ?? null)
     const after = await tx.vendor.update({
       where: { id: input.id },
       data: {
         ...pickContact(input),
         defaultExpenseAccountId: input.defaultExpenseAccountId ?? null,
+        agreementDate: input.agreementDate ? toDate(input.agreementDate) : null,
+        balanceDate: input.openingBalanceDate ? toDate(input.openingBalanceDate) : null,
+        balanceTime: input.balanceTime ?? null,
+        reminderDays: input.reminderDays ?? null,
       },
       select: { id: true, displayName: true },
     })
@@ -674,20 +756,26 @@ async function queryBalanceAlerts(
   timeZone: string,
   baseCurrency: string,
 ): Promise<BalanceAlert[]> {
-  const people = await db.customer.findMany({
-    where: { orgId, isActive: true, reminderDays: { in: [3, 5, 7] } },
-    select: {
-      id: true,
-      displayName: true,
-      balanceDate: true,
-      agreementDate: true,
-      balanceTime: true,
-      reminderDays: true,
-    },
-  })
+  const reminderWhere = { orgId, isActive: true, reminderDays: { in: [3, 5, 7] as number[] } }
+  const select = {
+    id: true,
+    displayName: true,
+    balanceDate: true,
+    agreementDate: true,
+    balanceTime: true,
+    reminderDays: true,
+  } as const
+
+  const [customers, vendors] = await Promise.all([
+    db.customer.findMany({ where: reminderWhere, select }),
+    db.vendor.findMany({ where: reminderWhere, select }),
+  ])
 
   const now = Date.now()
-  const due = people.flatMap((person) => {
+  const due = [
+    ...customers.map((person) => ({ ...person, href: `/customers?id=${person.id}` })),
+    ...vendors.map((person) => ({ ...person, href: `/vendors?id=${person.id}` })),
+  ].flatMap((person) => {
     const date = person.balanceDate ?? person.agreementDate
     if (!date || person.reminderDays == null) return []
     const moment = balanceMoment(toCalendarDate(date), person.balanceTime, timeZone)
@@ -696,24 +784,29 @@ async function queryBalanceAlerts(
     const when = person.balanceTime
       ? `${formatDate(toCalendarDate(date))} ${person.balanceTime}`
       : formatDate(toCalendarDate(date))
-    return [{ id: person.id, name: person.displayName, kind, when, reminderDays: person.reminderDays }]
+    return [{ id: person.id, href: person.href, name: person.displayName, kind, when, reminderDays: person.reminderDays }]
   })
   if (due.length === 0) return []
 
-  const balances = await subledgerBalances(
-    db,
-    { orgId } as OrgContext,
-    'customer',
-    due.map((person) => person.id),
-  )
+  const customerIds = due.filter((person) => person.href.startsWith('/customers')).map((person) => person.id)
+  const vendorIds = due.filter((person) => person.href.startsWith('/vendors')).map((person) => person.id)
+  const [customerBalances, vendorBalances] = await Promise.all([
+    customerIds.length
+      ? subledgerBalances(db, { orgId } as OrgContext, 'customer', customerIds)
+      : Promise.resolve(new Map<string, Decimal>()),
+    vendorIds.length
+      ? subledgerBalances(db, { orgId } as OrgContext, 'vendor', vendorIds)
+      : Promise.resolve(new Map<string, Decimal>()),
+  ])
 
   return due
     .flatMap((person) => {
-      const amount = balances.get(person.id) ?? new Decimal(0)
+      const amount = (person.href.startsWith('/customers') ? customerBalances : vendorBalances).get(person.id) ?? new Decimal(0)
       if (!amount.greaterThan('0.005')) return []
       return [
         {
-          customerId: person.id,
+          id: person.id,
+          href: person.href,
           name: person.name,
           amount: formatMoney(amount, baseCurrency),
           kind: person.kind,
@@ -724,6 +817,19 @@ async function queryBalanceAlerts(
     })
     .sort((a, b) => Number(b.kind === 'reached') - Number(a.kind === 'reached') || a.when.localeCompare(b.when))
     .slice(0, 20)
+}
+
+function presentVendor<
+  T extends {
+    agreementDate: Date | null
+    balanceDate: Date | null
+  },
+>(row: T) {
+  return {
+    ...row,
+    agreementDate: row.agreementDate ? toCalendarDate(row.agreementDate) : null,
+    balanceDate: row.balanceDate ? toCalendarDate(row.balanceDate) : null,
+  }
 }
 
 function presentCustomer<
@@ -770,6 +876,88 @@ function pickContact(input: CustomerInput | VendorInput) {
   return { displayName: input.displayName, ...optional } as {
     displayName: string
   } & Record<(typeof OPTIONAL_CONTACT_FIELDS)[number], string | null>
+}
+
+async function presentLinkedParty(
+  ctx: OrgContext,
+  side: Side,
+  party: { id: string; displayName: string; companyName: string | null; isActive: boolean } | null,
+): Promise<LinkedParty | null> {
+  if (!party) return null
+  const balances = await subledgerBalances(db, ctx, side, [party.id])
+  return {
+    id: party.id,
+    displayName: party.displayName,
+    companyName: party.companyName,
+    isActive: party.isActive,
+    balance: toMoneyString(balances.get(party.id) ?? 0, 2),
+    side,
+    href: side === 'vendor' ? `/vendors?id=${party.id}` : `/customers?id=${party.id}`,
+    statementHref:
+      side === 'vendor'
+        ? `/reports/statements/vendor?vendorId=${encodeURIComponent(party.id)}`
+        : `/reports/statements/customer?customerId=${encodeURIComponent(party.id)}`,
+  }
+}
+
+/**
+ * Point this customer at a vendor (or clear). If that vendor was already linked
+ * to someone else, the previous customer's link is cleared first — one vendor,
+ * one customer.
+ */
+async function resolveLinkedVendorId(
+  tx: Tx,
+  ctx: OrgContext,
+  vendorId: string | null,
+  customerId?: string,
+): Promise<string | null> {
+  if (!vendorId) return null
+  const vendor = await tx.vendor.findFirst({
+    where: { id: vendorId, orgId: ctx.orgId },
+    select: { id: true, displayName: true, isActive: true },
+  })
+  if (!vendor) throw validation('That supplier is not on the books.')
+  if (!vendor.isActive) {
+    throw precondition(`${vendor.displayName} is archived. Restore the vendor before linking.`)
+  }
+  await tx.customer.updateMany({
+    where: {
+      orgId: ctx.orgId,
+      linkedVendorId: vendorId,
+      ...(customerId ? { id: { not: customerId } } : {}),
+    },
+    data: { linkedVendorId: null },
+  })
+  return vendorId
+}
+
+/**
+ * From the vendor form: attach this vendor to a customer, or clear whoever was
+ * pointing at this vendor.
+ */
+async function applyVendorCustomerLink(
+  tx: Tx,
+  ctx: OrgContext,
+  vendorId: string,
+  customerId: string | null,
+) {
+  await tx.customer.updateMany({
+    where: { orgId: ctx.orgId, linkedVendorId: vendorId },
+    data: { linkedVendorId: null },
+  })
+  if (!customerId) return
+  const customer = await tx.customer.findFirst({
+    where: { id: customerId, orgId: ctx.orgId },
+    select: { id: true, displayName: true, isActive: true },
+  })
+  if (!customer) throw validation('That customer is not on the books.')
+  if (!customer.isActive) {
+    throw precondition(`${customer.displayName} is archived. Restore the customer before linking.`)
+  }
+  await tx.customer.update({
+    where: { id: customerId },
+    data: { linkedVendorId: vendorId },
+  })
 }
 
 async function assertNameFree(ctx: OrgContext, side: Side, name: string, selfId?: string) {

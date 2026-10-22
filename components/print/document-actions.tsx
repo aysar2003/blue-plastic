@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeftIcon,
+  FileSpreadsheetIcon,
   Loader2Icon,
   MailIcon,
   MessageCircleIcon,
@@ -33,6 +34,7 @@ import { readStoredPrintInk, withPrintInk } from '@/lib/print-ink'
 export function DocumentActions({
   paper = 'document',
   pdfHref,
+  excelHref,
   filename,
   printHref,
   backHref,
@@ -45,6 +47,8 @@ export function DocumentActions({
   /** Shown in dialog copy — "statement", "delivery report", "invoice". */
   paper?: string
   pdfHref?: string
+  /** Downloads a spreadsheet of the same rows. Omitted where Excel already lives elsewhere. */
+  excelHref?: string
   filename?: string
   /** Dedicated print page. When omitted, Print uses the current page. */
   printHref?: string
@@ -131,6 +135,11 @@ export function DocumentActions({
 
       <PrintInkMenu printHref={printHref} />
       <PdfInkMenu pdfHref={pdfHref} filename={file} />
+      {excelHref ? (
+        <a href={excelHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          <FileSpreadsheetIcon /> Excel
+        </a>
+      ) : null}
 
       <Dialog
         open={emailOpen}

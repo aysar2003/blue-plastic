@@ -90,6 +90,7 @@ export const MODULES: NavModule[] = [
       { label: 'Overview', href: '/projects' },
       { label: 'All projects', href: '/projects/list', permission: 'project:read' },
       { label: 'New', href: '/projects/new', permission: 'project:create' },
+      { label: 'Reports', href: '/projects/reports', permission: 'report:read' },
     ],
   },
   {
@@ -122,6 +123,7 @@ export const MODULES: NavModule[] = [
       },
       { label: 'Bill payments', href: '/bill-payments', permission: 'expense:read' },
       { label: 'Vendors', href: '/vendors', permission: 'vendor:read' },
+      { label: 'Reports', href: '/purchases/reports', permission: 'report:read' },
     ],
   },
   {
@@ -140,6 +142,7 @@ export const MODULES: NavModule[] = [
       { label: 'New transfer', href: '/banking/transfers/new', permission: 'bank:transact' },
       { label: 'New deposit', href: '/banking/deposits/new', permission: 'bank:transact' },
       { label: 'Import a statement', href: '/banking/import', permission: 'bank:import' },
+      { label: 'Reports', href: '/banking/reports', permission: 'report:read' },
     ],
   },
   {

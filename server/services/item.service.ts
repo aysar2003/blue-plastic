@@ -1095,7 +1095,7 @@ export async function listCatalog(ctx: OrgContext) {
       isActive: true,
       type: { notIn: ['GROUP', 'SUBTOTAL', 'PAYMENT'] },
     },
-    select: { id: true, name: true, sku: true, type: true },
+    select: { id: true, name: true, sku: true, type: true, unitOfMeasure: true },
     orderBy: { name: 'asc' },
   })
   const stockIds = rows
@@ -1108,6 +1108,7 @@ export async function listCatalog(ctx: OrgContext) {
     id: row.id,
     label: row.sku ? `${row.name} (${row.sku})` : row.name,
     type: row.type,
+    unitOfMeasure: row.unitOfMeasure,
     averageCost: positions.get(row.id)?.averageCost.toFixed(6) ?? null,
   }))
 }

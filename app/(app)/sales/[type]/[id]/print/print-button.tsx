@@ -9,6 +9,7 @@ import { DocumentActions } from '@/components/print/document-actions'
 export function PrintButton({
   paper = 'document',
   pdfHref,
+  excelHref,
   filename,
   printHref,
   backHref,
@@ -20,6 +21,7 @@ export function PrintButton({
 }: {
   paper?: string
   pdfHref?: string
+  excelHref?: string
   filename?: string
   printHref?: string
   backHref?: string
@@ -33,6 +35,7 @@ export function PrintButton({
     <DocumentActions
       paper={paper}
       pdfHref={pdfHref}
+      excelHref={excelHref}
       filename={filename}
       printHref={printHref}
       backHref={backHref}

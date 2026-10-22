@@ -1,5 +1,6 @@
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import type { CalendarDate } from '@/lib/date'
+import { isCollectionOverdue, type OverdueClock } from '@/lib/invoice-overdue'
 
 /**
  * The money bar on the vendor list — mirror of the customer bands, on the
@@ -14,6 +15,9 @@ export type PurchaseBandDocument = {
   total: string
   applied: string
   due: CalendarDate | null
+  partyBalanceDate?: CalendarDate | null
+  partyAgreementDate?: CalendarDate | null
+  partyBalanceTime?: string | null
   date: CalendarDate
 }
 
@@ -37,6 +41,9 @@ export type VendorLedgerBalance = {
   vendorId: string
   /** Natural payables balance: positive means the business owes the vendor. */
   balance: string
+  partyBalanceDate?: CalendarDate | null
+  partyAgreementDate?: CalendarDate | null
+  partyBalanceTime?: string | null
 }
 
 const money = (value: Decimal) => toMoneyString(value, 2)
@@ -54,11 +61,13 @@ export function vendorBands(
   asOf: CalendarDate,
   recentFrom: CalendarDate,
   balances: VendorLedgerBalance[] = [],
+  clock?: OverdueClock,
 ): Record<VendorBandKey, VendorBand> {
   const orders = { amount: ZERO, count: 0, ids: new Set<string>() }
   const overdue = { amount: ZERO, count: 0, ids: new Set<string>(), byVendor: new Map<string, Decimal>() }
   const open = { amount: ZERO, count: 0, credits: 0, ids: new Set<string>() }
   const paid = { amount: ZERO, count: 0, ids: new Set<string>() }
+  const openBills = new Set<string>()
 
   for (const row of documents) {
     if (row.type === 'PURCHASE_ORDER' && (row.status === 'DRAFT' || row.status === 'OPEN' || row.status === 'PARTIAL')) {
@@ -79,8 +88,21 @@ export function vendorBands(
     }
 
     if (row.type !== 'BILL') continue
-    const due = row.due ?? row.date
-    if (due < asOf) {
+    openBills.add(row.vendorId)
+    if (
+      isCollectionOverdue(
+        {
+          status: row.status,
+          dueDate: row.due,
+          partyBalanceDate: row.partyBalanceDate,
+          partyAgreementDate: row.partyAgreementDate,
+          partyBalanceTime: row.partyBalanceTime,
+          date: row.date,
+        },
+        asOf,
+        clock,
+      )
+    ) {
       overdue.amount = overdue.amount.plus(balance)
       overdue.count += 1
       push(overdue.ids, row.vendorId)
@@ -108,9 +130,28 @@ export function vendorBands(
     const owing = new Set<string>()
     for (const row of balances) {
       const late = overdue.byVendor.get(row.vendorId) ?? ZERO
-      const now = new Decimal(row.balance).minus(late)
-      if (!now.greaterThan(0)) continue
-      current = current.plus(now)
+      const leftover = new Decimal(row.balance).minus(late)
+      if (!leftover.greaterThan(0)) continue
+      const partyOverdue =
+        !openBills.has(row.vendorId) &&
+        isCollectionOverdue(
+          {
+            status: 'OPEN',
+            partyBalanceDate: row.partyBalanceDate,
+            partyAgreementDate: row.partyAgreementDate,
+            partyBalanceTime: row.partyBalanceTime,
+          },
+          asOf,
+          clock,
+        )
+      if (partyOverdue) {
+        overdue.amount = overdue.amount.plus(leftover)
+        overdue.count += 1
+        push(overdue.ids, row.vendorId)
+        overdue.byVendor.set(row.vendorId, late.plus(leftover))
+        continue
+      }
+      current = current.plus(leftover)
       owing.add(row.vendorId)
       push(open.ids, row.vendorId)
     }
@@ -156,7 +197,10 @@ export function vendorBands(
 
 export function vendorBandDetail(band: VendorBand): string {
   if (band.key === 'orders') return countPhrase(band.count, 'purchase order', 'purchase orders')
-  if (band.key === 'overdue') return countPhrase(band.count, 'overdue bill', 'overdue bills')
+  if (band.key === 'overdue') {
+    if (band.count === 0) return countPhrase(band.holders, 'overdue balance', 'overdue balances')
+    return countPhrase(band.count, 'overdue bill', 'overdue bills')
+  }
   if (band.key === 'paid') return countPhrase(band.count, 'recently paid', 'recently paid')
   if (band.count === 0 && band.extra === 0) {
     return countPhrase(band.holders, 'open balance', 'open balances')

@@ -47,6 +47,8 @@ export type DatabaseRow = {
   maxUsers: number | null
   rentNote: string | null
   rentExpired: boolean
+  onTrial: boolean
+  daysLeft: number | null
   openBlocked: boolean
   activeUsers: number
   /** Apps granted on this company (featureFlags.modules). */
@@ -182,6 +184,8 @@ function toDatabaseRow(
     maxUsers: limits.maxUsers,
     rentNote: limits.rentNote,
     rentExpired: limits.rentExpired,
+    onTrial: limits.onTrial,
+    daysLeft: limits.daysLeft,
     openBlocked: limits.openBlocked,
     activeUsers: organization._count.memberships,
     modules,

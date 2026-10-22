@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
 import type { ApprovalEntityType } from '@prisma/client'
@@ -16,6 +17,8 @@ import {
   updateApprovalPolicy,
 } from './actions'
 
+type Member = { id: string; name: string; email: string; role: string }
+
 type PolicyRow = {
   id: string
   name: string
@@ -27,25 +30,56 @@ type PolicyRow = {
   priority: number
   requireDifferentApprover: boolean
   levels: number
+  source: string
+  approverIds: string[]
 }
 
 const ENTITY_OPTIONS = APPROVAL_ENTITY_TYPES
 
-const QUICK_EXAMPLES: {
-  name: string
-  entityType: ApprovalEntityType
-  documentKind: string
-  levels: number
-}[] = [
-  { name: 'Purchase orders', entityType: 'PURCHASE_DOCUMENT', documentKind: 'PURCHASE_ORDER', levels: 1 },
-  { name: 'Sales orders', entityType: 'SALES_DOCUMENT', documentKind: 'SALES_ORDER', levels: 1 },
-  { name: 'Invoices', entityType: 'SALES_DOCUMENT', documentKind: 'INVOICE', levels: 1 },
-  { name: 'Customer payments', entityType: 'CUSTOMER_PAYMENT', documentKind: '', levels: 1 },
-  { name: 'Bank transfers', entityType: 'BANK_TRANSFER', documentKind: '', levels: 1 },
-  { name: 'Customer opening / credit', entityType: 'CUSTOMER', documentKind: '', levels: 1 },
-]
+function readApproverIds(formData: FormData): string[] {
+  return formData.getAll('approverIds').map((value) => String(value)).filter(Boolean)
+}
 
-export function ApprovalPoliciesForm({ policies }: { policies: PolicyRow[] }) {
+function ApproverPicker({ members, selected }: { members: Member[]; selected: string[] }) {
+  if (members.length === 0) {
+    return <p className="text-xs text-muted-foreground">No company users to assign yet.</p>
+  }
+  return (
+    <fieldset className="rounded-md border border-border p-2">
+      <legend className="px-1 text-xs text-muted-foreground">Users who may approve</legend>
+      <p className="mb-1.5 text-[0.6875rem] text-muted-foreground">
+        Tick people to restrict this rule to them. Leave empty so anyone with Approve permission
+        may decide. Owner and Admin can always decide.
+      </p>
+      <div className="grid gap-1 sm:grid-cols-2">
+        {members.map((member) => (
+          <label key={member.id} className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              name="approverIds"
+              value={member.id}
+              defaultChecked={selected.includes(member.id)}
+              className="size-3.5 rounded border-input"
+            />
+            <span className="min-w-0 truncate">
+              {member.name}
+              <span className="ml-1 text-muted-foreground">{member.role.toLowerCase()}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
+export function ApprovalPoliciesForm({
+  policies,
+  members,
+}: {
+  policies: PolicyRow[]
+  members: Member[]
+}) {
+  const router = useRouter()
   const [pending, start] = useTransition()
   const [createEntity, setCreateEntity] = useState<ApprovalEntityType>('SALES_DOCUMENT')
   const createKinds = APPROVAL_DOCUMENT_KINDS[createEntity] ?? []
@@ -64,33 +98,14 @@ export function ApprovalPoliciesForm({ policies }: { policies: PolicyRow[] }) {
         priority: Number(formData.get('priority') ?? 100),
         requireDifferentApprover: formData.get('requireDifferentApprover') === 'true',
         levels: Number(formData.get('levels') ?? 1),
+        approverUserIds: readApproverIds(formData),
       })
       if (!result.ok) {
         toast.error(result.error.message)
         return
       }
       toast.success('Workflow added.')
-    })
-  }
-
-  function addExample(example: (typeof QUICK_EXAMPLES)[number]) {
-    start(async () => {
-      const result = await createApprovalPolicy({
-        name: example.name,
-        entityType: example.entityType,
-        documentKind: example.documentKind || null,
-        enabled: true,
-        minAmount: '0',
-        maxAmount: null,
-        priority: 50,
-        requireDifferentApprover: true,
-        levels: example.levels,
-      })
-      if (!result.ok) {
-        toast.error(result.error.message)
-        return
-      }
-      toast.success(`Added “${example.name}”. Turn off the catch-all family rule if you only want this kind.`)
+      router.refresh()
     })
   }
 
@@ -109,12 +124,14 @@ export function ApprovalPoliciesForm({ policies }: { policies: PolicyRow[] }) {
         priority: Number(formData.get('priority') ?? 100),
         requireDifferentApprover: formData.get('requireDifferentApprover') === 'true',
         levels: Number(formData.get('levels') ?? 1),
+        approverUserIds: readApproverIds(formData),
       })
       if (!result.ok) {
         toast.error(result.error.message)
         return
       }
       toast.success('Workflow saved.')
+      router.refresh()
     })
   }
 
@@ -127,6 +144,7 @@ export function ApprovalPoliciesForm({ policies }: { policies: PolicyRow[] }) {
         return
       }
       toast.success('Workflow deleted.')
+      router.refresh()
     })
   }
 
@@ -137,37 +155,15 @@ export function ApprovalPoliciesForm({ policies }: { policies: PolicyRow[] }) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-        <p className="font-medium text-foreground">How to split work</p>
-        <ol className="mt-1.5 list-decimal space-y-1 pl-4">
-          <li>Turn <strong>off</strong> the catch-all rule (e.g. “Sales — default”) if you do not want every sale to wait.</li>
-          <li>Add a rule for one kind only — purchase orders, sales orders, invoices, payments, transfers…</li>
-          <li>Use levels 2–3 when a second or third person must also approve (larger amounts).</li>
-        </ol>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {QUICK_EXAMPLES.map((example) => (
-            <button
-              key={example.name}
-              type="button"
-              disabled={pending}
-              onClick={() => addExample(example)}
-              className="rounded-md border border-border bg-background px-2 py-1 text-[0.6875rem] font-medium text-foreground hover:bg-card disabled:opacity-50"
-            >
-              + {example.name}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <form
         action={create}
         className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4"
       >
         <div>
-          <p className="text-sm font-semibold text-foreground">Add workflow / rule</p>
+          <p className="text-sm font-semibold text-foreground">Build your own rule</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Example: “Purchase orders only” with 1 level, or “Invoices over 5,000” with 2 levels.
-            Lower priority number runs first. Leave max blank for no ceiling.
+            Example: “Sales orders only”, or “Invoices over 5,000” with 2 levels. Lower priority
+            number runs first. Leave max blank for no ceiling.
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -176,7 +172,7 @@ export function ApprovalPoliciesForm({ policies }: { policies: PolicyRow[] }) {
             <input
               name="name"
               required
-              placeholder="e.g. Purchase orders"
+              placeholder="e.g. Sales orders"
               className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
             />
           </label>
@@ -218,7 +214,7 @@ export function ApprovalPoliciesForm({ policies }: { policies: PolicyRow[] }) {
               name="priority"
               type="number"
               min={1}
-              defaultValue={100}
+              defaultValue={50}
               className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
             />
           </label>
@@ -265,19 +261,23 @@ export function ApprovalPoliciesForm({ policies }: { policies: PolicyRow[] }) {
             defaultChecked
             className="size-3.5 rounded border-input"
           />
-          Different person must approve (SOX)
+          Different person must approve
         </label>
+        <ApproverPicker members={members} selected={[]} />
         <button
           type="submit"
           disabled={pending}
           className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
         >
-          {pending ? 'Adding…' : 'Add workflow'}
+          {pending ? 'Adding…' : 'Add this rule'}
         </button>
       </form>
 
       <div className="space-y-6">
         <p className="text-sm font-semibold">Your workflows</p>
+        {byFamily.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No rules yet. Use a ready-made set above, or add one here.</p>
+        ) : null}
         {byFamily.map((group) => (
           <div key={group.type} className="space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -302,6 +302,7 @@ export function ApprovalPoliciesForm({ policies }: { policies: PolicyRow[] }) {
                       />
                       <p className="mt-1 text-xs text-muted-foreground">
                         {documentKindLabel(policy.entityType, policy.documentKind)}
+                        {policy.source === 'READY' ? ' · ready-made' : ' · custom'}
                       </p>
                     </div>
                     <label className="flex items-center gap-2 text-xs">
@@ -381,34 +382,33 @@ export function ApprovalPoliciesForm({ policies }: { policies: PolicyRow[] }) {
                       </select>
                     </label>
                   </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <input
-                        type="checkbox"
-                        name="requireDifferentApprover"
-                        value="true"
-                        defaultChecked={policy.requireDifferentApprover}
-                        className="size-3.5 rounded border-input"
-                      />
-                      Different person
-                    </label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => remove(policy.id, policy.name)}
-                        className="rounded-md border border-destructive/40 px-2.5 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
-                      >
-                        Delete
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={pending}
-                        className="rounded-md border border-border bg-background px-3 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
-                      >
-                        Save
-                      </button>
-                    </div>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      name="requireDifferentApprover"
+                      value="true"
+                      defaultChecked={policy.requireDifferentApprover}
+                      className="size-3.5 rounded border-input"
+                    />
+                    Different person must approve
+                  </label>
+                  <ApproverPicker members={members} selected={policy.approverIds} />
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => remove(policy.id, policy.name)}
+                      className="rounded-md border border-destructive/40 px-2.5 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={pending}
+                      className="rounded-md border border-border bg-background px-3 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                    >
+                      Save
+                    </button>
                   </div>
                 </form>
               )

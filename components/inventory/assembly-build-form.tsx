@@ -16,11 +16,13 @@ import { DateField } from '@/components/ui/date-field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
+import { formatQty, resolveUnit } from '@/lib/quantity'
 import { saveAssemblyBuildForm } from '@/app/(app)/inventory/actions'
 
 export type AssemblyOption = {
   id: string
   label: string
+  unitOfMeasure?: string | null
   onHand: string
   averageCost: string
   estimatedCost: string
@@ -28,6 +30,7 @@ export type AssemblyOption = {
     id: string
     label: string
     quantity: string
+    unitOfMeasure?: string | null
     onHand: string
     averageCost: string
     byStore: Record<string, string>
@@ -160,13 +163,29 @@ export function AssemblyBuildForm({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field name="quantity" label="Quantity to build" required error={state.fieldErrors?.quantity}>
-          <Input
-            value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
-            inputMode="decimal"
-            className="tabular"
-          />
+        <Field
+          name="quantity"
+          label={
+            assembly
+              ? `Quantity to build (${resolveUnit(assembly.unitOfMeasure)})`
+              : 'Quantity to build'
+          }
+          required
+          error={state.fieldErrors?.quantity}
+        >
+          <div className="relative">
+            <Input
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              inputMode="decimal"
+              className="tabular pr-10"
+            />
+            {assembly ? (
+              <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[0.65rem] font-medium uppercase text-muted-foreground">
+                {resolveUnit(assembly.unitOfMeasure)}
+              </span>
+            ) : null}
+          </div>
         </Field>
         <Field name="unitCost" label={`Cost each (${currency})`}>
           <Input
@@ -204,13 +223,13 @@ export function AssemblyBuildForm({
               {preview.map((row) => (
                 <tr key={row.id} className="border-t border-border">
                   <td className="px-3 py-2">{row.label}</td>
-                  <td className="px-3 py-2 tabular">{row.bomQty}</td>
-                  <td className="px-3 py-2 tabular">{row.needed}</td>
-                  <td className="px-3 py-2 tabular">{row.onHand}</td>
+                  <td className="px-3 py-2 tabular">{formatQty(row.bomQty, row.unitOfMeasure)}</td>
+                  <td className="px-3 py-2 tabular">{formatQty(row.needed, row.unitOfMeasure)}</td>
+                  <td className="px-3 py-2 tabular">{formatQty(row.onHand, row.unitOfMeasure)}</td>
                   <td
                     className={`px-3 py-2 tabular ${row.short ? 'text-destructive font-medium' : ''}`}
                   >
-                    {row.remaining}
+                    {formatQty(row.remaining, row.unitOfMeasure)}
                   </td>
                   <td className="px-3 py-2 text-right tabular">
                     {formatMoney(row.averageCost, currency)}

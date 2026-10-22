@@ -61,7 +61,10 @@ export async function GET(
       customerPhone: document.customer.phone,
       reference: document.reference,
       paymentTerm: document.paymentTerm?.name ?? null,
+      workScope: document.workScope,
+      workSite: document.workSite || document.project?.siteLocation || null,
       status: document.status,
+      createdByName: document.createdByName,
       currency,
       lines: document.lines.map((line) => ({
         quantity: line.quantity,

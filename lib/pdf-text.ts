@@ -42,6 +42,8 @@ export type PdfRow = {
   fillInset?: number
   /** Optional document / line barcode under the runs. */
   barcode?: PdfBarcode
+  /** Force the next rows onto a new page (invoice-by-invoice packs). */
+  pageBreak?: boolean
 }
 
 /** US Letter. Shared gutters so every paper lines up. */
@@ -52,6 +54,10 @@ export const PDF_PAGE = {
   left: 40,
   /** Right content edge (text / right-aligned amounts). */
   right: 572,
+  /** Top margin used by `buildTextPdf`. */
+  top: 36,
+  /** Bottom margin used by `buildTextPdf`. */
+  bottom: 40,
 } as const
 
 const LETTER = { width: PDF_PAGE.width, height: PDF_PAGE.height }
@@ -63,8 +69,8 @@ export function buildTextPdf(
   const width = options.width ?? LETTER.width
   const height = options.height ?? LETTER.height
   const ink = options.ink ?? 'color'
-  const top = height - 36
-  const bottom = 40
+  const top = height - PDF_PAGE.top
+  const bottom = PDF_PAGE.bottom
   const header = options.header ?? []
   const headerHeight = header.reduce((sum, row) => sum + (row.height ?? 14), 0)
 
@@ -72,6 +78,14 @@ export function buildTextPdf(
   let current: PdfRow[] = []
   let y = top - headerHeight
   for (const row of rows) {
+    if (row.pageBreak) {
+      if (current.length > 0) {
+        pages.push(current)
+        current = []
+        y = top - headerHeight
+      }
+      continue
+    }
     const rowHeight = row.height ?? 14
     if (y - rowHeight < bottom && current.length > 0) {
       pages.push(current)

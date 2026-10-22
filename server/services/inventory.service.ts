@@ -56,7 +56,7 @@ const STOCK_ALERT_LIST_LIMIT = 200
 
 // The key carries a version: entries cached under the old key held a bare array.
 const cachedStockAlerts = cache((orgId: string) =>
-  unstable_cache(() => queryStockAlerts(orgId), ['stock-alerts-v2', orgId], { revalidate: 60 })(),
+  unstable_cache(() => queryStockAlerts(orgId), ['stock-alerts-v3', orgId], { revalidate: 60 })(),
 )
 
 async function queryStockAlerts(orgId: string): Promise<StockAlertSummary> {
@@ -65,6 +65,7 @@ async function queryStockAlerts(orgId: string): Promise<StockAlertSummary> {
       itemId: string
       name: string
       quantity: string
+      unitOfMeasure: string | null
       reorderPoint: string | null
       kind: 'out' | 'limit'
       total: number
@@ -73,6 +74,7 @@ async function queryStockAlerts(orgId: string): Promise<StockAlertSummary> {
     SELECT i.id AS "itemId",
            i.name AS "name",
            COALESCE(t."runningQuantity", 0)::text AS "quantity",
+           i."unitOfMeasure" AS "unitOfMeasure",
            i."reorderPoint"::text AS "reorderPoint",
            CASE
              WHEN COALESCE(t."runningQuantity", 0) <= 0 THEN 'out'
@@ -109,6 +111,7 @@ async function queryStockAlerts(orgId: string): Promise<StockAlertSummary> {
       itemId: row.itemId,
       name: row.name,
       quantity: new Decimal(row.quantity).toFixed(2),
+      unitOfMeasure: row.unitOfMeasure,
       reorderPoint: row.reorderPoint ? new Decimal(row.reorderPoint).toFixed(2) : null,
       kind: row.kind,
     })),
@@ -932,7 +935,7 @@ export async function ticketsForStore(ctx: OrgContext, storeId: string, limit = 
       memo: true,
       preparedAt: true,
       createdById: true,
-      item: { select: { id: true, name: true, sku: true } },
+      item: { select: { id: true, name: true, sku: true, unitOfMeasure: true } },
       toStore: { select: { id: true, name: true } },
       salesDocument: { select: { id: true, number: true, type: true } },
       deliveryNote: { select: { id: true, number: true } },
@@ -979,6 +982,7 @@ export type KeeperPickJob = {
     ticketNumber: string
     itemName: string
     sku: string | null
+    unitOfMeasure: string | null
     quantity: string
     printHref: string
   }[]
@@ -1009,7 +1013,7 @@ export async function pendingSalePicks(ctx: OrgContext, storeId: string): Promis
       createdById: true,
       salesDocumentId: true,
       deliveryNoteId: true,
-      item: { select: { name: true, sku: true } },
+      item: { select: { name: true, sku: true, unitOfMeasure: true } },
       salesDocument: {
         select: {
           id: true,
@@ -1075,6 +1079,7 @@ export async function pendingSalePicks(ctx: OrgContext, storeId: string): Promis
         ticketNumber: row.number,
         itemName: row.item.name,
         sku: row.item.sku,
+        unitOfMeasure: row.item.unitOfMeasure,
         quantity: new Decimal(row.quantity.toString()).toFixed(2),
         printHref: `/stores/tickets/${row.id}/print`,
       })),
@@ -1172,7 +1177,7 @@ export async function storeTicketList(
       status: true,
       preparedAt: true,
       takenBy: true,
-      item: { select: { id: true, name: true, sku: true } },
+      item: { select: { id: true, name: true, sku: true, unitOfMeasure: true } },
       store: { select: { id: true, name: true } },
       salesDocument: { select: { id: true, number: true, type: true } },
       deliveryNote: { select: { id: true, number: true } },

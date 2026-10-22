@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 
 import { idleState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
+import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
@@ -23,6 +24,7 @@ import {
   updateCustomerForm,
   updateVendorForm,
 } from '@/app/(app)/customers/actions'
+import { linkPartyOptions } from '@/app/(app)/quick-create/actions'
 import { MergeIntoDialog } from '@/components/master-data/merge-into-dialog'
 
 export type ContactSide = 'customer' | 'vendor'
@@ -55,6 +57,10 @@ export type ContactValues = {
   balanceDate?: string | null
   balanceTime?: string | null
   reminderDays?: number | null
+  /** Supplier that is the same party (customer form). */
+  linkedVendorId?: string | null
+  /** Customer that is the same party (vendor form). */
+  linkedCustomerId?: string | null
   files?: { id: string; kind: 'PHOTO' | 'AGREEMENT'; originalName: string }[]
 }
 
@@ -127,8 +133,23 @@ export function ContactDialog({
   const [defaultExpenseAccountId, setDefaultExpenseAccountId] = useState(
     contact?.defaultExpenseAccountId ?? '',
   )
+  const [linkedPartyId, setLinkedPartyId] = useState(
+    side === 'customer' ? (contact?.linkedVendorId ?? '') : (contact?.linkedCustomerId ?? ''),
+  )
+  const [linkOptions, setLinkOptions] = useState<Option[]>([])
   const handled = useRef(false)
   const [mergeOpen, setMergeOpen] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void linkPartyOptions({ side }).then((result) => {
+      if (cancelled || !result.ok) return
+      setLinkOptions(result.data.options)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [side])
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
@@ -383,48 +404,47 @@ export function ContactDialog({
             </Field>
           )}
 
+          <Separator />
+
+          <Field
+            name={side === 'customer' ? 'linkedVendorId' : 'linkedCustomerId'}
+            label={side === 'customer' ? 'Linked supplier' : 'Linked customer'}
+            hint={
+              side === 'customer'
+                ? 'Same trading party on the purchase side (e.g. Mall Group as a supplier). Statements and reports can jump between both books.'
+                : 'Same trading party on the sales side. Their customer statement stays one click away.'
+            }
+            error={side === 'customer' ? e?.linkedVendorId : e?.linkedCustomerId}
+          >
+            <EntityPicker
+              id={side === 'customer' ? 'linkedVendorId' : 'linkedCustomerId'}
+              name={side === 'customer' ? 'linkedVendorId' : 'linkedCustomerId'}
+              options={linkOptions}
+              value={linkedPartyId || null}
+              onChange={(next) => setLinkedPartyId(next ?? '')}
+              kind={side === 'customer' ? 'vendor' : 'customer'}
+              placeholder={side === 'customer' ? '— no supplier link —' : '— no customer link —'}
+              clearable
+              error={side === 'customer' ? e?.linkedVendorId : e?.linkedCustomerId}
+            />
+          </Field>
+
           <Field name="notes" label="Notes" error={e?.notes}>
             <Input {...fieldProps('notes', e?.notes)} defaultValue={contact?.notes ?? ''} />
           </Field>
 
-          {side === 'customer' ? (
-            <CustomerRegistration
-              mode={mode}
-              currency={currency}
-              today={today}
-              contact={contact}
-              openingBalanceDate={openingBalanceDate}
-              onOpeningBalanceDate={setOpeningBalanceDate}
-              agreementDate={agreementDate}
-              onAgreementDate={setAgreementDate}
-              errors={e}
-            />
-          ) : mode === 'create' ? (
-            <div className="rounded-md border bg-muted/40 p-3">
-              <p className="mb-3 text-xs text-muted-foreground">
-                What was already owed to this vendor when the books started (positive), or a credit you already hold with them (negative). It posts to Accounts Payable against Opening Balance Equity.
-              </p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field name="openingBalance" label={`Opening balance (${currency})`} error={e?.openingBalance}>
-                  <Input
-                    {...fieldProps('openingBalance', e?.openingBalance)}
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    className="tabular"
-                  />
-                </Field>
-                <Field name="openingBalanceDate" label="As at" error={e?.openingBalanceDate}>
-                  <DateField
-                    id="openingBalanceDate"
-                    name="openingBalanceDate"
-                    value={openingBalanceDate}
-                    onChange={setOpeningBalanceDate}
-                    today={today}
-                  />
-                </Field>
-              </div>
-            </div>
-          ) : null}
+          <PartyRegistration
+            side={side}
+            mode={mode}
+            currency={currency}
+            today={today}
+            contact={contact}
+            openingBalanceDate={openingBalanceDate}
+            onOpeningBalanceDate={setOpeningBalanceDate}
+            agreementDate={agreementDate}
+            onAgreementDate={setAgreementDate}
+            errors={e}
+          />
 
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={onClose}>
@@ -452,7 +472,8 @@ export function ContactDialog({
   )
 }
 
-function CustomerRegistration({
+function PartyRegistration({
+  side,
   mode,
   currency,
   today,
@@ -463,6 +484,7 @@ function CustomerRegistration({
   onAgreementDate,
   errors,
 }: {
+  side: ContactSide
   mode: 'create' | 'edit'
   currency: string
   today: string
@@ -475,15 +497,16 @@ function CustomerRegistration({
 }) {
   const photo = contact?.files?.find((file) => file.kind === 'PHOTO')
   const papers = contact?.files?.filter((file) => file.kind === 'AGREEMENT') ?? []
-  const photoSrc = contact?.id && photo ? `/api/customers/${contact.id}/files/${photo.id}` : null
+  const photoSrc = side === 'customer' && contact?.id && photo ? `/api/customers/${contact.id}/files/${photo.id}` : null
 
   return (
     <div className="space-y-4 rounded-md border bg-muted/40 p-3">
       <div>
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Balance and agreement</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Payment terms are chosen above. Record the balance (positive if they owe you, negative if they hold a credit),
-          the day and time it was taken, and the date of the debt agreement. The amount posts to Accounts Receivable.
+          {side === 'customer'
+            ? 'Payment terms are chosen above. Record the balance (positive if they owe you, negative if they hold a credit), the day and time the balance falls due, and the date of the debt agreement. Overdue uses that promise. The amount posts to Accounts Receivable.'
+            : 'Payment terms are chosen above. Record what was already owed to this vendor (positive), or a credit you already hold (negative), the day and time that balance falls due, and the agreement date. Overdue uses that promise. The amount posts to Accounts Payable.'}
         </p>
       </div>
 
@@ -510,10 +533,15 @@ function CustomerRegistration({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field name="balanceTime" label="Balance time" hint="The clock time the balance was taken." error={errors?.balanceTime}>
+        <Field name="balanceTime" label="Balance time" hint="The clock time the promised balance falls due." error={errors?.balanceTime}>
           <Input {...fieldProps('balanceTime', errors?.balanceTime, true)} type="time" defaultValue={contact?.balanceTime ?? ''} />
         </Field>
-        <Field name="agreementDate" label="Agreement date" hint="The day the debt agreement was signed." error={errors?.agreementDate}>
+        <Field
+          name="agreementDate"
+          label="Agreement date"
+          hint={side === 'customer' ? 'The day the debt agreement was signed.' : 'The day the payable agreement was signed.'}
+          error={errors?.agreementDate}
+        >
           <DateField
             id="agreementDate"
             name="agreementDate"
@@ -541,32 +569,41 @@ function CustomerRegistration({
         </NativeSelect>
       </Field>
 
-      <Field name="photo" label="Customer photo" hint="JPEG, PNG, or WebP, up to 3 MB." error={errors?.photo}>
-        <PhotoField existingSrc={photoSrc} />
-      </Field>
+      {side === 'customer' ? (
+        <>
+          <Field name="photo" label="Customer photo" hint="JPEG, PNG, or WebP, up to 3 MB." error={errors?.photo}>
+            <PhotoField existingSrc={photoSrc} />
+          </Field>
 
-      <Field
-        name="agreements"
-        label="Agreement papers"
-        hint="The debt agreement. PDF or a picture, up to 4 files, 4 MB each."
-        error={errors?.agreements}
-      >
-        {papers.length > 0 ? (
-          <ul className="mb-2 space-y-1 text-sm">
-            {papers.map((paper) => (
-              <li key={paper.id}>
-                <a
-                  href={contact?.id ? `/api/customers/${contact.id}/files/${paper.id}` : undefined}
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  {paper.originalName}
-                </a>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        <Input {...fieldProps('agreements', errors?.agreements, true)} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple />
-      </Field>
+          <Field
+            name="agreements"
+            label="Agreement papers"
+            hint="The debt agreement. PDF or a picture, up to 4 files, 4 MB each."
+            error={errors?.agreements}
+          >
+            {papers.length > 0 ? (
+              <ul className="mb-2 space-y-1 text-sm">
+                {papers.map((paper) => (
+                  <li key={paper.id}>
+                    <a
+                      href={contact?.id ? `/api/customers/${contact.id}/files/${paper.id}` : undefined}
+                      className="text-primary underline-offset-4 hover:underline"
+                    >
+                      {paper.originalName}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <Input
+              {...fieldProps('agreements', errors?.agreements, true)}
+              type="file"
+              accept="application/pdf,image/jpeg,image/png,image/webp"
+              multiple
+            />
+          </Field>
+        </>
+      ) : null}
     </div>
   )
 }

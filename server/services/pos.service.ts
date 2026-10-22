@@ -733,6 +733,7 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
         sku: true,
         barcode: true,
         type: true,
+        unitOfMeasure: true,
         salesPrice: true,
         category: { select: { name: true } },
       },
@@ -779,6 +780,7 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
       sku: item.sku,
       barcode: item.barcode,
       category: item.category?.name ?? null,
+      unitOfMeasure: item.unitOfMeasure,
       price: item.salesPrice?.toString() ?? '0',
       /** Null for services and non-stock items: no warning for those. */
       onHand:
@@ -1961,7 +1963,7 @@ export async function receipt(ctx: OrgContext, documentId: string) {
           unitPrice: true,
           discountPercent: true,
           amount: true,
-          item: { select: { name: true } },
+          item: { select: { name: true, unitOfMeasure: true } },
         },
       },
     },
@@ -2010,6 +2012,7 @@ export async function receipt(ctx: OrgContext, documentId: string) {
       id: line.id,
       name: line.description || line.item?.name || '',
       quantity: line.quantity.toString(),
+      unitOfMeasure: line.item?.unitOfMeasure ?? null,
       unitPrice: line.unitPrice.toString(),
       discountPercent: line.discountPercent ? line.discountPercent.toString() : null,
       amount: line.amount.toString(),

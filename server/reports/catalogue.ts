@@ -7,12 +7,23 @@ import { addDays, formatDateTime, toCalendarDate, toDate, type CalendarDate } fr
 import { postedLineParts } from '@/lib/ledger-text'
 import { accountTenderTotals, type PosSaleTender } from '@/lib/pos-change'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
+import { formatQty } from '@/lib/quantity'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { generalLedger } from '@/server/accounting/balances'
 import { resolveSources, sourceFor } from '@/server/services/journal-sources'
 import { valuation } from '@/server/accounting/inventory'
 import type { Tx } from '@/server/db'
+import { BUCKET_LABELS, type AgingBucket } from '@/server/services/receivables.service'
+import { MODULE_LIST_REPORTS } from './module-lists'
+
+function agingBucketFor(daysOverdue: number | null): AgingBucket {
+  if (daysOverdue === null || daysOverdue <= 0) return 'current'
+  if (daysOverdue <= 30) return 'd1_30'
+  if (daysOverdue <= 60) return 'd31_60'
+  if (daysOverdue <= 90) return 'd61_90'
+  return 'd90_plus'
+}
 
 /**
  * The reports that are a **table** rather than a financial statement.
@@ -70,16 +81,28 @@ export type ReportTable = {
   empty?: string
 }
 
+export type ReportEntityFilters = {
+  customerId?: string
+  vendorId?: string
+  itemId?: string
+  accountId?: string
+  storeId?: string
+}
+
 export type ReportContext = {
   ctx: OrgContext
   range: { from: CalendarDate; to: CalendarDate }
   asOf: CalendarDate
+  /** Optional entity narrowing from the URL (`customerId`, `vendorId`, …). */
+  filters?: ReportEntityFilters
   /**
    * Tests pass the transaction they are about to roll back. Production omits
    * it and the report reads the live client.
    */
   client?: Tx
 }
+
+export type ReportFilterKind = 'customer' | 'vendor' | 'item' | 'account' | 'store'
 
 export type TableReport = {
   key: string
@@ -88,6 +111,8 @@ export type TableReport = {
   group: string
   /** A range report covers a period; an as-of report states a position at a date. */
   mode: 'range' | 'asOf'
+  /** Entity pickers shown on the shared table-report page. */
+  filterKinds?: ReportFilterKind[]
   build: (input: ReportContext) => Promise<ReportTable>
 }
 
@@ -108,7 +133,8 @@ const customerBalances: TableReport = {
   description: 'What every customer owes, and how much of it is overdue.',
   group: 'Who owes you',
   mode: 'asOf',
-  async build({ ctx, asOf }) {
+  filterKinds: ['customer'],
+  async build({ ctx, asOf, filters }) {
     const rows = await db.$queryRaw<
       {
         id: string
@@ -138,6 +164,7 @@ const customerBalances: TableReport = {
           SELECT SUM(amount) AS applied FROM sales_applications WHERE "invoiceId" = d.id
         ) a ON true
        WHERE c."orgId" = ${ctx.orgId}
+         AND (${filters?.customerId ?? null}::text IS NULL OR c.id = ${filters?.customerId ?? null})
        GROUP BY c.id, c."displayName", c.email
       HAVING COALESCE(SUM(d.total - COALESCE(a.applied, 0)), 0) <> 0
        ORDER BY 4 DESC
@@ -178,13 +205,15 @@ const openInvoices: TableReport = {
   description: 'Every unpaid invoice, oldest first, with what is still owed on it.',
   group: 'Who owes you',
   mode: 'asOf',
-  async build({ ctx, asOf }) {
+  filterKinds: ['customer'],
+  async build({ ctx, asOf, filters }) {
     const invoices = await db.salesDocument.findMany({
       where: {
         orgId: ctx.orgId,
         type: 'INVOICE',
         status: { in: ['OPEN', 'PARTIAL'] },
         date: { lte: toDate(asOf) },
+        ...(filters?.customerId ? { customerId: filters.customerId } : {}),
       },
       select: {
         id: true, number: true, date: true, dueDate: true, promisedDate: true,
@@ -244,18 +273,102 @@ const openInvoices: TableReport = {
   },
 }
 
+/** One open invoice per row — which paper, dated when, which aging bucket. */
+const arAgingDetail: TableReport = {
+  key: 'ar-aging-detail',
+  title: 'A/R Aging Detail',
+  description: 'Every unpaid invoice in its aging bucket — which paper, dated when.',
+  group: 'Who owes you',
+  mode: 'asOf',
+  filterKinds: ['customer'],
+  async build({ ctx, asOf, filters }) {
+    const asOfDate = toDate(asOf)
+    const invoices = await db.salesDocument.findMany({
+      where: {
+        orgId: ctx.orgId,
+        type: 'INVOICE',
+        status: { in: ['OPEN', 'PARTIAL'] },
+        date: { lte: asOfDate },
+        excludeFromOverdue: false,
+        ...(filters?.customerId ? { customerId: filters.customerId } : {}),
+      },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        dueDate: true,
+        promisedDate: true,
+        total: true,
+        customer: { select: { displayName: true } },
+        applications: { select: { amount: true } },
+      },
+      orderBy: [{ customer: { displayName: 'asc' } }, { dueDate: 'asc' }, { date: 'asc' }],
+    })
+
+    const asOfTime = asOfDate.getTime()
+    const rows: ReportRow[] = []
+    let outstanding = ZERO
+
+    for (const invoice of invoices) {
+      const applied = invoice.applications.reduce((sum, a) => sum.plus(a.amount.toString()), ZERO)
+      const balance = new Decimal(invoice.total.toString()).minus(applied)
+      if (!balance.greaterThan(0)) continue
+      outstanding = outstanding.plus(balance)
+
+      const collectionDue = invoice.promisedDate ?? invoice.dueDate
+      const days =
+        collectionDue != null
+          ? Math.floor((asOfTime - collectionDue.getTime()) / 86_400_000)
+          : null
+      const bucket = agingBucketFor(days)
+
+      rows.push({
+        href: `/sales/invoices/${invoice.id}`,
+        cells: {
+          customer: invoice.customer.displayName,
+          number: invoice.number,
+          date: date(invoice.date),
+          dueDate: date(collectionDue ?? invoice.dueDate),
+          days: days != null && days > 0 ? String(days) : '0',
+          bucket: BUCKET_LABELS[bucket],
+          balance: money(balance),
+        },
+      })
+    }
+
+    return {
+      columns: [
+        { key: 'customer', label: 'Customer' },
+        { key: 'number', label: 'Invoice', width: 'w-32' },
+        { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+        { key: 'dueDate', label: 'Due', format: 'date', width: 'w-28' },
+        { key: 'days', label: 'Days', format: 'number', width: 'w-20' },
+        { key: 'bucket', label: 'Age', width: 'w-36' },
+        { key: 'balance', label: 'Owing', format: 'money', width: 'w-32' },
+      ],
+      rows,
+      totals: { customer: 'Total', balance: money(outstanding) },
+      empty: 'No open invoices at this date.',
+      note: 'Same invoices as A/R Aging Summary, listed one per row for collection work.',
+    }
+  },
+}
+
 const paymentsReceived: TableReport = {
   key: 'payments-received',
   title: 'Invoice Payment List',
   description: 'Money in from customers, with what each payment settled.',
   group: 'Who owes you',
   mode: 'range',
-  async build({ ctx, range }) {
+  filterKinds: ['customer', 'account'],
+  async build({ ctx, range, filters }) {
     const payments = await db.customerPayment.findMany({
       where: {
         orgId: ctx.orgId,
         status: { not: 'VOID' },
         date: { gte: toDate(range.from), lte: toDate(range.to) },
+        ...(filters?.customerId ? { customerId: filters.customerId } : {}),
+        ...(filters?.accountId ? { depositAccountId: filters.accountId } : {}),
       },
       select: {
         id: true, number: true, date: true, amount: true, method: true, reference: true,
@@ -312,7 +425,8 @@ const vendorBalances: TableReport = {
   description: 'What the business owes each vendor, and how much of it is overdue.',
   group: 'What you owe',
   mode: 'asOf',
-  async build({ ctx, asOf }) {
+  filterKinds: ['vendor'],
+  async build({ ctx, asOf, filters }) {
     const rows = await db.$queryRaw<
       { id: string; name: string; email: string | null; outstanding: string; overdue: string; openCount: number }[]
     >`
@@ -333,6 +447,7 @@ const vendorBalances: TableReport = {
           SELECT SUM(amount) AS applied FROM purchase_applications WHERE "billId" = d.id
         ) a ON true
        WHERE v."orgId" = ${ctx.orgId}
+         AND (${filters?.vendorId ?? null}::text IS NULL OR v.id = ${filters?.vendorId ?? null})
        GROUP BY v.id, v."displayName", v.email
       HAVING COALESCE(SUM(d.total - COALESCE(a.applied, 0)), 0) <> 0
        ORDER BY 4 DESC
@@ -373,13 +488,15 @@ const unpaidBills: TableReport = {
   description: 'Everything still owed, oldest first — the list worked through on pay day.',
   group: 'What you owe',
   mode: 'asOf',
-  async build({ ctx, asOf }) {
+  filterKinds: ['vendor'],
+  async build({ ctx, asOf, filters }) {
     const bills = await db.purchaseDocument.findMany({
       where: {
         orgId: ctx.orgId,
         type: 'BILL',
         status: { in: ['OPEN', 'PARTIAL'] },
         date: { lte: toDate(asOf) },
+        ...(filters?.vendorId ? { vendorId: filters.vendorId } : {}),
       },
       select: {
         id: true, number: true, date: true, dueDate: true, total: true, reference: true,
@@ -436,18 +553,99 @@ const unpaidBills: TableReport = {
   },
 }
 
+/** One open bill per row — which paper, dated when, which aging bucket. */
+const apAgingDetail: TableReport = {
+  key: 'ap-aging-detail',
+  title: 'A/P Aging Detail',
+  description: 'Every unpaid bill in its aging bucket — which paper, dated when.',
+  group: 'What you owe',
+  mode: 'asOf',
+  filterKinds: ['vendor'],
+  async build({ ctx, asOf, filters }) {
+    const asOfDate = toDate(asOf)
+    const bills = await db.purchaseDocument.findMany({
+      where: {
+        orgId: ctx.orgId,
+        type: 'BILL',
+        status: { in: ['OPEN', 'PARTIAL'] },
+        date: { lte: asOfDate },
+        ...(filters?.vendorId ? { vendorId: filters.vendorId } : {}),
+      },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        dueDate: true,
+        total: true,
+        vendor: { select: { displayName: true } },
+        applications: { select: { amount: true } },
+      },
+      orderBy: [{ vendor: { displayName: 'asc' } }, { dueDate: 'asc' }, { date: 'asc' }],
+    })
+
+    const asOfTime = asOfDate.getTime()
+    const rows: ReportRow[] = []
+    let outstanding = ZERO
+
+    for (const bill of bills) {
+      const applied = bill.applications.reduce((sum, a) => sum.plus(a.amount.toString()), ZERO)
+      const balance = new Decimal(bill.total.toString()).minus(applied)
+      if (!balance.greaterThan(0)) continue
+      outstanding = outstanding.plus(balance)
+
+      const days =
+        bill.dueDate != null
+          ? Math.floor((asOfTime - bill.dueDate.getTime()) / 86_400_000)
+          : null
+      const bucket = agingBucketFor(days)
+
+      rows.push({
+        href: `/purchases/bills/${bill.id}`,
+        cells: {
+          vendor: bill.vendor.displayName,
+          number: bill.number,
+          date: date(bill.date),
+          dueDate: date(bill.dueDate),
+          days: days != null && days > 0 ? String(days) : '0',
+          bucket: BUCKET_LABELS[bucket],
+          balance: money(balance),
+        },
+      })
+    }
+
+    return {
+      columns: [
+        { key: 'vendor', label: 'Vendor' },
+        { key: 'number', label: 'Bill', width: 'w-32' },
+        { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+        { key: 'dueDate', label: 'Due', format: 'date', width: 'w-28' },
+        { key: 'days', label: 'Days', format: 'number', width: 'w-20' },
+        { key: 'bucket', label: 'Age', width: 'w-36' },
+        { key: 'balance', label: 'Owing', format: 'money', width: 'w-32' },
+      ],
+      rows,
+      totals: { vendor: 'Total', balance: money(outstanding) },
+      empty: 'No open bills at this date.',
+      note: 'Same bills as A/P Aging Summary, listed one per row for pay-day work.',
+    }
+  },
+}
+
 const paymentsMade: TableReport = {
   key: 'payments-made',
   title: 'Bill Payment List',
   description: 'Money out to vendors, and the account each payment left.',
   group: 'What you owe',
   mode: 'range',
-  async build({ ctx, range }) {
+  filterKinds: ['vendor', 'account'],
+  async build({ ctx, range, filters }) {
     const payments = await db.billPayment.findMany({
       where: {
         orgId: ctx.orgId,
         status: { not: 'VOID' },
         date: { gte: toDate(range.from), lte: toDate(range.to) },
+        ...(filters?.vendorId ? { vendorId: filters.vendorId } : {}),
+        ...(filters?.accountId ? { paymentAccountId: filters.accountId } : {}),
       },
       select: {
         id: true, number: true, date: true, amount: true, method: true, reference: true,
@@ -504,7 +702,8 @@ const expensesByVendor: TableReport = {
   description: 'What was spent with each vendor, net of tax, credits deducted.',
   group: 'Expenses and vendors',
   mode: 'range',
-  async build({ ctx, range }) {
+  filterKinds: ['vendor'],
+  async build({ ctx, range, filters }) {
     const rows = await db.$queryRaw<
       { id: string; name: string; amount: string; count: number }[]
     >`
@@ -519,6 +718,7 @@ const expensesByVendor: TableReport = {
         AND d."deletedAt" IS NULL
          AND d.type IN ('BILL', 'EXPENSE', 'VENDOR_CREDIT')
          AND d.date BETWEEN ${toDate(range.from)} AND ${toDate(range.to)}
+         AND (${filters?.vendorId ?? null}::text IS NULL OR v.id = ${filters?.vendorId ?? null})
        GROUP BY v.id, v."displayName"
        ORDER BY 3 DESC
     `
@@ -557,16 +757,26 @@ const purchasesByItem: TableReport = {
   description: 'What was bought, by quantity and value.',
   group: 'Expenses and vendors',
   mode: 'range',
-  async build({ ctx, range }) {
+  filterKinds: ['item', 'vendor'],
+  async build({ ctx, range, filters }) {
     const rows = await db.$queryRaw<
-      { id: string; name: string; sku: string | null; amount: string; quantity: string; count: number }[]
+      {
+        id: string
+        name: string
+        sku: string | null
+        amount: string
+        quantity: string
+        count: number
+        unitOfMeasure: string | null
+      }[]
     >`
       SELECT i.id   AS id,
              i.name AS name,
              i.sku  AS sku,
              COALESCE(SUM(CASE WHEN d.type = 'VENDOR_CREDIT' THEN -l.amount ELSE l.amount END), 0) AS amount,
              COALESCE(SUM(CASE WHEN d.type = 'VENDOR_CREDIT' THEN -l.quantity ELSE l.quantity END), 0) AS quantity,
-             COUNT(DISTINCT d.id)::int AS count
+             COUNT(DISTINCT d.id)::int AS count,
+             i."unitOfMeasure" AS "unitOfMeasure"
         FROM purchase_document_lines l
         JOIN purchase_documents d ON d.id = l."documentId"
         JOIN items i ON i.id = l."itemId"
@@ -575,7 +785,9 @@ const purchasesByItem: TableReport = {
         AND d."deletedAt" IS NULL
          AND d.type IN ('BILL', 'EXPENSE', 'VENDOR_CREDIT')
          AND d.date BETWEEN ${toDate(range.from)} AND ${toDate(range.to)}
-       GROUP BY i.id, i.name, i.sku
+         AND (${filters?.itemId ?? null}::text IS NULL OR i.id = ${filters?.itemId ?? null})
+         AND (${filters?.vendorId ?? null}::text IS NULL OR d."vendorId" = ${filters?.vendorId ?? null})
+       GROUP BY i.id, i.name, i.sku, i."unitOfMeasure"
        ORDER BY 4 DESC
     `
 
@@ -595,7 +807,7 @@ const purchasesByItem: TableReport = {
           name: row.name,
           sku: row.sku,
           count: String(row.count),
-          quantity: new Decimal(row.quantity).toFixed(2),
+          quantity: formatQty(new Decimal(row.quantity).toFixed(2), row.unitOfMeasure),
           amount: money(row.amount),
         },
       })),
@@ -612,16 +824,25 @@ const productProfitability: TableReport = {
     'Income against cost of goods sold, item by item — the margin each product actually earned.',
   group: 'Sales',
   mode: 'range',
-  async build({ ctx, range }) {
+  filterKinds: ['item'],
+  async build({ ctx, range, filters }) {
     // Income comes from the sales lines; cost comes from the stock ledger, which
     // is what was actually issued and at what average. Taking the cost from the
     // item's purchase price instead would report a margin nobody earned.
     const income = await db.$queryRaw<
-      { id: string; name: string; sku: string | null; amount: string; quantity: string }[]
+      {
+        id: string
+        name: string
+        sku: string | null
+        amount: string
+        quantity: string
+        unitOfMeasure: string | null
+      }[]
     >`
       SELECT i.id AS id, i.name AS name, i.sku AS sku,
              COALESCE(SUM(CASE WHEN d.type IN ('CREDIT_MEMO', 'REFUND_RECEIPT') THEN -l.amount ELSE l.amount END), 0) AS amount,
-             COALESCE(SUM(CASE WHEN d.type IN ('CREDIT_MEMO', 'REFUND_RECEIPT') THEN -l.quantity ELSE l.quantity END), 0) AS quantity
+             COALESCE(SUM(CASE WHEN d.type IN ('CREDIT_MEMO', 'REFUND_RECEIPT') THEN -l.quantity ELSE l.quantity END), 0) AS quantity,
+             i."unitOfMeasure" AS "unitOfMeasure"
         FROM sales_document_lines l
         JOIN sales_documents d ON d.id = l."documentId"
         JOIN items i ON i.id = l."itemId"
@@ -630,7 +851,8 @@ const productProfitability: TableReport = {
         AND d."deletedAt" IS NULL
          AND d.type IN ('INVOICE', 'SALES_RECEIPT', 'CREDIT_MEMO', 'REFUND_RECEIPT')
          AND d.date BETWEEN ${toDate(range.from)} AND ${toDate(range.to)}
-       GROUP BY i.id, i.name, i.sku
+         AND (${filters?.itemId ?? null}::text IS NULL OR i.id = ${filters?.itemId ?? null})
+       GROUP BY i.id, i.name, i.sku, i."unitOfMeasure"
     `
 
     const cost = await db.$queryRaw<{ id: string; value: string }[]>`
@@ -640,6 +862,7 @@ const productProfitability: TableReport = {
        WHERE t."orgId" = ${ctx.orgId}
          AND t.type IN ('SALE', 'SALE_RETURN')
          AND t.date BETWEEN ${toDate(range.from)} AND ${toDate(range.to)}
+         AND (${filters?.itemId ?? null}::text IS NULL OR t."itemId" = ${filters?.itemId ?? null})
        GROUP BY t."itemId"
     `
 
@@ -661,7 +884,7 @@ const productProfitability: TableReport = {
           cells: {
             name: row.name,
             sku: row.sku,
-            quantity: new Decimal(row.quantity).toFixed(2),
+            quantity: formatQty(new Decimal(row.quantity).toFixed(2), row.unitOfMeasure),
             income: money(revenue),
             cost: money(cogs),
             profit: money(margin),
@@ -710,8 +933,12 @@ const stockValuation: TableReport = {
   description: 'What is on hand and what it is worth, item by item.',
   group: 'Inventory',
   mode: 'asOf',
-  async build({ ctx }) {
+  filterKinds: ['item'],
+  async build({ ctx, filters }) {
     const stock = await valuation(db as unknown as Tx, ctx.orgId)
+    const items = filters?.itemId
+      ? stock.items.filter((item) => item.itemId === filters.itemId)
+      : stock.items
 
     return {
       columns: [
@@ -722,18 +949,21 @@ const stockValuation: TableReport = {
         { key: 'value', label: 'Value', format: 'money', width: 'w-32' },
         { key: 'price', label: 'Sales price', format: 'money', width: 'w-32' },
       ],
-      rows: stock.items.map((item) => ({
+      rows: items.map((item) => ({
         href: `/inventory/${item.itemId}`,
         cells: {
           name: item.name,
           sku: item.sku,
-          quantity: item.quantity.toFixed(2),
+          quantity: formatQty(item.quantity.toFixed(2), item.unitOfMeasure),
           cost: money(item.averageCost),
           value: money(item.value),
           price: item.salesPrice ? money(item.salesPrice) : null,
         },
       })),
-      totals: { name: 'Total', value: money(stock.totalValue) },
+      totals: {
+        name: 'Total',
+        value: money(items.reduce((sum, item) => sum.plus(item.value), ZERO)),
+      },
       note:
         'Stock is valued as the stock ledger holds it *now*, not as at a past date — ' +
         'the movement chain carries its running position on each row, so a historical ' +
@@ -750,11 +980,17 @@ const stockCostChange: TableReport = {
   description: 'Whether each item’s cost rose or fell, beside the inventory account it posts to.',
   group: 'Inventory',
   mode: 'range',
-  async build({ ctx, range }) {
+  filterKinds: ['item'],
+  async build({ ctx, range, filters }) {
     const [stock, items, opening] = await Promise.all([
       valuation(db as unknown as Tx, ctx.orgId),
       db.item.findMany({
-        where: { orgId: ctx.orgId, type: 'INVENTORY', deletedAt: null },
+        where: {
+          orgId: ctx.orgId,
+          type: 'INVENTORY',
+          deletedAt: null,
+          ...(filters?.itemId ? { id: filters.itemId } : {}),
+        },
         select: {
           id: true,
           inventoryAccount: { select: { code: true, name: true } },
@@ -777,8 +1013,11 @@ const stockCostChange: TableReport = {
     const before = new Map(opening.map((row) => [row.itemId, row]))
     let rose = 0
     let fell = 0
+    const scoped = filters?.itemId
+      ? stock.items.filter((item) => item.itemId === filters.itemId)
+      : stock.items
 
-    const rows = stock.items.map((item) => {
+    const rows = scoped.map((item) => {
       const prior = before.get(item.itemId)
       const priorQty = new Decimal(prior?.quantity ?? '0')
       const priorValue = new Decimal(prior?.value ?? '0')
@@ -820,22 +1059,76 @@ const stockCostChange: TableReport = {
   },
 }
 
+/**
+ * Prisma where for a store shelf: null storeId is counted at the office, so
+ * filtering to the office store includes those older rows.
+ */
+async function storeShelfWhere(
+  orgId: string,
+  storeId: string | undefined,
+): Promise<
+  | { storeId: string }
+  | { OR: [{ storeId: string }, { storeId: null }] }
+  | Record<string, never>
+> {
+  if (!storeId) return {}
+  const store = await db.store.findFirst({
+    where: { id: storeId, orgId, isActive: true },
+    select: { id: true, isOffice: true },
+  })
+  if (!store) return { storeId }
+  if (store.isOffice) return { OR: [{ storeId: store.id }, { storeId: null }] }
+  return { storeId: store.id }
+}
+
 const stockMovements: TableReport = {
   key: 'inventory-movements',
   title: 'Inventory Movement',
   description: 'Every movement of stock in the period, and what it did to the value.',
   group: 'Inventory',
   mode: 'range',
-  async build({ ctx, range }) {
+  filterKinds: ['item', 'store'],
+  async build({ ctx, range, filters }) {
+    const shelf = await storeShelfWhere(ctx.orgId, filters?.storeId)
+    const itemFilter = filters?.itemId ? { itemId: filters.itemId } : {}
+    const storeScoped = Boolean(filters?.storeId)
+
+    const office = await db.store.findFirst({
+      where: { orgId: ctx.orgId, isActive: true, isOffice: true },
+      select: { id: true, name: true },
+    })
+
+    // Opening qty per item on this shelf, so "on hand after" is store-true when
+    // a store is picked — company runningQuantity would be the wrong shelf.
+    const openingByItem = new Map<string, Decimal>()
+    if (storeScoped) {
+      const prior = await db.inventoryTransaction.groupBy({
+        by: ['itemId'],
+        where: {
+          orgId: ctx.orgId,
+          date: { lt: toDate(range.from) },
+          ...itemFilter,
+          ...shelf,
+        },
+        _sum: { quantity: true },
+      })
+      for (const row of prior) {
+        openingByItem.set(row.itemId, new Decimal(row._sum.quantity?.toString() ?? '0'))
+      }
+    }
+
     const movements = await db.inventoryTransaction.findMany({
       where: {
         orgId: ctx.orgId,
         date: { gte: toDate(range.from), lte: toDate(range.to) },
+        ...itemFilter,
+        ...shelf,
       },
       select: {
         id: true, date: true, createdAt: true, type: true, quantity: true, unitCost: true, value: true,
-        runningQuantity: true, sourceType: true,
+        runningQuantity: true, storeId: true, sourceType: true,
         item: { select: { id: true, name: true, sku: true } },
+        store: { select: { id: true, name: true, isOffice: true } },
         journal: { select: { id: true, journalNumber: true } },
       },
       orderBy: [{ date: 'asc' }, { sequence: 'asc' }],
@@ -843,11 +1136,14 @@ const stockMovements: TableReport = {
     })
 
     let net = ZERO
+    const running = new Map(openingByItem)
+    const narrowed = Boolean(filters?.itemId || filters?.storeId)
 
     return {
       columns: [
         { key: 'date', label: 'Date', format: 'datetime', width: 'w-44' },
         { key: 'item', label: 'Item' },
+        { key: 'store', label: 'Store', width: 'w-36' },
         { key: 'type', label: 'Movement', width: 'w-32' },
         { key: 'entry', label: 'Entry', width: 'w-28' },
         { key: 'quantity', label: 'Quantity', format: 'signed', width: 'w-28' },
@@ -857,22 +1153,39 @@ const stockMovements: TableReport = {
       ],
       rows: movements.map((movement) => {
         net = net.plus(movement.value.toString())
+        let onHand: string
+        if (storeScoped) {
+          const next = (running.get(movement.item.id) ?? ZERO).plus(movement.quantity.toString())
+          running.set(movement.item.id, next)
+          onHand = next.toFixed(2)
+        } else {
+          onHand = new Decimal(movement.runningQuantity.toString()).toFixed(2)
+        }
+        const storeName =
+          movement.store?.name ??
+          (movement.storeId ? null : office?.name ? `${office.name} (office)` : 'Office')
         return {
           href: movement.journal ? `/journals/${movement.journal.id}` : `/inventory/${movement.item.id}`,
           cells: {
             date: recorded(movement.createdAt),
             item: movement.item.sku ? `${movement.item.sku} — ${movement.item.name}` : movement.item.name,
+            store: storeName,
             type: movement.type.replace('_', ' ').toLowerCase(),
             entry: movement.journal?.journalNumber ?? null,
             quantity: new Decimal(movement.quantity.toString()).toFixed(2),
             cost: money(movement.unitCost.toString()),
             value: money(movement.value.toString()),
-            onHand: new Decimal(movement.runningQuantity.toString()).toFixed(2),
+            onHand,
           },
         }
       }),
       totals: { date: 'Net change in stock value', value: money(net) },
-      empty: 'No stock moved in this period.',
+      note: storeScoped
+        ? 'On hand after is this store’s shelf for each item, not the company total.'
+        : undefined,
+      empty: narrowed
+        ? 'No stock moved for this filter in the period.'
+        : 'No stock moved in this period.',
     }
   },
 }
@@ -883,9 +1196,12 @@ const reorder: TableReport = {
   description: 'Products at or below their reorder point.',
   group: 'Inventory',
   mode: 'asOf',
-  async build({ ctx }) {
+  filterKinds: ['item'],
+  async build({ ctx, filters }) {
     const stock = await valuation(db as unknown as Tx, ctx.orgId)
-    const low = stock.items.filter((item) => item.belowReorder)
+    const low = stock.items
+      .filter((item) => item.belowReorder)
+      .filter((item) => (filters?.itemId ? item.itemId === filters.itemId : true))
 
     return {
       columns: [
@@ -902,9 +1218,13 @@ const reorder: TableReport = {
         cells: {
           name: item.name,
           sku: item.sku,
-          quantity: item.quantity.toFixed(2),
-          reorderPoint: item.reorderPoint?.toFixed(2) ?? null,
-          shortfall: item.reorderPoint ? item.reorderPoint.minus(item.quantity).toFixed(2) : null,
+          quantity: formatQty(item.quantity.toFixed(2), item.unitOfMeasure),
+          reorderPoint: item.reorderPoint
+            ? formatQty(item.reorderPoint.toFixed(2), item.unitOfMeasure)
+            : null,
+          shortfall: item.reorderPoint
+            ? formatQty(item.reorderPoint.minus(item.quantity).toFixed(2), item.unitOfMeasure)
+            : null,
           cost: money(item.averageCost),
         },
       })),
@@ -1922,11 +2242,13 @@ const productServiceList: TableReport = {
 export const TABLE_REPORTS: TableReport[] = [
   customerBalances,
   openInvoices,
+  arAgingDetail,
   invoiceList,
   collectionsReport,
   paymentsReceived,
   vendorBalances,
   unpaidBills,
+  apAgingDetail,
   billList,
   paymentsMade,
   expensesByVendor,
@@ -1945,6 +2267,7 @@ export const TABLE_REPORTS: TableReport[] = [
   salesByCustomerDetail,
   billsAndPayments,
   productServiceList,
+  ...MODULE_LIST_REPORTS,
 ]
 
 export const tableReport = (key: string): TableReport | undefined =>

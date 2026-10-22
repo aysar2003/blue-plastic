@@ -83,6 +83,7 @@ import {
   settlePosPayments,
 } from '@/lib/pos-payment'
 import { POS_SHORTFALL_DISCOUNT_MAX } from '@/lib/pos-shortfall'
+import { resolveUnit } from '@/lib/quantity'
 import { formatStockQty, negativeStockWarning } from '@/lib/store-stock'
 import { cn } from '@/lib/utils'
 
@@ -92,6 +93,7 @@ type Product = {
   sku: string | null
   barcode?: string | null
   category: string | null
+  unitOfMeasure?: string | null
   price: string
   /** On hand in this register's store; null for services / non-stock items. */
   onHand: string | null
@@ -156,7 +158,7 @@ function peelLeakedScan(count: number) {
 
 function broadcastCart(payload: {
   orgName: string
-  lines: { name: string; quantity: number; amount: string }[]
+  lines: { name: string; quantity: number; amount: string; unitOfMeasure?: string | null }[]
   total: string
   customerName: string | null
 }) {
@@ -406,6 +408,7 @@ export function PosTerminal(props: {
             name: line.name,
             quantity: line.quantity,
             amount: formatMoney((Number(line.price) || 0) * line.quantity, props.currency),
+            unitOfMeasure: props.products.find((p) => p.id === line.itemId)?.unitOfMeasure ?? null,
           })),
           canDelete: true,
           receiptHref: null,
@@ -426,7 +429,7 @@ export function PosTerminal(props: {
       receiptHref: `/pos-receipt/${order.documentId}`,
     }))
     return [...ongoing, ...paid]
-  }, [book, props.currency, props.customers, props.recentOrders, props.session.id])
+  }, [book, props.currency, props.customers, props.products, props.recentOrders, props.session.id])
 
   function selectListedOrder(id: string) {
     if (!book?.orders.some((order) => order.id === id)) return
@@ -455,9 +458,10 @@ export function PosTerminal(props: {
         name: line.name,
         quantity: line.quantity,
         amount: formatMoney(Number(line.price) * line.quantity, props.currency),
+        unitOfMeasure: productById.get(line.itemId)?.unitOfMeasure ?? null,
       })),
     })
-  }, [book, cart, customerName, props.currency, props.orgName, subtotal])
+  }, [book, cart, customerName, productById, props.currency, props.orgName, subtotal])
 
   function addProduct(product: Product) {
     setToast(null)
@@ -1220,7 +1224,12 @@ export function PosTerminal(props: {
                                   value={store.id}
                                   style={{ background: '#fff', color: '#1f1f23' }}
                                 >
-                                  {store.name} ({formatStockQty(Number(product.stock?.[store.id] ?? 0))})
+                                  {store.name} (
+                                  {formatStockQty(
+                                    Number(product.stock?.[store.id] ?? 0),
+                                    resolveUnit(product.unitOfMeasure),
+                                  )}
+                                  )
                                 </option>
                               ))}
                             </select>
@@ -1238,6 +1247,9 @@ export function PosTerminal(props: {
                 <label className="flex flex-col items-center gap-0.5">
                   <span className="text-[0.65rem] uppercase tracking-wide" style={{ color: muted }}>
                     Qty
+                    {productById.get(line.itemId)?.unitOfMeasure
+                      ? ` · ${resolveUnit(productById.get(line.itemId)?.unitOfMeasure)}`
+                      : ''}
                   </span>
                   <input
                     type="number"
@@ -1252,7 +1264,7 @@ export function PosTerminal(props: {
                       background: dark ? '#1f1f23' : '#ffffff',
                       color: text,
                     }}
-                    aria-label={`Quantity for ${line.name}`}
+                    aria-label={`Quantity for ${line.name} (${resolveUnit(productById.get(line.itemId)?.unitOfMeasure)})`}
                   />
                 </label>
                 <button type="button" onClick={() => setQty(line.itemId, 0)} aria-label="Remove">
