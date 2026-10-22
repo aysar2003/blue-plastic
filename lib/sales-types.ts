@@ -97,6 +97,37 @@ export function isSalesOrder(type: SalesDocumentType | string | undefined | null
   return type === 'SALES_ORDER'
 }
 
+/**
+ * Date caption on the merchant print paper.
+ * Proposals and orders must not say "Invoice date".
+ */
+export function paperDateLabel(type: SalesDocumentType | string | undefined | null): string {
+  switch (type) {
+    case 'QUOTATION':
+      return 'Quotation date'
+    case 'ESTIMATE':
+      return 'Estimate date'
+    case 'SALES_ORDER':
+      return 'Order date'
+    case 'SALES_RECEIPT':
+      return 'Receipt date'
+    case 'CREDIT_MEMO':
+      return 'Credit date'
+    case 'REFUND_RECEIPT':
+      return 'Refund date'
+    default:
+      return 'Invoice date'
+  }
+}
+
+/**
+ * True when the paper can show PAID / UNPAID from money applied.
+ * Quotations, estimates, and sales orders are not collectible yet.
+ */
+export function paperShowsMoneyStatus(type: SalesDocumentType | string | undefined | null): boolean {
+  return type === 'INVOICE' || type === 'CREDIT_MEMO' || type === 'SALES_RECEIPT' || type === 'REFUND_RECEIPT'
+}
+
 /** The figure printed under the lines. An order is not yet money owed. */
 export function customerPaperTotalLabel(type: SalesDocumentType, needsDeposit: boolean): string {
   if (needsDeposit) return 'Amount received'

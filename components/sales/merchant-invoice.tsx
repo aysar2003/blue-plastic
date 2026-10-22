@@ -10,7 +10,12 @@ import { letterheadOf, type LetterheadSource } from '@/lib/letterhead'
 import { toCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import { hasPreviousQuotations } from '@/lib/project-quotations'
-import { STATUS_LABELS } from '@/lib/sales-types'
+import {
+  isProposal,
+  paperDateLabel,
+  paperShowsMoneyStatus,
+  STATUS_LABELS,
+} from '@/lib/sales-types'
 
 /** Cached so getSnapshot stays referentially stable (React forbids a fresh value each read). */
 let clientNowLabel: string | null = null
@@ -100,7 +105,7 @@ export function MerchantInvoice({
   const label = words ?? {
     party: 'Bill to',
     account: 'Customer account',
-    date: 'Invoice date',
+    date: paperDateLabel(config.type),
     person: 'Sales person',
     reference: 'Cust P.O no',
     order: 'Sales order',
@@ -117,9 +122,21 @@ export function MerchantInvoice({
     .filter((part) => part.toLowerCase() !== customer.displayName.trim().toLowerCase())
     .join(', ')
   const owed = Number(document.balance) > 0.004
-  const status =
-    document.status === 'PAID' ? 'PAID' : owed || document.status === 'OPEN' || document.status === 'PARTIAL' ? 'UNPAID' : (STATUS_LABELS[document.status] ?? document.status).toUpperCase()
-  const statusColor = status === 'PAID' ? '#047857' : status === 'UNPAID' ? '#be123c' : accent
+  const moneyStatus = paperShowsMoneyStatus(config.type)
+  const status = moneyStatus
+    ? document.status === 'PAID'
+      ? 'PAID'
+      : owed || document.status === 'OPEN' || document.status === 'PARTIAL'
+        ? 'UNPAID'
+        : (STATUS_LABELS[document.status] ?? document.status).toUpperCase()
+    : (STATUS_LABELS[document.status] ?? document.status).toUpperCase()
+  const statusColor =
+    moneyStatus && status === 'PAID'
+      ? '#047857'
+      : moneyStatus && status === 'UNPAID'
+        ? '#be123c'
+        : accent
+  const proposal = isProposal(config.type)
   const printedOn = useClientNowLabel()
 
   // Account running figure: Previous + Debit − Credit (payment / customer credit).
@@ -157,15 +174,21 @@ export function MerchantInvoice({
           </p>
           <p className="mt-1 text-sm font-semibold">{customer.displayName}</p>
           <dl className="mt-3 grid grid-cols-[7.5rem_minmax(0,1fr)] gap-y-1 text-[12px]">
-            <Meta label={label.reference} value={document.reference || '—'} />
-            <Meta label="Due date" value={document.dueDate ? longDate(toCalendarDate(document.dueDate)) : '—'} />
-            <Meta label="Payment" value={document.paymentTerm?.name || '—'} />
-            <Meta label="Address" value={address || '—'} />
-            <Meta label="Phone" value={customer.phone || '—'} />
-            <Meta label={label.order} value={document.reference || '—'} />
-            <Meta label={label.person} value={document.createdByName || '—'} />
+            {document.reference ? <Meta label={label.reference} value={document.reference} /> : null}
+            {!proposal && document.dueDate ? (
+              <Meta label="Due date" value={longDate(toCalendarDate(document.dueDate))} />
+            ) : null}
+            {!proposal && document.paymentTerm?.name ? (
+              <Meta label="Payment" value={document.paymentTerm.name} />
+            ) : null}
+            {address ? <Meta label="Address" value={address} /> : null}
+            {customer.phone ? <Meta label="Phone" value={customer.phone} /> : null}
+            {!proposal && document.reference ? (
+              <Meta label={label.order} value={document.reference} />
+            ) : null}
+            {document.createdByName ? <Meta label={label.person} value={document.createdByName} /> : null}
             {document.workSite || document.project?.siteLocation ? (
-              <Meta label="Work site" value={document.workSite || document.project?.siteLocation || '—'} />
+              <Meta label="Work site" value={document.workSite || document.project?.siteLocation || ''} />
             ) : null}
             {document.workScope ? (
               <Meta label="Work / job" value={`${document.workScope} · Client: ${customer.displayName}`} />

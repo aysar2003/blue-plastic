@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { formatDate, formatTransactionDate, isCalendarDate, toCalendarDate } from '@/lib/date'
+import { formatDate, formatLongTransactionDate, isCalendarDate, toCalendarDate } from '@/lib/date'
 import {
   DEFAULT_DOCUMENT_TEMPLATE,
   type DocumentTemplate,
@@ -18,7 +18,13 @@ import {
 } from '@/lib/merchant-pdf'
 import { buildTextPdf, pdfBarcodeRow, PDF_PAGE, type PdfRow } from '@/lib/pdf-text'
 import type { PrintInk } from '@/lib/print-ink'
-import { SALES_TYPES } from '@/lib/sales-types'
+import {
+  isProposal,
+  paperDateLabel,
+  paperShowsMoneyStatus,
+  SALES_TYPES,
+  STATUS_LABELS,
+} from '@/lib/sales-types'
 import { PURCHASE_TYPES } from '@/lib/purchase-types'
 
 export type SalesDocumentPdfInput = {
@@ -27,6 +33,8 @@ export type SalesDocumentPdfInput = {
   orgPhone: string | null
   orgEmail: string | null
   title: string
+  /** Sales / purchase type — drives date caption and PAID/UNPAID. */
+  documentType?: string
   number: string
   date: Date | string
   ink?: PrintInk
@@ -82,6 +90,15 @@ const COL = {
   amount: PDF_PAGE.right,
 } as const
 
+/** Meta grid — label column + value column, same as MerchantInvoice `<dl>`. */
+const META = {
+  label: PDF_PAGE.left,
+  value: 130,
+  right: PDF_PAGE.right,
+} as const
+
+const WHITE = [1, 1, 1] as const
+
 /**
  * Sales / purchase document PDF — same paper as browser Print (MerchantInvoice).
  * Accent, banks, and terms come from Settings → Templates.
@@ -125,7 +142,7 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
         ? toCalendarDate(input.date)
         : null
   const date = calendar
-    ? formatTransactionDate(calendar, input.createdAt, input.timeZone || 'UTC')
+    ? formatLongTransactionDate(calendar, input.createdAt, input.timeZone || 'UTC')
     : String(input.date)
   const due =
     input.dueDate == null
@@ -144,52 +161,60 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     }),
   )
 
-  // Same two-column paper as MerchantInvoice print: party + meta left, title +
-  // barcode + status + date right. PDF used to stack everything and print raw
-  // OPEN instead of UNPAID, so download and screen looked like two papers.
+  // Draw the same paper as MerchantInvoice print — two columns, badge, long date.
   const party = input.partyLabel ?? 'Bill to'
   const vendorPaper = (input.paper ?? 'customer') === 'vendor' || party.toLowerCase() === 'vendor'
+  const docType = input.documentType
+  const proposal = isProposal(docType)
   const words = vendorPaper
     ? { reference: 'Vendor ref', date: 'Bill date', person: 'Entered by', order: 'Reference' }
-    : { reference: 'Cust P.O no', date: 'Invoice date', person: 'Sales person', order: 'Sales order' }
+    : {
+        reference: 'Cust P.O no',
+        date: paperDateLabel(docType),
+        person: 'Sales person',
+        order: 'Sales order',
+      }
   const addressParts = input.customerAddress
     .map(cleanPart)
     .filter(Boolean)
     .filter((part) => part.toLowerCase() !== input.customerName.trim().toLowerCase())
   const addressLine = addressParts.join(', ')
-  const status = paperStatusLabel(input.status, input.balance)
-  const statusColor =
+  const status = paperStatusLabel(input.status, input.balance, docType)
+  const statusFill =
     status === 'PAID' ? ([0.016, 0.471, 0.341] as const) : status === 'UNPAID' ? ([0.745, 0.071, 0.235] as const) : accent
 
   rows.push({
     size: 8,
     height: 12,
     runs: [
-      { text: party.toUpperCase(), x: PDF_PAGE.left, bold: true, color: accent },
-      { text: input.title.toUpperCase(), x: PDF_PAGE.right, align: 'right', bold: true, color: accent },
+      { text: party.toUpperCase(), x: META.label, bold: true, color: accent },
+      { text: input.title.toUpperCase(), x: META.right, align: 'right', bold: true, color: accent },
     ],
   })
   rows.push({
     size: 11,
     height: 14,
     runs: [
-      { text: input.customerName, x: PDF_PAGE.left, bold: true, color: ink },
-      { text: input.number, x: PDF_PAGE.right, align: 'right', bold: true, color: ink },
+      { text: input.customerName, x: META.label, bold: true, color: ink },
+      { text: input.number, x: META.right, align: 'right', bold: true, color: ink },
     ],
   })
 
-  const numberBarcode = pdfBarcodeRow(input.number, { align: 'right', height: 36 })
+  const numberBarcode = pdfBarcodeRow(input.number, { align: 'right', height: 40 })
   if (numberBarcode) rows.push(numberBarcode)
 
-  const metaLeft: { label: string; value: string }[] = [
-    { label: words.reference, value: input.reference?.trim() || '—' },
-    { label: 'Due date', value: due ? formatDate(due) : '—' },
-    { label: 'Payment', value: input.paymentTerm?.trim() || '—' },
-    { label: 'Address', value: addressLine || '—' },
-    { label: 'Phone', value: input.customerPhone?.trim() || '—' },
-    { label: words.order, value: input.reference?.trim() || '—' },
-    { label: words.person, value: input.createdByName?.trim() || '—' },
-  ]
+  const metaLeft: { label: string; value: string }[] = []
+  if (input.reference?.trim()) metaLeft.push({ label: words.reference, value: input.reference.trim() })
+  if (!proposal && due) metaLeft.push({ label: 'Due date', value: formatDate(due) })
+  if (!proposal && input.paymentTerm?.trim()) {
+    metaLeft.push({ label: 'Payment', value: input.paymentTerm.trim() })
+  }
+  if (addressLine) metaLeft.push({ label: 'Address', value: addressLine })
+  if (input.customerPhone?.trim()) metaLeft.push({ label: 'Phone', value: input.customerPhone.trim() })
+  if (!proposal && input.reference?.trim()) {
+    metaLeft.push({ label: words.order, value: input.reference.trim() })
+  }
+  if (input.createdByName?.trim()) metaLeft.push({ label: words.person, value: input.createdByName.trim() })
   if (input.workSite?.trim()) metaLeft.push({ label: 'Work site', value: input.workSite.trim() })
   if (input.workScope?.trim()) {
     metaLeft.push({
@@ -199,11 +224,16 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   }
   if (input.customerEmail?.trim()) metaLeft.push({ label: 'Email', value: input.customerEmail.trim() })
 
-  const metaRight: { text: string; color?: readonly [number, number, number]; bold?: boolean }[] = [
-    { text: status, color: statusColor, bold: true },
-    { text: words.date.toUpperCase(), color: accent, bold: true },
-    { text: date },
-  ]
+  type RightCell = {
+    text: string
+    bold?: boolean
+    color?: readonly [number, number, number]
+    badge?: readonly [number, number, number]
+  }
+  const metaRight: RightCell[] = []
+  if (status) metaRight.push({ text: status, bold: true, color: WHITE, badge: statusFill })
+  metaRight.push({ text: words.date.toUpperCase(), bold: true, color: accent })
+  metaRight.push({ text: date, color: ink })
 
   const metaRows = Math.max(metaLeft.length, metaRight.length)
   for (let i = 0; i < metaRows; i++) {
@@ -217,25 +247,30 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
       color?: readonly [number, number, number]
     }[] = []
     if (left) {
-      runs.push({
-        text: `${left.label}  ${left.value}`.slice(0, 62),
-        x: PDF_PAGE.left,
-        color: muted,
-      })
+      runs.push({ text: left.label, x: META.label, color: muted })
+      runs.push({ text: left.value.slice(0, 42), x: META.value, color: ink })
     }
     if (right) {
       runs.push({
         text: right.text,
-        x: PDF_PAGE.right,
+        x: META.right,
         align: 'right',
         bold: right.bold,
         color: right.color ?? ink,
       })
     }
-    rows.push({ size: 9, height: 12, runs })
+    const badgeWidth = right?.badge ? Math.max(52, right.text.length * 7 + 16) : 0
+    rows.push({
+      size: 9,
+      height: 13,
+      fill: right?.badge,
+      fillFrom: right?.badge ? META.right - badgeWidth : undefined,
+      fillTo: right?.badge ? META.right : undefined,
+      runs,
+    })
   }
 
-  rows.push({ height: 8, runs: [] })
+  rows.push({ height: 10, runs: [] })
   rows.push(
     merchantPdfTableHead(
       [
@@ -379,6 +414,7 @@ export function salesDetailToPdfInput(
     ...shared,
     timeZone: shared.timeZone ?? undefined,
     title,
+    documentType: document.type,
     number: document.number,
     date: document.date,
     createdAt: document.createdAt,
@@ -506,11 +542,21 @@ function trimNumber(value: string): string {
   return n.toFixed(2)
 }
 
-/** Match MerchantInvoice: OPEN/PARTIAL with a balance reads UNPAID, not the ledger status. */
-function paperStatusLabel(status: string | null | undefined, balance: string | null | undefined): string {
+/**
+ * Match MerchantInvoice: invoices/receipts show PAID/UNPAID; quotations and
+ * estimates keep Open / Accepted / Declined — they are not collectible yet.
+ */
+function paperStatusLabel(
+  status: string | null | undefined,
+  balance: string | null | undefined,
+  documentType?: string | null,
+): string {
   if (!status) return ''
+  if (!paperShowsMoneyStatus(documentType)) {
+    return (STATUS_LABELS[status] ?? status).replaceAll('_', ' ').toUpperCase()
+  }
   if (status === 'PAID') return 'PAID'
   const owed = balance != null && Number(balance) > 0.004
   if (owed || status === 'OPEN' || status === 'PARTIAL') return 'UNPAID'
-  return status.replaceAll('_', ' ').toUpperCase()
+  return (STATUS_LABELS[status] ?? status).replaceAll('_', ' ').toUpperCase()
 }
