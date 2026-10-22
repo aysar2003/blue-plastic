@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { buildPackPrintHtml, hasPrintablePaper } from '@/lib/pack-print-html'
 import { readStoredPaperMetaHidden, withPaperMetaHidden } from '@/lib/paper-meta-fields'
 import { readStoredPrintInk, withPrintInk } from '@/lib/print-ink'
 
@@ -44,6 +45,7 @@ export function DocumentActions({
   defaultBody,
   whatsappPhone,
   whatsappText,
+  pdfMatchesPrint = false,
 }: {
   /** Shown in dialog copy — "statement", "delivery report", "invoice". */
   paper?: string
@@ -60,6 +62,11 @@ export function DocumentActions({
   defaultBody?: string
   whatsappPhone?: string | null
   whatsappText?: string
+  /**
+   * Pack print: PDF uses the on-screen HTML (same as Print → Save as PDF)
+   * instead of the compact server PDF. Email / WhatsApp still download pdfHref.
+   */
+  pdfMatchesPrint?: boolean
 }) {
   const [emailOpen, setEmailOpen] = useState(false)
   const [waOpen, setWaOpen] = useState(false)
@@ -78,8 +85,26 @@ export function DocumentActions({
     setBusy(true)
     setNote(null)
     try {
-      if (pdfHref) {
-        const ink = readStoredPrintInk()
+      const ink = readStoredPrintInk()
+      let blob: Blob | null = null
+      // Prefer the on-screen paper (same as PDF button) when it is already drawn.
+      if (pdfMatchesPrint || hasPrintablePaper()) {
+        try {
+          const html = await buildPackPrintHtml(ink)
+          const screen = await fetch('/api/print/html-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ html, filename: file }),
+          })
+          if (screen.ok) {
+            const next = await screen.blob()
+            if (next.size > 500) blob = next
+          }
+        } catch {
+          /* fall through to API PDF */
+        }
+      }
+      if (!blob && pdfHref) {
         const response = await fetch(
           withPaperMetaHidden(withPrintInk(pdfHref, ink), readStoredPaperMetaHidden()),
         )
@@ -87,7 +112,9 @@ export function DocumentActions({
           setNote('The PDF could not be prepared.')
           return
         }
-        const blob = await response.blob()
+        blob = await response.blob()
+      }
+      if (blob) {
         const pdfFile = new File([blob], file, { type: 'application/pdf' })
         const payload = { files: [pdfFile], title: subjectLine, text: body || waText }
         if (typeof navigator.share === 'function' && navigator.canShare?.(payload)) {
@@ -101,7 +128,7 @@ export function DocumentActions({
       if (mode === 'email') {
         window.location.href = `mailto:${to}?subject=${encodeURIComponent(subjectLine)}&body=${encodeURIComponent(clip(body))}`
         setNote(
-          pdfHref
+          blob
             ? 'The PDF downloaded. Attach it to the email that opened.'
             : 'The email opened. Use Print → Save as PDF if you need a file attached.',
         )
@@ -116,7 +143,7 @@ export function DocumentActions({
       const text = waText.trim() || subjectLine
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
       setNote(
-        pdfHref
+        blob
           ? 'WhatsApp opened. Attach the PDF that downloaded.'
           : 'WhatsApp opened. Attach a PDF from Print → Save as PDF if needed.',
       )
@@ -137,7 +164,7 @@ export function DocumentActions({
       ) : null}
 
       <PrintInkMenu printHref={printHref} />
-      <PdfInkMenu pdfHref={pdfHref} filename={file} />
+      <PdfInkMenu pdfHref={pdfHref} filename={file} matchPrintPaper={pdfMatchesPrint} />
       {excelHref ? (
         <a href={excelHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
           <FileSpreadsheetIcon /> Excel

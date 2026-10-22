@@ -45,6 +45,7 @@ async function ownerCtx(): Promise<OrgContext | null> {
       timeZone: true,
       allowNegativeStock: true,
       posTillLedgerMode: true,
+      parentOrgId: true,
       addressLine1: true,
       addressLine2: true,
       city: true,

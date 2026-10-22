@@ -99,6 +99,7 @@ live('portal invite dual-mode (live db)', () => {
         timeZone: true,
         allowNegativeStock: true,
         posTillLedgerMode: true,
+        parentOrgId: true,
         addressLine1: true,
         addressLine2: true,
         city: true,

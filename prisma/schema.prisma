@@ -32,10 +32,36 @@ datasource db {
 enum Role {
   OWNER
   ADMIN
+  /// Day-to-day ops lead: approvals and transactions, not period close / users.
+  MANAGER
   ACCOUNTANT
   BOOKKEEPER
+  /// Sales team lead — invoices, payments, and sales approvals.
+  SALES_MANAGER
   SALES
+  /// Customers, invoices and receipts only (no POS).
+  AR_CLERK
+  /// Purchasing team lead — AP approvals.
+  PURCHASING_MANAGER
+  /// Vendors, POs, bills and receiving.
+  PURCHASING
+  /// Vendors, bills and expenses without approve.
+  AP_CLERK
+  /// Bank deposits, transfers and imports.
+  BANK_CLERK
+  /// POS till lead — configure counters.
+  POS_SUPERVISOR
+  /// POS till and customer receipts.
+  CASHIER
+  /// Stock lead — items and inventory approvals.
+  WAREHOUSE_MANAGER
   STORE_KEEPER
+  /// Customer jobs / project folders.
+  PROJECT_MANAGER
+  /// Customers, vendors and items only.
+  MASTER_DATA
+  /// Read-only plus audit trail.
+  AUDITOR
   VIEWER
   /// Access comes from Membership.permissionsOverride, not a role template.
   CUSTOM
@@ -3303,7 +3329,7 @@ model ApprovalPolicy {
   /// Lower number = checked first when several rules match the type.
   priority   Int                @default(100)
   /// Maker may not approve their own submission (SOX segregation of duties).
-  /// Owner/Admin may still self-approve when they are the only authorised person.
+  /// Owner/Admin bypass create-time gating entirely and may still self-approve.
   requireDifferentApprover Boolean @default(true)
   /// Sequential approval steps (1 = classic maker-checker, 2–3 = escalation).
   levels Int @default(1) @db.SmallInt

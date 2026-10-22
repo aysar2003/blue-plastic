@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { MerchantInvoice } from '@/components/sales/merchant-invoice'
 import { formatMoney, ZERO } from '@/lib/money'
+import { printPackSectionClass } from '@/lib/print-pack'
 import {
   hasPreviousQuotations,
   printableProjectQuotations,
@@ -67,6 +68,7 @@ export default async function ProjectQuotationsPrintPage({
           backHref={`/projects/${project.id}`}
           pdfHref={`/api/projects/${project.id}/quotations/pdf`}
           filename={filename}
+          pdfMatchesPrint
           defaultTo={quotations[0]?.customer.email ?? ''}
           defaultSubject={`Quotations ${project.number} from ${organization.name}`}
           defaultBody={shareBody}
@@ -93,11 +95,8 @@ export default async function ProjectQuotationsPrintPage({
           {quotations.map((document, index) => (
             <section
               key={document.id}
-              className={
-                index === 0
-                  ? 'scroll-mt-20 print:mt-0'
-                  : 'mt-8 scroll-mt-20 break-before-page print:mt-0'
-              }
+              data-print-paper
+              className={printPackSectionClass(index, quotations.length)}
             >
               <p className="mb-2 text-right text-xs print:hidden">
                 <Link

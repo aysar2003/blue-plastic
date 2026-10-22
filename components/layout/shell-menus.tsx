@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { BellIcon, BookmarkIcon, PinIcon, RssIcon, SettingsIcon } from 'lucide-react'
@@ -14,29 +14,57 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import type { Permission } from '@/lib/permissions-catalog'
 
 type Bookmark = { id: string; label: string; href: string; kind: string }
 type Task = { href: string; label: string }
 type FeedItem = { id: string; entity: string; action: string; at: string; actor: string }
 
-const GEAR = [
-  { href: '/settings/organization', label: 'Organisation' },
-  { href: '/accounts', label: 'Chart of accounts' },
-  { href: '/settings/accounts', label: 'Default accounts' },
-  { href: '/settings/tax', label: 'Tax' },
-  { href: '/settings/users', label: 'Users' },
-  { href: '/settings/user-history', label: 'User history' },
+/** Gear links — each needs a matching permission (or stays personal). */
+const GEAR: {
+  href: string
+  label: string
+  /** Missing = always visible (Appearance / personal). */
+  permission?: Permission
+  /** Only when the shell says this user may switch companies. */
+  requiresDatabases?: boolean
+}[] = [
+  { href: '/settings/organization', label: 'Organisation', permission: 'org:update' },
+  { href: '/settings/features', label: 'Apps & features', permission: 'org:update' },
+  { href: '/accounts', label: 'Chart of accounts', permission: 'account:read' },
+  { href: '/settings/accounts', label: 'Default accounts', permission: 'account:read' },
+  { href: '/settings/tax', label: 'Tax', permission: 'tax:read' },
+  { href: '/settings/users', label: 'Users', permission: 'user:read' },
+  { href: '/settings/user-history', label: 'User history', permission: 'user:read' },
   { href: '/settings/appearance', label: 'Appearance' },
-  { href: '/databases', label: 'Databases' },
-  { href: '/settings/activity', label: 'Trash' },
-] as const
+  { href: '/databases', label: 'Databases', permission: 'org:update', requiresDatabases: true },
+  { href: '/settings/activity', label: 'Trash', permission: 'audit:read' },
+]
 
-export function ShellMenus() {
+export function ShellMenus({
+  permissions = [],
+  showDatabases = false,
+}: {
+  permissions?: string[]
+  showDatabases?: boolean
+}) {
   const pathname = usePathname()
   const router = useRouter()
   const [bookmarks, setBookmarks] = useState<Bookmark[] | null>(null)
   const [tasks, setTasks] = useState<Task[] | null>(null)
   const [feed, setFeed] = useState<FeedItem[] | null>(null)
+
+  const allowed = useMemo(() => new Set(permissions), [permissions])
+  const canReports = allowed.has('report:read') || allowed.has('report:overview')
+  const gearItems = useMemo(
+    () =>
+      GEAR.filter((item) => {
+        if (item.requiresDatabases && !showDatabases) return false
+        if (item.permission && !allowed.has(item.permission)) return false
+        return true
+      }),
+    [allowed, showDatabases],
+  )
 
   async function load() {
     const response = await fetch('/api/workspace')
@@ -111,9 +139,11 @@ export function ShellMenus() {
           <DropdownMenuItem asChild>
             <Link href="/dashboard">All apps</Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/reports">Reports</Link>
-          </DropdownMenuItem>
+          {canReports ? (
+            <DropdownMenuItem asChild>
+              <Link href="/reports">Reports</Link>
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -141,20 +171,22 @@ export function ShellMenus() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="Settings">
-            <SettingsIcon />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {GEAR.map((item) => (
-            <DropdownMenuItem key={item.href} asChild>
-              <Link href={item.href}>{item.label}</Link>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {gearItems.length > 0 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Settings">
+              <SettingsIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {gearItems.map((item) => (
+              <DropdownMenuItem key={item.href} asChild>
+                <Link href={item.href}>{item.label}</Link>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
 
       <PinButton pathname={pathname} />
     </>

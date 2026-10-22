@@ -45,6 +45,19 @@ export default function RootLayout({
       data-font-style="default"
     >
       <body className={`${sans.variable} ${mono.variable} ${inter.variable} ${sourceSans.variable} antialiased`}>
+        {/*
+          Cursor's built-in browser stamps data-cursor-ref on DOM nodes before
+          React hydrates, which Next.js reports as a hydration mismatch. Strip
+          those attributes during the hydrate window only (dev), then stop so
+          Cursor tools can use refs again afterward.
+        */}
+        {process.env.NODE_ENV === 'development' ? (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `(function(){try{var o=new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var m=ms[i];if(m.type==="attributes"&&m.attributeName==="data-cursor-ref"&&m.target&&m.target.nodeType===1){m.target.removeAttribute("data-cursor-ref")}else if(m.type==="childList"){m.addedNodes.forEach(function(n){if(n.nodeType!==1)return;if(n.hasAttribute&&n.hasAttribute("data-cursor-ref"))n.removeAttribute("data-cursor-ref");if(n.querySelectorAll)n.querySelectorAll("[data-cursor-ref]").forEach(function(el){el.removeAttribute("data-cursor-ref")})})}}});o.observe(document.documentElement,{attributes:true,childList:true,subtree:true,attributeFilter:["data-cursor-ref"]});function stop(){try{o.disconnect()}catch(e){}}setTimeout(stop,1500)}catch(e){}})();`,
+            }}
+          />
+        ) : null}
         <Providers>
           <Analytics />
           {children}

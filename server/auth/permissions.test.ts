@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { ASSIGNABLE_ROLES } from '@/lib/roles'
+import { ASSIGNABLE_ROLES, mayBypassApprovals } from '@/lib/roles'
 import { PERMISSION_GROUPS, PERMISSIONS, STAFF_PERMISSIONS } from '@/lib/permissions-catalog'
 import {
   ROLE_PERMISSIONS,
@@ -15,6 +15,14 @@ describe('permission matrix', () => {
     for (const permission of PERMISSIONS) {
       expect(can('OWNER', permission)).toBe(true)
     }
+  })
+
+  it('lets only owner and admin bypass document approvals', () => {
+    expect(mayBypassApprovals('OWNER')).toBe(true)
+    expect(mayBypassApprovals('ADMIN')).toBe(true)
+    expect(mayBypassApprovals('MANAGER')).toBe(false)
+    expect(mayBypassApprovals('ACCOUNTANT')).toBe(false)
+    expect(mayBypassApprovals('SALES')).toBe(false)
   })
 
   it('gives a viewer reads and nothing else', () => {
@@ -54,15 +62,45 @@ describe('permission matrix', () => {
     expect(can('SALES', 'report:overview')).toBe(false)
   })
 
-  it('reserves the business overview for owner, admin, and accountant', () => {
+  it('reserves the business overview for owner, admin, manager, accountant, and sales manager', () => {
     expect(can('OWNER', 'report:overview')).toBe(true)
     expect(can('ADMIN', 'report:overview')).toBe(true)
+    expect(can('MANAGER', 'report:overview')).toBe(true)
     expect(can('ACCOUNTANT', 'report:overview')).toBe(true)
+    expect(can('SALES_MANAGER', 'report:overview')).toBe(true)
     expect(can('BOOKKEEPER', 'report:overview')).toBe(false)
     expect(can('SALES', 'report:overview')).toBe(false)
+    expect(can('PURCHASING', 'report:overview')).toBe(false)
+    expect(can('CASHIER', 'report:overview')).toBe(false)
     expect(can('STORE_KEEPER', 'report:overview')).toBe(false)
+    expect(can('AUDITOR', 'report:overview')).toBe(false)
     expect(can('VIEWER', 'report:overview')).toBe(false)
     expect(can('CUSTOM', 'report:overview')).toBe(false)
+  })
+
+  it('gives manager approvals without ledger close authority', () => {
+    expect(can('MANAGER', 'invoice:approve')).toBe(true)
+    expect(can('MANAGER', 'bill:create')).toBe(true)
+    expect(can('MANAGER', 'journal:post')).toBe(false)
+    expect(can('MANAGER', 'period:close')).toBe(false)
+    expect(can('MANAGER', 'user:invite')).toBe(false)
+  })
+
+  it('keeps purchasing on AP and cashier on the till', () => {
+    expect(can('PURCHASING', 'bill:create')).toBe(true)
+    expect(can('PURCHASING', 'vendor:create')).toBe(true)
+    expect(can('PURCHASING', 'invoice:create')).toBe(false)
+    expect(can('CASHIER', 'pos:sell')).toBe(true)
+    expect(can('CASHIER', 'payment:create')).toBe(true)
+    expect(can('CASHIER', 'bill:create')).toBe(false)
+    expect(can('CASHIER', 'journal:post')).toBe(false)
+  })
+
+  it('gives auditors the trail without write access', () => {
+    expect(can('AUDITOR', 'audit:read')).toBe(true)
+    expect(can('AUDITOR', 'report:export')).toBe(true)
+    expect(can('AUDITOR', 'invoice:create')).toBe(false)
+    expect(can('AUDITOR', 'journal:post')).toBe(false)
   })
 
   it('lets an override grant or withhold the business overview', () => {
@@ -126,6 +164,40 @@ describe('permission matrix', () => {
     expect(ASSIGNABLE_ROLES).not.toContain('CUSTOM')
     expect(ASSIGNABLE_ROLES).not.toContain('CUSTOMER')
     expect(ASSIGNABLE_ROLES).toContain('STORE_KEEPER')
+    expect(ASSIGNABLE_ROLES).toContain('MANAGER')
+    expect(ASSIGNABLE_ROLES).toContain('SALES_MANAGER')
+    expect(ASSIGNABLE_ROLES).toContain('AR_CLERK')
+    expect(ASSIGNABLE_ROLES).toContain('PURCHASING_MANAGER')
+    expect(ASSIGNABLE_ROLES).toContain('PURCHASING')
+    expect(ASSIGNABLE_ROLES).toContain('AP_CLERK')
+    expect(ASSIGNABLE_ROLES).toContain('BANK_CLERK')
+    expect(ASSIGNABLE_ROLES).toContain('POS_SUPERVISOR')
+    expect(ASSIGNABLE_ROLES).toContain('CASHIER')
+    expect(ASSIGNABLE_ROLES).toContain('WAREHOUSE_MANAGER')
+    expect(ASSIGNABLE_ROLES).toContain('PROJECT_MANAGER')
+    expect(ASSIGNABLE_ROLES).toContain('MASTER_DATA')
+    expect(ASSIGNABLE_ROLES).toContain('AUDITOR')
+  })
+
+  it('keeps department clerks inside their desk', () => {
+    expect(can('AR_CLERK', 'invoice:create')).toBe(true)
+    expect(can('AR_CLERK', 'bill:create')).toBe(false)
+    expect(can('AR_CLERK', 'pos:sell')).toBe(false)
+    expect(can('AP_CLERK', 'bill:create')).toBe(true)
+    expect(can('AP_CLERK', 'invoice:create')).toBe(false)
+    expect(can('AP_CLERK', 'bill:approve')).toBe(false)
+    expect(can('BANK_CLERK', 'bank:transact')).toBe(true)
+    expect(can('BANK_CLERK', 'bank:reconcile')).toBe(false)
+    expect(can('MASTER_DATA', 'customer:create')).toBe(true)
+    expect(can('MASTER_DATA', 'vendor:create')).toBe(true)
+    expect(can('MASTER_DATA', 'invoice:create')).toBe(false)
+    expect(can('PROJECT_MANAGER', 'project:update')).toBe(true)
+    expect(can('PROJECT_MANAGER', 'journal:post')).toBe(false)
+    expect(can('WAREHOUSE_MANAGER', 'inventory:approve')).toBe(true)
+    expect(can('WAREHOUSE_MANAGER', 'item:create')).toBe(true)
+    expect(can('POS_SUPERVISOR', 'pos:manage')).toBe(true)
+    expect(can('POS_SUPERVISOR', 'journal:post')).toBe(false)
+    expect(can('PURCHASING_MANAGER', 'vendor:approve')).toBe(true)
   })
 
   it('gives CUSTOMER only portal:read and ignores overrides', () => {

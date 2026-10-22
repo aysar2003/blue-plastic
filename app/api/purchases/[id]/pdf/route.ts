@@ -48,6 +48,7 @@ export async function GET(
       orgPhone: company.phone,
       orgEmail: company.email,
       title: config.singular,
+      documentType: document.type,
       number: document.number,
       date: document.date,
       createdAt: document.createdAt,

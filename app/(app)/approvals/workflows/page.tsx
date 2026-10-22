@@ -47,7 +47,7 @@ export default async function ApprovalWorkflowsPage() {
     <>
       <PageHeader
         title="Workflows"
-        description="Use a ready-made set like QuickBooks or Odoo, or build your own rule and assign the people who may approve it."
+        description="Use a ready-made set like QuickBooks or Odoo, or build your own rule and assign the people who may approve it. Owner and Admin always post without waiting in Approvals."
       />
 
       <section className="mb-8">

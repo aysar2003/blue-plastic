@@ -69,7 +69,8 @@ export async function list(
   ctx: OrgContext,
   query: ListQuery & { userId?: string | null; action?: string | null },
 ) {
-  await pruneExpiredAuthEvents(ctx.orgId)
+  // Do not block the read on prune — fire-and-forget so the history page stays fast.
+  void pruneExpiredAuthEvents(ctx.orgId)
 
   const since = userHistoryRetentionStart()
   const q = query.q?.trim()

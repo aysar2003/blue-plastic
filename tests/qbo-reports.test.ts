@@ -124,7 +124,7 @@ suite('QuickBooks-style lists follow the documents', () => {
       const organization = await db.organization.findFirst({
         select: {
           id: true, name: true, legalName: true, baseCurrency: true, fiscalYearStartMonth: true,
-          timeZone: true, allowNegativeStock: true, posTillLedgerMode: true,
+          timeZone: true, allowNegativeStock: true, posTillLedgerMode: true, parentOrgId: true,
           addressLine1: true, addressLine2: true, city: true, region: true,
           postalCode: true, country: true, phone: true, email: true,
           brandMark: true, logoStorageKey: true, updatedAt: true,

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
 import { wipeCompanyBooks } from '@/server/company-wipe'
-import { db } from '@/server/db'
 import { CODE, inRolledBackTransaction, makeOrg } from './ledger-helpers'
 
 const suite = process.env.DATABASE_URL ? describe : describe.skip

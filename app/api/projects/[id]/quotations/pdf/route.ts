@@ -92,6 +92,7 @@ function toPdfInput(
   return {
     ...shared,
     title: config.singular,
+    documentType: document.type,
     number: document.number,
     date: document.date,
     createdAt: document.createdAt,
@@ -111,6 +112,7 @@ function toPdfInput(
     workScope: document.workScope,
     workSite: document.workSite || document.project?.siteLocation || null,
     status: document.status,
+    createdByName: document.createdByName,
     currency,
     lines: document.lines.map((line) => ({
       quantity: line.quantity,

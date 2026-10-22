@@ -7,7 +7,7 @@
  * When enabled for the company:
  *  1. Maker saves a posting document → PENDING_APPROVAL + ApprovalRequest
  *  2. Checker Approve → post to ledger; Reject → DRAFT
- *  3. POS till sales still post immediately
+ *  3. Owner/Admin and POS till sales post immediately (no inbox hold)
  */
 import type { ApprovalEntityType, ApprovalRequestStatus } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/client'
@@ -19,6 +19,7 @@ import { db, type Tx } from '@/server/db'
 import { requestMeta, writeAudit } from '@/server/audit'
 import { isValidDocumentKind } from '@/lib/approval-labels'
 import { approvalPack, isFamilyWideKindRule } from '@/lib/approval-templates'
+import { mayBypassApprovals } from '@/lib/roles'
 import { paged, paginate, type ListQuery } from '@/lib/validation/common'
 
 const POLICY_WITH_APPROVERS = {
@@ -373,6 +374,10 @@ export async function needsApproval(
   if (!approvalsEnabled(ctx)) {
     return { required: false, levels: 1, requireDifferentApprover: true }
   }
+  // Owner and Admin post immediately — they are not held in the approvals inbox.
+  if (mayBypassApprovals(ctx.role)) {
+    return { required: false, levels: 1, requireDifferentApprover: true }
+  }
   await ensureDefaultPolicies(ctx, tx)
   const value = amount instanceof Decimal ? amount : new Decimal(amount || 0)
   const kind = documentKind?.trim() || null
@@ -628,7 +633,7 @@ function canDecide(ctx: OrgContext, entityType: ApprovalEntityType): boolean {
 }
 
 function maySelfApprove(ctx: OrgContext): boolean {
-  return ctx.role === 'OWNER' || ctx.role === 'ADMIN'
+  return mayBypassApprovals(ctx.role)
 }
 
 export function decisionGate(

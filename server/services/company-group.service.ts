@@ -14,8 +14,13 @@ export type { GroupCompanyOption, GroupReportView }
 
 /**
  * Resolve the main company id for a group (self if already main / standalone).
+ * Pass parentOrgId when already loaded (e.g. OrgContext) to skip an extra query.
  */
-export async function resolveGroupRootId(orgId: string): Promise<string> {
+export async function resolveGroupRootId(
+  orgId: string,
+  parentOrgId?: string | null,
+): Promise<string> {
+  if (parentOrgId !== undefined) return parentOrgId ?? orgId
   const org = await db.organization.findUnique({
     where: { id: orgId },
     select: { id: true, parentOrgId: true },
@@ -104,7 +109,7 @@ export async function canViewGroupReports(ctx: OrgContext): Promise<boolean> {
   if (ctx.isSystemOwner) return true
   if (ctx.role !== 'OWNER' && ctx.role !== 'ADMIN') return false
 
-  const rootOrgId = await resolveGroupRootId(ctx.orgId)
+  const rootOrgId = await resolveGroupRootId(ctx.orgId, ctx.organization.parentOrgId)
   const [mainMembership, childCount] = await Promise.all([
     db.membership.findUnique({
       where: { orgId_userId: { orgId: rootOrgId, userId: ctx.userId } },

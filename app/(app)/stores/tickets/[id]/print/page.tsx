@@ -59,14 +59,19 @@ export default async function PrintStoreTicketPage({
               ? `/sales/delivery/${ticket.deliveryNote.id}`
               : `/stores/${ticket.store.id}`
           }
+          pdfHref={`/api/stores/tickets/${id}/pdf`}
           filename={`ticket-${ticket.number.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`}
+          pdfMatchesPrint
           defaultSubject={`Store ticket ${ticket.number} — ${ticket.item.name}`}
           defaultBody={shareBody}
           whatsappText={shareBody}
         />
       </div>
 
-      <article className="relative overflow-hidden rounded-2xl border border-[#1B3A4B]/15 bg-gradient-to-b from-[#f0f7fb] to-white text-[#1B3A4B] shadow-[0_16px_40px_-20px_rgb(15_23_42/0.35)] print:shadow-none">
+      <article
+        data-print-root
+        className="relative overflow-hidden rounded-2xl border border-[#1B3A4B]/15 bg-gradient-to-b from-[#f0f7fb] to-white text-[#1B3A4B] shadow-[0_16px_40px_-20px_rgb(15_23_42/0.35)] print:shadow-none"
+      >
         <div className="absolute inset-x-0 top-0 h-1.5 bg-[#3A7CA8]" />
         <div className="px-8 pb-10 pt-8">
           <div className="flex items-start justify-between gap-4">

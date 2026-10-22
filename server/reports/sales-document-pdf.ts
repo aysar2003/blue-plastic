@@ -266,7 +266,27 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
       runs.push({ text: left.label, x: META.label, color: muted })
       runs.push({ text: left.value.slice(0, 42), x: META.value, color: ink })
     }
-    if (right) {
+    if (right?.badge) {
+      // Pad the label inside the pill so "OPEN" / "UNPAID" never clip at the edge.
+      const padX = 10
+      const textW = Math.ceil(right.text.length * 9 * 0.62)
+      const badgeWidth = Math.max(58, textW + padX * 2)
+      const badgeLeft = META.right - badgeWidth
+      runs.push({
+        text: right.text,
+        x: badgeLeft + padX,
+        bold: true,
+        color: right.color ?? WHITE,
+      })
+      rows.push({
+        size: 9,
+        height: 14,
+        fill: right.badge,
+        fillFrom: badgeLeft,
+        fillTo: META.right,
+        runs,
+      })
+    } else if (right) {
       runs.push({
         text: right.text,
         x: META.right,
@@ -274,16 +294,10 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
         bold: right.bold,
         color: right.color ?? ink,
       })
+      rows.push({ size: 9, height: 13, runs })
+    } else {
+      rows.push({ size: 9, height: 13, runs })
     }
-    const badgeWidth = right?.badge ? Math.max(52, right.text.length * 7 + 16) : 0
-    rows.push({
-      size: 9,
-      height: 13,
-      fill: right?.badge,
-      fillFrom: right?.badge ? META.right - badgeWidth : undefined,
-      fillTo: right?.badge ? META.right : undefined,
-      runs,
-    })
   }
 
   rows.push({ height: 10, runs: [] })
@@ -334,31 +348,34 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     foot.push({ height: 8, runs: [] })
   }
 
-  foot.push(merchantPdfTotalBand('Subtotal', money(input.subtotal), accent))
+  const totals: typeof foot = []
+  totals.push(merchantPdfTotalBand('Subtotal', money(input.subtotal), accent))
   if (Number(input.discountAmount) > 0) {
-    foot.push(merchantPdfTotalBand('Discount', money(input.discountAmount), accent))
+    totals.push(merchantPdfTotalBand('Discount', money(input.discountAmount), accent))
   }
   if (Number(input.taxTotal) > 0) {
-    foot.push(merchantPdfTotalBand('Tax', money(input.taxTotal), accent))
+    totals.push(merchantPdfTotalBand('Tax', money(input.taxTotal), accent))
   }
   if (hasPreviousQuotations(input.previousQuotationsTotal)) {
     const prior = input.previousQuotationsTotal as string
-    foot.push(merchantPdfTotalBand('This quotation', money(input.total), accent))
-    foot.push(merchantPdfTotalBand('Previous quotations', money(prior), accent))
-    foot.push(
+    totals.push(merchantPdfTotalBand('This quotation', money(input.total), accent))
+    totals.push(merchantPdfTotalBand('Previous quotations', money(prior), accent))
+    totals.push(
       merchantPdfTotalBand('Grand total', money(ZERO.plus(prior).plus(input.total).toFixed(4)), accent),
     )
   } else {
-    foot.push(merchantPdfTotalBand('Grand total', money(input.total), accent))
+    totals.push(merchantPdfTotalBand('Grand total', money(input.total), accent))
   }
   if (!input.hideAccountBalance) {
     if (input.amountApplied && Number(input.amountApplied) > 0) {
-      foot.push(merchantPdfTotalBand('Paid amount', money(input.amountApplied), accent))
+      totals.push(merchantPdfTotalBand('Paid amount', money(input.amountApplied), accent))
     }
     if (input.balance != null && input.balance !== '') {
-      foot.push(merchantPdfTotalBand('Balance', money(input.balance), accent))
+      totals.push(merchantPdfTotalBand('Balance', money(input.balance), accent))
     }
   }
+  // Keep Subtotal → Grand total / Balance on one page (no orphaned last band).
+  for (const row of totals) foot.push({ ...row, keepId: 'paper-totals' })
 
   if (template.terms.trim()) {
     foot.push({ height: 12, runs: [] })

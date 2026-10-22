@@ -1,5 +1,8 @@
 import 'server-only'
 
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
+
 import {
   addDays,
   calendarDateInZone,
@@ -130,14 +133,26 @@ export async function upcoming(ctx: OrgContext, limit = 12): Promise<CalendarEve
 
 /**
  * Events whose reminder window has opened and that have not been dismissed.
- * Shown in the shell next to balance reminders.
+ * Shown in the shell next to balance reminders. Cached ~60s per org like stock alerts.
  */
-export async function dueReminders(ctx: OrgContext): Promise<CalendarReminder[]> {
+export function dueReminders(ctx: OrgContext): Promise<CalendarReminder[]> {
+  return cachedDueReminders(ctx.orgId, ctx.organization.timeZone)
+}
+
+const cachedDueReminders = cache((orgId: string, timeZone: string) =>
+  unstable_cache(
+    () => queryDueReminders(orgId, timeZone),
+    ['calendar-reminders-v1', orgId, timeZone],
+    { revalidate: 60 },
+  )(),
+)
+
+async function queryDueReminders(orgId: string, timeZone: string): Promise<CalendarReminder[]> {
   const now = new Date()
   const horizon = new Date(now.getTime() + 14 * 86_400_000)
   const rows = await db.calendarEvent.findMany({
     where: {
-      orgId: ctx.orgId,
+      orgId,
       reminderMinutes: { not: null },
       reminderDismissedAt: null,
       startsAt: { lte: horizon },
@@ -155,7 +170,6 @@ export async function dueReminders(ctx: OrgContext): Promise<CalendarReminder[]>
     take: 40,
   })
 
-  const zone = ctx.organization.timeZone
   const due: CalendarReminder[] = []
   for (const row of rows) {
     const lead = (row.reminderMinutes ?? 0) * 60_000
@@ -166,8 +180,8 @@ export async function dueReminders(ctx: OrgContext): Promise<CalendarReminder[]>
       kind: row.kind,
       startsAt: row.startsAt,
       when: row.allDay
-        ? calendarDateInZone(row.startsAt, zone)
-        : formatWhen(row.startsAt, zone),
+        ? calendarDateInZone(row.startsAt, timeZone)
+        : formatWhen(row.startsAt, timeZone),
     })
   }
   return due

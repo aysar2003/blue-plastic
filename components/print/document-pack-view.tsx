@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { MerchantInvoice } from '@/components/sales/merchant-invoice'
 import { formatMoney, ZERO } from '@/lib/money'
+import { printPackSectionClass } from '@/lib/print-pack'
 import { hasPreviousQuotations, runningQuotationTotals } from '@/lib/project-quotations'
 import type { DocumentTemplate } from '@/lib/document-template'
 import type { LetterheadSource } from '@/lib/letterhead'
@@ -82,6 +83,7 @@ export function DocumentPackView({
           pdfHref={pdfHref}
           excelHref={excelHref}
           filename={filename}
+          pdfMatchesPrint
           defaultTo={party?.email ?? ''}
           defaultSubject={`${title} from ${organization.name}`}
           defaultBody={shareBody}
@@ -107,11 +109,8 @@ export function DocumentPackView({
           {documents.map((document, index) => (
             <section
               key={document.id}
-              className={
-                index === 0
-                  ? 'scroll-mt-20 print:mt-0'
-                  : 'mt-8 scroll-mt-20 break-before-page print:mt-0'
-              }
+              data-print-paper
+              className={printPackSectionClass(index, documents.length)}
             >
               <p className="mb-2 text-right text-xs print:hidden">
                 <Link

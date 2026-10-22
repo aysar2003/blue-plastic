@@ -6,7 +6,6 @@ import { ClickableRow } from '@/components/data/clickable-row'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { QuerySelect } from '@/components/data/query-select'
-import { ScrollSheet } from '@/components/data/scroll-sheet'
 import { SearchInput } from '@/components/data/search-input'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -137,8 +136,8 @@ export default async function UserHistoryPage({
         />
       ) : (
         <Card className="overflow-hidden p-0">
-          <ScrollSheet>
-            <Table>
+          {/* embed: grow with every row — do not clip inside a viewport-height scrollport */}
+          <Table embed>
               <TableHeader>
                 <TableRow>
                   <TableHead>When</TableHead>
@@ -173,7 +172,6 @@ export default async function UserHistoryPage({
                 ))}
               </TableBody>
             </Table>
-          </ScrollSheet>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/30 px-3 py-1.5 text-xs">
             <p className="text-muted-foreground">
               <span className="tabular">{total}</span> {total === 1 ? 'row' : 'rows'}

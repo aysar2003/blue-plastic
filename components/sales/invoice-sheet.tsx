@@ -271,7 +271,7 @@ export function InvoiceSheet({
           </div>
         </div>
 
-        <dl className="ml-auto mt-5 w-64 space-y-1.5 text-sm text-[#5C6B7A]">
+        <dl className="ml-auto mt-5 w-64 break-inside-avoid space-y-1.5 text-sm text-[#5C6B7A]">
           <div className="flex justify-between gap-6">
             <dt>Subtotal</dt>
             <dd className="tabular">{money(document.subtotal)}</dd>

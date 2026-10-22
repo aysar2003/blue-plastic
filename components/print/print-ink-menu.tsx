@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { ChevronDownIcon, FileDownIcon, PrinterIcon } from 'lucide-react'
 
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -11,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { downloadPackPrintPdf, hasPrintablePaper } from '@/lib/pack-print-html'
 import { readStoredPaperMetaHidden, withPaperMetaHidden } from '@/lib/paper-meta-fields'
 import {
   printWithInk,
@@ -76,7 +78,7 @@ export function PrintInkMenu({
   )
 }
 
-/** PDF download dropdown — same Color / Black & White choice. */
+/** PDF dropdown — same Color / Black & White choice as Print. */
 export function PdfInkMenu({
   pdfHref,
   filename,
@@ -85,6 +87,8 @@ export function PdfInkMenu({
   variant = 'outline',
   className,
   onFallbackPrint,
+  /** Pack / multi-paper: PDF from the on-screen HTML (same sheet as Print). */
+  matchPrintPaper = false,
 }: {
   pdfHref?: string
   filename?: string
@@ -94,9 +98,30 @@ export function PdfInkMenu({
   className?: string
   /** When there is no PDF route, Print → Save as PDF with the chosen ink. */
   onFallbackPrint?: (ink: PrintInk) => void
+  matchPrintPaper?: boolean
 }) {
-  const run = (ink: PrintInk) => {
+  const [busy, setBusy] = useState(false)
+
+  const run = async (ink: PrintInk) => {
     rememberPrintInk(ink)
+    const name = filename || 'document.pdf'
+    // Any page that already draws the paper (print / pack / statement): PDF =
+    // that sheet. Detail pages without a paper fall through to the API PDF.
+    const preferScreen = matchPrintPaper || hasPrintablePaper()
+    if (preferScreen) {
+      setBusy(true)
+      try {
+        const ok = await downloadPackPrintPdf(name, ink)
+        if (ok) return
+        if (matchPrintPaper || !pdfHref) {
+          if (onFallbackPrint) onFallbackPrint(ink)
+          else printWithInk(ink)
+          return
+        }
+      } finally {
+        setBusy(false)
+      }
+    }
     if (!pdfHref) {
       if (onFallbackPrint) onFallbackPrint(ink)
       else printWithInk(ink)
@@ -112,24 +137,39 @@ export function PdfInkMenu({
     anchor.remove()
   }
 
+  const hints = {
+    color: 'Same paper as on screen when available',
+    mono: 'Black & white — same paper as on screen when available',
+  } as const
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(buttonVariants({ variant, size }), className)}
         type="button"
+        disabled={busy}
       >
         <FileDownIcon />
-        {label}
+        {busy ? 'PDF…' : label}
         <ChevronDownIcon className="opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         <DropdownMenuLabel>PDF ink</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {INK_OPTIONS.map((option) => (
-          <DropdownMenuItem key={option.ink} onSelect={() => run(option.ink)}>
+          <DropdownMenuItem
+            key={option.ink}
+            disabled={busy}
+            onSelect={(event) => {
+              event.preventDefault()
+              void run(option.ink)
+            }}
+          >
             <span className="flex flex-col gap-0.5">
               <span>{option.label}</span>
-              <span className="text-[0.6875rem] font-normal text-muted-foreground">{option.hint}</span>
+              <span className="text-[0.6875rem] font-normal text-muted-foreground">
+                {hints[option.ink]}
+              </span>
             </span>
           </DropdownMenuItem>
         ))}

@@ -233,6 +233,49 @@ const ORG_LIST_SELECT = {
   },
 } as const
 
+export type SwitchableCompany = {
+  id: string
+  name: string
+  isCurrent: boolean
+}
+
+/**
+ * Light company list for the app shell switcher — id/name only.
+ * Skips estimateCompanyBytes / owner lookups so every navigation stays fast.
+ * Use listUserDatabases on /databases when File size and meta are needed.
+ */
+export async function listSwitchableCompanies(ctx: OrgContext): Promise<SwitchableCompany[]> {
+  if (ctx.isSystemOwner) {
+    const organizations = await db.organization.findMany({
+      orderBy: [{ updatedAt: 'desc' }, { name: 'asc' }],
+      select: { id: true, name: true },
+    })
+    return organizations.map((organization) => ({
+      id: organization.id,
+      name: organization.name,
+      isCurrent: organization.id === ctx.orgId,
+    }))
+  }
+
+  const rows = await db.membership.findMany({
+    where: {
+      userId: ctx.userId,
+      status: 'ACTIVE',
+      ...(ctx.canConnect ? {} : { orgId: ctx.orgId }),
+    },
+    orderBy: { organization: { updatedAt: 'desc' } },
+    select: {
+      organization: { select: { id: true, name: true } },
+    },
+  })
+
+  return rows.map((row) => ({
+    id: row.organization.id,
+    name: row.organization.name,
+    isCurrent: row.organization.id === ctx.orgId,
+  }))
+}
+
 /** Companies this person is allowed to see. Staff see only the one they are in. */
 export async function listUserDatabases(ctx: OrgContext): Promise<DatabaseRow[]> {
   if (ctx.isSystemOwner) {

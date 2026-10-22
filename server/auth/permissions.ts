@@ -50,6 +50,210 @@ const SALES: Permission[] = [
   'calendar:delete',
 ]
 
+/** Sales lead — same desk as Sales, plus sales/payment approvals and overview. */
+const SALES_MANAGER: Permission[] = [
+  ...SALES,
+  'invoice:approve',
+  'payment:approve',
+  'customer:approve',
+  'customer:archive',
+  'invoice:void',
+  'payment:update',
+  'payment:void',
+  'report:overview',
+]
+
+/** AR desk — customers and receivables without POS or approvals. */
+const AR_CLERK: Permission[] = [
+  'org:read',
+  'customer:read',
+  'customer:create',
+  'customer:update',
+  'customer:archive',
+  'item:read',
+  'invoice:read',
+  'invoice:create',
+  'invoice:update',
+  'invoice:void',
+  'invoice:send',
+  'payment:read',
+  'payment:create',
+  'payment:update',
+  'payment:void',
+  'project:read',
+  'report:read',
+  'calendar:read',
+  'calendar:create',
+  'calendar:update',
+  'calendar:delete',
+]
+
+/** Buyers — vendors and AP, not AR or the full ledger. */
+const PURCHASING: Permission[] = [
+  'org:read',
+  'vendor:read',
+  'vendor:create',
+  'vendor:update',
+  'vendor:archive',
+  'item:read',
+  'item:create',
+  'item:update',
+  'bill:read',
+  'bill:create',
+  'bill:update',
+  'bill:void',
+  'bill:approve',
+  'expense:read',
+  'expense:create',
+  'expense:update',
+  'expense:void',
+  'expense:approve',
+  'inventory:read',
+  'inventory:adjust',
+  'inventory:approve',
+  'project:read',
+  'report:read',
+  'calendar:read',
+  'calendar:create',
+  'calendar:update',
+  'calendar:delete',
+]
+
+/** Purchasing lead — same AP desk with vendor approvals and overview. */
+const PURCHASING_MANAGER: Permission[] = [
+  ...PURCHASING,
+  'vendor:approve',
+  'report:overview',
+]
+
+/** AP desk — vendors and payables without approvals. */
+const AP_CLERK: Permission[] = [
+  'org:read',
+  'vendor:read',
+  'vendor:create',
+  'vendor:update',
+  'vendor:archive',
+  'item:read',
+  'bill:read',
+  'bill:create',
+  'bill:update',
+  'bill:void',
+  'expense:read',
+  'expense:create',
+  'expense:update',
+  'expense:void',
+  'inventory:read',
+  'report:read',
+  'calendar:read',
+  'calendar:create',
+  'calendar:update',
+  'calendar:delete',
+]
+
+/** Banking desk — moves money, does not own the ledger. */
+const BANK_CLERK: Permission[] = [
+  'org:read',
+  'bank:read',
+  'bank:transact',
+  'bank:import',
+  'payment:read',
+  'expense:read',
+  'account:read',
+  'report:read',
+  'calendar:read',
+]
+
+/** Till staff — sell and take payment, not back-office books. */
+const CASHIER: Permission[] = [
+  'org:read',
+  'customer:read',
+  'item:read',
+  'invoice:read',
+  'invoice:create',
+  'payment:read',
+  'payment:create',
+  'pos:read',
+  'pos:sell',
+  'report:read',
+  'calendar:read',
+]
+
+/** Till lead — cashier plus POS configuration and void rights. */
+const POS_SUPERVISOR: Permission[] = [
+  ...CASHIER,
+  'pos:manage',
+  'customer:create',
+  'customer:update',
+  'invoice:void',
+  'payment:void',
+]
+
+/** Stock lead — store work plus item master and inventory approvals. */
+const WAREHOUSE_MANAGER: Permission[] = [
+  'org:read',
+  'item:read',
+  'item:create',
+  'item:update',
+  'item:archive',
+  'customer:read',
+  'vendor:read',
+  'invoice:read',
+  'bill:read',
+  'bill:create',
+  'inventory:read',
+  'inventory:adjust',
+  'inventory:approve',
+  'report:read',
+  'calendar:read',
+  'calendar:create',
+  'calendar:update',
+  'calendar:delete',
+]
+
+/** Customer jobs — projects with light sales access. */
+const PROJECT_MANAGER: Permission[] = [
+  'org:read',
+  'customer:read',
+  'customer:create',
+  'customer:update',
+  'item:read',
+  'project:read',
+  'project:create',
+  'project:update',
+  'invoice:read',
+  'invoice:create',
+  'invoice:update',
+  'invoice:send',
+  'payment:read',
+  'report:read',
+  'calendar:read',
+  'calendar:create',
+  'calendar:update',
+  'calendar:delete',
+]
+
+/** Master-data clerk — cards only, no posting. */
+const MASTER_DATA: Permission[] = [
+  'org:read',
+  'customer:read',
+  'customer:create',
+  'customer:update',
+  'customer:archive',
+  'vendor:read',
+  'vendor:create',
+  'vendor:update',
+  'vendor:archive',
+  'item:read',
+  'item:create',
+  'item:update',
+  'item:archive',
+  'report:read',
+  'calendar:read',
+]
+
+/** Read-only plus the audit trail — external or internal review. */
+const AUDITOR: Permission[] = [...READ_ONLY, 'audit:read', 'report:export']
+
 /** BOOKKEEPER enters day-to-day transactions but cannot close periods or manage users. */
 const BOOKKEEPER: Permission[] = [
   ...READ_ONLY,
@@ -127,6 +331,19 @@ const ACCOUNTANT: Permission[] = [
   'project:update',
 ]
 
+/**
+ * Operations manager — enters work, approves, sees overview. Cannot post
+ * journals, close periods, edit the chart, or manage users.
+ */
+const MANAGER: Permission[] = [
+  ...BOOKKEEPER,
+  ...APPROVE,
+  'pos:manage',
+  'report:overview',
+  'project:update',
+  'portal:manage',
+]
+
 const ADMIN: Permission[] = [
   ...ACCOUNTANT,
   'period:reopen',
@@ -165,10 +382,23 @@ const CUSTOMER: Permission[] = ['portal:read']
 export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   OWNER: new Set(ALL),
   ADMIN: new Set(ADMIN),
+  MANAGER: new Set(MANAGER),
   ACCOUNTANT: new Set(ACCOUNTANT),
   BOOKKEEPER: new Set(BOOKKEEPER),
+  SALES_MANAGER: new Set(SALES_MANAGER),
   SALES: new Set(SALES),
+  AR_CLERK: new Set(AR_CLERK),
+  PURCHASING_MANAGER: new Set(PURCHASING_MANAGER),
+  PURCHASING: new Set(PURCHASING),
+  AP_CLERK: new Set(AP_CLERK),
+  BANK_CLERK: new Set(BANK_CLERK),
+  POS_SUPERVISOR: new Set(POS_SUPERVISOR),
+  CASHIER: new Set(CASHIER),
+  WAREHOUSE_MANAGER: new Set(WAREHOUSE_MANAGER),
   STORE_KEEPER: new Set(STORE_KEEPER),
+  PROJECT_MANAGER: new Set(PROJECT_MANAGER),
+  MASTER_DATA: new Set(MASTER_DATA),
+  AUDITOR: new Set(AUDITOR),
   VIEWER: new Set(READ_ONLY),
   CUSTOM: new Set(),
   CUSTOMER: new Set(CUSTOMER),

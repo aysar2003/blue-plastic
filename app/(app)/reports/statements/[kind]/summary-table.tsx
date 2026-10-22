@@ -136,16 +136,18 @@ export function SummaryTable({
         current: brought,
       },
     ]
-    let invoices = ZERO
-    let current = brought
-    const lines = rows.map((row) => {
+    const lines = rows.reduce<
+      { row: SummaryRow; amount: Decimal; debit: Decimal; credit: Decimal; invoices: Decimal; current: Decimal }[]
+    >((acc, row) => {
+      const prev = acc.at(-1)
       const amount = new Decimal(row.amount)
       const debit = new Decimal(row.debit)
       const credit = new Decimal(row.credit)
-      invoices = invoices.plus(debit)
-      current = current.plus(debit).minus(credit)
-      return { row, amount, debit, credit, invoices, current }
-    })
+      const invoices = (prev?.invoices ?? ZERO).plus(debit)
+      const current = (prev?.current ?? brought).plus(debit).minus(credit)
+      acc.push({ row, amount, debit, credit, invoices, current })
+      return acc
+    }, [])
     return [...forward, ...lines]
   }, [rows, opening])
 

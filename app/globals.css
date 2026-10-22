@@ -2466,8 +2466,31 @@ a.report-drill-link:hover {
   .merchant-invoice {
     min-height: 0 !important;
     height: auto !important;
+  }
+
+  /*
+   * Single paper print: avoid a blank trailing page after the sheet.
+   * Multi-paper packs ([data-print-paper]) must NOT use break-after:avoid —
+   * that glued the next quotation onto an orphaned grand total.
+   */
+  body:not(:has([data-print-paper])) .invoice-sheet,
+  body:not(:has([data-print-paper])) .merchant-invoice {
     break-after: avoid !important;
     page-break-after: avoid !important;
+  }
+
+  /* Pack / statement: each paper is its own sheet; keep totals with the paper. */
+  [data-print-paper]:not(:last-of-type),
+  [data-invoice-page]:not(:last-of-type) {
+    break-after: page !important;
+    page-break-after: always !important;
+  }
+
+  .merchant-invoice .break-inside-avoid,
+  .invoice-sheet .break-inside-avoid,
+  .break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   body:has(.invoice-sheet) .company-print-letterhead,
@@ -2518,12 +2541,12 @@ a.report-drill-link:hover {
     max-height: none !important;
   }
 
-  /* The sheet is the page. Forcing it static let the corner marks flow as
-   * extra blocks and print a blank page after the statement. */
+  /* The sheet is the page. Overflow must stay visible in print so totals are
+   * not clipped when a long paper spans a soft page boundary. */
   .invoice-sheet,
   .merchant-invoice {
     position: relative !important;
-    overflow: hidden !important;
+    overflow: visible !important;
   }
 
   /* Rows should not be split across a page break. */

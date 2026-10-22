@@ -184,8 +184,9 @@ describe('invoice by invoice', () => {
     expect(html).toContain('data-statement-part="invoices"')
     expect(html).not.toContain('Invoice summary')
     expect(html.match(/data-invoice-page/g)).toHaveLength(2)
-    // The first invoice is the first page; only the ones after it break.
+    // First sheet ends a page; later sheets also start a page.
     expect(html.match(/break-before-page/g)).toHaveLength(1)
+    expect(html.match(/break-after-page/g)).toHaveLength(1)
     expect(html.match(/class="invoice-sheet /g)).toHaveLength(2)
     expect(html).toContain('INV-0001')
     expect(html).toContain('INV-0002')

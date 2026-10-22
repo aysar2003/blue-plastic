@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
-import { ApprovalTrailPanel } from '@/components/approvals/approval-trail-panel'
+import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { PageHeader } from '@/components/data/page-header'
 import { DocumentForm } from '@/components/sales/document-form'
 import { toCalendarDate, today } from '@/lib/date'

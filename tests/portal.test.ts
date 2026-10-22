@@ -26,6 +26,7 @@ function staffCtx(overrides: Partial<OrgContext> = {}): OrgContext {
       timeZone: 'UTC',
       allowNegativeStock: false,
       posTillLedgerMode: 'HOLD_OFF_CHART',
+      parentOrgId: null,
       addressLine1: null,
       addressLine2: null,
       city: null,

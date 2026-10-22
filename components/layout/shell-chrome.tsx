@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 
@@ -18,7 +19,6 @@ import { CompanySwitcher, type CompanyOption } from './company-switcher'
 import { HistoryBack } from './history-back'
 import { ModuleTabs } from './module-tabs'
 import { NavTrailRecorder } from './nav-trail-recorder'
-import { CommandPalette } from './command-palette'
 import { moduleFor } from './nav-items'
 import { NavigationProgress } from './navigation-progress'
 import { QuickCreate } from './quick-create'
@@ -29,6 +29,12 @@ import { CompanyLetterhead } from '@/components/print/company-letterhead'
 import type { LetterheadSource } from '@/lib/letterhead'
 import { orgLogoUrl, resolveBrandMark } from '@/lib/org-brand'
 import { PRODUCT_CREDIT, PRODUCT_NAME } from '@/lib/product-brand'
+
+/** Defer until after first paint — ⌘K still works once the chunk loads. */
+const CommandPalette = dynamic(
+  () => import('./command-palette').then((mod) => ({ default: mod.CommandPalette })),
+  { ssr: false },
+)
 
 type ShellChromeProps = {
   orgName: string
@@ -251,7 +257,9 @@ export function ShellChrome({
                 features={features}
               />
             ) : null}
-            {working ? <ShellMenus /> : null}
+            {working ? (
+              <ShellMenus permissions={permissions} showDatabases={showDatabases} />
+            ) : null}
             {stockAlertsSlot != null ? (
               <Fragment key="shell-stock-alerts">{stockAlertsSlot}</Fragment>
             ) : null}

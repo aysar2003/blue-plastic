@@ -6,7 +6,7 @@ import { JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
 import { letterheadLines } from '@/lib/letterhead'
 import { toCalendarDate, today } from '@/lib/date'
 import { presetRange, readDatePreset } from '@/lib/list-filters'
-import { parsePackIds } from '@/lib/document-pack'
+import { parsePackIds, sortPackDocuments } from '@/lib/document-pack'
 import { bySlug } from '@/lib/sales-types'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -73,13 +73,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
         status: picked ? undefined : status,
         customerId: picked ? undefined : customerId,
         ids,
-        sort,
-        dir,
+        sort: picked ? 'date' : sort,
+        dir: picked ? 'asc' : dir,
         ...(picked ? {} : span),
       })
+      // Pack export: same oldest-first order as Print / pack PDF.
+      const listed = picked ? sortPackDocuments(page.rows) : page.rows
       const rows: CsvCell[][] = heading(salesConfig.plural)
       rows.push(['Number', 'Date', 'Due', 'Customer', 'Reference', 'Status', 'Total', 'Outstanding', 'Deposit to'])
-      for (const row of page.rows) {
+      for (const row of listed) {
         const account = row.depositAccount
         rows.push([
           row.number,
@@ -103,13 +105,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
         status: picked ? undefined : status,
         vendorId: picked ? undefined : vendorId,
         ids,
-        sort,
-        dir,
+        sort: picked ? 'date' : sort,
+        dir: picked ? 'asc' : dir,
         ...(picked ? {} : span),
       })
+      const listed = picked ? sortPackDocuments(page.rows) : page.rows
       const rows: CsvCell[][] = heading(purchaseConfig.plural)
       rows.push(['Number', 'Date', 'Due', 'Vendor', 'Their reference', 'Status', 'Total', 'Owing'])
-      for (const row of page.rows) {
+      for (const row of listed) {
         rows.push([
           row.number,
           toCalendarDate(row.date),

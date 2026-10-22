@@ -157,6 +157,7 @@ export function MerchantInvoice({
       { id: 'workSite' as const, label: 'Work site' },
       { id: 'workScope' as const, label: 'Work / job' },
       { id: 'email' as const, label: 'Email' },
+      { id: 'printedFooter' as const, label: 'Printed on / by' },
     ],
     [label.order, label.person, label.reference],
   )
@@ -208,7 +209,7 @@ export function MerchantInvoice({
     customer.phone,
     document.createdByName,
     document.dueDate,
-    document.paymentTerm?.name,
+    document.paymentTerm,
     document.project?.siteLocation,
     document.reference,
     document.workScope,
@@ -243,7 +244,7 @@ export function MerchantInvoice({
           onToggle={toggle}
           onReorder={reorder}
           title="Paper details"
-          description="Show or hide Bill to lines — Sales person, address, work site, and the rest. Drag to change order."
+          description="Show or hide Bill to lines and the Printed on / by footer. Drag to change order."
           showAllLabel="Show all details"
         />
       </div>
@@ -318,7 +319,8 @@ export function MerchantInvoice({
         ))}
       </div>
 
-      <div className="grid gap-6 px-8 py-6 sm:grid-cols-[minmax(0,1fr)_16rem]">
+      {/* Keep subtotal → grand total on one sheet; do not orphan the last total. */}
+      <div className="grid break-inside-avoid gap-6 px-8 py-6 sm:grid-cols-[minmax(0,1fr)_16rem]">
         <div className="space-y-4 text-[12px]">
           {template.footerLayout === 'side' ? (
             <DocumentAccountFooter template={template} accent={accent} />
@@ -380,7 +382,7 @@ export function MerchantInvoice({
           ) : null}
         </div>
 
-        <dl className="space-y-1 text-[12px]">
+        <dl className="space-y-1 break-inside-avoid text-[12px]">
           <Total label="Subtotal" value={money(document.subtotal)} accent={accent} />
           {Number(document.discountAmount) > 0 ? (
             <Total label="Discount" value={money(document.discountAmount)} accent={accent} />
@@ -426,10 +428,12 @@ export function MerchantInvoice({
         <DocumentAccountFooter template={template} accent={accent} />
       ) : null}
 
-      <div className="flex justify-between gap-4 border-t px-8 py-3 text-[10px] text-[#5C6B7A]">
-        <p>Printed on: {printedOn}</p>
-        <p>{printedBy ? `Printed by: ${printedBy}` : null}</p>
-      </div>
+      {prefs.hidden.includes('printedFooter') ? null : (
+        <div className="flex justify-between gap-4 border-t px-8 py-3 text-[10px] text-[#5C6B7A]">
+          <p>Printed on: {printedOn}</p>
+          <p>{printedBy ? `Printed by: ${printedBy}` : null}</p>
+        </div>
+      )}
     </article>
   )
 }

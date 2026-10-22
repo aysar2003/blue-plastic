@@ -306,7 +306,7 @@ const APP_NESTED: Partial<
       <SwitchRow
         name="enableDocumentApprovals"
         label="Require approval before posting"
-        hint="Gated documents wait in Approvals until an assigned checker posts them. POS still posts at the till."
+        hint="Gated documents wait in Approvals until an assigned checker posts them. Owner and Admin post immediately; POS still posts at the till."
         defaultChecked={flags.enableDocumentApprovals}
       />
       <div className="flex flex-wrap gap-x-3 gap-y-1">

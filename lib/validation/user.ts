@@ -5,10 +5,23 @@ import { cuid, email, password, requiredText } from './common'
 
 const assignableOrCustom = z.enum([
   'ADMIN',
+  'MANAGER',
   'ACCOUNTANT',
   'BOOKKEEPER',
+  'SALES_MANAGER',
   'SALES',
+  'AR_CLERK',
+  'PURCHASING_MANAGER',
+  'PURCHASING',
+  'AP_CLERK',
+  'BANK_CLERK',
+  'POS_SUPERVISOR',
+  'CASHIER',
+  'WAREHOUSE_MANAGER',
   'STORE_KEEPER',
+  'PROJECT_MANAGER',
+  'MASTER_DATA',
+  'AUDITOR',
   'VIEWER',
   'CUSTOM',
 ])

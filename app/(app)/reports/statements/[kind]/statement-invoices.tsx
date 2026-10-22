@@ -7,6 +7,7 @@ import { accentWash, DEFAULT_DOCUMENT_TEMPLATE, paperAccent, type DocumentTempla
 import { type CalendarDate } from '@/lib/date'
 import { letterheadOf } from '@/lib/letterhead'
 import { Decimal } from '@/lib/money'
+import { printPackSectionClass } from '@/lib/print-pack'
 import { purchaseByType } from '@/lib/purchase-types'
 import { byType } from '@/lib/sales-types'
 
@@ -178,8 +179,9 @@ export function StatementInvoices({
         <section
           key={document.id}
           id={`invoice-${document.id}`}
-          className={index === 0 ? 'scroll-mt-20 print:mt-0' : 'mt-8 scroll-mt-20 break-before-page print:mt-0'}
+          className={printPackSectionClass(index, documents.length)}
           data-invoice-page
+          data-print-paper
         >
           <p className="mb-2 text-right text-xs print:hidden">
             <Link href={href} className="text-muted-foreground underline-offset-4 hover:underline">

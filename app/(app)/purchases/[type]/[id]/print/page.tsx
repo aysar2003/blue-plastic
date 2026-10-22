@@ -71,6 +71,7 @@ export default async function PrintPurchasePage({
           backHref={`/purchases/${config.slug}/${id}`}
           pdfHref={`/api/purchases/${id}/pdf`}
           filename={filename}
+          pdfMatchesPrint
           defaultTo={vendor.email ?? ''}
           defaultSubject={`${config.singular} ${document.number} from ${organization.name}`}
           defaultBody={shareBody}

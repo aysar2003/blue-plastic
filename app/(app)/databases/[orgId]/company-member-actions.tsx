@@ -27,7 +27,7 @@ import {
 export function CompanyMemberActions({
   orgId,
   membershipId,
-  userId,
+  userId: _userId,
   role,
   status,
   name,

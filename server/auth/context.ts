@@ -35,6 +35,8 @@ export type OrgContext = {
     timeZone: string
     allowNegativeStock: boolean
     posTillLedgerMode: 'HOLD_OFF_CHART' | 'REGISTER_IN_CHART'
+    /** Null when this company is the group main / standalone. */
+    parentOrgId: string | null
     addressLine1: string | null
     addressLine2: string | null
     city: string | null
@@ -82,6 +84,7 @@ const ORGANIZATION_SELECT = {
   allowNegativeStock: true,
   posTillLedgerMode: true,
   featureFlags: true,
+  parentOrgId: true,
   addressLine1: true,
   addressLine2: true,
   city: true,

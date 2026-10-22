@@ -18,6 +18,7 @@ export function PrintButton({
   defaultBody,
   whatsappPhone,
   whatsappText,
+  pdfMatchesPrint = false,
 }: {
   paper?: string
   pdfHref?: string
@@ -30,6 +31,7 @@ export function PrintButton({
   defaultBody?: string
   whatsappPhone?: string | null
   whatsappText?: string
+  pdfMatchesPrint?: boolean
 }) {
   return (
     <DocumentActions
@@ -44,6 +46,7 @@ export function PrintButton({
       defaultBody={defaultBody}
       whatsappPhone={whatsappPhone}
       whatsappText={whatsappText}
+      pdfMatchesPrint={pdfMatchesPrint}
     />
   )
 }

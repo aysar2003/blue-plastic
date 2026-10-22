@@ -3,9 +3,9 @@ import Link from 'next/link'
 
 import { DocumentActions } from '@/components/print/document-actions'
 import { DocumentBarcode } from '@/components/print/document-barcode'
-import { SheetMarks } from '@/components/sales/sheet-marks'
-import { FORM_SHEET } from '@/lib/credit-brand'
 import { formatDate, formatDateTime } from '@/lib/date'
+import { accentWash, paperAccent } from '@/lib/document-template'
+import { letterheadOf } from '@/lib/letterhead'
 import { requireOrgContext } from '@/server/auth/context'
 import * as organizationService from '@/server/services/organization.service'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
@@ -13,8 +13,8 @@ import * as salesDelivery from '@/server/services/sales-delivery.service'
 export const metadata = { title: 'Print delivery note' }
 
 /**
- * Customer / carrier facing delivery note — ISO-style packing advice.
- * Browser print / Save as PDF; no headless renderer.
+ * Customer / carrier facing delivery note on the same merchant paper as
+ * invoices — Print and PDF stay one document.
  */
 export default async function PrintDeliveryNotePage({
   params,
@@ -23,19 +23,18 @@ export default async function PrintDeliveryNotePage({
 }) {
   const ctx = await requireOrgContext('invoice:read')
   const { id } = await params
-  const [note, organization] = await Promise.all([
+  const [note, organization, template] = await Promise.all([
     salesDelivery.get(ctx, id).catch(() => null),
     organizationService.get(ctx),
+    organizationService.getDocumentTemplate(ctx),
   ])
   if (!note) notFound()
 
-  const seller = [
-    [organization.addressLine1, organization.addressLine2].filter(Boolean).join(', '),
-    [organization.city, organization.region, organization.postalCode].filter(Boolean).join(' '),
-    organization.country,
-  ].filter(Boolean)
-
+  const company = letterheadOf(organization)
+  const accent = paperAccent(template, 'customer')
+  const wash = accentWash(accent)
   const issued = formatDateTime(new Date(note.issuedAt), organization.timeZone)
+  const filename = `delivery-note-${note.number.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`
   const shareBody = [
     `Delivery note ${note.number}`,
     `Customer: ${note.customerName}`,
@@ -55,7 +54,9 @@ export default async function PrintDeliveryNotePage({
         <DocumentActions
           paper="delivery note"
           backHref={`/sales/delivery/${id}`}
-          filename={`delivery-note-${note.number.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`}
+          pdfHref={`/api/sales/delivery/${id}/pdf`}
+          filename={filename}
+          pdfMatchesPrint
           defaultTo={note.customerEmail ?? ''}
           defaultSubject={`Delivery note ${note.number} from ${organization.name}`}
           defaultBody={shareBody}
@@ -64,157 +65,139 @@ export default async function PrintDeliveryNotePage({
         />
       </div>
 
-      <article className="invoice-sheet relative min-h-[900px] overflow-hidden bg-white text-[#1f1f23] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:min-h-0 print:shadow-none">
-        <div className="px-8 py-4 text-white sm:px-12" style={{ background: FORM_SHEET.band }}>
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-white/80">Delivery note</p>
-          <h1 className="text-xl font-semibold tracking-wide sm:text-2xl">
-            {organization.legalName ?? organization.name}
+      <article
+        className="merchant-invoice relative overflow-hidden bg-white text-[13px] text-[#1f2933] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:overflow-visible print:shadow-none"
+        style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
+      >
+        <div className="flex items-start justify-between gap-6 px-8 pb-4 pt-6">
+          <h1 className="text-3xl font-black tracking-tight" style={{ color: accent }}>
+            {company.name}
           </h1>
-        </div>
-        <SheetMarks />
-
-        <div className="relative px-8 pb-16 pt-10 sm:px-12">
-          <header className="flex flex-wrap items-start justify-between gap-6 border-b border-primary/20 pb-6">
-            <div>
-              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-primary">
-                Delivery note
-              </p>
-              <h1 className="mt-1 text-3xl font-bold tracking-tight tabular">{note.number}</h1>
-              <div className="mt-2">
-                <DocumentBarcode value={note.number} height={40} moduleWidth={1.15} />
-              </div>
-              <p className="mt-1 text-sm text-[#5C6B7A]">
-                {formatDate(note.date)} · {issued}
-              </p>
-            </div>
-            <div className="max-w-xs text-right">
-              <h2 className="text-lg font-bold uppercase tracking-wide">
-                {organization.legalName ?? organization.name}
-              </h2>
-              {seller.map((line) => (
-                <p key={line} className="text-sm text-[#5C6B7A]">
-                  {line}
-                </p>
-              ))}
-              {organization.phone ? <p className="text-sm text-[#5C6B7A]">Phone {organization.phone}</p> : null}
-            </div>
-          </header>
-
-          <div className="mt-8 grid gap-6 sm:grid-cols-2">
-            <section>
-              <h3 className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary">
-                Deliver to
-              </h3>
-              <p className="mt-2 text-base font-semibold">{note.customerName}</p>
-              {note.shipping.map((line) => (
-                <p key={line} className="text-sm text-[#5C6B7A]">
-                  {line}
-                </p>
-              ))}
-              {note.customerPhone ? <p className="mt-1 text-sm">Tel. {note.customerPhone}</p> : null}
-            </section>
-            <section className="sm:text-right">
-              <h3 className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary">
-                References
-              </h3>
-              <p className="mt-2 text-sm">
-                Sale <span className="font-semibold tabular">{note.salesNumber}</span>
-              </p>
-              {note.storeName ? (
-                <p className="text-sm text-[#5C6B7A]">From store {note.storeName}</p>
-              ) : null}
-              {note.carrier ? (
-                <p className="mt-1 text-sm">
-                  Carrier <span className="font-medium">{note.carrier}</span>
-                </p>
-              ) : null}
-            </section>
+          <div className="text-right text-[11px] leading-5 text-[#3d4c5c]">
+            {company.phone ? <p>TEL: {company.phone}</p> : null}
+            {company.email ? <p>EMAIL: {company.email}</p> : null}
+            {company.address ? <p>ADDR: {company.address}</p> : null}
           </div>
-
-          <table className="mt-8 w-full border-collapse text-sm">
-            <thead>
-              <tr
-                className="text-left text-[0.65rem] font-semibold uppercase tracking-wider text-white"
-                style={{ background: FORM_SHEET.band }}
-              >
-                <th className="px-3 py-2.5">#</th>
-                <th className="px-3 py-2.5">Item / description</th>
-                <th className="px-3 py-2.5">Store</th>
-                <th className="px-3 py-2.5 text-right">Qty</th>
-                <th className="px-3 py-2.5">Ticket</th>
-              </tr>
-            </thead>
-            <tbody>
-              {note.lines.map((line, index) => (
-                <tr
-                  key={line.lineNumber}
-                  className={index % 2 === 1 ? 'bg-[#eef5f9]' : 'bg-white'}
-                >
-                  <td className="border-b border-[#d5dde6] px-3 py-2 tabular text-[#5C6B7A]">
-                    {line.lineNumber}
-                  </td>
-                  <td className="border-b border-[#d5dde6] px-3 py-2">
-                    <div className="font-medium">{line.itemName ?? line.description ?? '—'}</div>
-                    {line.itemName && line.description && line.description !== line.itemName ? (
-                      <div className="text-xs text-[#5C6B7A]">{line.description}</div>
-                    ) : null}
-                  </td>
-                  <td className="border-b border-[#d5dde6] px-3 py-2 text-[#5C6B7A]">
-                    {line.storeName ?? '—'}
-                  </td>
-                  <td className="border-b border-[#d5dde6] px-3 py-2 text-right tabular font-medium">
-                    {line.quantity}
-                  </td>
-                  <td className="border-b border-[#d5dde6] px-3 py-2 tabular text-[#5C6B7A]">
-                    {line.ticketNumber ?? '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {(note.notes || note.carrier) && (
-            <section className="mt-8 rounded-lg border border-dashed border-[#3A7CA8]/40 bg-[#f4f9fc] px-4 py-3">
-              <h3 className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-[#3A7CA8]">
-                Notes / instructions
-              </h3>
-              {note.carrier ? (
-                <p className="mt-1 text-sm">
-                  <span className="font-medium">Carrier:</span> {note.carrier}
-                </p>
-              ) : null}
-              {note.notes ? (
-                <p className="mt-1 whitespace-pre-wrap text-sm text-[#1B3A4B]">{note.notes}</p>
-              ) : null}
-            </section>
-          )}
-
-          <footer className="mt-12 grid gap-8 sm:grid-cols-2">
-            <div className="border-t border-[#1B3A4B]/25 pt-3">
-              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-[#5C6B7A]">
-                Dispatched by
-              </p>
-              <div className="mt-8 h-px bg-[#1B3A4B]/30" />
-              <p className="mt-1 text-xs text-[#5C6B7A]">Name / signature</p>
-            </div>
-            <div className="border-t border-[#1B3A4B]/25 pt-3">
-              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-[#5C6B7A]">
-                Received by
-              </p>
-              <div className="mt-8 h-px bg-[#1B3A4B]/30" />
-              <p className="mt-1 text-xs text-[#5C6B7A]">Name / signature / date</p>
-            </div>
-          </footer>
-
-          <p className="mt-10 text-center text-[0.7rem] text-[#5C6B7A]">
-            This delivery note accompanies goods for sale{' '}
-            <Link href={`/sales/delivery/${id}`} className="underline print:no-underline">
-              {note.salesNumber}
-            </Link>
-            . It is not a tax invoice.
-          </p>
         </div>
+
+        <div className="grid gap-6 px-8 sm:grid-cols-[minmax(0,1fr)_16rem]">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>
+              Deliver to
+            </p>
+            <p className="mt-1 text-sm font-semibold">{note.customerName}</p>
+            <dl className="mt-3 grid grid-cols-[7.5rem_minmax(0,1fr)] gap-y-1 text-[12px]">
+              {note.shipping.map((line) => (
+                <Meta key={line} label="Address" value={line} />
+              ))}
+              <Meta label="Phone" value={note.customerPhone || '—'} />
+            </dl>
+          </div>
+          <div className="text-right">
+            <p className="text-lg font-black tracking-wide" style={{ color: accent }}>
+              DELIVERY NOTE
+            </p>
+            <p className="mt-1 font-semibold">{note.number}</p>
+            <div className="mt-2 flex justify-end">
+              <DocumentBarcode value={note.number} height={40} moduleWidth={1.15} />
+            </div>
+            <p className="mt-3 text-[11px] font-bold uppercase tracking-wide" style={{ color: accent }}>
+              Date
+            </p>
+            <p>
+              {formatDate(note.date)} · {issued}
+            </p>
+            <p className="mt-2 text-sm">
+              Sale <span className="font-semibold tabular">{note.salesNumber}</span>
+            </p>
+            {note.storeName ? (
+              <p className="text-sm text-[#5C6B7A]">From store {note.storeName}</p>
+            ) : null}
+            {note.carrier ? (
+              <p className="mt-1 text-sm">
+                Carrier <span className="font-medium">{note.carrier}</span>
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mx-8 mt-6">
+          <div
+            className="grid grid-cols-[2rem_minmax(0,1fr)_7rem_5rem_6rem] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white"
+            style={{ background: accent }}
+          >
+            <span>No</span>
+            <span>Item / description</span>
+            <span>Store</span>
+            <span className="text-right">Qty</span>
+            <span className="text-right">Ticket</span>
+          </div>
+          {note.lines.map((line, index) => (
+            <div
+              key={line.lineNumber}
+              className="grid grid-cols-[2rem_minmax(0,1fr)_7rem_5rem_6rem] items-center px-2 py-1.5 text-[12px]"
+              style={{ background: index % 2 === 0 ? '#ffffff' : wash }}
+            >
+              <span className="tabular text-[#5C6B7A]">{line.lineNumber}</span>
+              <span className="pr-2">
+                <span className="font-medium">{line.itemName ?? line.description ?? '—'}</span>
+                {line.itemName && line.description && line.description !== line.itemName ? (
+                  <span className="mt-0.5 block text-[11px] text-[#5C6B7A]">{line.description}</span>
+                ) : null}
+              </span>
+              <span className="text-[#5C6B7A]">{line.storeName ?? '—'}</span>
+              <span className="tabular text-right font-medium">{line.quantity}</span>
+              <span className="tabular text-right text-[#5C6B7A]">{line.ticketNumber ?? '—'}</span>
+            </div>
+          ))}
+        </div>
+
+        {note.notes || note.carrier ? (
+          <div className="mx-8 mt-6 border border-dashed px-4 py-3" style={{ borderColor: `${accent}66` }}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>
+              Notes / instructions
+            </p>
+            {note.carrier ? (
+              <p className="mt-1 text-sm">
+                <span className="font-medium">Carrier:</span> {note.carrier}
+              </p>
+            ) : null}
+            {note.notes ? (
+              <p className="mt-1 whitespace-pre-wrap text-sm text-[#3d4c5c]">{note.notes}</p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-10 grid break-inside-avoid gap-8 px-8 sm:grid-cols-2">
+          <div className="border-t border-[#d1d5db] pt-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#5C6B7A]">Dispatched by</p>
+            <div className="mt-8 h-px bg-[#d1d5db]" />
+            <p className="mt-1 text-xs text-[#5C6B7A]">Name / signature</p>
+          </div>
+          <div className="border-t border-[#d1d5db] pt-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#5C6B7A]">Received by</p>
+            <div className="mt-8 h-px bg-[#d1d5db]" />
+            <p className="mt-1 text-xs text-[#5C6B7A]">Name / signature / date</p>
+          </div>
+        </div>
+
+        <p className="mt-8 px-8 pb-6 text-center text-[11px] text-[#5C6B7A]">
+          This delivery note accompanies goods for sale{' '}
+          <Link href={`/sales/delivery/${id}`} className="underline print:no-underline">
+            {note.salesNumber}
+          </Link>
+          . It is not a tax invoice.
+        </p>
       </article>
     </div>
+  )
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <dt className="text-[#5C6B7A]">{label}</dt>
+      <dd>{value}</dd>
+    </>
   )
 }

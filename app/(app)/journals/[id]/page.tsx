@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
-import { ApprovalTrailPanel } from '@/components/approvals/approval-trail-panel'
+import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { DeleteButton } from '@/components/data/delete-record'
 import { DocumentAttachments } from '@/components/data/document-attachments'
 import { PageHeader } from '@/components/data/page-header'

@@ -50,6 +50,11 @@ export type PdfRow = {
   barcode?: PdfBarcode
   /** Force the next rows onto a new page (invoice-by-invoice packs). */
   pageBreak?: boolean
+  /**
+   * Rows that share a keepId stay on one page (subtotal → grand total).
+   * If the block will not fit, the whole block moves to the next page.
+   */
+  keepId?: string
 }
 
 /** US Letter. Shared gutters so every paper lines up. */
@@ -83,7 +88,8 @@ export function buildTextPdf(
   const pages: PdfRow[][] = []
   let current: PdfRow[] = []
   let y = top - headerHeight
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!
     if (row.pageBreak) {
       if (current.length > 0) {
         pages.push(current)
@@ -92,14 +98,25 @@ export function buildTextPdf(
       }
       continue
     }
-    const rowHeight = row.height ?? 14
-    if (y - rowHeight < bottom && current.length > 0) {
+
+    const block = [row]
+    let blockHeight = row.height ?? 14
+    if (row.keepId) {
+      while (i + 1 < rows.length && rows[i + 1]?.keepId === row.keepId && !rows[i + 1]?.pageBreak) {
+        i += 1
+        const next = rows[i]!
+        block.push(next)
+        blockHeight += next.height ?? 14
+      }
+    }
+
+    if (y - blockHeight < bottom && current.length > 0) {
       pages.push(current)
       current = []
       y = top - headerHeight
     }
-    current.push(row)
-    y -= rowHeight
+    current.push(...block)
+    y -= blockHeight
   }
   if (current.length > 0 || pages.length === 0) pages.push(current)
 
@@ -177,7 +194,7 @@ function pageStream(rows: PdfRow[], pageWidth: number, top: number, ink: PrintIn
           align === 'center'
             ? centeredX(run.text, size, pageWidth)
             : align === 'right'
-              ? rightAlignedX(run.text, size, run.x ?? PDF_PAGE.right)
+              ? rightAlignedX(run.text, size, run.x ?? PDF_PAGE.right, Boolean(run.bold))
               : (run.x ?? PDF_PAGE.left)
         if (run.color) {
           const [r, g, b] = paint(run.color)
@@ -256,17 +273,20 @@ export function pdfBarcodeRow(
   }
 }
 
-/** Helvetica is about half an em wide — close enough for layout. */
-function approxWidth(text: string, size: number) {
-  return pdfText(text).length * size * 0.5
+/**
+ * Helvetica advance width. Bold is wider — underestimating clips right-aligned
+ * labels (e.g. status "OPEN" → "OPE" against the page edge).
+ */
+export function approxWidth(text: string, size: number, bold = false) {
+  return pdfText(text).length * size * (bold ? 0.62 : 0.5)
 }
 
 function centeredX(text: string, size: number, pageWidth: number) {
   return Math.max(24, Math.round((pageWidth - approxWidth(text, size)) / 2))
 }
 
-function rightAlignedX(text: string, size: number, rightEdge: number) {
-  return Math.max(PDF_PAGE.left, Math.round(rightEdge - approxWidth(text, size)))
+function rightAlignedX(text: string, size: number, rightEdge: number, bold = false) {
+  return Math.max(PDF_PAGE.left, Math.round(rightEdge - approxWidth(text, size, bold)))
 }
 
 function pdfText(value: string): string {

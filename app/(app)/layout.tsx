@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { AppShell } from '@/components/layout/app-shell'
 import { withDatabasePage } from '@/lib/page-guard'
 import { getOrgContext } from '@/server/auth/context'
-import { listUserDatabases } from '@/server/services/backup-import.service'
+import { listSwitchableCompanies } from '@/server/services/backup-import.service'
 import { canViewGroupReports } from '@/server/services/company-group.service'
 import { balanceAlertsSlot, calendarAlertsSlot, stockAlertsSlot } from './shell-alerts'
 
@@ -18,9 +18,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     if (ctx.role === 'CUSTOMER') redirect('/portal')
 
     const canSwitch = ctx.isSystemOwner || ctx.canConnect
+    // Light switcher list only — File size estimates stay on /databases.
     const [showCompanyReports, databases] = await Promise.all([
       canViewGroupReports(ctx),
-      canSwitch ? listUserDatabases(ctx) : Promise.resolve([]),
+      canSwitch ? listSwitchableCompanies(ctx) : Promise.resolve([]),
     ])
 
     // Month P&L chart lives on /reports only (see reports/page.tsx). Loading it

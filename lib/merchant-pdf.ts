@@ -101,14 +101,19 @@ export function merchantPdfTableHead(
   }
 }
 
+/** Right-column totals only — same band width as MerchantInvoice print. */
+const TOTAL_FROM = 360
+
 export function merchantPdfTotalBand(label: string, value: string, accent: PdfRgb): PdfRow {
   return {
     size: 10,
     height: 16,
     fill: accent,
-    fillInset: 0,
+    fillFrom: TOTAL_FROM,
+    fillTo: PDF_PAGE.right + 0,
+    // Extend a hair past the content edge so the band meets the page margin look.
     runs: [
-      { text: label.toUpperCase(), x: PDF_PAGE.left + 280, bold: true, color: WHITE },
+      { text: label.toUpperCase(), x: TOTAL_FROM + 8, bold: true, color: WHITE },
       { text: value, x: PDF_PAGE.right, align: 'right', bold: true, color: WHITE },
     ],
   }

@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { PencilIcon } from 'lucide-react'
 
-import { ApprovalTrailPanel } from '@/components/approvals/approval-trail-panel'
+import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { DeleteButton } from '@/components/data/delete-record'
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
