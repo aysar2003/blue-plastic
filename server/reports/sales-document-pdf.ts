@@ -79,6 +79,8 @@ export type SalesDocumentPdfInput = {
   paper?: 'customer' | 'vendor'
   /** Who entered the document — same line as MerchantInvoice print. */
   createdByName?: string | null
+  /** Meta field ids hidden via Paper details customize (same as on-screen print). */
+  hiddenMeta?: string[] | null
 }
 
 /** Column edges matching the merchant print sheet (No / Item / Qty / Rate / Amount). */
@@ -203,26 +205,40 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   const numberBarcode = pdfBarcodeRow(input.number, { align: 'right', height: 40 })
   if (numberBarcode) rows.push(numberBarcode)
 
+  const hiddenMeta = new Set(input.hiddenMeta ?? [])
+  const showMeta = (id: string) => !hiddenMeta.has(id)
   const metaLeft: { label: string; value: string }[] = []
-  if (input.reference?.trim()) metaLeft.push({ label: words.reference, value: input.reference.trim() })
-  if (!proposal && due) metaLeft.push({ label: 'Due date', value: formatDate(due) })
-  if (!proposal && input.paymentTerm?.trim()) {
+  if (showMeta('reference') && input.reference?.trim()) {
+    metaLeft.push({ label: words.reference, value: input.reference.trim() })
+  }
+  if (showMeta('dueDate') && !proposal && due) {
+    metaLeft.push({ label: 'Due date', value: formatDate(due) })
+  }
+  if (showMeta('payment') && !proposal && input.paymentTerm?.trim()) {
     metaLeft.push({ label: 'Payment', value: input.paymentTerm.trim() })
   }
-  if (addressLine) metaLeft.push({ label: 'Address', value: addressLine })
-  if (input.customerPhone?.trim()) metaLeft.push({ label: 'Phone', value: input.customerPhone.trim() })
-  if (!proposal && input.reference?.trim()) {
+  if (showMeta('address') && addressLine) metaLeft.push({ label: 'Address', value: addressLine })
+  if (showMeta('phone') && input.customerPhone?.trim()) {
+    metaLeft.push({ label: 'Phone', value: input.customerPhone.trim() })
+  }
+  if (showMeta('order') && !proposal && input.reference?.trim()) {
     metaLeft.push({ label: words.order, value: input.reference.trim() })
   }
-  if (input.createdByName?.trim()) metaLeft.push({ label: words.person, value: input.createdByName.trim() })
-  if (input.workSite?.trim()) metaLeft.push({ label: 'Work site', value: input.workSite.trim() })
-  if (input.workScope?.trim()) {
+  if (showMeta('person') && input.createdByName?.trim()) {
+    metaLeft.push({ label: words.person, value: input.createdByName.trim() })
+  }
+  if (showMeta('workSite') && input.workSite?.trim()) {
+    metaLeft.push({ label: 'Work site', value: input.workSite.trim() })
+  }
+  if (showMeta('workScope') && input.workScope?.trim()) {
     metaLeft.push({
       label: 'Work / job',
       value: `${input.workScope.trim()} · Client: ${input.customerName}`,
     })
   }
-  if (input.customerEmail?.trim()) metaLeft.push({ label: 'Email', value: input.customerEmail.trim() })
+  if (showMeta('email') && input.customerEmail?.trim()) {
+    metaLeft.push({ label: 'Email', value: input.customerEmail.trim() })
+  }
 
   type RightCell = {
     text: string
@@ -406,7 +422,10 @@ export function salesDetailToPdfInput(
     timeZone?: string | null
   },
   extras: Partial<
-    Pick<SalesDocumentPdfInput, 'hideAccountBalance' | 'previousQuotationsTotal' | 'partyLabel' | 'paper' | 'title'>
+    Pick<
+      SalesDocumentPdfInput,
+      'hideAccountBalance' | 'previousQuotationsTotal' | 'partyLabel' | 'paper' | 'title' | 'hiddenMeta'
+    >
   > = {},
 ): SalesDocumentPdfInput {
   const title = extras.title ?? paperTitle(document.type)
@@ -415,6 +434,7 @@ export function salesDetailToPdfInput(
     timeZone: shared.timeZone ?? undefined,
     title,
     documentType: document.type,
+    hiddenMeta: extras.hiddenMeta,
     number: document.number,
     date: document.date,
     createdAt: document.createdAt,

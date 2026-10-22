@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { letterheadOf } from '@/lib/letterhead'
+import { parsePaperMetaHidden } from '@/lib/paper-meta-fields'
 import { parsePrintInk } from '@/lib/print-ink'
 import { byType } from '@/lib/sales-types'
 import { getOrgContext } from '@/server/auth/context'
@@ -22,7 +23,9 @@ export async function GET(
     const ctx = await getOrgContext()
     if (!ctx) throw unauthenticated()
 
-    const ink = parsePrintInk(new URL(request.url).searchParams.get('ink'))
+    const query = new URL(request.url).searchParams
+    const ink = parsePrintInk(query.get('ink'))
+    const hiddenMeta = parsePaperMetaHidden(query.get('meta'))
 
     const [document, org, template] = await Promise.all([
       salesService.get(ctx, id),
@@ -45,6 +48,7 @@ export async function GET(
       orgPhone: company.phone,
       orgEmail: company.email,
       title: config.singular,
+      documentType: document.type,
       number: document.number,
       date: document.date,
       createdAt: document.createdAt,
@@ -65,6 +69,7 @@ export async function GET(
       workSite: document.workSite || document.project?.siteLocation || null,
       status: document.status,
       createdByName: document.createdByName,
+      hiddenMeta,
       currency,
       lines: document.lines.map((line) => ({
         quantity: line.quantity,

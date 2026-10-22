@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { letterheadOf } from '@/lib/letterhead'
+import { parsePaperMetaHidden } from '@/lib/paper-meta-fields'
 import { parsePrintInk } from '@/lib/print-ink'
 import { isProposal, bySlug } from '@/lib/sales-types'
 import { getOrgContext } from '@/server/auth/context'
@@ -28,6 +29,7 @@ export async function GET(
 
     const url = new URL(request.url)
     const ink = parsePrintInk(url.searchParams.get('ink'))
+    const hiddenMeta = parsePaperMetaHidden(url.searchParams.get('meta'))
     const [documents, org, template] = await Promise.all([
       loadSalesPack(ctx, config.type, url.searchParams),
       organizationService.get(ctx),
@@ -47,7 +49,9 @@ export async function GET(
     const bytes = renderDocumentPackPdf({
       ink,
       runningTotals: isProposal(config.type),
-      documents: documents.map((document) => salesDetailToPdfInput(document, shared)),
+      documents: documents.map((document) =>
+        salesDetailToPdfInput(document, shared, { hiddenMeta }),
+      ),
     })
 
     return new NextResponse(Buffer.from(bytes), {

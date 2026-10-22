@@ -1,7 +1,8 @@
 'use client'
 
-import { useSyncExternalStore } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 
+import { TableColumnCustomize } from '@/components/data/table-column-customize'
 import { DocumentAccountFooter } from '@/components/sales/document-account-footer'
 import { DocumentBarcode } from '@/components/print/document-barcode'
 import { longDate, type SheetDocument } from '@/components/sales/invoice-sheet'
@@ -9,6 +10,10 @@ import { accentWash, paperAccent, type DocumentTemplate } from '@/lib/document-t
 import { letterheadOf, type LetterheadSource } from '@/lib/letterhead'
 import { toCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
+import {
+  PAPER_META_STORAGE_KEY,
+  type PaperMetaFieldId,
+} from '@/lib/paper-meta-fields'
 import { hasPreviousQuotations } from '@/lib/project-quotations'
 import {
   isProposal,
@@ -16,6 +21,7 @@ import {
   paperShowsMoneyStatus,
   STATUS_LABELS,
 } from '@/lib/sales-types'
+import { useTableColumnPrefs } from '@/lib/use-table-column-prefs'
 
 /** Cached so getSnapshot stays referentially stable (React forbids a fresh value each read). */
 let clientNowLabel: string | null = null
@@ -139,6 +145,82 @@ export function MerchantInvoice({
   const proposal = isProposal(config.type)
   const printedOn = useClientNowLabel()
 
+  const metaCatalog = useMemo(
+    () => [
+      { id: 'reference' as const, label: label.reference },
+      { id: 'dueDate' as const, label: 'Due date' },
+      { id: 'payment' as const, label: 'Payment' },
+      { id: 'address' as const, label: 'Address' },
+      { id: 'phone' as const, label: 'Phone' },
+      { id: 'order' as const, label: label.order },
+      { id: 'person' as const, label: label.person },
+      { id: 'workSite' as const, label: 'Work site' },
+      { id: 'workScope' as const, label: 'Work / job' },
+      { id: 'email' as const, label: 'Email' },
+    ],
+    [label.order, label.person, label.reference],
+  )
+  const { prefs, toggle, reorder } = useTableColumnPrefs(PAPER_META_STORAGE_KEY, metaCatalog)
+
+  const metaRows = useMemo(() => {
+    const workSite = document.workSite || document.project?.siteLocation || ''
+    const available: { id: PaperMetaFieldId; label: string; value: string }[] = []
+    if (document.reference) {
+      available.push({ id: 'reference', label: label.reference, value: document.reference })
+    }
+    if (!proposal && document.dueDate) {
+      available.push({
+        id: 'dueDate',
+        label: 'Due date',
+        value: longDate(toCalendarDate(document.dueDate)),
+      })
+    }
+    if (!proposal && document.paymentTerm?.name) {
+      available.push({ id: 'payment', label: 'Payment', value: document.paymentTerm.name })
+    }
+    if (address) available.push({ id: 'address', label: 'Address', value: address })
+    if (customer.phone) available.push({ id: 'phone', label: 'Phone', value: customer.phone })
+    if (!proposal && document.reference) {
+      available.push({ id: 'order', label: label.order, value: document.reference })
+    }
+    if (document.createdByName) {
+      available.push({ id: 'person', label: label.person, value: document.createdByName })
+    }
+    if (workSite) available.push({ id: 'workSite', label: 'Work site', value: workSite })
+    if (document.workScope) {
+      available.push({
+        id: 'workScope',
+        label: 'Work / job',
+        value: `${document.workScope} · Client: ${customer.displayName}`,
+      })
+    }
+    if (customer.email) available.push({ id: 'email', label: 'Email', value: customer.email })
+
+    const byId = new Map(available.map((row) => [row.id, row]))
+    return prefs.order
+      .filter((id) => !prefs.hidden.includes(id))
+      .map((id) => byId.get(id as PaperMetaFieldId))
+      .filter((row): row is { id: PaperMetaFieldId; label: string; value: string } => Boolean(row))
+  }, [
+    address,
+    customer.displayName,
+    customer.email,
+    customer.phone,
+    document.createdByName,
+    document.dueDate,
+    document.paymentTerm?.name,
+    document.project?.siteLocation,
+    document.reference,
+    document.workScope,
+    document.workSite,
+    label.order,
+    label.person,
+    label.reference,
+    prefs.hidden,
+    prefs.order,
+    proposal,
+  ])
+
   // Account running figure: Previous + Debit − Credit (payment / customer credit).
   const prior = previousBalance != null && previousBalance !== '' ? new Decimal(previousBalance) : ZERO
   const debit = new Decimal(document.total)
@@ -154,6 +236,17 @@ export function MerchantInvoice({
       className="merchant-invoice relative overflow-hidden bg-white text-[13px] text-[#1f2933] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:overflow-visible print:shadow-none"
       style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
     >
+      <div className="mb-2 flex justify-end px-8 print:hidden">
+        <TableColumnCustomize
+          columns={metaCatalog}
+          prefs={prefs}
+          onToggle={toggle}
+          onReorder={reorder}
+          title="Paper details"
+          description="Show or hide Bill to lines — Sales person, address, work site, and the rest. Drag to change order."
+          showAllLabel="Show all details"
+        />
+      </div>
       <div className="flex items-start justify-between gap-6 px-8 pb-4 pt-6">
         <div>
           <h1 className="text-3xl font-black tracking-tight" style={{ color: accent }}>
@@ -174,25 +267,9 @@ export function MerchantInvoice({
           </p>
           <p className="mt-1 text-sm font-semibold">{customer.displayName}</p>
           <dl className="mt-3 grid grid-cols-[7.5rem_minmax(0,1fr)] gap-y-1 text-[12px]">
-            {document.reference ? <Meta label={label.reference} value={document.reference} /> : null}
-            {!proposal && document.dueDate ? (
-              <Meta label="Due date" value={longDate(toCalendarDate(document.dueDate))} />
-            ) : null}
-            {!proposal && document.paymentTerm?.name ? (
-              <Meta label="Payment" value={document.paymentTerm.name} />
-            ) : null}
-            {address ? <Meta label="Address" value={address} /> : null}
-            {customer.phone ? <Meta label="Phone" value={customer.phone} /> : null}
-            {!proposal && document.reference ? (
-              <Meta label={label.order} value={document.reference} />
-            ) : null}
-            {document.createdByName ? <Meta label={label.person} value={document.createdByName} /> : null}
-            {document.workSite || document.project?.siteLocation ? (
-              <Meta label="Work site" value={document.workSite || document.project?.siteLocation || ''} />
-            ) : null}
-            {document.workScope ? (
-              <Meta label="Work / job" value={`${document.workScope} · Client: ${customer.displayName}`} />
-            ) : null}
+            {metaRows.map((row) => (
+              <Meta key={row.id} label={row.label} value={row.value} />
+            ))}
           </dl>
         </div>
         <div className="text-right">

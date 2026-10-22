@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { readStoredPaperMetaHidden, withPaperMetaHidden } from '@/lib/paper-meta-fields'
 import { readStoredPrintInk, withPrintInk } from '@/lib/print-ink'
 
 /**
@@ -79,7 +80,9 @@ export function DocumentActions({
     try {
       if (pdfHref) {
         const ink = readStoredPrintInk()
-        const response = await fetch(withPrintInk(pdfHref, ink))
+        const response = await fetch(
+          withPaperMetaHidden(withPrintInk(pdfHref, ink), readStoredPaperMetaHidden()),
+        )
         if (!response.ok) {
           setNote('The PDF could not be prepared.')
           return

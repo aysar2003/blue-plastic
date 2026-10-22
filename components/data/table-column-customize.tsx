@@ -22,12 +22,18 @@ export function TableColumnCustomize({
   onToggle,
   onReorder,
   className,
+  title = 'Customize',
+  description = 'Drag to change column order. Check columns you want to see.',
+  showAllLabel = 'Show all columns',
 }: {
   columns: CustomizeColumn[]
   prefs: ColumnPrefs
   onToggle: (id: string) => void
   onReorder: (from: string, to: string) => void
   className?: string
+  title?: string
+  description?: string
+  showAllLabel?: string
 }) {
   const [open, setOpen] = useState(false)
   const [dragId, setDragId] = useState<string | null>(null)
@@ -62,8 +68,8 @@ export function TableColumnCustomize({
           )}
         >
           <DialogHeader className="shrink-0">
-            <DialogTitle>Customize</DialogTitle>
-            <DialogDescription>Drag to change column order. Check columns you want to see.</DialogDescription>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           <div className="mb-3 flex shrink-0 flex-wrap gap-2">
             <Button
@@ -76,7 +82,7 @@ export function TableColumnCustomize({
                 }
               }}
             >
-              Show all columns
+              {showAllLabel}
             </Button>
           </div>
           <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">

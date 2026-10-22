@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { readStoredPaperMetaHidden, withPaperMetaHidden } from '@/lib/paper-meta-fields'
 import {
   printWithInk,
   rememberPrintInk,
@@ -101,7 +102,7 @@ export function PdfInkMenu({
       else printWithInk(ink)
       return
     }
-    const href = withPrintInk(pdfHref, ink)
+    const href = withPaperMetaHidden(withPrintInk(pdfHref, ink), readStoredPaperMetaHidden())
     const anchor = document.createElement('a')
     anchor.href = href
     if (filename) anchor.download = filename
