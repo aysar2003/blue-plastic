@@ -505,17 +505,51 @@ export async function customerChoices(ctx: OrgContext) {
 
 /** The document before and after this one, in date then number order. A new form sits after the last. */
 export async function neighbors(ctx: OrgContext, type: SalesDocumentType, currentId: string | null) {
-  const rows = await db.salesDocument.findMany({
-    where: { orgId: ctx.orgId, type, deletedAt: null },
-    select: { id: true, number: true },
-    orderBy: [{ date: 'asc' }, { number: 'asc' }],
-  })
-  const index = currentId == null ? rows.length : rows.findIndex((row) => row.id === currentId)
-  const place = index < 0 ? rows.length : index
-  return {
-    previous: place > 0 ? rows[place - 1]! : null,
-    next: place < rows.length - 1 ? rows[place + 1]! : null,
+  const base = { orgId: ctx.orgId, type, deletedAt: null as null }
+  const pick = { id: true, number: true } as const
+
+  if (currentId == null) {
+    const previous = await db.salesDocument.findFirst({
+      where: base,
+      select: pick,
+      orderBy: [{ date: 'desc' }, { number: 'desc' }],
+    })
+    return { previous, next: null }
   }
+
+  const current = await db.salesDocument.findFirst({
+    where: { ...base, id: currentId },
+    select: { id: true, number: true, date: true },
+  })
+  if (!current) return { previous: null, next: null }
+
+  // Same order as the register: date asc, then number asc — two keyed lookups, not the whole list.
+  const before = {
+    OR: [
+      { date: { lt: current.date } },
+      { date: current.date, number: { lt: current.number } },
+    ],
+  }
+  const after = {
+    OR: [
+      { date: { gt: current.date } },
+      { date: current.date, number: { gt: current.number } },
+    ],
+  }
+
+  const [previous, next] = await Promise.all([
+    db.salesDocument.findFirst({
+      where: { ...base, ...before },
+      select: pick,
+      orderBy: [{ date: 'desc' }, { number: 'desc' }],
+    }),
+    db.salesDocument.findFirst({
+      where: { ...base, ...after },
+      select: pick,
+      orderBy: [{ date: 'asc' }, { number: 'asc' }],
+    }),
+  ])
+  return { previous, next }
 }
 
 /** Receipts matching a number, a date, an amount, or the latest ones when nothing is typed. */

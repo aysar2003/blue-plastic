@@ -13,6 +13,9 @@ import * as projectService from '@/server/services/project.service'
 import * as salesService from '@/server/services/sales.service'
 import * as storeService from '@/server/services/store.service'
 
+/** Form options + stock for a large catalogue exceed the default 10s hobby limit. */
+export const maxDuration = 60
+
 export async function generateMetadata({
   params,
 }: {
@@ -39,7 +42,7 @@ export default async function NewSalesDocumentPage({
     byItem: {} as Awaited<ReturnType<typeof storeService.quantities>>['byItem'],
   }
   const [options, query, documentNumber, neighbors, shelf, openSources] = await Promise.all([
-    loadFormOptions(ctx),
+    loadFormOptions(ctx, { includeOnHand: false }),
     searchParams,
     peekDocumentNumber(db, ctx.orgId, config.type),
     salesService.neighbors(ctx, config.type, null),

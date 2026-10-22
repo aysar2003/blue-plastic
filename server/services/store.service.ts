@@ -182,7 +182,10 @@ export async function quantities(ctx: OrgContext): Promise<{ stores: StoreColumn
   const officeId = stores.find((store) => store.isOffice)?.id ?? ''
   const groups = await db.inventoryTransaction.groupBy({
     by: ['itemId', 'storeId'],
-    where: { orgId: ctx.orgId },
+    where: {
+      orgId: ctx.orgId,
+      item: { isActive: true, type: { in: ['INVENTORY', 'INVENTORY_ASSEMBLY'] } },
+    },
     _sum: { quantity: true },
   })
   const byItem = foldStoreQuantities(

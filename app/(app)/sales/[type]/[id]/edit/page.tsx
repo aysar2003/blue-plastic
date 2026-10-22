@@ -13,6 +13,9 @@ import * as storeService from '@/server/services/store.service'
 
 export const metadata: Metadata = { title: 'Edit document' }
 
+/** Form options + stock for a large catalogue exceed the default 10s hobby limit. */
+export const maxDuration = 60
+
 /**
  * Editing a posted document.
  *
@@ -34,11 +37,15 @@ export default async function EditSalesDocumentPage({
   if (!config) notFound()
 
   const ctx = await requireOrgContext('invoice:update')
+  const emptyShelf = {
+    stores: [] as Awaited<ReturnType<typeof storeService.quantities>>['stores'],
+    byItem: {} as Awaited<ReturnType<typeof storeService.quantities>>['byItem'],
+  }
   const [document, options, neighbors, shelf] = await Promise.all([
     salesService.get(ctx, id),
-    loadFormOptions(ctx),
+    loadFormOptions(ctx, { includeOnHand: false }),
     salesService.neighbors(ctx, config.type, id),
-    storeService.quantities(ctx),
+    storeService.quantities(ctx).catch(() => emptyShelf),
   ])
 
   if (document.type !== config.type) notFound()

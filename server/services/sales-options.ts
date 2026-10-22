@@ -14,7 +14,16 @@ import { listForPicker as listProjects } from '@/server/services/project.service
  * Fetched on the server and passed down as props: the form is interactive, but
  * it is not a place to discover what exists.
  */
-export async function loadFormOptions(ctx: OrgContext) {
+/**
+ * @param options.includeOnHand — company-total qty on each inventory item. Skip
+ * when the page already loads store shelves (`storeService.quantities`); that
+ * duplicate scan was pushing edit/new past Vercel's 10s limit.
+ */
+export async function loadFormOptions(
+  ctx: OrgContext,
+  options: { includeOnHand?: boolean } = {},
+) {
+  const includeOnHand = options.includeOnHand !== false
   const [customers, items, taxCodes, chart, terms, projects] = await Promise.all([
     db.customer.findMany({
       where: { orgId: ctx.orgId, isActive: true },
@@ -40,14 +49,15 @@ export async function loadFormOptions(ctx: OrgContext) {
     }),
     // Every item the business sells, tracked stock included. Leaving inventory
     // items out of the picker is what made them unsellable.
+    // BOM members only for GROUP rows — loading them on every item doubled the query.
     db.item.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: {
         id: true, name: true, sku: true, barcode: true, salesPrice: true, type: true,
         unitOfMeasure: true,
         salesDescription: true, description: true, salesTaxCodeId: true,
-        // GROUP members — expanded onto the form when the group is chosen.
         bomParents: {
+          where: { parent: { type: 'GROUP' } },
           orderBy: { sortOrder: 'asc' },
           select: {
             quantity: true,
@@ -76,7 +86,9 @@ export async function loadFormOptions(ctx: OrgContext) {
       },
       orderBy: { name: 'asc' },
     }),
-    selectableAccounts(ctx, { withBalances: true }),
+    // No ledger balances here — the form only needs the account list, and
+    // balancesAsOf across the whole chart is what made edit/new time out on Vercel.
+    selectableAccounts(ctx, { withBalances: false }),
     db.paymentTerm.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: { id: true, name: true, type: true, dueDays: true },
@@ -87,8 +99,14 @@ export async function loadFormOptions(ctx: OrgContext) {
 
   // Stock on hand, so choosing a tracked item on an invoice line shows what is
   // actually there rather than being discovered at posting time.
-  const trackedIds = items.filter((item) => item.type === 'INVENTORY').map((item) => item.id)
-  const positions = await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
+  const trackedIds = includeOnHand
+    ? items
+        .filter((item) => item.type === 'INVENTORY' || item.type === 'INVENTORY_ASSEMBLY')
+        .map((item) => item.id)
+    : []
+  const positions = includeOnHand
+    ? await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
+    : new Map()
 
   return {
     customers: customers.map((customer) => ({
@@ -125,7 +143,7 @@ export async function loadFormOptions(ctx: OrgContext) {
       type: item.type,
       group: ITEM_GROUPS[item.type],
       onHand:
-        item.type === 'INVENTORY'
+        item.type === 'INVENTORY' || item.type === 'INVENTORY_ASSEMBLY'
           ? (positions.get(item.id)?.quantity ?? new Decimal(0)).toFixed(2)
           : null,
       components:
@@ -160,7 +178,7 @@ export async function loadFormOptions(ctx: OrgContext) {
     // lead; the whole chart follows.
     depositAccounts: accountOptions(chart, {
       prefer: ['BANK', 'UNDEPOSITED_FUNDS', 'CREDIT_CARD', 'OTHER_CURRENT_ASSET'],
-      showBalance: true,
+      showBalance: false,
     }),
     terms,
     projects,
