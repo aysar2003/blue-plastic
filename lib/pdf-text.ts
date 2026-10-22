@@ -40,6 +40,12 @@ export type PdfRow = {
   fill?: PdfRgb
   /** Left/right inset for the fill; defaults to 0 (edge-to-edge). */
   fillInset?: number
+  /**
+   * Partial band (status badge, right-hand totals). When set, overrides
+   * `fillInset` and paints only from `fillFrom` to `fillTo`.
+   */
+  fillFrom?: number
+  fillTo?: number
   /** Optional document / line barcode under the runs. */
   barcode?: PdfBarcode
   /** Force the next rows onto a new page (invoice-by-invoice packs). */
@@ -148,11 +154,13 @@ function pageStream(rows: PdfRow[], pageWidth: number, top: number, ink: PrintIn
     const height = row.height ?? 14
     y -= height
     if (row.fill) {
-      const inset = row.fillInset ?? 0
       const [r, g, b] = paint(row.fill)
+      const from = row.fillFrom ?? row.fillInset ?? 0
+      const to = row.fillTo ?? pageWidth - (row.fillInset ?? 0)
+      const width = Math.max(0, to - from)
       parts.push(
         `${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg ` +
-          `${inset} ${y - 2} ${pageWidth - inset * 2} ${height + 2} re f`,
+          `${from.toFixed(2)} ${y - 2} ${width.toFixed(2)} ${height + 2} re f`,
       )
     }
     if (row.rule) {
