@@ -306,6 +306,13 @@ export type BalanceSheet = {
   /** assets − liabilities − equity. Must be zero. */
   difference: Decimal
   balanced: boolean
+  comparison?: {
+    asOf: CalendarDate
+    totalAssets: Decimal
+    totalLiabilities: Decimal
+    accumulatedProfit: Decimal
+    totalEquity: Decimal
+  }
 }
 
 /**
@@ -332,45 +339,83 @@ export async function balanceSheet(
     client?: Tx
     basis?: 'accrual' | 'cash'
     filters?: ReportEntityFilters
+    /** Prior statement date for a QBD-style column comparison. */
+    comparisonAsOf?: CalendarDate
   } = {},
 ): Promise<BalanceSheet> {
   const journalIds = await journalsForEntityFilters(orgId, options.filters, {
     client: options.client,
   })
-  const figures = narrowByAccount(
-    await accountFigures(
+  const [figures, comparisonFigures] = await Promise.all([
+    accountFigures(
       orgId,
       { from: '1900-01-01', to: asOf, basis: options.basis },
       { client: options.client, journalIds },
-    ),
-    options.filters?.accountId,
+    ).then((rows) => narrowByAccount(rows, options.filters?.accountId)),
+    options.comparisonAsOf
+      ? accountFigures(
+          orgId,
+          { from: '1900-01-01', to: options.comparisonAsOf, basis: options.basis },
+          { client: options.client, journalIds },
+        ).then((rows) => narrowByAccount(rows, options.filters?.accountId))
+      : Promise.resolve(null),
+  ])
+
+  const comparisonById = new Map(
+    (comparisonFigures ?? []).map((row) => [row.accountId, present(row.type, row.closing)]),
   )
 
   const sections = BALANCE_GROUPS.map((group) => {
     const rows = nestStatementRows(
       figures.filter((row) => group.subtypes.includes(row.subtype)),
       (row) => present(row.type, row.closing),
+      comparisonFigures ? (row) => comparisonById.get(row.accountId) ?? ZERO : undefined,
     )
     for (const row of rows) {
       row.group = ACCOUNT_SUBTYPE_LABELS[row.subtype]
     }
 
-    return { key: group.key, label: group.label, rows, total: sumBy(rows, (row) => row.amount) }
+    return {
+      key: group.key,
+      label: group.label,
+      rows,
+      total: sumBy(rows, (row) => row.amount),
+      comparisonTotal: comparisonFigures
+        ? sumBy(rows, (row) => row.comparison ?? ZERO)
+        : undefined,
+    }
   })
 
   const totalOf = (key: string) => sections.find((section) => section.key === key)?.total ?? ZERO
+  const comparisonTotalOf = (key: string) =>
+    sections.find((section) => section.key === key)?.comparisonTotal ?? ZERO
 
   const totalAssets = totalOf('currentAssets').plus(totalOf('fixedAssets'))
   const totalLiabilities = totalOf('currentLiabilities').plus(totalOf('longTermLiabilities'))
   const postedEquity = totalOf('equity')
 
-  const accumulatedProfit = sumBy(
-    figures.filter((row) => isProfitAndLoss(row.type)),
-    (row) => (row.type === 'REVENUE' ? present(row.type, row.closing) : present(row.type, row.closing).negated()),
-  )
+  const profitOf = (rows: AccountFigures[]) =>
+    sumBy(rows.filter((row) => isProfitAndLoss(row.type)), (row) =>
+      row.type === 'REVENUE'
+        ? present(row.type, row.closing)
+        : present(row.type, row.closing).negated(),
+    )
 
+  const accumulatedProfit = profitOf(figures)
   const totalEquity = postedEquity.plus(accumulatedProfit)
   const difference = totalAssets.minus(totalLiabilities).minus(totalEquity)
+
+  const comparison = comparisonFigures && options.comparisonAsOf
+    ? {
+        asOf: options.comparisonAsOf,
+        totalAssets: comparisonTotalOf('currentAssets').plus(comparisonTotalOf('fixedAssets')),
+        totalLiabilities: comparisonTotalOf('currentLiabilities').plus(
+          comparisonTotalOf('longTermLiabilities'),
+        ),
+        accumulatedProfit: profitOf(comparisonFigures),
+        totalEquity: comparisonTotalOf('equity').plus(profitOf(comparisonFigures)),
+      }
+    : undefined
 
   return {
     asOf,
@@ -382,6 +427,7 @@ export async function balanceSheet(
     totalEquity,
     difference,
     balanced: difference.isZero(),
+    comparison,
   }
 }
 

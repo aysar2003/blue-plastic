@@ -79,73 +79,8 @@ export default async function BusinessOverviewPage() {
         description={`${ctx.organization.name} · figures from the ledger as at ${formatDate(overview.now)}.`}
       />
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Cash flow</CardTitle>
-            <p className="text-base font-medium">Track how your money is doing</p>
-          </CardHeader>
-          <CardContent>
-            {overview.hasBank ? (
-              <div className="flex h-36 items-end gap-1">
-                {overview.cashMonths.map((month) => {
-                  const value = Number(month.amount)
-                  const height = Math.max(2, (Math.abs(value) / peak) * 100)
-                  return (
-                    <div key={month.label} className="flex flex-1 flex-col items-center gap-1">
-                      <div
-                        title={`${month.label} ${money(month.amount)}`}
-                        className={cn('w-full rounded-sm', value < 0 ? 'bg-destructive/70' : 'bg-primary')}
-                        style={{ height: `${height}%` }}
-                      />
-                      <span className="text-[0.65rem] text-muted-foreground">{month.label}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                <Link href="/banking/import" className="font-medium text-primary hover:underline">
-                  Link your bank to see cash flow
-                </Link>
-              </p>
-            )}
-            <p className="mt-3 text-center text-sm">
-              <Link href={`/reports/cash-flow?period=this-fiscal-year`} className="text-primary hover:underline">
-                Open the statement of cash flows
-              </Link>
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Bank accounts</CardTitle>
-            <span className="text-xs text-muted-foreground">As of today</span>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-2xl font-semibold tabular">{money(overview.bankTotal)}</p>
-            <p className="text-xs text-muted-foreground">Total bank and undeposited funds</p>
-            <ul className="space-y-2">
-              {overview.banks.length === 0 ? (
-                <li className="text-sm text-muted-foreground">No bank accounts on the chart.</li>
-              ) : (
-                overview.banks.map((account) => (
-                  <li key={account.id} className="flex items-center justify-between gap-3 text-sm">
-                    <Link href={`/accounts/${account.id}`} className="hover:underline">
-                      {account.name}
-                    </Link>
-                    <span className="tabular">{money(account.balance)}</span>
-                  </li>
-                ))
-              )}
-            </ul>
-            <Link href="/banking/accounts" className="inline-block text-sm text-primary hover:underline">
-              Go to registers
-            </Link>
-          </CardContent>
-        </Card>
-
+      {/* Overview tiles first — P&L / expenses / invoices / sales stay above the fold. */}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Profit & loss</CardTitle>
@@ -224,7 +159,7 @@ export default async function BusinessOverviewPage() {
           </CardContent>
         </Card>
 
-        <Card className="xl:col-span-1">
+        <Card className="md:col-span-2 xl:col-span-3">
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Sales</CardTitle>
             <span className="text-xs text-muted-foreground">Last month</span>
@@ -248,6 +183,75 @@ export default async function BusinessOverviewPage() {
             </div>
             <Link href="/reports/sales-by-customer?period=last-month" className="mt-3 inline-block text-sm text-primary hover:underline">
               Sales by customer
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Cash and bank sit below the trading overview. */}
+      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Cash flow</CardTitle>
+            <p className="text-base font-medium">Track how your money is doing</p>
+          </CardHeader>
+          <CardContent>
+            {overview.hasBank ? (
+              <div className="flex h-36 items-end gap-1">
+                {overview.cashMonths.map((month) => {
+                  const value = Number(month.amount)
+                  const height = Math.max(2, (Math.abs(value) / peak) * 100)
+                  return (
+                    <div key={month.label} className="flex flex-1 flex-col items-center gap-1">
+                      <div
+                        title={`${month.label} ${money(month.amount)}`}
+                        className={cn('w-full rounded-sm', value < 0 ? 'bg-destructive/70' : 'bg-primary')}
+                        style={{ height: `${height}%` }}
+                      />
+                      <span className="text-[0.65rem] text-muted-foreground">{month.label}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                <Link href="/banking/import" className="font-medium text-primary hover:underline">
+                  Link your bank to see cash flow
+                </Link>
+              </p>
+            )}
+            <p className="mt-3 text-center text-sm">
+              <Link href={`/reports/cash-flow?period=this-fiscal-year`} className="text-primary hover:underline">
+                Open the statement of cash flows
+              </Link>
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Bank accounts</CardTitle>
+            <span className="text-xs text-muted-foreground">As of today</span>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-2xl font-semibold tabular">{money(overview.bankTotal)}</p>
+            <p className="text-xs text-muted-foreground">Total bank and undeposited funds</p>
+            <ul className="space-y-2">
+              {overview.banks.length === 0 ? (
+                <li className="text-sm text-muted-foreground">No bank accounts on the chart.</li>
+              ) : (
+                overview.banks.map((account) => (
+                  <li key={account.id} className="flex items-center justify-between gap-3 text-sm">
+                    <Link href={`/accounts/${account.id}`} className="hover:underline">
+                      {account.name}
+                    </Link>
+                    <span className="tabular">{money(account.balance)}</span>
+                  </li>
+                ))
+              )}
+            </ul>
+            <Link href="/banking/accounts" className="inline-block text-sm text-primary hover:underline">
+              Go to registers
             </Link>
           </CardContent>
         </Card>

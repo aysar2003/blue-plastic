@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
+import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { PageHeader } from '@/components/data/page-header'
 import { MemorizeReportButton } from '@/components/reports/memorize-report-button'
 import { ReportEntityFilters } from '@/components/reports/report-entity-filters'
@@ -72,7 +73,16 @@ export default async function TableReportPage({
                 settings.range.to,
               )}${settings.period === 'custom' ? '' : ` — ${PERIOD_LABELS[settings.period]}`}.`
         }
-        actions={<MemorizeReportButton title={definition.title} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
+            <MemorizeReportButton title={definition.title} />
+            <PrintButton
+              paper={definition.title}
+              defaultSubject={`${definition.title} — ${ctx.organization.name}`}
+              defaultBody={`${definition.title}\n${ctx.organization.name}`}
+            />
+          </div>
+        }
       />
 
       <ReportControls

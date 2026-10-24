@@ -286,6 +286,24 @@ export const REPORT_SECTIONS: LauncherSection[] = [
         blurb: 'Every sales order',
       },
       {
+        key: 'open-sales-orders',
+        label: 'Open Sales Orders by Customer',
+        href: '/reports/open-sales-orders',
+        icon: 'clipboard',
+        accent: '#C2410C',
+        wash: '#FFEDD5',
+        blurb: 'Orders still outstanding',
+      },
+      {
+        key: 'open-estimates',
+        label: 'Open Estimates by Customer',
+        href: '/reports/open-estimates',
+        icon: 'file',
+        accent: '#22d3ee',
+        wash: '#cffafe',
+        blurb: 'Estimates not yet sold',
+      },
+      {
         key: 'sales-receipt-list',
         label: 'Sales Receipt List',
         href: '/reports/sales-receipt-list',
@@ -740,7 +758,7 @@ export const REPORT_SECTIONS: LauncherSection[] = [
       },
       {
         key: 'inventory-days-on-hand',
-        label: 'Average Days on Hand',
+        label: 'Average Days on Hand / Turnover',
         href: '/reports/inventory-days-on-hand',
         icon: 'clock',
         accent: '#B45309',

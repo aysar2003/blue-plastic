@@ -232,6 +232,10 @@ export default async function CustomersPage({
         { label: 'Show deliveries', href: withTx(customerHref(customer.id), 'Delivery') },
         { label: 'Customer snapshot', href: `/reports/statements/customer?customerId=${id}` },
         { label: 'Sales by item', href: `/reports/sales-by-item` },
+        {
+          label: 'Items sold',
+          href: `/reports/sales-by-customer-item?customerId=${id}`,
+        },
       ]
     : []
 

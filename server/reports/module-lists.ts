@@ -97,6 +97,42 @@ function signedPurchase(type: string, amount: Decimal.Value): Decimal {
   return type === 'VENDOR_CREDIT' ? value.negated() : value
 }
 
+/** QBD-style subtotal rows when a detail report is ordered by a name column. */
+function withGroupTotals(
+  rows: ReportRow[],
+  groupKey: string,
+  amountKey = 'amount',
+): ReportRow[] {
+  const out: ReportRow[] = []
+  let group: string | null = null
+  let groupTotal = ZERO
+
+  const flush = () => {
+    if (group == null) return
+    out.push({
+      emphasis: true,
+      cells: {
+        [groupKey]: `Total — ${group}`,
+        [amountKey]: money(groupTotal),
+      },
+    })
+    groupTotal = ZERO
+  }
+
+  for (const row of rows) {
+    const name = String(row.cells[groupKey] ?? '')
+    if (group !== name) {
+      flush()
+      group = name
+    }
+    const amount = row.cells[amountKey]
+    if (amount != null && amount !== '') groupTotal = groupTotal.plus(String(amount))
+    out.push(row)
+  }
+  flush()
+  return out
+}
+
 function salesDocumentList(spec: {
   key: string
   title: string
@@ -440,7 +476,7 @@ const salesByItemDetail: TableReport = {
     })
 
     let total = ZERO
-    const rows = lines.flatMap((line) => {
+    const detailRows = lines.flatMap((line) => {
       if (!line.item) return []
       const amount = signedSales(line.document.type, line.amount.toString())
       const quantity = signedSales(line.document.type, line.quantity.toString())
@@ -475,7 +511,7 @@ const salesByItemDetail: TableReport = {
         { key: 'rate', label: 'Rate', format: 'money', width: 'w-28' },
         { key: 'amount', label: 'Amount', format: 'money', width: 'w-32' },
       ],
-      rows,
+      rows: withGroupTotals(detailRows, 'item'),
       totals: {
         item: lines.length >= DETAIL_ROW_LIMIT ? `First ${DETAIL_ROW_LIMIT}` : 'Total',
         amount: money(total),
@@ -642,7 +678,7 @@ const expensesByVendorDetail: TableReport = {
     })
 
     let total = ZERO
-    const rows = documents.map((document) => {
+    const detailRows = documents.map((document) => {
       const amount = signedPurchase(document.type, document.subtotal.toString())
       total = total.plus(amount)
       return {
@@ -665,7 +701,7 @@ const expensesByVendorDetail: TableReport = {
         { key: 'number', label: 'No.', width: 'w-28' },
         { key: 'amount', label: 'Amount', format: 'money', width: 'w-32' },
       ],
-      rows,
+      rows: withGroupTotals(detailRows, 'vendor'),
       totals: { vendor: 'Total', amount: money(total) },
       empty: 'Nothing spent with a vendor in this period.',
     }
@@ -1237,6 +1273,96 @@ const openPurchaseOrders: TableReport = {
     }
   },
 }
+
+function openSalesPipeline(spec: {
+  key: string
+  title: string
+  description: string
+  type: 'SALES_ORDER' | 'ESTIMATE' | 'QUOTATION'
+  empty: string
+  numberLabel: string
+}): TableReport {
+  return {
+    key: spec.key,
+    title: spec.title,
+    description: spec.description,
+    group: 'Sales and customers',
+    mode: 'asOf',
+    filterKinds: ['customer'],
+    async build(input) {
+      const documents = await books(input).salesDocument.findMany({
+        where: {
+          orgId: input.ctx.orgId,
+          type: spec.type,
+          status: { in: ['OPEN', 'PARTIAL', 'PENDING_APPROVAL', 'ACCEPTED'] },
+          deletedAt: null,
+          convertedTo: { is: null },
+          date: { lte: toDate(input.asOf) },
+          ...(input.filters?.customerId ? { customerId: input.filters.customerId } : {}),
+        },
+        select: {
+          id: true,
+          number: true,
+          date: true,
+          status: true,
+          total: true,
+          expiryDate: true,
+          dueDate: true,
+          customer: { select: { displayName: true } },
+        },
+        orderBy: [{ date: 'asc' }, { number: 'asc' }],
+      })
+
+      let outstanding = ZERO
+      const rows = documents.map((document) => {
+        outstanding = outstanding.plus(document.total.toString())
+        return {
+          href: salesHref(spec.type, document.id),
+          cells: {
+            date: date(document.date),
+            number: document.number,
+            customer: document.customer.displayName,
+            status: statusLabel(document.status),
+            expires: date(document.expiryDate ?? document.dueDate),
+            total: money(document.total.toString()),
+          },
+        }
+      })
+
+      return {
+        columns: [
+          { key: 'date', label: 'Date', format: 'date', width: 'w-28' },
+          { key: 'number', label: spec.numberLabel, width: 'w-32' },
+          { key: 'customer', label: 'Customer' },
+          { key: 'status', label: 'Status', width: 'w-36' },
+          { key: 'expires', label: 'Due / expires', format: 'date', width: 'w-32' },
+          { key: 'total', label: 'Amount', format: 'money', width: 'w-32' },
+        ],
+        rows,
+        totals: { date: 'Total', total: money(outstanding) },
+        empty: spec.empty,
+      }
+    },
+  }
+}
+
+const openSalesOrders = openSalesPipeline({
+  key: 'open-sales-orders',
+  title: 'Open Sales Orders by Customer',
+  description: 'Sales orders still outstanding — not yet converted to a sale.',
+  type: 'SALES_ORDER',
+  empty: 'No open sales orders at this date.',
+  numberLabel: 'SO',
+})
+
+const openEstimates = openSalesPipeline({
+  key: 'open-estimates',
+  title: 'Open Estimates by Customer',
+  description: 'Estimates still open or accepted — not yet converted to a sale.',
+  type: 'ESTIMATE',
+  empty: 'No open estimates at this date.',
+  numberLabel: 'Estimate',
+})
 
 const BANK_STATUS: Record<string, string> = {
   POSTED: 'Posted',
@@ -2359,7 +2485,7 @@ const purchasesByItemDetail: TableReport = {
     })
 
     let total = ZERO
-    const rows = lines.flatMap((line) => {
+    const detailRows = lines.flatMap((line) => {
       if (!line.item) return []
       const amount = signedPurchase(line.document.type, line.amount.toString())
       const quantity = signedPurchase(line.document.type, line.quantity.toString())
@@ -2394,7 +2520,7 @@ const purchasesByItemDetail: TableReport = {
         { key: 'rate', label: 'Rate', format: 'money', width: 'w-28' },
         { key: 'amount', label: 'Amount', format: 'money', width: 'w-32' },
       ],
-      rows,
+      rows: withGroupTotals(detailRows, 'item'),
       totals: { item: 'Total', amount: money(total) },
       empty: 'No item purchases in this period.',
     }
@@ -2554,8 +2680,8 @@ const inventoryValuationDetail: TableReport = {
 
 const inventoryDaysOnHand: TableReport = {
   key: 'inventory-days-on-hand',
-  title: 'Average Days on Hand',
-  description: 'How many days of stock remain at the recent sales pace.',
+  title: 'Average Days on Hand / Turnover',
+  description: 'Days of stock at the recent sales pace, and how many times stock turned in the period.',
   group: 'Inventory',
   mode: 'range',
   filterKinds: ['item'],
@@ -2611,6 +2737,7 @@ const inventoryDaysOnHand: TableReport = {
         { key: 'sold', label: 'Sold in period', format: 'number', width: 'w-32' },
         { key: 'daily', label: 'Avg / day', format: 'number', width: 'w-28' },
         { key: 'days', label: 'Days on hand', format: 'number', width: 'w-32' },
+        { key: 'turnover', label: 'Turnover', format: 'number', width: 'w-28' },
       ],
       rows: items.map((item) => {
         const soldQty = soldByItem.get(item.itemId) ?? ZERO
@@ -2618,6 +2745,10 @@ const inventoryDaysOnHand: TableReport = {
         const daysOnHand = daily.isZero()
           ? null
           : item.quantity.dividedBy(daily).toDecimalPlaces(1).toString()
+        // Qty sold ÷ on-hand approximates turns in the period (QBD-style).
+        const turnover = item.quantity.isZero()
+          ? null
+          : soldQty.dividedBy(item.quantity).toDecimalPlaces(2).toString()
         return {
           href: `/inventory/${item.itemId}`,
           cells: {
@@ -2627,11 +2758,12 @@ const inventoryDaysOnHand: TableReport = {
             sold: formatQty(soldQty.toFixed(2), item.unitOfMeasure),
             daily: daily.isZero() ? null : formatQty(daily.toFixed(2), item.unitOfMeasure),
             days: daysOnHand,
+            turnover,
           },
         }
       }),
       empty: 'No tracked products yet.',
-      note: `Sales pace uses ${days} days in the selected period.`,
+      note: `Sales pace uses ${days} days in the selected period. Turnover is quantity sold ÷ on hand.`,
     }
   },
 }
@@ -2930,6 +3062,8 @@ export const MODULE_LIST_REPORTS: TableReport[] = [
   estimateList,
   quotationList,
   salesOrderList,
+  openSalesOrders,
+  openEstimates,
   salesReceiptList,
   creditMemoList,
   refundList,

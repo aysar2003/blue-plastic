@@ -3,14 +3,22 @@ import type { Metadata } from 'next'
 import { PageHeader } from '@/components/data/page-header'
 import { readSort } from '@/components/data/sortable-header'
 import { RankedTable } from '@/components/reports/ranked-table'
+import { ReportEntityFilters } from '@/components/reports/report-entity-filters'
 import { Card } from '@/components/ui/card'
 import { formatDate } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import { salesByItem } from '@/server/reports/business'
+import { loadFilterOptions } from '../filter-options'
 import { ReportControls } from '../report-controls'
-import { readSettings, settingsToQueryObject, type SearchParams } from '../params'
+import {
+  readEntityFilters,
+  readSettings,
+  settingsToQueryObject,
+  type SearchParams,
+} from '../params'
 
 const SORTABLE = ['name', 'count', 'quantity', 'amount'] as const
+const FILTERS = ['item', 'customer'] as const
 
 export const metadata: Metadata = { title: 'Sales by Product/Service Summary' }
 
@@ -18,10 +26,23 @@ export default async function SalesByItemPage({ searchParams }: { searchParams: 
   const ctx = await requireOrgContext('report:read')
   const query = await searchParams
   const settings = readSettings(query, ctx.organization)
+  const filters = readEntityFilters(query)
   const sort = readSort(query, SORTABLE, { sort: 'amount', dir: 'desc' })
-  const linkParams = { ...settingsToQueryObject(settings), sort: sort.sort, dir: sort.dir }
+  const linkParams = {
+    ...settingsToQueryObject(settings),
+    sort: sort.sort,
+    dir: sort.dir,
+    ...(filters.itemId ? { itemId: filters.itemId } : {}),
+    ...(filters.customerId ? { customerId: filters.customerId } : {}),
+  }
 
-  const report = await salesByItem(ctx.orgId, settings.range)
+  const [report, filterOptions] = await Promise.all([
+    salesByItem(ctx.orgId, settings.range, {
+      itemId: filters.itemId,
+      customerId: filters.customerId,
+    }),
+    loadFilterOptions(ctx.orgId, [...FILTERS]),
+  ])
 
   return (
     <>
@@ -41,20 +62,22 @@ export default async function SalesByItemPage({ searchParams }: { searchParams: 
         controls={{ mode: 'range', exportAs: 'sales-by-item' }}
       />
 
+      <ReportEntityFilters kinds={[...FILTERS]} values={filters} options={filterOptions} />
+
       <Card className="overflow-hidden p-0">
         <RankedTable
-            sort={sort}
-            basePath="/reports/sales-by-item"
-            linkParams={linkParams}
-            rows={report.rows}
-            total={report.total}
-            currency={ctx.organization.baseCurrency}
-            nameHeader="Item"
-            countHeader="Documents"
-            linkTo={(id) => `/inventory/${id}`}
-            quantities
-            empty="Nothing was sold in this period."
-          />
+          sort={sort}
+          basePath="/reports/sales-by-item"
+          linkParams={linkParams}
+          rows={report.rows}
+          total={report.total}
+          currency={ctx.organization.baseCurrency}
+          nameHeader="Item"
+          countHeader="Documents"
+          linkTo={(id) => `/inventory/${id}`}
+          quantities
+          empty="Nothing was sold in this period."
+        />
       </Card>
     </>
   )

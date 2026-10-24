@@ -177,9 +177,26 @@ async function build(
     }
 
     case 'balance-sheet': {
-      const data = await balanceSheet(orgId, settings.asOf, { basis: settings.basis, filters })
+      const compareAsOf =
+        settings.comparison !== 'none' && settings.comparisonRange
+          ? settings.comparisonRange.to
+          : undefined
+      const data = await balanceSheet(orgId, settings.asOf, {
+        basis: settings.basis,
+        filters,
+        comparisonAsOf: compareAsOf,
+      })
+      const compare = Boolean(compareAsOf)
       const rows: CsvCell[][] = heading('Balance sheet')
-      rows.push(['Section', 'Code', 'Account', 'Type', 'Detail type', 'Amount'])
+      rows.push([
+        'Section',
+        'Code',
+        'Account',
+        'Type',
+        'Detail type',
+        'Amount',
+        ...(compare ? ['Comparison'] : []),
+      ])
 
       for (const section of data.sections) {
         for (const row of section.rows) {
@@ -190,16 +207,52 @@ async function build(
             ACCOUNT_TYPE_LABELS[row.type],
             ACCOUNT_SUBTYPE_LABELS[row.subtype],
             row.amount,
+            ...(compare ? [row.comparison ?? null] : []),
           ])
         }
-        rows.push([section.label, '', `Total ${section.label.toLowerCase()}`, '', section.total])
+        rows.push([
+          section.label,
+          '',
+          `Total ${section.label.toLowerCase()}`,
+          '',
+          section.total,
+          ...(compare ? [section.comparisonTotal ?? null] : []),
+        ])
       }
 
       rows.push([])
-      rows.push(['', '', 'Total assets', '', data.totalAssets])
-      rows.push(['', '', 'Total liabilities', '', data.totalLiabilities])
-      rows.push(['', '', 'Profit not yet closed to retained earnings', '', data.accumulatedProfit])
-      rows.push(['', '', 'Total equity', '', data.totalEquity])
+      rows.push([
+        '',
+        '',
+        'Total assets',
+        '',
+        data.totalAssets,
+        ...(compare ? [data.comparison?.totalAssets ?? null] : []),
+      ])
+      rows.push([
+        '',
+        '',
+        'Total liabilities',
+        '',
+        data.totalLiabilities,
+        ...(compare ? [data.comparison?.totalLiabilities ?? null] : []),
+      ])
+      rows.push([
+        '',
+        '',
+        'Profit not yet closed to retained earnings',
+        '',
+        data.accumulatedProfit,
+        ...(compare ? [data.comparison?.accumulatedProfit ?? null] : []),
+      ])
+      rows.push([
+        '',
+        '',
+        'Total equity',
+        '',
+        data.totalEquity,
+        ...(compare ? [data.comparison?.totalEquity ?? null] : []),
+      ])
       rows.push(['', '', 'Out of balance by', '', data.difference])
       return rows
     }
@@ -288,7 +341,7 @@ async function build(
     }
 
     default: {
-      const [title, nameHeader, data] = await rankedReport(report, orgId, settings)
+      const [title, nameHeader, data] = await rankedReport(report, orgId, settings, filters)
       const rows: CsvCell[][] = heading(title)
       const quantities = data.rows.some((row) => 'quantity' in row)
 
@@ -316,14 +369,30 @@ async function rankedReport(
   >,
   orgId: string,
   settings: ReturnType<typeof readSettings>,
+  filters: ReturnType<typeof readEntityFilters> = {},
 ) {
   switch (report) {
     case 'sales-by-customer':
-      return ['Sales by customer', 'Customer', await salesByCustomer(orgId, settings.range)] as const
+      return [
+        'Sales by customer',
+        'Customer',
+        await salesByCustomer(orgId, settings.range, { customerId: filters.customerId }),
+      ] as const
     case 'sales-by-item':
-      return ['Sales by product or service', 'Item', await salesByItem(orgId, settings.range)] as const
+      return [
+        'Sales by product or service',
+        'Item',
+        await salesByItem(orgId, settings.range, {
+          itemId: filters.itemId,
+          customerId: filters.customerId,
+        }),
+      ] as const
     case 'purchases-by-vendor':
-      return ['Purchases by vendor', 'Vendor', await purchasesByVendor(orgId, settings.range)] as const
+      return [
+        'Purchases by vendor',
+        'Vendor',
+        await purchasesByVendor(orgId, settings.range, { vendorId: filters.vendorId }),
+      ] as const
     case 'expenses-by-category':
       return ['Expenses by category', 'Account', await expensesByCategory(orgId, settings.range)] as const
   }

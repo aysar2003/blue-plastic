@@ -664,7 +664,7 @@ export const INVENTORY_REPORT_APPS: HubApp[] = [
   },
   {
     key: 'inventory-days-on-hand',
-    label: 'Average Days on Hand',
+    label: 'Average Days on Hand / Turnover',
     href: '/reports/inventory-days-on-hand',
     icon: 'clock',
     accent: '#B45309',

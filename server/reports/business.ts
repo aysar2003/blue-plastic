@@ -54,9 +54,10 @@ function rank(rows: { id: string; name: string; amount: string; count: number }[
 export async function salesByCustomer(
   orgId: string,
   range: { from: CalendarDate; to: CalendarDate },
-  options: { client?: Tx } = {},
+  options: { client?: Tx; customerId?: string } = {},
 ) {
   const client = options.client ?? db
+  const customerId = options.customerId ?? null
 
   const rows = await client.$queryRaw<{ id: string; name: string; amount: string; count: number }[]>`
     SELECT c.id            AS id,
@@ -70,6 +71,7 @@ export async function salesByCustomer(
         AND d."deletedAt" IS NULL
        AND d.type IN ('INVOICE', 'SALES_RECEIPT', 'CREDIT_MEMO', 'REFUND_RECEIPT')
        AND d.date BETWEEN ${toDate(range.from)} AND ${toDate(range.to)}
+       AND (${customerId}::text IS NULL OR d."customerId" = ${customerId})
      GROUP BY c.id, c."displayName"
   `
 
@@ -80,9 +82,11 @@ export async function salesByCustomer(
 export async function salesByItem(
   orgId: string,
   range: { from: CalendarDate; to: CalendarDate },
-  options: { client?: Tx } = {},
+  options: { client?: Tx; itemId?: string; customerId?: string } = {},
 ) {
   const client = options.client ?? db
+  const itemId = options.itemId ?? null
+  const customerId = options.customerId ?? null
 
   const rows = await client.$queryRaw<
     {
@@ -108,6 +112,8 @@ export async function salesByItem(
         AND d."deletedAt" IS NULL
        AND d.type IN ('INVOICE', 'SALES_RECEIPT', 'CREDIT_MEMO', 'REFUND_RECEIPT')
        AND d.date BETWEEN ${toDate(range.from)} AND ${toDate(range.to)}
+       AND (${itemId}::text IS NULL OR l."itemId" = ${itemId})
+       AND (${customerId}::text IS NULL OR d."customerId" = ${customerId})
      GROUP BY i.id, i.name, i."unitOfMeasure"
   `
 
@@ -129,9 +135,10 @@ export async function salesByItem(
 export async function purchasesByVendor(
   orgId: string,
   range: { from: CalendarDate; to: CalendarDate },
-  options: { client?: Tx } = {},
+  options: { client?: Tx; vendorId?: string } = {},
 ) {
   const client = options.client ?? db
+  const vendorId = options.vendorId ?? null
 
   const rows = await client.$queryRaw<{ id: string; name: string; amount: string; count: number }[]>`
     SELECT v.id            AS id,
@@ -145,6 +152,7 @@ export async function purchasesByVendor(
         AND d."deletedAt" IS NULL
        AND d.type IN ('BILL', 'EXPENSE', 'VENDOR_CREDIT')
        AND d.date BETWEEN ${toDate(range.from)} AND ${toDate(range.to)}
+       AND (${vendorId}::text IS NULL OR d."vendorId" = ${vendorId})
      GROUP BY v.id, v."displayName"
   `
 

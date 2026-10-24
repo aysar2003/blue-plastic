@@ -8,13 +8,18 @@ import { ReportEntityFilters } from '@/components/reports/report-entity-filters'
 import { STATEMENT_SORT_COLUMNS, StatementTable } from '@/components/reports/statement-table'
 import { Card } from '@/components/ui/card'
 import { formatDate } from '@/lib/date'
-import { formatMoney } from '@/lib/money'
+import { formatMoney, ZERO } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import type { ReportFilterKind } from '@/server/reports/catalogue'
 import { balanceSheet } from '@/server/reports/statements'
 import { loadFilterOptions } from '../filter-options'
 import { ReportControls } from '../report-controls'
-import { readEntityFilters, readSettings, type SearchParams } from '../params'
+import {
+  COMPARISON_LABELS,
+  readEntityFilters,
+  readSettings,
+  type SearchParams,
+} from '../params'
 
 const BS_FILTERS: ReportFilterKind[] = ['customer', 'vendor', 'item', 'account', 'store']
 
@@ -37,6 +42,7 @@ export default async function BalanceSheetPage({
     to: settings.range.to,
     asOf: settings.asOf,
     basis: settings.basis,
+    compare: settings.comparison === 'none' ? undefined : settings.comparison,
     ...(filters.customerId ? { customerId: filters.customerId } : {}),
     ...(filters.vendorId ? { vendorId: filters.vendorId } : {}),
     ...(filters.itemId ? { itemId: filters.itemId } : {}),
@@ -47,8 +53,16 @@ export default async function BalanceSheetPage({
     filters.customerId || filters.vendorId || filters.itemId || filters.accountId || filters.storeId,
   )
 
+  const compared = settings.comparison !== 'none' && Boolean(settings.comparisonRange)
+  const comparisonAsOf = compared ? settings.comparisonRange!.to : undefined
+  const comparisonLabel = compared ? COMPARISON_LABELS[settings.comparison] : undefined
+
   const [sheet, filterOptions] = await Promise.all([
-    balanceSheet(ctx.orgId, settings.asOf, { basis: settings.basis, filters }),
+    balanceSheet(ctx.orgId, settings.asOf, {
+      basis: settings.basis,
+      filters,
+      comparisonAsOf,
+    }),
     loadFilterOptions(ctx.orgId, BS_FILTERS),
   ])
 
@@ -58,12 +72,19 @@ export default async function BalanceSheetPage({
   const drill = (accountId: string) =>
     `/reports/transaction-detail?account=${accountId}&period=custom&from=1900-01-01&to=${settings.asOf}&back=/reports/balance-sheet`
 
+  const line = (label: string, amount: typeof sheet.totalAssets, comparison: typeof sheet.totalAssets, emphasis = false) =>
+    compared
+      ? { label, amount, comparison, emphasis }
+      : { label, amount, emphasis }
+
   return (
     <>
       <PageHeader
         organization={ctx.organization}
         title="Balance Sheet"
-        description={`As at ${formatDate(settings.asOf)}`}
+        description={`As at ${formatDate(settings.asOf)}${
+          comparisonAsOf ? ` · compared with ${formatDate(comparisonAsOf)}` : ''
+        }`}
         actions={
           <PrintButton
             paper="balance sheet"
@@ -80,7 +101,7 @@ export default async function BalanceSheetPage({
         asOf={settings.asOf}
         basis={settings.basis}
         comparison={settings.comparison}
-        controls={{ mode: 'range', basis: true, exportAs: 'balance-sheet' }}
+        controls={{ mode: 'range', basis: true, comparison: true, exportAs: 'balance-sheet' }}
       />
 
       <ReportEntityFilters kinds={BS_FILTERS} values={filters} options={filterOptions} />
@@ -93,25 +114,38 @@ export default async function BalanceSheetPage({
 
       <Card className="overflow-hidden p-0">
         <StatementTable
-            sections={sheet.sections}
-            currency={currency}
-            drillTo={drill}
-            sort={sort}
-            basePath="/reports/balance-sheet"
-            linkParams={linkParams}
-            subtotals={{
-              fixedAssets: [{ label: 'Total assets', amount: sheet.totalAssets, emphasis: true }],
-              longTermLiabilities: [{ label: 'Total liabilities', amount: sheet.totalLiabilities }],
-              equity: [
-                // Shown as its own line because it is not posted anywhere: it is
-                // the profit sitting in the nominal accounts until the year is
-                // closed. Hiding it inside equity is what makes people think a
-                // balance sheet is arbitrary.
-                { label: 'Profit not yet closed to retained earnings', amount: sheet.accumulatedProfit },
-                { label: 'Total equity', amount: sheet.totalEquity, emphasis: true },
-              ],
-            }}
-          />
+          sections={sheet.sections}
+          currency={currency}
+          drillTo={drill}
+          comparisonLabel={comparisonLabel}
+          sort={sort}
+          basePath="/reports/balance-sheet"
+          linkParams={linkParams}
+          subtotals={{
+            fixedAssets: [
+              line('Total assets', sheet.totalAssets, sheet.comparison?.totalAssets ?? ZERO, true),
+            ],
+            longTermLiabilities: [
+              line(
+                'Total liabilities',
+                sheet.totalLiabilities,
+                sheet.comparison?.totalLiabilities ?? ZERO,
+              ),
+            ],
+            equity: [
+              // Shown as its own line because it is not posted anywhere: it is
+              // the profit sitting in the nominal accounts until the year is
+              // closed. Hiding it inside equity is what makes people think a
+              // balance sheet is arbitrary.
+              line(
+                'Profit not yet closed to retained earnings',
+                sheet.accumulatedProfit,
+                sheet.comparison?.accumulatedProfit ?? ZERO,
+              ),
+              line('Total equity', sheet.totalEquity, sheet.comparison?.totalEquity ?? ZERO, true),
+            ],
+          }}
+        />
 
         <div
           className={`flex items-center gap-2 border-t px-3 py-2.5 text-sm ${
