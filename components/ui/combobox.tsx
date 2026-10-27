@@ -306,7 +306,15 @@ export function Combobox({
       const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
       // Down still opens the list when nothing is chosen. Once a name is set,
       // the arrows move between the line cells.
-      if ((horizontal || (vertical && value)) && inputRef.current && moveInLineGrid(inputRef.current, event.key)) {
+      if (
+        (horizontal || (vertical && value)) &&
+        inputRef.current &&
+        (event.key === 'ArrowLeft' ||
+          event.key === 'ArrowRight' ||
+          event.key === 'ArrowUp' ||
+          event.key === 'ArrowDown') &&
+        moveInLineGrid(inputRef.current, event.key)
+      ) {
         event.preventDefault()
         return
       }

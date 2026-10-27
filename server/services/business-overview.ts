@@ -47,7 +47,7 @@ const cachedOverview = cache((orgId: string, timeZone: string, currency: string,
 )
 
 async function queryBusinessOverview(orgId: string, timeZone: string, _currency: string, month: string) {
-  const ctx = { orgId, organization: { timeZone, baseCurrency: _currency }, permissions: new Set(['report:overview']) } as OrgContext
+  const ctx = { orgId, organization: { timeZone, baseCurrency: _currency }, permissions: new Set(['report:overview']) } as unknown as OrgContext
   const now = today(timeZone)
   const nowTime = clockInZone(new Date(), timeZone)
   const monthStart = overviewMonth(month, now)

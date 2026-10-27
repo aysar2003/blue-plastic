@@ -30,8 +30,7 @@ export async function renderAuthenticatedPagePdf(
 
   const dir = await mkdtemp(join(tmpdir(), 'screen-pdf-'))
   const port = await freePort()
-  const child = spawn(
-    chrome,
+  const child = spawn(/*turbopackIgnore: true*/ chrome,
     [
       '--headless=new',
       '--disable-gpu',
@@ -200,7 +199,7 @@ export async function screenPaperResponse(pageUrl: string, cookieHeader: string,
   const bytes = await renderAuthenticatedPagePdf(pageUrl, cookieHeader)
   if (!bytes || bytes.length < 500) return null
   const safe = filename.replace(/[^\w.-]+/g, '-')
-  return new NextResponse(bytes, {
+  return new NextResponse(new Uint8Array(bytes), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${safe}"`,

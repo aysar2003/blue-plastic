@@ -53,7 +53,7 @@ async function queryFormOptions(
   const ctx = {
     orgId,
     permissions: new Set(canReadProjects ? ['project:read'] : []),
-  } as OrgContext
+  } as unknown as OrgContext
   const [customers, items, taxCodes, chart, terms, projects] = await Promise.all([
     db.customer.findMany({
       where: { orgId, isActive: true },

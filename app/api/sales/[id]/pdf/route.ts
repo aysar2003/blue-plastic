@@ -48,7 +48,7 @@ export async function GET(
       const filename = `${config.slug.replace(/s$/, '')}-${document.number
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')}.pdf`
-      return new NextResponse(screen, {
+      return new NextResponse(new Uint8Array(screen), {
         headers: {
           'Content-Type': 'application/pdf',
           'Content-Disposition': `attachment; filename="${filename}"`,

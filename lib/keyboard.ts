@@ -153,7 +153,7 @@ export function moveInLineGrid(
   if (from.tagName === 'SELECT' && (key === 'ArrowUp' || key === 'ArrowDown')) return false
 
   const row = from.closest('tr')
-  if (!row) return false
+  if (!(row instanceof HTMLElement)) return false
   const cells = lineCells(row)
   const index = cells.indexOf(from)
   if (index < 0) return false
@@ -166,7 +166,9 @@ export function moveInLineGrid(
     return true
   }
 
-  const rows = [...table.querySelectorAll('tbody tr')].filter((candidate) => lineCells(candidate).length > 0)
+  const rows = [...table.querySelectorAll<HTMLElement>('tbody tr')].filter(
+    (candidate) => lineCells(candidate).length > 0,
+  )
   const rowIndex = rows.indexOf(row)
   if (rowIndex < 0) return false
   const targetRow = rows[rowIndex + (key === 'ArrowDown' ? 1 : -1)]
