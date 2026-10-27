@@ -82,6 +82,7 @@ export function DocumentActions({
   const [emailOpen, setEmailOpen] = useState(false)
   const [waOpen, setWaOpen] = useState(false)
   const [to, setTo] = useState(defaultTo)
+  const savedRecipient = defaultTo.trim()
   const [subject, setSubject] = useState(defaultSubject ?? '')
   const [body, setBody] = useState(defaultBody ?? '')
   const [waPhone, setWaPhone] = useState(digitsOnly(whatsappPhone) ?? '')
@@ -394,6 +395,11 @@ export function DocumentActions({
                 onChange={(event) => setTo(event.target.value)}
                 placeholder="name@email.com"
               />
+              <p className="text-xs text-muted-foreground">
+                {savedRecipient
+                  ? `Sends to the email saved on this customer: ${savedRecipient}`
+                  : 'This customer has no email saved. Add one on the customer, and Send will use it.'}
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="doc-email-subject">Subject</Label>

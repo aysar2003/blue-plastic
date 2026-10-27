@@ -250,6 +250,9 @@ export function MerchantInvoice({
         terms={template.terms}
         statusColor={statusColor}
         customerMessage={document.customerMessage}
+        previousQuotationsTotal={priorQuotes ? (previousQuotationsTotal as string) : null}
+        thisQuotationTotal={priorQuotes ? document.total : null}
+        runningQuoteTotal={priorQuotes ? runningQuoteTotal.toFixed(4) : null}
         person={document.createdByName ?? ''}
         dateLabel={longDate(toCalendarDate(document.date), document.createdAt, organization.timeZone)}
         approval={approval}
@@ -325,30 +328,44 @@ export function MerchantInvoice({
 
       <div className="mx-8 mt-6">
         <div
-          className="grid grid-cols-[2rem_minmax(0,1fr)_4.2rem_3.4rem_5rem_5.4rem] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white"
+          className={
+            proposal
+              ? 'grid grid-cols-[2rem_minmax(0,1fr)_6.5rem_5rem_5.4rem] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white'
+              : 'grid grid-cols-[2rem_minmax(0,1fr)_4.2rem_3.4rem_5rem_5.4rem] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white'
+          }
           style={{ background: accent }}
         >
           <span>No</span>
           <span>Item name</span>
           <span className="text-right">Qty</span>
-          <span className="text-right">Unit</span>
+          {proposal ? null : <span className="text-right">Unit</span>}
           <span className="text-right">Rate</span>
           <span className="text-right">Amount</span>
         </div>
-        {document.lines.map((line, index) => (
+        {document.lines.map((line, index) => {
+          const unit = line.item?.unitOfMeasure?.trim()
+          const qty = proposal && unit ? `${trimNumber(line.quantity)} ${unit}` : trimNumber(line.quantity)
+          return (
           <div
             key={line.id}
-            className="grid grid-cols-[2rem_minmax(0,1fr)_4.2rem_3.4rem_5rem_5.4rem] items-center px-2 py-1.5 text-[12px]"
+            className={
+              proposal
+                ? 'grid grid-cols-[2rem_minmax(0,1fr)_6.5rem_5rem_5.4rem] items-center px-2 py-1.5 text-[12px]'
+                : 'grid grid-cols-[2rem_minmax(0,1fr)_4.2rem_3.4rem_5rem_5.4rem] items-center px-2 py-1.5 text-[12px]'
+            }
             style={{ background: index % 2 === 0 ? '#ffffff' : wash }}
           >
             <span className="tabular">{line.lineNumber}</span>
             <span className="truncate pr-2">{line.description || line.item?.name || line.item?.sku || ''}</span>
-            <span className="tabular text-right">{trimNumber(line.quantity)}</span>
-            <span className="text-right">{line.item?.unitOfMeasure?.trim().toUpperCase() || ''}</span>
+            <span className="tabular text-right">{qty}</span>
+            {proposal ? null : (
+              <span className="text-right">{line.item?.unitOfMeasure?.trim().toUpperCase() || ''}</span>
+            )}
             <span className="tabular text-right">{money(line.unitPrice)}</span>
             <span className="tabular text-right font-medium">{money(line.amount)}</span>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Keep subtotal → grand total on one sheet; do not orphan the last total. */}
@@ -460,13 +477,15 @@ export function MerchantInvoice({
         <DocumentAccountFooter template={template} accent={accent} />
       ) : null}
 
-      <div className="px-8 pb-2 pt-4">
-        <DocumentStampBlock
-          createdBy={document.createdByName}
-          approval={approval}
-          status={STATUS_LABELS[document.status] ?? document.status}
-        />
-      </div>
+      {proposal ? null : (
+        <div className="px-8 pb-2 pt-4">
+          <DocumentStampBlock
+            createdBy={document.createdByName}
+            approval={approval}
+            status={STATUS_LABELS[document.status] ?? document.status}
+          />
+        </div>
+      )}
 
       {prefs.hidden.includes('printedFooter') ? null : (
         <div className="flex justify-between gap-4 border-t px-8 py-3 text-[10px] text-[#5C6B7A]">
@@ -519,6 +538,9 @@ function TradePaper({
   config,
   terms,
   customerMessage,
+  previousQuotationsTotal,
+  thisQuotationTotal,
+  runningQuoteTotal,
   person,
   dateLabel,
   approval,
@@ -536,6 +558,9 @@ function TradePaper({
   config: { type: string; singular: string }
   terms: string
   customerMessage: string | null
+  previousQuotationsTotal: string | null
+  thisQuotationTotal: string | null
+  runningQuoteTotal: string | null
   person: string
   dateLabel: string
   approval: { name: string; at: Date | null } | null
@@ -618,6 +643,23 @@ function TradePaper({
         </div>
       </div>
 
+      {document.workSite || document.project?.siteLocation || document.workScope ? (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="font-semibold text-[#111827]">Work site:</p>
+            <p className="mt-1">{document.workSite || document.project?.siteLocation || '—'}</p>
+          </div>
+          <div>
+            <p className="font-semibold text-[#111827]">Work / job:</p>
+            <p className="mt-1">
+              {document.workScope
+                ? `${document.workScope} · Client: ${document.customer.displayName}`
+                : '—'}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <p className="mt-4">
         <span className="font-semibold">Remarks:</span>
         <span className="whitespace-pre-wrap">{customerMessage?.trim() || terms.trim() || '—'}</span>
@@ -680,16 +722,33 @@ function TradePaper({
               <dt>Taxes</dt>
               <dd className="tabular">{money(document.taxTotal)}</dd>
             </div>
-          ) : (
+          ) : runningQuoteTotal ? null : (
             <div className="flex justify-between gap-3">
               <dt>Payment</dt>
               <dd className="tabular">{money(document.amountApplied || 0)}</dd>
             </div>
           )}
-          <div className="flex justify-between gap-3 border-t border-[#1f2933] pt-1 font-semibold">
-            <dt>Total</dt>
-            <dd className="tabular">{money(document.total)}</dd>
-          </div>
+          {runningQuoteTotal ? (
+            <>
+              <div className="flex justify-between gap-3">
+                <dt>This quotation</dt>
+                <dd className="tabular">{money(thisQuotationTotal ?? document.total)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Previous quotations</dt>
+                <dd className="tabular">{money(previousQuotationsTotal ?? '0')}</dd>
+              </div>
+              <div className="flex justify-between gap-3 border-t border-[#1f2933] pt-1 font-semibold">
+                <dt>Grand total</dt>
+                <dd className="tabular">{money(runningQuoteTotal)}</dd>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between gap-3 border-t border-[#1f2933] pt-1 font-semibold">
+              <dt>Total</dt>
+              <dd className="tabular">{money(document.total)}</dd>
+            </div>
+          )}
         </dl>
       </div>
 

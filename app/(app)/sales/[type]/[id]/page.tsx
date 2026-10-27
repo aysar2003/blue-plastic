@@ -90,6 +90,13 @@ export default async function SalesDocumentPage({
     number: document.number,
     extraLines: [
       `Date: ${formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)}`,
+      document.createdByName ? `Sales person: ${document.createdByName}` : null,
+      document.workSite || document.project?.siteLocation
+        ? `Work site: ${document.workSite || document.project?.siteLocation}`
+        : null,
+      document.workScope
+        ? `Work / job: ${document.workScope} · Client: ${document.customer.displayName}`
+        : null,
       `Total: ${formatMoney(document.total, currency)}`,
       Number(document.balance) > 0
         ? `Amount due: ${formatMoney(document.balance, currency)}`

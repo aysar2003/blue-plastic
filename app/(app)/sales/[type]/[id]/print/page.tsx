@@ -54,6 +54,13 @@ export default async function PrintDocumentPage({
     number: document.number,
     extraLines: [
       `Date: ${longDate(toCalendarDate(document.date), document.createdAt, organization.timeZone)}`,
+      document.createdByName ? `Sales person: ${document.createdByName}` : null,
+      document.workSite || document.project?.siteLocation
+        ? `Work site: ${document.workSite || document.project?.siteLocation}`
+        : null,
+      document.workScope
+        ? `Work / job: ${document.workScope} · Client: ${customer.displayName}`
+        : null,
       `Total: ${money(document.total)}`,
       document.balance && Number(document.balance) > 0 ? `Amount due: ${money(document.balance)}` : null,
       ...documentStampLines({
@@ -95,11 +102,12 @@ export default async function PrintDocumentPage({
       <MerchantInvoice
         document={document}
         organization={organization}
-        template={{ ...template, paperStyle: 'trade' }}
+        template={{ ...template, paperStyle: document.type === 'QUOTATION' ? 'merchant' : 'trade' }}
         config={config}
         baseCurrency={ctx.organization.baseCurrency}
         printedBy={ctx.user.name}
         approval={approval}
+        hideAccountBalance={document.type === 'QUOTATION'}
       />
     </div>
   )
