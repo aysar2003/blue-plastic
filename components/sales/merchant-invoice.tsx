@@ -556,7 +556,8 @@ function TradePaper({
       className="merchant-invoice bg-white px-10 pb-6 pt-8 text-[12px] leading-snug text-[#374151] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:shadow-none"
       style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
     >
-      <header className="flex items-start justify-between gap-6">
+      {/* A div, not a header: print CSS hides every header (the app bar), which dropped the company name and TEL / EMAIL / ADDR off the invoice PDF. */}
+      <div className="flex items-start justify-between gap-6">
         <h1 className="text-3xl font-black tracking-tight" style={{ color: accent }}>
           {company.name}
         </h1>
@@ -565,7 +566,7 @@ function TradePaper({
           {company.email ? <p>EMAIL: {company.email}</p> : null}
           {company.address ? <p>ADDR: {company.address}</p> : null}
         </div>
-      </header>
+      </div>
 
       <div className="mt-6 grid gap-6 sm:grid-cols-[minmax(0,1fr)_16rem]">
         <div>
@@ -674,10 +675,15 @@ function TradePaper({
               <dt>Bill payment</dt>
               <dd className="tabular">{money(document.amountApplied || 0)}</dd>
             </div>
-          ) : (
+          ) : purchase ? (
             <div className="flex justify-between gap-3">
               <dt>Taxes</dt>
               <dd className="tabular">{money(document.taxTotal)}</dd>
+            </div>
+          ) : (
+            <div className="flex justify-between gap-3">
+              <dt>Payment</dt>
+              <dd className="tabular">{money(document.amountApplied || 0)}</dd>
             </div>
           )}
           <div className="flex justify-between gap-3 border-t border-[#1f2933] pt-1 font-semibold">

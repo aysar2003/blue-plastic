@@ -9,6 +9,7 @@
 export type TemplateList =
   | 'yesno'
   | 'itemType'
+  | 'unit'
   | 'country'
   | 'terms'
   | 'income'
@@ -134,6 +135,13 @@ export const ITEM_TEMPLATE: TemplateColumn[] = [
     entry: 'itemType',
   },
   {
+    header: 'Unit',
+    required: false,
+    hint: 'How you count it: Pcs, kg, m, roll, bag, carton, litre, or box. Blank means Pcs.',
+    example: 'Pcs',
+    entry: 'unit',
+  },
+  {
     header: 'Sales Description',
     required: false,
     hint: 'Text shown on the invoice line.',
@@ -240,6 +248,9 @@ export const COUNTRY_CHOICES = [
 ]
 
 export const ITEM_TYPE_CHOICES = ['Service', 'Non-inventory', 'Inventory']
+
+/** Units the product sheet offers. Blank on the sheet still means Pcs. */
+export const ITEM_UNIT_CHOICES = ['Pcs', 'kg', 'g', 'm', 'roll', 'bag', 'carton', 'litre', 'box']
 
 export function templateFor(kind: 'customer' | 'vendor' | 'item'): TemplateColumn[] {
   if (kind === 'customer') return CUSTOMER_TEMPLATE
@@ -348,6 +359,7 @@ const ITEM_SAMPLES: Record<string, string>[] = [
     SKU: 'DRM-1',
     Barcode: '5901234123457',
     Type: 'Inventory',
+    Unit: 'Pcs',
     'Sales Description': '20L drum',
     'Sales Price': '25',
     Taxable: 'Yes',

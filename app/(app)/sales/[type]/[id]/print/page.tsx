@@ -95,7 +95,7 @@ export default async function PrintDocumentPage({
       <MerchantInvoice
         document={document}
         organization={organization}
-        template={template}
+        template={{ ...template, paperStyle: 'trade' }}
         config={config}
         baseCurrency={ctx.organization.baseCurrency}
         printedBy={ctx.user.name}

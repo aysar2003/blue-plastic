@@ -49,8 +49,7 @@ export type DeliveryNotePdfInput = {
  */
 export function renderDeliveryNotePdf(input: DeliveryNotePdfInput): Uint8Array {
   const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
-  const trade = template.paperStyle === 'trade'
-  const accent = trade ? merchantPdfInk() : merchantAccent(template)
+  const accent = merchantAccent(template)
   const wash = accentWashRgb(accent)
   const ink = merchantPdfInk()
   const muted = merchantPdfMuted()
@@ -67,7 +66,6 @@ export function renderDeliveryNotePdf(input: DeliveryNotePdfInput): Uint8Array {
       orgPhone: input.orgPhone,
       orgEmail: input.orgEmail,
       accent,
-      plain: trade,
     }),
   )
 

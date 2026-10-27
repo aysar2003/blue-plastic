@@ -2530,6 +2530,12 @@ a.report-drill-link:hover {
     display: none !important;
   }
 
+  /* The app bar is a header. The paper's own company block must still print. */
+  .merchant-invoice header,
+  .invoice-sheet header {
+    display: flex !important;
+  }
+
   /*
    * A table that scrolls on screen has to print whole: an `overflow` container
    * prints only what was visible, silently truncating the page. That includes

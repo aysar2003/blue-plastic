@@ -12,6 +12,7 @@ import {
   shapeContact,
   shapeItem,
 } from '@/lib/spreadsheet'
+import { nextBlankSku } from '@/lib/sku'
 import { customerSchema, itemSchema, vendorSchema } from '@/lib/validation/master-data'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -277,12 +278,18 @@ export async function importItems(
       issues.push({ row: lineNumber, message: `"${draft.name}" already exists — skipped` })
       return
     }
-    if (draft.sku) {
-      const skuKey = draft.sku.toLowerCase()
-      if (skus.has(skuKey) || seenSkus.has(skuKey)) {
-        issues.push({ row: lineNumber, message: `SKU "${draft.sku}" is already used — skipped` })
-        return
-      }
+    if (!draft.sku) {
+      draft.sku = nextBlankSku(new Set([...skus, ...seenSkus]))
+      issues.push({
+        row: lineNumber,
+        field: 'SKU',
+        message: `No SKU on this row, so ${draft.sku} was assigned`,
+      })
+    }
+    const skuKey = draft.sku.toLowerCase()
+    if (skus.has(skuKey) || seenSkus.has(skuKey)) {
+      issues.push({ row: lineNumber, message: `SKU "${draft.sku}" is already used — skipped` })
+      return
     }
 
     const incomeAccountId = resolveAccount(draft.incomeAccountName, accounts, incomeFallback, issues, lineNumber, 'Income account')
@@ -354,7 +361,7 @@ export async function importItems(
       openingUnitCost: draft.openingUnitCost,
       openingDate: draft.openingDate,
       categoryId: '',
-      unitOfMeasure: '',
+      unitOfMeasure: draft.unitOfMeasure,
       salesTaxCodeId: '',
       purchaseTaxCodeId: '',
     })

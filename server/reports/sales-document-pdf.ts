@@ -596,9 +596,11 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   const date = calendar
     ? formatLongTransactionDate(calendar, input.createdAt, input.timeZone || 'UTC')
     : String(input.date)
-  const ship = purchase ? input.orgAddress : input.customerAddress
-  const other = purchase ? input.customerAddress : input.orgAddress
-  const otherName = purchase ? input.customerName : input.orgName
+  const accent = merchantAccent(input.template, purchase ? 'vendor' : 'customer')
+  const party = (input.partyLabel ?? (purchase ? 'Vendor' : 'Bill to')).toUpperCase()
+  const docTitle = input.title.toUpperCase()
+  const status = (STATUS_LABELS[input.status ?? ''] ?? input.status ?? '').replaceAll('_', ' ').toUpperCase()
+  const addressLine = input.customerAddress.map(cleanPart).filter(Boolean).join(', ')
 
   rows.push(
     ...merchantPdfLetterhead({
@@ -606,25 +608,56 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
       orgAddress: input.orgAddress,
       orgPhone: input.orgPhone,
       orgEmail: input.orgEmail,
-      accent: merchantAccent(input.template, purchase ? 'vendor' : 'customer'),
+      accent,
     }),
   )
-  const shipLines = ship.length ? ship : ['—']
-  const rightLines = [otherName, ...other.filter(Boolean)]
-  const pairs = Math.max(shipLines.length + 1, rightLines.length)
-  rows.push({ size: 8, height: 16, runs: [] })
-  for (let i = 0; i < pairs; i += 1) {
-    const left = i === 0 ? 'Shipping address:' : (shipLines[i - 1] ?? '')
-    const right = rightLines[i] ?? ''
+  rows.push({
+    size: 8,
+    height: 12,
+    runs: [
+      { text: party, bold: true, color: accent },
+      { text: docTitle, x: PDF_PAGE.right, align: 'right', bold: true, color: accent },
+    ],
+  })
+  rows.push({
+    size: 11,
+    height: 14,
+    runs: [
+      { text: input.customerName, bold: true },
+      { text: input.number, x: PDF_PAGE.right, align: 'right', bold: true },
+    ],
+  })
+  if (addressLine) {
     rows.push({
       size: 9,
       height: 12,
       runs: [
-        { text: left, bold: i === 0 },
-        ...(right ? [{ text: right, x: 340 }] : []),
+        { text: 'Address', color: muted },
+        { text: addressLine.slice(0, 48), x: 90 },
       ],
     })
   }
+  const numberBarcode = pdfBarcodeRow(input.number, { align: 'right', height: 36 })
+  if (numberBarcode) rows.push(numberBarcode)
+  if (status) {
+    rows.push({
+      size: 8,
+      height: 14,
+      runs: [{ text: status, x: PDF_PAGE.right, align: 'right', bold: true, color: accent }],
+    })
+  }
+  rows.push({
+    size: 8,
+    height: 12,
+    runs: [
+      { text: paperDateLabel(input.documentType).toUpperCase(), x: PDF_PAGE.right, align: 'right', bold: true, color: accent },
+    ],
+  })
+  rows.push({
+    size: 9,
+    height: 13,
+    runs: [{ text: date, x: PDF_PAGE.right, align: 'right' }],
+  })
 
   rows.push({ size: 18, height: 28, runs: [{ text: title }] })
   rows.push({
@@ -716,11 +749,19 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     keepId: 'trade-totals',
     runs: [
       { text: stamp[1] ?? '', color: muted },
-      { text: purchase && input.documentType === 'PURCHASE_ORDER' ? 'Bill payment' : 'Taxes', x: 430 },
       {
-        text: purchase && input.documentType === 'PURCHASE_ORDER'
-          ? money(input.amountApplied || '0')
-          : money(input.taxTotal),
+        text: purchase
+          ? input.documentType === 'PURCHASE_ORDER'
+            ? 'Bill payment'
+            : 'Taxes'
+          : 'Payment',
+        x: 430,
+      },
+      {
+        text:
+          purchase && input.documentType !== 'PURCHASE_ORDER'
+            ? money(input.taxTotal)
+            : money(input.amountApplied || '0'),
         x: amountX,
         align: 'right',
       },

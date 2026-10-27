@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { ITEM_TEMPLATE, sampleRows } from '@/lib/import-template'
+import { nextBlankSku } from '@/lib/sku'
 import { matchPosBarcode } from '@/lib/pos-barcode'
 import { shapeItem } from '@/lib/spreadsheet'
 import { parseCsv } from '@/lib/csv'
@@ -29,11 +30,22 @@ describe('item barcode import', () => {
     expect(shapeItem(rows[0]!, 'DMY').draft).toMatchObject({
       name: 'Blue drum',
       barcode: '5901234123457',
+      unitOfMeasure: '',
     })
+    const withUnit = parseCsv(
+      ['Product/Service Name,Unit', 'Blue drum,kg'].join('\n'),
+    )
+    expect(shapeItem(withUnit.rows[0]!, 'DMY').draft?.unitOfMeasure).toBe('kg')
     expect(shapeItem(rows[1]!, 'DMY').draft).toMatchObject({
       name: 'Delivery',
       barcode: '5901234123458',
     })
+  })
+
+  it('fills the next free SKU when an import row left it blank', () => {
+    expect(nextBlankSku(['1600-00-230', 'sku-00002'])).toBe('SKU-00003')
+    expect(nextBlankSku(['sku-00003'])).toBe('SKU-00004')
+    expect(nextBlankSku([])).toBe('SKU-00001')
   })
 
   it('lets POS sell after an existing item gets a barcode from import or edit', () => {

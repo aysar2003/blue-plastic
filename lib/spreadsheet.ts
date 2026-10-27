@@ -314,6 +314,8 @@ export type ShapedItem = {
     openingDate: string
     /** Store name from the sheet — resolved to an id at import time. */
     storeName: string
+    /** Blank means Pcs. */
+    unitOfMeasure: string
   }
 }
 
@@ -388,6 +390,11 @@ export function shapeItem(row: CsvRow, order: DateOrder): ShapedItem {
 
   const inactive = !normaliseYes(pick(row, 'active'), true)
   const storeName = pick(row, 'store', 'location', 'warehouse', 'site')
+  const unitRaw = pick(row, 'unit', 'unit of measure', 'uom', 'u/m')
+  const unitOfMeasure = unitRaw.trim().slice(0, 20)
+  if (unitRaw.trim().length > 20) {
+    warnings.push({ field: 'Unit', message: 'Unit was shortened to 20 characters' })
+  }
 
   return {
     warnings,
@@ -410,6 +417,7 @@ export function shapeItem(row: CsvRow, order: DateOrder): ShapedItem {
       openingUnitCost,
       openingDate,
       storeName,
+      unitOfMeasure,
     },
   }
 }

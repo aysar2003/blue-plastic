@@ -1,0 +1,439 @@
+﻿
+> som-erp@0.1.0 test C:\Users\Zmart\Desktop\blue-plastic
+> vitest run
+
+
+ RUN  v4.1.11 C:/Users/Zmart/Desktop/blue-plastic
+
+pnpm.exe : stderr | tests/export-month-quotations-pdf.test.ts
+At C:\Users\Zmart\AppData\Roaming\npm\pnpm.ps1:14 char:3
++   & "$basedir/node_modules/pnpm/pnpm.exe"   $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (stderr | tests/...ons-pdf.test.ts:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[vitest] Skipping DB integration tests: DATABASE_URL points at hosted Supabase. Set ALLOW_DB_TESTS=1 to run them 
+(prefer a local DB).
+
+ ❯ tests/export-month-quotations-pdf.test.ts (1 test | 1 failed) 19ms
+     × writes October 2026 quotations pack to Downloads 14ms
+stderr | tests/pos-receipt.test.ts
+[vitest] Skipping DB integration tests: DATABASE_URL points at hosted Supabase. Set ALLOW_DB_TESTS=1 to run them 
+(prefer a local DB).
+
+ ❯ tests/pos-receipt.test.ts (13 tests | 1 failed) 95ms
+     × prints the slip in black on an 80mm roll by default 65ms
+stderr | tests/project-quotations.test.ts
+[vitest] Skipping DB integration tests: DATABASE_URL points at hosted Supabase. Set ALLOW_DB_TESTS=1 to run them 
+(prefer a local DB).
+
+ ❯ tests/project-quotations.test.ts (4 tests | 1 failed) 65ms
+     × prints each original quotation and carries the previous grand total 39ms
+stderr | tests/business-overview-access.test.ts
+[vitest] Skipping DB integration tests: DATABASE_URL points at hosted Supabase. Set ALLOW_DB_TESTS=1 to run them 
+(prefer a local DB).
+
+ ❯ tests/business-overview-access.test.ts (5 tests | 1 failed) 32ms
+     × still lists the other statements in the business overview group 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/business-overview-access.test.ts > business overview access > still lists the other statements in the 
+business overview group
+AssertionError: expected [ '/reports/profit-loss', …(4) ] to deeply equal [ '/reports/profit-loss', …(3) ]
+
+- Expected
++ Received
+
+  [
+    "/reports/profit-loss",
+    "/reports/balance-sheet",
+    "/reports/cash-flow",
+    "/reports/trial-balance",
++   "/reports/profit-loss/by-month",
+  ]
+
+ ❯ tests/business-overview-access.test.ts:79:50
+     77|   it('still lists the other statements in the business overview group'…
+     78|     const section = reportSectionsFor(sales).find((item) => item.label…
+     79|     expect(section?.apps.map((app) => app.href)).toEqual([
+       |                                                  ^
+     80|       '/reports/profit-loss',
+     81|       '/reports/balance-sheet',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/export-month-quotations-pdf.test.ts > export month quotations pdf > writes October 2026 quotations pack 
+to Downloads
+AssertionError: expected undefined to be truthy
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ tests/export-month-quotations-pdf.test.ts:34:17
+     32|   it('writes October 2026 quotations pack to Downloads', async () => {
+     33|     const url = process.env.DATABASE_URL
+     34|     expect(url).toBeTruthy()
+       |                 ^
+     35|     const prisma = new PrismaClient({ adapter: new PrismaPg({ connecti…
+     36|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/pos-receipt.test.ts > thermal receipt > prints the slip in black on an 80mm roll by default
+AssertionError: expected '<div class="min-h-svh bg-neutral-200 …' to contain '2 x $20.00'
+
+Expected: "2 x $20.00"
+Received: "<div class="min-h-svh bg-neutral-200 py-6 print:min-h-0 print:bg-white print:p-0"><style></style><div 
+class="mx-auto mb-4 flex w-fit flex-wrap items-center gap-2 print:hidden"><button type="button" class="inline-flex 
+items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white"><svg 
+xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" 
+stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-printer size-4" 
+aria-hidden="true"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><path 
+d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"></path><rect x="6" y="14" width="12" height="8" 
+rx="1"></rect></svg>Print</button><div class="inline-flex overflow-hidden rounded-md border border-black/30 bg-white 
+text-sm" role="group" aria-label="Paper width"><button type="button" aria-pressed="true" class="bg-black px-3 py-2 
+font-semibold text-white">80mm</button><button type="button" aria-pressed="false" class="px-3 py-2 
+text-black">58mm</button></div><button type="button" class="inline-flex items-center gap-1.5 rounded-md border 
+border-black/30 bg-white px-3 py-2 text-sm text-black"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" 
+viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" 
+class="lucide lucide-x size-4" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 
+12"></path></svg>Done</button></div><div data-paper="80" class="thermal-receipt mx-auto bg-white text-black shadow-md 
+print:shadow-none" style="width:80mm;padding:5mm 4mm 6mm;font-family:var(--font-geist-mono), ui-monospace, 
+&quot;Courier New&quot;, monospace;font-size:12px;line-height:1.35;color:#000"><div class="text-center"><p 
+style="font-size:1.45em;font-weight:800;line-height:1.15;letter-spacing:0.02em">BLUE PLASTIC CENTER</p><p>Bakaara 
+Market</p><p>Mogadishu</p><p>Tel: +252 61 000 0000</p></div><div aria-hidden="true" style="border-top:1px dashed 
+#000;margin:0.45em 0"></div><p class="text-center" style="font-weight:700;letter-spacing:0.12em">SALES RECEIPT</p><div 
+class="flex justify-between gap-2"><span style="overflow-wrap:break-word;min-width:fit-content">Receipt</span><span 
+class="tabular-nums text-right" style="overflow-wrap:break-word;min-width:0">SR-1042</span></div><div class="flex 
+justify-between gap-2"><span style="overflow-wrap:break-word;min-width:fit-content">Date</span><span 
+class="tabular-nums text-right" style="overflow-wrap:break-word;min-width:0">08/10/2026 17:56</span></div><div 
+class="flex justify-between gap-2"><span style="overflow-wrap:break-word;min-width:fit-content">Counter</span><span 
+class="tabular-nums text-right" style="overflow-wrap:break-word;min-width:0">Main till</span></div><div class="flex 
+justify-between gap-2"><span style="overflow-wrap:break-word;min-width:fit-content">Salesman</span><span 
+class="tabular-nums text-right" style="overflow-wrap:break-word;min-width:0">Fahad</span></div><div aria-hidden="true" 
+style="border-top:1px dashed #000;margin:0.45em 0"></div><ul><li style="margin-bottom:0.3em;break-inside:avoid"><p 
+style="font-weight:600;overflow-wrap:anywhere">AASTO</p><div class="flex justify-between gap-2"><span>2 Pcs x 
+$20.00</span><span class="tabular-nums" style="white-space:nowrap">$40.00</span></div></li><li 
+style="margin-bottom:0.3em;break-inside:avoid"><p style="font-weight:600;overflow-wrap:anywhere">A4</p><div 
+class="flex justify-between gap-2"><span>1 Pcs x $6.00</span><span class="tabular-nums" 
+style="white-space:nowrap">$6.00</span></div></li></ul><div aria-hidden="true" style="border-top:1px dashed 
+#000;margin:0.45em 0"></div><div class="flex justify-between gap-2"><span 
+style="overflow-wrap:break-word;min-width:fit-content">Items: 3</span><span class="tabular-nums text-right" 
+style="overflow-wrap:break-word;min-width:0"></span></div><div class="flex justify-between gap-2"><span 
+style="overflow-wrap:break-word;min-width:fit-content">Subtotal</span><span class="tabular-nums text-right" 
+style="overflow-wrap:break-word;min-width:0">$46.00</span></div><div class="flex justify-between gap-2" 
+style="font-size:1.3em;font-weight:800;margin-top:0.2em"><span>TOTAL</span><span 
+class="tabular-nums">$46.00</span></div><div aria-hidden="true" style="border-top:1px dashed #000;margin:0.45em 
+0"></div><div class="flex justify-between gap-2"><span 
+style="overflow-wrap:break-word;min-width:fit-content">Cash</span><span class="tabular-nums text-right" 
+style="overflow-wrap:break-word;min-width:0">$50.00</span></div><div class="flex justify-between gap-2" 
+style="font-weight:700"><span style="overflow-wrap:break-word;min-width:fit-content">Paid</span><span 
+class="tabular-nums text-right" style="overflow-wrap:break-word;min-width:0">$50.00</span></div><div class="flex 
+justify-between gap-2" style="font-weight:700"><span 
+style="overflow-wrap:break-word;min-width:fit-content">Change</span><span class="tabular-nums text-right" 
+style="overflow-wrap:break-word;min-width:0">$4.00</span></div><div aria-hidden="true" style="border-top:1px dashed 
+#000;margin:0.45em 0"></div><div class="text-center"><p style="font-weight:700">Mahadsanid!</p><p>Thank you for 
+shopping with us</p></div></div></div>"
+
+ ❯ tests/pos-receipt.test.ts:174:18
+    172|     expect(html).not.toContain('Cashier')
+    173|     expect(html).not.toContain('Register')
+    174|     expect(html).toContain('2 x $20.00')
+       |                  ^
+    175|     expect(html).toContain('$46.00')
+    176|     expect(html).toMatch(/Cash<\/span><span[^>]*>\$50\.00/)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/project-quotations.test.ts > combined project quotations PDF > prints each original quotation and carries 
+the previous grand total
+AssertionError: expected '%PDF-1.4\n1 0 obj\n<< /Type /Font /Su…' to contain 'WORK SITE'
+
+- Expected
++ Received
+
+- WORK SITE
++ %PDF-1.4
++ 1 0 obj
++ << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
++ endobj
++ 2 0 obj
++ << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
++ endobj
++ 3 0 obj
++ << /Length 2594 >>
++ stream
++ BT
++ 0.118 0.722 0.682 rg
++ /F2 18 Tf 1 0 0 1 40 730 Tm (Blue Plastic) Tj
++ ET
++ BT
++ 0.360 0.420 0.480 rg
++ /F1 8 Tf 1 0 0 1 512 719 Tm (ADDR: Mogadishu) Tj
++ ET
++ BT
++ 0.118 0.722 0.682 rg
++ /F2 8 Tf 1 0 0 1 40 693 Tm (BILL TO) Tj
++ 0.118 0.722 0.682 rg
++ /F2 8 Tf 1 0 0 1 527 693 Tm (QUOTATION) Tj
++ ET
++ BT
++ 0.120 0.160 0.200 rg
++ /F2 11 Tf 1 0 0 1 40 679 Tm (Amina Construction) Tj
++ 0.120 0.160 0.200 rg
++ /F2 11 Tf 1 0 0 1 545 679 Tm (QT-1) Tj
++ ET
++ 0 0 0 rg
++ 474.10 650.00 2.20 27.00 re f
++ 477.40 650.00 1.10 27.00 re f
++ 480.70 650.00 1.10 27.00 re f
++ 486.20 650.00 2.20 27.00 re f
++ 489.50 650.00 1.10 27.00 re f
++ 493.90 650.00 3.30 27.00 re f
++ 498.30 650.00 2.20 27.00 re f
++ 501.60 650.00 3.30 27.00 re f
++ 508.20 650.00 1.10 27.00 re f
++ 510.40 650.00 1.10 27.00 re f
++ 513.70 650.00 2.20 27.00 re f
++ 517.00 650.00 3.30 27.00 re f
++ 522.50 650.00 1.10 27.00 re f
++ 525.80 650.00 3.30 27.00 re f
++ 531.30 650.00 2.20 27.00 re f
++ 534.60 650.00 3.30 27.00 re f
++ 539.00 650.00 1.10 27.00 re f
++ 543.40 650.00 2.20 27.00 re f
++ 546.70 650.00 2.20 27.00 re f
++ 552.20 650.00 3.30 27.00 re f
++ 556.60 650.00 1.10 27.00 re f
++ 558.80 650.00 2.20 27.00 re f
++ BT
++ /F1 8 Tf 1 0 0 1 509.55 639.00 Tm (QT-1) Tj
++ ET
++ BT
++ 0.360 0.420 0.480 rg
++ /F1 9 Tf 1 0 0 1 40 626 Tm (Work site) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 130 626 Tm (Alanley villa) Tj
++ 0.118 0.722 0.682 rg
++ /F2 9 Tf 1 0 0 1 505 626 Tm (INVOICE DATE) Tj
++ ET
++ BT
++ 0.360 0.420 0.480 rg
++ /F1 9 Tf 1 0 0 1 40 613 Tm (Work / job) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 130 613 Tm (Foundation   Client: Amina Construction) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 505 613 Tm (20 October 2026) Tj
++ ET
++ 0.118 0.722 0.682 rg 0.00 585 612.00 18 re f
++ BT
++ 1.000 1.000 1.000 rg
++ /F2 8 Tf 1 0 0 1 40 587 Tm (No) Tj
++ 1.000 1.000 1.000 rg
++ /F2 8 Tf 1 0 0 1 70 587 Tm (Item name) Tj
++ 1.000 1.000 1.000 rg
++ /F2 8 Tf 1 0 0 1 345 587 Tm (Qty) Tj
++ 1.000 1.000 1.000 rg
++ /F2 8 Tf 1 0 0 1 430 587 Tm (Rate) Tj
++ 1.000 1.000 1.000 rg
++ /F2 8 Tf 1 0 0 1 542 587 Tm (Amount) Tj
++ ET
++ BT
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 40 573 Tm (1) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 70 573 Tm (Labour) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 324 573 Tm (1.00 Pcs) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 419 573 Tm ($100.00) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 541 573 Tm ($100.00) Tj
++ ET
++ 0.118 0.722 0.682 rg 360.00 543 212.00 18 re f
++ BT
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 368 545 Tm (SUBTOTAL) Tj
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 529 545 Tm ($100.00) Tj
++ ET
++ 0.118 0.722 0.682 rg 360.00 527 212.00 18 re f
++ BT
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 368 529 Tm (GRAND TOTAL) Tj
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 529 529 Tm ($100.00) Tj
++ ET
++ endstream
++ endobj
++ 4 0 obj
++ << /Type /Page /Parent 7 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 
+R >>
++ endobj
++ 5 0 obj
++ << /Length 2971 >>
++ stream
++ BT
++ 0.118 0.722 0.682 rg
++ /F2 18 Tf 1 0 0 1 40 730 Tm (Blue Plastic) Tj
++ ET
++ BT
++ 0.360 0.420 0.480 rg
++ /F1 8 Tf 1 0 0 1 512 719 Tm (ADDR: Mogadishu) Tj
++ ET
++ BT
++ 0.118 0.722 0.682 rg
++ /F2 8 Tf 1 0 0 1 40 693 Tm (BILL TO) Tj
++ 0.118 0.722 0.682 rg
+
+ Test Files  4 failed | 100 passed | 25 skipped (129)
++ /F2 8 Tf 1 0 0 1 527 693 Tm (QUOTATION) Tj
++ ET
++ BT
++ 0.120 0.160 0.200 rg
++ /F2 11 Tf 1 0 0 1 40 679 Tm (Amina Construction) Tj
++ 0.120 0.160 0.200 rg
++ /F2 11 Tf 1 0 0 1 545 679 Tm (QT-2) Tj
++ ET
++ 0 0 0 rg
++ 474.10 650.00 2.20 27.00 re f
++ 477.40 650.00 1.10 27.00 re f
++ 480.70 650.00 1.10 27.00 re f
++ 486.20 650.00 2.20 27.00 re f
++ 489.50 650.00 1.10 27.00 re f
++ 493.90 650.00 3.30 27.00 re f
++ 498.30 650.00 2.20 27.00 re f
++ 501.60 650.00 3.30 27.00 re f
++ 508.20 650.00 1.10 27.00 re f
++ 510.40 650.00 1.10 27.00 re f
++ 513.70 650.00 2.20 27.00 re f
++ 517.00 650.00 3.30 27.00 re f
++ 522.50 650.00 2.20 27.00 re f
++ 526.90 650.00 3.30 27.00 re f
++ 532.40 650.00 1.10 27.00 re f
++ 534.60 650.00 3.30 27.00 re f
++ 541.20 650.00 2.20 27.00 re f
++ 544.50 650.00 1.10 27.00 re f
++ 546.70 650.00 2.20 27.00 re f
++ 552.20 650.00 3.30 27.00 re f
+      Tests  4 failed | 662 passed | 209 skipped (875)
+   Start at  19:13:35
+   Duration  90.34s (transform 6.51s, setup 1.50s, import 29.56s, tests 5.63s, environment 4.48s)
+
++ 556.60 650.00 1.10 27.00 re f
++ 558.80 650.00 2.20 27.00 re f
++ BT
++ /F1 8 Tf 1 0 0 1 509.55 639.00 Tm (QT-2) Tj
++ ET
++ BT
++ 0.360 0.420 0.480 rg
++ /F1 9 Tf 1 0 0 1 40 626 Tm (Work site) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 130 626 Tm (Alanley villa) Tj
++ 0.118 0.722 0.682 rg
++ /F2 9 Tf 1 0 0 1 505 626 Tm (INVOICE DATE) Tj
++ ET
++ BT
++ 0.360 0.420 0.480 rg
++ /F1 9 Tf 1 0 0 1 40 613 Tm (Work / job) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 130 613 Tm (Electrical   Client: Amina Construction) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 505 613 Tm (20 October 2026) Tj
++ ET
++ 0.118 0.722 0.682 rg 0.00 585 612.00 18 re f
++ BT
++ 1.000 1.000 1.000 rg
++ /F2 8 Tf 1 0 0 1 40 587 Tm (No) Tj
++ 1.000 1.000 1.000 rg
++ /F2 8 Tf 1 0 0 1 70 587 Tm (Item name) Tj
++ 1.000 1.000 1.000 rg
++ /F2 8 Tf 1 0 0 1 345 587 Tm (Qty) Tj
++ 1.000 1.000 1.000 rg
++ /F2 8 Tf 1 0 0 1 430 587 Tm (Rate) Tj
++ 1.000 1.000 1.000 rg
++ /F2 8 Tf 1 0 0 1 542 587 Tm (Amount) Tj
++ ET
++ BT
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 40 573 Tm (1) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 70 573 Tm (Labour) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 324 573 Tm (1.00 Pcs) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 419 573 Tm ($100.00) Tj
++ 0.120 0.160 0.200 rg
++ /F1 9 Tf 1 0 0 1 541 573 Tm ($100.00) Tj
++ ET
++ 0.118 0.722 0.682 rg 360.00 543 212.00 18 re f
++ BT
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 368 545 Tm (SUBTOTAL) Tj
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 529 545 Tm ($100.00) Tj
++ ET
++ 0.118 0.722 0.682 rg 360.00 527 212.00 18 re f
++ BT
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 368 529 Tm (THIS QUOTATION) Tj
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 529 529 Tm ($250.00) Tj
++ ET
++ 0.118 0.722 0.682 rg 360.00 511 212.00 18 re f
++ BT
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 368 513 Tm (PREVIOUS QUOTATIONS) Tj
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 529 513 Tm ($100.00) Tj
++ ET
++ 0.118 0.722 0.682 rg 360.00 495 212.00 18 re f
++ BT
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 368 497 Tm (GRAND TOTAL) Tj
++ 1.000 1.000 1.000 rg
++ /F2 10 Tf 1 0 0 1 529 497 Tm ($350.00) Tj
++ ET
++ endstream
++ endobj
++ 6 0 obj
++ << /Type /Page /Parent 7 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 5 0 
+R >>
++ endobj
++ 7 0 obj
++ << /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
++ endobj
++ 8 0 obj
++ << /Type /Catalog /Pages 7 0 R >>
++ endobj
++ xref
++ 0 9
++ 0000000000 65535 f 
++ 0000000009 00000 n 
++ 0000000079 00000 n 
++ 0000000154 00000 n 
++ 0000002800 00000 n 
++ 0000002936 00000 n 
++ 0000005959 00000 n 
++ 0000006095 00000 n 
++ 0000006158 00000 n 
++ trailer << /Size 9 /Root 8 0 R >>
++ startxref
++ 6207
++ %%EOF
+
+ ❯ tests/project-quotations.test.ts:91:18
+     89|     expect(text).toContain('Foundation')
+     90|     expect(text).toContain('Electrical')
+     91|     expect(text).toContain('WORK SITE')
+       |                  ^
+     92|     expect(text).toContain('Alanley villa')
+     93|     expect(text).toContain('Amina Construction')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+ ELIFECYCLE  Test failed. See above for more details.

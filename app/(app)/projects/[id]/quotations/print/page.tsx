@@ -129,7 +129,7 @@ export default async function ProjectQuotationsPrintPage({
               <MerchantInvoice
                 document={document}
                 organization={organization}
-                template={template}
+                template={{ ...template, paperStyle: 'trade' }}
                 config={byType(document.type)}
                 baseCurrency={currency}
                 printedBy={ctx.user.name}

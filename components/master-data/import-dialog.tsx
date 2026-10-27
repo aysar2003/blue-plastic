@@ -145,11 +145,10 @@ export function ImportDialog({
             </p>
             {kind === 'item' ? (
               <p className="mt-2 rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Barcode.</span> Paste ready package codes
-                in the Barcode column. New products keep that code for the till. A row that matches an
-                existing product by name only updates its barcode (stock stays as it is). You can also
-                open any product → Edit → Barcode, scan the package with a USB scanner, and Save — POS
-                sells by that code afterwards.
+                <span className="font-medium text-foreground">Fill these.</span> Name, Type, Unit
+                (Pcs, kg, m, roll… — blank means Pcs), Sales Price, Purchase Cost, Quantity on hand,
+                and Store. Barcode is for the till: a row that matches an existing product by name
+                only updates its barcode.
               </p>
             ) : null}
             <div className="mt-2 max-h-44 space-y-3 overflow-y-auto rounded-md border bg-muted/30 p-3 text-xs">

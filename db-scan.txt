@@ -1,0 +1,66 @@
+﻿
+> som-erp@0.1.0 db:verify C:\Users\Zmart\Desktop\blue-plastic
+> tsx scripts/verify-db.ts
+
+Ledger integrity objects
+
+  ✓ trg_journal_balanced           R2/R3   every posted journal balances and has at least two lines
+  ✓ trg_journal_immutable          R4      a posted journal cannot be edited or deleted
+  ✓ trg_journal_line_immutable     R4      the lines of a posted journal cannot be changed
+  ✓ trg_journal_period_open        R5/R6   nothing posts into a closed period or outside its period
+  ✓ trg_journal_line_dimensions    R7      AR/AP lines carry their counterparty and journalDate stays honest
+  ✓ trg_protect_system_accounts    R10     system accounts cannot be deleted or repurposed
+  ✓ trg_account_classification     —       an account subtype always matches its statement type
+  ✓ trg_item_account_mapping       —       an item maps to accounts of the right kind, and tracked stock has all three
+  ✓ trg_application_target         —       only an open invoice can be settled, and never beyond its total
+  ✓ trg_application_source         —       a payment or credit cannot be applied beyond its own value
+  ✓ trg_document_totals            —       a posted document's totals agree with its own lines
+  ✓ trg_purchase_application_target —       only an open bill can be settled, and never beyond its total
+  ✓ trg_purchase_application_source —       a payment or vendor credit cannot be applied beyond its own value
+  ✓ trg_purchase_totals            —       a posted bill's totals agree with its own lines
+  ✓ trg_deposit_total              —       a deposit totals what its own lines add up to
+  ✓ trg_reconciliation_immutable   —       a completed reconciliation cannot be quietly changed
+  ✓ trg_reconciliation_entry_locked —       nothing is added to or removed from a completed reconciliation
+  ✓ trg_entry_account_matches      —       a reconciliation only clears lines on the account it is reconciling
+  ✓ trg_inventory_movement_immutable —       the stock ledger is append-only, like the general ledger
+  ✓ trg_movement_item_tracked      —       only a tracked item has stock to move
+  ✓ trg_movement_continuity        —       every running total follows from the movement before it
+  ✓ trg_locked_year_periods        —       a closed fiscal year contains no period still accepting postings
+  ✓ trg_locked_year_self           —       a year cannot be locked while one of its periods is open
+  ✓ journal_lines_one_sided                  R1   a line is a debit or a credit, never both, never negative
+  ✓ journals_closing_entry_source            —    a journal flagged as a closing entry is sourced as one
+  ✓ fiscal_years_close_record                —    an open year carries no record of having been closed
+  ✓ tax_rates_fraction                       —    a tax rate is a fraction between 0 and 1, never a percentage
+  ✓ sales_applications_one_source            —    an application comes from a payment or a credit memo, never both or neither
+  ✓ sales_applications_positive              —    an application settles a positive amount
+  ✓ sales_documents_non_negative             —    a document total is never negative — that would be a credit memo
+  ✓ sales_documents_deposit_required         —    a receipt says which account the cash went to
+  ✓ customer_payments_positive               —    a payment is a positive amount
+  ✓ purchase_applications_one_source         —    an application comes from a payment or a vendor credit, never both or neither
+  ✓ purchase_applications_positive           —    an application settles a positive amount
+  ✓ purchase_documents_non_negative          —    a bill total is never negative — that would be a vendor credit
+  ✓ purchase_documents_payment_required      —    an expense says which account it was paid from
+  ✓ bill_payments_positive                   —    a bill payment is a positive amount
+  ✓ bank_transfers_distinct_accounts         —    a transfer moves money between two different accounts
+  ✓ bank_transfers_positive                  —    a transfer moves a positive amount
+  ✓ deposit_lines_one_source                 —    a deposit line banks a payment or names an account, never both or neither
+  ✓ deposit_lines_positive                   —    a deposit line banks a positive amount
+  ✓ inventory_transactions_non_zero          —    a movement of nothing is not a movement
+  ✓ adjustment_lines_change                  —    an adjustment line's arithmetic holds
+  ✓ fiscal_years_closing_journal_org_fkey    R9   a year's closing journal cannot belong to another organisation
+  ✓ journal_lines_journal_org_fkey           R9   a line cannot reference another organisation's journal
+  ✓ journal_lines_account_org_fkey           R9   a line cannot reference another organisation's account
+  ✓ journal_lines_customer_org_fkey          R9   a line cannot reference another organisation's customer
+  ✓ journal_lines_vendor_org_fkey            R9   a line cannot reference another organisation's vendor
+  ✓ sales_lines_document_org_fkey            R9   a document line cannot cross organisations
+  ✓ sales_applications_invoice_org_fkey      R9   an application cannot settle another organisation's invoice
+  ✓ purchase_lines_document_org_fkey         R9   a bill line cannot cross organisations
+  ✓ purchase_applications_bill_org_fkey      R9   an application cannot settle another organisation's bill
+  ✓ deposit_lines_deposit_org_fkey           R9   a deposit line cannot cross organisations
+  ✓ adjustment_lines_document_org_fkey       R9   an adjustment line cannot cross organisations
+  ✓ payment_terms_one_default                —    exactly one default payment term per organisation
+  ✓ reconciliations_one_in_progress          —    one reconciliation in progress per account at a time
+  ✓ ledger_accounts_one_pos_banks            —    one POS Banks heading per organisation
+  ✓ ledger_accounts_one_pos_register         —    one chart account per POS register
+
+All 58 integrity objects present.

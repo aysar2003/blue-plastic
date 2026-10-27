@@ -1,0 +1,12 @@
+﻿
+> som-erp@0.1.0 typecheck C:\Users\Zmart\Desktop\blue-plastic
+> tsc --noEmit
+
+tmp/smoke-qbd-reports.mts(1,44): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tmp/smoke-qbd-reports.mts(2,20): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tmp/smoke-qbd-reports.mts(3,23): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tmp/smoke-qbd-reports.mts(4,46): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tmp/smoke-qbd-reports.mts(5,45): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tmp/smoke-qbd-reports.mts(6,28): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tmp/verify-smtp.mts(4,28): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+ ELIFECYCLE  Command failed with exit code 1.

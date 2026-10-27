@@ -46,7 +46,7 @@ export default async function SalesPackPrintPage({
     <DocumentPackView
       documents={documents}
       organization={organization}
-      template={template}
+      template={{ ...template, paperStyle: 'trade' }}
       baseCurrency={ctx.organization.baseCurrency}
       printedBy={ctx.user.name}
       title={config.plural}

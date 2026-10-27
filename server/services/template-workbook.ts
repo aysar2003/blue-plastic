@@ -5,6 +5,7 @@ import type { Workbook as ExcelWorkbook } from 'exceljs'
 import {
   COUNTRY_CHOICES,
   ITEM_TYPE_CHOICES,
+  ITEM_UNIT_CHOICES,
   type TemplateColumn,
   type TemplateList,
 } from '@/lib/import-template'
@@ -40,6 +41,7 @@ export async function buildImportTemplate(input: {
   const lists = {
     yesno: ['Yes', 'No'],
     itemType: ITEM_TYPE_CHOICES,
+    unit: ITEM_UNIT_CHOICES,
     country: COUNTRY_CHOICES,
     terms: [],
     income: [],
@@ -66,12 +68,13 @@ export async function buildImportTemplate(input: {
 const LIST_COLUMN: Record<TemplateList, number> = {
   yesno: 1,
   itemType: 2,
-  country: 3,
-  terms: 4,
-  income: 5,
-  expense: 6,
-  inventory: 7,
-  store: 8,
+  unit: 3,
+  country: 4,
+  terms: 5,
+  income: 6,
+  expense: 7,
+  inventory: 8,
+  store: 9,
 }
 
 function writeLists(sheet: ExcelWorkbook['worksheets'][number], lists: Record<TemplateList, string[]>) {
