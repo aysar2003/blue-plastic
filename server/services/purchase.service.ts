@@ -309,7 +309,7 @@ export async function get(ctx: OrgContext, id: string) {
           id: true, lineNumber: true, description: true, quantity: true, unitPrice: true,
           quantityReceived: true, storeId: true,
           discountPercent: true, amount: true, taxAmount: true,
-          item: { select: { id: true, name: true, sku: true } },
+          item: { select: { id: true, name: true, sku: true, unitOfMeasure: true } },
           taxCode: { select: { id: true, name: true } },
           expenseAccount: { select: { id: true, code: true, name: true } },
         },

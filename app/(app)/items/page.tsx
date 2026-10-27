@@ -22,6 +22,7 @@ import * as itemService from '@/server/services/item.service'
 import * as storeService from '@/server/services/store.service'
 import * as taxService from '@/server/services/tax.service'
 import { whoText } from '@/components/data/recorded-by'
+import { ItemFilters } from './item-filters'
 import { ItemTable } from './item-table'
 
 const SORTABLE = [
@@ -46,8 +47,16 @@ const SORTABLE = [
 
 export const metadata: Metadata = { title: 'Products and services' }
 
+function itemsQuery(values: Record<string, string | undefined>) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(values)) {
+    if (value) params.set(key, value)
+  }
+  const text = params.toString()
+  return text ? `/items?${text}` : '/items'
+}
+
 const TYPE_FILTERS = [
-  { value: '', label: 'All' },
   { value: 'SERVICE', label: 'Service' },
   { value: 'INVENTORY', label: 'Inventory Part' },
   { value: 'INVENTORY_ASSEMBLY', label: 'Inventory Assembly' },
@@ -68,20 +77,23 @@ export default async function ItemsPage({
   const params = await searchParams
   const query = parseListQuery(params)
   const type = typeof params.type === 'string' ? params.type : undefined
+  const unit = typeof params.unit === 'string' ? params.unit : undefined
   const categoryId = typeof params.category === 'string' ? params.category : undefined
   const includeInactive = params.archived === '1'
   const sort = readSort(params, SORTABLE, { sort: 'type', dir: 'asc' })
   const linkParams = {
     q: query.q,
     type,
+    unit,
     category: categoryId,
     archived: includeInactive ? '1' : undefined,
     sort: sort.sort,
     dir: sort.dir,
   }
 
-  const [page, accounts, taxCodes, categories, shelf, catalogItems] = await Promise.all([
-    itemService.list(ctx, query, { type, categoryId, includeInactive, ...sort }),
+  const [page, units, accounts, taxCodes, categories, shelf, catalogItems] = await Promise.all([
+    itemService.list(ctx, query, { type, unit, categoryId, includeInactive, ...sort }),
+    itemService.listUnits(ctx),
     accountService.selectableAccounts(ctx),
     taxService.listCodes(ctx),
     itemService.listCategories(ctx),
@@ -144,30 +156,15 @@ export default async function ItemsPage({
           placeholder="Search name, SKU, barcode or description"
           className="max-w-2xl"
         />
-        <div className="flex gap-1">
-          {TYPE_FILTERS.map((filter) => {
-            const active = (type ?? '') === filter.value
-            const href = filter.value
-              ? `/items?type=${filter.value}${categoryId ? `&category=${categoryId}` : ''}`
-              : categoryId
-                ? `/items?category=${categoryId}`
-                : '/items'
-            return (
-              <Link
-                key={filter.label}
-                href={href}
-                className={cn(
-                  'rounded-md px-2.5 py-1 text-sm transition-colors',
-                  active ? 'bg-secondary font-medium' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {filter.label}
-              </Link>
-            )
-          })}
-        </div>
+        <ItemFilters types={TYPE_FILTERS} units={units} />
         <Link
-          href={includeInactive ? '/items' : '/items?archived=1'}
+          href={itemsQuery({
+            type,
+            unit,
+            category: categoryId,
+            q: query.q,
+            archived: includeInactive ? undefined : '1',
+          })}
           className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
         >
           {includeInactive ? 'Hide archived' : 'Show archived'}
@@ -182,7 +179,7 @@ export default async function ItemsPage({
       {categories.length > 0 ? (
         <div className="mb-4 flex flex-wrap gap-1.5">
           <Link
-            href={type ? `/items?type=${type}` : '/items'}
+            href={itemsQuery({ type, unit, archived: includeInactive ? '1' : undefined, q: query.q })}
             className={cn(
               'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
               !categoryId ? 'border-primary bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:text-foreground',
@@ -192,9 +189,13 @@ export default async function ItemsPage({
           </Link>
           {categories.map((category) => {
             const active = categoryId === category.id
-            const href = type
-              ? `/items?type=${type}&category=${category.id}`
-              : `/items?category=${category.id}`
+            const href = itemsQuery({
+              type,
+              unit,
+              category: category.id,
+              archived: includeInactive ? '1' : undefined,
+              q: query.q,
+            })
             return (
               <Link
                 key={category.id}
@@ -214,13 +215,13 @@ export default async function ItemsPage({
       {page.total === 0 ? (
         <EmptyState
           icon={PackageIcon}
-          title={query.q || type || categoryId ? 'No items match' : 'No products or services yet'}
+          title={query.q || type || unit || categoryId ? 'No items match' : 'No products or services yet'}
           description={
-            query.q || type || categoryId
+            query.q || type || unit || categoryId
               ? 'Try a different search or filter.'
               : 'Add what the business sells. An inventory item also needs a stock account and a cost of goods sold account, so selling one moves both in the same journal as the sale.'
           }
-          action={!query.q && !type && !categoryId ? newButton : undefined}
+          action={!query.q && !type && !unit && !categoryId ? newButton : undefined}
         />
       ) : (
         <Card className="overflow-hidden p-0">

@@ -343,8 +343,8 @@ export function MerchantInvoice({
           <span className="text-right">Amount</span>
         </div>
         {document.lines.map((line, index) => {
-          const unit = line.item?.unitOfMeasure?.trim()
-          const qty = proposal && unit ? `${trimNumber(line.quantity)} ${unit}` : trimNumber(line.quantity)
+          const unit = line.item?.unitOfMeasure?.trim() || 'EACH'
+          const qty = proposal ? `${trimNumber(line.quantity)} ${unit}` : trimNumber(line.quantity)
           return (
           <div
             key={line.id}
@@ -359,7 +359,7 @@ export function MerchantInvoice({
             <span className="truncate pr-2">{line.description || line.item?.name || line.item?.sku || ''}</span>
             <span className="tabular text-right">{qty}</span>
             {proposal ? null : (
-              <span className="text-right">{line.item?.unitOfMeasure?.trim().toUpperCase() || ''}</span>
+              <span className="text-right">{(line.item?.unitOfMeasure?.trim() || 'EACH').toUpperCase()}</span>
             )}
             <span className="tabular text-right">{money(line.unitPrice)}</span>
             <span className="tabular text-right font-medium">{money(line.amount)}</span>
@@ -676,7 +676,7 @@ function TradePaper({
           <span className="text-right">Amount</span>
         </div>
         {document.lines.map((line, index) => {
-          const unit = line.item?.unitOfMeasure?.trim()
+          const unit = line.item?.unitOfMeasure?.trim() || 'EACH'
           return (
             <div
               key={line.id}
@@ -691,7 +691,7 @@ function TradePaper({
               <span className="tabular text-right">
                 {Number.isFinite(Number(line.quantity)) ? Number(line.quantity).toFixed(3) : line.quantity}
               </span>
-              <span className="text-right">{unit ? unit.toUpperCase() : ''}</span>
+              <span className="text-right">{unit.toUpperCase()}</span>
               <span className="tabular text-right">
                 {Number.isFinite(Number(line.unitPrice)) ? Number(line.unitPrice).toFixed(3) : line.unitPrice}
               </span>

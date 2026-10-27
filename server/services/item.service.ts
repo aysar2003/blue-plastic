@@ -86,6 +86,21 @@ const ITEM_ORDER: Record<string, (dir: 'asc' | 'desc') => Prisma.ItemOrderByWith
 /** Sort keys that need stock figures first (then page). */
 const STOCK_SORTS = new Set(['onHand', 'stockValue'])
 
+/** Distinct unit labels already saved on items, for the products filter. */
+export async function listUnits(ctx: OrgContext): Promise<string[]> {
+  const rows = await db.item.findMany({
+    where: { orgId: ctx.orgId, unitOfMeasure: { not: null } },
+    select: { unitOfMeasure: true },
+    distinct: ['unitOfMeasure'],
+  })
+  const labels = new Set<string>()
+  for (const row of rows) {
+    const text = row.unitOfMeasure?.trim()
+    if (text) labels.add(text)
+  }
+  return [...labels].sort((a, b) => a.localeCompare(b))
+}
+
 export async function list(
   ctx: OrgContext,
   query: ListQuery,
@@ -93,10 +108,29 @@ export async function list(
     includeInactive?: boolean
     type?: string
     categoryId?: string
+    /** Exact unit, or `__none__` for a blank unit of measure. */
+    unit?: string
     sort?: string
     dir?: 'asc' | 'desc'
   } = {},
 ) {
+  const and: Prisma.ItemWhereInput[] = []
+  if (query.q) {
+    and.push({
+      OR: [
+        { name: { contains: query.q, mode: 'insensitive' } },
+        { sku: { contains: query.q, mode: 'insensitive' } },
+        { barcode: { contains: query.q, mode: 'insensitive' } },
+        { description: { contains: query.q, mode: 'insensitive' } },
+      ],
+    })
+  }
+  if (options.unit === '__none__') {
+    and.push({ OR: [{ unitOfMeasure: null }, { unitOfMeasure: '' }] })
+  } else if (options.unit) {
+    and.push({ unitOfMeasure: { equals: options.unit, mode: 'insensitive' } })
+  }
+
   const where: Prisma.ItemWhereInput = {
     orgId: ctx.orgId,
     ...(options.includeInactive ? {} : { isActive: true }),
@@ -106,16 +140,7 @@ export async function list(
       : options.categoryId
         ? { categoryId: options.categoryId }
         : {}),
-    ...(query.q
-      ? {
-          OR: [
-            { name: { contains: query.q, mode: 'insensitive' } },
-            { sku: { contains: query.q, mode: 'insensitive' } },
-            { barcode: { contains: query.q, mode: 'insensitive' } },
-            { description: { contains: query.q, mode: 'insensitive' } },
-          ],
-        }
-      : {}),
+    ...(and.length ? { AND: and } : {}),
   }
 
   const total = await db.item.count({ where })

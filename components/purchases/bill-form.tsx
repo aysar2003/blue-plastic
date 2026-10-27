@@ -949,6 +949,7 @@ export function BillForm({
                 <th className="w-44 px-2 py-2 text-left">Item</th>
                 {showColumn('description') ? <th className="px-2 py-2 text-left">Description</th> : null}
                 {showColumn('qty') ? <th className="w-24 px-2 py-2 text-center">Qty</th> : null}
+                {showColumn('qty') ? <th className="w-16 px-2 py-2 text-center">Unit</th> : null}
                 {showColumn('rate') ? <th className="w-28 px-2 py-2 text-right">Rate</th> : null}
                 {showTax && showColumn('tax') ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
                 <th className="w-28 px-2 py-2 text-right">Amount</th>
@@ -965,7 +966,7 @@ export function BillForm({
                     colSpan={
                       3 +
                       (showColumn('description') ? 1 : 0) +
-                      (showColumn('qty') ? 1 : 0) +
+                      (showColumn('qty') ? 2 : 0) +
                       (showColumn('rate') ? 1 : 0) +
                       (showTax && showColumn('tax') ? 1 : 0) +
                       (showColumn('store') && stores.length > 0 ? 1 : 0)
@@ -1000,24 +1001,21 @@ export function BillForm({
                     ) : null}
                     {showColumn('qty') ? (
                       <td className="px-2 py-1.5">
-                        <div className="flex items-center gap-1">
-                          <Input
-                            aria-label="Quantity"
-                            inputMode="decimal"
-                            className="min-w-0 flex-1 tabular text-right"
-                            value={line.quantity}
-                            onChange={(event) => update(line.key, { quantity: event.target.value })}
-                            onBlur={(event) => update(line.key, { quantity: fixed2(event.target.value) })}
-                          />
-                          {line.itemId ? (
-                            <span
-                              className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
-                              title={resolveUnit(itemById.get(line.itemId)?.unitOfMeasure)}
-                            >
-                              {resolveUnit(itemById.get(line.itemId)?.unitOfMeasure)}
-                            </span>
-                          ) : null}
-                        </div>
+                        <Input
+                          aria-label="Quantity"
+                          inputMode="decimal"
+                          className="tabular text-right"
+                          value={line.quantity}
+                          onChange={(event) => update(line.key, { quantity: event.target.value })}
+                          onBlur={(event) => update(line.key, { quantity: fixed2(event.target.value) })}
+                        />
+                      </td>
+                    ) : null}
+                    {showColumn('qty') ? (
+                      <td className="px-2 py-1.5 text-center text-[0.7rem] font-medium uppercase text-muted-foreground">
+                        {line.itemId
+                          ? (itemById.get(line.itemId)?.unitOfMeasure?.trim() || 'EACH').toUpperCase()
+                          : ''}
                       </td>
                     ) : null}
                     {showColumn('rate') ? (

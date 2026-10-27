@@ -336,7 +336,7 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
           align: 'right',
           color: ink,
         },
-        { text: (row.unitOfMeasure?.trim() || '').toUpperCase(), x: COL.qty + 48, align: 'right', color: ink },
+        { text: (row.unitOfMeasure?.trim() || 'EACH').toUpperCase(), x: COL.qty + 48, align: 'right', color: ink },
         { text: money(row.unitPrice), x: COL.rate, align: 'right', color: ink },
         { text: money(row.amount), x: COL.amount, align: 'right', color: ink },
       ],
@@ -709,7 +709,7 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   })
   input.lines.forEach((line, index) => {
     const qty = Number.isFinite(Number(line.quantity)) ? Number(line.quantity).toFixed(3) : line.quantity
-    const unit = line.unitOfMeasure?.trim()
+    const unit = line.unitOfMeasure?.trim() || 'EACH'
     rows.push({
       size: 8,
       height: 14,
@@ -720,7 +720,7 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
         { text: '', x: taxX, align: 'right' },
         { text: date, x: dateX, align: 'right' },
         { text: qty, x: qtyX, align: 'right' },
-        { text: unit ? unit.toUpperCase() : '', x: qtyX + 42, align: 'right' },
+        { text: unit.toUpperCase(), x: qtyX + 42, align: 'right' },
         {
           text: Number.isFinite(Number(line.unitPrice)) ? Number(line.unitPrice).toFixed(3) : line.unitPrice,
           x: rateX,

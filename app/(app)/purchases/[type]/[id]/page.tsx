@@ -293,6 +293,7 @@ export default async function PurchaseDocumentPage({
               <TableHead>Description</TableHead>
               <TableHead>Category or product</TableHead>
               <TableHead className="numeric w-20">Qty</TableHead>
+              <TableHead className="w-20">Unit</TableHead>
               {isOrder ? <TableHead className="numeric w-24">Received</TableHead> : null}
               {isOrder ? <TableHead className="numeric w-28">Outstanding</TableHead> : null}
               <TableHead className="numeric w-28">Cost</TableHead>
@@ -322,6 +323,9 @@ export default async function PurchaseDocumentPage({
                 </TableCell>
                 <TableCell className="numeric tabular">
                   {line.item ? Number(line.quantity) : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-xs font-medium uppercase text-muted-foreground">
+                  {line.item ? (line.item.unitOfMeasure?.trim() || 'EACH').toUpperCase() : '—'}
                 </TableCell>
                 {isOrder ? (
                   <TableCell className="numeric tabular text-muted-foreground">
