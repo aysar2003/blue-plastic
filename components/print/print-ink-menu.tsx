@@ -115,18 +115,12 @@ export function PdfInkMenu({
       try {
         const ok = await downloadPackPrintPdf(name, ink)
         if (ok) return
-        if (matchPrintPaper || !pdfHref) {
-          if (onFallbackPrint) onFallbackPrint(ink)
-          else printWithInk(ink)
-          return
-        }
       } finally {
         setBusy(false)
       }
     }
     if (!pdfHref) {
-      if (onFallbackPrint) onFallbackPrint(ink)
-      else printWithInk(ink)
+      onFallbackPrint?.(ink)
       return
     }
     const href = withPaperMetaHidden(withPrintInk(pdfHref, ink), readStoredPaperMetaHidden())
