@@ -64,6 +64,26 @@ export const PURCHASE_HUB_APPS: HubApp[] = [
     blurb: 'Not received yet',
   },
   {
+    key: 'purchase-requests',
+    label: 'Purchase requests',
+    href: '/purchases/purchase-requests',
+    icon: 'clipboard',
+    permission: 'bill:read',
+    accent: '#4338CA',
+    wash: '#E0E7FF',
+    blurb: 'Internal ask for goods',
+  },
+  {
+    key: 'rfqs',
+    label: 'RFQs',
+    href: '/purchases/rfqs',
+    icon: 'clipboard',
+    permission: 'bill:read',
+    accent: '#7C3AED',
+    wash: '#EDE9FE',
+    blurb: 'Ask vendors for prices',
+  },
+  {
     key: 'delivery',
     label: 'Delivery',
     href: '/purchases/delivery',
@@ -1109,6 +1129,16 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     blurb: 'Name, logo, address, currency',
   },
   {
+    key: 'billing',
+    label: 'Billing',
+    href: '/billing',
+    icon: 'wallet',
+    permission: 'org:read',
+    accent: '#047857',
+    wash: '#D1FAE5',
+    blurb: 'Trial, rent plans, and payment proof',
+  },
+  {
     key: 'features',
     label: 'Apps & features',
     href: '/settings/features',
@@ -1223,7 +1253,7 @@ export const SETTINGS_HUB_SECTIONS: { label: string; blurb: string; keys: string
   {
     label: 'Company',
     blurb: 'Identity, which apps this company uses, look and paper.',
-    keys: ['organization', 'features', 'templates', 'appearance'],
+    keys: ['organization', 'billing', 'features', 'templates', 'appearance'],
   },
   {
     label: 'Accounting setup',

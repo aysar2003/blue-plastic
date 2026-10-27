@@ -1,14 +1,14 @@
 import 'server-only'
 
 import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, validation } from '@/server/errors'
+import { deleteStoredObject, getStoredObject, putStoredObject } from '@/server/files/object-store'
 
-const ROOT = path.resolve(process.cwd(), 'uploads', 'trash')
+const PREFIX = 'trash'
 const MAX = 4 * 1024 * 1024
 const MAX_FILES = 12
 
@@ -49,6 +49,10 @@ function sniff(bytes: Buffer): { contentType: string; extension: string } | null
     return { contentType: 'image/webp', extension: 'webp' }
   }
   return null
+}
+
+function objectKey(storageKey: string) {
+  return `${PREFIX}/${storageKey}`
 }
 
 async function assertTrashLog(ctx: OrgContext, auditLogId: string) {
@@ -93,9 +97,7 @@ export async function storeTrashFiles(ctx: OrgContext, auditLogId: string, files
     if (!sniffed) throw validation('Attach a PDF, JPEG, PNG, or WebP.')
 
     const storageKey = `${ctx.orgId}/${auditLogId}/${randomBytes(16).toString('hex')}.${sniffed.extension}`
-    const destination = absolutePath(storageKey)
-    await mkdir(path.dirname(destination), { recursive: true })
-    await writeFile(destination, bytes)
+    await putStoredObject(objectKey(storageKey), bytes, sniffed.contentType)
 
     try {
       stored.push(
@@ -113,7 +115,7 @@ export async function storeTrashFiles(ctx: OrgContext, auditLogId: string, files
         }),
       )
     } catch (error) {
-      await unlink(destination).catch(() => undefined)
+      await deleteStoredObject(objectKey(storageKey))
       throw error
     }
   }
@@ -125,7 +127,7 @@ export async function readTrashFile(ctx: OrgContext, auditLogId: string, fileId:
     where: { id: fileId, auditLogId, orgId: ctx.orgId },
   })
   if (!file) throw notFound('File')
-  const bytes = await readFile(absolutePath(file.storageKey))
+  const bytes = await getStoredObject(objectKey(file.storageKey))
   return { file, bytes }
 }
 
@@ -136,7 +138,7 @@ export async function removeTrashFile(ctx: OrgContext, auditLogId: string, fileI
   })
   if (!file) throw notFound('File')
   await db.trashFile.delete({ where: { id: file.id } })
-  await unlink(absolutePath(file.storageKey)).catch(() => undefined)
+  await deleteStoredObject(objectKey(file.storageKey))
 }
 
 /** Drop every paper attached to the given trash lines (used when clearing Trash). */
@@ -153,7 +155,7 @@ export async function removeTrashFilesForLogs(ctx: OrgContext, auditLogIds: stri
   await db.trashFile.deleteMany({
     where: { id: { in: files.map((file) => file.id) } },
   })
-  await Promise.all(files.map((file) => unlink(absolutePath(file.storageKey)).catch(() => undefined)))
+  await Promise.all(files.map((file) => deleteStoredObject(objectKey(file.storageKey))))
   return files.length
 }
 
@@ -171,18 +173,8 @@ export async function removeAllTrashFilesForLogs(ctx: OrgContext, auditLogIds: s
   await db.trashFile.deleteMany({
     where: { orgId: ctx.orgId, id: { in: files.map((file) => file.id) } },
   })
-  await Promise.all(files.map((file) => unlink(absolutePath(file.storageKey)).catch(() => undefined)))
+  await Promise.all(files.map((file) => deleteStoredObject(objectKey(file.storageKey))))
   return files.length
-}
-
-/** Refuse path traversal even if a storage key in the DB is ever corrupted. */
-function absolutePath(storageKey: string) {
-  const full = path.resolve(/*turbopackIgnore: true*/ ROOT, storageKey)
-  const relative = path.relative(/*turbopackIgnore: true*/ ROOT, full)
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw validation('That file could not be read.')
-  }
-  return full
 }
 
 function safeName(name: string) {

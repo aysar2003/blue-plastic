@@ -52,6 +52,8 @@ export const APPROVAL_DOCUMENT_KINDS: Record<
     { value: 'BILL', label: 'Bills only' },
     { value: 'EXPENSE', label: 'Expenses / purchase receipts only' },
     { value: 'PURCHASE_ORDER', label: 'Purchase orders only' },
+    { value: 'PURCHASE_REQUEST', label: 'Purchase requests only' },
+    { value: 'RFQ', label: 'RFQs only' },
     { value: 'VENDOR_CREDIT', label: 'Vendor credits only' },
   ],
   CUSTOMER_PAYMENT: [],

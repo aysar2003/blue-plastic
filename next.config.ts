@@ -2,11 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // exceljs is a Node reader (streams, unzip). Bundling it pulls the browser build.
-  serverExternalPackages: ['exceljs'],
-  // Uploads are runtime-only on disk — never ship them inside serverless traces.
-  outputFileTracingExcludes: {
-    '*': ['./uploads/**'],
-  },
+  // Keep the R2 S3 client external so Vercel Node runtimes get the real package.
+  serverExternalPackages: ['exceljs', '@aws-sdk/client-s3'],
   // Dev: browsers open the app as 127.0.0.1 while `next dev` binds as localhost.
   // Without this, Next blocks /_next chunks and the shell never hydrates — so
   // every Apps chip and menu looks dead.

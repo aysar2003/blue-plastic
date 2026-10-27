@@ -334,7 +334,7 @@ export default async function ProjectDetailPage({
                         </Link>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{config.singular}</TableCell>
-                      <TableCell>{row.vendor.displayName}</TableCell>
+                      <TableCell>{row.vendor?.displayName ?? '—'}</TableCell>
                       <TableCell>{formatDate(row.date)}</TableCell>
                       <TableCell>
                         <Badge variant={STATUS_VARIANTS[row.status] ?? 'secondary'}>

@@ -15,9 +15,9 @@ export function PricingLeadForm() {
   return (
     <form action={formAction} className="space-y-3 rounded-xl border border-border bg-card/80 p-5">
       <div>
-        <p className="text-sm font-semibold text-foreground">Talk to us about your company</p>
+        <p className="text-sm font-semibold text-foreground">Need help?</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Leave your details — we set up a 14-day free trial company for you.
+          Prefer to start yourself? Use Start free trial. Or leave a message and we will follow up.
         </p>
       </div>
       <FormStatus state={state} />

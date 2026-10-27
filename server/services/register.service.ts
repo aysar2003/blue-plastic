@@ -11,6 +11,7 @@ import {
   parseModulesSelection,
   type ModuleFlag,
 } from '@/lib/feature-flags'
+import { isSelfServeApprovalRequired, isSelfServeEnabled } from '@/lib/self-serve'
 import type { SetupInput } from '@/lib/validation/auth'
 import type { ReviewSignupRequestInput } from '@/lib/validation/signup-request'
 import type { OrgContext } from '@/server/auth/context'
@@ -20,28 +21,26 @@ import { conflict, forbidden, notFound } from '@/server/errors'
 import { createDefaultSequences } from '@/server/sequences'
 import { needsSetup } from '@/server/services/setup.service'
 
+export { isSelfServeApprovalRequired, isSelfServeEnabled }
+
 function flagsForSignup(modules: Record<ModuleFlag, boolean>) {
   return featureFlagsWithModules(modules) as unknown as Prisma.InputJsonValue
-}
-
-/**
- * Public /register stays available so businesses can *request* a company.
- * Set SELF_SERVE_COMPANIES=false to hide /register after the first company exists.
- */
-export function isSelfServeEnabled(): boolean {
-  const raw = process.env.SELF_SERVE_COMPANIES
-  if (raw === 'false' || raw === '0') return false
-  return true
 }
 
 export type RegisterResult =
   | { kind: 'created'; organizationId: string; userId: string; email: string }
   | { kind: 'pending'; requestId: string; email: string }
 
+function trialEndsAt(from: Date = new Date()) {
+  const ends = new Date(from)
+  ends.setUTCDate(ends.getUTCDate() + 14)
+  return ends
+}
+
 /**
- * First company on an empty instance is created immediately (bootstrap).
- * Later public registrations become PENDING — no login until a system owner
- * approves them under Databases.
+ * First company on an empty instance is created immediately (bootstrap → system owner).
+ * Later public registrations create a company + 14-day trial unless
+ * SELF_SERVE_REQUIRE_APPROVAL is set (then PENDING until Databases approve).
  */
 export async function registerCompany(input: SetupInput): Promise<RegisterResult> {
   const empty = await needsSetup()
@@ -146,21 +145,85 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
   }
 
   const passwordHash = await hashPassword(input.password)
-  const request = await db.companySignupRequest.create({
-    data: {
-      organizationName: orgName,
-      baseCurrency: input.baseCurrency,
-      fiscalYearStartMonth: input.fiscalYearStartMonth,
-      ownerName: input.name.trim(),
-      email,
-      passwordHash,
-      requestedModules,
-      status: 'PENDING',
-    },
-    select: { id: true, email: true },
-  })
 
-  return { kind: 'pending', requestId: request.id, email: request.email }
+  if (isSelfServeApprovalRequired()) {
+    const request = await db.companySignupRequest.create({
+      data: {
+        organizationName: orgName,
+        baseCurrency: input.baseCurrency,
+        fiscalYearStartMonth: input.fiscalYearStartMonth,
+        ownerName: input.name.trim(),
+        email,
+        passwordHash,
+        requestedModules,
+        status: 'PENDING',
+      },
+      select: { id: true, email: true },
+    })
+
+    return { kind: 'pending', requestId: request.id, email: request.email }
+  }
+
+  return db.$transaction(async (tx) => {
+    const organization = await tx.organization.create({
+      data: {
+        name: orgName,
+        baseCurrency: input.baseCurrency,
+        fiscalYearStartMonth: input.fiscalYearStartMonth,
+        rentExpiresAt: trialEndsAt(),
+        rentNote: 'Free trial',
+        featureFlags: flagsForSignup(requestedModules),
+      },
+      select: { id: true, name: true },
+    })
+
+    const user = await tx.user.create({
+      data: {
+        email,
+        name: input.name.trim(),
+        passwordHash,
+        emailVerified: new Date(),
+        isSystemOwner: false,
+        homeOrgId: organization.id,
+      },
+      select: { id: true, email: true },
+    })
+
+    await tx.membership.create({
+      data: {
+        orgId: organization.id,
+        userId: user.id,
+        role: 'OWNER',
+        status: 'ACTIVE',
+        acceptedAt: new Date(),
+      },
+    })
+
+    await createDefaultSequences(tx, organization.id)
+
+    await tx.auditLog.create({
+      data: {
+        orgId: organization.id,
+        actorId: user.id,
+        entity: 'Organization',
+        entityId: organization.id,
+        action: 'CREATE',
+        after: {
+          name: organization.name,
+          owner: user.email,
+          selfServe: true,
+          rentNote: 'Free trial',
+        },
+      },
+    })
+
+    return {
+      kind: 'created' as const,
+      organizationId: organization.id,
+      userId: user.id,
+      email: user.email,
+    }
+  })
 }
 
 export type SignupRequestRow = {
@@ -268,6 +331,8 @@ export async function reviewSignupRequest(
         name: request.organizationName,
         baseCurrency: request.baseCurrency,
         fiscalYearStartMonth: request.fiscalYearStartMonth,
+        rentExpiresAt: trialEndsAt(),
+        rentNote: 'Free trial',
         featureFlags: flagsForSignup(modules),
       },
       select: { id: true, name: true },

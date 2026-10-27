@@ -30,6 +30,7 @@ describe('custom form templates', () => {
           footerNote: '',
           footerLayout: 'side',
           showClassicPaper: false,
+          paperStyle: 'merchant',
         },
       },
     ])

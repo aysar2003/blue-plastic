@@ -11,6 +11,7 @@ import { idleState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
+import { FormCustomizePanel } from '@/components/forms/form-customize-panel'
 import { LockedNumber } from '@/components/forms/locked-number'
 import { FormStatus } from '@/components/forms/form-status'
 import { neighborHrefs, RecordNav } from '@/components/forms/record-nav'
@@ -22,6 +23,15 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import type { AccountPickerOption } from '@/lib/account-options'
 import { formatDate, isCalendarDate } from '@/lib/date'
+import type { FormCustomizationProps } from '@/lib/form-customization-props'
+import {
+  isColumnVisible,
+  isFieldVisible,
+  PURCHASE_CATEGORY_COLUMNS,
+  PURCHASE_FORM_COLUMNS,
+  PURCHASE_FORM_FIELDS,
+} from '@/lib/form-field-catalog'
+import type { FormTemplate } from '@/lib/form-templates'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
 import { resolveUnit } from '@/lib/quantity'
 import { dueDateFor, type PaymentTermShape } from '@/lib/payment-terms'
@@ -136,6 +146,7 @@ export function BillForm({
   neighbors,
   stores = [],
   stock = {},
+  formCustomization,
 }: {
   config: PurchaseTypeConfig
   vendors: VendorOption[]
@@ -185,8 +196,23 @@ export function BillForm({
   /** Stores a purchased item can be received into. The office is the default. */
   stores?: StoreChoice[]
   stock?: StockByStore
+  formCustomization?: FormCustomizationProps
 }) {
   const officeId = officeStoreId(stores)
+  const [draftTemplate, setDraftTemplate] = useState<FormTemplate | null>(null)
+  const [draftActiveId, setDraftActiveId] = useState<string | null>(null)
+  const activeForm =
+    draftTemplate && draftActiveId === formCustomization?.activeId
+      ? draftTemplate
+      : (formCustomization?.active ?? null)
+  const setFormDraft = (next: FormTemplate) => {
+    setDraftActiveId(formCustomization?.activeId ?? next.id)
+    setDraftTemplate(next)
+  }
+  const showField = (id: string) => isFieldVisible(activeForm?.fields, id)
+  const showColumn = (id: string) => isColumnVisible(activeForm?.columns, id)
+  const showCategoryColumn = (id: string) =>
+    isColumnVisible(activeForm?.categoryColumns ?? activeForm?.columns, id)
   const router = useRouter()
   const [state, formAction] = useActionState(savePurchaseForm, idleState)
   const isExpense = config.type === 'EXPENSE'
@@ -320,10 +346,10 @@ export function BillForm({
       const timer = window.setTimeout(() => window.document.getElementById('offsetCustomerId')?.focus(), 0)
       return () => window.clearTimeout(timer)
     }
-    if (vendorId) return
+    if (config.vendorOptional || vendorId) return
     const timer = window.setTimeout(() => window.document.getElementById('vendorId')?.focus(), 0)
     return () => window.clearTimeout(timer)
-  }, [vendorId, offsetCustomerId, isExpense, paymentSource])
+  }, [vendorId, offsetCustomerId, isExpense, paymentSource, config.vendorOptional])
 
   const seedVendor = !document && Boolean(initialVendorId)
   const [vendorSeeded, setVendorSeeded] = useState(!seedVendor)
@@ -367,7 +393,9 @@ export function BillForm({
           ? `/purchases/${config.slug}/new`
           : config.type === 'PURCHASE_ORDER' && savedId
             ? `/purchases/purchase-orders/${savedId}/receive`
-            : `/purchases/${config.slug}`,
+            : (config.type === 'PURCHASE_REQUEST' || config.type === 'RFQ') && savedId
+              ? `/purchases/${config.slug}/${savedId}`
+              : `/purchases/${config.slug}`,
       )
       router.refresh()
     }
@@ -471,7 +499,12 @@ export function BillForm({
               ...line,
               itemId,
               description: item?.description ?? '',
-              unitPrice: item?.price ?? '',
+              // PR and RFQ ask the supplier for a price. The item's stored cost
+              // stays off the line until a purchase order, bill, or expense.
+              unitPrice:
+                config.type === 'PURCHASE_REQUEST' || config.type === 'RFQ'
+                  ? ''
+                  : (item?.price ?? ''),
               taxCodeId: item?.taxCodeId ?? '',
               quantity: line.quantity.trim() === '' ? '1' : line.quantity,
             }
@@ -524,9 +557,20 @@ export function BillForm({
       })),
     })
 
-  const hasParty = payFromCustomer ? offsetCustomerId !== '' : vendorId !== ''
-  const canSave = hasParty && filled.length > 0 && totals.total.greaterThan(0)
-  const canDraft = hasParty && lines.some((line) => lineNamed(line) || lineTouched(line))
+  const vendorOptional = Boolean(config.vendorOptional)
+  const allowsZeroTotal =
+    config.type === 'PURCHASE_ORDER' ||
+    config.type === 'PURCHASE_REQUEST' ||
+    config.type === 'RFQ'
+  const hasParty = payFromCustomer
+    ? offsetCustomerId !== ''
+    : vendorOptional
+      ? true
+      : vendorId !== ''
+  const canSave =
+    hasParty && filled.length > 0 && (allowsZeroTotal || totals.total.greaterThan(0))
+  const canDraft =
+    (vendorOptional || hasParty) && lines.some((line) => lineNamed(line) || lineTouched(line))
   const term = terms.find((row) => row.id === paymentTermId)
   const due =
     isCalendarDate(date) && term?.type
@@ -557,8 +601,21 @@ export function BillForm({
     >
       <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor(false)} />
 
-      <div className="flex flex-wrap items-center gap-1 print:hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <RecordNav {...neighborHrefs(`/purchases/${config.slug}`, neighbors, document?.id)} />
+        {formCustomization && activeForm ? (
+          <FormCustomizePanel
+            family={formCustomization.family}
+            templates={formCustomization.templates}
+            activeId={formCustomization.activeId}
+            draft={activeForm}
+            onDraftChange={setFormDraft}
+            fieldCatalog={PURCHASE_FORM_FIELDS}
+            columnCatalog={PURCHASE_FORM_COLUMNS}
+            categoryColumnCatalog={PURCHASE_CATEGORY_COLUMNS}
+            canManage={formCustomization.canManage}
+          />
+        ) : null}
       </div>
 
       <Card className="overflow-hidden bg-white p-0">
@@ -611,15 +668,20 @@ export function BillForm({
                 )}
               </Field>
             ) : (
-              <Field name="vendorId" label="Vendor name" required error={state.fieldErrors?.vendorId}>
+              <Field
+                name="vendorId"
+                label="Vendor name"
+                required={!vendorOptional}
+                error={state.fieldErrors?.vendorId}
+              >
                 <EntityPicker
                   id="vendorId"
                   kind="vendor"
                   options={vendors}
                   value={vendorId || null}
                   onChange={(next) => chooseVendor(next ?? '')}
-                  placeholder="Choose a vendor"
-                  required
+                  placeholder={vendorOptional ? 'Optional — choose later for RFQ' : 'Choose a vendor'}
+                  required={!vendorOptional}
                   error={state.fieldErrors?.vendorId}
                 />
               </Field>
@@ -653,17 +715,19 @@ export function BillForm({
             ) : (
               <div />
             )}
-            <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
-              <Input
-                {...fieldProps('reference', state.fieldErrors?.reference, true)}
-                value={reference}
-                onChange={(event) => setReference(event.target.value)}
-                placeholder="PO / bill no."
-              />
-            </Field>
+            {showField('reference') ? (
+              <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
+                <Input
+                  {...fieldProps('reference', state.fieldErrors?.reference, true)}
+                  value={reference}
+                  onChange={(event) => setReference(event.target.value)}
+                  placeholder="PO / bill no."
+                />
+              </Field>
+            ) : null}
           </div>
 
-          {projects.length > 0 || projectId ? (
+          {showField('project') && (projects.length > 0 || projectId) ? (
             <Field name="projectId" label="Project" error={state.fieldErrors?.projectId}>
               <EntityPicker
                 id="projectId"
@@ -679,7 +743,7 @@ export function BillForm({
           ) : null}
 
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {owed ? (
+            {owed && showField('paymentTerms') ? (
               <Field name="paymentTermId" label="Terms" error={state.fieldErrors?.paymentTermId}>
                 <NativeSelect
                   {...fieldProps('paymentTermId', state.fieldErrors?.paymentTermId)}
@@ -777,8 +841,12 @@ export function BillForm({
                     style={{ background: isVendorCredit ? VENDOR_CREDIT.band : FORM_SHEET.band }}
                   >
                     <th className="w-64 px-2 py-2 text-left">Category</th>
-                    <th className="px-2 py-2 text-left">Description</th>
-                    {showTax ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
+                    {showCategoryColumn('description') ? (
+                      <th className="px-2 py-2 text-left">Description</th>
+                    ) : null}
+                    {showTax && showCategoryColumn('tax') ? (
+                      <th className="w-36 px-2 py-2 text-left">Tax</th>
+                    ) : null}
                     <th className="w-32 px-2 py-2 text-right">Amount</th>
                     <th className="w-8" />
                   </tr>
@@ -786,7 +854,14 @@ export function BillForm({
                 <tbody>
                   {categoryLines.length === 0 ? (
                     <tr>
-                      <td colSpan={showTax ? 5 : 4} className="px-3 py-4 text-sm text-muted-foreground">
+                      <td
+                        colSpan={
+                          2 +
+                          (showCategoryColumn('description') ? 1 : 0) +
+                          (showTax && showCategoryColumn('tax') ? 1 : 0)
+                        }
+                        className="px-3 py-4 text-sm text-muted-foreground"
+                      >
                         Nothing categorised yet.
                       </td>
                     </tr>
@@ -801,14 +876,16 @@ export function BillForm({
                           clearable
                         />
                       </td>
-                      <td className="px-2 py-1.5">
-                        <Input
-                          aria-label="Description"
-                          value={line.description}
-                          onChange={(event) => update(line.key, { description: event.target.value })}
-                        />
-                      </td>
-                      {showTax ? (
+                      {showCategoryColumn('description') ? (
+                        <td className="px-2 py-1.5">
+                          <Input
+                            aria-label="Description"
+                            value={line.description}
+                            onChange={(event) => update(line.key, { description: event.target.value })}
+                          />
+                        </td>
+                      ) : null}
+                      {showTax && showCategoryColumn('tax') ? (
                         <td className="px-2 py-1.5">
                           <NativeSelect
                             aria-label="Tax code"
@@ -869,19 +946,31 @@ export function BillForm({
                   style={{ background: isVendorCredit ? VENDOR_CREDIT.band : FORM_SHEET.band }}
                 >
                 <th className="w-44 px-2 py-2 text-left">Item</th>
-                <th className="px-2 py-2 text-left">Description</th>
-                <th className="w-24 px-2 py-2 text-center">Qty</th>
-                <th className="w-28 px-2 py-2 text-right">Rate</th>
-                {showTax ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
+                {showColumn('description') ? <th className="px-2 py-2 text-left">Description</th> : null}
+                {showColumn('qty') ? <th className="w-24 px-2 py-2 text-center">Qty</th> : null}
+                {showColumn('rate') ? <th className="w-28 px-2 py-2 text-right">Rate</th> : null}
+                {showTax && showColumn('tax') ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
                 <th className="w-28 px-2 py-2 text-right">Amount</th>
-                {stores.length > 0 ? <th className="w-40 px-2 py-2 text-left">Store</th> : null}
+                {showColumn('store') && stores.length > 0 ? (
+                  <th className="w-40 px-2 py-2 text-left">Store</th>
+                ) : null}
                 <th className="w-8" />
               </tr>
             </thead>
             <tbody>
               {itemLines.length === 0 ? (
                 <tr>
-                  <td colSpan={(showTax ? 7 : 6) + (stores.length > 0 ? 1 : 0)} className="px-3 py-4 text-sm text-muted-foreground">
+                  <td
+                    colSpan={
+                      3 +
+                      (showColumn('description') ? 1 : 0) +
+                      (showColumn('qty') ? 1 : 0) +
+                      (showColumn('rate') ? 1 : 0) +
+                      (showTax && showColumn('tax') ? 1 : 0) +
+                      (showColumn('store') && stores.length > 0 ? 1 : 0)
+                    }
+                    className="px-3 py-4 text-sm text-muted-foreground"
+                  >
                     No products on this document.
                   </td>
                 </tr>
@@ -899,42 +988,48 @@ export function BillForm({
                         clearable
                       />
                     </td>
-                    <td className="px-2 py-1.5">
-                      <Input
-                        aria-label="Description"
-                        value={line.description}
-                        onChange={(event) => update(line.key, { description: event.target.value })}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <div className="flex items-center gap-1">
+                    {showColumn('description') ? (
+                      <td className="px-2 py-1.5">
                         <Input
-                          aria-label="Quantity"
-                          inputMode="decimal"
-                          className="min-w-0 flex-1 tabular text-right"
-                          value={line.quantity}
-                          onChange={(event) => update(line.key, { quantity: event.target.value })}
+                          aria-label="Description"
+                          value={line.description}
+                          onChange={(event) => update(line.key, { description: event.target.value })}
                         />
-                        {line.itemId ? (
-                          <span
-                            className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
-                            title={resolveUnit(itemById.get(line.itemId)?.unitOfMeasure)}
-                          >
-                            {resolveUnit(itemById.get(line.itemId)?.unitOfMeasure)}
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <Input
-                        aria-label="Unit cost"
-                        inputMode="decimal"
-                        className="tabular text-right"
-                        value={line.unitPrice}
-                        onChange={(event) => update(line.key, { unitPrice: event.target.value })}
-                      />
-                    </td>
-                    {showTax ? (
+                      </td>
+                    ) : null}
+                    {showColumn('qty') ? (
+                      <td className="px-2 py-1.5">
+                        <div className="flex items-center gap-1">
+                          <Input
+                            aria-label="Quantity"
+                            inputMode="decimal"
+                            className="min-w-0 flex-1 tabular text-right"
+                            value={line.quantity}
+                            onChange={(event) => update(line.key, { quantity: event.target.value })}
+                          />
+                          {line.itemId ? (
+                            <span
+                              className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
+                              title={resolveUnit(itemById.get(line.itemId)?.unitOfMeasure)}
+                            >
+                              {resolveUnit(itemById.get(line.itemId)?.unitOfMeasure)}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                    ) : null}
+                    {showColumn('rate') ? (
+                      <td className="px-2 py-1.5">
+                        <Input
+                          aria-label="Unit cost"
+                          inputMode="decimal"
+                          className="tabular text-right"
+                          value={line.unitPrice}
+                          onChange={(event) => update(line.key, { unitPrice: event.target.value })}
+                        />
+                      </td>
+                    ) : null}
+                    {showTax && showColumn('tax') ? (
                       <td className="px-2 py-1.5">
                         <NativeSelect
                           aria-label="Tax code"
@@ -953,7 +1048,7 @@ export function BillForm({
                     <td className="px-1 py-1">
                       <ItemAmount line={line} onCommit={(next) => update(line.key, next)} />
                     </td>
-                    {stores.length > 0 ? (
+                    {showColumn('store') && stores.length > 0 ? (
                       <td className="px-1 py-1 align-top">
                         <LineStore
                           stores={stores}

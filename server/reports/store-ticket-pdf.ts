@@ -39,7 +39,8 @@ export type StoreTicketPdfInput = {
 /** Store ticket PDF — merchant letterhead so it matches the rest of the papers. */
 export function renderStoreTicketPdf(input: StoreTicketPdfInput): Uint8Array {
   const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
-  const accent = merchantAccent(template)
+  const trade = template.paperStyle === 'trade'
+  const accent = trade ? merchantPdfInk() : merchantAccent(template)
   const ink = merchantPdfInk()
   const muted = merchantPdfMuted()
   const rows: PdfRow[] = []
@@ -54,6 +55,7 @@ export function renderStoreTicketPdf(input: StoreTicketPdfInput): Uint8Array {
       orgPhone: input.orgPhone,
       orgEmail: input.orgEmail,
       accent,
+      plain: trade,
     }),
   )
 

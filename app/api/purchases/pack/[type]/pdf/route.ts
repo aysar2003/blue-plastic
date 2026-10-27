@@ -32,7 +32,7 @@ export async function GET(
     const [documents, org, template] = await Promise.all([
       loadPurchasePack(ctx, config.type, url.searchParams),
       organizationService.get(ctx),
-      organizationService.getDocumentTemplate(ctx),
+      organizationService.getPrintTemplate(ctx, url.searchParams.get('paper')),
     ])
 
     const company = letterheadOf(org)

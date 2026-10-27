@@ -76,7 +76,7 @@ export async function loadFormOptions(
           },
         },
       },
-      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+      orderBy: { name: 'asc' },
     }),
     db.taxCode.findMany({
       where: { orgId: ctx.orgId, isActive: true },

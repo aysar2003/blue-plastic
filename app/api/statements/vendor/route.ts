@@ -55,7 +55,7 @@ export async function GET(request: Request) {
     const [statement, org, template] = await Promise.all([
       payables.vendorStatement(ctx, vendorId, settings.range),
       organizationService.get(ctx),
-      organizationService.getDocumentTemplate(ctx),
+      organizationService.getPrintTemplate(ctx, url.searchParams.get('paper')),
     ])
     const currency = ctx.organization.baseCurrency
     const company = letterheadOf(org)

@@ -45,6 +45,7 @@ export type OrgContext = {
     country: string | null
     phone: string | null
     email: string | null
+    website: string | null
     brandMark: string | null
     hasLogo: boolean
     updatedAt: Date
@@ -93,6 +94,7 @@ const ORGANIZATION_SELECT = {
   country: true,
   phone: true,
   email: true,
+  website: true,
   brandMark: true,
   logoStorageKey: true,
   updatedAt: true,

@@ -44,5 +44,14 @@ describe('document kinds hide hub tiles', () => {
     const apps = salesAppsForPermissions(allPermissions, DEFAULT_FEATURE_FLAGS)
     expect(apps.some((app) => app.key === 'estimates')).toBe(true)
     expect(apps.some((app) => app.key === 'invoices')).toBe(true)
+
+    const purchaseApps = visibleHubApps(
+      PURCHASE_HUB_APPS,
+      allPermissions,
+      DEFAULT_FEATURE_FLAGS,
+      'purchases',
+    )
+    expect(purchaseApps.some((app) => app.key === 'purchase-requests')).toBe(true)
+    expect(purchaseApps.some((app) => app.key === 'rfqs')).toBe(true)
   })
 })

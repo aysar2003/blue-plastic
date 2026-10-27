@@ -113,8 +113,7 @@ export function RegisterForm() {
             Apps you need
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Choose only what your business will use. The system owner can change this when they
-            approve your request.
+            Choose only what your business will use. You can change apps later in Settings.
           </p>
           {state.fieldErrors?.moduleSales?.[0] ? (
             <p className="mt-1 text-xs text-destructive">{state.fieldErrors.moduleSales[0]}</p>
@@ -172,7 +171,7 @@ export function RegisterForm() {
           <Field
             name="password"
             label="Password"
-            hint="At least 6 characters. Used only after approval."
+            hint="At least 6 characters."
             required
             error={state.fieldErrors?.password}
           >
@@ -196,12 +195,12 @@ export function RegisterForm() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Submitting sends a request. You cannot open the books until the system owner approves it in
-        Databases.
+        Creating your company starts a 14-day free trial. You can sign in and open the books
+        immediately.
       </p>
 
-      <SubmitButton className="w-full" pendingLabel="Sending request…">
-        Request access
+      <SubmitButton className="w-full" pendingLabel="Creating company…">
+        Start free trial
       </SubmitButton>
     </form>
   )

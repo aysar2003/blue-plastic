@@ -412,7 +412,14 @@ export async function assertCanOpenCompany(ctx: OrgContext, orgId: string) {
 
   const limits = companyLimitStatus(membership.organization)
   if (limits.openBlocked) {
-    throw forbidden(limits.blockReason ?? 'This company cannot be opened right now.')
+    // OWNER/ADMIN may still open when only rent expired so they can reach /billing.
+    const billingRescue =
+      limits.rentExpired &&
+      !membership.organization.accessRestricted &&
+      (membership.role === 'OWNER' || membership.role === 'ADMIN')
+    if (!billingRescue) {
+      throw forbidden(limits.blockReason ?? 'This company cannot be opened right now.')
+    }
   }
 
   return {

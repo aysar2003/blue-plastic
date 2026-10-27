@@ -35,7 +35,7 @@ export async function GET(
         listed.map((row) => row.id),
       ),
       organizationService.get(ctx),
-      organizationService.getDocumentTemplate(ctx),
+      organizationService.getPrintTemplate(ctx, new URL(request.url).searchParams.get('paper')),
     ])
 
     const company = letterheadOf(org)

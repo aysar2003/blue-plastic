@@ -1,14 +1,13 @@
 import 'server-only'
 
 import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import path from 'node:path'
 
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, validation } from '@/server/errors'
+import { deleteStoredObject, getStoredObject, putStoredObject } from '@/server/files/object-store'
 
-const ROOT = path.resolve(process.cwd(), 'uploads', 'ledger')
+const PREFIX = 'ledger'
 const MAX = 4 * 1024 * 1024
 
 const ALLOWED = new Map<string, string>([
@@ -47,6 +46,10 @@ function sniff(bytes: Buffer): { contentType: string; extension: string } | null
     return { contentType: 'image/webp', extension: 'webp' }
   }
   return null
+}
+
+function objectKey(storageKey: string) {
+  return `${PREFIX}/${storageKey}`
 }
 
 async function resolveLink(ctx: OrgContext, link: LedgerFileLink): Promise<LedgerFileLink> {
@@ -115,8 +118,7 @@ export async function storeLedgerFile(ctx: OrgContext, file: File, rawLink: Ledg
 
   const link = await resolveLink(ctx, rawLink)
   const storageKey = `${ctx.orgId}/${randomBytes(16).toString('hex')}.${sniffed.extension}`
-  await mkdir(path.join(/*turbopackIgnore: true*/ ROOT, ctx.orgId), { recursive: true })
-  await writeFile(path.join(/*turbopackIgnore: true*/ ROOT, storageKey), bytes)
+  await putStoredObject(objectKey(storageKey), bytes, sniffed.contentType)
 
   return db.ledgerFile.create({
     data: {
@@ -140,7 +142,7 @@ export async function readLedgerFile(ctx: OrgContext, id: string) {
     where: { id, orgId: ctx.orgId },
   })
   if (!file) throw notFound('File')
-  const bytes = await readFile(absolutePath(file.storageKey))
+  const bytes = await getStoredObject(objectKey(file.storageKey))
   return { file, bytes }
 }
 
@@ -151,22 +153,8 @@ export async function removeLedgerFile(ctx: OrgContext, id: string) {
   })
   if (!file) throw notFound('File')
   await db.ledgerFile.delete({ where: { id: file.id } })
-  try {
-    await unlink(absolutePath(file.storageKey))
-  } catch {
-    // Missing file on disk should not block the DB delete.
-  }
+  await deleteStoredObject(objectKey(file.storageKey))
   return { id: file.id }
-}
-
-/** Refuse path traversal even if a storage key in the DB is ever corrupted. */
-function absolutePath(storageKey: string) {
-  const full = path.resolve(/*turbopackIgnore: true*/ ROOT, storageKey)
-  const relative = path.relative(/*turbopackIgnore: true*/ ROOT, full)
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw validation('That file could not be read.')
-  }
-  return full
 }
 
 const LIST_SELECT = {

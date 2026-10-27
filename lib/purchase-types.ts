@@ -18,6 +18,8 @@ export type PurchaseTypeConfig = {
   /** True when the money leaves at once and it never becomes a payable. */
   needsPaymentAccount: boolean
   posts: boolean
+  /** Vendor may be blank (internal purchase request). */
+  vendorOptional?: boolean
 }
 
 export const PURCHASE_TYPES: PurchaseTypeConfig[] = [
@@ -56,6 +58,27 @@ export const PURCHASE_TYPES: PurchaseTypeConfig[] = [
     singular: 'Purchase order',
     plural: 'Purchase orders',
     effect: 'An order placed. Nothing has happened yet, so nothing is posted to the ledger.',
+    needsPaymentAccount: false,
+    posts: false,
+  },
+  {
+    type: 'PURCHASE_REQUEST',
+    slug: 'purchase-requests',
+    singular: 'Purchase request',
+    plural: 'Purchase requests',
+    effect:
+      'An internal request from staff or the store. No catalog price — it becomes an RFQ or a purchase order, and the vendor states the price.',
+    needsPaymentAccount: false,
+    posts: false,
+    vendorOptional: true,
+  },
+  {
+    type: 'RFQ',
+    slug: 'rfqs',
+    singular: 'RFQ',
+    plural: 'RFQs',
+    effect:
+      'Sent to one vendor to ask their price. Nothing is filled from the item cost. Accepting it creates a purchase order.',
     needsPaymentAccount: false,
     posts: false,
   },

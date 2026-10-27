@@ -111,6 +111,7 @@ export function renderSalesDocumentPdf(input: SalesDocumentPdfInput): Uint8Array
 
 function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
+  if (template.paperStyle === 'trade') return tradeDocumentPdfRows(input)
   const accent = merchantAccent(template, input.paper ?? 'customer')
   const wash = accentWashRgb(accent)
   const ink = merchantPdfInk()
@@ -554,6 +555,109 @@ export function renderProjectQuotationsPdf(input: {
     runningTotals: true,
     documents: input.quotations,
   })
+}
+
+/** Plain order sheet — same Trade paper as on-screen print. */
+function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
+  const muted = merchantPdfMuted()
+  const money = (value: string) => formatMoney(value, input.currency)
+  const rows: PdfRow[] = []
+  const party = input.partyLabel ?? 'Bill to'
+  const title = `${input.title} #${input.number}`
+  const calendar =
+    typeof input.date === 'string' && isCalendarDate(input.date)
+      ? input.date
+      : input.date instanceof Date
+        ? toCalendarDate(input.date)
+        : null
+  const date = calendar
+    ? formatLongTransactionDate(calendar, input.createdAt, input.timeZone || 'UTC')
+    : String(input.date)
+
+  rows.push({
+    size: 11,
+    height: 14,
+    runs: [{ text: input.orgName, bold: true, color: [0.17, 0.44, 0.73] }],
+  })
+  for (const part of [...input.orgAddress, input.orgEmail, input.orgPhone].filter((part): part is string => Boolean(part))) {
+    rows.push({ size: 8, height: 11, runs: [{ text: part, color: muted }] })
+  }
+  rows.push({ size: 4, height: 8, runs: [], rule: true })
+  rows.push({
+    size: 9,
+    height: 12,
+    runs: [
+      { text: party, bold: true },
+      { text: date, x: PDF_PAGE.right, align: 'right', color: muted },
+    ],
+  })
+  rows.push({ size: 10, height: 13, runs: [{ text: input.customerName, bold: true }] })
+  for (const part of input.customerAddress.filter(Boolean)) {
+    rows.push({ size: 9, height: 12, runs: [{ text: part, color: muted }] })
+  }
+  rows.push({ size: 14, height: 22, runs: [{ text: title, bold: true }] })
+
+  const facts = [
+    input.paymentTerm ? `Payment  ${input.paymentTerm}` : '',
+    input.createdByName ? `Entered by  ${input.createdByName}` : '',
+    `Date  ${date}`,
+  ].filter(Boolean)
+  if (facts.length) {
+    rows.push({ size: 8, height: 12, runs: facts.map((text, index) => ({ text, x: PDF_PAGE.left + index * 170 })) })
+  }
+  if (input.message?.trim()) {
+    rows.push({ size: 9, height: 13, runs: [{ text: input.message.trim(), color: muted }] })
+  }
+
+  rows.push({
+    size: 8,
+    height: 14,
+    runs: [
+      { text: 'DESCRIPTION', bold: true },
+      { text: 'QTY', x: 400, align: 'right', bold: true },
+      { text: 'RATE', x: 480, align: 'right', bold: true },
+      { text: 'AMOUNT', x: PDF_PAGE.right, align: 'right', bold: true },
+    ],
+    rule: true,
+  })
+  input.lines.forEach((line, index) => {
+    rows.push({
+      size: 9,
+      height: 14,
+      fill: index % 2 === 1 ? [0.953, 0.957, 0.965] : undefined,
+      fillInset: PDF_PAGE.left,
+      runs: [
+        { text: (line.description || line.sku || '').slice(0, 70) },
+        { text: trimNumber(line.quantity), x: 400, align: 'right' },
+        { text: money(line.unitPrice), x: 480, align: 'right' },
+        { text: money(line.amount), x: PDF_PAGE.right, align: 'right' },
+      ],
+    })
+  })
+
+  const totals: [string, string][] = [['Subtotal', money(input.subtotal)]]
+  if (Number(input.discountAmount) > 0) totals.push(['Discount', money(input.discountAmount)])
+  if (Number(input.taxTotal) > 0) totals.push(['Tax', money(input.taxTotal)])
+  totals.push(['Total', money(input.total)])
+  totals.forEach(([label, value], index) => {
+    rows.push({
+      size: 10,
+      height: 14,
+      keepId: 'trade-totals',
+      rule: index === totals.length - 1,
+      runs: [
+        { text: label, x: 430, bold: label === 'Total' },
+        { text: value, x: PDF_PAGE.right, align: 'right', bold: label === 'Total' },
+      ],
+    })
+  })
+  const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
+  if (template.terms.trim()) {
+    rows.push({ size: 8, height: 12, runs: [{ text: template.terms.trim().slice(0, 240), color: muted }] })
+  }
+  const foot = [input.orgEmail, input.orgPhone].filter(Boolean).join('  ·  ')
+  if (foot) rows.push({ size: 8, height: 12, runs: [{ text: foot, color: muted }], rule: true })
+  return rows
 }
 
 function lineItemLabel(row: { sku: string | null; description: string }): string {

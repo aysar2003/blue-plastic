@@ -22,6 +22,7 @@ import { readVendorFilter, statementBills, vendorFilterCaption, vendorTypeOption
 import { ACCOUNT_SUBTYPE_LABELS, JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
 import { accountOptions } from '@/lib/account-options'
 import { formatDate, formatTransactionDate, toCalendarDate } from '@/lib/date'
+import { documentEmailSubject } from '@/lib/document-email'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import { PERIOD_LABELS, type PeriodKey } from '@/lib/report-periods'
 import { requireOrgContext } from '@/server/auth/context'
@@ -154,7 +155,7 @@ export default async function StatementPage({
         })
       : [],
     kind === 'account' ? accountService.selectableAccounts(ctx, { withBalances: true }) : [],
-    organizationService.getDocumentTemplate(ctx),
+    organizationService.getPrintTemplate(ctx),
   ])
 
   const subjectId =
@@ -345,6 +346,7 @@ export default async function StatementPage({
             }`}
             actions={
               <PrintButton
+                paperStyle={template.paperStyle}
                 paper="invoices"
                 excelHref={`/api/statements/export?party=customer&${new URLSearchParams({
                   customerId: subjectId,
@@ -442,11 +444,16 @@ export default async function StatementPage({
           }`}
           actions={
             <StatementSend
+              paperStyle={template.paperStyle}
               pdfHref={`/api/statements/customer?${pdfParams.toString()}`}
               excelHref={`/api/statements/export?party=customer&${pdfParams.toString()}`}
               filename={filename}
               defaultTo={customer.email ?? ''}
-              defaultSubject={`Statement from ${ctx.organization.name}`}
+              defaultSubject={documentEmailSubject(
+                'Customer statement',
+                customer.displayName,
+                ctx.organization.name,
+              )}
               defaultBody={emailBody}
               whatsappPhone={customer.phone}
             />
@@ -619,6 +626,7 @@ export default async function StatementPage({
           }`}
           actions={
             <PrintButton
+              paperStyle={template.paperStyle}
               paper="vendor statement"
               excelHref={`/api/statements/export?party=vendor&${new URLSearchParams({
                 vendorId: subjectId,
@@ -644,7 +652,11 @@ export default async function StatementPage({
                 .replace(/^-|-$/g, '')
                 .slice(0, 40) || 'vendor'}.pdf`}
               defaultTo={vendor.email ?? ''}
-              defaultSubject={`Vendor statement from ${ctx.organization.name}`}
+              defaultSubject={documentEmailSubject(
+                'Vendor statement',
+                vendor.displayName,
+                ctx.organization.name,
+              )}
               defaultBody={vendorBody}
               whatsappPhone={vendor.phone}
               whatsappText={vendorBody}

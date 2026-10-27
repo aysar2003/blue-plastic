@@ -75,9 +75,11 @@ issues HTTPS automatically; do not use bare `http://` in production.
 Public product page: `/` (SOM ERP). Request a company: `/register`. Company login: `/login` or `/sign-in`.
 
 Each company has its own apps (Settings → Apps & features), users, tax, and ledger. Public
-`/register` creates a **pending** request — the person cannot sign in until a system owner
-**Approves** under **Databases**. Set `SELF_SERVE_COMPANIES=false` to hide `/register` after
-the first company exists.
+`/register` creates a company with a **14-day free trial** and signs the owner in. Set
+`SELF_SERVE_REQUIRE_APPROVAL=true` to keep the old pending-approval gate. Set
+`SELF_SERVE_COMPANIES=false` to hide `/register` after the first company exists. After the
+trial, companies pay rent from **Billing** (EVC / Zaad / bank proof); the system owner
+confirms payments under **Databases**.
 
 `GET /api/health` answers `{ ok, database }` and, when Postgres is down, a
 `problem` name. It never includes a connection string. Supabase URLs need

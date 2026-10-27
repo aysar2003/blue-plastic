@@ -1,13 +1,9 @@
 import 'server-only'
 
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
-
 import { parseFeatureFlags } from '@/lib/feature-flags'
 import { db } from '@/server/db'
 import { notFound } from '@/server/errors'
-
-const ROOT = path.resolve(process.cwd(), 'uploads', 'branding')
+import { getStoredObject } from '@/server/files/object-store'
 
 /**
  * Public logo for the customer-portal login page.
@@ -26,7 +22,7 @@ export async function readPublicPortalLogo(orgId: string) {
   if (!org?.logoStorageKey || !org.logoContentType) throw notFound('Logo')
   if (!parseFeatureFlags(org.featureFlags).enableCustomerPortal) throw notFound('Logo')
 
-  const bytes = await readFile(path.join(/*turbopackIgnore: true*/ ROOT, org.logoStorageKey))
+  const bytes = await getStoredObject(`branding/${org.logoStorageKey}`)
   return {
     bytes,
     contentType: org.logoContentType,

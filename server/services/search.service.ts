@@ -100,5 +100,7 @@ function purchasePath(type: string) {
   if (type === 'EXPENSE') return 'expenses'
   if (type === 'VENDOR_CREDIT') return 'vendor-credits'
   if (type === 'PURCHASE_ORDER') return 'purchase-orders'
+  if (type === 'PURCHASE_REQUEST') return 'purchase-requests'
+  if (type === 'RFQ') return 'rfqs'
   return 'bills'
 }

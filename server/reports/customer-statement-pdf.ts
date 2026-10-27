@@ -53,7 +53,8 @@ export type StatementPdfInput = {
  */
 export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array {
   const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
-  const accent = merchantAccent(template)
+  const trade = template.paperStyle === 'trade'
+  const accent = trade ? merchantPdfInk() : merchantAccent(template)
   const inkColor = merchantPdfInk()
   const muted = merchantPdfMuted()
   const money = (value: Decimal.Value) => formatMoney(value, input.currency)
@@ -83,6 +84,7 @@ export function renderCustomerStatementPdf(input: StatementPdfInput): Uint8Array
       orgPhone: input.orgPhone,
       orgEmail: input.orgEmail,
       accent,
+      plain: trade,
     }),
   )
 

@@ -38,6 +38,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
+import { workbookRecords } from '@/server/services/workbook'
 import * as approvalService from '@/server/services/approval.service'
 import { resolveProjectId } from '@/server/services/project.service'
 import * as storeService from '@/server/services/store.service'
@@ -48,7 +49,27 @@ const SEQUENCE_FOR: Record<PurchaseDocumentType, DocumentType> = {
   EXPENSE: 'EXPENSE',
   VENDOR_CREDIT: 'VENDOR_CREDIT',
   PURCHASE_ORDER: 'PURCHASE_ORDER',
+  PURCHASE_REQUEST: 'PURCHASE_REQUEST',
+  RFQ: 'RFQ',
 }
+
+/** Non-posting papers that may have no money value yet. */
+const ALLOWS_ZERO_TOTAL: ReadonlySet<PurchaseDocumentType> = new Set([
+  'PURCHASE_ORDER',
+  'PURCHASE_REQUEST',
+  'RFQ',
+])
+
+/** Papers that keep an expiry / “good until” date like a purchase order. */
+const HAS_EXPIRY: ReadonlySet<PurchaseDocumentType> = new Set([
+  'PURCHASE_ORDER',
+  'PURCHASE_REQUEST',
+  'RFQ',
+])
+
+const CONVERTIBLE_SOURCES: PurchaseDocumentType[] = ['PURCHASE_REQUEST', 'RFQ']
+export const PURCHASE_CONVERT_TARGETS = ['RFQ', 'PURCHASE_ORDER'] as const
+export type PurchaseConvertTarget = (typeof PURCHASE_CONVERT_TARGETS)[number]
 
 const DOCUMENT_SELECT = {
   id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true,
@@ -110,7 +131,7 @@ export async function list(
     ...(selected.length ? { id: { in: selected } } : {}),
     ...(selected.length ? {} : options.vendorId ? { vendorId: options.vendorId } : {}),
     ...(options.status === 'open'
-      ? type === 'PURCHASE_ORDER'
+      ? type === 'PURCHASE_ORDER' || type === 'PURCHASE_REQUEST' || type === 'RFQ'
         ? { status: 'OPEN' as const }
         : { status: { in: ['OPEN' as const, 'PARTIAL' as const] } }
       : {}),
@@ -367,6 +388,7 @@ export async function getMany(ctx: OrgContext, ids: string[]) {
       createdAt: true,
       status: true,
       reference: true,
+      memo: true,
       subtotal: true,
       taxTotal: true,
       total: true,
@@ -394,6 +416,7 @@ export async function getMany(ctx: OrgContext, ids: string[]) {
           unitPrice: true,
           discountPercent: true,
           amount: true,
+          taxAmount: true,
           item: { select: { name: true, sku: true, unitOfMeasure: true } },
         },
       },
@@ -432,10 +455,18 @@ export async function getMany(ctx: OrgContext, ids: string[]) {
       total: total.toString(),
       amountApplied: toMoneyString(applied, 2),
       balance: document.type === 'BILL' ? toMoneyString(total.minus(applied), 2) : '0.00',
-      customerMessage: null,
+      customerMessage: document.memo,
       createdByName: document.createdById ? (names.get(document.createdById) ?? null) : null,
       paymentTerm: document.paymentTerm,
-      customer: document.vendor,
+      customer: document.vendor ?? {
+        displayName: 'No vendor',
+        email: null,
+        phone: null,
+        billingLine1: null,
+        billingLine2: null,
+        billingCity: null,
+        billingRegion: null,
+      },
       lines: document.lines.map((line) => ({
         id: line.id,
         lineNumber: line.lineNumber,
@@ -444,6 +475,7 @@ export async function getMany(ctx: OrgContext, ids: string[]) {
         unitPrice: line.unitPrice.toString(),
         amount: line.amount.toString(),
         discountPercent: line.discountPercent?.toString() ?? null,
+        taxAmount: line.taxAmount.toString(),
         item: line.item,
       })),
     }
@@ -712,10 +744,10 @@ async function createWithin(
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
     const isDraft = input.saveAsDraft === true
     assertNamedPurchaseLines(isDraft, input.lines)
-    const lines = await resolveLines(tx, ctx, input.lines, vendor.defaultExpenseAccountId)
+    const lines = await resolveLines(tx, ctx, input.lines, vendor?.defaultExpenseAccountId ?? null)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency)
-    if (priced.total.isZero() && !isDraft && type !== 'PURCHASE_ORDER') {
+    if (priced.total.isZero() && !isDraft && !ALLOWS_ZERO_TOTAL.has(type)) {
       throw validation('A document with no value has nothing to record.')
     }
 
@@ -724,7 +756,7 @@ async function createWithin(
           where: { id: input.paymentTermId, orgId: ctx.orgId },
           select: { id: true, type: true, dueDays: true },
         })
-      : vendor.paymentTerm
+      : (vendor?.paymentTerm ?? null)
 
     // An expense is paid at once — from a money account, or against a customer.
     if (type === 'EXPENSE' && !isDraft) {
@@ -738,7 +770,7 @@ async function createWithin(
     })
     if (clash) throw numberTaken()
 
-    // Bills post to the ledger; purchase orders may still wait for approval to open.
+    // Bills post to the ledger; purchase orders / PRs / RFQs may wait for approval to open.
     const gate = !isDraft
       ? await approvalService.needsApproval(ctx, 'PURCHASE_DOCUMENT', priced.total, tx, type)
       : { required: false, levels: 1, requireDifferentApprover: true }
@@ -749,11 +781,10 @@ async function createWithin(
         orgId: ctx.orgId,
         type,
         number,
-        vendorId: vendor.id,
+        vendorId: vendor?.id ?? null,
         date: toDate(input.date),
         dueDate: type === 'BILL' ? toDate(dueDateFor(input.date, term ?? null)) : null,
-        expiryDate:
-          type === 'PURCHASE_ORDER' && input.expiryDate ? toDate(input.expiryDate) : null,
+        expiryDate: HAS_EXPIRY.has(type) && input.expiryDate ? toDate(input.expiryDate) : null,
         paymentTermId: term?.id ?? null,
         status: isDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         reference: input.reference ?? null,
@@ -848,7 +879,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
     }
 
     assertNamedPurchaseLines(input.saveAsDraft === true, input.lines)
-    const lines = await resolveLines(tx, ctx, input.lines, vendor.defaultExpenseAccountId)
+    const lines = await resolveLines(tx, ctx, input.lines, vendor?.defaultExpenseAccountId ?? null)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency)
 
@@ -857,7 +888,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
           where: { id: input.paymentTermId, orgId: ctx.orgId },
           select: { id: true, type: true, dueDays: true },
         })
-      : vendor.paymentTerm
+      : (vendor?.paymentTerm ?? null)
 
     // The old journal comes out before the new one goes in — and so does the
     // stock it received. Reversing only the journal would leave the stock
@@ -892,13 +923,13 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
       where: { id },
       data: {
         number,
-        vendorId: vendor.id,
+        vendorId: vendor?.id ?? null,
         date: toDate(input.date),
         dueDate: existing.type === 'BILL' ? toDate(dueDateFor(input.date, term ?? null)) : null,
         // A purchase order's expiry survives an edit. It used to be silently
         // dropped, so editing an order threw away the date it was good until.
         expiryDate:
-          existing.type === 'PURCHASE_ORDER' && input.expiryDate ? toDate(input.expiryDate) : null,
+          HAS_EXPIRY.has(existing.type) && input.expiryDate ? toDate(input.expiryDate) : null,
         paymentTermId: term?.id ?? null,
         reference: input.reference ?? null,
         memo: input.memo ?? null,
@@ -1035,6 +1066,10 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     taxCodes,
     ctx.organization.baseCurrency,
   )
+
+  if (!document.vendorId) {
+    throw precondition(`${document.number} needs a vendor before it can be posted.`)
+  }
 
   const input: PurchaseJournalInput = {
     date: toCalendarDate(document.date),
@@ -1553,6 +1588,9 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
       },
     })
     if (!order) throw notFound('Purchase order')
+    if (!order.vendorId) {
+      throw precondition(`${order.number} has no vendor and cannot be received.`)
+    }
 
     if (order.status === 'VOID') {
       throw precondition(`${order.number} is void and cannot be received.`)
@@ -1721,6 +1759,134 @@ export async function convertOrder(ctx: OrgContext, orderId: string, date: Calen
 }
 
 /**
+ * Turn a purchase request into an RFQ, or an RFQ into a purchase order.
+ *
+ * Mirrors sales convert: source stays readable and is CLOSED; the new document
+ * points back via convertedFromId. Receiving a PO into bills stays on
+ * receiveOrder / convertOrder.
+ */
+export async function convertPurchaseDocument(
+  ctx: OrgContext,
+  sourceId: string,
+  date: CalendarDate,
+  target: PurchaseConvertTarget,
+  vendorId?: string | null,
+) {
+  const meta = await requestMeta()
+
+  return db.$transaction(async (tx) => {
+    const source = await tx.purchaseDocument.findFirst({
+      where: { id: sourceId, orgId: ctx.orgId, type: { in: CONVERTIBLE_SOURCES } },
+      select: {
+        id: true,
+        number: true,
+        type: true,
+        status: true,
+        vendorId: true,
+        projectId: true,
+        reference: true,
+        memo: true,
+        paymentTermId: true,
+        convertedTo: {
+          where: { type: { in: ['RFQ', 'PURCHASE_ORDER'] }, deletedAt: null },
+          select: { number: true, type: true },
+          take: 1,
+        },
+        lines: {
+          orderBy: { lineNumber: 'asc' },
+          select: {
+            itemId: true,
+            description: true,
+            quantity: true,
+            unitPrice: true,
+            discountPercent: true,
+            taxCodeId: true,
+            expenseAccountId: true,
+            storeId: true,
+          },
+        },
+      },
+    })
+    if (!source) throw notFound('Document')
+    if (source.convertedTo.length > 0) {
+      const prior = source.convertedTo[0]!
+      throw conflict(`${source.number} has already become ${prior.number}.`)
+    }
+    if (source.status === 'VOID' || source.status === 'CLOSED' || source.status === 'DRAFT') {
+      throw precondition(
+        `${source.number} is ${source.status.toLowerCase()} and cannot be converted.`,
+      )
+    }
+    if (source.status === 'PENDING_APPROVAL') {
+      throw precondition(`${source.number} is waiting for approval and cannot be converted yet.`)
+    }
+    if (source.type === 'PURCHASE_REQUEST' && target !== 'RFQ' && target !== 'PURCHASE_ORDER') {
+      throw precondition('A purchase request becomes an RFQ or a purchase order.')
+    }
+    if (source.type === 'RFQ' && target !== 'PURCHASE_ORDER') {
+      throw precondition('An RFQ becomes a purchase order.')
+    }
+    if (source.type === target) {
+      throw precondition(`${source.number} is already that kind of document.`)
+    }
+
+    const resolvedVendorId = vendorId ?? source.vendorId
+    if (!resolvedVendorId) {
+      throw validation('Choose a vendor.', { vendorId: ['Choose a vendor'] })
+    }
+
+    const created = await createWithin(
+      tx,
+      ctx,
+      target,
+      {
+        vendorId: resolvedVendorId,
+        date,
+        reference: source.reference,
+        memo: source.memo,
+        paymentTermId: source.paymentTermId,
+        projectId: source.projectId,
+        saveAsDraft: false,
+        lines: source.lines.map((line) => ({
+          itemId: line.itemId,
+          expenseAccountId: line.expenseAccountId,
+          storeId: line.storeId,
+          description: line.description,
+          quantity: line.quantity.toString(),
+          unitPrice: line.unitPrice.toString(),
+          discountPercent: line.discountPercent?.toString() ?? null,
+          taxCodeId: line.taxCodeId,
+        })),
+      } as PurchaseDocumentInput,
+      meta,
+    )
+
+    await tx.purchaseDocument.update({
+      where: { id: created.id },
+      data: { convertedFromId: sourceId },
+    })
+    await tx.purchaseDocument.update({
+      where: { id: sourceId },
+      data: { status: 'CLOSED' },
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'PurchaseDocument',
+        entityId: sourceId,
+        action: 'UPDATE',
+        after: { convertedTo: created.number, fulfilledAs: target },
+      },
+      meta,
+    )
+
+    return { ...created, type: target }
+  })
+}
+
+/**
  * Recompute a document's status from what has actually settled it.
  *
  * A bill runs OPEN -> PARTIAL -> PAID as payments and credits are applied. An
@@ -1873,9 +2039,10 @@ async function requireCustomer(tx: Tx, ctx: OrgContext, customerId: string) {
 /**
  * Who the purchase is with.
  *
- * Bills and orders need a vendor. An expense settled on a customer balance may
- * omit the vendor: a matching vendor row is found or created from that customer
- * so lists and printouts still have a name, while the journal credits AR.
+ * Bills, RFQs and orders need a vendor. A purchase request may omit one (internal
+ * ask). An expense settled on a customer balance may omit the vendor: a matching
+ * vendor row is found or created from that customer so lists and printouts still
+ * have a name, while the journal credits AR.
  */
 async function resolvePurchaseParty(
   tx: Tx,
@@ -1898,6 +2065,9 @@ async function resolvePurchaseParty(
   }
 
   if (!input.vendorId) {
+    if (type === 'PURCHASE_REQUEST') {
+      return { vendor: null, offsetCustomerId: null }
+    }
     throw validation('Choose a vendor.', { vendorId: ['Choose a vendor'] })
   }
   return { vendor: await requireVendor(tx, ctx, input.vendorId), offsetCustomerId: null }
@@ -2102,4 +2272,98 @@ async function loadTaxCodes(
   }
 
   return codes
+}
+
+const RATE_HEADERS = new Set(['rate', 'unit price', 'unit cost', 'price', 'qimaha', 'qiimaha'])
+
+/**
+ * Read the Excel sent back for an RFQ and write each quoted rate onto the matching line.
+ * Rows match the exported sheet: SKU first, otherwise the item name.
+ */
+export async function applyRfqQuotedPrices(ctx: OrgContext, id: string, workbook: string) {
+  const records = await workbookRecords(workbook)
+  const headerIndex = records.findIndex((row) =>
+    row.some((cell) => RATE_HEADERS.has(cell.trim().toLowerCase())),
+  )
+  if (headerIndex < 0) {
+    throw validation('The file has no Rate column. Use the Excel downloaded from this RFQ.')
+  }
+  const header = records[headerIndex]!.map((cell) => cell.trim().toLowerCase())
+  const rateAt = header.findIndex((cell) => RATE_HEADERS.has(cell))
+  const skuAt = header.findIndex((cell) => cell === 'sku' || cell === 'product sku')
+  const itemAt = header.findIndex(
+    (cell) => cell === 'item' || cell === 'product' || cell === 'description' || cell === 'name',
+  )
+  const quotes = records.slice(headerIndex + 1).flatMap((row) => {
+    const cleaned = (row[rateAt] ?? '').trim().replace(/,/g, '')
+    if (!cleaned) return []
+    const amount = Number(cleaned)
+    if (!Number.isFinite(amount) || amount < 0) return []
+    return [{ sku: skuAt >= 0 ? row[skuAt]?.trim() ?? '' : '', name: itemAt >= 0 ? row[itemAt]?.trim() ?? '' : '', rate: amount }]
+  })
+  if (quotes.length === 0) throw validation('No prices were filled in the Rate column.')
+
+  return db.$transaction(async (tx) => {
+    const document = await tx.purchaseDocument.findFirst({
+      where: { id, orgId: ctx.orgId, type: 'RFQ' },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        taxTotal: true,
+        lines: {
+          orderBy: { lineNumber: 'asc' },
+          select: {
+            id: true,
+            description: true,
+            quantity: true,
+            item: { select: { name: true, sku: true } },
+          },
+        },
+      },
+    })
+    if (!document) throw notFound('RFQ')
+    if (document.status === 'VOID' || document.status === 'CLOSED') {
+      throw precondition(`${document.number} is ${document.status.toLowerCase()} and cannot take prices.`)
+    }
+
+    const used = new Set<string>()
+    let updated = 0
+    for (const quote of quotes) {
+      const sku = quote.sku.toLowerCase()
+      const name = quote.name.toLowerCase()
+      const line = document.lines.find((candidate) => {
+        if (used.has(candidate.id)) return false
+        const lineSku = candidate.item?.sku?.trim().toLowerCase() ?? ''
+        const lineName = (candidate.item?.name ?? '').trim().toLowerCase()
+        const lineDescription = (candidate.description ?? '').trim().toLowerCase()
+        if (sku && lineSku && lineSku === sku) return true
+        if (name && (lineName === name || lineDescription === name)) return true
+        return false
+      })
+      if (!line) continue
+      used.add(line.id)
+      const amount = line.quantity.times(quote.rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+      await tx.purchaseDocumentLine.update({
+        where: { id: line.id },
+        data: { unitPrice: new Decimal(quote.rate), amount },
+      })
+      updated += 1
+    }
+    if (updated === 0) {
+      throw validation('None of the rows matched this RFQ. Keep the Item and SKU from the file you sent.')
+    }
+
+    const lines = await tx.purchaseDocumentLine.findMany({
+      where: { documentId: id },
+      select: { amount: true },
+    })
+    const subtotal = lines.reduce((sum, line) => sum.plus(line.amount), ZERO)
+    const total = subtotal.plus(document.taxTotal)
+    await tx.purchaseDocument.update({
+      where: { id },
+      data: { subtotal, total },
+    })
+    return { updated, skipped: quotes.length - updated }
+  })
 }

@@ -1,14 +1,13 @@
 import 'server-only'
 
 import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import path from 'node:path'
 
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, validation } from '@/server/errors'
+import { deleteStoredObject, getStoredObject, putStoredObject } from '@/server/files/object-store'
 
-const ROOT = path.resolve(process.cwd(), 'uploads', 'branding')
+const PREFIX = 'branding'
 const MAX = 2 * 1024 * 1024
 
 const ALLOWED = new Map<string, string>([
@@ -30,6 +29,10 @@ function sniff(bytes: Buffer): { contentType: string; extension: string } | null
   return null
 }
 
+function objectKey(storageKey: string) {
+  return `${PREFIX}/${storageKey}`
+}
+
 export async function storeOrgLogo(ctx: OrgContext, file: File) {
   if (file.size <= 0 || file.size > MAX) throw validation('Choose a logo image of 2 MB or smaller.')
   const bytes = Buffer.from(await file.arrayBuffer())
@@ -45,8 +48,7 @@ export async function storeOrgLogo(ctx: OrgContext, file: File) {
   if (!before) throw notFound('Organisation')
 
   const storageKey = `${ctx.orgId}/${randomBytes(12).toString('hex')}.${sniffed.extension}`
-  await mkdir(path.join(/*turbopackIgnore: true*/ ROOT, ctx.orgId), { recursive: true })
-  await writeFile(path.join(/*turbopackIgnore: true*/ ROOT, storageKey), bytes)
+  await putStoredObject(objectKey(storageKey), bytes, sniffed.contentType)
 
   await db.organization.update({
     where: { id: ctx.orgId },
@@ -57,7 +59,7 @@ export async function storeOrgLogo(ctx: OrgContext, file: File) {
   })
 
   if (before.logoStorageKey && before.logoStorageKey !== storageKey) {
-    await unlink(path.join(/*turbopackIgnore: true*/ ROOT, before.logoStorageKey)).catch(() => undefined)
+    await deleteStoredObject(objectKey(before.logoStorageKey))
   }
 
   return { storageKey, contentType: sniffed.contentType }
@@ -76,7 +78,7 @@ export async function clearOrgLogo(ctx: OrgContext) {
   })
 
   if (before.logoStorageKey) {
-    await unlink(path.join(/*turbopackIgnore: true*/ ROOT, before.logoStorageKey)).catch(() => undefined)
+    await deleteStoredObject(objectKey(before.logoStorageKey))
   }
 }
 
@@ -86,7 +88,7 @@ export async function readOrgLogo(ctx: OrgContext) {
     select: { logoStorageKey: true, logoContentType: true, name: true },
   })
   if (!org?.logoStorageKey || !org.logoContentType) throw notFound('Logo')
-  const bytes = await readFile(path.join(/*turbopackIgnore: true*/ ROOT, org.logoStorageKey))
+  const bytes = await getStoredObject(objectKey(org.logoStorageKey))
   return {
     bytes,
     contentType: org.logoContentType,

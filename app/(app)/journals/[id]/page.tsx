@@ -69,6 +69,9 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
           <>
             <DocumentActions
               paper="journal entry"
+              filename={journal.journalNumber}
+              pdfMatchesPrint
+              excelHref={`/api/journals/${journal.id}/export`}
               defaultSubject={`${journal.journalNumber} — ${ctx.organization.name}`}
               defaultBody={[
                 journal.journalNumber,
@@ -117,133 +120,135 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
         </div>
       ) : null}
 
-      <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Detail
-          label="Date"
-          value={formatTransactionDate(toCalendarDate(journal.date), journal.postedAt, ctx.organization.timeZone)}
-        />
-        <Detail
-          label="Source"
-          value={
-            journal.source.number
-              ? `${JOURNAL_SOURCE_LABELS[journal.sourceType] ?? journal.sourceType} ${journal.source.number}`
-              : (JOURNAL_SOURCE_LABELS[journal.sourceType] ?? journal.sourceType)
-          }
-          href={journal.source.href ?? undefined}
-        />
-        <Detail
-          label="Period"
-          value={`${formatDate(toCalendarDate(journal.period.startDate))} — ${PERIOD_STATUS_LABELS[journal.period.status]}`}
-        />
+      <div data-print-root className="space-y-4">
+        <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Detail
+            label="Date"
+            value={formatTransactionDate(toCalendarDate(journal.date), journal.postedAt, ctx.organization.timeZone)}
+          />
+          <Detail
+            label="Source"
+            value={
+              journal.source.number
+                ? `${JOURNAL_SOURCE_LABELS[journal.sourceType] ?? journal.sourceType} ${journal.source.number}`
+                : (JOURNAL_SOURCE_LABELS[journal.sourceType] ?? journal.sourceType)
+            }
+            href={journal.source.href ?? undefined}
+          />
+          <Detail
+            label="Period"
+            value={`${formatDate(toCalendarDate(journal.period.startDate))} — ${PERIOD_STATUS_LABELS[journal.period.status]}`}
+          />
+          {party ? (
+            <Detail label="Customer / vendor" value={party.name} href={party.href} />
+          ) : (
+            <Detail label="Posted" value={formatDateTime(journal.postedAt, ctx.organization.timeZone)} />
+          )}
+        </div>
+
         {party ? (
-          <Detail label="Customer / vendor" value={party.name} href={party.href} />
-        ) : (
-          <Detail label="Posted" value={formatDateTime(journal.postedAt, ctx.organization.timeZone)} />
-        )}
-      </div>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Posted {formatDateTime(journal.postedAt, ctx.organization.timeZone)}
+          </p>
+        ) : null}
 
-      {party ? (
-        <p className="mb-4 text-xs text-muted-foreground">
-          Posted {formatDateTime(journal.postedAt, ctx.organization.timeZone)}
-        </p>
-      ) : null}
+        {journal.status === 'REVERSED' && journal.reversedBy ? (
+          <Notice>
+            This entry was reversed by{' '}
+            <Link href={`/journals/${journal.reversedBy.id}`} className="font-medium underline underline-offset-4">
+              {journal.reversedBy.journalNumber}
+            </Link>{' '}
+            on {formatDate(toCalendarDate(journal.reversedBy.date))}. Both remain in the ledger and cancel out.
+          </Notice>
+        ) : null}
 
-      {journal.status === 'REVERSED' && journal.reversedBy ? (
-        <Notice>
-          This entry was reversed by{' '}
-          <Link href={`/journals/${journal.reversedBy.id}`} className="font-medium underline underline-offset-4">
-            {journal.reversedBy.journalNumber}
-          </Link>{' '}
-          on {formatDate(toCalendarDate(journal.reversedBy.date))}. Both remain in the ledger and cancel out.
-        </Notice>
-      ) : null}
+        {journal.reversalOf ? (
+          <Notice>
+            This is the reversal of{' '}
+            <Link href={`/journals/${journal.reversalOf.id}`} className="font-medium underline underline-offset-4">
+              {journal.reversalOf.journalNumber}
+            </Link>
+            {journal.reversalReason ? ` — ${journal.reversalReason}` : null}.
+          </Notice>
+        ) : null}
 
-      {journal.reversalOf ? (
-        <Notice>
-          This is the reversal of{' '}
-          <Link href={`/journals/${journal.reversalOf.id}`} className="font-medium underline underline-offset-4">
-            {journal.reversalOf.journalNumber}
-          </Link>
-          {journal.reversalReason ? ` — ${journal.reversalReason}` : null}.
-        </Notice>
-      ) : null}
-
-      <Card className="overflow-hidden p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Account</TableHead>
-              <TableHead className="numeric w-36">Debit</TableHead>
-              <TableHead className="numeric w-36">Credit</TableHead>
-              <TableHead>Memo</TableHead>
-              <TableHead className="w-48">Name</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {journal.lines.map((line) => (
-              <TableRow key={line.id}>
-                <TableCell>
-                  <Link
-                    href={`/accounts/${line.account.id}`}
-                    className="inline-flex items-center gap-1.5 underline-offset-4 hover:underline"
-                  >
-                    <AccountTypeIcon type={line.account.type} size="sm" />
-                    <span>
-                      <span className="tabular text-muted-foreground">{line.account.code}</span>{' '}
-                      {line.account.name}
-                    </span>
-                  </Link>
-                </TableCell>
-                <TableCell className="numeric tabular">
-                  {line.debit === '0' ? '' : formatMoney(line.debit, currency)}
-                </TableCell>
-                <TableCell className="numeric tabular">
-                  {line.credit === '0' ? '' : formatMoney(line.credit, currency)}
-                </TableCell>
-                <TableCell className="text-muted-foreground">{line.description ?? '—'}</TableCell>
-                <TableCell>
-                  {line.customer ? (
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Account</TableHead>
+                <TableHead className="numeric w-36">Debit</TableHead>
+                <TableHead className="numeric w-36">Credit</TableHead>
+                <TableHead>Memo</TableHead>
+                <TableHead className="w-48">Name</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {journal.lines.map((line) => (
+                <TableRow key={line.id}>
+                  <TableCell>
                     <Link
-                      href={`/customers?id=${line.customer.id}`}
-                      className="underline-offset-4 hover:underline"
+                      href={`/accounts/${line.account.id}`}
+                      className="inline-flex items-center gap-1.5 underline-offset-4 hover:underline"
                     >
-                      {line.customer.displayName}
+                      <AccountTypeIcon type={line.account.type} size="sm" />
+                      <span>
+                        <span className="tabular text-muted-foreground">{line.account.code}</span>{' '}
+                        {line.account.name}
+                      </span>
                     </Link>
-                  ) : line.vendor ? (
-                    <Link
-                      href={`/vendors/${line.vendor.id}`}
-                      className="underline-offset-4 hover:underline"
-                    >
-                      {line.vendor.displayName}
-                    </Link>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
+                  </TableCell>
+                  <TableCell className="numeric tabular">
+                    {line.debit === '0' ? '' : formatMoney(line.debit, currency)}
+                  </TableCell>
+                  <TableCell className="numeric tabular">
+                    {line.credit === '0' ? '' : formatMoney(line.credit, currency)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{line.description ?? '—'}</TableCell>
+                  <TableCell>
+                    {line.customer ? (
+                      <Link
+                        href={`/customers?id=${line.customer.id}`}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {line.customer.displayName}
+                      </Link>
+                    ) : line.vendor ? (
+                      <Link
+                        href={`/vendors/${line.vendor.id}`}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {line.vendor.displayName}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell className="font-medium">
+                  Totals
+                  {journal.balanced ? null : (
+                    <Badge variant="destructive" className="ml-2">
+                      out of balance
+                    </Badge>
                   )}
                 </TableCell>
+                <TableCell className="numeric tabular font-semibold">
+                  {formatMoney(journal.totalDebit, currency)}
+                </TableCell>
+                <TableCell className="numeric tabular font-semibold">
+                  {formatMoney(journal.totalCredit, currency)}
+                </TableCell>
+                <TableCell colSpan={2} />
               </TableRow>
-            ))}
-          </TableBody>
-          <TableFooter>
-            <TableRow>
-              <TableCell className="font-medium">
-                Totals
-                {journal.balanced ? null : (
-                  <Badge variant="destructive" className="ml-2">
-                    out of balance
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell className="numeric tabular font-semibold">
-                {formatMoney(journal.totalDebit, currency)}
-              </TableCell>
-              <TableCell className="numeric tabular font-semibold">
-                {formatMoney(journal.totalCredit, currency)}
-              </TableCell>
-              <TableCell colSpan={2} />
-            </TableRow>
-          </TableFooter>
-        </Table>
-      </Card>
+            </TableFooter>
+          </Table>
+        </Card>
+      </div>
 
       <p className="mt-4 text-xs text-muted-foreground">
         Posted amounts are never rewritten. Delete withdraws the entry from balances and reports while

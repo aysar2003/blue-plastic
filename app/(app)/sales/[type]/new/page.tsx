@@ -8,6 +8,7 @@ import { bySlug } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { peekDocumentNumber } from '@/server/sequences'
+import { loadFormCustomization } from '@/server/services/form-customization'
 import { loadFormOptions } from '@/server/services/sales-options'
 import * as projectService from '@/server/services/project.service'
 import * as salesService from '@/server/services/sales.service'
@@ -41,14 +42,16 @@ export default async function NewSalesDocumentPage({
     stores: [] as Awaited<ReturnType<typeof storeService.quantities>>['stores'],
     byItem: {} as Awaited<ReturnType<typeof storeService.quantities>>['byItem'],
   }
-  const [options, query, documentNumber, neighbors, shelf, openSources] = await Promise.all([
-    loadFormOptions(ctx, { includeOnHand: false }),
-    searchParams,
-    peekDocumentNumber(db, ctx.orgId, config.type),
-    salesService.neighbors(ctx, config.type, null),
-    storeService.quantities(ctx).catch(() => emptyShelf),
-    loadsSources ? salesService.listConvertibleSources(ctx) : Promise.resolve([]),
-  ])
+  const [options, query, documentNumber, neighbors, shelf, openSources, formCustomization] =
+    await Promise.all([
+      loadFormOptions(ctx, { includeOnHand: false }),
+      searchParams,
+      peekDocumentNumber(db, ctx.orgId, config.type),
+      salesService.neighbors(ctx, config.type, null),
+      storeService.quantities(ctx).catch(() => emptyShelf),
+      loadsSources ? salesService.listConvertibleSources(ctx) : Promise.resolve([]),
+      loadFormCustomization(ctx, 'sales', config.type),
+    ])
   const requestedProject = typeof query.project === 'string' ? query.project : undefined
   const project = requestedProject
     ? await projectService.peek(ctx, requestedProject).catch(() => null)
@@ -92,6 +95,7 @@ export default async function NewSalesDocumentPage({
         stores={shelf.stores}
         stock={shelf.byItem}
         openSources={openSources}
+        formCustomization={formCustomization}
       />
     </>
   )

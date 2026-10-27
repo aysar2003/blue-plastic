@@ -1,17 +1,21 @@
 import 'server-only'
 
 import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, validation } from '@/server/errors'
+import { deleteStoredObject, getStoredObject, putStoredObject } from '@/server/files/object-store'
 
-const ROOT = path.resolve(process.cwd(), 'uploads', 'company-agreements')
+const PREFIX = 'company-agreements'
 const MAX_BYTES = 8 * 1024 * 1024
 
 type Sniffed = { contentType: string; extension: string }
+
+function objectKey(storageKey: string) {
+  return `${PREFIX}/${storageKey}`
+}
 
 export async function storeAgreementFile(
   ctx: OrgContext,
@@ -30,9 +34,7 @@ export async function storeAgreementFile(
 
   const id = randomBytes(16).toString('hex')
   const storageKey = `${orgId}/${agreementId}/${id}.${sniffed.extension}`
-  const destination = absolutePath(storageKey)
-  await mkdir(path.dirname(destination), { recursive: true })
-  await writeFile(destination, bytes)
+  await putStoredObject(objectKey(storageKey), bytes, sniffed.contentType)
 
   return {
     originalName: safeName(file.name),
@@ -44,12 +46,12 @@ export async function storeAgreementFile(
 }
 
 export async function readAgreementBytes(storageKey: string) {
-  return readFile(absolutePath(storageKey))
+  return getStoredObject(objectKey(storageKey))
 }
 
 export async function removeAgreementStored(storageKey: string | null | undefined) {
   if (!storageKey) return
-  await unlink(absolutePath(storageKey)).catch(() => undefined)
+  await deleteStoredObject(objectKey(storageKey))
 }
 
 export async function assertAgreementOrg(orgId: string, agreementId: string) {
@@ -85,15 +87,6 @@ function sniff(bytes: Buffer): Sniffed | null {
     return { contentType: 'application/pdf', extension: 'pdf' }
   }
   return null
-}
-
-function absolutePath(storageKey: string) {
-  const full = path.resolve(/*turbopackIgnore: true*/ ROOT, storageKey)
-  const relative = path.relative(/*turbopackIgnore: true*/ ROOT, full)
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw validation('That file could not be read.')
-  }
-  return full
 }
 
 function safeName(name: string) {

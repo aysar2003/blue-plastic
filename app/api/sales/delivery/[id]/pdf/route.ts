@@ -24,7 +24,7 @@ export async function GET(
     const [note, org, template] = await Promise.all([
       salesDelivery.get(ctx, id),
       organizationService.get(ctx),
-      organizationService.getDocumentTemplate(ctx),
+      organizationService.getPrintTemplate(ctx, new URL(request.url).searchParams.get('paper')),
     ])
 
     const company = letterheadOf(org)

@@ -177,6 +177,7 @@ export function MyTemplatesPanel({
         footerNote: currentDocument.footerNote,
         footerLayout: currentDocument.footerLayout,
         showClassicPaper: currentDocument.showClassicPaper,
+        paperStyle: currentDocument.paperStyle,
         banks: currentDocument.banks,
       })
       if (!result.ok) {
@@ -207,6 +208,7 @@ export function MyTemplatesPanel({
           footerNote: item.document!.footerNote,
           footerLayout: item.document!.footerLayout,
           showClassicPaper: item.document!.showClassicPaper,
+          paperStyle: item.document!.paperStyle,
           banks: item.document!.banks,
         })
         if (!result.ok) {

@@ -45,6 +45,7 @@ export type SheetDocument = {
     unitPrice: string
     amount: string
     discountPercent: string | null
+    taxAmount?: string | null
     item: { name: string; sku: string | null; unitOfMeasure?: string | null } | null
   }[]
 }

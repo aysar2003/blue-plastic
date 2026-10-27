@@ -30,7 +30,7 @@ export async function GET(
     const [document, org, template] = await Promise.all([
       salesService.get(ctx, id),
       organizationService.get(ctx),
-      organizationService.getDocumentTemplate(ctx),
+      organizationService.getPrintTemplate(ctx, query.get('paper')),
     ])
 
     // Portal logins may only download their own customer's documents.

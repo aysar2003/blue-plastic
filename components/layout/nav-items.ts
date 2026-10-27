@@ -112,6 +112,12 @@ export const MODULES: NavModule[] = [
       { label: 'Vendor credits', href: '/purchases/vendor-credits', permission: 'bill:read' },
       { label: 'Purchase orders', href: '/purchases/purchase-orders', permission: 'bill:read' },
       {
+        label: 'Purchase requests',
+        href: '/purchases/purchase-requests',
+        permission: 'bill:read',
+      },
+      { label: 'RFQs', href: '/purchases/rfqs', permission: 'bill:read' },
+      {
         label: 'Delivery',
         href: '/purchases/delivery',
         permission: 'bill:read',
@@ -216,6 +222,7 @@ export const MODULES: NavModule[] = [
     tabs: [
       { label: 'Home', href: '/databases' },
       { label: 'System users', href: '/databases/users' },
+      { label: 'Platform billing', href: '/databases/billing' },
     ],
   },
   {
@@ -224,10 +231,11 @@ export const MODULES: NavModule[] = [
     href: '/settings',
     icon: SettingsIcon,
     permission: 'org:read',
-    owns: ['/settings'],
+    owns: ['/settings', '/billing'],
     tabs: [
       { label: 'Home', href: '/settings' },
       { label: 'Organisation', href: '/settings/organization' },
+      { label: 'Billing', href: '/billing', permission: 'org:read' },
       { label: 'Apps & features', href: '/settings/features', permission: 'org:update' },
       { label: 'Default accounts', href: '/settings/accounts', permission: 'account:read' },
       { label: 'Payment terms', href: '/settings/payment-terms' },

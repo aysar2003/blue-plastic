@@ -10,6 +10,7 @@ import {
   applyVendorCreditSchema,
   billPaymentSchema,
   convertOrderSchema,
+  convertPurchaseDocumentSchema,
   purchaseDocumentSchema,
   receiveOrderSchema,
 } from '@/lib/validation/purchases'
@@ -20,7 +21,14 @@ import * as purchaseService from '@/server/services/purchase.service'
 import { assertDocumentDeleteAllowed } from '@/server/feature-guards'
 
 function revalidatePurchases() {
-  for (const slug of ['bills', 'expenses', 'vendor-credits', 'purchase-orders']) {
+  for (const slug of [
+    'bills',
+    'expenses',
+    'vendor-credits',
+    'purchase-orders',
+    'purchase-requests',
+    'rfqs',
+  ]) {
     revalidatePath(`/purchases/${slug}`)
   }
   revalidatePath('/bill-payments')
@@ -32,7 +40,14 @@ function revalidatePurchases() {
   revalidatePath('/accounts')
 }
 
-const documentType = z.enum(['BILL', 'EXPENSE', 'VENDOR_CREDIT', 'PURCHASE_ORDER'])
+const documentType = z.enum([
+  'BILL',
+  'EXPENSE',
+  'VENDOR_CREDIT',
+  'PURCHASE_ORDER',
+  'PURCHASE_REQUEST',
+  'RFQ',
+])
 
 export const createPurchase = action
   .requires('bill:create')
@@ -74,6 +89,33 @@ export const convertOrder = action
     const bill = await purchaseService.convertOrder(ctx, input.id, input.date)
     revalidatePurchases()
     return bill
+  })
+
+/** Write supplier rates from the RFQ Excel back onto the document. */
+export const importRfqPrices = action
+  .requires('bill:update')
+  .input(z.object({ id: cuid, workbook: z.string().min(16) }))
+  .handler(async (ctx, input) => {
+    const result = await purchaseService.applyRfqQuotedPrices(ctx, input.id, input.workbook)
+    revalidatePurchases()
+    revalidatePath(`/purchases/rfqs/${input.id}`)
+    return result
+  })
+
+/** PR → RFQ or RFQ → purchase order. */
+export const convertPurchaseDocument = action
+  .requires('bill:create')
+  .input(convertPurchaseDocumentSchema)
+  .handler(async (ctx, input) => {
+    const document = await purchaseService.convertPurchaseDocument(
+      ctx,
+      input.id,
+      input.date,
+      input.target,
+      input.vendorId,
+    )
+    revalidatePurchases()
+    return document
   })
 
 /**

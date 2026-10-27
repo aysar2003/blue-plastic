@@ -7,6 +7,7 @@ import { DocumentAccountFooter } from '@/components/sales/document-account-foote
 import { DocumentBarcode } from '@/components/print/document-barcode'
 import { longDate, type SheetDocument } from '@/components/sales/invoice-sheet'
 import { accentWash, paperAccent, type DocumentTemplate } from '@/lib/document-template'
+import { orgLogoUrl } from '@/lib/org-brand'
 import { letterheadOf, type LetterheadSource } from '@/lib/letterhead'
 import { toCalendarDate } from '@/lib/date'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
@@ -60,6 +61,8 @@ const TITLES: Record<string, string> = {
   EXPENSE: 'EXPENSE',
   VENDOR_CREDIT: 'VENDOR CREDIT',
   PURCHASE_ORDER: 'PURCHASE ORDER',
+  PURCHASE_REQUEST: 'PURCHASE REQUEST',
+  RFQ: 'RFQ',
 }
 
 /**
@@ -81,6 +84,7 @@ export function MerchantInvoice({
   printedBy,
   words,
   ledger = false,
+  approval = null,
 }: {
   document: SheetDocument
   organization: LetterheadSource & { timeZone?: string | null; taxRegistrationNumber?: string | null }
@@ -96,6 +100,8 @@ export function MerchantInvoice({
     order: string
   }
   baseCurrency: string
+  /** Who approved the document, when the books recorded an approval. */
+  approval?: { name: string; at: Date | null } | null
   /** Account balance before this paper. Omitted on a single invoice. */
   previousBalance?: string | null
   /** Account balance after this paper. Falls back to the document balance. */
@@ -231,6 +237,31 @@ export function MerchantInvoice({
   const runningQuoteTotal = priorQuotes
     ? new Decimal(previousQuotationsTotal as string).plus(document.total)
     : debit
+
+  if (template.paperStyle === 'trade') {
+    return (
+      <TradePaper
+        document={document}
+        company={company}
+        label={label}
+        money={money}
+        address={address}
+        config={config}
+        terms={template.terms}
+        customerMessage={document.customerMessage}
+        person={document.createdByName ?? ''}
+        dateLabel={longDate(toCalendarDate(document.date), document.createdAt, organization.timeZone)}
+        approval={approval}
+        website={(organization as { website?: string | null }).website ?? null}
+        legalName={organization.legalName ?? null}
+        logoSrc={orgLogoUrl(
+          Boolean((organization as { logoStorageKey?: string | null }).logoStorageKey),
+          (organization as { updatedAt?: Date | null }).updatedAt,
+        )}
+        timeZone={organization.timeZone}
+      />
+    )
+  }
 
   return (
     <article
@@ -434,6 +465,190 @@ export function MerchantInvoice({
           <p>{printedBy ? `Printed by: ${printedBy}` : null}</p>
         </div>
       )}
+    </article>
+  )
+}
+
+function TradePaper({
+  document,
+  company,
+  label,
+  money,
+  address,
+  config,
+  terms,
+  customerMessage,
+  person,
+  dateLabel,
+  approval,
+  website,
+  legalName,
+  logoSrc,
+  timeZone,
+}: {
+  document: SheetDocument
+  company: { name: string; phone?: string | null; email?: string | null; address?: string | null }
+  label: { party: string }
+  money: (value: Parameters<typeof formatMoney>[0]) => string
+  address: string
+  config: { type: string; singular: string }
+  terms: string
+  customerMessage: string | null
+  person: string
+  dateLabel: string
+  approval: { name: string; at: Date | null } | null
+  website: string | null
+  legalName: string | null
+  logoSrc: string | null
+  timeZone?: string | null
+}) {
+  const purchase = label.party === 'Vendor'
+  const title = `${TITLES[config.type] ?? config.singular.toUpperCase()} #${document.number}`
+  const needed = document.expiryDate
+    ? longDate(toCalendarDate(document.expiryDate), null, timeZone)
+    : dateLabel
+  const status = (STATUS_LABELS[document.status] ?? document.status).replaceAll('_', ' ')
+  const orgLines = (company.address ?? '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const shipLines = (purchase ? orgLines : address.split(',').map((part) => part.trim()).filter(Boolean))
+  const cols = 'grid grid-cols-[minmax(0,1.4fr)_4.5rem_7.5rem_5.5rem_5.2rem_5.6rem] gap-x-2'
+
+  return (
+    <article
+      className="merchant-invoice bg-white px-10 pb-6 pt-8 text-[12px] leading-snug text-[#374151] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:shadow-none"
+      style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
+    >
+      <header className="flex items-start gap-4">
+        {logoSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoSrc} alt="" className="h-[72px] w-[88px] shrink-0 object-contain" />
+        ) : null}
+        <div className="pt-1 text-[13px] leading-[18px] text-[#111827]">
+          <p className="font-semibold">{company.name}</p>
+          {legalName && legalName.trim() !== company.name.trim() ? <p>{legalName}</p> : null}
+          {orgLines.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </div>
+      </header>
+
+      <div className="mt-10 grid grid-cols-2 items-start gap-8">
+        <div>
+          <p className="font-semibold text-[#111827]">Shipping address:</p>
+          <div className="mt-1 space-y-0.5 leading-[18px]">
+            {(shipLines.length > 0 ? shipLines : ['—']).map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
+        </div>
+        <div className="pt-5 text-right leading-[18px]">
+          <p>{document.customer.displayName}</p>
+          {address
+            .split(',')
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+        </div>
+      </div>
+
+      <h1 className="mt-5 text-[28px] font-normal tracking-tight text-[#111827]">{title}</h1>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-3">
+        <div>
+          <p className="font-semibold text-[#111827]">{purchase ? 'Purchase Representative:' : 'Sales person:'}</p>
+          <p className="mt-1">{person || '—'}</p>
+        </div>
+        <div>
+          <p className="font-semibold text-[#111827]">{purchase ? 'Your Order Reference:' : 'Reference:'}</p>
+          <p className="mt-1">{document.reference?.trim() || '—'}</p>
+        </div>
+        <div>
+          <p className="font-semibold text-[#111827]">Order Date:</p>
+          <p className="mt-1">{dateLabel}</p>
+        </div>
+      </div>
+
+      <p className="mt-4">
+        <span className="font-semibold">Remarks:</span>
+        <span className="whitespace-pre-wrap">{customerMessage?.trim() || terms.trim() || '—'}</span>
+      </p>
+
+      <div className="mt-4">
+        <div className={`${cols} border-b border-[#9ca3af] py-1 text-[12px] font-semibold text-[#111827]`}>
+          <span>Description</span>
+          <span className="text-right">Taxes</span>
+          <span className="text-right">Date req.</span>
+          <span className="text-right">Qty</span>
+          <span className="text-right">Unit price</span>
+          <span className="text-right">Amount</span>
+        </div>
+        {document.lines.map((line, index) => {
+          const unit = line.item?.unitOfMeasure?.trim()
+          return (
+            <div
+              key={line.id}
+              className={`${cols} items-start py-1.5`}
+              style={{ background: index % 2 === 0 ? '#ffffff' : '#f3f4f6' }}
+            >
+              <span className="pr-2">{line.description || line.item?.name || line.item?.sku || ''}</span>
+              <span className="tabular text-right">
+                {line.taxAmount && Number(line.taxAmount) > 0 ? money(line.taxAmount) : ''}
+              </span>
+              <span className="text-right text-[10px] leading-3">{needed}</span>
+              <span className="tabular text-right">
+                {Number.isFinite(Number(line.quantity)) ? Number(line.quantity).toFixed(3) : line.quantity}
+                {unit ? ` ${unit.toUpperCase()}` : ''}
+              </span>
+              <span className="tabular text-right">{money(line.unitPrice)}</span>
+              <span className="tabular text-right">{money(line.amount)}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="grid break-inside-avoid gap-6 py-6 sm:grid-cols-[minmax(0,1fr)_12rem]">
+        <dl className="space-y-1 text-[11px]">
+          <div className="flex gap-3">
+            <dt className="w-28 text-[#5C6B7A]">Created by</dt>
+            <dd>{person || '—'}</dd>
+          </div>
+          <div className="flex gap-3">
+            <dt className="w-28 text-[#5C6B7A]">Approved by</dt>
+            <dd>{approval?.name || '—'}</dd>
+          </div>
+          <div className="flex gap-3">
+            <dt className="w-28 text-[#5C6B7A]">Approved</dt>
+            <dd>{approval?.at ? longDate(toCalendarDate(approval.at), approval.at, timeZone) : '—'}</dd>
+          </div>
+          <div className="flex gap-3">
+            <dt className="w-28 text-[#5C6B7A]">Status</dt>
+            <dd className="capitalize">{status}</dd>
+          </div>
+        </dl>
+        <dl className="space-y-1 text-[12px]">
+          <div className="flex justify-between gap-3">
+            <dt>Subtotal</dt>
+            <dd className="tabular">{money(document.subtotal)}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt>Taxes</dt>
+            <dd className="tabular">{money(document.taxTotal)}</dd>
+          </div>
+          <div className="flex justify-between gap-3 border-t border-[#1f2933] pt-1 font-semibold">
+            <dt>Total</dt>
+            <dd className="tabular">{money(document.total)}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <footer className="mt-2 border-t border-[#d1d5db] pt-2 text-center text-[10px] text-[#6b7280]">
+        <p>{[company.email, website].filter(Boolean).join('  |  ')}</p>
+        <p className="mt-1">Page 1 of 1</p>
+      </footer>
     </article>
   )
 }

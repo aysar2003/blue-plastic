@@ -81,6 +81,7 @@ describe('business overview access', () => {
       '/reports/balance-sheet',
       '/reports/cash-flow',
       '/reports/trial-balance',
+      '/reports/profit-loss/by-month',
     ])
   })
 

@@ -5,6 +5,7 @@ import { withDatabasePage } from '@/lib/page-guard'
 import { getOrgContext } from '@/server/auth/context'
 import { listSwitchableCompanies } from '@/server/services/backup-import.service'
 import { canViewGroupReports } from '@/server/services/company-group.service'
+import { RentBanner } from './rent-banner'
 import { balanceAlertsSlot, calendarAlertsSlot, stockAlertsSlot } from './shell-alerts'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -35,6 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         showCompanyReports={showCompanyReports}
         databases={databases}
       >
+        <RentBanner />
         {children}
       </AppShell>
     )

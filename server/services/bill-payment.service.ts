@@ -356,6 +356,9 @@ export async function applyCredit(
       select: { id: true, number: true, status: true, vendorId: true, total: true },
     })
     if (!credit) throw notFound('Vendor credit')
+    if (!credit.vendorId) {
+      throw precondition(`${credit.number} has no vendor and cannot be applied.`)
+    }
     if (credit.status === 'VOID' || credit.status === 'DRAFT') {
       throw precondition(`${credit.number} is ${credit.status.toLowerCase()} and cannot be applied.`)
     }

@@ -159,7 +159,7 @@ export default async function PurchaseListPage({
             id: row.id,
             number: row.number,
             date: formatTransactionDate(toCalendarDate(row.date), row.createdAt, ctx.organization.timeZone),
-            vendor: row.vendor.displayName,
+            vendor: row.vendor?.displayName ?? '—',
             reference: row.reference,
             due: row.dueDate ? formatDate(toCalendarDate(row.dueDate)) : null,
             overdue,

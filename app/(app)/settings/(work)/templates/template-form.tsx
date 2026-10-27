@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { parseDocumentTemplate, type DocumentTemplate } from '@/lib/document-template'
+import { PAPER_STYLE_OPTIONS, parseDocumentTemplate, type DocumentTemplate } from '@/lib/document-template'
 
 const SLOTS = [1, 2, 3, 4, 5, 6]
 
@@ -176,6 +176,33 @@ export function TemplateForm({ template, canEdit }: { template: DocumentTemplate
                 />
               </Field>
 
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">Paper</legend>
+                <p className="text-xs text-muted-foreground">
+                  Invoices and purchase orders print on the sheet you pick. Save to use it.
+                </p>
+                <input type="hidden" name="paperStyle" value={draft.paperStyle} />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {PAPER_STYLE_OPTIONS.map((option) => {
+                    const selected = draft.paperStyle === option.id
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        disabled={!editing}
+                        onClick={() => setDraft({ ...draft, paperStyle: option.id })}
+                        className={`rounded-lg border px-3 py-2 text-left ${
+                          selected ? 'border-primary bg-primary/5' : 'border-border bg-card'
+                        }`}
+                      >
+                        <span className="block text-sm font-medium">{option.label}</span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">{option.blurb}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </fieldset>
+
               <label className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-3">
                 <input
                   type="checkbox"
@@ -198,7 +225,11 @@ export function TemplateForm({ template, canEdit }: { template: DocumentTemplate
 
             <aside className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Live preview</p>
-              <TemplateLayoutPreview kind="document" accent={draft.accent} size="stage" />
+              <TemplateLayoutPreview
+                kind={draft.paperStyle === 'trade' ? 'trade' : 'document'}
+                accent={draft.accent}
+                size="stage"
+              />
               {draft.banks.some((bank) => bank.name || bank.account) ? (
                 <ul className="space-y-1 text-[11px] text-muted-foreground">
                   {draft.banks
@@ -258,7 +289,12 @@ export function TemplateForm({ template, canEdit }: { template: DocumentTemplate
             <DialogTitle>View · Invoice & statement paper</DialogTitle>
             <DialogDescription>Sida template-kan u muuqdo with your colour, banks, and terms.</DialogDescription>
           </DialogHeader>
-          <TemplateLayoutPreview kind="document" accent={draft.accent} size="stage" className="mx-auto" />
+          <TemplateLayoutPreview
+            kind={draft.paperStyle === 'trade' ? 'trade' : 'document'}
+            accent={draft.accent}
+            size="stage"
+            className="mx-auto"
+          />
           {draft.banks.some((bank) => bank.name || bank.account) ? (
             <ul className="space-y-1 text-sm text-muted-foreground">
               {draft.banks

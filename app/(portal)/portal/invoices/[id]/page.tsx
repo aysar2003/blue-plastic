@@ -38,7 +38,7 @@ export default async function PortalInvoicePage({
 
   const [organization, template] = await Promise.all([
     organizationService.get(ctx),
-    organizationService.getDocumentTemplate(ctx),
+    organizationService.getPrintTemplate(ctx),
   ])
   const config = byType(document.type)
 

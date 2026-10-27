@@ -26,13 +26,14 @@ export default async function PrintDeliveryNotePage({
   const [note, organization, template] = await Promise.all([
     salesDelivery.get(ctx, id).catch(() => null),
     organizationService.get(ctx),
-    organizationService.getDocumentTemplate(ctx),
+    organizationService.getPrintTemplate(ctx),
   ])
   if (!note) notFound()
 
   const company = letterheadOf(organization)
-  const accent = paperAccent(template, 'customer')
-  const wash = accentWash(accent)
+  const trade = template.paperStyle === 'trade'
+  const accent = trade ? '#1f2933' : paperAccent(template, 'customer')
+  const wash = trade ? '#f3f4f6' : accentWash(accent)
   const issued = formatDateTime(new Date(note.issuedAt), organization.timeZone)
   const filename = `delivery-note-${note.number.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`
   const shareBody = [
@@ -57,6 +58,7 @@ export default async function PrintDeliveryNotePage({
           pdfHref={`/api/sales/delivery/${id}/pdf`}
           filename={filename}
           pdfMatchesPrint
+          paperStyle={template.paperStyle}
           defaultTo={note.customerEmail ?? ''}
           defaultSubject={`Delivery note ${note.number} from ${organization.name}`}
           defaultBody={shareBody}

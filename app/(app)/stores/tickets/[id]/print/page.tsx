@@ -22,9 +22,10 @@ export default async function PrintStoreTicketPage({
 }) {
   const ctx = await requireOrgContext('inventory:read')
   const { id } = await params
-  const [ticket, organization] = await Promise.all([
+  const [ticket, organization, template] = await Promise.all([
     salesDelivery.getTicket(ctx, id).catch(() => null),
     organizationService.get(ctx),
+    organizationService.getPrintTemplate(ctx),
   ])
   if (!ticket) notFound()
 
@@ -60,6 +61,7 @@ export default async function PrintStoreTicketPage({
               : `/stores/${ticket.store.id}`
           }
           pdfHref={`/api/stores/tickets/${id}/pdf`}
+          paperStyle={template.paperStyle}
           filename={`ticket-${ticket.number.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`}
           pdfMatchesPrint
           defaultSubject={`Store ticket ${ticket.number} — ${ticket.item.name}`}

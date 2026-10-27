@@ -54,6 +54,7 @@ async function ownerCtx(): Promise<OrgContext | null> {
       country: true,
       phone: true,
       email: true,
+      website: true,
       brandMark: true,
       logoStorageKey: true,
       updatedAt: true,

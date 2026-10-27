@@ -2,7 +2,6 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
 
-import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import {
@@ -26,6 +25,7 @@ import { idleState, type FormState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
+import { FormCustomizePanel } from '@/components/forms/form-customize-panel'
 import { neighborHrefs, RecordNav } from '@/components/forms/record-nav'
 import { PartyInfo } from '@/components/forms/party-info'
 import { LockedNumber } from '@/components/forms/locked-number'
@@ -51,20 +51,20 @@ import { DateField } from '@/components/ui/date-field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import type { AccountPickerOption } from '@/lib/account-options'
+import { isFieldVisible, isColumnVisible, SALES_FORM_COLUMNS, SALES_FORM_FIELDS } from '@/lib/form-field-catalog'
+import type { FormCustomizationProps } from '@/lib/form-customization-props'
+import type { FormTemplate } from '@/lib/form-templates'
 import {
   DEFAULT_INVOICE_FORM_TEMPLATE,
   DEFAULT_SALES_FORM_TEMPLATE,
   DEFAULT_SALES_RECEIPT_FORM_TEMPLATE,
   INVOICE_FORM_TEMPLATES,
-  INVOICE_FORM_TEMPLATE_STORAGE_KEY,
   isInvoiceFormTemplateId,
   isSalesFormTemplateId,
   isSalesReceiptFormTemplateId,
   PRINT_SHEET_SALES_TYPES,
-  SALES_FORM_TEMPLATE_STORAGE_KEY,
   SALES_FORM_TEMPLATES,
   SALES_RECEIPT_FORM_TEMPLATES,
-  SALES_RECEIPT_FORM_TEMPLATE_STORAGE_KEY,
   type InvoiceFormTemplateId,
   type SalesFormTemplateId,
   type SalesReceiptFormTemplateId,
@@ -199,8 +199,7 @@ function sharedLineDiscount(document: DocumentSeed | undefined): string {
 
 /**
  * One form for every customer-facing document. The type decides the wording and
- * where money goes; the template only rearranges the sheet. The choice is
- * remembered in this browser.
+ * where money goes; company form templates control which fields and columns show.
  */
 export function DocumentForm({
   config,
@@ -223,6 +222,7 @@ export function DocumentForm({
   stores = [],
   stock = {},
   openSources = [],
+  formCustomization,
 }: {
   config: SalesTypeConfig
   customers: CustomerOption[]
@@ -257,6 +257,8 @@ export function DocumentForm({
   stock?: StockByStore
   /** Open estimates, quotations, and sales orders a new invoice or receipt can use. */
   openSources?: OpenSourceOption[]
+  /** Company form field/column templates for this document type. */
+  formCustomization?: FormCustomizationProps
 }) {
   const officeId = officeStoreId(stores)
   const defaultStoreId =
@@ -264,24 +266,32 @@ export function DocumentForm({
   const router = useRouter()
   const [state, formAction] = useActionState(saveDocumentForm, idleState)
   // Invoice, quotation, sales receipt, credit, and refund share the print sheet —
-  // the same paper POS and the counter print. No template picker on those.
+  // the same paper POS and the counter print. Layout skins stay available only
+  // when the type is not locked to that sheet.
   const usesPrintSheet = (PRINT_SHEET_SALES_TYPES as readonly string[]).includes(config.type)
   const usesInvoiceSheet =
     config.type === 'INVOICE' || isProposal(config.type) || isSalesOrder(config.type)
-  const templateKey = usesInvoiceSheet
-    ? INVOICE_FORM_TEMPLATE_STORAGE_KEY
-    : config.type === 'SALES_RECEIPT'
-      ? SALES_RECEIPT_FORM_TEMPLATE_STORAGE_KEY
-      : SALES_FORM_TEMPLATE_STORAGE_KEY
-  const storedTemplate = useBrowserStore(templateKey)
+  const [draftTemplate, setDraftTemplate] = useState<FormTemplate | null>(null)
+  const [draftActiveId, setDraftActiveId] = useState<string | null>(null)
+  const activeForm =
+    draftTemplate && draftActiveId === formCustomization?.activeId
+      ? draftTemplate
+      : (formCustomization?.active ?? null)
+  const setFormDraft = (next: FormTemplate) => {
+    setDraftActiveId(formCustomization?.activeId ?? next.id)
+    setDraftTemplate(next)
+  }
+  const layoutFromCompany = activeForm?.layoutId
   const template: FormTemplateId = (() => {
     if (usesPrintSheet) return 'sheet'
-    const known = usesInvoiceSheet
-      ? isInvoiceFormTemplateId(storedTemplate ?? '')
-      : config.type === 'SALES_RECEIPT'
-        ? isSalesReceiptFormTemplateId(storedTemplate ?? '')
-        : isSalesFormTemplateId(storedTemplate ?? '')
-    if (storedTemplate && known) return storedTemplate as FormTemplateId
+    if (layoutFromCompany) {
+      const known = usesInvoiceSheet
+        ? isInvoiceFormTemplateId(layoutFromCompany)
+        : config.type === 'SALES_RECEIPT'
+          ? isSalesReceiptFormTemplateId(layoutFromCompany)
+          : isSalesFormTemplateId(layoutFromCompany)
+      if (known) return layoutFromCompany as FormTemplateId
+    }
     return usesInvoiceSheet
       ? DEFAULT_INVOICE_FORM_TEMPLATE
       : config.type === 'SALES_RECEIPT'
@@ -289,8 +299,18 @@ export function DocumentForm({
         : DEFAULT_SALES_FORM_TEMPLATE
   })()
   const setTemplate = (next: FormTemplateId) => {
-    writeBrowserStore(templateKey, next)
+    if (!activeForm) return
+    setDraftTemplate({ ...activeForm, layoutId: next })
   }
+  const showField = (id: string) => isFieldVisible(activeForm?.fields, id)
+  const showColumn = (id: string) => isColumnVisible(activeForm?.columns, id)
+  const layoutOptions = usesPrintSheet
+    ? undefined
+    : usesInvoiceSheet
+      ? INVOICE_FORM_TEMPLATES
+      : config.type === 'SALES_RECEIPT'
+        ? SALES_RECEIPT_FORM_TEMPLATES
+        : SALES_FORM_TEMPLATES
   const savedDiscount = Number(document?.discountAmount ?? 0)
   const liftedPercent =
     config.type === 'SALES_RECEIPT' && savedDiscount <= 0 ? sharedLineDiscount(document) : ''
@@ -840,6 +860,8 @@ export function DocumentForm({
       config.type === 'SALES_RECEIPT' ? ('SALES_RECEIPT' as const) : ('INVOICE' as const),
     convertedFromLabel,
     applyFromSource,
+    showField,
+    showColumn,
   }
 
   return (
@@ -873,7 +895,19 @@ export function DocumentForm({
         </div>
       )}
 
-      {usesPrintSheet ? null : usesInvoiceSheet ? (
+      {formCustomization && activeForm ? (
+        <FormCustomizePanel
+          family={formCustomization.family}
+          templates={formCustomization.templates}
+          activeId={formCustomization.activeId}
+          draft={activeForm}
+          onDraftChange={setFormDraft}
+          fieldCatalog={SALES_FORM_FIELDS}
+          columnCatalog={SALES_FORM_COLUMNS}
+          canManage={formCustomization.canManage}
+          layoutOptions={layoutOptions}
+        />
+      ) : usesPrintSheet ? null : usesInvoiceSheet ? (
         <TemplateMenu options={INVOICE_FORM_TEMPLATES} value={template} onChange={setTemplate} />
       ) : config.type === 'SALES_RECEIPT' ? (
         <TemplateMenu options={SALES_RECEIPT_FORM_TEMPLATES} value={template} onChange={setTemplate} />
@@ -1069,6 +1103,7 @@ function TemplateThumb({ kind, active }: { kind: SalesFormTemplateId; active: bo
 }
 
 function ProjectField({ props }: { props: LayoutProps }) {
+  if (!props.showField('project')) return null
   if (props.projects.length === 0 && !props.projectId) return null
   const options = props.projects.filter(
     (row) => !props.customerId || row.customerId === props.customerId || row.id === props.projectId,
@@ -1159,6 +1194,8 @@ type LayoutProps = {
   convertTarget: 'INVOICE' | 'SALES_RECEIPT'
   convertedFromLabel: string | null
   applyFromSource: (applied: AppliedSource) => void
+  showField: (id: string) => boolean
+  showColumn: (id: string) => boolean
 }
 
 function HeaderFields({
@@ -1233,19 +1270,21 @@ function HeaderFields({
           </Field>
         ) : null}
 
-        <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
-          <Input
-            {...fieldProps('reference', state.fieldErrors?.reference)}
-            value={props.reference}
-            onChange={(event) => props.setReference(event.target.value)}
-            placeholder="PO number"
-          />
-        </Field>
+        {props.showField('reference') ? (
+          <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
+            <Input
+              {...fieldProps('reference', state.fieldErrors?.reference)}
+              value={props.reference}
+              onChange={(event) => props.setReference(event.target.value)}
+              placeholder="PO number"
+            />
+          </Field>
+        ) : null}
       </div>
 
       {(config.type === 'INVOICE' || config.needsDeposit) && (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {config.type === 'INVOICE' ? (
+          {config.type === 'INVOICE' && props.showField('paymentTerms') ? (
             <Field
               name="paymentTermId"
               label="Terms"
@@ -1291,6 +1330,7 @@ function HeaderFields({
 
 function DiscountControl({ props }: { props: LayoutProps }) {
   if (props.config.type !== 'INVOICE' && props.config.type !== 'SALES_RECEIPT') return null
+  if (!props.showField('documentDiscount')) return null
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <span className="text-muted-foreground">Discount</span>
@@ -1351,40 +1391,46 @@ function NotesFields({ props }: { props: LayoutProps }) {
   const showWorkScope = isProposal(props.config.type)
   const customerName =
     props.customers.find((row) => row.id === props.customerId)?.label ?? ''
+  const showSite = showWorkScope && props.showField('workSite')
+  const showScope = showWorkScope && props.showField('workScope')
   return (
     <div className="grid gap-2">
-      {showWorkScope ? (
+      {showSite || showScope ? (
         <div className="grid gap-2 sm:grid-cols-2">
-          <Field
-            name="workSite"
-            label="Work site"
-            hint="Magaca ama nooca goobta shaqada. Waxaa ka soo muuqda hoosta Sales person."
-            error={props.state.fieldErrors?.workSite}
-          >
-            <Input
-              {...fieldProps('workSite', props.state.fieldErrors?.workSite)}
-              value={props.workSite}
-              onChange={(event) => props.setWorkSite(event.target.value)}
-              placeholder="e.g. Alanley villa, Site A, Warehouse 2"
-            />
-          </Field>
-          <Field
-            name="workScope"
-            label="Work / job section"
-            hint="Nooca shaqada ama qaybta mashruuca. Waxaa lagu daabacaa quotation-ka magaca macmiilka."
-            error={props.state.fieldErrors?.workScope}
-          >
-            <Input
-              {...fieldProps('workScope', props.state.fieldErrors?.workScope)}
-              value={props.workScope}
-              onChange={(event) => props.setWorkScope(event.target.value)}
-              placeholder={
-                customerName
-                  ? `e.g. Foundation works — ${customerName}`
-                  : 'e.g. Foundation works, Electrical, Phase 2'
-              }
-            />
-          </Field>
+          {showSite ? (
+            <Field
+              name="workSite"
+              label="Work site"
+              hint="Magaca ama nooca goobta shaqada. Waxaa ka soo muuqda hoosta Sales person."
+              error={props.state.fieldErrors?.workSite}
+            >
+              <Input
+                {...fieldProps('workSite', props.state.fieldErrors?.workSite)}
+                value={props.workSite}
+                onChange={(event) => props.setWorkSite(event.target.value)}
+                placeholder="e.g. Alanley villa, Site A, Warehouse 2"
+              />
+            </Field>
+          ) : null}
+          {showScope ? (
+            <Field
+              name="workScope"
+              label="Work / job section"
+              hint="Nooca shaqada ama qaybta mashruuca. Waxaa lagu daabacaa quotation-ka magaca macmiilka."
+              error={props.state.fieldErrors?.workScope}
+            >
+              <Input
+                {...fieldProps('workScope', props.state.fieldErrors?.workScope)}
+                value={props.workScope}
+                onChange={(event) => props.setWorkScope(event.target.value)}
+                placeholder={
+                  customerName
+                    ? `e.g. Foundation works — ${customerName}`
+                    : 'e.g. Foundation works, Electrical, Phase 2'
+                }
+              />
+            </Field>
+          ) : null}
         </div>
       ) : null}
       <div className="grid gap-2 sm:grid-cols-2">
@@ -1449,7 +1495,8 @@ function InvoiceLayout(props: LayoutProps) {
               </Field>
               <ProjectField props={props} />
             </div>
-            {customer?.billingAddress || customer?.shippingAddress ? (
+            {props.showField('addresses') &&
+            (customer?.billingAddress || customer?.shippingAddress) ? (
               <div className="grid gap-2 md:grid-cols-2">
                 <AddressBox label="Billing address" value={customer?.billingAddress ?? ''} empty="No billing address" />
                 <AddressBox label="Shipping address" value={customer?.shippingAddress ?? ''} empty="No shipping address" />
@@ -1513,14 +1560,16 @@ function InvoiceLayout(props: LayoutProps) {
               <Input id="dueDate" value={isCalendarDate(due) ? formatDate(due) : ''} readOnly />
             </Field>
           )}
-          <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
-            <Input
-              {...fieldProps('reference', state.fieldErrors?.reference)}
-              value={props.reference}
-              onChange={(event) => props.setReference(event.target.value)}
-              placeholder="PO number"
-            />
-          </Field>
+          {props.showField('reference') ? (
+            <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
+              <Input
+                {...fieldProps('reference', state.fieldErrors?.reference)}
+                value={props.reference}
+                onChange={(event) => props.setReference(event.target.value)}
+                placeholder="PO number"
+              />
+            </Field>
+          ) : null}
           {props.config.needsDeposit ? (
             <Field
               name="depositAccountId"
@@ -1537,7 +1586,7 @@ function InvoiceLayout(props: LayoutProps) {
                 error={state.fieldErrors?.depositAccountId}
               />
             </Field>
-          ) : (
+          ) : props.showField('paymentTerms') ? (
             <Field name="paymentTermId" label="Terms" error={state.fieldErrors?.paymentTermId}>
               <NativeSelect
                 {...fieldProps('paymentTermId', state.fieldErrors?.paymentTermId)}
@@ -1552,7 +1601,7 @@ function InvoiceLayout(props: LayoutProps) {
                 ))}
               </NativeSelect>
             </Field>
-          )}
+          ) : null}
         </div>
 
         <InvoiceLines props={props} />
@@ -1628,6 +1677,10 @@ const noteBox =
   'flex min-h-20 w-full rounded-md border border-input bg-card px-2.5 py-2 text-[0.8125rem] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25'
 
 function InvoiceLines({ props }: { props: LayoutProps }) {
+  const showDescription = props.showColumn('description')
+  const showQty = props.showColumn('qty')
+  const showRate = props.showColumn('rate')
+  const showStore = props.showColumn('store') && props.stores.length > 0
   return (
     <div>
       <div className="overflow-x-auto rounded-md border">
@@ -1635,11 +1688,11 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
           <thead>
             <tr className="ledger-head text-[12px] font-semibold uppercase tracking-wide">
               <th className="w-44 px-2 py-2 text-left">Item</th>
-              <th className="px-2 py-2 text-left">Description</th>
-              <th className="w-24 px-2 py-2 text-center">Qty</th>
-              <th className="w-28 px-2 py-2 text-right">Rate</th>
+              {showDescription ? <th className="px-2 py-2 text-left">Description</th> : null}
+              {showQty ? <th className="w-24 px-2 py-2 text-center">Qty</th> : null}
+              {showRate ? <th className="w-28 px-2 py-2 text-right">Rate</th> : null}
               <th className="w-28 px-2 py-2 text-right">Amount</th>
-              {props.stores.length > 0 ? <th className="w-40 px-2 py-2 text-left">Store</th> : null}
+              {showStore ? <th className="w-40 px-2 py-2 text-left">Store</th> : null}
               <th className="w-8" />
             </tr>
           </thead>
@@ -1655,50 +1708,56 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                     placeholder="Item"
                     clearable
                   />
-                  {props.stores.length === 0 ? <StockWarningNote warning={props.stockWarnings[line.key]} /> : null}
+                  {!showStore ? <StockWarningNote warning={props.stockWarnings[line.key]} /> : null}
                 </td>
-                <td className="px-1 py-1">
-                  <Input
-                    aria-label={`Description, line ${index + 1}`}
-                    className={lineInput}
-                    value={line.description}
-                    onChange={(event) => props.update(line.key, { description: event.target.value })}
-                  />
-                </td>
-                <td className="px-1 py-1">
-                  <div className="flex items-center gap-1">
+                {showDescription ? (
+                  <td className="px-1 py-1">
                     <Input
-                      aria-label={`Quantity, line ${index + 1}`}
+                      aria-label={`Description, line ${index + 1}`}
+                      className={lineInput}
+                      value={line.description}
+                      onChange={(event) => props.update(line.key, { description: event.target.value })}
+                    />
+                  </td>
+                ) : null}
+                {showQty ? (
+                  <td className="px-1 py-1">
+                    <div className="flex items-center gap-1">
+                      <Input
+                        aria-label={`Quantity, line ${index + 1}`}
+                        inputMode="decimal"
+                        readOnly={props.subtotalItemIds.has(line.itemId)}
+                        className={cn(lineInput, 'min-w-0 flex-1 tabular text-center')}
+                        value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
+                        onChange={(event) => props.update(line.key, { quantity: event.target.value })}
+                      />
+                      {line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
+                        <span
+                          className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
+                          title={resolveUnit(
+                            props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
+                          )}
+                        >
+                          {resolveUnit(
+                            props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
+                          )}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
+                ) : null}
+                {showRate ? (
+                  <td className="px-1 py-1">
+                    <Input
+                      aria-label={`Rate, line ${index + 1}`}
                       inputMode="decimal"
                       readOnly={props.subtotalItemIds.has(line.itemId)}
-                      className={cn(lineInput, 'min-w-0 flex-1 tabular text-center')}
-                      value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
-                      onChange={(event) => props.update(line.key, { quantity: event.target.value })}
+                      className={cn(lineInput, 'tabular text-right')}
+                      value={props.subtotalItemIds.has(line.itemId) ? '' : line.unitPrice}
+                      onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
                     />
-                    {line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
-                      <span
-                        className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
-                        title={resolveUnit(
-                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
-                        )}
-                      >
-                        {resolveUnit(
-                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
-                        )}
-                      </span>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="px-1 py-1">
-                  <Input
-                    aria-label={`Rate, line ${index + 1}`}
-                    inputMode="decimal"
-                    readOnly={props.subtotalItemIds.has(line.itemId)}
-                    className={cn(lineInput, 'tabular text-right')}
-                    value={props.subtotalItemIds.has(line.itemId) ? '' : line.unitPrice}
-                    onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
-                  />
-                </td>
+                  </td>
+                ) : null}
                 <td className="px-1 py-1">
                   <AmountField
                     line={line}
@@ -1709,7 +1768,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                     onCommit={(next) => props.update(line.key, next)}
                   />
                 </td>
-                {props.stores.length > 0 ? (
+                {showStore ? (
                   <td className="px-1 py-1 align-top">
                     <LineStore
                       stores={props.stores}
@@ -2156,6 +2215,11 @@ const sheetLineInput =
 function StripedLines({ props }: { props: LayoutProps }) {
   const head =
     props.config.type === 'CREDIT_MEMO' ? CUSTOMER_CREDIT.band : FORM_SHEET.band
+  const showDescription = props.showColumn('description')
+  const showQty = props.showColumn('qty')
+  const showRate = props.showColumn('rate')
+  const showStore = props.showColumn('store') && props.stores.length > 0
+  const showTax = props.showColumn('tax') && props.showTax
 
   return (
     <div className="rounded-lg bg-muted/40 p-1.5 sm:p-2">
@@ -2166,19 +2230,25 @@ function StripedLines({ props }: { props: LayoutProps }) {
               <th className="w-40 rounded-tl-md px-1.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide">
                 Item
               </th>
-              <th className="px-1.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide">
-                Description
-              </th>
-              <th className="w-24 px-1.5 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide">
-                Qty
-              </th>
-              <th className="w-24 px-1.5 py-1.5 text-right text-[11px] font-semibold uppercase tracking-wide">
-                Rate
-              </th>
+              {showDescription ? (
+                <th className="px-1.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide">
+                  Description
+                </th>
+              ) : null}
+              {showQty ? (
+                <th className="w-24 px-1.5 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide">
+                  Qty
+                </th>
+              ) : null}
+              {showRate ? (
+                <th className="w-24 px-1.5 py-1.5 text-right text-[11px] font-semibold uppercase tracking-wide">
+                  Rate
+                </th>
+              ) : null}
               <th className="w-24 px-1.5 py-1.5 text-right text-[11px] font-semibold uppercase tracking-wide">
                 Amount
               </th>
-              {props.stores.length > 0 ? (
+              {showStore ? (
                 <th className="w-36 px-1.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide">
                   Store
                 </th>
@@ -2202,65 +2272,71 @@ function StripedLines({ props }: { props: LayoutProps }) {
                     clearable
                     className={sheetLineInput}
                   />
-                  {props.stores.length === 0 ? <StockWarningNote warning={props.stockWarnings[line.key]} /> : null}
+                  {!showStore ? <StockWarningNote warning={props.stockWarnings[line.key]} /> : null}
                 </td>
-                <td className="px-1 py-1">
-                  <Input
-                    aria-label={`Description, line ${index + 1}`}
-                    className={sheetLineInput}
-                    value={line.description}
-                    onChange={(event) => props.update(line.key, { description: event.target.value })}
-                  />
-                  {props.showTax && (line.itemId || line.description || line.unitPrice || line.taxCodeId) ? (
-                    <NativeSelect
-                      aria-label={`Tax, line ${index + 1}`}
-                      value={line.taxCodeId}
-                      onChange={(event) => props.update(line.key, { taxCodeId: event.target.value })}
-                      className="mt-0.5 h-6 rounded-md border border-border/70 bg-transparent px-2 text-xs"
-                    >
-                      <option value="">No tax</option>
-                      {props.taxCodes.map((code) => (
-                        <option key={code.id} value={code.id}>
-                          {code.label}
-                        </option>
-                      ))}
-                    </NativeSelect>
-                  ) : null}
-                </td>
-                <td className="px-1 py-1">
-                  <div className="flex items-center gap-1">
+                {showDescription ? (
+                  <td className="px-1 py-1">
                     <Input
-                      aria-label={`Quantity, line ${index + 1}`}
+                      aria-label={`Description, line ${index + 1}`}
+                      className={sheetLineInput}
+                      value={line.description}
+                      onChange={(event) => props.update(line.key, { description: event.target.value })}
+                    />
+                    {showTax && (line.itemId || line.description || line.unitPrice || line.taxCodeId) ? (
+                      <NativeSelect
+                        aria-label={`Tax, line ${index + 1}`}
+                        value={line.taxCodeId}
+                        onChange={(event) => props.update(line.key, { taxCodeId: event.target.value })}
+                        className="mt-0.5 h-6 rounded-md border border-border/70 bg-transparent px-2 text-xs"
+                      >
+                        <option value="">No tax</option>
+                        {props.taxCodes.map((code) => (
+                          <option key={code.id} value={code.id}>
+                            {code.label}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    ) : null}
+                  </td>
+                ) : null}
+                {showQty ? (
+                  <td className="px-1 py-1">
+                    <div className="flex items-center gap-1">
+                      <Input
+                        aria-label={`Quantity, line ${index + 1}`}
+                        inputMode="decimal"
+                        readOnly={props.subtotalItemIds.has(line.itemId)}
+                        className={cn(sheetLineInput, 'min-w-0 flex-1 tabular text-center')}
+                        value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
+                        onChange={(event) => props.update(line.key, { quantity: event.target.value })}
+                      />
+                      {line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
+                        <span
+                          className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
+                          title={resolveUnit(
+                            props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
+                          )}
+                        >
+                          {resolveUnit(
+                            props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
+                          )}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
+                ) : null}
+                {showRate ? (
+                  <td className="px-1 py-1">
+                    <Input
+                      aria-label={`Rate, line ${index + 1}`}
                       inputMode="decimal"
                       readOnly={props.subtotalItemIds.has(line.itemId)}
-                      className={cn(sheetLineInput, 'min-w-0 flex-1 tabular text-center')}
-                      value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
-                      onChange={(event) => props.update(line.key, { quantity: event.target.value })}
+                      className={cn(sheetLineInput, 'tabular text-right')}
+                      value={props.subtotalItemIds.has(line.itemId) ? '' : line.unitPrice}
+                      onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
                     />
-                    {line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
-                      <span
-                        className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
-                        title={resolveUnit(
-                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
-                        )}
-                      >
-                        {resolveUnit(
-                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
-                        )}
-                      </span>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="px-1 py-1">
-                  <Input
-                    aria-label={`Rate, line ${index + 1}`}
-                    inputMode="decimal"
-                    readOnly={props.subtotalItemIds.has(line.itemId)}
-                    className={cn(sheetLineInput, 'tabular text-right')}
-                    value={props.subtotalItemIds.has(line.itemId) ? '' : line.unitPrice}
-                    onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
-                  />
-                </td>
+                  </td>
+                ) : null}
                 <td className="px-1 py-1">
                   <AmountField
                     line={line}
@@ -2272,7 +2348,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
                     className={sheetLineInput}
                   />
                 </td>
-                {props.stores.length > 0 ? (
+                {showStore ? (
                   <td className="px-1 py-1 align-top">
                     <LineStore
                       stores={props.stores}

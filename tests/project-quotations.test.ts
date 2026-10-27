@@ -88,7 +88,7 @@ describe('combined project quotations PDF', () => {
     expect(text).toContain('QT-2')
     expect(text).toContain('Foundation')
     expect(text).toContain('Electrical')
-    expect(text).toContain('WORK SITE')
+    expect(text).toContain('Work site')
     expect(text).toContain('Alanley villa')
     expect(text).toContain('Amina Construction')
     expect(text).toContain('THIS QUOTATION')

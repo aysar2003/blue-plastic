@@ -1,6 +1,10 @@
 import { notFound } from 'next/navigation'
 
 import { toCalendarDate } from '@/lib/date'
+import {
+  documentEmailBody,
+  documentEmailSubject,
+} from '@/lib/document-email'
 import { formatMoney } from '@/lib/money'
 import { bySlug } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -32,7 +36,7 @@ export default async function PrintDocumentPage({
   const [document, organization, template] = await Promise.all([
     salesService.get(ctx, id).catch(() => null),
     organizationService.get(ctx),
-    organizationService.getDocumentTemplate(ctx),
+    organizationService.getPrintTemplate(ctx),
   ])
   if (!document || document.type !== config.type) notFound()
 
@@ -40,21 +44,20 @@ export default async function PrintDocumentPage({
   const customer = document.customer
   const money = (value: string | number) => formatMoney(value, currency)
 
-  const shareBody = [
-    `${config.singular} ${document.number}`,
-    `To: ${customer.displayName}`,
-    `Date: ${longDate(toCalendarDate(document.date), document.createdAt, organization.timeZone)}`,
-    `Total: ${money(document.total)}`,
-    document.balance && Number(document.balance) > 0 ? `Amount due: ${money(document.balance)}` : null,
-    '',
-    `From ${organization.legalName ?? organization.name}`,
-  ]
-    .filter((line) => line !== null)
-    .join('\n')
+  const shareBody = documentEmailBody({
+    partyName: customer.displayName,
+    singular: config.singular,
+    number: document.number,
+    extraLines: [
+      `Date: ${longDate(toCalendarDate(document.date), document.createdAt, organization.timeZone)}`,
+      `Total: ${money(document.total)}`,
+      document.balance && Number(document.balance) > 0 ? `Amount due: ${money(document.balance)}` : null,
+    ],
+  })
 
   const filename = `${config.slug.replace(/s$/, '')}-${document.number
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')}.pdf`
+    .replace(/[^a-z0-9]+/g, '-')}`
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -63,10 +66,16 @@ export default async function PrintDocumentPage({
           paper={config.singular.toLowerCase()}
           backHref={`/sales/${config.slug}/${id}`}
           pdfHref={`/api/sales/${id}/pdf`}
+          excelHref={`/api/sales/${id}/xlsx`}
           filename={filename}
           pdfMatchesPrint
+          paperStyle={template.paperStyle}
           defaultTo={customer.email ?? ''}
-          defaultSubject={`${config.singular} ${document.number} from ${organization.name}`}
+          defaultSubject={documentEmailSubject(
+            config.singular,
+            document.number,
+            organization.name,
+          )}
           defaultBody={shareBody}
           whatsappPhone={customer.phone}
           whatsappText={shareBody}

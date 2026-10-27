@@ -46,6 +46,8 @@ const PURCHASE_SLUG: Record<string, string> = {
   EXPENSE: 'expenses',
   VENDOR_CREDIT: 'vendor-credits',
   PURCHASE_ORDER: 'purchase-orders',
+  PURCHASE_REQUEST: 'purchase-requests',
+  RFQ: 'rfqs',
 }
 
 const SALES_SOURCES: JournalSourceType[] = [
@@ -214,8 +216,12 @@ export async function resolveSources(
       number: document.number,
       href: `/purchases/${slug}/${document.id}`,
       // Customer-settled expenses belong on the customer, not the shadow vendor.
-      partyName: offset?.displayName ?? document.vendor.displayName,
-      partyHref: offset ? `/customers?id=${offset.id}` : `/vendors/${document.vendor.id}`,
+      partyName: offset?.displayName ?? document.vendor?.displayName ?? null,
+      partyHref: offset
+        ? `/customers?id=${offset.id}`
+        : document.vendor
+          ? `/vendors/${document.vendor.id}`
+          : null,
     })
   }
 

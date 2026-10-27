@@ -94,7 +94,7 @@ export default async function ReceiveOrderPage({
           <ReceiveForm
             orderId={order.id}
             orderNumber={order.number}
-            vendorName={order.vendor.displayName}
+            vendorName={order.vendor?.displayName ?? '—'}
             lines={order.lines}
             today={today(ctx.organization.timeZone)}
             currency={ctx.organization.baseCurrency}

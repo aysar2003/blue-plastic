@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { withDatabasePage } from '@/lib/page-guard'
 import { PRODUCT_NAME } from '@/lib/product-brand'
-import { isSelfServeEnabled } from '@/server/services/register.service'
+import { isSelfServeEnabled } from '@/lib/self-serve'
 import { needsSetup } from '@/server/services/setup.service'
 import { RegisterForm } from './register-form'
 
@@ -28,10 +28,10 @@ export default async function RegisterPage() {
       <div className="flex w-full max-w-lg flex-col gap-4">
         <Card className="w-full border-border bg-card text-card-foreground shadow-sm">
           <CardHeader>
-            <CardTitle>Request a company</CardTitle>
+            <CardTitle>Start your company</CardTitle>
             <CardDescription>
-              Ask to join {PRODUCT_NAME}. Your request waits for approval — you cannot sign in or open
-              books until the system owner accepts it.
+              Create a company on {PRODUCT_NAME}. You get a 14-day free trial and can sign in right
+              away. After the trial, pay rent from Billing (EVC, Zaad, or bank).
             </CardDescription>
           </CardHeader>
           <CardContent>

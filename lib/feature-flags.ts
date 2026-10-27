@@ -157,6 +157,8 @@ export const PURCHASE_DOCUMENT_KINDS = [
   'EXPENSE',
   'VENDOR_CREDIT',
   'PURCHASE_ORDER',
+  'PURCHASE_REQUEST',
+  'RFQ',
   'DELIVERY',
 ] as const
 export type PurchaseDocumentKind = (typeof PURCHASE_DOCUMENT_KINDS)[number]
@@ -193,6 +195,8 @@ export const DOCUMENT_KIND_LABELS: {
     EXPENSE: 'Expenses',
     VENDOR_CREDIT: 'Vendor credits',
     PURCHASE_ORDER: 'Purchase orders',
+    PURCHASE_REQUEST: 'Purchase requests',
+    RFQ: 'RFQs',
     DELIVERY: 'Delivery',
   },
   inventory: {
@@ -249,6 +253,8 @@ export const PURCHASE_HUB_KIND: Partial<Record<string, PurchaseDocumentKind>> = 
   expenses: 'EXPENSE',
   'vendor-credits': 'VENDOR_CREDIT',
   'purchase-orders': 'PURCHASE_ORDER',
+  'purchase-requests': 'PURCHASE_REQUEST',
+  rfqs: 'RFQ',
   delivery: 'DELIVERY',
 }
 
@@ -530,7 +536,7 @@ export function documentKindForPath(
     return { family: 'sales', kind }
   }
   const purchases = path.match(
-    /^\/purchases\/(bills|expenses|vendor-credits|purchase-orders|delivery|purchase-receipts)(?:\/|$)/,
+    /^\/purchases\/(bills|expenses|vendor-credits|purchase-orders|purchase-requests|rfqs|delivery|purchase-receipts)(?:\/|$)/,
   )
   if (purchases) {
     const slug = purchases[1]!
@@ -543,7 +549,11 @@ export function documentKindForPath(
             ? 'VENDOR_CREDIT'
             : slug === 'purchase-orders'
               ? 'PURCHASE_ORDER'
-              : 'DELIVERY'
+              : slug === 'purchase-requests'
+                ? 'PURCHASE_REQUEST'
+                : slug === 'rfqs'
+                  ? 'RFQ'
+                  : 'DELIVERY'
     return { family: 'purchases', kind }
   }
   if (path === '/items' || path.startsWith('/items/')) {

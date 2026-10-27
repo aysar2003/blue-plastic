@@ -22,6 +22,8 @@ const PACK_SLUG: Record<string, string> = {
   BILL: 'bills',
   EXPENSE: 'expenses',
   PURCHASE_ORDER: 'purchase-orders',
+  PURCHASE_REQUEST: 'purchase-requests',
+  RFQ: 'rfqs',
   VENDOR_CREDIT: 'vendor-credits',
 }
 

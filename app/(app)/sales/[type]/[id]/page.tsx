@@ -16,6 +16,10 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
+import {
+  documentEmailBody,
+  documentEmailSubject,
+} from '@/lib/document-email'
 import { formatMoney } from '@/lib/money'
 import { bySlug, byType, isSalesOrder, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -76,19 +80,26 @@ export default async function SalesDocumentPage({
     document.status !== 'CLOSED' &&
     !applied
 
-  const shareBody = [
-    `${config.singular} ${document.number}`,
-    `To: ${document.customer.displayName}`,
-    `Date: ${formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)}`,
-    `Total: ${formatMoney(document.total, currency)}`,
-    Number(document.balance) > 0
-      ? `Amount due: ${formatMoney(document.balance, currency)}`
-      : null,
-    '',
-    `From ${ctx.organization.name}`,
-  ]
-    .filter((line) => line !== null)
-    .join('\n')
+  const shareBody = documentEmailBody({
+    partyName: document.customer.displayName,
+    singular: config.singular,
+    number: document.number,
+    extraLines: [
+      `Date: ${formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)}`,
+      `Total: ${formatMoney(document.total, currency)}`,
+      Number(document.balance) > 0
+        ? `Amount due: ${formatMoney(document.balance, currency)}`
+        : null,
+    ],
+  })
+  const emailSubject = documentEmailSubject(
+    config.singular,
+    document.number,
+    ctx.organization.name,
+  )
+  const fileBase = `${config.slug.replace(/s$/, '')}-${document.number
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')}`
 
   return (
     <>
@@ -102,11 +113,10 @@ export default async function SalesDocumentPage({
               paper={config.singular.toLowerCase()}
               printHref={`/sales/${config.slug}/${id}/print`}
               pdfHref={`/api/sales/${id}/pdf`}
-              filename={`${config.slug.replace(/s$/, '')}-${document.number
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')}.pdf`}
+              excelHref={`/api/sales/${id}/xlsx`}
+              filename={fileBase}
               defaultTo={document.customer.email ?? ''}
-              defaultSubject={`${config.singular} ${document.number} from ${ctx.organization.name}`}
+              defaultSubject={emailSubject}
               defaultBody={shareBody}
               whatsappPhone={document.customer.phone}
               whatsappText={shareBody}

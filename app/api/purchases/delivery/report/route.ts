@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     const [orders, org, template] = await Promise.all([
       delivery.detailReport(ctx, { filter, vendorId }),
       organizationService.get(ctx),
-      organizationService.getDocumentTemplate(ctx),
+      organizationService.getPrintTemplate(ctx, url.searchParams.get('paper')),
     ])
 
     const filterLabel =

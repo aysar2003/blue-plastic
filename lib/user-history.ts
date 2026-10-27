@@ -75,6 +75,8 @@ const PURCHASE_SLUG: Record<string, string> = {
   EXPENSE: 'expenses',
   VENDOR_CREDIT: 'vendor-credits',
   PURCHASE_ORDER: 'purchase-orders',
+  PURCHASE_REQUEST: 'purchase-requests',
+  RFQ: 'rfqs',
 }
 
 function recordOf(value: unknown): Record<string, unknown> | null {

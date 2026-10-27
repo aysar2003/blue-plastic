@@ -351,4 +351,8 @@ export const PURCHASE_POSTS_A_JOURNAL: Record<PurchaseDocumentType, boolean> = {
   VENDOR_CREDIT: true,
   /// An order placed is not a transaction. Nothing is posted until it arrives.
   PURCHASE_ORDER: false,
+  /// Internal request — nothing purchased yet.
+  PURCHASE_REQUEST: false,
+  /// Quote request — prices only until it becomes a PO.
+  RFQ: false,
 }

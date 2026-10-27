@@ -53,7 +53,11 @@ export default async function CompanyDatabasePage({
 
   const canManage = canManageCompanyUsers(ctx, company.id)
   const canConnect = company.isCurrent || ctx.canConnect || ctx.isSystemOwner
-  const staffBlocked = company.openBlocked && !ctx.isSystemOwner
+  const billingRescue =
+    company.rentExpired &&
+    !company.accessRestricted &&
+    (ctx.isSystemOwner || ctx.role === 'OWNER' || ctx.role === 'ADMIN')
+  const staffBlocked = company.openBlocked && !ctx.isSystemOwner && !billingRescue
   const agreements = ctx.isSystemOwner
     ? await companyAgreementService.listForCompany(ctx, company.id)
     : []
@@ -95,6 +99,12 @@ export default async function CompanyDatabasePage({
               >
                 <ShieldIcon />
                 Limits &amp; apps
+              </Link>
+            ) : null}
+            {company.isCurrent &&
+            (ctx.role === 'OWNER' || ctx.role === 'ADMIN' || ctx.isSystemOwner) ? (
+              <Link href="/billing" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                Billing
               </Link>
             ) : null}
             <a

@@ -108,6 +108,7 @@ live('portal invite dual-mode (live db)', () => {
         country: true,
         phone: true,
         email: true,
+        website: true,
         brandMark: true,
         logoStorageKey: true,
         updatedAt: true,

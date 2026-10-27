@@ -109,7 +109,84 @@ export const documentTemplateSchema = z.object({
   footerNote: optionalText(2000),
   footerLayout: z.enum(['side', 'bottom', 'band']).default('side'),
   showClassicPaper: boolFlag.default(false),
+  paperStyle: z.enum(['merchant', 'trade']).default('merchant'),
   banks: z.array(bankLine).max(6).default([]),
 })
 
 export type DocumentTemplateInput = z.infer<typeof documentTemplateSchema>
+
+const formVisibility = z.record(z.string().max(40), z.boolean())
+
+export const formTemplateBodySchema = z.object({
+  id: z.string().trim().min(1).max(40),
+  name: z.string().trim().min(1).max(80),
+  layoutId: z.string().trim().max(40).optional(),
+  fields: formVisibility,
+  columns: formVisibility,
+  categoryColumns: formVisibility.optional(),
+})
+
+export const upsertFormTemplateSchema = z.object({
+  family: z.string().regex(/^(sales|purchase):[A-Z0-9_]+$/),
+  template: formTemplateBodySchema,
+  makeActive: z.boolean().default(true),
+})
+
+export type UpsertFormTemplateInput = z.infer<typeof upsertFormTemplateSchema>
+
+export const setActiveFormTemplateSchema = z.object({
+  family: z.string().regex(/^(sales|purchase):[A-Z0-9_]+$/),
+  templateId: z.string().trim().min(1).max(40),
+})
+
+export type SetActiveFormTemplateInput = z.infer<typeof setActiveFormTemplateSchema>
+
+export const deleteFormTemplateSchema = z.object({
+  family: z.string().regex(/^(sales|purchase):[A-Z0-9_]+$/),
+  templateId: z.string().trim().min(1).max(40),
+})
+
+export type DeleteFormTemplateInput = z.infer<typeof deleteFormTemplateSchema>
+
+const boolFlagLoose = z
+  .union([z.literal('true'), z.literal('false'), z.literal('on'), z.boolean()])
+  .transform((v) => v === true || v === 'true' || v === 'on')
+
+/** Settings → Organisation → Outgoing email (SMTP / Gmail App Password). */
+export const outboundEmailSchema = z.union([
+  z.object({ clear: z.literal(true) }),
+  z.object({
+    clear: z.literal(false).optional(),
+    host: requiredText('SMTP host', 200),
+    port: z.coerce.number().int().min(1).max(65535),
+    secure: boolFlagLoose.default(true),
+    user: email,
+    from: z
+      .union([email, z.literal('')])
+      .transform((v) => (v === '' ? null : v))
+      .nullable()
+      .optional(),
+    /** Blank keeps the previously saved password. */
+    password: z.string().max(200).optional(),
+  }),
+])
+
+export type OutboundEmailInput = z.infer<typeof outboundEmailSchema>
+
+export const sendDocumentEmailSchema = z.object({
+  to: email,
+  subject: requiredText('Subject', 200),
+  body: z.string().trim().max(10_000).default(''),
+  filename: requiredText('Filename', 200),
+  /** Base64 of the PDF or Excel attachment. */
+  contentBase64: z.string().min(1, 'Attachment is required').max(12_000_000),
+  contentType: z.string().trim().min(1).max(120).default('application/pdf'),
+})
+
+export type SendDocumentEmailInput = z.infer<typeof sendDocumentEmailSchema>
+
+export const testOutboundEmailSchema = z.object({
+  to: email,
+})
+
+export type TestOutboundEmailInput = z.infer<typeof testOutboundEmailSchema>

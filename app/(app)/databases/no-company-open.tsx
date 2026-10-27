@@ -259,7 +259,12 @@ function CompanyCard({
   const group = companyGroupLabel(row.groupKind)
   const mark = groupMark(row.groupKind)
   const limits = limitBadges(row)
-  const staffBlocked = row.openBlocked && !canManageLimits
+  // OWNER/ADMIN may open when only rent expired so they can pay from Billing.
+  const billingRescue =
+    row.rentExpired &&
+    !row.accessRestricted &&
+    (row.role === 'OWNER' || row.role === 'ADMIN' || canManageLimits)
+  const staffBlocked = row.openBlocked && !canManageLimits && !billingRescue
 
   return (
     <article
@@ -304,7 +309,13 @@ function CompanyCard({
               onOpen()
             }}
           >
-            {busy ? <Loader2Icon className="size-3.5 animate-spin" /> : 'Connect'}
+            {busy ? (
+              <Loader2Icon className="size-3.5 animate-spin" />
+            ) : billingRescue ? (
+              'Pay rent'
+            ) : (
+              'Connect'
+            )}
           </button>
         ) : (
           <span className="text-[0.7rem] font-semibold uppercase tracking-wider text-muted-foreground">

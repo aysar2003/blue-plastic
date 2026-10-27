@@ -57,6 +57,8 @@ const PURCHASE_SLUG: Record<string, string> = {
   EXPENSE: 'expenses',
   VENDOR_CREDIT: 'vendor-credits',
   PURCHASE_ORDER: 'purchase-orders',
+  PURCHASE_REQUEST: 'purchase-requests',
+  RFQ: 'rfqs',
 }
 
 const SALES_TYPE_LABEL: Record<string, string> = {
@@ -74,6 +76,8 @@ const PURCHASE_TYPE_LABEL: Record<string, string> = {
   EXPENSE: 'Expense',
   VENDOR_CREDIT: 'Vendor credit',
   PURCHASE_ORDER: 'Purchase order',
+  PURCHASE_REQUEST: 'Purchase request',
+  RFQ: 'RFQ',
 }
 
 const POSTED_SALES: SalesDocumentType[] = ['INVOICE', 'SALES_RECEIPT', 'CREDIT_MEMO', 'REFUND_RECEIPT']
@@ -307,7 +311,7 @@ function purchaseDocumentList(spec: {
           cells: {
             date: recorded(document.createdAt),
             number: document.number,
-            vendor: document.vendor.displayName,
+            vendor: document.vendor?.displayName ?? '—',
             dueDate: date(document.dueDate),
             reference: document.reference,
             status: statusLabel(document.status),
@@ -684,7 +688,7 @@ const expensesByVendorDetail: TableReport = {
       return {
         href: purchaseHref(document.type, document.id),
         cells: {
-          vendor: document.vendor.displayName,
+          vendor: document.vendor?.displayName ?? '—',
           date: recorded(document.createdAt),
           type: PURCHASE_TYPE_LABEL[document.type] ?? document.type,
           number: document.number,
@@ -957,7 +961,7 @@ const transactionListByVendor: TableReport = {
       ...documents.map((document) => ({
         href: purchaseHref(document.type, document.id),
         cells: {
-          vendor: document.vendor.displayName,
+          vendor: document.vendor?.displayName ?? '—',
           date: recorded(document.createdAt),
           type: PURCHASE_TYPE_LABEL[document.type] ?? document.type,
           number: document.number,
@@ -1250,7 +1254,7 @@ const openPurchaseOrders: TableReport = {
         cells: {
           date: date(order.date),
           number: order.number,
-          vendor: order.vendor.displayName,
+          vendor: order.vendor?.displayName ?? '—',
           status: statusLabel(order.status),
           remaining: remainingQty.toFixed(2),
           total: money(order.total.toString()),
@@ -2496,7 +2500,7 @@ const purchasesByItemDetail: TableReport = {
           cells: {
             item: line.item.name,
             sku: line.item.sku,
-            vendor: line.document.vendor.displayName,
+            vendor: line.document.vendor?.displayName ?? '—',
             date: recorded(line.document.createdAt),
             type: PURCHASE_TYPE_LABEL[line.document.type] ?? line.document.type,
             number: line.document.number,
@@ -2917,7 +2921,7 @@ const voidedTransactions: TableReport = {
           side: 'Purchases',
           type: PURCHASE_TYPE_LABEL[document.type] ?? document.type,
           number: document.number,
-          name: document.vendor.displayName,
+          name: document.vendor?.displayName ?? '—',
           amount: money(document.total.toString()),
         },
       })),

@@ -39,7 +39,7 @@ export default async function ProjectQuotationsPrintPage({
       listed.map((row) => row.id),
     ),
     organizationService.get(ctx),
-    organizationService.getDocumentTemplate(ctx),
+    organizationService.getPrintTemplate(ctx),
   ])
   const quotations = documents.filter((row) => row.type === 'QUOTATION')
   const running = runningQuotationTotals(quotations.map((row) => row.total))
@@ -69,6 +69,7 @@ export default async function ProjectQuotationsPrintPage({
           pdfHref={`/api/projects/${project.id}/quotations/pdf`}
           filename={filename}
           pdfMatchesPrint
+          paperStyle={template.paperStyle}
           defaultTo={quotations[0]?.customer.email ?? ''}
           defaultSubject={`Quotations ${project.number} from ${organization.name}`}
           defaultBody={shareBody}

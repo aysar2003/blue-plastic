@@ -20,7 +20,7 @@ export type DeliveryOrderRow = {
   id: string
   number: string
   date: CalendarDate
-  vendorId: string
+  vendorId: string | null
   vendorName: string
   status: string
   bucket: DeliveryBucket
@@ -69,7 +69,7 @@ function summariseOrder(order: {
   number: string
   date: Date
   status: string
-  vendor: { id: string; displayName: string }
+  vendor: { id: string; displayName: string } | null
   lines: {
     id: string
     lineNumber: number
@@ -122,8 +122,8 @@ function summariseOrder(order: {
     id: order.id,
     number: order.number,
     date: toCalendarDate(order.date),
-    vendorId: order.vendor.id,
-    vendorName: order.vendor.displayName,
+    vendorId: order.vendor?.id ?? null,
+    vendorName: order.vendor?.displayName ?? '—',
     status: order.status,
     bucket,
     orderedQty: orderedQty.toFixed(2),

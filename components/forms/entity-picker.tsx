@@ -103,20 +103,31 @@ export function EntityPicker({
   const [pendingName, setPendingName] = React.useState<string | null>(null)
   const [dialog, setDialog] = React.useState<DialogData | null>(null)
 
+  const alphabetical =
+    kind === 'item' ||
+    options.some((option) => option.group != null && option.accountType == null)
+
   const merged: ComboboxOption[] = React.useMemo(
-    () =>
-      [...extra, ...options]
+    () => {
+      const unique = [...extra, ...options]
         // A newly created record appears here at once; after the refresh the
         // server list carries it too, and the duplicate has to go.
         .filter((option, index, all) => all.findIndex((other) => other.id === option.id) === index)
-        .map((option) => ({
-          value: option.id,
-          label: option.label,
-          hint: option.hint,
-          group: option.group,
-          accountType: option.accountType,
-        })),
-    [options, extra],
+      const ordered = alphabetical
+        ? [...unique].sort((a, b) =>
+            a.label.localeCompare(b.label, undefined, { sensitivity: 'base', numeric: true }),
+          )
+        : unique
+      return ordered.map((option) => ({
+        value: option.id,
+        label: option.label,
+        hint: option.hint,
+        // One A–Z list. Keeping type headings would split names that sort together.
+        group: alphabetical ? undefined : option.group,
+        accountType: option.accountType,
+      }))
+    },
+    [options, extra, alphabetical],
   )
 
   async function openCreate(label: string) {

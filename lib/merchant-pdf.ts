@@ -55,7 +55,28 @@ export function merchantPdfLetterhead(input: {
   orgPhone?: string | null
   orgEmail?: string | null
   accent?: PdfRgb
+  /** Trade sheet: small company block and a rule, no coloured name. */
+  plain?: boolean
 }): PdfRow[] {
+  if (input.plain) {
+    const rows: PdfRow[] = [
+      {
+        size: 11,
+        height: 14,
+        runs: [{ text: input.orgName, x: PDF_PAGE.left, bold: true, color: [0.17, 0.44, 0.73] }],
+      },
+    ]
+    const lines = [
+      ...(input.orgAddress ?? []).map(cleanLine).filter(Boolean),
+      input.orgEmail,
+      input.orgPhone,
+    ].filter((part): part is string => Boolean(part))
+    for (const line of lines) {
+      rows.push({ size: 8, height: 11, runs: [{ text: line, color: MUTED }] })
+    }
+    rows.push({ size: 4, height: 8, runs: [], rule: true })
+    return rows
+  }
   const accent = input.accent ?? hexToPdfRgb(DEFAULT_DOCUMENT_TEMPLATE.accent)
   const rows: PdfRow[] = []
 

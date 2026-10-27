@@ -7,13 +7,19 @@ import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { DeleteButton } from '@/components/data/delete-record'
 import { DocumentActions } from '@/components/print/document-actions'
+import {
+  documentEmailBody,
+  documentEmailSubject,
+} from '@/lib/document-email'
+import { ConvertPurchaseDocumentActions } from '@/components/purchases/convert-actions'
+import { RfqPriceUpload } from '@/components/purchases/rfq-price-upload'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatDate, formatTransactionDate, toCalendarDate } from '@/lib/date'
+import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
-import { purchaseBySlug } from '@/lib/purchase-types'
+import { purchaseBySlug, purchaseByType } from '@/lib/purchase-types'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { DocumentAttachments } from '@/components/data/document-attachments'
@@ -37,14 +43,24 @@ export default async function PurchaseDocumentPage({
   const ctx = await requireOrgContext('bill:read')
   const document = await purchaseService.get(ctx, id).catch(() => null)
   if (!document) notFound()
-  const [trail, history, papers] = await Promise.all([
+  const canConvert =
+    (config.type === 'PURCHASE_REQUEST' || config.type === 'RFQ') &&
+    ctx.permissions.has('bill:create') &&
+    document.status !== 'VOID' &&
+    document.status !== 'CLOSED' &&
+    document.status !== 'DRAFT' &&
+    document.status !== 'PENDING_APPROVAL' &&
+    document.convertedTo.length === 0
+  const [trail, history, papers, vendors] = await Promise.all([
     trailFor(ctx, document.id),
     historyFor(ctx, document.id),
     listForPurchase(ctx, document.id),
+    canConvert ? purchaseService.vendorChoices(ctx) : Promise.resolve([]),
   ])
 
   const currency = ctx.organization.baseCurrency
   const isOrder = config.type === 'PURCHASE_ORDER'
+  const vendorName = document.vendor?.displayName ?? 'No vendor yet'
   // One control, one verb. A document already voided under the old scheme is
   // left alone: its entry has been reversed and there is nothing left to remove.
   const canDelete = ctx.features.allowDocumentDelete && ctx.permissions.has('bill:void') && document.status !== 'VOID'
@@ -72,7 +88,7 @@ export default async function PurchaseDocumentPage({
         description={
           document.offsetCustomer
             ? `${document.offsetCustomer.displayName} (customer balance)`
-            : document.vendor.displayName
+            : vendorName
         }
         actions={
           <>
@@ -80,23 +96,41 @@ export default async function PurchaseDocumentPage({
               paper={config.singular.toLowerCase()}
               printHref={`/purchases/${config.slug}/${id}/print`}
               pdfHref={`/api/purchases/${id}/pdf`}
+              excelHref={`/api/purchases/${id}/xlsx`}
               filename={`${config.slug.replace(/s$/, '')}-${document.number
                 .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')}.pdf`}
-              defaultTo={document.offsetCustomer?.email ?? document.vendor.email ?? ''}
-              defaultSubject={`${config.singular} ${document.number} — ${ctx.organization.name}`}
-              defaultBody={[
-                `${config.singular} ${document.number}`,
-                document.offsetCustomer
-                  ? `Customer: ${document.offsetCustomer.displayName}`
-                  : `Vendor: ${document.vendor.displayName}`,
-                `Date: ${formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)}`,
-                `Total: ${formatMoney(document.total, currency)}`,
-                '',
-                `From ${ctx.organization.name}`,
-              ].join('\n')}
-              whatsappPhone={document.offsetCustomer?.phone ?? document.vendor.phone}
+                .replace(/[^a-z0-9]+/g, '-')}`}
+              defaultTo={document.offsetCustomer?.email ?? document.vendor?.email ?? ''}
+              defaultSubject={documentEmailSubject(
+                config.singular,
+                document.number,
+                ctx.organization.name,
+              )}
+              defaultBody={documentEmailBody({
+                partyName: document.offsetCustomer?.displayName ?? vendorName,
+                singular: config.singular,
+                number: document.number,
+                extraLines: [
+                  document.offsetCustomer
+                    ? `Customer: ${document.offsetCustomer.displayName}`
+                    : `Vendor: ${vendorName}`,
+                  `Date: ${formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)}`,
+                  `Total: ${formatMoney(document.total, currency)}`,
+                ],
+              })}
+              whatsappPhone={document.offsetCustomer?.phone ?? document.vendor?.phone ?? null}
             />
+            {canEdit && config.type === 'RFQ' ? <RfqPriceUpload id={id} /> : null}
+            {canConvert && (config.type === 'PURCHASE_REQUEST' || config.type === 'RFQ') ? (
+              <ConvertPurchaseDocumentActions
+                id={id}
+                number={document.number}
+                sourceType={config.type}
+                today={today(ctx.organization.timeZone)}
+                vendors={vendors.map((vendor) => ({ id: vendor.id, label: vendor.displayName }))}
+                initialVendorId={document.vendor?.id}
+              />
+            ) : null}
             {canReceive ? (
               <Link
                 href={`/purchases/purchase-orders/${id}/receive`}
@@ -209,19 +243,30 @@ export default async function PurchaseDocumentPage({
 
       {document.convertedTo.length > 0 ? (
         <div className="mb-4 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-          {document.convertedTo.length === 1 ? 'Received on bill ' : 'Received on bills '}
-          {document.convertedTo.map((bill, index) => (
-            <span key={bill.id}>
-              {index > 0 ? ', ' : ''}
-              <Link
-                href={`/purchases/bills/${bill.id}`}
-                className="font-medium underline underline-offset-4"
-              >
-                {bill.number}
-              </Link>
-            </span>
-          ))}
-          {document.status === 'CLOSED' ? '. Everything ordered has arrived.' : '. Part of the order is still outstanding.'}
+          {isOrder
+            ? document.convertedTo.length === 1
+              ? 'Received on bill '
+              : 'Received on bills '
+            : 'Became '}
+          {document.convertedTo.map((child, index) => {
+            const childConfig = purchaseByType(child.type)
+            return (
+              <span key={child.id}>
+                {index > 0 ? ', ' : ''}
+                <Link
+                  href={`/purchases/${childConfig.slug}/${child.id}`}
+                  className="font-medium underline underline-offset-4"
+                >
+                  {child.number}
+                </Link>
+              </span>
+            )
+          })}
+          {isOrder
+            ? document.status === 'CLOSED'
+              ? '. Everything ordered has arrived.'
+              : '. Part of the order is still outstanding.'
+            : '.'}
         </div>
       ) : null}
 

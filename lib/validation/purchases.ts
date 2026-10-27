@@ -40,9 +40,9 @@ export const purchaseLineSchema = z.object({
 export const purchaseDocumentSchema = z.object({
   number: chosenNumber,
   /**
-   * Required for bills, credits and orders. On an expense settled against a
-   * customer, the server may create or reuse a vendor from that customer when
-   * this is left blank.
+   * Required for bills, credits, RFQs and orders. Optional on a purchase
+   * request. On an expense settled against a customer, the server may create
+   * or reuse a vendor from that customer when this is left blank.
    */
   vendorId: optionalId,
   date: calendarDate,
@@ -73,6 +73,24 @@ export function unnamedPurchaseLineIndexes(
 }
 
 export const convertOrderSchema = z.object({ id: cuid, date: calendarDate })
+
+/** PR → RFQ or purchase order, and RFQ → purchase order. An RFQ needs a vendor. */
+export const convertPurchaseDocumentSchema = z
+  .object({
+    id: cuid,
+    date: calendarDate,
+    target: z.enum(['RFQ', 'PURCHASE_ORDER']),
+    vendorId: optionalId,
+  })
+  .superRefine((value, ctx) => {
+    if (value.target === 'RFQ' && !value.vendorId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['vendorId'],
+        message: 'Choose a vendor for the RFQ.',
+      })
+    }
+  })
 
 export const billPaymentSchema = z.object({
   number: chosenNumber,

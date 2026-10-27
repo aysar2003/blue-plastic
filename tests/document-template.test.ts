@@ -5,6 +5,7 @@ import { parseDocumentTemplate } from '@/lib/document-template'
 describe('document template', () => {
   it('hides the classic paper until settings turn it on', () => {
     expect(parseDocumentTemplate(null).showClassicPaper).toBe(false)
+    expect(parseDocumentTemplate(null).paperStyle).toBe('merchant')
     expect(parseDocumentTemplate(null).accent).toBe('#1eb8ae')
   })
 
@@ -38,6 +39,8 @@ describe('document template', () => {
     expect(template.footerTitle).toBe('Akoonka shirkadda')
     expect(template.footerNote).toContain('Kismaayo')
     expect(template.footerLayout).toBe('band')
+    expect(parseDocumentTemplate({ paperStyle: 'trade' }).paperStyle).toBe('trade')
+    expect(parseDocumentTemplate({ paperStyle: 'nope' }).paperStyle).toBe('merchant')
     expect(parseDocumentTemplate({ footerLayout: 'nope' }).footerLayout).toBe('side')
   })
 })

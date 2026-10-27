@@ -524,7 +524,7 @@ const unpaidBills: TableReport = {
         href: `/purchases/bills/${bill.id}`,
         cells: {
           number: bill.number,
-          vendor: bill.vendor.displayName,
+          vendor: bill.vendor?.displayName ?? '—',
           reference: bill.reference,
           date: date(bill.date),
           dueDate: date(bill.dueDate),
@@ -602,7 +602,7 @@ const apAgingDetail: TableReport = {
       rows.push({
         href: `/purchases/bills/${bill.id}`,
         cells: {
-          vendor: bill.vendor.displayName,
+          vendor: bill.vendor?.displayName ?? '—',
           number: bill.number,
           date: date(bill.date),
           dueDate: date(bill.dueDate),
@@ -1699,7 +1699,7 @@ const billList: TableReport = {
         cells: {
           date: recorded(bill.createdAt),
           number: bill.number,
-          vendor: bill.vendor.displayName,
+          vendor: bill.vendor?.displayName ?? '—',
           dueDate: date(bill.dueDate),
           status: DOCUMENT_STATUS[bill.status] ?? bill.status,
           total: money(bill.total.toString()),
@@ -2171,7 +2171,7 @@ const billsAndPayments: TableReport = {
         cells: {
           date: date(bill.date),
           number: bill.number,
-          vendor: bill.vendor.displayName,
+          vendor: bill.vendor?.displayName ?? '—',
           total: money(bill.total.toString()),
           applied: money(applied),
           sources: sources.length ? sources.join(', ') : null,

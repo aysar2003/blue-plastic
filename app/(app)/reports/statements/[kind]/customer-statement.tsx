@@ -17,7 +17,7 @@ import {
 } from '@/lib/customer-statement'
 
 export { forwardBalances, signedOpen }
-import { letterheadLines, type LetterheadSource } from '@/lib/letterhead'
+import type { LetterheadSource } from '@/lib/letterhead'
 import { Decimal, formatMoney, ZERO } from '@/lib/money'
 import type { StatementEntry, StatementItem } from '@/server/services/receivables.service'
 
@@ -509,10 +509,13 @@ export function statementEmailBody(input: {
     ]
     return [row, ...items]
   })
-  const company = input.organization ? letterheadLines(input.organization) : [`Statement from ${input.orgName}`]
+  const greeting = input.customerName.trim()
+    ? `Dear ${input.customerName.trim()} team,`
+    : 'Dear Customer,'
   return [
-    ...company,
-    input.customerName,
+    greeting,
+    '',
+    'Please find the attached statement.',
     `${formatDate(input.from)} to ${formatDate(input.to)}`,
     STATEMENT_VIEW_LABELS[input.filter.view],
     caption,
@@ -521,6 +524,8 @@ export function statementEmailBody(input: {
     ...lines,
     '',
     `Amount due: ${money(input.closing)}`,
+    '',
+    'Thanks & Best regards,',
   ]
     .filter((line) => line !== '')
     .join('\n')

@@ -4,10 +4,12 @@ import Link from 'next/link'
 import { requireOrgContext } from '@/server/auth/context'
 import * as appAccessService from '@/server/services/app-access.service'
 import { listUserDatabases } from '@/server/services/backup-import.service'
+import * as platformBilling from '@/server/services/platform-billing.service'
 import { listPendingSignupRequests } from '@/server/services/register.service'
 
 import { DatabasesBoard } from './databases-board'
 import { PendingAppRequests } from './pending-app-requests'
+import { PendingRentPayments } from './pending-rent-payments'
 import { PendingSignups } from './pending-signups'
 
 export const metadata: Metadata = { title: 'My databases' }
@@ -26,6 +28,9 @@ export default async function DatabasesPage({
   const databases = await listUserDatabases(ctx)
   const pendingSignups = ctx.isSystemOwner ? await listPendingSignupRequests(ctx) : []
   const pendingAppRequests = ctx.isSystemOwner ? await appAccessService.listPendingForOwner(ctx) : []
+  const pendingRentPayments = ctx.isSystemOwner
+    ? await platformBilling.listPendingRentPayments(ctx)
+    : []
   const panel =
     params.create === '1' ? 'create' : params.import === '1' ? 'import' : null
   const limitsOrgId = typeof params.limits === 'string' ? params.limits : null
@@ -41,15 +46,19 @@ export default async function DatabasesPage({
           }))}
         />
       ) : null}
+      {ctx.isSystemOwner ? <PendingRentPayments payments={pendingRentPayments} /> : null}
       {ctx.isSystemOwner ? <PendingSignups requests={pendingSignups} /> : null}
       {ctx.isSystemOwner ? (
         <p className="text-sm text-muted-foreground">
           <Link href="/databases/users" className="font-medium text-primary underline">
             System users
           </Link>
+          {' · '}
+          <Link href="/databases/billing" className="font-medium text-primary underline">
+            Platform billing
+          </Link>
           {' — '}
-          every staff login across companies. Open a company card for that company’s users and
-          details.
+          plans, pay-to numbers, and every staff login across companies.
         </p>
       ) : null}
       <DatabasesBoard

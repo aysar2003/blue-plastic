@@ -116,7 +116,7 @@ export default async function PortalStatementPage({
         invoiceEntries.slice(0, INVOICE_PAPER_LIMIT).map((entry) => entry.id),
       ),
       organizationService.get(ctx),
-      organizationService.getDocumentTemplate(ctx),
+      organizationService.getPrintTemplate(ctx),
     ])
     // Each paper's Previous = Balance at the bottom of the previous invoice
     // (Previous + Debit − Credit carried forward).

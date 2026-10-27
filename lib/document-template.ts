@@ -16,6 +16,23 @@ export type BankLine = {
 export const FOOTER_LAYOUTS = ['side', 'bottom', 'band'] as const
 export type FooterLayout = (typeof FOOTER_LAYOUTS)[number]
 
+/** Merchant is the coloured band paper. Trade is the plain order sheet for invoices and purchase orders. */
+export const PAPER_STYLES = ['merchant', 'trade'] as const
+export type PaperStyle = (typeof PAPER_STYLES)[number]
+
+export const PAPER_STYLE_OPTIONS: { id: PaperStyle; label: string; blurb: string }[] = [
+  {
+    id: 'merchant',
+    label: 'Merchant',
+    blurb: 'Coloured header, line band, and total strips.',
+  },
+  {
+    id: 'trade',
+    label: 'Trade',
+    blurb: 'Plain purchase-order sheet — title, party block, striped lines, totals on the right. Same look on invoices.',
+  },
+]
+
 export type DocumentTemplate = {
   /** Header and total bands. A CSS colour. */
   accent: string
@@ -35,6 +52,8 @@ export type DocumentTemplate = {
    * turns the hidden button on in Settings → Templates.
    */
   showClassicPaper: boolean
+  /** Which sheet invoices, bills, and purchase orders print on. */
+  paperStyle: PaperStyle
 }
 
 /** Close to the invoice teal, shifted toward cyan so a vendor bill is obvious. */
@@ -49,6 +68,7 @@ export const DEFAULT_DOCUMENT_TEMPLATE: DocumentTemplate = {
   footerLayout: 'side',
   terms: '',
   showClassicPaper: false,
+  paperStyle: 'merchant',
 }
 
 const ACCENT = /^#[0-9a-fA-F]{6}$/
@@ -72,6 +92,9 @@ export function parseDocumentTemplate(raw: unknown): DocumentTemplate {
     base.footerLayout = data.footerLayout as FooterLayout
   }
   if (typeof data.showClassicPaper === 'boolean') base.showClassicPaper = data.showClassicPaper
+  if (PAPER_STYLES.includes(data.paperStyle as PaperStyle)) {
+    base.paperStyle = data.paperStyle as PaperStyle
+  }
 
   if (Array.isArray(data.banks)) {
     base.banks = data.banks.flatMap((row) => {

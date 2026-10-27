@@ -34,7 +34,11 @@ export function ItemComponentsEditor({
 
   const options = useMemo(
     () =>
-      catalog.map((item) => ({
+      [...catalog]
+        .sort((a, b) =>
+          a.label.localeCompare(b.label, undefined, { sensitivity: 'base', numeric: true }),
+        )
+        .map((item) => ({
         id: item.id,
         label: item.label,
         hint: item.type,

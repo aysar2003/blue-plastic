@@ -84,6 +84,7 @@ export function DocumentPackView({
           excelHref={excelHref}
           filename={filename}
           pdfMatchesPrint
+          paperStyle={template.paperStyle}
           defaultTo={party?.email ?? ''}
           defaultSubject={`${title} from ${organization.name}`}
           defaultBody={shareBody}

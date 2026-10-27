@@ -34,7 +34,8 @@ export function renderTrashRecordPdf(input: {
   template?: DocumentTemplate | null
 }): Uint8Array {
   const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
-  const accent = merchantAccent(template)
+  const trade = template.paperStyle === 'trade'
+  const accent = trade ? merchantPdfInk() : merchantAccent(template)
   const ink = merchantPdfInk()
   const muted = merchantPdfMuted()
   const rows: PdfRow[] = []
@@ -63,6 +64,7 @@ export function renderTrashRecordPdf(input: {
       orgPhone: input.orgPhone,
       orgEmail: input.orgEmail,
       accent,
+      plain: trade,
     }),
   )
 

@@ -29,10 +29,11 @@ try {
 }
 
 describe('export month quotations pdf', () => {
-  it('writes October 2026 quotations pack to Downloads', async () => {
-    const url = process.env.DATABASE_URL
-    expect(url).toBeTruthy()
-    const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: url! }) })
+  it.skipIf(!process.env.DATABASE_URL)(
+    'writes October 2026 quotations pack to Downloads',
+    async () => {
+    const url = process.env.DATABASE_URL!
+    const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) })
 
     try {
       const org = await prisma.organization.findFirst({
@@ -126,5 +127,6 @@ describe('export month quotations pdf', () => {
     } finally {
       await prisma.$disconnect()
     }
-  })
+  },
+  )
 })

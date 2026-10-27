@@ -40,6 +40,8 @@ const DOCUMENT_KIND: Record<string, string> = {
   EXPENSE: 'Expense',
   VENDOR_CREDIT: 'Vendor credit',
   PURCHASE_ORDER: 'Purchase order',
+  PURCHASE_REQUEST: 'Purchase request',
+  RFQ: 'RFQ',
   PURCHASE_RECEIPT: 'Purchase receipt',
 }
 

@@ -260,7 +260,7 @@ export async function itemActivity(
       ticketHref: null,
       storeName: line.store?.name ?? null,
       storeHref: line.storeId ? `/stores/${line.storeId}` : null,
-      party: doc.vendor.displayName,
+      party: doc.vendor?.displayName ?? '—',
       quantity: qty.toFixed(2),
       cost: money(line.unitPrice.toString()),
       salesPrice: null,

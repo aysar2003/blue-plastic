@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import type { CustomerFileKind } from '@prisma/client'
@@ -9,8 +8,9 @@ import type { CustomerFileKind } from '@prisma/client'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, validation } from '@/server/errors'
+import { deleteStoredObject, getStoredObject, putStoredObject } from '@/server/files/object-store'
 
-const ROOT = path.resolve(process.cwd(), 'uploads')
+const PREFIX = 'customers'
 const MAX_PHOTO = 3 * 1024 * 1024
 const MAX_PAPER = 4 * 1024 * 1024
 const MAX_PAPERS = 4
@@ -114,7 +114,7 @@ export async function readCustomerFile(ctx: OrgContext, customerId: string, file
     where: { id: fileId, customerId, orgId: ctx.orgId },
   })
   if (!file) throw notFound('File')
-  const bytes = await readFile(absolutePath(file.storageKey))
+  const bytes = await getStoredObject(objectKey(file.storageKey))
   return { file, bytes }
 }
 
@@ -151,12 +151,8 @@ async function writeOne(
   }
 
   const id = randomBytes(16).toString('hex')
-  // Keep this a plain relative key — path.join with only dynamic segments makes
-  // Turbopack file-trace the whole repo and blows past Vercel function size limits.
   const storageKey = `${ctx.orgId}/${customerId}/${id}.${sniffed.extension}`
-  const destination = absolutePath(storageKey)
-  await mkdir(path.dirname(destination), { recursive: true })
-  await writeFile(destination, bytes)
+  await putStoredObject(objectKey(storageKey), bytes, sniffed.contentType)
 
   try {
     return await db.customerFile.create({
@@ -206,17 +202,12 @@ function sniff(bytes: Buffer): Sniffed | null {
   return null
 }
 
-function absolutePath(storageKey: string) {
-  const full = path.resolve(/*turbopackIgnore: true*/ ROOT, storageKey)
-  const relative = path.relative(/*turbopackIgnore: true*/ ROOT, full)
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw validation('That file could not be read.')
-  }
-  return full
+function objectKey(storageKey: string) {
+  return `${PREFIX}/${storageKey}`
 }
 
 async function removeStored(storageKey: string) {
-  await unlink(absolutePath(storageKey)).catch(() => undefined)
+  await deleteStoredObject(objectKey(storageKey))
 }
 
 function safeName(name: string) {

@@ -52,6 +52,8 @@ const COLUMNS: { heading: string; entries: Entry[] }[] = [
       { label: 'Bill', href: '/purchases/bills/new', permission: 'bill:create' },
       { label: 'Expense', href: '/purchases/expenses/new', permission: 'expense:create' },
       { label: 'Pay bills', href: '/bill-payments/new', permission: 'expense:create' },
+      { label: 'Purchase request', href: '/purchases/purchase-requests/new', permission: 'bill:create' },
+      { label: 'RFQ', href: '/purchases/rfqs/new', permission: 'bill:create' },
       { label: 'Purchase order', href: '/purchases/purchase-orders/new', permission: 'bill:create' },
       { label: 'Receive items', href: '/purchases/purchase-orders?status=open', permission: 'bill:create' },
       { label: 'Delivery', href: '/purchases/delivery', permission: 'bill:read' },

@@ -253,7 +253,7 @@ export async function openBills(ctx: OrgContext) {
       number: doc.number,
       date: toCalendarDate(doc.date),
       vendorId: doc.vendorId,
-      name: doc.vendor.displayName,
+      name: doc.vendor?.displayName ?? '—',
       outstanding: (balances.get(doc.id) ?? new Decimal(0)).toFixed(2),
     }))
     .filter((doc) => Number(doc.outstanding) > 0)
@@ -414,6 +414,7 @@ export async function matchBill(ctx: OrgContext, importedId: string, billId: str
     select: { id: true, vendorId: true },
   })
   if (!bill) throw notFound('Bill')
+  if (!bill.vendorId) throw validation('That bill has no vendor.')
 
   const magnitude = amount.abs().toFixed(2)
   const payment = await billPaymentService.create(ctx, {

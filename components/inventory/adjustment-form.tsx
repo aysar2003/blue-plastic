@@ -123,10 +123,14 @@ export function AdjustmentForm({
 
   const shelfItems = useMemo(
     () =>
-      items.map((item) => ({
-        ...item,
-        onHand: storeId ? quantityAtStore(stockByStore, item.id, storeId) : item.onHand,
-      })),
+      items
+        .map((item) => ({
+          ...item,
+          onHand: storeId ? quantityAtStore(stockByStore, item.id, storeId) : item.onHand,
+        }))
+        .sort((a, b) =>
+          a.label.localeCompare(b.label, undefined, { sensitivity: 'base', numeric: true }),
+        ),
     [items, storeId, stockByStore],
   )
   const itemById = useMemo(() => new Map(shelfItems.map((item) => [item.id, item])), [shelfItems])

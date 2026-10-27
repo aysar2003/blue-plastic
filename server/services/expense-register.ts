@@ -50,7 +50,9 @@ export async function expenseRegister(
   } = {},
 ): Promise<ExpenseRegister> {
   const kinds = options.kind ? [options.kind] : [...DOCUMENT_KINDS, 'BILL_PAYMENT' as const]
-  const documentTypes = kinds.filter((kind): kind is PurchaseDocumentType => kind !== 'BILL_PAYMENT')
+  const documentTypes = kinds.filter(
+    (kind): kind is Exclude<ExpenseKind, 'BILL_PAYMENT'> => kind !== 'BILL_PAYMENT',
+  ) as PurchaseDocumentType[]
   const wantPayments = kinds.includes('BILL_PAYMENT')
   const statuses = statusWhere(options.status)
   const date =
@@ -143,8 +145,8 @@ export async function expenseRegister(
         typeLabel: EXPENSE_KIND_LABELS[kind],
         date: toCalendarDate(document.date),
         number: document.number,
-        payee: document.vendor.displayName,
-        payeeId: document.vendor.id,
+        payee: document.vendor?.displayName ?? '—',
+        payeeId: document.vendor?.id ?? '',
         category: lineLabel(document.lines.map((line) => line.expenseAccount?.name)),
         subtotal: toMoneyString(subtotal, 2),
         tax: toMoneyString(tax, 2),
@@ -152,7 +154,10 @@ export async function expenseRegister(
         status: document.status,
         href: `/purchases/${slug}/${document.id}`,
         editHref: document.status === 'VOID' ? null : `/purchases/${slug}/${document.id}/edit`,
-        payHref: kind === 'BILL' && open ? `/bill-payments/new?vendor=${document.vendor.id}` : null,
+        payHref:
+          kind === 'BILL' && open && document.vendor
+            ? `/bill-payments/new?vendor=${document.vendor.id}`
+            : null,
       }
     }),
     ...payments.map((payment) => {

@@ -48,7 +48,7 @@ export async function makeOrg(tx: Tx, options: { fiscalYearStartMonth?: number }
       id: true, name: true, legalName: true, baseCurrency: true, fiscalYearStartMonth: true,
       timeZone: true, allowNegativeStock: true, posTillLedgerMode: true, parentOrgId: true,
       addressLine1: true, addressLine2: true, city: true, region: true,
-      postalCode: true, country: true, phone: true, email: true,
+      postalCode: true, country: true, phone: true, email: true, website: true,
       brandMark: true, logoStorageKey: true, updatedAt: true,
     },
   })

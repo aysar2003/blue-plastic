@@ -27,7 +27,7 @@ export async function GET(
     const [rows, org, template] = await Promise.all([
       purchaseService.getMany(ctx, [id]),
       organizationService.get(ctx),
-      organizationService.getDocumentTemplate(ctx),
+      organizationService.getPrintTemplate(ctx, new URL(request.url).searchParams.get('paper')),
     ])
     const document = rows[0]
     if (!document) {

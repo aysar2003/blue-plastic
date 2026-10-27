@@ -14,6 +14,7 @@ export function StatementSend({
   defaultSubject,
   defaultBody,
   whatsappPhone,
+  paperStyle,
 }: {
   pdfHref: string
   excelHref?: string
@@ -22,6 +23,7 @@ export function StatementSend({
   defaultSubject: string
   defaultBody: string
   whatsappPhone?: string | null
+  paperStyle?: 'merchant' | 'trade'
 }) {
   return (
     <DocumentActions
@@ -34,6 +36,7 @@ export function StatementSend({
       defaultBody={defaultBody}
       whatsappPhone={whatsappPhone}
       whatsappText={defaultBody}
+      paperStyle={paperStyle}
     />
   )
 }

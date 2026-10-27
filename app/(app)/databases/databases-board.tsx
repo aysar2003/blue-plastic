@@ -342,8 +342,15 @@ export function DatabasesBoard({
   }
 
   const openDatabase = async (orgId: string, isCurrent: boolean) => {
+    const row = databases.find((entry) => entry.id === orgId)
+    const goBilling =
+      Boolean(row?.rentExpired) &&
+      !row?.accessRestricted &&
+      (row?.role === 'OWNER' || row?.role === 'ADMIN' || isSystemOwner)
+    const dest = goBilling ? '/billing' : '/dashboard'
+
     if (isCurrent) {
-      router.push('/dashboard')
+      router.push(dest)
       return
     }
     setOpeningId(orgId)
@@ -355,7 +362,7 @@ export function DatabasesBoard({
       }
       await update({ orgId })
       router.refresh()
-      router.push('/dashboard')
+      router.push(dest)
     } catch {
       toast.error('Could not open that database.')
     } finally {

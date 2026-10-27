@@ -69,7 +69,7 @@ export async function GET(request: Request) {
     const [statement, org, template] = await Promise.all([
       receivables.statement(ctx, customerId, settings.range),
       organizationService.get(ctx),
-      organizationService.getDocumentTemplate(ctx),
+      organizationService.getPrintTemplate(ctx, url.searchParams.get('paper')),
     ])
     const entries = visibleEntries(statement.entries, filter, settings.asOf)
     const currency = ctx.organization.baseCurrency

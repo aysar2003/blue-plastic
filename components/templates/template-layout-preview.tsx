@@ -13,6 +13,7 @@ export type TemplatePreviewKind =
   | '80'
   | '58'
   | 'document'
+  | 'trade'
   | 'generic'
 
 export function TemplateLayoutPreview({
@@ -48,6 +49,7 @@ export function TemplateLayoutPreview({
       ) : null}
       {resolved === '80' || resolved === '58' ? <ReceiptMock width={resolved} tall={tall} /> : null}
       {resolved === 'document' ? <DocumentMock accent={accent} tall={tall} /> : null}
+      {resolved === 'trade' ? <TradeMock tall={tall} /> : null}
       {resolved === 'generic' ? <GenericMock tall={tall} /> : null}
     </div>
   )
@@ -66,6 +68,7 @@ function resolveKind(kind: string): TemplatePreviewKind {
     '80',
     '58',
     'document',
+    'trade',
   ]
   return (known.includes(kind as TemplatePreviewKind) ? kind : 'generic') as TemplatePreviewKind
 }
@@ -229,6 +232,31 @@ function ReceiptMock({ width, tall }: { width: '80' | '58'; tall: boolean }) {
         <p className="border-t border-dashed border-slate-300 pt-1 text-center font-bold">15.00</p>
         {tall ? <p className="pt-2 text-center text-slate-400">{width} mm</p> : null}
       </div>
+    </div>
+  )
+}
+
+function TradeMock({ tall }: { tall: boolean }) {
+  return (
+    <div className={cn('flex h-full flex-col bg-white text-slate-800', tall ? 'p-4' : 'p-2')}>
+      <p className={cn('font-semibold', tall ? 'text-xs' : 'text-[8px]')}>Company</p>
+      <span className={cn('mt-1 border-b border-slate-300', tall ? 'mb-2' : 'mb-1')} />
+      <p className={cn('font-semibold', tall ? 'text-sm' : 'text-[9px]')}>Purchase order #PO-1</p>
+      <div className={cn('mt-2 grid grid-cols-4 border-b border-slate-400 text-[8px] font-semibold', tall ? 'py-1' : '')}>
+        <span className="col-span-2">Description</span>
+        <span className="text-right">Qty</span>
+        <span className="text-right">Amount</span>
+      </div>
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="grid grid-cols-4 text-[8px]"
+          style={{ background: i % 2 ? '#f3f4f6' : '#fff', height: tall ? 16 : 6 }}
+        />
+      ))}
+      <p className={cn('ml-auto mt-auto border-t border-slate-800 pt-1 font-semibold', tall ? 'text-xs' : 'text-[8px]')}>
+        Total
+      </p>
     </div>
   )
 }

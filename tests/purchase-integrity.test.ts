@@ -83,13 +83,13 @@ suite('purchase applications', () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)
       const bill = await makeBill(tx, fixture, { total: '1000' })
-      const payment = await makeBillPayment(tx, fixture, bill.vendorId, '5000')
+      const payment = await makeBillPayment(tx, fixture, bill.vendorId!, '5000')
 
       await tx.purchaseApplication.create({
         data: { orgId: fixture.ctx.orgId, paymentId: payment.id, billId: bill.id, amount: '1000' },
       })
 
-      const second = await makeBillPayment(tx, fixture, bill.vendorId, '500')
+      const second = await makeBillPayment(tx, fixture, bill.vendorId!, '500')
       await expect(
         tx.purchaseApplication.create({
           data: { orgId: fixture.ctx.orgId, paymentId: second.id, billId: bill.id, amount: '1' },
@@ -102,7 +102,7 @@ suite('purchase applications', () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)
       const bill = await makeBill(tx, fixture, { total: '5000' })
-      const payment = await makeBillPayment(tx, fixture, bill.vendorId, '100')
+      const payment = await makeBillPayment(tx, fixture, bill.vendorId!, '100')
 
       await expect(
         tx.purchaseApplication.create({
@@ -116,7 +116,7 @@ suite('purchase applications', () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)
       const order = await makeBill(tx, fixture, { type: 'PURCHASE_ORDER' })
-      const payment = await makeBillPayment(tx, fixture, order.vendorId, '100')
+      const payment = await makeBillPayment(tx, fixture, order.vendorId!, '100')
 
       await expect(
         tx.purchaseApplication.create({
@@ -130,8 +130,8 @@ suite('purchase applications', () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)
       const bill = await makeBill(tx, fixture, { total: '1000' })
-      const first = await makeBillPayment(tx, fixture, bill.vendorId, '400')
-      const second = await makeBillPayment(tx, fixture, bill.vendorId, '600')
+      const first = await makeBillPayment(tx, fixture, bill.vendorId!, '400')
+      const second = await makeBillPayment(tx, fixture, bill.vendorId!, '600')
 
       await tx.purchaseApplication.create({
         data: { orgId: fixture.ctx.orgId, paymentId: first.id, billId: bill.id, amount: '400' },

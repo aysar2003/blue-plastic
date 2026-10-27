@@ -117,7 +117,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
           row.number,
           toCalendarDate(row.date),
           row.dueDate ? toCalendarDate(row.dueDate) : '',
-          row.vendor.displayName,
+          row.vendor?.displayName ?? '—',
           row.reference ?? '',
           row.status,
           row.total,
@@ -182,7 +182,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
           rows.push([
             row.number,
             toCalendarDate(row.date),
-            row.vendor.displayName,
+            row.vendor?.displayName ?? '—',
             row.method,
             row.status,
             row.amount,

@@ -1,6 +1,7 @@
 'use client'
 
 import { DocumentActions } from '@/components/print/document-actions'
+import type { PaperStyle } from '@/lib/document-template'
 
 /**
  * Toolbar for any printed page — Print, PDF, Email, WhatsApp.
@@ -19,6 +20,7 @@ export function PrintButton({
   whatsappPhone,
   whatsappText,
   pdfMatchesPrint = false,
+  paperStyle,
 }: {
   paper?: string
   pdfHref?: string
@@ -32,6 +34,7 @@ export function PrintButton({
   whatsappPhone?: string | null
   whatsappText?: string
   pdfMatchesPrint?: boolean
+  paperStyle?: PaperStyle
 }) {
   return (
     <DocumentActions
@@ -47,6 +50,7 @@ export function PrintButton({
       whatsappPhone={whatsappPhone}
       whatsappText={whatsappText}
       pdfMatchesPrint={pdfMatchesPrint}
+      paperStyle={paperStyle}
     />
   )
 }

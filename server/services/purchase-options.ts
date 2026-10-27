@@ -63,7 +63,7 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
         purchaseDescription: true, description: true, purchaseTaxCodeId: true,
         expenseAccountId: true,
       },
-      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+      orderBy: { name: 'asc' },
     }),
     db.taxCode.findMany({
       where: { orgId: ctx.orgId, isActive: true },

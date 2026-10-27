@@ -142,6 +142,10 @@ enum DocumentType {
   EXPENSE
   VENDOR_CREDIT
   PURCHASE_ORDER
+  /// Internal purchase request (PR) — store keeper / warehouse ask; no ledger.
+  PURCHASE_REQUEST
+  /// Request for quotation from a vendor — prices only; no ledger.
+  RFQ
   TRANSFER
   DEPOSIT
   INVENTORY_ADJUSTMENT
@@ -374,6 +378,10 @@ enum PurchaseDocumentType {
   VENDOR_CREDIT
   /// An order placed. Nothing has happened yet, so nothing is posted.
   PURCHASE_ORDER
+  /// Internal ask for goods (store keeper / warehouse). No vendor required yet.
+  PURCHASE_REQUEST
+  /// Quote request to one vendor. Converted to a purchase order when accepted.
+  RFQ
 }
 
 enum PurchaseDocumentStatus {
@@ -553,6 +561,10 @@ model Organization {
   /// Null means the merchant paper (teal bill) with the classic sheet hidden.
   documentTemplate Json?
 
+  /// Company form layouts: which fields/columns show on sales and purchase entry.
+  /// Shape: `lib/form-templates.ts` (`OrgFormTemplates`). Null → system defaults.
+  formTemplates Json?
+
   /// Short mark shown in the shell when no logo is set (e.g. "AF"). Null → initials from name.
   brandMark String?
 
@@ -577,6 +589,15 @@ model Organization {
 
   /// Free note for the rent / restriction (e.g. invoice ref, plan name).
   rentNote String?
+
+  /// Outbound SMTP for invoices / bills / statements (per company).
+  /// Password is sealed with AUTH_SECRET — see `lib/sealed-secret.ts`.
+  smtpHost            String?
+  smtpPort            Int?     @db.SmallInt
+  smtpSecure          Boolean  @default(true)
+  smtpUser            String?
+  smtpFrom            String?
+  smtpPasswordSealed  String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -631,6 +652,7 @@ model Organization {
   appAccessRequests   AppAccessRequest[]
   recurringTemplates  RecurringTemplate[]
   companyAgreements   CompanyAgreement[]
+  companyRentPayments CompanyRentPayment[]
   budgets             Budget[]
 
   @@index([parentOrgId])
@@ -682,6 +704,101 @@ model MarketingLead {
 
   @@index([createdAt])
   @@map("marketing_leads")
+}
+
+/// Platform rent plans (SOM ERP seats / months). System owner configures these.
+model PlatformPlan {
+  id        String  @id @default(cuid())
+  name      String
+  months    Int
+  price     Decimal @db.Decimal(19, 4)
+  currency  String  @default("USD") @db.Char(3)
+  /// Seat cap applied on confirm. Null = leave company maxUsers unchanged.
+  maxUsers  Int?
+  /// Apps granted on confirm. Shape: Record<ModuleFlag, boolean>. Null = leave modules as-is.
+  modules   Json?
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  rentPayments CompanyRentPayment[]
+
+  @@index([active, sortOrder])
+  @@map("platform_plans")
+}
+
+/// Pay-to instructions for EVC / Zaad / bank (singleton row id = default).
+model PlatformBillingSettings {
+  id String @id @default("default")
+
+  evcNumber         String?
+  zaadNumber        String?
+  edahabNumber      String?
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
+  /// Extra text shown on the company billing page.
+  instructions      String?
+
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("platform_billing_settings")
+}
+
+enum CompanyRentPaymentStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum RentPaymentMethod {
+  EVC
+  ZAAD
+  EDAHAB
+  BANK
+}
+
+/// Company submitted proof of platform rent payment — system owner confirms.
+model CompanyRentPayment {
+  id     String @id @default(cuid())
+  orgId  String
+  planId String
+
+  status   CompanyRentPaymentStatus @default(PENDING)
+  method   RentPaymentMethod
+  amount   Decimal                  @db.Decimal(19, 4)
+  currency String                   @db.Char(3)
+  reference String
+  notes     String?
+
+  originalName String?
+  contentType  String?
+  byteSize     Int?
+  /// Path under uploads/rent-payments/. Never a public URL.
+  storageKey   String?
+
+  submittedById String
+  reviewedAt    DateTime? @db.Timestamptz(6)
+  reviewedBy    String?
+  reviewNote    String?
+
+  /// Snapshot of the plan at submit time (plan row may change later).
+  planName     String
+  planMonths   Int
+  planMaxUsers Int?
+  planModules  Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plan         PlatformPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([orgId, createdAt(sort: Desc)])
+  @@map("company_rent_payments")
 }
 
 // ---------------------------------------------------------------------------
@@ -2320,7 +2437,7 @@ model SalesApplication {
 // Purchases  (Phase 5)
 // ---------------------------------------------------------------------------
 
-/// Bills, expenses, vendor credits and purchase orders.
+/// Bills, expenses, vendor credits, purchase orders, PRs and RFQs.
 ///
 /// Deliberately the mirror of `SalesDocument`, field for field where the meaning
 /// is the same. Two subledgers that behave differently is a source of bugs and of
@@ -2332,7 +2449,8 @@ model PurchaseDocument {
   type   PurchaseDocumentType
   number String
 
-  vendorId String
+  /// Optional on PURCHASE_REQUEST (internal ask). Required for RFQ, PO, bills.
+  vendorId String?
   date     DateTime  @db.Date
   dueDate  DateTime? @db.Date
   /// Copied from the vendor at creation, so changing a term later never restates
@@ -2365,7 +2483,8 @@ model PurchaseDocument {
   journalId String?
   version   Int    @default(1)
 
-  /// Set on each bill raised against a purchase order.
+  /// Set on each bill raised against a purchase order, and on RFQ/PO converted
+  /// from a PR or RFQ (sales-style close).
   ///
   /// Not unique. An order is rarely filled in one delivery: half the pallets
   /// arrive on Tuesday and the rest a fortnight later, and each arrival is its
@@ -2391,7 +2510,7 @@ model PurchaseDocument {
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
   organization   Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  vendor         Vendor                 @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  vendor         Vendor?                @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   paymentTerm    PaymentTerm?           @relation(fields: [paymentTermId], references: [id], onDelete: SetNull)
   paymentAccount LedgerAccount?         @relation("PurchasePaymentAccount", fields: [paymentAccountId], references: [id], onDelete: Restrict)
   offsetCustomer Customer?              @relation("PurchaseOffsetCustomer", fields: [offsetCustomerId], references: [id], onDelete: Restrict)

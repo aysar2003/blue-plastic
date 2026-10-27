@@ -1,6 +1,18 @@
 import 'server-only'
 
+import { cookies } from 'next/headers'
+
 import { parseDocumentTemplate, type DocumentTemplate } from '@/lib/document-template'
+import { applyPaperChoice, PAPER_CHOICE_COOKIE, parsePaperChoice } from '@/lib/paper-choice'
+import {
+  parseOrgFormTemplates,
+  removeTemplateInOrg,
+  setActiveInOrg,
+  upsertTemplateInOrg,
+  type FormFamilyKey,
+  type FormTemplate,
+  type OrgFormTemplates,
+} from '@/lib/form-templates'
 import {
   modulesClampedToGrants,
   parseFeatureFlags,
@@ -333,6 +345,89 @@ export async function getDocumentTemplate(ctx: OrgContext): Promise<DocumentTemp
   return parseDocumentTemplate(org.documentTemplate)
 }
 
+/** Saved paper, then the Print/PDF choice (query wins over the browser cookie). */
+export async function getPrintTemplate(
+  ctx: OrgContext,
+  queryPaper?: string | null,
+): Promise<DocumentTemplate> {
+  const saved = await getDocumentTemplate(ctx)
+  const query = parsePaperChoice(queryPaper)
+  if (query) return applyPaperChoice(saved, query)
+  const jar = await cookies()
+  return applyPaperChoice(saved, parsePaperChoice(jar.get(PAPER_CHOICE_COOKIE)?.value))
+}
+
+export async function getFormTemplates(ctx: OrgContext): Promise<OrgFormTemplates> {
+  const org = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: { formTemplates: true },
+  })
+  if (!org) throw notFound('Organisation')
+  return parseOrgFormTemplates(org.formTemplates)
+}
+
+async function writeFormTemplates(
+  ctx: OrgContext,
+  next: OrgFormTemplates,
+): Promise<OrgFormTemplates> {
+  const meta = await requestMeta()
+  return db.$transaction(async (tx) => {
+    const before = await tx.organization.findUnique({
+      where: { id: ctx.orgId },
+      select: { formTemplates: true },
+    })
+    if (!before) throw notFound('Organisation')
+
+    const after = await tx.organization.update({
+      where: { id: ctx.orgId },
+      data: { formTemplates: next },
+      select: { formTemplates: true },
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Organization',
+        entityId: ctx.orgId,
+        action: 'UPDATE',
+        before: { formTemplates: before.formTemplates },
+        after: { formTemplates: after.formTemplates },
+      },
+      meta,
+    )
+    return parseOrgFormTemplates(after.formTemplates)
+  })
+}
+
+export async function upsertFormTemplate(
+  ctx: OrgContext,
+  family: FormFamilyKey,
+  template: FormTemplate,
+  makeActive: boolean,
+): Promise<OrgFormTemplates> {
+  const current = await getFormTemplates(ctx)
+  return writeFormTemplates(ctx, upsertTemplateInOrg(current, family, template, makeActive))
+}
+
+export async function setActiveFormTemplate(
+  ctx: OrgContext,
+  family: FormFamilyKey,
+  templateId: string,
+): Promise<OrgFormTemplates> {
+  const current = await getFormTemplates(ctx)
+  return writeFormTemplates(ctx, setActiveInOrg(current, family, templateId))
+}
+
+export async function deleteFormTemplate(
+  ctx: OrgContext,
+  family: FormFamilyKey,
+  templateId: string,
+): Promise<OrgFormTemplates> {
+  const current = await getFormTemplates(ctx)
+  return writeFormTemplates(ctx, removeTemplateInOrg(current, family, templateId))
+}
+
 export async function updateDocumentTemplate(ctx: OrgContext, input: DocumentTemplateInput) {
   const meta = await requestMeta()
   const template: DocumentTemplate = parseDocumentTemplate({
@@ -343,6 +438,7 @@ export async function updateDocumentTemplate(ctx: OrgContext, input: DocumentTem
     footerNote: input.footerNote ?? '',
     footerLayout: input.footerLayout,
     showClassicPaper: input.showClassicPaper,
+    paperStyle: input.paperStyle,
     banks: input.banks
       .map((bank) => ({ name: bank.name ?? '', account: bank.account ?? '' }))
       .filter((bank) => bank.name || bank.account),

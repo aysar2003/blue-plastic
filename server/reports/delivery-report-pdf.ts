@@ -29,7 +29,8 @@ export function renderDeliveryReportPdf(input: {
   template?: DocumentTemplate | null
 }): Uint8Array {
   const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
-  const accent = merchantAccent(template)
+  const trade = template.paperStyle === 'trade'
+  const accent = trade ? merchantPdfInk() : merchantAccent(template)
   const inkColor = merchantPdfInk()
   const muted = merchantPdfMuted()
   const money = (value: string) => formatMoney(value, input.currency)
@@ -52,6 +53,7 @@ export function renderDeliveryReportPdf(input: {
       orgPhone: input.orgPhone,
       orgEmail: input.orgEmail,
       accent,
+      plain: trade,
     }),
   )
   line('DELIVERY REPORT', { bold: true, size: 14, height: 18, color: accent })

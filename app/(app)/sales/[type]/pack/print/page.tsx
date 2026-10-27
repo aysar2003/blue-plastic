@@ -30,7 +30,7 @@ export default async function SalesPackPrintPage({
   const [documents, organization, template] = await Promise.all([
     loadSalesPack(ctx, config.type, query),
     organizationService.get(ctx),
-    organizationService.getDocumentTemplate(ctx),
+    organizationService.getPrintTemplate(ctx),
   ])
 
   const paper = config.singular.toLowerCase()

@@ -7,6 +7,7 @@ import { DocumentForm } from '@/components/sales/document-form'
 import { toCalendarDate, today } from '@/lib/date'
 import { bySlug } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
+import { loadFormCustomization } from '@/server/services/form-customization'
 import { loadFormOptions } from '@/server/services/sales-options'
 import * as salesService from '@/server/services/sales.service'
 import * as storeService from '@/server/services/store.service'
@@ -41,11 +42,12 @@ export default async function EditSalesDocumentPage({
     stores: [] as Awaited<ReturnType<typeof storeService.quantities>>['stores'],
     byItem: {} as Awaited<ReturnType<typeof storeService.quantities>>['byItem'],
   }
-  const [document, options, neighbors, shelf] = await Promise.all([
+  const [document, options, neighbors, shelf, formCustomization] = await Promise.all([
     salesService.get(ctx, id),
     loadFormOptions(ctx, { includeOnHand: false }),
     salesService.neighbors(ctx, config.type, id),
     storeService.quantities(ctx).catch(() => emptyShelf),
+    loadFormCustomization(ctx, 'sales', config.type),
   ])
 
   if (document.type !== config.type) notFound()
@@ -101,6 +103,7 @@ export default async function EditSalesDocumentPage({
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}
+        formCustomization={formCustomization}
       />
       <ApprovalTrailPanel entityType="SALES_DOCUMENT" entityId={document.id} />
     </>

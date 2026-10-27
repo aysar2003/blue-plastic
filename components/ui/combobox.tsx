@@ -253,15 +253,28 @@ export function Combobox({
     }
   }, [open, place])
 
+  const needle = normalise(query.trim())
+  const showingAll =
+    !needle || (selected != null && normalise(selected.label) === needle)
+
   // Reset the highlight when the list changes, during render rather than in an
   // effect — an effect would paint the stale highlight once before correcting it.
   const listKey = `${open}|${query}`
   const [lastListKey, setLastListKey] = React.useState(listKey)
   if (listKey !== lastListKey) {
     setLastListKey(listKey)
-    // The match is the default, not "Add …", so Tab takes the name they started.
-    const preferred = rows.findIndex((row) => row.kind === 'option')
-    setActive(preferred < 0 ? 0 : preferred)
+    // Reopening a chosen name shows the whole list. Land on that row so the
+    // list does not jump back to the first name.
+    const selectedIndex = showingAll
+      ? rows.findIndex((row) => row.kind === 'option' && row.option.value === value)
+      : -1
+    if (selectedIndex >= 0) {
+      setActive(selectedIndex)
+    } else {
+      // The match is the default, not "Add …", so Tab takes the name they started.
+      const preferred = rows.findIndex((row) => row.kind === 'option')
+      setActive(preferred < 0 ? 0 : preferred)
+    }
   }
 
   const keyboardNav = React.useRef(false)
@@ -270,6 +283,11 @@ export function Combobox({
     keyboardNav.current = false
     listRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [active, open])
+
+  React.useLayoutEffect(() => {
+    if (!open || !value || !showingAll) return
+    listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+  }, [open, value, showingAll, rows.length])
 
   function openList() {
     if (disabled || open) return

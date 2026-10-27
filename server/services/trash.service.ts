@@ -304,8 +304,8 @@ async function formSnapshot(
       { label: 'Number', value: document.number },
       { label: 'Type', value: document.type },
       { label: 'Status', value: document.status },
-      { label: 'Vendor', value: document.vendor.displayName },
-      ...(document.vendor.email ? [{ label: 'Vendor email', value: document.vendor.email }] : []),
+      { label: 'Vendor', value: document.vendor?.displayName ?? '—' },
+      ...(document.vendor?.email ? [{ label: 'Vendor email', value: document.vendor.email }] : []),
       { label: 'Date', value: toCalendarDate(document.date) },
       ...(document.dueDate ? [{ label: 'Due date', value: toCalendarDate(document.dueDate) }] : []),
       ...document.lines.map((line, index) => ({
@@ -697,7 +697,7 @@ export async function renderPdf(
   const entry = presentTrashEntry(row)
   const [org, template] = await Promise.all([
     organizationService.get(ctx),
-    organizationService.getDocumentTemplate(ctx),
+    organizationService.getPrintTemplate(ctx),
   ])
   const company = letterheadOf(org)
   const letterhead = {
@@ -852,15 +852,15 @@ export async function renderPdf(
         createdAt: document.createdAt,
         timeZone: org.timeZone,
         dueDate: document.dueDate,
-        customerName: document.vendor.displayName,
+        customerName: document.vendor?.displayName ?? '—',
         customerAddress: [
-          document.vendor.billingLine1,
-          document.vendor.billingLine2,
-          document.vendor.billingCity,
-          document.vendor.billingRegion,
+          document.vendor?.billingLine1,
+          document.vendor?.billingLine2,
+          document.vendor?.billingCity,
+          document.vendor?.billingRegion,
         ].filter((part): part is string => Boolean(part)),
-        customerEmail: document.vendor.email,
-        customerPhone: document.vendor.phone,
+        customerEmail: document.vendor?.email ?? null,
+        customerPhone: document.vendor?.phone ?? null,
         reference: document.reference,
         paymentTerm: document.paymentTerm?.name ?? null,
         status: 'DELETED',

@@ -171,7 +171,7 @@ describe('thermal receipt', () => {
     expect(html).toContain('Fahad')
     expect(html).not.toContain('Cashier')
     expect(html).not.toContain('Register')
-    expect(html).toContain('2 x $20.00')
+    expect(html).toContain('2 Pcs x $20.00')
     expect(html).toContain('$46.00')
     expect(html).toMatch(/Cash<\/span><span[^>]*>\$50\.00/)
     expect(html).toMatch(/Change<\/span><span[^>]*>\$4\.00/)

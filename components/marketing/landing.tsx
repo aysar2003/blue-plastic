@@ -116,7 +116,7 @@ export function Landing({
   contact?: MarketingContact
 }) {
   const enterHref = signedIn ? '/dashboard' : '/register'
-  const enterLabel = signedIn ? 'Open your books' : 'Request a company'
+  const enterLabel = signedIn ? 'Open your books' : 'Start free trial'
 
   return (
     <WebsiteShell className="erp-landing min-h-screen bg-background text-[15px] leading-relaxed text-foreground">
@@ -425,8 +425,8 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <SectionHeading
           eyebrow="For companies"
-          title="Start with a free trial. Keep the company when rent is set."
-          body="Every new company on SOM ERP gets 14 days to run the books. After the trial, the system owner extends rent and seats. No card required on this page."
+          title="Start with a free trial. Pay rent online when you are ready."
+          body="Create a company in minutes — 14 days free. After the trial, pick a plan and pay by EVC, Zaad, eDahab, or bank. No phone call required."
         />
 
         <div className="mt-12 grid gap-6 lg:grid-cols-[1fr_1.1fr]">
@@ -437,8 +437,8 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
               </p>
               <h3 className="mt-2 text-xl font-bold text-foreground">14 days</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Full company database — sales, purchases, inventory, POS, and reports. Staff
-                lose open access when the trial ends until rent is extended.
+                Full company database — sales, purchases, inventory, POS, and reports. Sign in
+                right away after you create your company.
               </p>
               <ul className="mt-4 space-y-1.5 text-sm text-muted-foreground">
                 <li>· Separate books per company</li>
@@ -446,20 +446,20 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
                 <li>· Backup and restore</li>
               </ul>
               <div className="mt-5 flex flex-wrap gap-2">
+                <Link
+                  href={signedIn ? '/databases?create=1' : '/register'}
+                  className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                >
+                  {signedIn ? 'Create company' : 'Start free trial'}
+                </Link>
                 {!signedIn ? (
                   <Link
                     href={LOGIN_COMPANY}
-                    className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                    className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-medium text-foreground hover:bg-secondary"
                   >
-                    Start free trial
+                    Company login
                   </Link>
                 ) : null}
-                <Link
-                  href={signedIn ? '/databases?create=1' : '/register'}
-                  className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-medium text-foreground hover:bg-secondary"
-                >
-                  {signedIn ? 'Create company' : 'Request a company'}
-                </Link>
               </div>
             </article>
 
@@ -469,14 +469,26 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
               </p>
               <h3 className="mt-2 text-xl font-bold text-foreground">Paid rent</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Agree seats, apps, and an end date with the system owner. Upload the signed
-                agreement on the company card. When the agreement ends, the company can be
-                removed cleanly.
+                Choose a plan in Billing, pay by mobile money or bank, and submit your
+                transaction reference. When the system owner confirms, rent and seats extend
+                automatically.
               </p>
+              {signedIn ? (
+                <div className="mt-5">
+                  <Link
+                    href="/billing"
+                    className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-medium text-foreground hover:bg-secondary"
+                  >
+                    Open Billing
+                  </Link>
+                </div>
+              ) : null}
             </article>
           </div>
 
-          <PricingLeadForm />
+          <div className="space-y-4">
+            <PricingLeadForm />
+          </div>
         </div>
       </div>
     </section>
@@ -680,11 +692,11 @@ function Cta({ enterHref, enterLabel }: { enterHref: string; enterLabel: string 
               Get started
             </p>
             <h2 className="mt-3 text-[2rem] font-bold tracking-[-0.02em] text-foreground sm:text-[2.3rem]">
-              Request a company on {PRODUCT_NAME}.
+              Start a company on {PRODUCT_NAME}.
             </h2>
             <p className="mt-4 text-[16px] leading-[1.65] text-muted-foreground">
-              Outside businesses send a request. They cannot sign in until you approve them under
-              Databases. Each approved company gets its own apps, settings, users, and ledger.
+              Create your company, get 14 days free, and sign in immediately. Each company has its
+              own apps, settings, users, and ledger. After the trial, pay rent from Billing.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link

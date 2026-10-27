@@ -144,7 +144,11 @@ export function AssemblyBuildForm({
         </Field>
         <Field name="itemId" label="Assembly" required error={state.fieldErrors?.itemId}>
           <EntityPicker
-            options={assemblies.map((row) => ({ id: row.id, label: row.label }))}
+            options={[...assemblies]
+              .sort((a, b) =>
+                a.label.localeCompare(b.label, undefined, { sensitivity: 'base', numeric: true }),
+              )
+              .map((row) => ({ id: row.id, label: row.label }))}
             value={itemId || null}
             onChange={(next) => setItemId(next ?? '')}
             placeholder="Choose an assembly…"

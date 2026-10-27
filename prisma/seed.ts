@@ -35,6 +35,8 @@ const DEFAULT_PREFIX: Record<DocumentType, string> = {
   EXPENSE: 'EXP-',
   VENDOR_CREDIT: 'VC-',
   PURCHASE_ORDER: 'PO-',
+  PURCHASE_REQUEST: 'PR-',
+  RFQ: 'RFQ-',
   TRANSFER: 'TRF-',
   DEPOSIT: 'DEP-',
   INVENTORY_ADJUSTMENT: 'ADJ-',

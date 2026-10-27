@@ -7,6 +7,7 @@ import { BillForm } from '@/components/purchases/bill-form'
 import { toCalendarDate, today } from '@/lib/date'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { requireOrgContext } from '@/server/auth/context'
+import { loadFormCustomization } from '@/server/services/form-customization'
 import { loadPurchaseOptions } from '@/server/services/purchase-options'
 import * as purchaseService from '@/server/services/purchase.service'
 import * as storeService from '@/server/services/store.service'
@@ -27,11 +28,12 @@ export default async function EditPurchasePage({
   if (!config) notFound()
 
   const ctx = await requireOrgContext('bill:update')
-  const [document, options, neighbors, shelf] = await Promise.all([
+  const [document, options, neighbors, shelf, formCustomization] = await Promise.all([
     purchaseService.get(ctx, id),
     loadPurchaseOptions(ctx),
     purchaseService.neighbors(ctx, config.type, id),
     storeService.quantities(ctx),
+    loadFormCustomization(ctx, 'purchase', config.type),
   ])
 
   if (document.type !== config.type) notFound()
@@ -63,7 +65,7 @@ export default async function EditPurchasePage({
         documentNumber={document.number}
         document={{
           id: document.id,
-          vendorId: document.vendor.id,
+          vendorId: document.vendor?.id ?? '',
           date: toCalendarDate(document.date),
           reference: document.reference,
           memo: document.memo,
@@ -85,6 +87,7 @@ export default async function EditPurchasePage({
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}
+        formCustomization={formCustomization}
       />
       <ApprovalTrailPanel entityType="PURCHASE_DOCUMENT" entityId={document.id} />
     </>

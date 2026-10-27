@@ -365,6 +365,8 @@ export async function vendorStatement(
     VENDOR_CREDIT: 'vendor-credits',
     EXPENSE: 'expenses',
     PURCHASE_ORDER: 'purchase-orders',
+    PURCHASE_REQUEST: 'purchase-requests',
+    RFQ: 'rfqs',
   }
 
   const entries: Omit<VendorStatementEntry, 'balance'>[] = [
