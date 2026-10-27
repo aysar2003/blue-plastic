@@ -7,6 +7,8 @@ import { byType } from '@/lib/sales-types'
 import { getOrgContext } from '@/server/auth/context'
 import { isAppError, unauthenticated } from '@/server/errors'
 import { renderSalesDocumentPdf } from '@/server/reports/sales-document-pdf'
+import { renderAuthenticatedPagePdf } from '@/server/reports/screen-pdf'
+import * as approvalService from '@/server/services/approval.service'
 import * as organizationService from '@/server/services/organization.service'
 import * as portalService from '@/server/services/portal.service'
 import * as salesService from '@/server/services/sales.service'
@@ -37,6 +39,27 @@ export async function GET(
     portalService.assertInvoicePdfAccess(ctx, document.customer.id)
 
     const config = byType(document.type)
+    const origin = new URL(request.url).origin
+    const screen = await renderAuthenticatedPagePdf(
+      `${origin}/sales/${config.slug}/${id}/print`,
+      request.headers.get('cookie') ?? '',
+    )
+    if (screen && screen.length > 500) {
+      const filename = `${config.slug.replace(/s$/, '')}-${document.number
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')}.pdf`
+      return new NextResponse(screen, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Cache-Control': 'no-store',
+          'X-Paper': 'screen',
+        },
+      })
+    }
+
+    const approvals = await approvalService.latestApprovals(ctx.orgId, [id])
+    const approval = approvals.get(id) ?? null
     const company = letterheadOf(org)
     const currency = document.currencyCode || ctx.organization.baseCurrency
 
@@ -69,6 +92,8 @@ export async function GET(
       workSite: document.workSite || document.project?.siteLocation || null,
       status: document.status,
       createdByName: document.createdByName,
+      approvedByName: approval?.name ?? null,
+      approvedAt: approval?.at ?? null,
       hiddenMeta,
       currency,
       lines: document.lines.map((line) => ({

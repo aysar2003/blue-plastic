@@ -8,6 +8,7 @@ import {
   documentEmailBody,
   documentEmailSubject,
 } from '@/lib/document-email'
+import { documentStampLines } from '@/lib/document-stamp'
 import { formatMoney } from '@/lib/money'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -66,6 +67,12 @@ export default async function PrintPurchasePage({
       `Date: ${longDate(toCalendarDate(document.date), document.createdAt, organization.timeZone)}`,
       `Total: ${money(document.total)}`,
       document.balance && Number(document.balance) > 0 ? `Amount due: ${money(document.balance)}` : null,
+      ...documentStampLines({
+        createdBy: document.createdByName,
+        approvedBy: decision?.decidedBy.name,
+        approvedAt: decision?.decidedAt,
+        status: document.status,
+      }),
     ],
   })
 
@@ -99,7 +106,7 @@ export default async function PrintPurchasePage({
       <MerchantInvoice
         document={document}
         organization={organization}
-        template={template}
+        template={{ ...template, paperStyle: 'trade' }}
         config={config}
         baseCurrency={ctx.organization.baseCurrency}
         printedBy={ctx.user.name}

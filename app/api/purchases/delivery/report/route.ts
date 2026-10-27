@@ -5,6 +5,7 @@ import { parsePrintInk } from '@/lib/print-ink'
 import { requireOrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
 import { renderDeliveryReportPdf } from '@/server/reports/delivery-report-pdf'
+import { screenPaperResponse } from '@/server/reports/screen-pdf'
 import * as delivery from '@/server/services/delivery.service'
 import * as organizationService from '@/server/services/organization.service'
 
@@ -35,6 +36,14 @@ export async function GET(request: Request) {
         : filter === 'delivered'
           ? 'Delivered orders'
           : 'All purchase orders'
+
+    const origin = url.origin
+    const screen = await screenPaperResponse(
+      `${origin}/purchases/delivery/report${url.search}`,
+      request.headers.get('cookie') ?? '',
+      'delivery-report.pdf',
+    )
+    if (screen) return screen
 
     const company = letterheadOf(org)
     const bytes = renderDeliveryReportPdf({

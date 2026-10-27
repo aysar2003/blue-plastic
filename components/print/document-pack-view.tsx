@@ -34,6 +34,7 @@ export function DocumentPackView({
   vendorPaper = false,
   emptyHref,
   emptyLabel,
+  approvals,
 }: {
   documents: Parameters<typeof MerchantInvoice>[0]['document'][]
   organization: LetterheadSource & { timeZone?: string | null; taxRegistrationNumber?: string | null; name: string; legalName?: string | null }
@@ -51,6 +52,7 @@ export function DocumentPackView({
   vendorPaper?: boolean
   emptyHref: string
   emptyLabel: string
+  approvals?: Record<string, { name: string; at: Date }>
 }) {
   const currency = documents[0]?.currencyCode || baseCurrency
   const running = runningTotals ? runningQuotationTotals(documents.map((row) => row.total)) : []
@@ -135,6 +137,7 @@ export function DocumentPackView({
                     : null
                 }
                 words={vendorPaper ? VENDOR_WORDS : undefined}
+                approval={approvals?.[document.id] ?? null}
               />
             </section>
           ))}

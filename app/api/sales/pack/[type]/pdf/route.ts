@@ -7,6 +7,8 @@ import { isProposal, bySlug } from '@/lib/sales-types'
 import { getOrgContext } from '@/server/auth/context'
 import { isAppError, unauthenticated } from '@/server/errors'
 import { renderDocumentPackPdf, salesDetailToPdfInput } from '@/server/reports/sales-document-pdf'
+import { screenPaperResponse } from '@/server/reports/screen-pdf'
+import * as approvalService from '@/server/services/approval.service'
 import * as organizationService from '@/server/services/organization.service'
 import { loadSalesPack } from '@/server/services/document-pack.service'
 
@@ -37,6 +39,14 @@ export async function GET(
     ])
 
     const company = letterheadOf(org)
+    const origin = new URL(request.url).origin
+    const screen = await screenPaperResponse(
+      `${origin}/sales/${config.slug}/pack/print${url.search}`,
+      request.headers.get('cookie') ?? '',
+      `${config.slug}-pack.pdf`,
+    )
+    if (screen) return screen
+
     const shared = {
       ink,
       template,
@@ -46,11 +56,23 @@ export async function GET(
       orgEmail: company.email,
       timeZone: org.timeZone,
     }
+    const approvals = await approvalService.latestApprovals(
+      ctx.orgId,
+      documents.map((document) => document.id),
+    )
     const bytes = renderDocumentPackPdf({
       ink,
       runningTotals: isProposal(config.type),
       documents: documents.map((document) =>
-        salesDetailToPdfInput(document, shared, { hiddenMeta }),
+        salesDetailToPdfInput(
+          {
+            ...document,
+            approvedByName: approvals.get(document.id)?.name ?? null,
+            approvedAt: approvals.get(document.id)?.at ?? null,
+          },
+          shared,
+          { hiddenMeta },
+        ),
       ),
     })
 

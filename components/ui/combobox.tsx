@@ -6,7 +6,7 @@ import type { AccountType } from '@prisma/client'
 import { CheckIcon, ChevronDownIcon, PlusIcon } from 'lucide-react'
 
 import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
-import { focusNextField } from '@/lib/keyboard'
+import { focusNextField, moveInLineGrid } from '@/lib/keyboard'
 import { cn } from '@/lib/utils'
 
 /**
@@ -302,6 +302,14 @@ export function Combobox({
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (!open) {
+      const vertical = event.key === 'ArrowDown' || event.key === 'ArrowUp'
+      const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
+      // Down still opens the list when nothing is chosen. Once a name is set,
+      // the arrows move between the line cells.
+      if ((horizontal || (vertical && value)) && inputRef.current && moveInLineGrid(inputRef.current, event.key)) {
+        event.preventDefault()
+        return
+      }
       if (event.key === 'ArrowDown') {
         event.preventDefault()
         openList()

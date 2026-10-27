@@ -1,5 +1,8 @@
 import 'server-only'
 
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
+
 import { accountOptions, MONEY_SUBTYPES } from '@/lib/account-options'
 import { Decimal } from '@/lib/money'
 import { positionsOf } from '@/server/accounting/inventory'
@@ -19,14 +22,41 @@ import { listForPicker as listProjects } from '@/server/services/project.service
  * when the page already loads store shelves (`storeService.quantities`); that
  * duplicate scan was pushing edit/new past Vercel's 10s limit.
  */
-export async function loadFormOptions(
+export function loadFormOptions(
   ctx: OrgContext,
   options: { includeOnHand?: boolean } = {},
 ) {
   const includeOnHand = options.includeOnHand !== false
+  return cachedFormOptions(
+    ctx.orgId,
+    ctx.features.enableTax,
+    includeOnHand,
+    ctx.permissions.has('project:read'),
+  )
+}
+
+const cachedFormOptions = cache(
+  (orgId: string, enableTax: boolean, includeOnHand: boolean, canReadProjects: boolean) =>
+    unstable_cache(
+      () => queryFormOptions(orgId, enableTax, includeOnHand, canReadProjects),
+      ['sales-form-options-v1', orgId, String(enableTax), String(includeOnHand), String(canReadProjects)],
+      { revalidate: 30 },
+    )(),
+)
+
+async function queryFormOptions(
+  orgId: string,
+  enableTax: boolean,
+  includeOnHand: boolean,
+  canReadProjects: boolean,
+) {
+  const ctx = {
+    orgId,
+    permissions: new Set(canReadProjects ? ['project:read'] : []),
+  } as OrgContext
   const [customers, items, taxCodes, chart, terms, projects] = await Promise.all([
     db.customer.findMany({
-      where: { orgId: ctx.orgId, isActive: true },
+      where: { orgId, isActive: true },
       select: {
         id: true,
         displayName: true,
@@ -51,7 +81,7 @@ export async function loadFormOptions(
     // items out of the picker is what made them unsellable.
     // BOM members only for GROUP rows — loading them on every item doubled the query.
     db.item.findMany({
-      where: { orgId: ctx.orgId, isActive: true },
+      where: { orgId, isActive: true },
       select: {
         id: true, name: true, sku: true, barcode: true, salesPrice: true, type: true,
         unitOfMeasure: true,
@@ -79,7 +109,7 @@ export async function loadFormOptions(
       orderBy: { name: 'asc' },
     }),
     db.taxCode.findMany({
-      where: { orgId: ctx.orgId, isActive: true },
+      where: { orgId, isActive: true },
       select: {
         id: true, name: true, isInclusive: true,
         components: { select: { taxRate: { select: { rate: true } } } },
@@ -90,7 +120,7 @@ export async function loadFormOptions(
     // balancesAsOf across the whole chart is what made edit/new time out on Vercel.
     selectableAccounts(ctx, { withBalances: false }),
     db.paymentTerm.findMany({
-      where: { orgId: ctx.orgId, isActive: true },
+      where: { orgId, isActive: true },
       select: { id: true, name: true, type: true, dueDays: true },
       orderBy: [{ isDefault: 'desc' }, { dueDays: 'asc' }],
     }),
@@ -105,7 +135,7 @@ export async function loadFormOptions(
         .map((item) => item.id)
     : []
   const positions = includeOnHand
-    ? await positionsOf(db as unknown as Tx, ctx.orgId, trackedIds)
+    ? await positionsOf(db as unknown as Tx, orgId, trackedIds)
     : new Map()
 
   return {
@@ -139,7 +169,7 @@ export async function loadFormOptions(
       unitOfMeasure: item.unitOfMeasure,
       price: item.salesPrice?.toString() ?? null,
       description: item.salesDescription ?? item.description ?? item.name,
-      taxCodeId: ctx.features.enableTax ? item.salesTaxCodeId : null,
+      taxCodeId: enableTax ? item.salesTaxCodeId : null,
       type: item.type,
       group: ITEM_GROUPS[item.type],
       onHand:
@@ -159,12 +189,12 @@ export async function loadFormOptions(
                   row.component.salesDescription ??
                   row.component.description ??
                   row.component.name,
-                taxCodeId: ctx.features.enableTax ? row.component.salesTaxCodeId : null,
+                taxCodeId: enableTax ? row.component.salesTaxCodeId : null,
                 type: row.component.type,
               }))
           : undefined,
     })),
-    taxCodes: ctx.features.enableTax
+    taxCodes: enableTax
       ? taxCodes.map((code) => ({
           id: code.id,
           label: code.name,

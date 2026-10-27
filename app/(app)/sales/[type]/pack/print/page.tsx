@@ -5,6 +5,7 @@ import { listExportHref } from '@/lib/document-pack'
 import { isProposal, bySlug, byType } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
 import * as organizationService from '@/server/services/organization.service'
+import * as approvalService from '@/server/services/approval.service'
 import { loadSalesPack } from '@/server/services/document-pack.service'
 
 export const metadata = { title: 'Print papers' }
@@ -33,6 +34,10 @@ export default async function SalesPackPrintPage({
     organizationService.getPrintTemplate(ctx),
   ])
 
+  const approvals = await approvalService.latestApprovals(
+    ctx.orgId,
+    documents.map((row) => row.id),
+  )
   const paper = config.singular.toLowerCase()
   const filename = `${config.slug}-pack.pdf`
   const queryString = query.toString()
@@ -54,6 +59,7 @@ export default async function SalesPackPrintPage({
       runningTotals={isProposal(config.type)}
       emptyHref={`/sales/${config.slug}`}
       emptyLabel={`Back to ${config.plural.toLowerCase()}`}
+      approvals={Object.fromEntries(approvals)}
     />
   )
 }

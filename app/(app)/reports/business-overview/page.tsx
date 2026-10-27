@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { PageHeader } from '@/components/data/page-header'
+import { OverviewPeriod } from '@/components/reports/overview-period'
 import { AccessDenied } from '@/components/system/access-denied'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { canViewBusinessOverview } from '@/lib/business-overview-access'
@@ -28,12 +29,21 @@ function changeText(value: string | null, prior: string) {
   return `${direction} ${Math.abs(amount)}% from ${prior}`
 }
 
-export default async function BusinessOverviewPage() {
+export default async function BusinessOverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>
+}) {
   const ctx = await requireOrgContext()
   if (!canViewBusinessOverview(ctx.permissions)) {
     return <AccessDenied section="Business overview" />
   }
-  const overview = await businessOverview(ctx)
+  const { month: requestedMonth } = await searchParams
+  const overview = await businessOverview(ctx, requestedMonth)
+  const currentYear = Number(overview.now.slice(0, 4))
+  const years = Array.from({ length: 16 }, (_, index) => currentYear - index)
+  const monthLabel = formatDate(overview.lastMonth.from).replace(/ \d+,/, '')
+  const periodQuery = `period=custom&from=${overview.lastMonth.from}&to=${overview.lastMonth.to}`
   const currency = ctx.organization.baseCurrency
   const money = (value: string) => formatMoney(value, currency)
   const peak = Math.max(
@@ -73,139 +83,47 @@ export default async function BusinessOverviewPage() {
         })}
       </nav>
 
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <OverviewPeriod month={overview.month} years={years} />
+      </div>
+
       <PageHeader
         organization={ctx.organization}
         title="Business overview"
         description={`${ctx.organization.name} · figures from the ledger as at ${formatDate(overview.now)}.`}
       />
 
-      {/* Overview tiles first — P&L / expenses / invoices / sales stay above the fold. */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Profit & loss</CardTitle>
-            <span className="text-xs text-muted-foreground">Last month</span>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              Net profit for {formatDate(overview.lastMonth.from).replace(/ \d+,/, '')}
-            </p>
-            <p className="text-2xl font-semibold tabular">{money(overview.profit.net)}</p>
-            <p className="text-sm text-primary">{changeText(overview.profit.change, 'the prior month')}</p>
-            <div className="mt-4 space-y-2 text-sm">
-              <Bar label="Income" amount={overview.profit.income} currency={currency} tone="bg-primary" />
-              <Bar label="Expenses" amount={overview.profit.expenses} currency={currency} tone="bg-foreground/70" />
-            </div>
-            <Link href="/reports/profit-loss?period=last-month" className="mt-3 inline-block text-sm text-primary hover:underline">
-              See profit and loss report
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Expenses</CardTitle>
-            <span className="text-xs text-muted-foreground">Last 30 days</span>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Spending for last 30 days</p>
-            <p className="text-2xl font-semibold tabular">{money(overview.spending.total)}</p>
-            <p className="text-sm text-primary">{changeText(overview.spending.change, 'the prior 30 days')}</p>
-            <div className="mt-4 flex items-center gap-4">
-              <div
-                className="size-24 shrink-0 rounded-full"
-                style={{
-                  background: `conic-gradient(var(--primary) 0 ${costShare}%, var(--foreground) ${costShare}% 100%)`,
-                }}
-                role="img"
-                aria-label={`Cost of sales ${money(overview.spending.costOfSales)}, other ${money(overview.spending.other)}`}
-              />
-              <ul className="space-y-1 text-sm">
-                <li>Cost of sales {money(overview.spending.costOfSales)}</li>
-                <li>Other expense {money(overview.spending.other)}</li>
-              </ul>
-            </div>
-            <Link href="/purchases/expenses?date=last12" className="mt-3 inline-block text-sm text-primary hover:underline">
-              View all spending
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Invoices</CardTitle>
-            <span className="text-xs text-muted-foreground">Last 365 days</span>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-2xl font-semibold tabular">{money(overview.invoices.unpaid)}</p>
-            <p className="text-xs text-muted-foreground">Unpaid</p>
-            <div className="h-3 overflow-hidden rounded-full bg-muted">
-              <div className="h-full bg-destructive" style={{ width: `${overdueShare}%` }} />
-            </div>
-            <p className="text-xs text-muted-foreground">Overdue {money(overview.invoices.overdue)}</p>
-            <p className="text-sm">Paid last 30 days {money(overview.invoices.paid)}</p>
-            <div className="grid grid-cols-2 overflow-hidden rounded-md text-center text-xs text-primary-foreground">
-              <div className="bg-primary/80 px-2 py-2" style={{ width: `${Math.max(depositedShare, 8)}%` }}>
-                Deposited
-              </div>
-              <div className="bg-foreground/80 px-2 py-2">Not deposited</div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Not deposited {money(overview.invoices.notDeposited)} · Deposited {money(overview.invoices.deposited)}
-            </p>
-            <Link href="/reports/open-invoices" className="inline-block text-sm text-primary hover:underline">
-              Open invoices
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card className="md:col-span-2 xl:col-span-3">
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Sales</CardTitle>
-            <span className="text-xs text-muted-foreground">Last month</span>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Total amount</p>
-            <p className="text-2xl font-semibold tabular">{money(overview.sales.total)}</p>
-            <div className="mt-4 flex h-24 items-end gap-px">
-              {overview.sales.days.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No sales last month.</p>
-              ) : (
-                overview.sales.days.map((day) => (
-                  <div
-                    key={day.day}
-                    title={`${day.day} ${money(day.amount)}`}
-                    className="flex-1 rounded-sm bg-primary"
-                    style={{ height: `${Math.max(4, (Number(day.amount) / salesPeak) * 100)}%` }}
-                  />
-                ))
-              )}
-            </div>
-            <Link href="/reports/sales-by-customer?period=last-month" className="mt-3 inline-block text-sm text-primary hover:underline">
-              Sales by customer
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Cash and bank sit below the trading overview. */}
-      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+      <div className="flex flex-col">
+      <div className="order-2 mt-4 grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Cash flow</CardTitle>
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cash flow · {overview.year}</CardTitle>
             <p className="text-base font-medium">Track how your money is doing</p>
+            <p className="text-sm text-muted-foreground">
+              Each bar is the net movement in bank accounts and undeposited funds for that month of {overview.year}.
+            </p>
+            <ul className="mt-1 flex flex-wrap gap-4 text-xs text-muted-foreground">
+              <li className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-sm bg-primary" />
+                Money in
+              </li>
+              <li className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-sm bg-destructive" />
+                Money out
+              </li>
+            </ul>
           </CardHeader>
           <CardContent>
             {overview.hasBank ? (
-              <div className="flex h-36 items-end gap-1">
+              <div className="flex h-40 items-end gap-2 border-b border-border pb-1">
                 {overview.cashMonths.map((month) => {
                   const value = Number(month.amount)
-                  const height = Math.max(2, (Math.abs(value) / peak) * 100)
+                  const height = Math.max(4, (Math.abs(value) / peak) * 100)
                   return (
-                    <div key={month.label} className="flex flex-1 flex-col items-center gap-1">
+                    <div key={month.label} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
                       <div
                         title={`${month.label} ${money(month.amount)}`}
-                        className={cn('w-full rounded-sm', value < 0 ? 'bg-destructive/70' : 'bg-primary')}
+                        className={cn('w-full max-w-8 rounded-sm', value < 0 ? 'bg-destructive' : 'bg-primary')}
                         style={{ height: `${height}%` }}
                       />
                       <span className="text-[0.65rem] text-muted-foreground">{month.label}</span>
@@ -214,14 +132,19 @@ export default async function BusinessOverviewPage() {
                 })}
               </div>
             ) : (
-              <p className="py-8 text-center text-sm text-muted-foreground">
+              <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border text-sm text-muted-foreground">
+                <div className="flex w-full items-end justify-between gap-1 px-2 opacity-40" aria-hidden>
+                  {overview.cashMonths.map((month) => (
+                    <span key={month.label} className="h-1 flex-1 rounded-sm bg-primary" />
+                  ))}
+                </div>
                 <Link href="/banking/import" className="font-medium text-primary hover:underline">
                   Link your bank to see cash flow
                 </Link>
-              </p>
+              </div>
             )}
             <p className="mt-3 text-center text-sm">
-              <Link href={`/reports/cash-flow?period=this-fiscal-year`} className="text-primary hover:underline">
+              <Link href="/reports/cash-flow?period=this-fiscal-year" className="text-primary hover:underline">
                 Open the statement of cash flows
               </Link>
             </p>
@@ -230,13 +153,15 @@ export default async function BusinessOverviewPage() {
 
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Bank accounts</CardTitle>
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bank accounts</CardTitle>
             <span className="text-xs text-muted-foreground">As of today</span>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-2xl font-semibold tabular">{money(overview.bankTotal)}</p>
-            <p className="text-xs text-muted-foreground">Total bank and undeposited funds</p>
-            <ul className="space-y-2">
+            <div>
+              <p className="text-xs text-muted-foreground">Total bank balance</p>
+              <p className="text-2xl font-semibold tabular">{money(overview.bankTotal)}</p>
+            </div>
+            <ul className="space-y-2 border-t border-border pt-3">
               {overview.banks.length === 0 ? (
                 <li className="text-sm text-muted-foreground">No bank accounts on the chart.</li>
               ) : (
@@ -255,6 +180,124 @@ export default async function BusinessOverviewPage() {
             </Link>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="order-1 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Profit & loss</CardTitle>
+            <span className="text-xs text-muted-foreground">{monthLabel}</span>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Net profit for {monthLabel}
+            </p>
+            <p className="text-2xl font-semibold tabular">{money(overview.profit.net)}</p>
+            <p className="text-sm text-primary">{changeText(overview.profit.change, 'the prior month')}</p>
+            <div className="mt-4 space-y-2 text-sm">
+              <Bar label="Income" amount={overview.profit.income} currency={currency} tone="bg-primary" />
+              <Bar label="Expenses" amount={overview.profit.expenses} currency={currency} tone="bg-foreground/70" />
+            </div>
+            <Link href={`/reports/profit-loss?${periodQuery}`} className="mt-3 inline-block text-sm text-primary hover:underline">
+              See profit and loss report
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Expenses</CardTitle>
+            <span className="text-xs text-muted-foreground">{monthLabel}</span>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">Spending for {monthLabel}</p>
+            <p className="text-2xl font-semibold tabular">{money(overview.spending.total)}</p>
+            <p className="text-sm text-primary">{changeText(overview.spending.change, 'the prior month')}</p>
+            <div className="mt-4 flex items-center gap-4">
+              <div
+                className="grid size-24 shrink-0 place-items-center rounded-full"
+                style={{
+                  background: `conic-gradient(var(--primary) 0 ${costShare}%, color-mix(in srgb, var(--foreground) 55%, var(--muted)) ${costShare}% 100%)`,
+                }}
+                role="img"
+                aria-label={`Cost of sales ${money(overview.spending.costOfSales)}, other ${money(overview.spending.other)}`}
+              >
+                <span className="size-12 rounded-full bg-card" />
+              </div>
+              <ul className="space-y-1 text-sm">
+                <li className="flex items-center gap-2">
+                  <span className="size-2 rounded-full bg-primary" />
+                  Cost of sales {money(overview.spending.costOfSales)}
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="size-2 rounded-full bg-foreground/55" />
+                  Other expense {money(overview.spending.other)}
+                </li>
+              </ul>
+            </div>
+            <Link href="/purchases/expenses?date=last12" className="mt-3 inline-block text-sm text-primary hover:underline">
+              View all spending
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Invoices</CardTitle>
+            <span className="text-xs text-muted-foreground">{overview.year}</span>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-2xl font-semibold tabular">{money(overview.invoices.unpaid)}</p>
+            <p className="text-xs text-muted-foreground">Unpaid</p>
+            <div className="h-3 overflow-hidden rounded-sm bg-muted">
+              <div className="h-full bg-destructive" style={{ width: `${Math.max(overdueShare, unpaid.isZero() ? 0 : 4)}%` }} />
+            </div>
+            <p className="text-xs text-muted-foreground">Overdue {money(overview.invoices.overdue)}</p>
+            <p className="text-sm">Paid in {monthLabel} {money(overview.invoices.paid)}</p>
+            <div className="flex h-8 overflow-hidden rounded-sm text-[0.65rem] text-primary-foreground">
+              <div className="bg-primary" style={{ width: `${Math.max(depositedShare, paid.isZero() ? 50 : 8)}%` }} />
+              <div className="flex-1 bg-foreground/75" />
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Not deposited {money(overview.invoices.notDeposited)}</span>
+              <span>Deposited {money(overview.invoices.deposited)}</span>
+            </div>
+            <Link href="/reports/open-invoices" className="inline-block text-sm text-primary hover:underline">
+              Open invoices
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sales</CardTitle>
+            <span className="text-xs text-muted-foreground">{monthLabel}</span>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">Total amount</p>
+            <p className="text-2xl font-semibold tabular">{money(overview.sales.total)}</p>
+            <div className="relative mt-4 h-28">
+              {overview.sales.days.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No sales last month.</p>
+              ) : (
+                <div className="flex h-full items-end gap-px">
+                  {overview.sales.days.map((day) => (
+                    <div
+                      key={day.day}
+                      title={`${day.day} ${money(day.amount)}`}
+                      className="w-1.5 rounded-full bg-primary"
+                      style={{ height: `${Math.max(8, (Number(day.amount) / salesPeak) * 100)}%` }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <Link href={`/reports/sales-by-customer?${periodQuery}`} className="mt-3 inline-block text-sm text-primary hover:underline">
+              Sales by customer
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
       </div>
     </>
   )

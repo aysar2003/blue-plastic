@@ -1,6 +1,9 @@
 import 'server-only'
 
-import { addDays, addMonths, clockInZone, endOfMonth, startOfMonth, toDate, today, type CalendarDate } from '@/lib/date'
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
+
+import { addMonths, clockInZone, endOfMonth, isCalendarDate, startOfMonth, toDate, today, type CalendarDate } from '@/lib/date'
 import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -18,23 +21,44 @@ function changePercent(current: Decimal, prior: Decimal): string | null {
  * The business overview cards. Every figure is read from the ledger or from the
  * documents that posted to it.
  */
-export async function businessOverview(ctx: OrgContext) {
+/** `YYYY-MM`, clamped so it is a real month and not after the current one. */
+export function overviewMonth(requested: string | undefined, now: CalendarDate): CalendarDate {
+  const fallback = startOfMonth(addMonths(startOfMonth(now), -1))
+  if (!requested || !/^\d{4}-\d{2}$/.test(requested)) return fallback
+  const candidate = `${requested}-01`
+  if (!isCalendarDate(candidate)) return fallback
+  const current = startOfMonth(now)
+  return candidate > current ? current : candidate
+}
+
+export function businessOverview(ctx: OrgContext, requestedMonth?: string) {
   assertPermission(ctx, 'report:overview')
   const now = today(ctx.organization.timeZone)
-  const nowTime = clockInZone(new Date(), ctx.organization.timeZone)
-  const year = now.slice(0, 4)
+  const month = overviewMonth(requestedMonth, now).slice(0, 7)
+  return cachedOverview(ctx.orgId, ctx.organization.timeZone, ctx.organization.baseCurrency, month)
+}
+
+const cachedOverview = cache((orgId: string, timeZone: string, currency: string, month: string) =>
+  unstable_cache(
+    () => queryBusinessOverview(orgId, timeZone, currency, month),
+    ['business-overview-v1', orgId, timeZone, month],
+    { revalidate: 60 },
+  )(),
+)
+
+async function queryBusinessOverview(orgId: string, timeZone: string, _currency: string, month: string) {
+  const ctx = { orgId, organization: { timeZone, baseCurrency: _currency }, permissions: new Set(['report:overview']) } as OrgContext
+  const now = today(timeZone)
+  const nowTime = clockInZone(new Date(), timeZone)
+  const monthStart = overviewMonth(month, now)
+  const monthEnd = endOfMonth(monthStart)
+  const priorMonthStart = startOfMonth(addMonths(monthStart, -1))
+  const priorMonthEnd = endOfMonth(priorMonthStart)
+  const year = monthStart.slice(0, 4)
   const yearStart = `${year}-01-01`
   const yearEnd = `${year}-12-31`
-  const lastMonthStart = startOfMonth(addMonths(startOfMonth(now), -1))
-  const lastMonthEnd = endOfMonth(lastMonthStart)
-  const priorMonthStart = startOfMonth(addMonths(lastMonthStart, -1))
-  const priorMonthEnd = endOfMonth(priorMonthStart)
-  const last30From = addDays(now, -29)
-  const prior30To = addDays(last30From, -1)
-  const prior30From = addDays(prior30To, -29)
-  const last365From = addDays(now, -364)
 
-  const [movement, lastPnL, priorPnL, recentPnL, priorRecentPnL, banks, invoiceRow, paymentRow, salesDays] =
+  const [movement, lastPnL, priorPnL, banks, invoiceRow, paymentRow, salesDays] =
     await Promise.all([
       db.$queryRaw<{ month: string; movement: string }[]>`
         SELECT to_char(j.date, 'YYYY-MM') AS month,
@@ -49,10 +73,8 @@ export async function businessOverview(ctx: OrgContext) {
            AND j.date BETWEEN ${toDate(yearStart)} AND ${toDate(yearEnd)}
          GROUP BY 1
       `,
-      profitAndLoss(ctx.orgId, { from: lastMonthStart, to: lastMonthEnd, basis: 'accrual' }),
+      profitAndLoss(ctx.orgId, { from: monthStart, to: monthEnd, basis: 'accrual' }),
       profitAndLoss(ctx.orgId, { from: priorMonthStart, to: priorMonthEnd, basis: 'accrual' }),
-      profitAndLoss(ctx.orgId, { from: last30From, to: now, basis: 'accrual' }),
-      profitAndLoss(ctx.orgId, { from: prior30From, to: prior30To, basis: 'accrual' }),
       bankAccounts(ctx),
       db.$queryRaw<{ unpaid: string; overdue: string }[]>`
         SELECT COALESCE(SUM(d.total - COALESCE(a.applied, 0)), 0)::text AS unpaid,
@@ -73,14 +95,16 @@ export async function businessOverview(ctx: OrgContext) {
                  ELSE 0 END), 0)::text AS overdue
           FROM sales_documents d
           JOIN customers c ON c.id = d."customerId"
-          LEFT JOIN LATERAL (
-            SELECT SUM(amount) AS applied FROM sales_applications WHERE "invoiceId" = d.id
-          ) a ON true
+          LEFT JOIN (
+            SELECT "invoiceId", SUM(amount) AS applied
+              FROM sales_applications
+             GROUP BY "invoiceId"
+          ) a ON a."invoiceId" = d.id
          WHERE d."orgId" = ${ctx.orgId}
            AND d.type = 'INVOICE'
            AND d.status IN ('OPEN', 'PARTIAL')
            AND d."deletedAt" IS NULL
-           AND d.date BETWEEN ${toDate(last365From)} AND ${toDate(now)}
+           AND d.date BETWEEN ${toDate(yearStart)} AND ${toDate(yearEnd)}
       `,
       db.$queryRaw<{ paid: string; undeposited: string; deposited: string }[]>`
         SELECT COALESCE(SUM(p.amount), 0)::text AS paid,
@@ -91,7 +115,7 @@ export async function businessOverview(ctx: OrgContext) {
          WHERE p."orgId" = ${ctx.orgId}
            AND p."deletedAt" IS NULL
            AND p.status NOT IN ('VOID', 'DRAFT')
-           AND p.date BETWEEN ${toDate(last30From)} AND ${toDate(now)}
+           AND p.date BETWEEN ${toDate(monthStart)} AND ${toDate(monthEnd)}
       `,
       db.$queryRaw<{ day: string; amount: string }[]>`
         SELECT to_char(d.date, 'YYYY-MM-DD') AS day,
@@ -101,7 +125,7 @@ export async function businessOverview(ctx: OrgContext) {
            AND d."deletedAt" IS NULL
            AND d.status NOT IN ('DRAFT', 'VOID')
            AND d.type IN ('INVOICE', 'SALES_RECEIPT', 'CREDIT_MEMO', 'REFUND_RECEIPT')
-           AND d.date BETWEEN ${toDate(lastMonthStart)} AND ${toDate(lastMonthEnd)}
+           AND d.date BETWEEN ${toDate(monthStart)} AND ${toDate(monthEnd)}
          GROUP BY d.date
          ORDER BY d.date
       `,
@@ -116,8 +140,8 @@ export async function businessOverview(ctx: OrgContext) {
   const section = (report: typeof lastPnL, key: string) =>
     report.sections.find((item) => item.key === key)?.total ?? ZERO
 
-  const spending = section(recentPnL, 'cogs').plus(section(recentPnL, 'expenses')).plus(section(recentPnL, 'otherExpense'))
-  const costOfSales = section(recentPnL, 'cogs')
+  const spending = section(lastPnL, 'cogs').plus(section(lastPnL, 'expenses')).plus(section(lastPnL, 'otherExpense'))
+  const costOfSales = section(lastPnL, 'cogs')
   const otherExpense = spending.minus(costOfSales)
 
   const invoices = invoiceRow[0] ?? { unpaid: '0', overdue: '0' }
@@ -136,9 +160,9 @@ export async function businessOverview(ctx: OrgContext) {
   return {
     now,
     year,
-    lastMonth: { from: lastMonthStart, to: lastMonthEnd },
+    month: monthStart.slice(0, 7),
+    lastMonth: { from: monthStart, to: monthEnd },
     priorMonth: { from: priorMonthStart, to: priorMonthEnd },
-    last30: { from: last30From, to: now },
     cashMonths,
     hasBank: banks.some((account) => account.subtype === 'BANK'),
     banks: bankList,
@@ -161,9 +185,9 @@ export async function businessOverview(ctx: OrgContext) {
       other: toMoneyString(otherExpense, 2),
       change: changePercent(
         spending,
-        section(priorRecentPnL, 'cogs')
-          .plus(section(priorRecentPnL, 'expenses'))
-          .plus(section(priorRecentPnL, 'otherExpense')),
+        section(priorPnL, 'cogs')
+          .plus(section(priorPnL, 'expenses'))
+          .plus(section(priorPnL, 'otherExpense')),
       ),
     },
     invoices: {

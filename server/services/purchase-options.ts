@@ -73,7 +73,7 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
       },
       orderBy: { name: 'asc' },
     }),
-    selectableAccounts(ctx, { withBalances: true }),
+    selectableAccounts(ctx, { withBalances: false }),
     db.paymentTerm.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: { id: true, name: true, type: true, dueDays: true },
@@ -142,7 +142,7 @@ export async function loadPurchaseOptions(ctx: OrgContext) {
     // Where the money left from, on an expense. Bank and credit card lead.
     paymentAccounts: accountOptions(chart, {
       prefer: ['BANK', 'CREDIT_CARD', 'UNDEPOSITED_FUNDS', 'OTHER_CURRENT_ASSET'],
-      showBalance: true,
+      showBalance: false,
     }),
     // Where a cost lands. Expenses lead, then the rest of the chart — a bill can
     // legitimately capitalise into a fixed asset or settle a liability.

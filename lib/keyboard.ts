@@ -111,3 +111,69 @@ export function focusNextInGrid(from: HTMLElement) {
   if (from.tagName === 'BUTTON' && from.getAttribute('role') !== 'combobox') return false
   return focusNextField(from, 1)
 }
+
+function lineCells(row: HTMLElement) {
+  return [...row.querySelectorAll<HTMLElement>('input, select, textarea')].filter(isFocusable)
+}
+
+function focusCell(node: HTMLElement) {
+  node.focus()
+  if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) node.select?.()
+}
+
+/**
+ * Left and right stay inside a word until the caret is at the edge, or the
+ * whole value is selected (the state a cell is in right after it is focused).
+ * Up and down always change rows.
+ */
+function canLeaveHorizontally(from: HTMLElement, key: 'ArrowLeft' | 'ArrowRight') {
+  if (!(from instanceof HTMLInputElement || from instanceof HTMLTextAreaElement)) return true
+  if (from.readOnly) return true
+  const start = from.selectionStart
+  const end = from.selectionEnd
+  if (start == null || end == null) return true
+  if (start === 0 && end === from.value.length) return true
+  if (key === 'ArrowLeft') return start === 0 && end === 0
+  return start === from.value.length && end === from.value.length
+}
+
+/**
+ * Arrow keys inside a sales or purchase line table move between the cells,
+ * the way a spreadsheet does. A select still uses up and down to change its
+ * option. An open item list keeps the arrows for itself.
+ */
+export function moveInLineGrid(
+  from: HTMLElement,
+  key: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight',
+) {
+  const table = from.closest('form table')
+  if (!table) return false
+  if (from.closest('[aria-expanded="true"]')) return false
+  if (from.tagName === 'TEXTAREA') return false
+  if (from.tagName === 'SELECT' && (key === 'ArrowUp' || key === 'ArrowDown')) return false
+
+  const row = from.closest('tr')
+  if (!row) return false
+  const cells = lineCells(row)
+  const index = cells.indexOf(from)
+  if (index < 0) return false
+
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    if (!canLeaveHorizontally(from, key)) return false
+    const next = cells[index + (key === 'ArrowRight' ? 1 : -1)]
+    if (!next) return false
+    focusCell(next)
+    return true
+  }
+
+  const rows = [...table.querySelectorAll('tbody tr')].filter((candidate) => lineCells(candidate).length > 0)
+  const rowIndex = rows.indexOf(row)
+  if (rowIndex < 0) return false
+  const targetRow = rows[rowIndex + (key === 'ArrowDown' ? 1 : -1)]
+  if (!targetRow) return false
+  const targetCells = lineCells(targetRow)
+  const target = targetCells[Math.min(index, targetCells.length - 1)]
+  if (!target) return false
+  focusCell(target)
+  return true
+}

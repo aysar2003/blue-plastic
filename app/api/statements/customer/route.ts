@@ -9,6 +9,7 @@ import { getOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { isAppError, unauthenticated } from '@/server/errors'
 import { renderCustomerStatementPdf } from '@/server/reports/customer-statement-pdf'
+import { screenPaperResponse } from '@/server/reports/screen-pdf'
 import * as organizationService from '@/server/services/organization.service'
 import * as portalService from '@/server/services/portal.service'
 import * as receivables from '@/server/services/receivables.service'
@@ -37,6 +38,13 @@ export async function GET(request: Request) {
         { status: 422 },
       )
     }
+
+    const screen = await screenPaperResponse(
+      `${url.origin}/reports/statements/customer${url.search}`,
+      request.headers.get('cookie') ?? '',
+      'customer-statement.pdf',
+    )
+    if (screen) return screen
 
     portalService.assertCustomerDataAccess(ctx, customerId)
 

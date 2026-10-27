@@ -233,7 +233,7 @@ export function ThermalReceipt({
         </ul>
         <Rule />
 
-        <Row label={`Items: ${trimQty(String(itemCount))}`} value="" />
+        <Row label={`Items: ${itemCount}`} value="" />
         <Row label="Subtotal" value={money(receipt.subtotal)} />
         {hasDiscount ? <Row label="Discount" value={`-${money(receipt.discount)}`} /> : null}
         {hasTax ? <Row label="Tax" value={money(receipt.tax)} /> : null}

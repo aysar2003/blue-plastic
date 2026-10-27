@@ -56,7 +56,7 @@ const STOCK_ALERT_LIST_LIMIT = 200
 
 // The key carries a version: entries cached under the old key held a bare array.
 const cachedStockAlerts = cache((orgId: string) =>
-  unstable_cache(() => queryStockAlerts(orgId), ['stock-alerts-v3', orgId], { revalidate: 60 })(),
+  unstable_cache(() => queryStockAlerts(orgId), ['stock-alerts-v4', orgId], { revalidate: 60 })(),
 )
 
 async function queryStockAlerts(orgId: string): Promise<StockAlertSummary> {
@@ -86,7 +86,8 @@ async function queryStockAlerts(orgId: string): Promise<StockAlertSummary> {
       LEFT JOIN LATERAL (
         SELECT "runningQuantity"
           FROM inventory_transactions
-         WHERE "itemId" = i.id
+         WHERE "orgId" = ${orgId}
+           AND "itemId" = i.id
          ORDER BY sequence DESC
          LIMIT 1
       ) t ON true

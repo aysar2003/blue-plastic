@@ -1,4 +1,7 @@
 import 'server-only'
+
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
 import type { DocumentType, Prisma, SalesDocumentType } from '@prisma/client'
 
 import { endOfMonth, isCalendarDate, startOfMonth, toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
@@ -1656,14 +1659,26 @@ export type ConvertTarget = (typeof CONVERT_TARGETS)[number]
  * not voided, declined, or already converted. Used on new invoice / sales
  * receipt forms and the till (QuickBooks “Available estimates / orders”).
  */
-export async function listConvertibleSources(
+export function listConvertibleSources(
   ctx: OrgContext,
   options: { types?: SalesDocumentType[] } = {},
 ) {
   const types = options.types?.length ? options.types : CONVERTIBLE_SOURCES
+  return cachedConvertible(ctx.orgId, types.join(','))
+}
+
+const cachedConvertible = cache((orgId: string, typeKey: string) =>
+  unstable_cache(
+    () => queryConvertibleSources(orgId, typeKey.split(',') as SalesDocumentType[]),
+    ['convertible-sources-v1', orgId, typeKey],
+    { revalidate: 20 },
+  )(),
+)
+
+async function queryConvertibleSources(orgId: string, types: SalesDocumentType[]) {
   const rows = await db.salesDocument.findMany({
     where: {
-      orgId: ctx.orgId,
+      orgId,
       type: { in: types },
       status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
       convertedTo: { is: null },

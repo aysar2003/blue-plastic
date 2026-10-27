@@ -16,6 +16,14 @@ export function trimQty(value: string | number | null | undefined): string {
     .replace(/\.$/, '')
 }
 
+/** Two decimal places for a quantity, rate, or amount. Blank stays blank. */
+export function fixed2(value: string | number | null | undefined): string {
+  if (value == null || String(value).trim() === '') return ''
+  const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''))
+  if (!Number.isFinite(n)) return String(value).trim()
+  return n.toFixed(2)
+}
+
 /** Unit label for an item — blank → Pcs. */
 export function resolveUnit(unit: string | null | undefined): string {
   const text = unit?.trim()
@@ -23,14 +31,14 @@ export function resolveUnit(unit: string | null | undefined): string {
 }
 
 /**
- * "12 m", "3 Pcs". Pass `unit` from the item; omit or null for Pcs.
+ * "12.00 m", "3.00 Pcs". Pass `unit` from the item; omit or null for Pcs.
  * Empty quantity returns "".
  */
 export function formatQty(
   quantity: string | number | null | undefined,
   unit?: string | null,
 ): string {
-  const qty = trimQty(quantity)
+  const qty = fixed2(quantity)
   if (!qty) return ''
   return `${qty} ${resolveUnit(unit)}`
 }

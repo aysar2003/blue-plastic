@@ -9,6 +9,7 @@ import { byType } from '@/lib/sales-types'
 import { cn } from '@/lib/utils'
 import { isAppError } from '@/server/errors'
 import { requirePortalContext } from '@/server/auth/context'
+import * as approvalService from '@/server/services/approval.service'
 import * as organizationService from '@/server/services/organization.service'
 import * as portalService from '@/server/services/portal.service'
 
@@ -41,6 +42,7 @@ export default async function PortalInvoicePage({
     organizationService.getPrintTemplate(ctx),
   ])
   const config = byType(document.type)
+  const approvals = await approvalService.latestApprovals(ctx.orgId, [document.id])
 
   return (
     <div className="space-y-4">
@@ -61,6 +63,7 @@ export default async function PortalInvoicePage({
           <PortalPrintButton />
           <a
             href={`/api/sales/${document.id}/pdf`}
+            download
             className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
           >
             Download PDF
@@ -75,6 +78,7 @@ export default async function PortalInvoicePage({
         config={config}
         baseCurrency={ctx.organization.baseCurrency}
         printedBy={ctx.user.name}
+        approval={approvals.get(document.id) ?? null}
         ledger
       />
     </div>

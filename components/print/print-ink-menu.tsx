@@ -15,6 +15,7 @@ import {
 import { downloadPackPrintPdf, hasPrintablePaper } from '@/lib/pack-print-html'
 import { readStoredPaperMetaHidden, withPaperMetaHidden } from '@/lib/paper-meta-fields'
 import {
+  downloadPdfFile,
   printWithInk,
   rememberPrintInk,
   withPrintInk,
@@ -23,8 +24,8 @@ import {
 import { cn } from '@/lib/utils'
 
 const INK_OPTIONS: { ink: PrintInk; label: string; hint: string }[] = [
-  { ink: 'color', label: 'Color', hint: 'Full colour bands and accents' },
   { ink: 'mono', label: 'Black & White', hint: 'Greyscale for plain printers' },
+  { ink: 'color', label: 'Color', hint: 'Full colour bands and accents' },
 ]
 
 /** Print dropdown — Color or Black & White, then browser print. */
@@ -78,7 +79,7 @@ export function PrintInkMenu({
   )
 }
 
-/** PDF dropdown — same Color / Black & White choice as Print. */
+/** One click: download the colour PDF that matches the paper on screen. */
 export function PdfInkMenu({
   pdfHref,
   filename,
@@ -102,7 +103,8 @@ export function PdfInkMenu({
 }) {
   const [busy, setBusy] = useState(false)
 
-  const run = async (ink: PrintInk) => {
+  const run = async () => {
+    const ink: PrintInk = 'color'
     rememberPrintInk(ink)
     const name = filename || 'document.pdf'
     // Any page that already draws the paper (print / pack / statement): PDF =
@@ -128,53 +130,40 @@ export function PdfInkMenu({
       return
     }
     const href = withPaperMetaHidden(withPrintInk(pdfHref, ink), readStoredPaperMetaHidden())
-    const anchor = document.createElement('a')
-    anchor.href = href
-    if (filename) anchor.download = filename
-    anchor.rel = 'noopener'
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
+    setBusy(true)
+    try {
+      const ok = await downloadPdfFile(href, name)
+      if (!ok) window.location.assign(href)
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const hints = {
-    color: 'Same paper as on screen when available',
-    mono: 'Black & white — same paper as on screen when available',
-  } as const
-
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className={cn(buttonVariants({ variant, size }), className)}
-        type="button"
-        disabled={busy}
-      >
-        <FileDownIcon />
-        {busy ? 'PDF…' : label}
-        <ChevronDownIcon className="opacity-60" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuLabel>PDF ink</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {INK_OPTIONS.map((option) => (
-          <DropdownMenuItem
-            key={option.ink}
-            disabled={busy}
-            onSelect={(event) => {
-              event.preventDefault()
-              void run(option.ink)
-            }}
-          >
-            <span className="flex flex-col gap-0.5">
-              <span>{option.label}</span>
-              <span className="text-[0.6875rem] font-normal text-muted-foreground">
-                {hints[option.ink]}
-              </span>
-            </span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <button
+      type="button"
+      className={cn(buttonVariants({ variant, size }), className)}
+      disabled={busy}
+      title="Download colour PDF"
+      onClick={() => void run()}
+    >
+      <FileDownIcon />
+      {busy ? 'PDF…' : label}
+    </button>
+  )
+}
+
+/** List menus: save the PDF file instead of opening it in the browser. */
+export function PdfMenuDownload({ href }: { href: string }) {
+  return (
+    <DropdownMenuItem
+      onSelect={(event) => {
+        event.preventDefault()
+        void downloadPdfFile(withPrintInk(href, 'color'))
+      }}
+    >
+      PDF
+    </DropdownMenuItem>
   )
 }
 

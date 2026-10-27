@@ -27,4 +27,13 @@ describe('merchant-pdf', () => {
     expect(rows[0]?.runs[0]?.color).toEqual(hexToPdfRgb('#1eb8ae'))
     expect(rows.some((row) => row.runs.some((run) => run.text.includes('TEL:')))).toBe(true)
   })
+
+  it('joins street, city, and country into one ADDR line', () => {
+    const rows = merchantPdfLetterhead({
+      orgName: 'AL FURAAT',
+      orgAddress: ['Furaat Store, Balcad Street', 'Kismaayo, SOMALIA', 'US'],
+    })
+    const addr = rows.flatMap((row) => row.runs.map((run) => run.text)).filter((text) => text.startsWith('ADDR:'))
+    expect(addr).toEqual(['ADDR: Furaat Store, Balcad Street, Kismaayo, SOMALIA, US'])
+  })
 })

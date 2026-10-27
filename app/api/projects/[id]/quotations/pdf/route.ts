@@ -10,6 +10,8 @@ import {
   renderProjectQuotationsPdf,
   type SalesDocumentPdfInput,
 } from '@/server/reports/sales-document-pdf'
+import { screenPaperResponse } from '@/server/reports/screen-pdf'
+import * as approvalService from '@/server/services/approval.service'
 import * as organizationService from '@/server/services/organization.service'
 import * as projectService from '@/server/services/project.service'
 import * as salesService from '@/server/services/sales.service'
@@ -49,6 +51,19 @@ export async function GET(
       orgEmail: company.email,
     }
 
+    const filename = `quotations-${project.number.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`
+    const origin = new URL(request.url).origin
+    const screen = await screenPaperResponse(
+      `${origin}/projects/${id}/quotations/print`,
+      request.headers.get('cookie') ?? '',
+      filename,
+    )
+    if (screen) return screen
+
+    const approvals = await approvalService.latestApprovals(
+      ctx.orgId,
+      quotations.map((document) => document.id),
+    )
     const bytes = renderProjectQuotationsPdf({
       ...shared,
       projectNumber: project.number,
@@ -56,10 +71,11 @@ export async function GET(
       siteLocation: project.siteLocation,
       customerName: project.customer.displayName,
       currency: ctx.organization.baseCurrency,
-      quotations: quotations.map((document) => toPdfInput(document, shared, org.timeZone)),
+      quotations: quotations.map((document) =>
+        toPdfInput(document, shared, org.timeZone, approvals.get(document.id) ?? null),
+      ),
     })
 
-    const filename = `quotations-${project.number.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`
     return new NextResponse(Buffer.from(bytes), {
       headers: {
         'Content-Type': 'application/pdf',
@@ -86,6 +102,7 @@ function toPdfInput(
   document: Awaited<ReturnType<typeof salesService.getMany>>[number],
   shared: Pick<SalesDocumentPdfInput, 'ink' | 'template' | 'orgName' | 'orgAddress' | 'orgPhone' | 'orgEmail'>,
   timeZone: string | null | undefined,
+  approval: { name: string; at: Date } | null,
 ): SalesDocumentPdfInput {
   const config = byType(document.type)
   const currency = document.currencyCode
@@ -113,6 +130,8 @@ function toPdfInput(
     workSite: document.workSite || document.project?.siteLocation || null,
     status: document.status,
     createdByName: document.createdByName,
+    approvedByName: approval?.name ?? null,
+    approvedAt: approval?.at ?? null,
     currency,
     lines: document.lines.map((line) => ({
       quantity: line.quantity,

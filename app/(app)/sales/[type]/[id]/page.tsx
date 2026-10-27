@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { documentStampLines } from '@/lib/document-stamp'
 import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import {
   documentEmailBody,
@@ -27,6 +28,7 @@ import { db } from '@/server/db'
 import { listForSale } from '@/server/files/ledger-files'
 import { historyFor, trailFor } from '@/server/services/audit.service'
 import { loadDepositAccounts } from '@/server/services/sales-options'
+import * as approvalService from '@/server/services/approval.service'
 import * as salesService from '@/server/services/sales.service'
 
 export const metadata: Metadata = { title: 'Document' }
@@ -65,6 +67,8 @@ export default async function SalesDocumentPage({
     canConvert ? loadDepositAccounts(ctx) : Promise.resolve([]),
   ])
 
+  const approvals = await approvalService.latestApprovals(ctx.orgId, [id])
+  const approval = approvals.get(id) ?? null
   const currency = ctx.organization.baseCurrency
   // A draft can now be deleted, so the control shows for it too — what it does
   // is decided by `disposition` below.
@@ -90,6 +94,12 @@ export default async function SalesDocumentPage({
       Number(document.balance) > 0
         ? `Amount due: ${formatMoney(document.balance, currency)}`
         : null,
+      ...documentStampLines({
+        createdBy: document.createdByName,
+        approvedBy: approval?.name,
+        approvedAt: approval?.at,
+        status: document.status,
+      }),
     ],
   })
   const emailSubject = documentEmailSubject(

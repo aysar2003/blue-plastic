@@ -72,7 +72,7 @@ import {
 import { formatDate, isCalendarDate } from '@/lib/date'
 import { dueDateFor } from '@/lib/payment-terms'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
-import { resolveUnit } from '@/lib/quantity'
+import { fixed2, resolveUnit } from '@/lib/quantity'
 import {
   byType,
   customerPaperTotalLabel,
@@ -346,8 +346,8 @@ export function DocumentForm({
             key: index + 1,
             itemId: line.itemId ?? '',
             description: line.description ?? '',
-            quantity: line.quantity,
-            unitPrice: line.unitPrice,
+            quantity: fixed2(line.quantity),
+            unitPrice: fixed2(line.unitPrice),
             discountPercent: liftedPercent ? '' : (line.discountPercent ?? ''),
             taxCodeId: line.taxCodeId ?? '',
             storeId: line.storeId ?? defaultStoreId,
@@ -392,8 +392,8 @@ export function DocumentForm({
             key: index + 1,
             itemId: line.itemId ?? '',
             description: line.description ?? '',
-            quantity: line.quantity,
-            unitPrice: line.unitPrice,
+            quantity: fixed2(line.quantity),
+            unitPrice: fixed2(line.unitPrice),
             discountPercent: restoredPercent ? '' : (line.discountPercent ?? ''),
             taxCodeId: line.taxCodeId ?? '',
             storeId: line.storeId ?? defaultStoreId,
@@ -661,8 +661,8 @@ export function DocumentForm({
             key: nextKey.current++,
             itemId: component.itemId,
             description: component.description ?? component.label,
-            quantity: memberQty.toFixed(4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, ''),
-            unitPrice: component.price ?? '',
+            quantity: fixed2(memberQty.toString()),
+            unitPrice: fixed2(component.price),
             discountPercent: '',
             taxCodeId: component.taxCodeId ?? '',
             storeId: host.storeId || defaultStoreId,
@@ -680,14 +680,14 @@ export function DocumentForm({
               ...line,
               itemId,
               description: item?.description ?? '',
-              unitPrice: item?.type === 'SUBTOTAL' ? '' : (item?.price ?? ''),
+              unitPrice: item?.type === 'SUBTOTAL' ? '' : fixed2(item?.price),
               taxCodeId: item?.type === 'SUBTOTAL' || item?.type === 'PAYMENT' ? '' : (item?.taxCodeId ?? ''),
               quantity:
                 item?.type === 'SUBTOTAL'
-                  ? '1'
+                  ? '1.00'
                   : line.quantity.trim() === ''
-                    ? '1'
-                    : line.quantity,
+                    ? '1.00'
+                    : fixed2(line.quantity),
             }
           : line,
       ),
@@ -1730,6 +1730,9 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                         className={cn(lineInput, 'min-w-0 flex-1 tabular text-center')}
                         value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
                         onChange={(event) => props.update(line.key, { quantity: event.target.value })}
+                        onBlur={(event) =>
+                          props.update(line.key, { quantity: fixed2(event.target.value) })
+                        }
                       />
                       {line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
                         <span
@@ -1755,6 +1758,9 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                       className={cn(lineInput, 'tabular text-right')}
                       value={props.subtotalItemIds.has(line.itemId) ? '' : line.unitPrice}
                       onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
+                      onBlur={(event) =>
+                        props.update(line.key, { unitPrice: fixed2(event.target.value) })
+                      }
                     />
                   </td>
                 ) : null}
@@ -2051,8 +2057,8 @@ function unitPriceFromTotal(
   const gross = kept.isZero() ? total : total.dividedBy(kept)
   const unit = gross.dividedBy(count).toDecimalPlaces(4, Decimal.ROUND_HALF_UP)
   return {
-    quantity: qty && !qty.isZero() ? quantity : '1',
-    unitPrice: unit.toFixed(4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, ''),
+    quantity: qty && !qty.isZero() ? fixed2(quantity) : '1.00',
+    unitPrice: fixed2(unit.toString()),
   }
 }
 
@@ -2088,7 +2094,7 @@ function AmountField({
     ? (subtotalDisplay ?? '0')
     : draft ??
       (amount
-        ? amount.toFixed(4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+        ? fixed2(amount.toString())
         : '')
 
   return (
@@ -2309,6 +2315,9 @@ function StripedLines({ props }: { props: LayoutProps }) {
                         className={cn(sheetLineInput, 'min-w-0 flex-1 tabular text-center')}
                         value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
                         onChange={(event) => props.update(line.key, { quantity: event.target.value })}
+                        onBlur={(event) =>
+                          props.update(line.key, { quantity: fixed2(event.target.value) })
+                        }
                       />
                       {line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
                         <span
@@ -2334,6 +2343,9 @@ function StripedLines({ props }: { props: LayoutProps }) {
                       className={cn(sheetLineInput, 'tabular text-right')}
                       value={props.subtotalItemIds.has(line.itemId) ? '' : line.unitPrice}
                       onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
+                      onBlur={(event) =>
+                        props.update(line.key, { unitPrice: fixed2(event.target.value) })
+                      }
                     />
                   </td>
                 ) : null}

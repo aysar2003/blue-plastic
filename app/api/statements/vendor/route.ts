@@ -8,6 +8,7 @@ import { getOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { isAppError, unauthenticated } from '@/server/errors'
 import { renderCustomerStatementPdf } from '@/server/reports/customer-statement-pdf'
+import { screenPaperResponse } from '@/server/reports/screen-pdf'
 import type { StatementEntry } from '@/server/services/receivables.service'
 import * as organizationService from '@/server/services/organization.service'
 import * as payables from '@/server/services/payables.service'
@@ -30,6 +31,13 @@ export async function GET(request: Request) {
         { status: 422 },
       )
     }
+
+    const screen = await screenPaperResponse(
+      `${url.origin}/reports/statements/vendor${url.search}`,
+      request.headers.get('cookie') ?? '',
+      'vendor-statement.pdf',
+    )
+    if (screen) return screen
 
     const vendor = await db.vendor.findFirst({
       where: { id: vendorId, orgId: ctx.orgId },

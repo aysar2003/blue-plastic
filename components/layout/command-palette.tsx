@@ -11,7 +11,7 @@ import {
   moduleForPath,
   type OrgFeatureFlags,
 } from '@/lib/feature-flags'
-import { addLineFromKeyboard, focusNextInGrid, moveListRow, saveFromKeyboard } from '@/lib/keyboard'
+import { addLineFromKeyboard, focusNextInGrid, moveInLineGrid, moveListRow, saveFromKeyboard } from '@/lib/keyboard'
 import { formatKeys, SHORTCUTS, type Shortcut } from '@/lib/shortcuts'
 import { cn } from '@/lib/utils'
 import { MODULES } from './nav-items'
@@ -230,6 +230,26 @@ export function CommandPalette({
       if ((event.metaKey || event.ctrlKey) && key === 'l' && !event.altKey && !event.shiftKey && !openRef.current) {
         if (addLineFromKeyboard()) event.preventDefault()
         return
+      }
+
+      if (
+        (event.key === 'ArrowUp' ||
+          event.key === 'ArrowDown' ||
+          event.key === 'ArrowLeft' ||
+          event.key === 'ArrowRight') &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        const element = document.activeElement
+        if (
+          !event.defaultPrevented &&
+          element instanceof HTMLElement &&
+          moveInLineGrid(element, event.key)
+        ) {
+          event.preventDefault()
+        }
       }
 
       if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {

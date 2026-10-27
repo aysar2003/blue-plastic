@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { formatDate, formatLongTransactionDate, isCalendarDate, toCalendarDate } from '@/lib/date'
+import { documentStampLines } from '@/lib/document-stamp'
 import {
   DEFAULT_DOCUMENT_TEMPLATE,
   type DocumentTemplate,
@@ -79,6 +80,9 @@ export type SalesDocumentPdfInput = {
   paper?: 'customer' | 'vendor'
   /** Who entered the document — same line as MerchantInvoice print. */
   createdByName?: string | null
+  /** Who approved the paper, and when. Shown under the lines with status. */
+  approvedByName?: string | null
+  approvedAt?: Date | string | null
   /** Meta field ids hidden via Paper details customize (same as on-screen print). */
   hiddenMeta?: string[] | null
 }
@@ -308,6 +312,7 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
         { text: 'No', x: COL.no },
         { text: 'Item name', x: COL.item },
         { text: 'Qty', x: COL.qty, align: 'right' },
+        { text: 'Unit', x: COL.qty + 48, align: 'right' },
         { text: 'Rate', x: COL.rate, align: 'right' },
         { text: 'Amount', x: COL.amount, align: 'right' },
       ],
@@ -317,7 +322,6 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
 
   input.lines.forEach((row, index) => {
     const item = lineItemLabel(row)
-    const uom = row.unitOfMeasure?.trim() || 'Pcs' // keep Pcs fallback for blank item unit
     rows.push({
       size: 9,
       height: 14,
@@ -327,11 +331,12 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
         { text: String(index + 1), x: COL.no, color: ink },
         { text: item.slice(0, 42), x: COL.item, color: ink },
         {
-          text: `${trimNumber(row.quantity)} ${uom}`,
+          text: `${trimNumber(row.quantity)}`,
           x: COL.qty,
           align: 'right',
           color: ink,
         },
+        { text: (row.unitOfMeasure?.trim() || '').toUpperCase(), x: COL.qty + 48, align: 'right', color: ink },
         { text: money(row.unitPrice), x: COL.rate, align: 'right', color: ink },
         { text: money(row.amount), x: COL.amount, align: 'right', color: ink },
       ],
@@ -391,6 +396,11 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     line(input.message, { size: 9, height: 14 })
   }
 
+  foot.push({ height: 8, runs: [] })
+  for (const text of stampPdfLines(input)) {
+    line(text, { size: 9, height: 13, color: muted })
+  }
+
   return [...rows, ...foot]
 }
 
@@ -418,6 +428,8 @@ export type PackableSheetDocument = {
   status?: string | null
   currencyCode: string
   createdByName?: string | null
+  approvedByName?: string | null
+  approvedAt?: Date | string | null
   lines: {
     quantity: string
     description?: string | null
@@ -473,6 +485,8 @@ export function salesDetailToPdfInput(
     status: document.status,
     currency: document.currencyCode,
     createdByName: document.createdByName,
+    approvedByName: document.approvedByName,
+    approvedAt: document.approvedAt,
     lines: document.lines.map((line) => ({
       quantity: line.quantity,
       sku: line.item?.sku ?? null,
@@ -557,12 +571,21 @@ export function renderProjectQuotationsPdf(input: {
   })
 }
 
-/** Plain order sheet — same Trade paper as on-screen print. */
+function stampPdfLines(input: SalesDocumentPdfInput): string[] {
+  return documentStampLines({
+    createdBy: input.createdByName,
+    approvedBy: input.approvedByName,
+    approvedAt: input.approvedAt,
+    status: input.status,
+  })
+}
+
+/** Same Trade sheet as on-screen print: ship-to, order facts, six line columns. */
 function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   const muted = merchantPdfMuted()
   const money = (value: string) => formatMoney(value, input.currency)
   const rows: PdfRow[] = []
-  const party = input.partyLabel ?? 'Bill to'
+  const purchase = (input.partyLabel ?? '').toLowerCase() === 'vendor'
   const title = `${input.title} #${input.number}`
   const calendar =
     typeof input.date === 'string' && isCalendarDate(input.date)
@@ -573,90 +596,166 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   const date = calendar
     ? formatLongTransactionDate(calendar, input.createdAt, input.timeZone || 'UTC')
     : String(input.date)
+  const ship = purchase ? input.orgAddress : input.customerAddress
+  const other = purchase ? input.customerAddress : input.orgAddress
+  const otherName = purchase ? input.customerName : input.orgName
 
-  rows.push({
-    size: 11,
-    height: 14,
-    runs: [{ text: input.orgName, bold: true, color: [0.17, 0.44, 0.73] }],
-  })
-  for (const part of [...input.orgAddress, input.orgEmail, input.orgPhone].filter((part): part is string => Boolean(part))) {
-    rows.push({ size: 8, height: 11, runs: [{ text: part, color: muted }] })
+  rows.push(
+    ...merchantPdfLetterhead({
+      orgName: input.orgName,
+      orgAddress: input.orgAddress,
+      orgPhone: input.orgPhone,
+      orgEmail: input.orgEmail,
+      accent: merchantAccent(input.template, purchase ? 'vendor' : 'customer'),
+    }),
+  )
+  const shipLines = ship.length ? ship : ['—']
+  const rightLines = [otherName, ...other.filter(Boolean)]
+  const pairs = Math.max(shipLines.length + 1, rightLines.length)
+  rows.push({ size: 8, height: 16, runs: [] })
+  for (let i = 0; i < pairs; i += 1) {
+    const left = i === 0 ? 'Shipping address:' : (shipLines[i - 1] ?? '')
+    const right = rightLines[i] ?? ''
+    rows.push({
+      size: 9,
+      height: 12,
+      runs: [
+        { text: left, bold: i === 0 },
+        ...(right ? [{ text: right, x: 340 }] : []),
+      ],
+    })
   }
-  rows.push({ size: 4, height: 8, runs: [], rule: true })
+
+  rows.push({ size: 18, height: 28, runs: [{ text: title }] })
   rows.push({
-    size: 9,
+    size: 8,
     height: 12,
     runs: [
-      { text: party, bold: true },
-      { text: date, x: PDF_PAGE.right, align: 'right', color: muted },
+      { text: purchase ? 'Purchase Representative:' : 'Sales person:', bold: true },
+      { text: purchase ? 'Your Order Reference:' : 'Reference:', x: 220, bold: true },
+      { text: 'Order Date:', x: 400, bold: true },
     ],
   })
-  rows.push({ size: 10, height: 13, runs: [{ text: input.customerName, bold: true }] })
-  for (const part of input.customerAddress.filter(Boolean)) {
-    rows.push({ size: 9, height: 12, runs: [{ text: part, color: muted }] })
-  }
-  rows.push({ size: 14, height: 22, runs: [{ text: title, bold: true }] })
+  rows.push({
+    size: 9,
+    height: 14,
+    runs: [
+      { text: input.createdByName?.trim() || '—' },
+      { text: input.reference?.trim() || '—', x: 220 },
+      { text: date, x: 400 },
+    ],
+  })
+  const remarks = input.message?.trim() || (input.template ?? DEFAULT_DOCUMENT_TEMPLATE).terms.trim() || '—'
+  rows.push({
+    size: 9,
+    height: 14,
+    runs: [
+      { text: 'Remarks:', bold: true },
+      { text: ` ${remarks.slice(0, 180)}` },
+    ],
+  })
 
-  const facts = [
-    input.paymentTerm ? `Payment  ${input.paymentTerm}` : '',
-    input.createdByName ? `Entered by  ${input.createdByName}` : '',
-    `Date  ${date}`,
-  ].filter(Boolean)
-  if (facts.length) {
-    rows.push({ size: 8, height: 12, runs: facts.map((text, index) => ({ text, x: PDF_PAGE.left + index * 170 })) })
-  }
-  if (input.message?.trim()) {
-    rows.push({ size: 9, height: 13, runs: [{ text: input.message.trim(), color: muted }] })
-  }
-
+  const taxX = 250
+  const dateX = 330
+  const qtyX = 420
+  const rateX = 490
+  const amountX = PDF_PAGE.right
   rows.push({
     size: 8,
     height: 14,
     runs: [
-      { text: 'DESCRIPTION', bold: true },
-      { text: 'QTY', x: 400, align: 'right', bold: true },
-      { text: 'RATE', x: 480, align: 'right', bold: true },
-      { text: 'AMOUNT', x: PDF_PAGE.right, align: 'right', bold: true },
+      { text: 'Description', bold: true },
+      { text: 'Taxes', x: taxX, align: 'right', bold: true },
+      { text: 'Date req.', x: dateX, align: 'right', bold: true },
+      { text: 'Qty', x: qtyX, align: 'right', bold: true },
+      { text: 'Unit', x: qtyX + 42, align: 'right', bold: true },
+      { text: 'Unit price', x: rateX, align: 'right', bold: true },
+      { text: 'Amount', x: amountX, align: 'right', bold: true },
     ],
     rule: true,
   })
   input.lines.forEach((line, index) => {
+    const qty = Number.isFinite(Number(line.quantity)) ? Number(line.quantity).toFixed(3) : line.quantity
+    const unit = line.unitOfMeasure?.trim()
     rows.push({
-      size: 9,
+      size: 8,
       height: 14,
       fill: index % 2 === 1 ? [0.953, 0.957, 0.965] : undefined,
       fillInset: PDF_PAGE.left,
       runs: [
-        { text: (line.description || line.sku || '').slice(0, 70) },
-        { text: trimNumber(line.quantity), x: 400, align: 'right' },
-        { text: money(line.unitPrice), x: 480, align: 'right' },
-        { text: money(line.amount), x: PDF_PAGE.right, align: 'right' },
+        { text: (line.description || line.sku || '').slice(0, 36) },
+        { text: '', x: taxX, align: 'right' },
+        { text: date, x: dateX, align: 'right' },
+        { text: qty, x: qtyX, align: 'right' },
+        { text: unit ? unit.toUpperCase() : '', x: qtyX + 42, align: 'right' },
+        {
+          text: Number.isFinite(Number(line.unitPrice)) ? Number(line.unitPrice).toFixed(3) : line.unitPrice,
+          x: rateX,
+          align: 'right',
+        },
+        { text: money(line.amount), x: amountX, align: 'right' },
       ],
     })
   })
 
-  const totals: [string, string][] = [['Subtotal', money(input.subtotal)]]
-  if (Number(input.discountAmount) > 0) totals.push(['Discount', money(input.discountAmount)])
-  if (Number(input.taxTotal) > 0) totals.push(['Tax', money(input.taxTotal)])
-  totals.push(['Total', money(input.total)])
-  totals.forEach(([label, value], index) => {
-    rows.push({
-      size: 10,
-      height: 14,
-      keepId: 'trade-totals',
-      rule: index === totals.length - 1,
-      runs: [
-        { text: label, x: 430, bold: label === 'Total' },
-        { text: value, x: PDF_PAGE.right, align: 'right', bold: label === 'Total' },
-      ],
-    })
+  const stamp = stampPdfLines(input)
+  rows.push({ size: 6, height: 10, runs: [] })
+  rows.push({
+    size: 9,
+    height: 13,
+    keepId: 'trade-totals',
+    runs: [
+      { text: stamp[0] ?? '', color: muted },
+      { text: 'Subtotal', x: 430 },
+      { text: money(input.subtotal), x: amountX, align: 'right' },
+    ],
   })
-  const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
-  if (template.terms.trim()) {
-    rows.push({ size: 8, height: 12, runs: [{ text: template.terms.trim().slice(0, 240), color: muted }] })
+  rows.push({
+    size: 9,
+    height: 13,
+    keepId: 'trade-totals',
+    runs: [
+      { text: stamp[1] ?? '', color: muted },
+      { text: purchase && input.documentType === 'PURCHASE_ORDER' ? 'Bill payment' : 'Taxes', x: 430 },
+      {
+        text: purchase && input.documentType === 'PURCHASE_ORDER'
+          ? money(input.amountApplied || '0')
+          : money(input.taxTotal),
+        x: amountX,
+        align: 'right',
+      },
+    ],
+  })
+  rows.push({
+    size: 9,
+    height: 13,
+    keepId: 'trade-totals',
+    runs: [
+      { text: stamp[2] ?? '', color: muted },
+    ],
+  })
+  rows.push({
+    size: 9,
+    height: 13,
+    keepId: 'trade-totals',
+    runs: [
+      { text: stamp[3] ?? '', color: muted },
+    ],
+  })
+  rows.push({
+    size: 10,
+    height: 16,
+    keepId: 'trade-totals',
+    rule: true,
+    runs: [
+      { text: 'Total', x: 430, bold: true },
+      { text: money(input.total), x: amountX, align: 'right', bold: true },
+    ],
+  })
+  const foot = [input.orgEmail, input.orgPhone].filter(Boolean).join('  |  ')
+  if (foot) {
+    rows.push({ size: 8, height: 14, runs: [{ text: foot, x: 306, align: 'center', color: muted }], rule: true })
   }
-  const foot = [input.orgEmail, input.orgPhone].filter(Boolean).join('  ·  ')
-  if (foot) rows.push({ size: 8, height: 12, runs: [{ text: foot, color: muted }], rule: true })
   return rows
 }
 

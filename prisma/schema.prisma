@@ -2955,6 +2955,7 @@ model InventoryTransaction {
 
   @@unique([itemId, sequence])
   @@index([orgId, itemId, sequence(sort: Desc)])
+  @@index([orgId, itemId, storeId])
   @@index([orgId, date])
   @@index([orgId, sourceType, sourceId])
   @@map("inventory_transactions")

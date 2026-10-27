@@ -89,9 +89,9 @@ export function merchantPdfLetterhead(input: {
   const contact: string[] = []
   if (input.orgPhone) contact.push(`TEL: ${input.orgPhone}`)
   if (input.orgEmail) contact.push(`EMAIL: ${input.orgEmail}`)
-  for (const part of (input.orgAddress ?? []).map(cleanLine).filter(Boolean)) {
-    contact.push(`ADDR: ${part}`)
-  }
+  // Screen letterhead is one ADDR line. Callers may pass street, city, and country separately.
+  const address = (input.orgAddress ?? []).map(cleanLine).filter(Boolean).join(', ')
+  if (address) contact.push(`ADDR: ${address}`)
   for (const line of contact) {
     rows.push({
       size: 8,

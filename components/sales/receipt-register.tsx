@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { ChevronDownIcon } from 'lucide-react'
 
+import { PdfMenuDownload } from '@/components/print/print-ink-menu'
 import { DeleteMenuItem } from '@/components/data/delete-record'
 import { PackActions, packLinks } from '@/components/data/pack-actions'
 import { EnteredByToggle } from '@/components/data/entered-by-toggle'
@@ -109,9 +110,7 @@ export function ReceiptRegister({
               <DropdownMenuItem disabled>Print</DropdownMenuItem>
             )}
             {links.canPack ? (
-              <DropdownMenuItem asChild>
-                <Link href={links.pdfHref}>PDF</Link>
-              </DropdownMenuItem>
+              <PdfMenuDownload href={links.pdfHref} />
             ) : (
               <DropdownMenuItem disabled>PDF</DropdownMenuItem>
             )}

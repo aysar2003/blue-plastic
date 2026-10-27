@@ -13,6 +13,7 @@ import {
   salesPackPrintHref,
   singleDocumentPdfHref,
 } from '@/lib/document-pack'
+import { downloadPdfFile, withPrintInk } from '@/lib/print-ink'
 import { cn } from '@/lib/utils'
 
 export type PackOne = {
@@ -55,7 +56,7 @@ export function PackActions({
     <div className="flex flex-wrap items-center gap-1">
       <PackLink href={links.viewHref} disabled={!links.canPack} label="View" icon={EyeIcon} />
       <PackLink href={links.printHref} disabled={!links.canPack} label="Print" icon={PrinterIcon} />
-      <PackLink href={links.pdfHref} disabled={!links.canPack} label="PDF" icon={FileTextIcon} />
+      <PackLink href={links.pdfHref} disabled={!links.canPack} label="PDF" icon={FileTextIcon} downloadPdf />
       <a
         href={links.excelHref}
         download
@@ -78,11 +79,13 @@ function PackLink({
   disabled,
   label,
   icon: Icon,
+  downloadPdf = false,
 }: {
   href: string
   disabled: boolean
   label: string
   icon: typeof EyeIcon
+  downloadPdf?: boolean
 }) {
   const className = cn(buttonVariants({ variant: 'outline', size: 'sm' }), disabled && 'pointer-events-none opacity-50')
   if (disabled) {
@@ -91,6 +94,19 @@ function PackLink({
         <Icon />
         {label}
       </span>
+    )
+  }
+  if (downloadPdf) {
+    return (
+      <button
+        type="button"
+        className={className}
+        title="Download PDF"
+        onClick={() => void downloadPdfFile(withPrintInk(href, 'color'))}
+      >
+        <Icon />
+        {label}
+      </button>
     )
   }
   return (

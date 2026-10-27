@@ -5,6 +5,7 @@ import { parsePrintInk } from '@/lib/print-ink'
 import { getOrgContext } from '@/server/auth/context'
 import { isAppError, unauthenticated } from '@/server/errors'
 import { renderDeliveryNotePdf } from '@/server/reports/delivery-note-pdf'
+import { screenPaperResponse } from '@/server/reports/screen-pdf'
 import * as organizationService from '@/server/services/organization.service'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
 
@@ -28,6 +29,15 @@ export async function GET(
     ])
 
     const company = letterheadOf(org)
+    const filename = `delivery-note-${note.number.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`
+    const origin = new URL(request.url).origin
+    const screen = await screenPaperResponse(
+      `${origin}/sales/delivery/${id}/print`,
+      request.headers.get('cookie') ?? '',
+      filename,
+    )
+    if (screen) return screen
+
     const bytes = renderDeliveryNotePdf({
       ink,
       template,
@@ -56,7 +66,6 @@ export async function GET(
       })),
     })
 
-    const filename = `delivery-note-${note.number.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`
     return new NextResponse(Buffer.from(bytes), {
       headers: {
         'Content-Type': 'application/pdf',

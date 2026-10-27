@@ -3,18 +3,39 @@
  * the user sees (Pack / single print / statements / delivery / tickets).
  */
 
+/** Wins over app @page / body rules copied from the live page. */
 const PRINT_CSS = `
-@page { size: A4; margin: 10mm; }
-html, body { margin: 0; background: #fff; color: #1f2933; }
+@page { size: A4; margin: 12mm; }
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  display: block !important;
+  background: #fff !important;
+  color: #1f2933 !important;
+}
+html[data-print-ink="mono"],
+html[data-print-ink="mono"] body {
+  filter: grayscale(1);
+}
 section[data-print-paper],
 section[data-invoice-page] {
   break-after: page;
   page-break-after: always;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 section[data-print-paper]:last-of-type,
 section[data-invoice-page]:last-of-type {
   break-after: auto;
   page-break-after: auto;
+}
+article.merchant-invoice,
+article.invoice-sheet {
+  margin: 0 !important;
+  min-height: 0 !important;
+  box-shadow: none !important;
 }
 .break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }
 .print\\:hidden, .print\\:hidden * { display: none !important; }
@@ -110,7 +131,7 @@ export async function buildPackPrintHtml(ink: 'color' | 'mono' = 'color'): Promi
   }
   const styles = await collectStyles()
   const inkAttr = ink === 'mono' ? ' data-print-ink="mono"' : ''
-  return `<!DOCTYPE html><html${inkAttr}><head><meta charset="utf-8"><base href="${location.origin}/"><style>${PRINT_CSS}\n${styles}</style></head><body>${bodyHtml}</body></html>`
+  return `<!DOCTYPE html><html${inkAttr}><head><meta charset="utf-8"><base href="${location.origin}/"><style>${styles}\n${PRINT_CSS}</style></head><body>${bodyHtml}</body></html>`
 }
 
 /** Download a PDF that matches the on-screen paper (Chrome / Edge headless). */

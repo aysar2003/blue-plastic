@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { MerchantInvoice } from '@/components/sales/merchant-invoice'
+import { documentStampLines } from '@/lib/document-stamp'
 import { formatMoney, ZERO } from '@/lib/money'
 import { printPackSectionClass } from '@/lib/print-pack'
 import {
@@ -12,6 +13,7 @@ import {
 } from '@/lib/project-quotations'
 import { byType } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
+import * as approvalService from '@/server/services/approval.service'
 import * as organizationService from '@/server/services/organization.service'
 import * as projectService from '@/server/services/project.service'
 import * as salesService from '@/server/services/sales.service'
@@ -42,6 +44,10 @@ export default async function ProjectQuotationsPrintPage({
     organizationService.getPrintTemplate(ctx),
   ])
   const quotations = documents.filter((row) => row.type === 'QUOTATION')
+  const approvals = await approvalService.latestApprovals(
+    ctx.orgId,
+    quotations.map((row) => row.id),
+  )
   const running = runningQuotationTotals(quotations.map((row) => row.total))
   const currency = ctx.organization.baseCurrency
   const grand = quotations.reduce((sum, row) => sum.plus(row.total), ZERO)
@@ -55,6 +61,19 @@ export default async function ProjectQuotationsPrintPage({
         `${row.number}${row.workSite ? ` · ${row.workSite}` : ''}${row.workScope ? ` · ${row.workScope}` : ''} · ${money(row.total)} · running ${money(running[index]?.runningTotal ?? row.total)}`,
     ),
     `Grand total ${money(grand.toFixed(4))}`,
+    ...quotations.flatMap((row) => {
+      const approval = approvals.get(row.id)
+      return [
+        '',
+        row.number,
+        ...documentStampLines({
+          createdBy: row.createdByName,
+          approvedBy: approval?.name,
+          approvedAt: approval?.at,
+          status: row.status,
+        }),
+      ]
+    }),
     '',
     `From ${organization.legalName ?? organization.name}`,
   ].join('\n')
@@ -114,6 +133,7 @@ export default async function ProjectQuotationsPrintPage({
                 config={byType(document.type)}
                 baseCurrency={currency}
                 printedBy={ctx.user.name}
+                approval={approvals.get(document.id) ?? null}
                 hideAccountBalance
                 previousQuotationsTotal={
                   hasPreviousQuotations(running[index]?.previousQuotationsTotal)

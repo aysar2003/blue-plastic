@@ -29,7 +29,7 @@ import { buildPackPrintHtml, hasPrintablePaper } from '@/lib/pack-print-html'
 import { readStoredPaperMetaHidden, withPaperMetaHidden } from '@/lib/paper-meta-fields'
 import { paperChoiceCookie } from '@/lib/paper-choice'
 import type { PaperStyle } from '@/lib/document-template'
-import { readStoredPrintInk, withPrintInk } from '@/lib/print-ink'
+import { withPrintInk } from '@/lib/print-ink'
 import { cn } from '@/lib/utils'
 
 type AttachFormat = 'pdf' | 'excel'
@@ -121,7 +121,7 @@ export function DocumentActions({
   const subjectLine = subject || `Your ${paper}`
 
   const prepareFile = async (): Promise<{ blob: Blob; name: string; mime: string } | null> => {
-    const ink = readStoredPrintInk()
+    const ink = 'color' as const
     if (attachFormat === 'excel') {
       if (!excelHref) {
         setNote('Excel is not available for this document.')

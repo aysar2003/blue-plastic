@@ -16,7 +16,7 @@ import { DateField } from '@/components/ui/date-field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Decimal, formatMoney, parseMoneyInput } from '@/lib/money'
-import { formatQty, resolveUnit } from '@/lib/quantity'
+import { fixed2, formatQty, resolveUnit } from '@/lib/quantity'
 import { officeStoreId, type StoreChoice } from '@/lib/store-stock'
 import { cn } from '@/lib/utils'
 import { receiveOrderForm } from '@/app/(app)/purchases/actions'
@@ -258,6 +258,12 @@ export function ReceiveForm({
                             setQuantities((current) => ({
                               ...current,
                               [line.lineId]: event.target.value,
+                            }))
+                          }
+                          onBlur={(event) =>
+                            setQuantities((current) => ({
+                              ...current,
+                              [line.lineId]: fixed2(event.target.value),
                             }))
                           }
                         />

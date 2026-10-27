@@ -75,7 +75,7 @@ export default async function DeliveryReportPage({
   ].join('\n')
 
   return (
-    <>
+    <div data-print-root>
       <PageHeader
         className="print:hidden"
         title="Delivery report"
@@ -221,7 +221,7 @@ export default async function DeliveryReportPage({
           ))}
         </div>
       )}
-    </>
+    </div>
   )
 }
 

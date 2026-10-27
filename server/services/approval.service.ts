@@ -564,6 +564,27 @@ export async function listPending(ctx: OrgContext) {
   })
 }
 
+/** Latest approval on each paper, for the Created / Approved block on print, PDF, and email. */
+export async function latestApprovals(orgId: string, entityIds: string[]) {
+  const ids = [...new Set(entityIds.filter(Boolean))]
+  const map = new Map<string, { name: string; at: Date }>()
+  if (ids.length === 0) return map
+  const rows = await db.approvalDecision.findMany({
+    where: { orgId, decision: 'APPROVED', request: { entityId: { in: ids } } },
+    orderBy: { decidedAt: 'desc' },
+    select: {
+      decidedAt: true,
+      decidedBy: { select: { name: true } },
+      request: { select: { entityId: true } },
+    },
+  })
+  for (const row of rows) {
+    const entityId = row.request.entityId
+    if (!map.has(entityId)) map.set(entityId, { name: row.decidedBy.name, at: row.decidedAt })
+  }
+  return map
+}
+
 /** Every submit / decide cycle for one paper, newest first. */
 export async function listForEntity(
   ctx: OrgContext,

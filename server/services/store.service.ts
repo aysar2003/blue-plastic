@@ -1,5 +1,8 @@
 import 'server-only'
 
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
+
 import { Decimal, ZERO } from '@/lib/money'
 import { foldStoreQuantities, type StockByStore, type StoreChoice } from '@/lib/store-stock'
 import type { OrgContext } from '@/server/auth/context'
@@ -180,15 +183,26 @@ export async function columns(ctx: OrgContext): Promise<StoreColumn[]> {
 export async function quantities(ctx: OrgContext): Promise<{ stores: StoreColumn[]; byItem: StockByStore }> {
   const stores = await columns(ctx)
   const officeId = stores.find((store) => store.isOffice)?.id ?? ''
+  const byItem = await cachedShelf(ctx.orgId, officeId)
+  return { stores, byItem }
+}
+
+const cachedShelf = cache((orgId: string, officeId: string) =>
+  unstable_cache(() => shelfQuantities(orgId, officeId), ['store-shelf-v1', orgId, officeId], {
+    revalidate: 30,
+  })(),
+)
+
+async function shelfQuantities(orgId: string, officeId: string): Promise<StockByStore> {
   const groups = await db.inventoryTransaction.groupBy({
     by: ['itemId', 'storeId'],
     where: {
-      orgId: ctx.orgId,
+      orgId,
       item: { isActive: true, type: { in: ['INVENTORY', 'INVENTORY_ASSEMBLY'] } },
     },
     _sum: { quantity: true },
   })
-  const byItem = foldStoreQuantities(
+  return foldStoreQuantities(
     groups.map((row) => ({
       itemId: row.itemId,
       storeId: row.storeId,
@@ -196,7 +210,6 @@ export async function quantities(ctx: OrgContext): Promise<{ stores: StoreColumn
     })),
     officeId,
   )
-  return { stores, byItem }
 }
 
 /** The inventory account a line should hit when it names a store. */

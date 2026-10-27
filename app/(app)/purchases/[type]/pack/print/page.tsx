@@ -5,6 +5,7 @@ import { listExportHref } from '@/lib/document-pack'
 import { purchaseBySlug, purchaseByType } from '@/lib/purchase-types'
 import { requireOrgContext } from '@/server/auth/context'
 import * as organizationService from '@/server/services/organization.service'
+import * as approvalService from '@/server/services/approval.service'
 import { loadPurchasePack } from '@/server/services/document-pack.service'
 
 export const metadata = { title: 'Print papers' }
@@ -33,6 +34,10 @@ export default async function PurchasePackPrintPage({
     organizationService.getPrintTemplate(ctx),
   ])
 
+  const approvals = await approvalService.latestApprovals(
+    ctx.orgId,
+    documents.map((row) => row.id),
+  )
   const paper = config.singular.toLowerCase()
   const filename = `${config.slug}-pack.pdf`
   const queryString = query.toString()
@@ -54,6 +59,7 @@ export default async function PurchasePackPrintPage({
       vendorPaper
       emptyHref={`/purchases/${config.slug}`}
       emptyLabel={`Back to ${config.plural.toLowerCase()}`}
+      approvals={Object.fromEntries(approvals)}
     />
   )
 }

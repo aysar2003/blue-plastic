@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { documentStampLines } from '@/lib/document-stamp'
 import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { purchaseBySlug, purchaseByType } from '@/lib/purchase-types'
@@ -25,8 +26,10 @@ import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { DocumentAttachments } from '@/components/data/document-attachments'
 import { DocumentHistory } from '@/components/data/document-history'
 import { requireOrgContext } from '@/server/auth/context'
+import { db } from '@/server/db'
 import { listForPurchase } from '@/server/files/ledger-files'
 import { historyFor, trailFor } from '@/server/services/audit.service'
+import * as approvalService from '@/server/services/approval.service'
 import * as purchaseService from '@/server/services/purchase.service'
 
 export const metadata: Metadata = { title: 'Document' }
@@ -58,6 +61,13 @@ export default async function PurchaseDocumentPage({
     canConvert ? purchaseService.vendorChoices(ctx) : Promise.resolve([]),
   ])
 
+  const [approvals, creator] = await Promise.all([
+    approvalService.latestApprovals(ctx.orgId, [id]),
+    document.createdById
+      ? db.user.findUnique({ where: { id: document.createdById }, select: { name: true } })
+      : Promise.resolve(null),
+  ])
+  const approval = approvals.get(id) ?? null
   const currency = ctx.organization.baseCurrency
   const isOrder = config.type === 'PURCHASE_ORDER'
   const vendorName = document.vendor?.displayName ?? 'No vendor yet'
@@ -116,6 +126,12 @@ export default async function PurchaseDocumentPage({
                     : `Vendor: ${vendorName}`,
                   `Date: ${formatTransactionDate(toCalendarDate(document.date), document.createdAt, ctx.organization.timeZone)}`,
                   `Total: ${formatMoney(document.total, currency)}`,
+                  ...documentStampLines({
+                    createdBy: creator?.name,
+                    approvedBy: approval?.name,
+                    approvedAt: approval?.at,
+                    status: document.status,
+                  }),
                 ],
               })}
               whatsappPhone={document.offsetCustomer?.phone ?? document.vendor?.phone ?? null}

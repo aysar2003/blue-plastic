@@ -2379,12 +2379,14 @@ a.report-drill-link:hover {
 }
 
 @page invoice {
-  margin: 10mm;
+  size: A4;
+  margin: 12mm;
 }
 
 @media print {
   @page {
-    margin: 18mm;
+    size: A4;
+    margin: 12mm;
   }
 
   .invoice-sheet,
@@ -2450,9 +2452,17 @@ a.report-drill-link:hover {
 
   /* A fixed paper height plus page margins spilled a blank second page. */
   html,
-  body {
+  body,
+  .app-surface {
     height: auto !important;
     min-height: 0 !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+  }
+
+  .app-atmosphere,
+  .shell-topbar {
+    display: none !important;
   }
 
   /* One page style for the whole print. A sheet on a named page, then the

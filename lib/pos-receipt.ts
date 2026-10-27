@@ -78,10 +78,10 @@ export function paymentRows(
   return { rows, paid, change: effectiveChange }
 }
 
-/** 2.0000 → "2", 1.5000 → "1.5". */
+/** 2 → "2.00", 1.5 → "1.50". */
 export function trimQty(value: string): string {
   const n = Number(value)
-  return Number.isFinite(n) ? String(n) : value
+  return Number.isFinite(n) ? n.toFixed(2) : value
 }
 
 /** px → mm at the CSS 96dpi the print engine uses. */

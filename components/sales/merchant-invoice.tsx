@@ -248,6 +248,7 @@ export function MerchantInvoice({
         address={address}
         config={config}
         terms={template.terms}
+        statusColor={statusColor}
         customerMessage={document.customerMessage}
         person={document.createdByName ?? ''}
         dateLabel={longDate(toCalendarDate(document.date), document.createdAt, organization.timeZone)}
@@ -258,7 +259,7 @@ export function MerchantInvoice({
           Boolean((organization as { logoStorageKey?: string | null }).logoStorageKey),
           (organization as { updatedAt?: Date | null }).updatedAt,
         )}
-        timeZone={organization.timeZone}
+        accent={accent}
       />
     )
   }
@@ -324,26 +325,26 @@ export function MerchantInvoice({
 
       <div className="mx-8 mt-6">
         <div
-          className="grid grid-cols-[2rem_minmax(0,1fr)_5.5rem_5.5rem_6rem] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white"
+          className="grid grid-cols-[2rem_minmax(0,1fr)_4.2rem_3.4rem_5rem_5.4rem] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white"
           style={{ background: accent }}
         >
           <span>No</span>
           <span>Item name</span>
           <span className="text-right">Qty</span>
+          <span className="text-right">Unit</span>
           <span className="text-right">Rate</span>
           <span className="text-right">Amount</span>
         </div>
         {document.lines.map((line, index) => (
           <div
             key={line.id}
-            className="grid grid-cols-[2rem_minmax(0,1fr)_5.5rem_5.5rem_6rem] items-center px-2 py-1.5 text-[12px]"
+            className="grid grid-cols-[2rem_minmax(0,1fr)_4.2rem_3.4rem_5rem_5.4rem] items-center px-2 py-1.5 text-[12px]"
             style={{ background: index % 2 === 0 ? '#ffffff' : wash }}
           >
             <span className="tabular">{line.lineNumber}</span>
             <span className="truncate pr-2">{line.description || line.item?.name || line.item?.sku || ''}</span>
-            <span className="tabular text-right">
-              {trimNumber(line.quantity)} {line.item?.unitOfMeasure?.trim() || 'Pcs'}
-            </span>
+            <span className="tabular text-right">{trimNumber(line.quantity)}</span>
+            <span className="text-right">{line.item?.unitOfMeasure?.trim().toUpperCase() || ''}</span>
             <span className="tabular text-right">{money(line.unitPrice)}</span>
             <span className="tabular text-right font-medium">{money(line.amount)}</span>
           </div>
@@ -459,6 +460,14 @@ export function MerchantInvoice({
         <DocumentAccountFooter template={template} accent={accent} />
       ) : null}
 
+      <div className="px-8 pb-2 pt-4">
+        <DocumentStampBlock
+          createdBy={document.createdByName}
+          approval={approval}
+          status={STATUS_LABELS[document.status] ?? document.status}
+        />
+      </div>
+
       {prefs.hidden.includes('printedFooter') ? null : (
         <div className="flex justify-between gap-4 border-t px-8 py-3 text-[10px] text-[#5C6B7A]">
           <p>Printed on: {printedOn}</p>
@@ -466,6 +475,38 @@ export function MerchantInvoice({
         </div>
       )}
     </article>
+  )
+}
+
+function DocumentStampBlock({
+  createdBy,
+  approval,
+  status,
+}: {
+  createdBy?: string | null
+  approval: { name: string; at: Date | null } | null
+  status: string
+}) {
+  const approvedDate = approval?.at ? toCalendarDate(approval.at) : '—'
+  return (
+    <dl className="space-y-1 text-[11px]">
+      <div className="flex gap-3">
+        <dt className="w-32 shrink-0 whitespace-nowrap text-[#5C6B7A]">Created By:</dt>
+        <dd>{createdBy?.trim() || '—'}</dd>
+      </div>
+      <div className="flex gap-3">
+        <dt className="w-32 shrink-0 whitespace-nowrap text-[#5C6B7A]">Approved By:</dt>
+        <dd>{approval?.name?.trim() || '—'}</dd>
+      </div>
+      <div className="flex gap-3">
+        <dt className="w-32 shrink-0 whitespace-nowrap text-[#5C6B7A]">Approved Date:</dt>
+        <dd>{approvedDate}</dd>
+      </div>
+      <div className="flex gap-3">
+        <dt className="w-32 shrink-0 whitespace-nowrap text-[#5C6B7A]">Status:</dt>
+        <dd className="capitalize">{status.replaceAll('_', ' ')}</dd>
+      </div>
+    </dl>
   )
 }
 
@@ -484,11 +525,12 @@ function TradePaper({
   website,
   legalName,
   logoSrc,
-  timeZone,
+  accent,
+  statusColor,
 }: {
   document: SheetDocument
   company: { name: string; phone?: string | null; email?: string | null; address?: string | null }
-  label: { party: string }
+  label: { party: string; date: string }
   money: (value: Parameters<typeof formatMoney>[0]) => string
   address: string
   config: { type: string; singular: string }
@@ -500,62 +542,65 @@ function TradePaper({
   website: string | null
   legalName: string | null
   logoSrc: string | null
-  timeZone?: string | null
+  accent: string
+  statusColor: string
 }) {
   const purchase = label.party === 'Vendor'
   const title = `${TITLES[config.type] ?? config.singular.toUpperCase()} #${document.number}`
-  const needed = document.expiryDate
-    ? longDate(toCalendarDate(document.expiryDate), null, timeZone)
-    : dateLabel
+  const needed = dateLabel
   const status = (STATUS_LABELS[document.status] ?? document.status).replaceAll('_', ' ')
-  const orgLines = (company.address ?? '')
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean)
-  const shipLines = (purchase ? orgLines : address.split(',').map((part) => part.trim()).filter(Boolean))
-  const cols = 'grid grid-cols-[minmax(0,1.4fr)_4.5rem_7.5rem_5.5rem_5.2rem_5.6rem] gap-x-2'
+  const cols = 'grid grid-cols-[minmax(0,1.35fr)_2.75rem_5.4rem_4.4rem_3.2rem_4.4rem_5.4rem] gap-x-2'
 
   return (
     <article
       className="merchant-invoice bg-white px-10 pb-6 pt-8 text-[12px] leading-snug text-[#374151] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:shadow-none"
       style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
     >
-      <header className="flex items-start gap-4">
-        {logoSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoSrc} alt="" className="h-[72px] w-[88px] shrink-0 object-contain" />
-        ) : null}
-        <div className="pt-1 text-[13px] leading-[18px] text-[#111827]">
-          <p className="font-semibold">{company.name}</p>
-          {legalName && legalName.trim() !== company.name.trim() ? <p>{legalName}</p> : null}
-          {orgLines.map((line) => (
-            <p key={line}>{line}</p>
-          ))}
+      <header className="flex items-start justify-between gap-6">
+        <h1 className="text-3xl font-black tracking-tight" style={{ color: accent }}>
+          {company.name}
+        </h1>
+        <div className="text-right text-[11px] leading-5 text-[#3d4c5c]">
+          {company.phone ? <p>TEL: {company.phone}</p> : null}
+          {company.email ? <p>EMAIL: {company.email}</p> : null}
+          {company.address ? <p>ADDR: {company.address}</p> : null}
         </div>
       </header>
 
-      <div className="mt-10 grid grid-cols-2 items-start gap-8">
+      <div className="mt-6 grid gap-6 sm:grid-cols-[minmax(0,1fr)_16rem]">
         <div>
-          <p className="font-semibold text-[#111827]">Shipping address:</p>
-          <div className="mt-1 space-y-0.5 leading-[18px]">
-            {(shipLines.length > 0 ? shipLines : ['—']).map((line) => (
-              <p key={line}>{line}</p>
-            ))}
-          </div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>
+            {label.party}
+          </p>
+          <p className="mt-1 text-sm font-semibold">{document.customer.displayName}</p>
+          <dl className="mt-3 grid grid-cols-[7.5rem_minmax(0,1fr)] gap-y-1 text-[12px]">
+            {address ? <Meta label="Address" value={address} /> : null}
+            {document.customer.phone ? <Meta label="Phone" value={document.customer.phone} /> : null}
+          </dl>
         </div>
-        <div className="pt-5 text-right leading-[18px]">
-          <p>{document.customer.displayName}</p>
-          {address
-            .split(',')
-            .map((part) => part.trim())
-            .filter(Boolean)
-            .map((line) => (
-              <p key={line}>{line}</p>
-            ))}
+        <div className="text-right">
+          {logoSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoSrc} alt="" className="mb-2 ml-auto h-12 w-14 object-contain" />
+          ) : null}
+          <p className="text-lg font-black tracking-wide" style={{ color: accent }}>
+            {TITLES[config.type] ?? config.singular.toUpperCase()}
+          </p>
+          <p className="mt-1 font-semibold">{document.number}</p>
+          <div className="mt-2 flex justify-end">
+            <DocumentBarcode value={document.number} height={40} moduleWidth={1.15} />
+          </div>
+          <p className="mt-2 inline-block rounded px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: statusColor }}>
+            {status.toUpperCase()}
+          </p>
+          <p className="mt-3 text-[11px] font-bold uppercase tracking-wide" style={{ color: accent }}>
+            {label.date}
+          </p>
+          <p>{dateLabel}</p>
         </div>
       </div>
 
-      <h1 className="mt-5 text-[28px] font-normal tracking-tight text-[#111827]">{title}</h1>
+      <h2 className="mt-6 text-[22px] font-normal tracking-tight text-[#111827]">{title}</h2>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-3">
         <div>
@@ -583,6 +628,7 @@ function TradePaper({
           <span className="text-right">Taxes</span>
           <span className="text-right">Date req.</span>
           <span className="text-right">Qty</span>
+          <span className="text-right">Unit</span>
           <span className="text-right">Unit price</span>
           <span className="text-right">Amount</span>
         </div>
@@ -598,12 +644,14 @@ function TradePaper({
               <span className="tabular text-right">
                 {line.taxAmount && Number(line.taxAmount) > 0 ? money(line.taxAmount) : ''}
               </span>
-              <span className="text-right text-[10px] leading-3">{needed}</span>
+              <span className="tabular text-right text-[11px]">{needed}</span>
               <span className="tabular text-right">
                 {Number.isFinite(Number(line.quantity)) ? Number(line.quantity).toFixed(3) : line.quantity}
-                {unit ? ` ${unit.toUpperCase()}` : ''}
               </span>
-              <span className="tabular text-right">{money(line.unitPrice)}</span>
+              <span className="text-right">{unit ? unit.toUpperCase() : ''}</span>
+              <span className="tabular text-right">
+                {Number.isFinite(Number(line.unitPrice)) ? Number(line.unitPrice).toFixed(3) : line.unitPrice}
+              </span>
               <span className="tabular text-right">{money(line.amount)}</span>
             </div>
           )
@@ -611,33 +659,27 @@ function TradePaper({
       </div>
 
       <div className="grid break-inside-avoid gap-6 py-6 sm:grid-cols-[minmax(0,1fr)_12rem]">
-        <dl className="space-y-1 text-[11px]">
-          <div className="flex gap-3">
-            <dt className="w-28 text-[#5C6B7A]">Created by</dt>
-            <dd>{person || '—'}</dd>
-          </div>
-          <div className="flex gap-3">
-            <dt className="w-28 text-[#5C6B7A]">Approved by</dt>
-            <dd>{approval?.name || '—'}</dd>
-          </div>
-          <div className="flex gap-3">
-            <dt className="w-28 text-[#5C6B7A]">Approved</dt>
-            <dd>{approval?.at ? longDate(toCalendarDate(approval.at), approval.at, timeZone) : '—'}</dd>
-          </div>
-          <div className="flex gap-3">
-            <dt className="w-28 text-[#5C6B7A]">Status</dt>
-            <dd className="capitalize">{status}</dd>
-          </div>
-        </dl>
+        <DocumentStampBlock
+          createdBy={person}
+          approval={approval}
+          status={status}
+        />
         <dl className="space-y-1 text-[12px]">
           <div className="flex justify-between gap-3">
             <dt>Subtotal</dt>
             <dd className="tabular">{money(document.subtotal)}</dd>
           </div>
-          <div className="flex justify-between gap-3">
-            <dt>Taxes</dt>
-            <dd className="tabular">{money(document.taxTotal)}</dd>
-          </div>
+          {config.type === 'PURCHASE_ORDER' ? (
+            <div className="flex justify-between gap-3">
+              <dt>Bill payment</dt>
+              <dd className="tabular">{money(document.amountApplied || 0)}</dd>
+            </div>
+          ) : (
+            <div className="flex justify-between gap-3">
+              <dt>Taxes</dt>
+              <dd className="tabular">{money(document.taxTotal)}</dd>
+            </div>
+          )}
           <div className="flex justify-between gap-3 border-t border-[#1f2933] pt-1 font-semibold">
             <dt>Total</dt>
             <dd className="tabular">{money(document.total)}</dd>

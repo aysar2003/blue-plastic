@@ -51,6 +51,33 @@ export function printWithInk(ink: PrintInk) {
   window.print()
 }
 
+/** Fetch a PDF URL and save it as a file. Avoids the browser opening the PDF inline. */
+export async function downloadPdfFile(href: string, filename?: string): Promise<boolean> {
+  const response = await fetch(href)
+  if (!response.ok) return false
+  const blob = await response.blob()
+  if (blob.size < 200) return false
+  const fromHeader = filenameFromContentDisposition(response.headers.get('content-disposition'))
+  const name = filename || fromHeader || 'document.pdf'
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = name.toLowerCase().endsWith('.pdf') ? name : `${name}.pdf`
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+  return true
+}
+
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null
+  const utf = header.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf?.[1]) return decodeURIComponent(utf[1])
+  const plain = header.match(/filename="?([^";]+)"?/i)
+  return plain?.[1] ?? null
+}
+
 /** Device RGB (0–1) → luminance grey for mono PDFs. */
 export function toMonoRgb(rgb: readonly [number, number, number]): readonly [number, number, number] {
   const [r, g, b] = rgb

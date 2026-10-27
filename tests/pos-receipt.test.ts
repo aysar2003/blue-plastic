@@ -109,8 +109,8 @@ describe('receipt helpers', () => {
   })
 
   it('trims quantities and converts px to mm at 96dpi', () => {
-    expect(trimQty('2.0000')).toBe('2')
-    expect(trimQty('1.5000')).toBe('1.5')
+    expect(trimQty('2.0000')).toBe('2.00')
+    expect(trimQty('1.5000')).toBe('1.50')
     expect(pxToMm(96)).toBeCloseTo(25.4)
   })
 
@@ -171,7 +171,7 @@ describe('thermal receipt', () => {
     expect(html).toContain('Fahad')
     expect(html).not.toContain('Cashier')
     expect(html).not.toContain('Register')
-    expect(html).toContain('2 Pcs x $20.00')
+    expect(html).toContain('2.00 Pcs x $20.00')
     expect(html).toContain('$46.00')
     expect(html).toMatch(/Cash<\/span><span[^>]*>\$50\.00/)
     expect(html).toMatch(/Change<\/span><span[^>]*>\$4\.00/)

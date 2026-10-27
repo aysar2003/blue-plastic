@@ -33,7 +33,7 @@ import {
 } from '@/lib/form-field-catalog'
 import type { FormTemplate } from '@/lib/form-templates'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
-import { resolveUnit } from '@/lib/quantity'
+import { fixed2, resolveUnit } from '@/lib/quantity'
 import { dueDateFor, type PaymentTermShape } from '@/lib/payment-terms'
 import { FORM_SHEET, VENDOR_CREDIT } from '@/lib/credit-brand'
 import { defaultPurchaseLineRows, type PurchaseTypeConfig } from '@/lib/purchase-types'
@@ -243,8 +243,8 @@ export function BillForm({
             itemId: line.itemId ?? '',
             expenseAccountId: line.expenseAccountId ?? '',
             description: line.description ?? '',
-            quantity: line.quantity,
-            unitPrice: line.unitPrice,
+            quantity: fixed2(line.quantity),
+            unitPrice: fixed2(line.unitPrice),
             taxCodeId: line.taxCodeId ?? '',
             storeId: line.storeId ?? officeId,
           }))
@@ -288,8 +288,8 @@ export function BillForm({
           itemId: line.itemId ?? '',
           expenseAccountId: line.expenseAccountId ?? '',
           description: line.description ?? '',
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
+          quantity: fixed2(line.quantity),
+          unitPrice: fixed2(line.unitPrice),
           taxCodeId: line.taxCodeId ?? '',
           storeId: line.storeId ?? officeId,
         })),
@@ -504,9 +504,9 @@ export function BillForm({
               unitPrice:
                 config.type === 'PURCHASE_REQUEST' || config.type === 'RFQ'
                   ? ''
-                  : (item?.price ?? ''),
+                  : fixed2(item?.price),
               taxCodeId: item?.taxCodeId ?? '',
-              quantity: line.quantity.trim() === '' ? '1' : line.quantity,
+              quantity: line.quantity.trim() === '' ? '1.00' : fixed2(line.quantity),
             }
           : line,
       ),
@@ -908,6 +908,7 @@ export function BillForm({
                           className="tabular text-right"
                           value={line.unitPrice}
                           onChange={(event) => update(line.key, { unitPrice: event.target.value })}
+                          onBlur={(event) => update(line.key, { unitPrice: fixed2(event.target.value) })}
                         />
                       </td>
                       <td className="px-1 py-1.5">
@@ -1006,6 +1007,7 @@ export function BillForm({
                             className="min-w-0 flex-1 tabular text-right"
                             value={line.quantity}
                             onChange={(event) => update(line.key, { quantity: event.target.value })}
+                            onBlur={(event) => update(line.key, { quantity: fixed2(event.target.value) })}
                           />
                           {line.itemId ? (
                             <span
@@ -1026,6 +1028,7 @@ export function BillForm({
                           className="tabular text-right"
                           value={line.unitPrice}
                           onChange={(event) => update(line.key, { unitPrice: event.target.value })}
+                          onBlur={(event) => update(line.key, { unitPrice: fixed2(event.target.value) })}
                         />
                       </td>
                     ) : null}
@@ -1183,8 +1186,8 @@ function costFromTotal(quantity: string, totalText: string): { quantity: string;
   const count = qty && !qty.isZero() ? qty : new Decimal(1)
   const unit = total.dividedBy(count).toDecimalPlaces(4, Decimal.ROUND_HALF_UP)
   return {
-    quantity: qty && !qty.isZero() ? quantity : '1',
-    unitPrice: unit.toFixed(4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, ''),
+    quantity: qty && !qty.isZero() ? fixed2(quantity) : '1.00',
+    unitPrice: fixed2(unit.toString()),
   }
 }
 
@@ -1200,7 +1203,7 @@ function ItemAmount({
   const price = parseMoneyInput(line.unitPrice) ?? ZERO
   const amount = quantity.isZero() && price.isZero() ? null : quantity.times(price)
   const shown =
-    draft ?? (amount ? amount.toFixed(4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') : '')
+    draft ?? (amount ? fixed2(amount.toString()) : '')
 
   return (
     <Input

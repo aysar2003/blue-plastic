@@ -72,7 +72,7 @@ export const PURCHASE_CONVERT_TARGETS = ['RFQ', 'PURCHASE_ORDER'] as const
 export type PurchaseConvertTarget = (typeof PURCHASE_CONVERT_TARGETS)[number]
 
 const DOCUMENT_SELECT = {
-  id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true,
+  id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true, createdById: true,
   status: true, reference: true, memo: true,
   subtotal: true, taxTotal: true, total: true,
   currencyCode: true, paymentAccountId: true, offsetCustomerId: true, journalId: true, version: true,
@@ -429,14 +429,42 @@ export async function getMany(ctx: OrgContext, ids: string[]) {
     return row ? [row] : []
   })
   const userIds = [...new Set(ordered.map((row) => row.createdById).filter((id): id is string => Boolean(id)))]
-  const users =
+  const orderIds = ordered.filter((row) => row.type === 'PURCHASE_ORDER').map((row) => row.id)
+  const [users, childBills] = await Promise.all([
     userIds.length === 0
-      ? []
-      : await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } })
+      ? Promise.resolve([])
+      : db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }),
+    orderIds.length === 0
+      ? Promise.resolve([])
+      : db.purchaseDocument.findMany({
+          where: {
+            orgId: ctx.orgId,
+            type: 'BILL',
+            deletedAt: null,
+            convertedFromId: { in: orderIds },
+          },
+          select: {
+            convertedFromId: true,
+            applications: { select: { amount: true, paymentId: true } },
+          },
+        }),
+  ])
   const names = new Map(users.map((user) => [user.id, user.name]))
+  const paidOnOrder = new Map<string, Decimal>()
+  for (const bill of childBills) {
+    if (!bill.convertedFromId) continue
+    const paid = bill.applications.reduce((sum, row) => {
+      if (!row.paymentId) return sum
+      return sum.plus(row.amount.toString())
+    }, ZERO)
+    paidOnOrder.set(bill.convertedFromId, (paidOnOrder.get(bill.convertedFromId) ?? ZERO).plus(paid))
+  }
 
   return ordered.map((document) => {
-    const applied = document.applications.reduce((sum, row) => sum.plus(row.amount.toString()), ZERO)
+    const applied =
+      document.type === 'PURCHASE_ORDER'
+        ? (paidOnOrder.get(document.id) ?? ZERO)
+        : document.applications.reduce((sum, row) => sum.plus(row.amount.toString()), ZERO)
     const total = new Decimal(document.total.toString())
     return {
       id: document.id,

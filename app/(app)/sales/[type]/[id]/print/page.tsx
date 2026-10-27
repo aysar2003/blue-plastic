@@ -6,8 +6,10 @@ import {
   documentEmailSubject,
 } from '@/lib/document-email'
 import { formatMoney } from '@/lib/money'
+import { documentStampLines } from '@/lib/document-stamp'
 import { bySlug } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
+import * as approvalService from '@/server/services/approval.service'
 import * as organizationService from '@/server/services/organization.service'
 import * as salesService from '@/server/services/sales.service'
 import { longDate } from '@/components/sales/invoice-sheet'
@@ -40,6 +42,8 @@ export default async function PrintDocumentPage({
   ])
   if (!document || document.type !== config.type) notFound()
 
+  const approvals = await approvalService.latestApprovals(ctx.orgId, [id])
+  const approval = approvals.get(id) ?? null
   const currency = document.currencyCode || ctx.organization.baseCurrency
   const customer = document.customer
   const money = (value: string | number) => formatMoney(value, currency)
@@ -52,6 +56,12 @@ export default async function PrintDocumentPage({
       `Date: ${longDate(toCalendarDate(document.date), document.createdAt, organization.timeZone)}`,
       `Total: ${money(document.total)}`,
       document.balance && Number(document.balance) > 0 ? `Amount due: ${money(document.balance)}` : null,
+      ...documentStampLines({
+        createdBy: document.createdByName,
+        approvedBy: approval?.name,
+        approvedAt: approval?.at,
+        status: document.status,
+      }),
     ],
   })
 
@@ -89,6 +99,7 @@ export default async function PrintDocumentPage({
         config={config}
         baseCurrency={ctx.organization.baseCurrency}
         printedBy={ctx.user.name}
+        approval={approval}
       />
     </div>
   )
