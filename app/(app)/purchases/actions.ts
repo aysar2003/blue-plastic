@@ -49,6 +49,24 @@ const documentType = z.enum([
   'RFQ',
 ])
 
+const documentSearch = z.object({
+  type: documentType,
+  number: z.string().trim().max(40).optional(),
+  date: z.string().trim().max(10).optional(),
+  amount: z.string().trim().max(24).optional(),
+  amountOp: z.enum(['eq', 'gt', 'lt', 'gte', 'lte']).optional(),
+})
+
+export const findPurchaseDocuments = action
+  .requires('bill:read')
+  .input(documentSearch)
+  .handler((ctx, input) =>
+    purchaseService.findDocuments(ctx, {
+      ...input,
+      type: input.type as PurchaseDocumentType,
+    }),
+  )
+
 export const createPurchase = action
   .requires('bill:create')
   .input(purchaseDocumentSchema.safeExtend({ type: documentType }))

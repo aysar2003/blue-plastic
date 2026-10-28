@@ -47,15 +47,28 @@ const documentType = z.enum([
   'REFUND_RECEIPT',
 ])
 
-const receiptSearch = z.object({
+const documentSearch = z.object({
+  type: documentType,
   number: z.string().trim().max(40).optional(),
   date: z.string().trim().max(10).optional(),
-  amount: z.string().trim().max(20).optional(),
+  amount: z.string().trim().max(24).optional(),
+  amountOp: z.enum(['eq', 'gt', 'lt', 'gte', 'lte']).optional(),
 })
 
+export const findSalesDocuments = action
+  .requires('invoice:read')
+  .input(documentSearch)
+  .handler((ctx, input) =>
+    salesService.findDocuments(ctx, {
+      ...input,
+      type: input.type as SalesDocumentType,
+    }),
+  )
+
+/** @deprecated Prefer findSalesDocuments. */
 export const findSalesReceipts = action
   .requires('invoice:read')
-  .input(receiptSearch)
+  .input(documentSearch.omit({ type: true }))
   .handler((ctx, input) => salesService.findReceipts(ctx, input))
 
 export const getConvertibleSource = action

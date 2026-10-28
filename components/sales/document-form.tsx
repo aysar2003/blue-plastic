@@ -79,6 +79,7 @@ import {
   defaultLineRows,
   isProposal,
   isSalesOrder,
+  PAYMENT_METHOD_LABELS,
   type SalesTypeConfig,
 } from '@/lib/sales-types'
 import { cn } from '@/lib/utils'
@@ -93,7 +94,7 @@ import {
   type StockWarning,
   type StoreChoice,
 } from '@/lib/store-stock'
-import { findSalesReceipts, saveDocumentForm } from '@/app/(app)/sales/actions'
+import { findSalesDocuments, saveDocumentForm } from '@/app/(app)/sales/actions'
 
 export type ItemOption = {
   id: string
@@ -124,6 +125,9 @@ export type Option = { id: string; label: string }
 export type CustomerOption = Option & {
   email: string | null
   paymentTermId: string | null
+  /** Open A/R balance before this document. Positive = customer owes. */
+  balance?: string | null
+  hint?: string
   billingAddress: string
   shippingAddress: string
 }
@@ -176,6 +180,7 @@ type DocumentSeed = {
   workSite?: string | null
   paymentTermId: string | null
   depositAccountId: string | null
+  paymentMethod?: string | null
   projectId?: string | null
   discountAmount?: string | null
   lines: {
@@ -335,6 +340,7 @@ export function DocumentForm({
   const [depositAccountId, setDepositAccountId] = useState(
     document?.depositAccountId ?? depositAccounts[0]?.id ?? '',
   )
+  const [paymentMethod, setPaymentMethod] = useState(document?.paymentMethod ?? '')
   /** Estimate / quotation / order the lines were brought from — closed on save. */
   const [convertedFromId, setConvertedFromId] = useState<string | null>(null)
   const [convertedFromLabel, setConvertedFromLabel] = useState<string | null>(null)
@@ -382,6 +388,7 @@ export function DocumentForm({
       setWorkSite(document.workSite ?? '')
       setPaymentTermId(document.paymentTermId ?? '')
       setDepositAccountId(document.depositAccountId ?? depositAccounts[0]?.id ?? '')
+      setPaymentMethod(document.paymentMethod ?? '')
       setDiscountKind(restoredDiscount > 0 ? 'amount' : 'percent')
       setDiscountValue(restoredDiscount > 0 ? restoredDiscount.toFixed(2) : restoredPercent)
       setConvertedFromId(null)
@@ -419,6 +426,7 @@ export function DocumentForm({
     )
     setPaymentTermId('')
     setDepositAccountId(depositAccounts[0]?.id ?? '')
+    setPaymentMethod('')
     setDiscountKind('percent')
     setDiscountValue('')
     setConvertedFromId(null)
@@ -455,6 +463,7 @@ export function DocumentForm({
         )
         setPaymentTermId('')
         setDepositAccountId(depositAccounts[0]?.id ?? '')
+        setPaymentMethod('')
         setDiscountKind('percent')
         setDiscountValue('')
         setConvertedFromId(null)
@@ -764,6 +773,8 @@ export function DocumentForm({
       workSite,
       paymentTermId,
       depositAccountId: config.needsDeposit ? depositAccountId : '',
+      paymentMethod:
+        config.type === 'SALES_RECEIPT' || config.type === 'REFUND_RECEIPT' ? paymentMethod : '',
       projectId,
       saveAsDraft: draft,
       ...(convertedFromId && !document?.id ? { convertedFromId } : {}),
@@ -836,6 +847,8 @@ export function DocumentForm({
     setPaymentTermId,
     depositAccountId,
     setDepositAccountId,
+    paymentMethod,
+    setPaymentMethod,
     lines,
     stores,
     stock,
@@ -878,7 +891,9 @@ export function DocumentForm({
 
       {config.type === 'SALES_RECEIPT' ? (
         <SalesReceiptToolbar
+          type={config.type}
           slug={config.slug}
+          singular={config.singular}
           recordId={document?.id}
           neighbors={neighbors}
           canSave={canSave}
@@ -892,6 +907,7 @@ export function DocumentForm({
           <RecordNav
             {...neighborHrefs(`/sales/${config.slug}`, neighbors, document?.id)}
           />
+          <DocumentFinder type={config.type} slug={config.slug} singular={config.singular} />
         </div>
       )}
 
@@ -1173,6 +1189,8 @@ type LayoutProps = {
   setPaymentTermId: (value: string) => void
   depositAccountId: string
   setDepositAccountId: (value: string) => void
+  paymentMethod: string
+  setPaymentMethod: (value: string) => void
   lines: Line[]
   stores: StoreChoice[]
   stock: StockByStore
@@ -1264,7 +1282,7 @@ function HeaderFields({
           recordId={props.recordId}
         />
 
-        {showDue ? (
+        {showDue && props.showField('dueDate') ? (
           <Field name="dueDate" label={dueLabel}>
             <Input id="dueDate" value={isCalendarDate(due) ? formatDate(due) : ''} readOnly />
           </Field>
@@ -1283,12 +1301,13 @@ function HeaderFields({
       </div>
 
       {(config.type === 'INVOICE' || config.needsDeposit) && (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="flex flex-wrap items-end gap-2">
           {config.type === 'INVOICE' && props.showField('paymentTerms') ? (
             <Field
               name="paymentTermId"
               label="Terms"
               error={state.fieldErrors?.paymentTermId}
+              className="w-full min-w-[10rem] sm:w-44"
             >
               <NativeSelect
                 {...fieldProps('paymentTermId', state.fieldErrors?.paymentTermId, true)}
@@ -1305,12 +1324,36 @@ function HeaderFields({
             </Field>
           ) : null}
 
+          {(config.type === 'SALES_RECEIPT' || config.type === 'REFUND_RECEIPT') &&
+          props.showField('paymentMethod') ? (
+            <Field
+              name="paymentMethod"
+              label="Payment method"
+              error={state.fieldErrors?.paymentMethod}
+              className="w-full min-w-[10rem] sm:w-44"
+            >
+              <NativeSelect
+                {...fieldProps('paymentMethod', state.fieldErrors?.paymentMethod, true)}
+                value={props.paymentMethod}
+                onChange={(event) => props.setPaymentMethod(event.target.value)}
+              >
+                <option value="">Choose</option>
+                {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+          ) : null}
+
           {config.needsDeposit ? (
             <Field
               name="depositAccountId"
               label={config.type === 'REFUND_RECEIPT' ? 'Paid from' : 'Deposit to'}
               required
               error={state.fieldErrors?.depositAccountId}
+              className="w-full min-w-[12rem] sm:w-56"
             >
               <AccountPicker
                 id="depositAccountId"
@@ -1319,6 +1362,26 @@ function HeaderFields({
                 onChange={(next) => props.setDepositAccountId(next ?? '')}
                 required
                 error={state.fieldErrors?.depositAccountId}
+              />
+            </Field>
+          ) : null}
+
+          {config.type === 'INVOICE' && props.showField('customerBalance') ? (
+            <Field
+              name="customerBalance"
+              label="Balance"
+              className="ml-auto w-full min-w-[10rem] sm:w-44"
+            >
+              <Input
+                id="customerBalance"
+                className="tabular text-right"
+                value={
+                  customer
+                    ? formatMoney(customer.balance ?? '0', props.currency)
+                    : ''
+                }
+                readOnly
+                placeholder="Choose a customer"
               />
             </Field>
           ) : null}
@@ -1548,7 +1611,7 @@ function InvoiceLayout(props: LayoutProps) {
             error={state.fieldErrors?.number}
             recordId={props.recordId}
           />
-          {props.config.needsDeposit ? null : (
+          {props.config.needsDeposit || !props.showField('dueDate') ? null : (
             <Field
               name="dueDate"
               label={
@@ -1600,6 +1663,21 @@ function InvoiceLayout(props: LayoutProps) {
                   </option>
                 ))}
               </NativeSelect>
+            </Field>
+          ) : null}
+          {props.config.type === 'INVOICE' && props.showField('customerBalance') ? (
+            <Field name="customerBalance" label="Balance" className="lg:col-start-5">
+              <Input
+                id="customerBalance"
+                className="tabular text-right"
+                value={
+                  customer
+                    ? formatMoney(customer.balance ?? '0', props.currency)
+                    : ''
+                }
+                readOnly
+                placeholder="Choose a customer"
+              />
             </Field>
           ) : null}
         </div>
@@ -1679,6 +1757,7 @@ const noteBox =
 function InvoiceLines({ props }: { props: LayoutProps }) {
   const showDescription = props.showColumn('description')
   const showQty = props.showColumn('qty')
+  const showUnit = props.showColumn('unit')
   const showRate = props.showColumn('rate')
   const showStore = props.showColumn('store') && props.stores.length > 0
   return (
@@ -1690,6 +1769,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
               <th className="w-44 px-2 py-2 text-left">Item</th>
               {showDescription ? <th className="px-2 py-2 text-left">Description</th> : null}
               {showQty ? <th className="w-24 px-2 py-2 text-center">Qty</th> : null}
+              {showUnit ? <th className="w-16 px-2 py-2 text-center">Unit</th> : null}
               {showRate ? <th className="w-28 px-2 py-2 text-right">Rate</th> : null}
               <th className="w-28 px-2 py-2 text-right">Amount</th>
               {showStore ? <th className="w-40 px-2 py-2 text-left">Store</th> : null}
@@ -1734,7 +1814,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                           props.update(line.key, { quantity: fixed2(event.target.value) })
                         }
                       />
-                      {line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
+                      {!showUnit && line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
                         <span
                           className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
                           title={resolveUnit(
@@ -1747,6 +1827,16 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                         </span>
                       ) : null}
                     </div>
+                  </td>
+                ) : null}
+                {showUnit ? (
+                  <td className="px-1 py-1 text-center text-[0.7rem] font-medium uppercase text-muted-foreground">
+                    {line.itemId && !props.subtotalItemIds.has(line.itemId)
+                      ? (
+                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure?.trim() ||
+                          'EACH'
+                        ).toUpperCase()
+                      : ''}
                   </td>
                 ) : null}
                 {showRate ? (
@@ -1898,13 +1988,17 @@ function SheetLayout(props: LayoutProps) {
 
 
 function SalesReceiptToolbar({
+  type,
   slug,
+  singular,
   recordId,
   neighbors,
   canSave,
   onSave,
 }: {
+  type: SalesTypeConfig['type']
   slug: string
+  singular: string
   recordId?: string
   neighbors?: {
     previous: { id: string; number: string } | null
@@ -1935,7 +2029,7 @@ function SalesReceiptToolbar({
         <PlusIcon />
         New
       </Button>
-      <ReceiptFinder slug={slug} />
+      <DocumentFinder type={type} slug={slug} singular={singular} />
       <Button type="submit" size="sm" disabled={!canSave} onClick={onSave}>
         <SaveIcon />
         Save
@@ -1944,22 +2038,47 @@ function SalesReceiptToolbar({
   )
 }
 
-function ReceiptFinder({ slug }: { slug: string }) {
+const AMOUNT_OPS = [
+  { value: 'eq', label: '=' },
+  { value: 'gt', label: '>' },
+  { value: 'lt', label: '<' },
+  { value: 'gte', label: '≥' },
+  { value: 'lte', label: '≤' },
+] as const
+
+/** QuickBooks-style Find: number, date, amount with = / > / <. */
+function DocumentFinder({
+  type,
+  slug,
+  singular,
+}: {
+  type: SalesTypeConfig['type']
+  slug: string
+  singular: string
+}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [number, setNumber] = useState('')
   const [date, setDate] = useState('')
   const [amount, setAmount] = useState('')
+  const [amountOp, setAmountOp] = useState<(typeof AMOUNT_OPS)[number]['value']>('eq')
   const [rows, setRows] = useState<
     { id: string; number: string; date: string; total: string; currencyCode: string; customerName: string }[]
   >([])
   const [searched, setSearched] = useState(false)
 
-  async function search(next?: { number?: string; date?: string; amount?: string }) {
-    const result = await findSalesReceipts({
+  async function search(next?: {
+    number?: string
+    date?: string
+    amount?: string
+    amountOp?: (typeof AMOUNT_OPS)[number]['value']
+  }) {
+    const result = await findSalesDocuments({
+      type,
       number: next?.number ?? number,
       date: next?.date ?? date,
       amount: next?.amount ?? amount,
+      amountOp: next?.amountOp ?? amountOp,
     })
     setRows(result.ok ? result.data : [])
     setSearched(true)
@@ -1970,7 +2089,13 @@ function ReceiptFinder({ slug }: { slug: string }) {
       open={open}
       onOpenChange={(next) => {
         setOpen(next)
-        if (next) void search({ number: '', date: '', amount: '' })
+        if (next) {
+          setNumber('')
+          setDate('')
+          setAmount('')
+          setAmountOp('eq')
+          void search({ number: '', date: '', amount: '', amountOp: 'eq' })
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -1981,16 +2106,18 @@ function ReceiptFinder({ slug }: { slug: string }) {
       </DialogTrigger>
       <DialogContent size="sm">
         <DialogHeader>
-          <DialogTitle>Find a sales receipt</DialogTitle>
-          <DialogDescription>Search by the receipt number, the date, or the amount.</DialogDescription>
+          <DialogTitle>Find {singular.toLowerCase()}</DialogTitle>
+          <DialogDescription>
+            Search by number, date, or amount — use =, &gt;, or &lt; like QuickBooks Desktop.
+          </DialogDescription>
         </DialogHeader>
         <div className="mt-4 grid gap-3">
-          <Field name="findNumber" label="Sales number">
+          <Field name="findNumber" label={`${singular} no.`}>
             <Input
               id="findNumber"
               value={number}
               onChange={(event) => setNumber(event.target.value)}
-              placeholder="SR-00001"
+              placeholder="Number"
               autoComplete="off"
             />
           </Field>
@@ -1998,14 +2125,31 @@ function ReceiptFinder({ slug }: { slug: string }) {
             <DateField id="findDate" value={date} onChange={setDate} />
           </Field>
           <Field name="findAmount" label="Amount">
-            <Input
-              id="findAmount"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              inputMode="decimal"
-              placeholder="100"
-              autoComplete="off"
-            />
+            <div className="flex gap-1.5">
+              <NativeSelect
+                aria-label="Amount match"
+                value={amountOp}
+                onChange={(event) =>
+                  setAmountOp(event.target.value as (typeof AMOUNT_OPS)[number]['value'])
+                }
+                className="w-16 shrink-0"
+              >
+                {AMOUNT_OPS.map((op) => (
+                  <option key={op.value} value={op.value}>
+                    {op.label}
+                  </option>
+                ))}
+              </NativeSelect>
+              <Input
+                id="findAmount"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                inputMode="decimal"
+                placeholder="100 or >100"
+                autoComplete="off"
+                className="min-w-0 flex-1"
+              />
+            </div>
           </Field>
           <Button type="button" onClick={() => void search()}>
             <SearchIcon />
@@ -2034,7 +2178,7 @@ function ReceiptFinder({ slug }: { slug: string }) {
             </li>
           ))}
           {searched && rows.length === 0 ? (
-            <li className="px-2 py-3 text-sm text-muted-foreground">No receipt matches.</li>
+            <li className="px-2 py-3 text-sm text-muted-foreground">No {singular.toLowerCase()} matches.</li>
           ) : null}
         </ul>
       </DialogContent>
@@ -2223,6 +2367,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
     props.config.type === 'CREDIT_MEMO' ? CUSTOMER_CREDIT.band : FORM_SHEET.band
   const showDescription = props.showColumn('description')
   const showQty = props.showColumn('qty')
+  const showUnit = props.showColumn('unit')
   const showRate = props.showColumn('rate')
   const showStore = props.showColumn('store') && props.stores.length > 0
   const showTax = props.showColumn('tax') && props.showTax
@@ -2244,6 +2389,11 @@ function StripedLines({ props }: { props: LayoutProps }) {
               {showQty ? (
                 <th className="w-24 px-1.5 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide">
                   Qty
+                </th>
+              ) : null}
+              {showUnit ? (
+                <th className="w-16 px-1.5 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide">
+                  Unit
                 </th>
               ) : null}
               {showRate ? (
@@ -2319,7 +2469,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
                           props.update(line.key, { quantity: fixed2(event.target.value) })
                         }
                       />
-                      {line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
+                      {!showUnit && line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
                         <span
                           className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
                           title={resolveUnit(
@@ -2332,6 +2482,16 @@ function StripedLines({ props }: { props: LayoutProps }) {
                         </span>
                       ) : null}
                     </div>
+                  </td>
+                ) : null}
+                {showUnit ? (
+                  <td className="px-1 py-1 text-center text-[0.7rem] font-medium uppercase text-muted-foreground">
+                    {line.itemId && !props.subtotalItemIds.has(line.itemId)
+                      ? (
+                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure?.trim() ||
+                          'EACH'
+                        ).toUpperCase()
+                      : ''}
                   </td>
                 ) : null}
                 {showRate ? (

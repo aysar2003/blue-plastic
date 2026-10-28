@@ -9,6 +9,7 @@ import { positionsOf } from '@/server/accounting/inventory'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { selectableAccounts } from '@/server/services/account.service'
+import { subledgerBalances } from '@/server/services/contact.service'
 import { listForPicker as listProjects } from '@/server/services/project.service'
 
 /**
@@ -39,7 +40,7 @@ const cachedFormOptions = cache(
   (orgId: string, enableTax: boolean, includeOnHand: boolean, canReadProjects: boolean) =>
     unstable_cache(
       () => queryFormOptions(orgId, enableTax, includeOnHand, canReadProjects),
-      ['sales-form-options-v1', orgId, String(enableTax), String(includeOnHand), String(canReadProjects)],
+      ['sales-form-options-v2', orgId, String(enableTax), String(includeOnHand), String(canReadProjects)],
       { revalidate: 30 },
     )(),
 )
@@ -134,33 +135,50 @@ async function queryFormOptions(
         .filter((item) => item.type === 'INVENTORY' || item.type === 'INVENTORY_ASSEMBLY')
         .map((item) => item.id)
     : []
-  const positions = includeOnHand
-    ? await positionsOf(db as unknown as Tx, orgId, trackedIds)
-    : new Map()
+  const [positions, customerBalances] = await Promise.all([
+    includeOnHand
+      ? positionsOf(db as unknown as Tx, orgId, trackedIds)
+      : Promise.resolve(new Map()),
+    subledgerBalances(
+      db,
+      { orgId } as OrgContext,
+      'customer',
+      customers.map((customer) => customer.id),
+    ),
+  ])
 
   return {
-    customers: customers.map((customer) => ({
-      id: customer.id,
-      label: customer.displayName,
-      email: customer.email,
-      paymentTermId: customer.paymentTermId,
-      billingAddress: postalAddress(
-        customer.billingLine1,
-        customer.billingLine2,
-        customer.billingCity,
-        customer.billingRegion,
-        customer.billingPostalCode,
-        customer.billingCountry,
-      ),
-      shippingAddress: postalAddress(
-        customer.shippingLine1,
-        customer.shippingLine2,
-        customer.shippingCity,
-        customer.shippingRegion,
-        customer.shippingPostalCode,
-        customer.shippingCountry,
-      ),
-    })),
+    customers: customers.map((customer) => {
+      const balance = customerBalances.get(customer.id) ?? new Decimal(0)
+      return {
+        id: customer.id,
+        label: customer.displayName,
+        email: customer.email,
+        paymentTermId: customer.paymentTermId,
+        balance: balance.toFixed(4),
+        hint: balance.isZero()
+          ? 'No balance'
+          : balance.isPositive()
+            ? `Balance ${balance.toFixed(2)}`
+            : `Credit ${balance.abs().toFixed(2)}`,
+        billingAddress: postalAddress(
+          customer.billingLine1,
+          customer.billingLine2,
+          customer.billingCity,
+          customer.billingRegion,
+          customer.billingPostalCode,
+          customer.billingCountry,
+        ),
+        shippingAddress: postalAddress(
+          customer.shippingLine1,
+          customer.shippingLine2,
+          customer.shippingCity,
+          customer.shippingRegion,
+          customer.shippingPostalCode,
+          customer.shippingCountry,
+        ),
+      }
+    }),
     items: items.map((item) => ({
       id: item.id,
       label: item.name,

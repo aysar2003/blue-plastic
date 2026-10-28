@@ -55,6 +55,15 @@ export const salesDocumentSchema = z.object({
   /** Place the work is done — printed below Sales person. */
   workSite: optionalText(200),
   depositAccountId: optionalId,
+  /** Sales receipt only. Blank is allowed so an older receipt can still be saved. */
+  paymentMethod: z
+    .union([
+      z.enum(['CASH', 'BANK_TRANSFER', 'CHEQUE', 'CARD', 'MOBILE_MONEY', 'OTHER']),
+      z.literal(''),
+    ])
+    .transform((value) => (value === '' ? null : value))
+    .nullable()
+    .optional(),
   saveAsDraft: z.coerce.boolean().default(false),
   /**
    * Estimate, quotation, or sales order this sale was built from. Closing the

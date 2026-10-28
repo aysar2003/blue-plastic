@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
 
 import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
-import { ChevronDownIcon, ChevronUpIcon, PlusIcon, Trash2Icon } from 'lucide-react'
+import { ChevronDownIcon, ChevronUpIcon, PlusIcon, SearchIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { idleState } from '@/components/forms/action-state'
@@ -19,6 +19,14 @@ import { SubmitButton } from '@/components/forms/submit-button'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { DateField } from '@/components/ui/date-field'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import type { AccountPickerOption } from '@/lib/account-options'
@@ -40,7 +48,7 @@ import { defaultPurchaseLineRows, type PurchaseTypeConfig } from '@/lib/purchase
 import { cn } from '@/lib/utils'
 import { LineStore } from '@/components/inventory/line-store'
 import { officeStoreId, type StockByStore, type StoreChoice } from '@/lib/store-stock'
-import { savePurchaseForm } from '@/app/(app)/purchases/actions'
+import { findPurchaseDocuments, savePurchaseForm } from '@/app/(app)/purchases/actions'
 
 export type VendorOption = {
   id: string
@@ -602,7 +610,10 @@ export function BillForm({
       <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor(false)} />
 
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <RecordNav {...neighborHrefs(`/purchases/${config.slug}`, neighbors, document?.id)} />
+        <div className="flex flex-wrap items-center gap-1">
+          <RecordNav {...neighborHrefs(`/purchases/${config.slug}`, neighbors, document?.id)} />
+          <PurchaseFinder type={config.type} slug={config.slug} singular={config.singular} />
+        </div>
         {formCustomization && activeForm ? (
           <FormCustomizePanel
             family={formCustomization.family}
@@ -949,7 +960,7 @@ export function BillForm({
                 <th className="w-44 px-2 py-2 text-left">Item</th>
                 {showColumn('description') ? <th className="px-2 py-2 text-left">Description</th> : null}
                 {showColumn('qty') ? <th className="w-24 px-2 py-2 text-center">Qty</th> : null}
-                {showColumn('qty') ? <th className="w-16 px-2 py-2 text-center">Unit</th> : null}
+                {showColumn('unit') ? <th className="w-16 px-2 py-2 text-center">Unit</th> : null}
                 {showColumn('rate') ? <th className="w-28 px-2 py-2 text-right">Rate</th> : null}
                 {showTax && showColumn('tax') ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
                 <th className="w-28 px-2 py-2 text-right">Amount</th>
@@ -966,7 +977,8 @@ export function BillForm({
                     colSpan={
                       3 +
                       (showColumn('description') ? 1 : 0) +
-                      (showColumn('qty') ? 2 : 0) +
+                      (showColumn('qty') ? 1 : 0) +
+                      (showColumn('unit') ? 1 : 0) +
                       (showColumn('rate') ? 1 : 0) +
                       (showTax && showColumn('tax') ? 1 : 0) +
                       (showColumn('store') && stores.length > 0 ? 1 : 0)
@@ -1011,7 +1023,7 @@ export function BillForm({
                         />
                       </td>
                     ) : null}
-                    {showColumn('qty') ? (
+                    {showColumn('unit') ? (
                       <td className="px-2 py-1.5 text-center text-[0.7rem] font-medium uppercase text-muted-foreground">
                         {line.itemId
                           ? (itemById.get(line.itemId)?.unitOfMeasure?.trim() || 'EACH').toUpperCase()
@@ -1216,5 +1228,152 @@ function ItemAmount({
         setDraft(null)
       }}
     />
+  )
+}
+
+const PURCHASE_AMOUNT_OPS = [
+  { value: 'eq', label: '=' },
+  { value: 'gt', label: '>' },
+  { value: 'lt', label: '<' },
+  { value: 'gte', label: '≥' },
+  { value: 'lte', label: '≤' },
+] as const
+
+function PurchaseFinder({
+  type,
+  slug,
+  singular,
+}: {
+  type: PurchaseTypeConfig['type']
+  slug: string
+  singular: string
+}) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [number, setNumber] = useState('')
+  const [date, setDate] = useState('')
+  const [amount, setAmount] = useState('')
+  const [amountOp, setAmountOp] = useState<(typeof PURCHASE_AMOUNT_OPS)[number]['value']>('eq')
+  const [rows, setRows] = useState<
+    { id: string; number: string; date: string; total: string; currencyCode: string; partyName: string }[]
+  >([])
+  const [searched, setSearched] = useState(false)
+
+  async function search(next?: {
+    number?: string
+    date?: string
+    amount?: string
+    amountOp?: (typeof PURCHASE_AMOUNT_OPS)[number]['value']
+  }) {
+    const result = await findPurchaseDocuments({
+      type,
+      number: next?.number ?? number,
+      date: next?.date ?? date,
+      amount: next?.amount ?? amount,
+      amountOp: next?.amountOp ?? amountOp,
+    })
+    setRows(result.ok ? result.data : [])
+    setSearched(true)
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (next) {
+          setNumber('')
+          setDate('')
+          setAmount('')
+          setAmountOp('eq')
+          void search({ number: '', date: '', amount: '', amountOp: 'eq' })
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline" size="sm">
+          <SearchIcon />
+          Find
+        </Button>
+      </DialogTrigger>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Find {singular.toLowerCase()}</DialogTitle>
+          <DialogDescription>
+            Search by number, date, or amount — use =, &gt;, or &lt; like QuickBooks Desktop.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="mt-4 grid gap-3">
+          <Field name="findNumber" label={`${singular} no.`}>
+            <Input
+              id="findNumber"
+              value={number}
+              onChange={(event) => setNumber(event.target.value)}
+              placeholder="Number"
+              autoComplete="off"
+            />
+          </Field>
+          <Field name="findDate" label="Date">
+            <DateField id="findDate" value={date} onChange={setDate} />
+          </Field>
+          <Field name="findAmount" label="Amount">
+            <div className="flex gap-1.5">
+              <NativeSelect
+                aria-label="Amount match"
+                value={amountOp}
+                onChange={(event) =>
+                  setAmountOp(event.target.value as (typeof PURCHASE_AMOUNT_OPS)[number]['value'])
+                }
+                className="w-16 shrink-0"
+              >
+                {PURCHASE_AMOUNT_OPS.map((op) => (
+                  <option key={op.value} value={op.value}>
+                    {op.label}
+                  </option>
+                ))}
+              </NativeSelect>
+              <Input
+                id="findAmount"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                inputMode="decimal"
+                placeholder="100 or >100"
+                autoComplete="off"
+                className="min-w-0 flex-1"
+              />
+            </div>
+          </Field>
+          <Button type="button" onClick={() => void search()}>
+            <SearchIcon />
+            Find
+          </Button>
+        </div>
+        <ul className="mt-4 max-h-64 space-y-1 overflow-y-auto">
+          {rows.map((row) => (
+            <li key={row.id}>
+              <button
+                type="button"
+                className="flex w-full items-baseline justify-between gap-3 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-accent hover:text-accent-foreground"
+                onClick={() => {
+                  setOpen(false)
+                  router.push(`/purchases/${slug}/${row.id}/edit`)
+                }}
+              >
+                <span>
+                  <span className="font-medium">{row.number}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {row.partyName} · {formatDate(row.date)}
+                  </span>
+                </span>
+                <span className="tabular">{formatMoney(row.total, row.currencyCode)}</span>
+              </button>
+            </li>
+          ))}
+          {searched && rows.length === 0 ? (
+            <li className="px-2 py-3 text-sm text-muted-foreground">No {singular.toLowerCase()} matches.</li>
+          ) : null}
+        </ul>
+      </DialogContent>
+    </Dialog>
   )
 }

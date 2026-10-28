@@ -4,6 +4,7 @@ import type { DocumentType, Prisma, PurchaseDocumentType } from '@prisma/client'
 import { lineLabel } from '@/lib/purchase-board'
 import {
   endOfMonth,
+  isCalendarDate,
   startOfMonth,
   toCalendarDate,
   toDate,
@@ -11,7 +12,7 @@ import {
   type CalendarDate,
 } from '@/lib/date'
 import { documentOverdueOr, isCollectionOverdue, overdueClock, partyFromContact } from '@/lib/invoice-overdue'
-import { Decimal, toMoneyString, ZERO } from '@/lib/money'
+import { Decimal, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import {
@@ -296,6 +297,96 @@ export async function vendorChoices(ctx: OrgContext) {
     select: { id: true, displayName: true },
     orderBy: { displayName: 'asc' },
   })
+}
+
+export type PurchaseFindAmountOp = 'eq' | 'gt' | 'lt' | 'gte' | 'lte'
+
+function parsePurchaseAmountFilter(
+  amountRaw?: string,
+  amountOp?: PurchaseFindAmountOp,
+): { money: Decimal; op: PurchaseFindAmountOp } | null {
+  const text = amountRaw?.trim() ?? ''
+  if (!text) return null
+  const matched = text.match(/^(>=|<=|>|<|=)\s*(.+)$/)
+  const opFromText =
+    matched?.[1] === '>='
+      ? 'gte'
+      : matched?.[1] === '<='
+        ? 'lte'
+        : matched?.[1] === '>'
+          ? 'gt'
+          : matched?.[1] === '<'
+            ? 'lt'
+            : matched?.[1] === '='
+              ? 'eq'
+              : null
+  const money = parseMoneyInput(matched?.[2]?.trim() ?? text)
+  if (!money) return null
+  return {
+    money: money.toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
+    op: opFromText ?? amountOp ?? 'eq',
+  }
+}
+
+function purchaseTotalFilter(money: Decimal, op: PurchaseFindAmountOp): Prisma.DecimalFilter {
+  switch (op) {
+    case 'gt':
+      return { gt: money }
+    case 'lt':
+      return { lt: money }
+    case 'gte':
+      return { gte: money }
+    case 'lte':
+      return { lte: money }
+    case 'eq':
+    default:
+      return { gte: money, lt: money.plus('0.005') }
+  }
+}
+
+/** Find a purchase paper by number, date, and/or amount (QuickBooks-style). */
+export async function findDocuments(
+  ctx: OrgContext,
+  input: {
+    type: PurchaseDocumentType
+    number?: string
+    date?: string
+    amount?: string
+    amountOp?: PurchaseFindAmountOp
+  },
+) {
+  const number = input.number?.trim()
+  const date = input.date?.trim()
+  const amountFilter = parsePurchaseAmountFilter(input.amount, input.amountOp)
+  const rows = await db.purchaseDocument.findMany({
+    where: {
+      orgId: ctx.orgId,
+      type: input.type,
+      deletedAt: null,
+      ...(number ? { number: { contains: number, mode: 'insensitive' } } : {}),
+      ...(date && isCalendarDate(date) ? { date: toDate(date) } : {}),
+      ...(amountFilter ? { total: purchaseTotalFilter(amountFilter.money, amountFilter.op) } : {}),
+    },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      total: true,
+      currencyCode: true,
+      vendor: { select: { displayName: true } },
+    },
+    orderBy: [{ date: 'desc' }, { number: 'desc' }],
+    take: 20,
+  })
+
+  return rows.map((row) => ({
+    id: row.id,
+    number: row.number,
+    date: toCalendarDate(row.date),
+    total: row.total.toString(),
+    currencyCode: row.currencyCode,
+    partyName: row.vendor?.displayName ?? '—',
+  }))
 }
 
 export async function get(ctx: OrgContext, id: string) {

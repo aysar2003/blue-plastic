@@ -2246,6 +2246,8 @@ model SalesDocument {
   /// Where the money landed, for documents that move cash immediately.
   /// Required for SALES_RECEIPT and REFUND_RECEIPT, unused otherwise.
   depositAccountId String?
+  /// How a sales receipt was paid. Unused on every other sales document.
+  paymentMethod PaymentMethod?
 
   /// The journal currently representing this document. Null for drafts and
   /// estimates. An edit reverses the old journal and points this at the new one.

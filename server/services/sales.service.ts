@@ -86,7 +86,7 @@ const DOCUMENT_SELECT = {
   promisedDate: true, promiseNote: true, excludeFromOverdue: true,
   status: true, reference: true, memo: true, customerMessage: true, workScope: true, workSite: true,
   subtotal: true, discountAmount: true, taxTotal: true, total: true,
-  currencyCode: true, depositAccountId: true, journalId: true, version: true,
+  currencyCode: true, depositAccountId: true, paymentMethod: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
   projectId: true,
   createdById: true,
@@ -556,28 +556,80 @@ export async function neighbors(ctx: OrgContext, type: SalesDocumentType, curren
 }
 
 /** Receipts matching a number, a date, an amount, or the latest ones when nothing is typed. */
-export async function findReceipts(
+export type SalesFindAmountOp = 'eq' | 'gt' | 'lt' | 'gte' | 'lte'
+
+/** Pull `> 100` / `<=50` out of the amount box the way QuickBooks Find does. */
+function parseAmountFilter(
+  amountRaw?: string,
+  amountOp?: SalesFindAmountOp,
+): { money: Decimal; op: SalesFindAmountOp } | null {
+  const text = amountRaw?.trim() ?? ''
+  if (!text) return null
+  const matched = text.match(/^(>=|<=|>|<|=)\s*(.+)$/)
+  const opFromText =
+    matched?.[1] === '>='
+      ? 'gte'
+      : matched?.[1] === '<='
+        ? 'lte'
+        : matched?.[1] === '>'
+          ? 'gt'
+          : matched?.[1] === '<'
+            ? 'lt'
+            : matched?.[1] === '='
+              ? 'eq'
+              : null
+  const valueText = matched?.[2]?.trim() ?? text
+  const money = parseMoneyInput(valueText)
+  if (!money) return null
+  return {
+    money: money.toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
+    op: opFromText ?? amountOp ?? 'eq',
+  }
+}
+
+function totalFilter(
+  money: Decimal,
+  op: SalesFindAmountOp,
+): Prisma.DecimalFilter {
+  switch (op) {
+    case 'gt':
+      return { gt: money }
+    case 'lt':
+      return { lt: money }
+    case 'gte':
+      return { gte: money }
+    case 'lte':
+      return { lte: money }
+    case 'eq':
+    default:
+      return { gte: money, lt: money.plus('0.005') }
+  }
+}
+
+/**
+ * Find a sales paper by number, date, and/or amount — same idea as QuickBooks
+ * Desktop Find. An empty search returns the latest of that type.
+ */
+export async function findDocuments(
   ctx: OrgContext,
-  input: { number?: string; date?: string; amount?: string },
+  input: {
+    type: SalesDocumentType
+    number?: string
+    date?: string
+    amount?: string
+    amountOp?: SalesFindAmountOp
+  },
 ) {
   const number = input.number?.trim()
   const date = input.date?.trim()
-  const amount = input.amount?.trim()
-  const money = amount ? parseMoneyInput(amount) : null
+  const amountFilter = parseAmountFilter(input.amount, input.amountOp)
   const where: Prisma.SalesDocumentWhereInput = {
     orgId: ctx.orgId,
-    type: 'SALES_RECEIPT',
+    type: input.type,
     deletedAt: null,
     ...(number ? { number: { contains: number, mode: 'insensitive' } } : {}),
     ...(date && isCalendarDate(date) ? { date: toDate(date) } : {}),
-    ...(money
-      ? {
-          total: {
-            gte: money.toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
-            lt: money.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).plus('0.005'),
-          },
-        }
-      : {}),
+    ...(amountFilter ? { total: totalFilter(amountFilter.money, amountFilter.op) } : {}),
   }
 
   const rows = await db.salesDocument.findMany({
@@ -602,6 +654,14 @@ export async function findReceipts(
     currencyCode: row.currencyCode,
     customerName: row.customer.displayName,
   }))
+}
+
+/** @deprecated Prefer findDocuments — kept for older call sites. */
+export async function findReceipts(
+  ctx: OrgContext,
+  input: { number?: string; date?: string; amount?: string; amountOp?: SalesFindAmountOp },
+) {
+  return findDocuments(ctx, { type: 'SALES_RECEIPT', ...input })
 }
 
 const DETAIL_SELECT = {
@@ -826,6 +886,8 @@ export async function create(
         total: priced.total.toFixed(4),
         currencyCode: ctx.organization.baseCurrency,
         depositAccountId: input.depositAccountId ?? null,
+        paymentMethod:
+          type === 'SALES_RECEIPT' || type === 'REFUND_RECEIPT' ? (input.paymentMethod ?? null) : null,
         projectId,
         createdById: ctx.userId,
         lines: {
@@ -1081,6 +1143,9 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
         taxTotal: priced.taxTotal.toFixed(4),
         total: priced.total.toFixed(4),
         depositAccountId: input.depositAccountId ?? null,
+        ...(existing.type === 'SALES_RECEIPT' || existing.type === 'REFUND_RECEIPT'
+          ? { paymentMethod: input.paymentMethod ?? null }
+          : {}),
         projectId,
         journalId: null,
         version: { increment: 1 },

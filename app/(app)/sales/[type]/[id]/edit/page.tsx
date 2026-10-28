@@ -87,6 +87,7 @@ export default async function EditSalesDocumentPage({
           workSite: document.workSite,
           paymentTermId: document.paymentTerm?.id ?? null,
           depositAccountId: document.depositAccount?.id ?? null,
+          paymentMethod: document.paymentMethod,
           projectId: document.projectId ?? null,
           discountAmount: document.discountAmount,
           lines: document.lines.map((line) => ({
