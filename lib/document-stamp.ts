@@ -8,7 +8,10 @@ export type DocumentStamp = {
   status?: string | null
 }
 
-/** Bottom block on sales and purchase papers: who entered it, who approved it, when, and the status. */
+/**
+ * Audit lines for the on-screen Change history / email body — not printed on
+ * the customer paper or PDF (Created By stays in audit only).
+ */
 export function documentStampLines(stamp: DocumentStamp): string[] {
   const status = stamp.status
     ? (STATUS_LABELS[stamp.status] ?? stamp.status).replaceAll('_', ' ')

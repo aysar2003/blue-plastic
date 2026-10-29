@@ -36,6 +36,10 @@ export type AppGlyphName =
   | 'bill-payments'
   | 'periods'
   | 'calendar'
+  | 'todos'
+  | 'documents'
+  | 'knowledge'
+  | 'employees'
   | 'databases'
   | 'settings'
   | 'help'
@@ -203,6 +207,58 @@ const GLYPHS: Record<AppGlyphName, ReactNode> = {
       <rect x="30" y="24" width="7" height="6" rx="1.5" fill={C.orange} opacity="0.9" />
       <rect x="12" y="32" width="7" height="5" rx="1.5" fill={C.plum} opacity="0.35" />
       <rect x="21" y="32" width="7" height="5" rx="1.5" fill={C.plum} opacity="0.35" />
+    </>
+  ),
+  // Checklist card with a teal tick.
+  todos: (
+    <>
+      <rect x="8" y="6" width="32" height="36" rx="5" fill={C.paper} />
+      <rect x="8" y="6" width="32" height="8" rx="5" fill={C.plum} />
+      <rect x="8" y="10" width="32" height="4" fill={C.plum} />
+      <rect x="13" y="18" width="5" height="5" rx="1.2" fill={C.teal} />
+      <rect x="21" y="19" width="14" height="3" rx="1.5" fill={C.plum} opacity="0.45" />
+      <rect x="13" y="27" width="5" height="5" rx="1.2" fill={C.amber} />
+      <rect x="21" y="28" width="14" height="3" rx="1.5" fill={C.plum} opacity="0.35" />
+      <circle cx="34" cy="36" r="9" fill={C.teal} />
+      <path
+        d="M29.5 36.2l3 3 6.5-7"
+        fill="none"
+        stroke={C.paper}
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </>
+  ),
+  // Overlapping papers: amber back, teal front.
+  documents: (
+    <>
+      <rect x="10" y="8" width="24" height="30" rx="3" fill={C.amber} transform="rotate(-8 22 23)" />
+      <rect x="12" y="10" width="26" height="32" rx="3" fill={C.paper} />
+      <rect x="12" y="10" width="26" height="7" rx="3" fill={C.teal} />
+      <rect x="12" y="14" width="26" height="3" fill={C.teal} />
+      <rect x="17" y="22" width="16" height="2.5" rx="1" fill={C.plum} opacity="0.45" />
+      <rect x="17" y="28" width="12" height="2.5" rx="1" fill={C.plum} opacity="0.35" />
+      <rect x="17" y="34" width="14" height="2.5" rx="1" fill={C.plum} opacity="0.25" />
+    </>
+  ),
+  // Bookmark flag: teal ribbon with plum page.
+  knowledge: (
+    <>
+      <rect x="12" y="6" width="24" height="36" rx="3" fill={C.paper} />
+      <path d="M12 6h16a3 3 0 0 1 3 3v10l-5 4 5 4v9a3 3 0 0 1-3 3H12V6Z" fill={C.teal} />
+      <path d="M26 6v27l-5-4-5 4V6Z" fill={C.plum} opacity="0.9" />
+      <rect x="16" y="12" width="10" height="2.5" rx="1" fill={C.amber} />
+      <rect x="16" y="18" width="8" height="2.5" rx="1" fill={C.paper} opacity="0.7" />
+    </>
+  ),
+  employees: (
+    <>
+      <circle cx="18" cy="16" r="7" fill={C.teal} />
+      <circle cx="32" cy="18" r="6" fill={C.plum} />
+      <path d="M6 40c0-7 5.5-12 12-12s12 5 12 12" fill={C.teal} opacity="0.85" />
+      <path d="M22 40c1-6 5.5-10 12-10 5 0 9 3 11 7" fill={C.plum} opacity="0.9" />
+      <rect x="8" y="36" width="32" height="6" rx="2" fill={C.amber} opacity="0.55" />
     </>
   ),
   // Stacked cylinders: separate company databases.

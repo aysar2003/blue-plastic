@@ -22,7 +22,6 @@ export function DocumentPackView({
   organization,
   template,
   baseCurrency,
-  printedBy,
   title,
   backHref,
   pdfHref,
@@ -40,7 +39,6 @@ export function DocumentPackView({
   organization: LetterheadSource & { timeZone?: string | null; taxRegistrationNumber?: string | null; name: string; legalName?: string | null }
   template: DocumentTemplate
   baseCurrency: string
-  printedBy: string
   title: string
   backHref: string
   pdfHref: string
@@ -129,7 +127,6 @@ export function DocumentPackView({
                 template={template}
                 config={configOf(document.type)}
                 baseCurrency={baseCurrency}
-                printedBy={printedBy}
                 hideAccountBalance={runningTotals}
                 previousQuotationsTotal={
                   runningTotals && hasPreviousQuotations(running[index]?.previousQuotationsTotal)

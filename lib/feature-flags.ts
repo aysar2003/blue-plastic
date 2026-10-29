@@ -26,6 +26,10 @@ export type ModuleFlag =
   | 'bill-payments'
   | 'periods'
   | 'calendar'
+  | 'todos'
+  | 'documents'
+  | 'knowledge'
+  | 'employees'
   | 'databases'
 
 /** Ordered list for Apps & features and Databases → Limits. */
@@ -48,7 +52,22 @@ export const MODULE_FLAGS: readonly ModuleFlag[] = [
   'periods',
   'reports',
   'calendar',
+  'todos',
+  'documents',
+  'knowledge',
+  'employees',
   'databases',
+] as const
+
+/**
+ * New apps that stay off until the company turns them on in Apps & features.
+ * Missing keys in saved JSON must not inherit allModules(true).
+ */
+export const OPT_IN_MODULE_FLAGS: readonly ModuleFlag[] = [
+  'todos',
+  'documents',
+  'knowledge',
+  'employees',
 ] as const
 
 export const MODULE_FLAG_LABELS: Record<ModuleFlag, { label: string; hint: string }> = {
@@ -70,6 +89,10 @@ export const MODULE_FLAG_LABELS: Record<ModuleFlag, { label: string; hint: strin
   periods: { label: 'Periods', hint: 'Close the books' },
   reports: { label: 'Reports', hint: 'Financial and operations reports' },
   calendar: { label: 'Calendar', hint: 'Meetings and reminders' },
+  todos: { label: 'To-do', hint: 'Personal and team checklists' },
+  documents: { label: 'Documents', hint: 'Company file library' },
+  knowledge: { label: 'Knowledge', hint: 'Internal wiki and how-tos' },
+  employees: { label: 'Employees', hint: 'People, leave, attendance, and payroll' },
   databases: { label: 'Databases', hint: 'Companies and backups' },
 }
 
@@ -272,6 +295,12 @@ function allModules(on: boolean): Record<ModuleFlag, boolean> {
   return Object.fromEntries(MODULE_FLAGS.map((key) => [key, on])) as Record<ModuleFlag, boolean>
 }
 
+function defaultModules(): Record<ModuleFlag, boolean> {
+  const modules = allModules(true)
+  for (const key of OPT_IN_MODULE_FLAGS) modules[key] = false
+  return modules
+}
+
 export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   allowJournalDelete: true,
   allowCustomerDelete: true,
@@ -283,8 +312,9 @@ export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   enableTax: true,
   enableCustomerPortal: false,
   enableDocumentApprovals: false,
+  /** Opt-in apps are granted so Apps & features can turn them on. */
   grantedModules: allModules(true),
-  modules: allModules(true),
+  modules: defaultModules(),
   documentKinds: defaultDocumentKinds(),
 }
 
@@ -326,6 +356,10 @@ export const MODULE_PATH_PREFIXES: readonly { prefix: string; module: ModuleFlag
   { prefix: '/periods', module: 'periods' },
   { prefix: '/reports', module: 'reports' },
   { prefix: '/calendar', module: 'calendar' },
+  { prefix: '/todos', module: 'todos' },
+  { prefix: '/documents', module: 'documents' },
+  { prefix: '/knowledge', module: 'knowledge' },
+  { prefix: '/employees', module: 'employees' },
   { prefix: '/databases', module: 'databases' },
 ] as const
 
@@ -382,6 +416,10 @@ export const MODULE_KEY_TO_FLAG: Record<string, ModuleFlag | null> = {
   'bill-payments': 'bill-payments',
   periods: 'periods',
   calendar: 'calendar',
+  todos: 'todos',
+  documents: 'documents',
+  knowledge: 'knowledge',
+  employees: 'employees',
   databases: 'databases',
 }
 
@@ -419,6 +457,10 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
     // Fill apps that were never saved from their old parent family flag.
     for (const key of MODULE_FLAGS) {
       if (typeof modules[key] === 'boolean') continue
+      if ((OPT_IN_MODULE_FLAGS as readonly string[]).includes(key)) {
+        base.modules[key] = false
+        continue
+      }
       const parent = LEGACY_PARENT[key]
       if (parent && typeof modules[parent] === 'boolean') {
         base.modules[key] = modules[parent]
@@ -433,8 +475,14 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
     for (const key of MODULE_FLAGS) {
       if (typeof granted[key] === 'boolean') base.grantedModules[key] = granted[key]
     }
+    for (const key of OPT_IN_MODULE_FLAGS) {
+      if (typeof granted[key] !== 'boolean') base.grantedModules[key] = true
+    }
   } else {
     base.grantedModules = { ...base.modules }
+    for (const key of OPT_IN_MODULE_FLAGS) {
+      base.grantedModules[key] = true
+    }
   }
 
   // A module that was never granted cannot stay "on".

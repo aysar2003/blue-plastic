@@ -178,6 +178,29 @@ enum ProjectTaskStage {
   CANCELLED
 }
 
+/// Personal to-do workflow (Odoo-style stages).
+enum WorkspaceTodoStage {
+  OPEN
+  IN_PROGRESS
+  WAITING
+  DONE
+}
+
+/// Odoo Knowledge visibility: company wiki, invited members, or personal notes.
+enum KnowledgeScope {
+  WORKSPACE
+  SHARED
+  PRIVATE
+}
+
+/// How the assignee closed the to-do (when stage = DONE).
+enum WorkspaceTodoCompletion {
+  COMPLETED
+  PARTIAL
+  BLOCKED
+  REPORT
+}
+
 /// Company asked the ERP owner for extra apps beyond the current grant.
 enum AppAccessRequestStatus {
   PENDING
@@ -507,6 +530,7 @@ enum JournalSourceType {
   ASSEMBLY_BUILD
   POS_CASH_MOVE
   POS_SESSION_CLOSE
+  PAYROLL
 }
 
 // ---------------------------------------------------------------------------
@@ -636,6 +660,29 @@ model Organization {
   customerFiles  CustomerFile[]
   bankRules      BankRule[]
   bookmarks      WorkspaceBookmark[]
+  todos          WorkspaceTodo[]
+  documentFolders WorkspaceDocumentFolder[]
+  documents      WorkspaceDocument[]
+  knowledgeArticles   KnowledgeArticle[]
+  knowledgeFavorites  KnowledgeFavorite[]
+  knowledgeShares     KnowledgeShare[]
+  knowledgeRevisions  KnowledgeRevision[]
+  employees      Employee[]
+  leaveTypes        LeaveType[]
+  leaveAllocations  LeaveAllocation[]
+  leaveRequests     LeaveRequest[]
+  attendanceDays    AttendanceDay[]
+  payrollRuns       PayrollRun[]
+  payslips          Payslip[]
+  employeeContracts EmployeeContract[]
+  employeeDocuments EmployeeDocument[]
+  hrSettings            HrSettings?
+  attendanceDevices     AttendanceDevice[]
+  attendanceDeviceUsers AttendanceDeviceUser[]
+  attendancePunches     AttendancePunch[]
+  hrBudgets             HrBudget[]
+  hrBudgetMonths        HrBudgetMonth[]
+  hrPolicies            HrPolicy[]
   reportNotes    ReportNote[]
   ledgerFiles    LedgerFile[]
   trashFiles     TrashFile[]
@@ -814,6 +861,8 @@ model User {
   passwordHash  String?
   image         String?
   emailVerified DateTime? @db.Timestamptz(6)
+  /// Optional mobile (country code, digits). Reserved for WhatsApp to-do notify later.
+  phone         String?
 
   lastLoginAt DateTime? @db.Timestamptz(6)
 
@@ -833,6 +882,24 @@ model User {
   sessions    Session[]
   auditLogs   AuditLog[]
   bookmarks   WorkspaceBookmark[]
+  todosOwned      WorkspaceTodo[] @relation("WorkspaceTodoOwner")
+  todosAssigned   WorkspaceTodo[] @relation("WorkspaceTodoAssignee")
+  todosCompleted  WorkspaceTodo[] @relation("WorkspaceTodoCompletedBy")
+  documentsUploaded WorkspaceDocument[] @relation("WorkspaceDocumentCreatedBy")
+  knowledgeCreated   KnowledgeArticle[]  @relation("KnowledgeCreatedBy")
+  knowledgeUpdated   KnowledgeArticle[]  @relation("KnowledgeUpdatedBy")
+  knowledgeOwned     KnowledgeArticle[]  @relation("KnowledgeOwner")
+  knowledgeLocked    KnowledgeArticle[]  @relation("KnowledgeLockedBy")
+  knowledgeFavorites KnowledgeFavorite[]
+  knowledgeShares    KnowledgeShare[]
+  knowledgeRevisions KnowledgeRevision[] @relation("KnowledgeRevisionAuthor")
+  employees          Employee[]
+  leaveRequestsDecided LeaveRequest[] @relation("LeaveRequestDecidedBy")
+  leaveRequestsCreated LeaveRequest[] @relation("LeaveRequestCreatedBy")
+  payrollRunsCreated   PayrollRun[]   @relation("PayrollRunCreatedBy")
+  employeeContractsCreated EmployeeContract[] @relation("EmployeeContractCreatedBy")
+  employeeDocumentsCreated EmployeeDocument[] @relation("EmployeeDocumentCreatedBy")
+  hrPoliciesCreated        HrPolicy[]         @relation("HrPolicyCreatedBy")
   calendarEvents CalendarEvent[]
   posRegisters PosRegisterStaff[]
   customerPortalUsers CustomerPortalUser[]
@@ -1119,6 +1186,9 @@ model LedgerAccount {
   posOrderDeposits  PosOrder[]            @relation("PosOrderDeposit")
   posCashMoveCounterparties PosCashMovement[] @relation("PosCashMoveCounterparty")
   budgetLines               BudgetLine[]
+  employeeWageExpense       Employee[]    @relation("EmployeeWageExpense")
+  employeeWagePayable       Employee[]    @relation("EmployeeWagePayable")
+  payrollRunPayFrom         PayrollRun[]  @relation("PayrollRunPayFrom")
 
   @@unique([orgId, code])
   @@unique([orgId, systemKey])
@@ -1250,6 +1320,7 @@ model Journal {
   files LedgerFile[]
   posCashMovements PosCashMovement[]
   posSessionCloses PosSession[] @relation("PosSessionCloseJournal")
+  payrollRun       PayrollRun?
 
   reversalOf Journal? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedBy Journal? @relation("JournalReversal")
@@ -3347,6 +3418,729 @@ model WorkspaceBookmark {
   @@unique([orgId, userId, href, kind])
   @@index([orgId, userId, kind, sort])
   @@map("workspace_bookmarks")
+}
+
+/// Personal / team checklist (Odoo To-do). Not a project board task — see ProjectTask.
+model WorkspaceTodo {
+  id    String @id @default(cuid())
+  orgId String
+
+  /// Who created / owns the row (always set).
+  userId String
+  /// Optional colleague who should do it (same org).
+  assigneeId String?
+
+  title   String
+  notes   String?
+  dueDate DateTime? @db.Date
+  /// Odoo-style priority: 0 normal, 1 important, 2 urgent.
+  priority Int @default(0)
+  /// Open → In progress → Waiting → Done.
+  stage WorkspaceTodoStage @default(OPEN)
+  /// Set when stage = DONE (kept for overdue / list filters).
+  doneAt DateTime? @db.Timestamptz(6)
+  /// How it was closed (required when moving to DONE).
+  completionKind WorkspaceTodoCompletion?
+  /// Note / report text from the person closing the work.
+  completionNote String?
+  completedById  String?
+  /// Order among open items for the owner (lower = higher).
+  sequence Int @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  owner        User         @relation("WorkspaceTodoOwner", fields: [userId], references: [id], onDelete: Cascade)
+  assignee     User?        @relation("WorkspaceTodoAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  completedBy  User?        @relation("WorkspaceTodoCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, userId, doneAt, sequence])
+  @@index([orgId, assigneeId, doneAt])
+  @@index([orgId, stage, sequence])
+  @@map("workspace_todos")
+}
+
+/// Folder in the company file library (Odoo Documents-style workspace).
+model WorkspaceDocumentFolder {
+  id    String @id @default(cuid())
+  orgId String
+
+  name String
+  /// Stable key for seeded folders (`contracts`, `finance`, …). Null = user-created.
+  systemKey String?
+  /// Seeded folders cannot be deleted.
+  isSystem  Boolean @default(false)
+  sequence  Int     @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  documents    WorkspaceDocument[]
+
+  @@unique([orgId, name])
+  @@unique([orgId, systemKey])
+  @@index([orgId, sequence])
+  @@map("workspace_document_folders")
+}
+
+/// Company file library (Odoo Documents-style). Not a sales/purchase document.
+model WorkspaceDocument {
+  id    String @id @default(cuid())
+  orgId String
+
+  folderId String?
+
+  /// Display name; defaults to the original file name.
+  title        String
+  originalName String
+  contentType  String
+  byteSize     Int
+  /// Path under the documents/ object-store prefix. Never a public URL.
+  storageKey   String
+  notes        String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  folder       WorkspaceDocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdBy    User?                    @relation("WorkspaceDocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, createdAt])
+  @@index([orgId, folderId, createdAt])
+  @@index([orgId, title])
+  @@map("workspace_documents")
+}
+
+/// Internal wiki page (Odoo Knowledge-style). Not a sales/purchase document.
+model KnowledgeArticle {
+  id    String @id @default(cuid())
+  orgId String
+
+  title String
+  /// HTML body (TipTap). Plain text from early rows still renders as text.
+  body  String @db.Text
+
+  /// Workspace = company; Shared = invited; Private = owner only.
+  scope KnowledgeScope @default(WORKSPACE)
+  /// Nesting — child inherits the parent's scope on create.
+  parentId String?
+  /// Owner of PRIVATE / SHARED articles; null for workspace pages.
+  ownerId String?
+  /// Order among siblings (lower first).
+  sequence Int @default(0)
+
+  /// Title emoji (Odoo-style).
+  icon     String?
+  /// Cover image URL (paste/upload URL — not Unsplash).
+  coverUrl String?
+
+  lockedAt   DateTime? @db.Timestamptz(6)
+  lockedById String?
+  /// Soft trash (Odoo “Send to Trash”).
+  deletedAt  DateTime? @db.Timestamptz(6)
+
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  parent       KnowledgeArticle?  @relation("KnowledgeTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children     KnowledgeArticle[] @relation("KnowledgeTree")
+  owner        User? @relation("KnowledgeOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  lockedBy     User? @relation("KnowledgeLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+  createdBy    User? @relation("KnowledgeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy    User? @relation("KnowledgeUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  favorites    KnowledgeFavorite[]
+  shares       KnowledgeShare[]
+  revisions    KnowledgeRevision[]
+
+  @@index([orgId, scope, parentId, sequence])
+  @@index([orgId, updatedAt])
+  @@index([orgId, title])
+  @@index([orgId, ownerId, scope])
+  @@index([orgId, deletedAt])
+  @@map("knowledge_articles")
+}
+
+/// Per-user star (Odoo Favorites).
+model KnowledgeFavorite {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String
+  articleId String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article      KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+  @@index([orgId, userId])
+  @@map("knowledge_favorites")
+}
+
+/// Invited members on a SHARED article (Odoo Share → Invite).
+model KnowledgeShare {
+  id        String   @id @default(cuid())
+  orgId     String
+  articleId String
+  userId    String
+  canEdit   Boolean  @default(false)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  article      KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, userId])
+  @@index([orgId, userId])
+  @@map("knowledge_shares")
+}
+
+/// Snapshot before each save (Odoo version history). Cap enforced in service.
+model KnowledgeRevision {
+  id        String   @id @default(cuid())
+  orgId     String
+  articleId String
+  title     String
+  body      String   @db.Text
+  createdById String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  article      KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  createdBy    User?            @relation("KnowledgeRevisionAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([articleId, createdAt])
+  @@index([orgId, articleId])
+  @@map("knowledge_revisions")
+}
+
+enum EmploymentType {
+  EMPLOYEE
+  CONTRACTOR
+  INTERN
+}
+
+enum WageType {
+  MONTHLY
+  DAILY
+  HOURLY
+}
+
+enum LeaveRequestStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REFUSED
+  CANCELLED
+}
+
+enum AttendanceSource {
+  MANUAL
+  DEVICE
+}
+
+enum AttendanceDeviceKind {
+  GENERIC_HTTP
+  ZKTECO
+  ANVIZ
+  OTHER
+}
+
+enum AttendancePunchKind {
+  IN
+  OUT
+  UNKNOWN
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  POSTED
+}
+
+enum PayslipLineKind {
+  EARNING
+  DEDUCTION
+}
+
+enum EmployeeContractState {
+  DRAFT
+  OPEN
+  EXPIRED
+  CANCELLED
+}
+
+enum EmployeeDocumentKind {
+  CONTRACT
+  ID
+  CERTIFICATE
+  OTHER
+}
+
+/// Company people directory (Odoo Employees-style). Not login/access — that is Membership.
+model Employee {
+  id    String @id @default(cuid())
+  orgId String
+
+  name       String
+  jobTitle   String?
+  department String?
+  /// Photo URL (paste link — same pattern as Knowledge cover).
+  photoUrl   String?
+
+  workEmail String?
+  workPhone String?
+  mobile    String?
+
+  workStreet  String?
+  workCity    String?
+  workCountry String?
+
+  privateStreet  String?
+  privateCity    String?
+  privateCountry String?
+
+  emergencyContact String?
+  emergencyPhone   String?
+
+  /// Comma-separated skills / tags (Odoo skills lite).
+  skills String?
+
+  notes  String?
+  active Boolean @default(true)
+
+  employmentType EmploymentType @default(EMPLOYEE)
+  hiredAt        DateTime?      @db.Date
+  leftAt         DateTime?      @db.Date
+
+  /// Reports-to (org chart).
+  managerId String?
+
+  /// Optional link to a login user on this company (one employee card per user).
+  userId String?
+
+  wageType          WageType @default(MONTHLY)
+  wageAmount        Decimal  @default(0) @db.Decimal(19, 4)
+  expenseAccountId  String?
+  payableAccountId  String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization   Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  manager        Employee?     @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports        Employee[]    @relation("EmployeeManager")
+  expenseAccount LedgerAccount? @relation("EmployeeWageExpense", fields: [expenseAccountId], references: [id], onDelete: Restrict)
+  payableAccount LedgerAccount? @relation("EmployeeWagePayable", fields: [payableAccountId], references: [id], onDelete: Restrict)
+
+  leaveAllocations LeaveAllocation[]
+  leaveRequests    LeaveRequest[]
+  attendanceDays   AttendanceDay[]
+  payslips         Payslip[]
+  contracts        EmployeeContract[]
+  documents        EmployeeDocument[]
+  deviceUsers      AttendanceDeviceUser[]
+  punches          AttendancePunch[]
+
+  @@unique([orgId, userId])
+  @@index([orgId, active])
+  @@index([orgId, name])
+  @@index([orgId, managerId])
+  @@index([orgId, department])
+  @@map("employees")
+}
+
+/// Employment contract (Odoo hr.contract lite). Wage here can sync onto the employee card.
+model EmployeeContract {
+  id         String @id @default(cuid())
+  orgId      String
+  employeeId String
+
+  name       String
+  state      EmployeeContractState @default(DRAFT)
+  dateStart  DateTime              @db.Date
+  dateEnd    DateTime?             @db.Date
+  wageType   WageType              @default(MONTHLY)
+  wageAmount Decimal               @default(0) @db.Decimal(19, 4)
+  jobTitle   String?
+  notes      String?
+
+  /// Optional signed PDF / scan (R2 under employee-contracts/).
+  originalName String?
+  contentType  String?
+  byteSize     Int?
+  storageKey   String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("EmployeeContractCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, state])
+  @@index([orgId, employeeId])
+  @@index([orgId, dateStart])
+  @@map("employee_contracts")
+}
+
+/// HR papers on an employee (ID, certificates, extra contract scans).
+model EmployeeDocument {
+  id         String @id @default(cuid())
+  orgId      String
+  employeeId String
+
+  kind         EmployeeDocumentKind @default(OTHER)
+  title        String
+  originalName String
+  contentType  String
+  byteSize     Int
+  storageKey   String
+  notes        String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("EmployeeDocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, employeeId, kind])
+  @@map("employee_documents")
+}
+
+model LeaveType {
+  id    String @id @default(cuid())
+  orgId String
+
+  name         String
+  paid         Boolean @default(true)
+  daysPerYear  Decimal @default(0) @db.Decimal(19, 4)
+  active       Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  allocations  LeaveAllocation[]
+  requests     LeaveRequest[]
+
+  @@unique([orgId, name])
+  @@index([orgId, active])
+  @@map("leave_types")
+}
+
+model LeaveAllocation {
+  id           String @id @default(cuid())
+  orgId        String
+  employeeId   String
+  leaveTypeId  String
+  year         Int
+  entitledDays Decimal @db.Decimal(19, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType    LeaveType    @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@index([orgId, year])
+  @@map("leave_allocations")
+}
+
+model LeaveRequest {
+  id          String @id @default(cuid())
+  orgId       String
+  employeeId  String
+  leaveTypeId String
+
+  dateFrom DateTime @db.Date
+  dateTo   DateTime @db.Date
+  days     Decimal  @db.Decimal(19, 4)
+  reason   String?
+
+  status LeaveRequestStatus @default(PENDING)
+
+  createdById String?
+  decidedById String?
+  decidedAt   DateTime? @db.Timestamptz(6)
+  decisionNote String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType    LeaveType    @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  createdBy    User?        @relation("LeaveRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  decidedBy    User?        @relation("LeaveRequestDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status])
+  @@index([orgId, employeeId, dateFrom])
+  @@index([orgId, leaveTypeId])
+  @@map("leave_requests")
+}
+
+model AttendanceDay {
+  id         String @id @default(cuid())
+  orgId      String
+  employeeId String
+
+  date         DateTime  @db.Date
+  checkIn      DateTime? @db.Timestamptz(6)
+  checkOut     DateTime? @db.Timestamptz(6)
+  workedHours  Decimal?  @db.Decimal(19, 4)
+  note         String?
+  source       AttendanceSource @default(MANUAL)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  punches      AttendancePunch[]
+
+  @@unique([employeeId, date])
+  @@index([orgId, date])
+  @@index([orgId, employeeId])
+  @@map("attendance_days")
+}
+
+/// One row per org — hours/day, OT rules for payroll.
+model HrSettings {
+  id    String @id @default(cuid())
+  orgId String @unique
+
+  hoursPerDay              Decimal @default(8) @db.Decimal(19, 4)
+  workDaysPerWeek          Int     @default(6)
+  overtimeAfterHoursPerDay Decimal @default(8) @db.Decimal(19, 4)
+  overtimeMultiplier       Decimal @default(1.5) @db.Decimal(19, 4)
+  /// Free-text note (e.g. Africa/Mogadishu) — display only.
+  timezoneNote String?
+
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("hr_settings")
+}
+
+model AttendanceDevice {
+  id    String @id @default(cuid())
+  orgId String
+
+  name        String
+  kind        AttendanceDeviceKind @default(GENERIC_HTTP)
+  active      Boolean              @default(true)
+  /// Stable id the device sends (serial / terminal code).
+  externalKey String
+  /// bcrypt of ingest token (shown once on create).
+  tokenHash   String
+  lastSeenAt  DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userMaps     AttendanceDeviceUser[]
+  punches      AttendancePunch[]
+
+  @@unique([orgId, externalKey])
+  @@unique([orgId, name])
+  @@index([orgId, active])
+  @@map("attendance_devices")
+}
+
+model AttendanceDeviceUser {
+  id         String @id @default(cuid())
+  orgId      String
+  deviceId   String
+  employeeId String
+  /// Badge / PIN / vendor user id on the clock.
+  externalUserId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  device       AttendanceDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  employee     Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, externalUserId])
+  @@index([orgId, employeeId])
+  @@map("attendance_device_users")
+}
+
+/// Append-only punch log from devices.
+model AttendancePunch {
+  id         String @id @default(cuid())
+  orgId      String
+  deviceId   String
+  employeeId String?
+
+  punchedAt DateTime            @db.Timestamptz(6)
+  kind      AttendancePunchKind @default(UNKNOWN)
+  /// Vendor punch id — skip duplicates.
+  externalId     String?
+  externalUserId String?
+  raw            Json?
+
+  attendanceDayId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization  Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  device        AttendanceDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  employee      Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  attendanceDay AttendanceDay?   @relation(fields: [attendanceDayId], references: [id], onDelete: SetNull)
+
+  @@unique([orgId, deviceId, externalId])
+  @@index([orgId, punchedAt])
+  @@index([orgId, employeeId, punchedAt])
+  @@map("attendance_punches")
+}
+
+/// Wage / headcount plan by calendar year (not ledger Accounting Budget).
+model HrBudget {
+  id    String @id @default(cuid())
+  orgId String
+
+  year  Int
+  name  String
+  notes String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  months       HrBudgetMonth[]
+
+  @@unique([orgId, year])
+  @@index([orgId, year])
+  @@map("hr_budgets")
+}
+
+model HrBudgetMonth {
+  id       String @id @default(cuid())
+  orgId    String
+  budgetId String
+  /// 1–12
+  month Int
+
+  plannedWage      Decimal @default(0) @db.Decimal(19, 4)
+  plannedHeadcount Int     @default(0)
+
+  budget       HrBudget     @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetId, month])
+  @@index([orgId, budgetId])
+  @@map("hr_budget_months")
+}
+
+/// Company HR policy documents.
+model HrPolicy {
+  id    String @id @default(cuid())
+  orgId String
+
+  title     String
+  body      String  @default("")
+  published Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  originalName String?
+  contentType  String?
+  byteSize     Int?
+  storageKey   String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("HrPolicyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, published, sortOrder])
+  @@map("hr_policies")
+}
+
+model PayrollRun {
+  id    String @id @default(cuid())
+  orgId String
+
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  memo        String?
+
+  status     PayrollRunStatus @default(DRAFT)
+  journalId  String?          @unique
+  postedAt   DateTime?        @db.Timestamptz(6)
+  /// Bank / cash (or payable) credited when posting.
+  payFromAccountId String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization   Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  journal        Journal?      @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  payFromAccount LedgerAccount? @relation("PayrollRunPayFrom", fields: [payFromAccountId], references: [id], onDelete: Restrict)
+  createdBy      User?         @relation("PayrollRunCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  payslips       Payslip[]
+
+  @@index([orgId, status])
+  @@index([orgId, periodStart, periodEnd])
+  @@map("payroll_runs")
+}
+
+model Payslip {
+  id         String @id @default(cuid())
+  orgId      String
+  runId      String
+  employeeId String
+
+  gross       Decimal @db.Decimal(19, 4)
+  deductions  Decimal @db.Decimal(19, 4)
+  net         Decimal @db.Decimal(19, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  run          PayrollRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  lines        PayslipLine[]
+
+  @@unique([runId, employeeId])
+  @@index([orgId, employeeId])
+  @@map("payslips")
+}
+
+model PayslipLine {
+  id        String @id @default(cuid())
+  orgId     String
+  payslipId String
+
+  code   String
+  label  String
+  amount Decimal         @db.Decimal(19, 4)
+  kind   PayslipLineKind
+  sortOrder Int @default(0)
+
+  payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+
+  @@index([payslipId, sortOrder])
+  @@index([orgId])
+  @@map("payslip_lines")
 }
 
 /// Named budget covering a date range (QBD-style Budget vs Actual).

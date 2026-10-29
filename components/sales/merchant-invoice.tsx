@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useSyncExternalStore } from 'react'
+import { useMemo } from 'react'
 
 import { TableColumnCustomize } from '@/components/data/table-column-customize'
 import { DocumentAccountFooter } from '@/components/sales/document-account-footer'
@@ -23,31 +23,6 @@ import {
   STATUS_LABELS,
 } from '@/lib/sales-types'
 import { useTableColumnPrefs } from '@/lib/use-table-column-prefs'
-
-/** Cached so getSnapshot stays referentially stable (React forbids a fresh value each read). */
-let clientNowLabel: string | null = null
-
-function readClientNowLabel() {
-  if (clientNowLabel == null) {
-    clientNowLabel = new Intl.DateTimeFormat('en-GB', {
-      weekday: 'short',
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date())
-  }
-  return clientNowLabel
-}
-
-function useClientNowLabel() {
-  return useSyncExternalStore(
-    () => () => {},
-    readClientNowLabel,
-    () => '',
-  )
-}
 
 const TITLES: Record<string, string> = {
   INVOICE: 'INVOICE',
@@ -81,10 +56,8 @@ export function MerchantInvoice({
   currentBalance,
   previousQuotationsTotal,
   hideAccountBalance = false,
-  printedBy,
   words,
   ledger = false,
-  approval = null,
 }: {
   document: SheetDocument
   organization: LetterheadSource & { timeZone?: string | null; taxRegistrationNumber?: string | null }
@@ -100,7 +73,11 @@ export function MerchantInvoice({
     order: string
   }
   baseCurrency: string
-  /** Who approved the document, when the books recorded an approval. */
+  /**
+   * @deprecated Audit stamp no longer prints on the paper — Created By / Approved By
+   * stay on the screen Change history / audit section only. Prop kept so call sites
+   * do not break; it is ignored.
+   */
   approval?: { name: string; at: Date | null } | null
   /** Account balance before this paper. Omitted on a single invoice. */
   previousBalance?: string | null
@@ -110,7 +87,6 @@ export function MerchantInvoice({
   previousQuotationsTotal?: string | null
   /** Project quotation pack: no customer A/R or leftover balance — only the running quote total. */
   hideAccountBalance?: boolean
-  printedBy?: string | null
   /** Statement / portal: Debit = invoice total, Credit = payments, Balance = remaining. */
   ledger?: boolean
 }) {
@@ -149,7 +125,6 @@ export function MerchantInvoice({
         ? '#be123c'
         : accent
   const proposal = isProposal(config.type)
-  const printedOn = useClientNowLabel()
 
   const metaCatalog = useMemo(
     () => [
@@ -163,7 +138,6 @@ export function MerchantInvoice({
       { id: 'workSite' as const, label: 'Work site' },
       { id: 'workScope' as const, label: 'Work / job' },
       { id: 'email' as const, label: 'Email' },
-      { id: 'printedFooter' as const, label: 'Printed on / by' },
     ],
     [label.order, label.person, label.reference],
   )
@@ -255,9 +229,6 @@ export function MerchantInvoice({
         runningQuoteTotal={priorQuotes ? runningQuoteTotal.toFixed(4) : null}
         person={document.createdByName ?? ''}
         dateLabel={longDate(toCalendarDate(document.date), document.createdAt, organization.timeZone)}
-        approval={approval}
-        website={(organization as { website?: string | null }).website ?? null}
-        legalName={organization.legalName ?? null}
         logoSrc={orgLogoUrl(
           Boolean((organization as { logoStorageKey?: string | null }).logoStorageKey),
           (organization as { updatedAt?: Date | null }).updatedAt,
@@ -279,7 +250,7 @@ export function MerchantInvoice({
           onToggle={toggle}
           onReorder={reorder}
           title="Paper details"
-          description="Show or hide Bill to lines and the Printed on / by footer. Drag to change order."
+          description="Show or hide Bill to lines. Drag to change order."
           showAllLabel="Show all details"
         />
       </div>
@@ -326,47 +297,42 @@ export function MerchantInvoice({
         </div>
       </div>
 
-      <div className="mx-8 mt-6">
-        <div
-          className={
-            proposal
-              ? 'grid grid-cols-[2rem_minmax(0,1fr)_6.5rem_5rem_5.4rem] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white'
-              : 'grid grid-cols-[2rem_minmax(0,1fr)_4.2rem_3.4rem_5rem_5.4rem] px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white'
-          }
-          style={{ background: accent }}
-        >
-          <span>No</span>
-          <span>Item name</span>
-          <span className="text-right">Qty</span>
-          {proposal ? null : <span className="text-right">Unit</span>}
-          <span className="text-right">Rate</span>
-          <span className="text-right">Amount</span>
-        </div>
-        {document.lines.map((line, index) => {
-          const unit = line.item?.unitOfMeasure?.trim() || 'EACH'
-          const qty = proposal ? `${trimNumber(line.quantity)} ${unit}` : trimNumber(line.quantity)
-          return (
-          <div
-            key={line.id}
-            className={
-              proposal
-                ? 'grid grid-cols-[2rem_minmax(0,1fr)_6.5rem_5rem_5.4rem] items-center px-2 py-1.5 text-[12px]'
-                : 'grid grid-cols-[2rem_minmax(0,1fr)_4.2rem_3.4rem_5rem_5.4rem] items-center px-2 py-1.5 text-[12px]'
-            }
-            style={{ background: index % 2 === 0 ? '#ffffff' : wash }}
+      {/* Real <table> so print page 2+ repeats column headers (standard multi-page). */}
+      <table className="mx-8 mt-6 w-[calc(100%-4rem)] border-collapse text-[12px]">
+        <thead>
+          <tr
+            className="text-[11px] font-bold uppercase tracking-wide text-white"
+            style={{ background: accent, printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
           >
-            <span className="tabular">{line.lineNumber}</span>
-            <span className="truncate pr-2">{line.description || line.item?.name || line.item?.sku || ''}</span>
-            <span className="tabular text-right">{qty}</span>
-            {proposal ? null : (
-              <span className="text-right">{(line.item?.unitOfMeasure?.trim() || 'EACH').toUpperCase()}</span>
-            )}
-            <span className="tabular text-right">{money(line.unitPrice)}</span>
-            <span className="tabular text-right font-medium">{money(line.amount)}</span>
-          </div>
-          )
-        })}
-      </div>
+            <th className="w-8 px-2 py-1.5 text-left font-bold">No</th>
+            <th className="px-2 py-1.5 text-left font-bold">Item name</th>
+            <th className="w-[4.2rem] px-2 py-1.5 text-right font-bold">Qty</th>
+            {proposal ? null : <th className="w-[3.4rem] px-2 py-1.5 text-right font-bold">Unit</th>}
+            <th className="w-20 px-2 py-1.5 text-right font-bold">Rate</th>
+            <th className="w-[5.4rem] px-2 py-1.5 text-right font-bold">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {document.lines.map((line, index) => {
+            const unit = line.item?.unitOfMeasure?.trim() || 'EACH'
+            const qty = proposal ? `${trimNumber(line.quantity)} ${unit}` : trimNumber(line.quantity)
+            return (
+              <tr key={line.id} style={{ background: index % 2 === 0 ? '#ffffff' : wash }}>
+                <td className="px-2 py-1.5 tabular">{line.lineNumber}</td>
+                <td className="max-w-0 truncate px-2 py-1.5 pr-2">
+                  {line.description || line.item?.name || line.item?.sku || ''}
+                </td>
+                <td className="px-2 py-1.5 text-right tabular">{qty}</td>
+                {proposal ? null : (
+                  <td className="px-2 py-1.5 text-right">{unit.toUpperCase()}</td>
+                )}
+                <td className="px-2 py-1.5 text-right tabular">{money(line.unitPrice)}</td>
+                <td className="px-2 py-1.5 text-right font-medium tabular">{money(line.amount)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
 
       {/* Keep subtotal → grand total on one sheet; do not orphan the last total. */}
       <div className="grid break-inside-avoid gap-6 px-8 py-6 sm:grid-cols-[minmax(0,1fr)_16rem]">
@@ -477,55 +443,7 @@ export function MerchantInvoice({
         <DocumentAccountFooter template={template} accent={accent} />
       ) : null}
 
-      {proposal ? null : (
-        <div className="px-8 pb-2 pt-4">
-          <DocumentStampBlock
-            createdBy={document.createdByName}
-            approval={approval}
-            status={STATUS_LABELS[document.status] ?? document.status}
-          />
-        </div>
-      )}
-
-      {prefs.hidden.includes('printedFooter') ? null : (
-        <div className="flex justify-between gap-4 border-t px-8 py-3 text-[10px] text-[#5C6B7A]">
-          <p>Printed on: {printedOn}</p>
-          <p>{printedBy ? `Printed by: ${printedBy}` : null}</p>
-        </div>
-      )}
     </article>
-  )
-}
-
-function DocumentStampBlock({
-  createdBy,
-  approval,
-  status,
-}: {
-  createdBy?: string | null
-  approval: { name: string; at: Date | null } | null
-  status: string
-}) {
-  const approvedDate = approval?.at ? toCalendarDate(approval.at) : '—'
-  return (
-    <dl className="space-y-1 text-[11px]">
-      <div className="flex gap-3">
-        <dt className="w-32 shrink-0 whitespace-nowrap text-[#5C6B7A]">Created By:</dt>
-        <dd>{createdBy?.trim() || '—'}</dd>
-      </div>
-      <div className="flex gap-3">
-        <dt className="w-32 shrink-0 whitespace-nowrap text-[#5C6B7A]">Approved By:</dt>
-        <dd>{approval?.name?.trim() || '—'}</dd>
-      </div>
-      <div className="flex gap-3">
-        <dt className="w-32 shrink-0 whitespace-nowrap text-[#5C6B7A]">Approved Date:</dt>
-        <dd>{approvedDate}</dd>
-      </div>
-      <div className="flex gap-3">
-        <dt className="w-32 shrink-0 whitespace-nowrap text-[#5C6B7A]">Status:</dt>
-        <dd className="capitalize">{status.replaceAll('_', ' ')}</dd>
-      </div>
-    </dl>
   )
 }
 
@@ -543,9 +461,6 @@ function TradePaper({
   runningQuoteTotal,
   person,
   dateLabel,
-  approval,
-  website,
-  legalName,
   logoSrc,
   accent,
   statusColor,
@@ -563,9 +478,6 @@ function TradePaper({
   runningQuoteTotal: string | null
   person: string
   dateLabel: string
-  approval: { name: string; at: Date | null } | null
-  website: string | null
-  legalName: string | null
   logoSrc: string | null
   accent: string
   statusColor: string
@@ -574,7 +486,6 @@ function TradePaper({
   const title = `${TITLES[config.type] ?? config.singular.toUpperCase()} #${document.number}`
   const needed = dateLabel
   const status = (STATUS_LABELS[document.status] ?? document.status).replaceAll('_', ' ')
-  const cols = 'grid grid-cols-[minmax(0,1.35fr)_2.75rem_5.4rem_4.4rem_3.2rem_4.4rem_5.4rem] gap-x-2'
 
   return (
     <article
@@ -665,49 +576,44 @@ function TradePaper({
         <span className="whitespace-pre-wrap">{customerMessage?.trim() || terms.trim() || '—'}</span>
       </p>
 
-      <div className="mt-4">
-        <div className={`${cols} border-b border-[#9ca3af] py-1 text-[12px] font-semibold text-[#111827]`}>
-          <span>Description</span>
-          <span className="text-right">Taxes</span>
-          <span className="text-right">Date req.</span>
-          <span className="text-right">Qty</span>
-          <span className="text-right">Unit</span>
-          <span className="text-right">Unit price</span>
-          <span className="text-right">Amount</span>
-        </div>
-        {document.lines.map((line, index) => {
-          const unit = line.item?.unitOfMeasure?.trim() || 'EACH'
-          return (
-            <div
-              key={line.id}
-              className={`${cols} items-start py-1.5`}
-              style={{ background: index % 2 === 0 ? '#ffffff' : '#f3f4f6' }}
-            >
-              <span className="pr-2">{line.description || line.item?.name || line.item?.sku || ''}</span>
-              <span className="tabular text-right">
-                {line.taxAmount && Number(line.taxAmount) > 0 ? money(line.taxAmount) : ''}
-              </span>
-              <span className="tabular text-right text-[11px]">{needed}</span>
-              <span className="tabular text-right">
-                {Number.isFinite(Number(line.quantity)) ? Number(line.quantity).toFixed(3) : line.quantity}
-              </span>
-              <span className="text-right">{unit.toUpperCase()}</span>
-              <span className="tabular text-right">
-                {Number.isFinite(Number(line.unitPrice)) ? Number(line.unitPrice).toFixed(3) : line.unitPrice}
-              </span>
-              <span className="tabular text-right">{money(line.amount)}</span>
-            </div>
-          )
-        })}
-      </div>
+      <table className="mt-4 w-full border-collapse text-[12px]">
+        <thead>
+          <tr className="border-b border-[#9ca3af] text-[12px] font-semibold text-[#111827]">
+            <th className="py-1 text-left font-semibold">Description</th>
+            <th className="w-12 py-1 text-right font-semibold">Taxes</th>
+            <th className="w-[5.4rem] py-1 text-right font-semibold">Date req.</th>
+            <th className="w-[4.4rem] py-1 text-right font-semibold">Qty</th>
+            <th className="w-[3.2rem] py-1 text-right font-semibold">Unit</th>
+            <th className="w-[4.4rem] py-1 text-right font-semibold">Unit price</th>
+            <th className="w-[5.4rem] py-1 text-right font-semibold">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {document.lines.map((line, index) => {
+            const unit = line.item?.unitOfMeasure?.trim() || 'EACH'
+            return (
+              <tr key={line.id} style={{ background: index % 2 === 0 ? '#ffffff' : '#f3f4f6' }}>
+                <td className="py-1.5 pr-2">{line.description || line.item?.name || line.item?.sku || ''}</td>
+                <td className="py-1.5 text-right tabular">
+                  {line.taxAmount && Number(line.taxAmount) > 0 ? money(line.taxAmount) : ''}
+                </td>
+                <td className="py-1.5 text-right text-[11px] tabular">{needed}</td>
+                <td className="py-1.5 text-right tabular">
+                  {Number.isFinite(Number(line.quantity)) ? Number(line.quantity).toFixed(3) : line.quantity}
+                </td>
+                <td className="py-1.5 text-right">{unit.toUpperCase()}</td>
+                <td className="py-1.5 text-right tabular">
+                  {Number.isFinite(Number(line.unitPrice)) ? Number(line.unitPrice).toFixed(3) : line.unitPrice}
+                </td>
+                <td className="py-1.5 text-right tabular">{money(line.amount)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
 
-      <div className="grid break-inside-avoid gap-6 py-6 sm:grid-cols-[minmax(0,1fr)_12rem]">
-        <DocumentStampBlock
-          createdBy={person}
-          approval={approval}
-          status={status}
-        />
-        <dl className="space-y-1 text-[12px]">
+      <div className="flex break-inside-avoid justify-end py-6">
+        <dl className="w-48 space-y-1 text-[12px]">
           <div className="flex justify-between gap-3">
             <dt>Subtotal</dt>
             <dd className="tabular">{money(document.subtotal)}</dd>
@@ -752,10 +658,6 @@ function TradePaper({
         </dl>
       </div>
 
-      <footer className="mt-2 border-t border-[#d1d5db] pt-2 text-center text-[10px] text-[#6b7280]">
-        <p>{[company.email, website].filter(Boolean).join('  |  ')}</p>
-        <p className="mt-1">Page 1 of 1</p>
-      </footer>
     </article>
   )
 }

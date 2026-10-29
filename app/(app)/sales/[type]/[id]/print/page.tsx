@@ -105,7 +105,6 @@ export default async function PrintDocumentPage({
         template={{ ...template, paperStyle: document.type === 'QUOTATION' ? 'merchant' : 'trade' }}
         config={config}
         baseCurrency={ctx.organization.baseCurrency}
-        printedBy={ctx.user.name}
         approval={approval}
         hideAccountBalance={document.type === 'QUOTATION'}
       />

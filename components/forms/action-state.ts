@@ -31,6 +31,10 @@ export type FormState = {
    * instead of leaving the user with a dead-end conflict.
    */
   mergeClash?: { id: string; name: string }
+  /** Soft warning after a successful save (e.g. to-do saved but email notify failed). */
+  warning?: string
+  /** WhatsApp wa.me URL to open after assigning a to-do. */
+  whatsappUrl?: string
 }
 
 export const idleState: FormState = { status: 'idle' }

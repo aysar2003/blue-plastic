@@ -2521,11 +2521,24 @@ a.report-drill-link:hover {
   aside,
   header,
   nav,
+  footer,
   .app-atmosphere,
   [data-slot='toaster'],
   /* The toast region: empty, but after a named-page invoice it forced a blank
    * last page onto every printed invoice. */
   section[aria-label^='Notifications'],
+  /*
+   * Portaled overlays (Radix menus, dialogs, combobox panels) render on <body>,
+   * outside any .print:hidden toolbar. Without this, an open "Paper ink"
+   * dropdown is baked into Print / Save as PDF.
+   */
+  [data-slot='dropdown-menu-content'],
+  [data-slot='dialog-overlay'],
+  [data-slot='dialog-content'],
+  [data-slot='popover-content'],
+  [data-slot='combobox-panel'],
+  [data-radix-popper-content-wrapper],
+  [data-radix-portal],
   .print\:hidden {
     display: none !important;
   }
@@ -2570,8 +2583,19 @@ a.report-drill-link:hover {
     break-inside: avoid;
   }
 
+  /*
+   * Standard multi-page papers: page 1 keeps the full letterhead + bill-to;
+   * when the item table overflows, thead repeats on page 2+ so the list is
+   * readable. Totals stay at the end (break-inside-avoid on the totals block).
+   */
   thead {
     display: table-header-group;
+  }
+
+  .merchant-invoice table,
+  .invoice-sheet table {
+    width: 100%;
+    border-collapse: collapse;
   }
 
   main {

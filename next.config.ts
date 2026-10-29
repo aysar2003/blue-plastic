@@ -12,7 +12,9 @@ const nextConfig: NextConfig = {
     // `forbidden()` renders app/forbidden.tsx instead of the generic error page.
     authInterrupts: true,
     serverActions: {
-      // A customer photo plus the debt-agreement papers.
+      // Small attachments (customer papers, logos). Workspace Documents
+      // upload straight to R2 via presigned PUT (up to 100 MB) and never
+      // pass through this limit — Vercel caps function bodies at ~4.5 MB.
       bodySizeLimit: '20mb',
     },
   },

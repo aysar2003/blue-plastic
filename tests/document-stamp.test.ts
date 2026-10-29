@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { documentStampLines } from '@/lib/document-stamp'
 
 describe('documentStampLines', () => {
-  it('prints the paper footer used on sales and purchase PDF, print, and email', () => {
+  it('formats audit lines for Change history / email (not the printed paper)', () => {
     expect(
       documentStampLines({
         createdBy: 'Zakariye Abdisalam Noor',

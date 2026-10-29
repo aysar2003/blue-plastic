@@ -132,7 +132,6 @@ export default async function ProjectQuotationsPrintPage({
                 template={{ ...template, paperStyle: 'merchant' }}
                 config={byType(document.type)}
                 baseCurrency={currency}
-                printedBy={ctx.user.name}
                 approval={approvals.get(document.id) ?? null}
                 hideAccountBalance
                 previousQuotationsTotal={

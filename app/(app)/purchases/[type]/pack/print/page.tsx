@@ -48,7 +48,6 @@ export default async function PurchasePackPrintPage({
       organization={organization}
       template={template}
       baseCurrency={ctx.organization.baseCurrency}
-      printedBy={ctx.user.name}
       title={config.plural}
       paper={paper}
       backHref={`/purchases/${config.slug}${queryString ? `?${queryString}` : ''}`}

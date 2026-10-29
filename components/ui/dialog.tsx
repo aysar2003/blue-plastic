@@ -56,7 +56,7 @@ function DialogOverlay({
       style={{ ...style, zIndex: z }}
       className={cn(
         // Pass clicks through so the page under a moved dialog stays usable.
-        'pointer-events-none fixed inset-0 bg-black/25 backdrop-blur-[0.5px]',
+        'pointer-events-none fixed inset-0 bg-black/25 backdrop-blur-[0.5px] print:hidden',
         'data-[state=open]:animate-in data-[state=open]:fade-in-0',
         'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
         className,
@@ -198,7 +198,7 @@ function DialogContent({
             : {}),
         }}
         className={cn(
-          'pointer-events-auto fixed left-1/2 top-4 w-[calc(100%-2rem)] -translate-x-1/2 sm:top-1/2 sm:-translate-y-1/2',
+          'pointer-events-auto fixed left-1/2 top-4 w-[calc(100%-2rem)] -translate-x-1/2 sm:top-1/2 sm:-translate-y-1/2 print:hidden',
           // A tall form scrolls inside the dialog rather than pushing the page,
           // so the header and the footer buttons stay where the user left them.
           'max-h-[calc(100svh-2rem)] overflow-y-auto rounded-md border bg-card p-5 text-card-foreground shadow-xl',

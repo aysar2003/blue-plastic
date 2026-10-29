@@ -38,7 +38,16 @@ article.invoice-sheet {
   box-shadow: none !important;
 }
 .break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }
+thead { display: table-header-group !important; }
+tr { break-inside: avoid !important; page-break-inside: avoid !important; }
 .print\\:hidden, .print\\:hidden * { display: none !important; }
+[data-slot="dropdown-menu-content"],
+[data-slot="dialog-overlay"],
+[data-slot="dialog-content"],
+[data-slot="popover-content"],
+[data-slot="combobox-panel"],
+[data-radix-popper-content-wrapper],
+[data-radix-portal] { display: none !important; }
 `
 
 /** Selectors for every printable paper the app draws on screen. */
@@ -59,7 +68,17 @@ export function hasPrintablePaper(): boolean {
 function stripChrome(root: HTMLElement) {
   root
     .querySelectorAll(
-      '.print\\:hidden, [class*="print:hidden"], [data-slot="dialog-content"], [data-slot="toaster"]',
+      [
+        '.print\\:hidden',
+        '[class*="print:hidden"]',
+        '[data-slot="dialog-content"]',
+        '[data-slot="dialog-overlay"]',
+        '[data-slot="dropdown-menu-content"]',
+        '[data-slot="popover-content"]',
+        '[data-slot="combobox-panel"]',
+        '[data-slot="toaster"]',
+        '[data-radix-popper-content-wrapper]',
+      ].join(', '),
     )
     .forEach((el) => el.remove())
 }

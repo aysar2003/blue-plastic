@@ -456,6 +456,7 @@ export function Combobox({
         ? createPortal(
             <div
               ref={panelRef}
+              data-slot="combobox-panel"
               style={{
                 position: 'fixed',
                 top: anchor.above ? undefined : anchor.top,
@@ -464,7 +465,7 @@ export function Combobox({
                 width: anchor.width,
               }}
               className={cn(
-                'pointer-events-auto z-[60] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg',
+                'pointer-events-auto z-[60] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg print:hidden',
                 'animate-in fade-in-0 zoom-in-95',
               )}
             >

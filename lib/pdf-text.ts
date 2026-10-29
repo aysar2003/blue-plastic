@@ -75,7 +75,19 @@ const LETTER = { width: PDF_PAGE.width, height: PDF_PAGE.height }
 
 export function buildTextPdf(
   rows: PdfRow[],
-  options: { width?: number; height?: number; header?: PdfRow[]; ink?: PrintInk } = {},
+  options: {
+    width?: number
+    height?: number
+    /** Drawn at the top of every page (including page 1). */
+    header?: PdfRow[]
+    /**
+     * Standard multi-page papers: drawn only on page 2+ (e.g. doc number +
+     * table column headers) so the full letterhead stays on page 1 and the
+     * item list continues with column titles on later pages.
+     */
+    continueHeader?: PdfRow[]
+    ink?: PrintInk
+  } = {},
 ): Uint8Array {
   const width = options.width ?? LETTER.width
   const height = options.height ?? LETTER.height
@@ -83,19 +95,29 @@ export function buildTextPdf(
   const top = height - PDF_PAGE.top
   const bottom = PDF_PAGE.bottom
   const header = options.header ?? []
+  const continueHeader = options.continueHeader ?? []
   const headerHeight = header.reduce((sum, row) => sum + (row.height ?? 14), 0)
+  const continueHeight = continueHeader.reduce((sum, row) => sum + (row.height ?? 14), 0)
+
+  const startPage = (pageIndex: number): { rows: PdfRow[]; y: number } => {
+    if (pageIndex === 0) return { rows: [], y: top - headerHeight }
+    return { rows: [...continueHeader], y: top - headerHeight - continueHeight }
+  }
 
   const pages: PdfRow[][] = []
-  let current: PdfRow[] = []
-  let y = top - headerHeight
+  let pageIndex = 0
+  let started = startPage(0)
+  let current = started.rows
+  let y = started.y
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!
     if (row.pageBreak) {
-      if (current.length > 0) {
-        pages.push(current)
-        current = []
-        y = top - headerHeight
-      }
+      // New paper in a pack — full letterhead again, not a "continued" header.
+      if (current.length > 0) pages.push(current)
+      pageIndex = 0
+      started = startPage(0)
+      current = started.rows
+      y = started.y
       continue
     }
 
@@ -110,10 +132,12 @@ export function buildTextPdf(
       }
     }
 
-    if (y - blockHeight < bottom && current.length > 0) {
+    if (y - blockHeight < bottom && current.length > (pageIndex === 0 ? 0 : continueHeader.length)) {
       pages.push(current)
-      current = []
-      y = top - headerHeight
+      pageIndex += 1
+      started = startPage(pageIndex)
+      current = started.rows
+      y = started.y
     }
     current.push(...block)
     y -= blockHeight

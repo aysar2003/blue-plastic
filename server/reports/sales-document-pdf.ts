@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { formatDate, formatLongTransactionDate, isCalendarDate, toCalendarDate } from '@/lib/date'
-import { documentStampLines } from '@/lib/document-stamp'
 import {
   DEFAULT_DOCUMENT_TEMPLATE,
   type DocumentTemplate,
@@ -110,7 +109,10 @@ const WHITE = [1, 1, 1] as const
  * Accent, banks, and terms come from Settings → Templates.
  */
 export function renderSalesDocumentPdf(input: SalesDocumentPdfInput): Uint8Array {
-  return buildTextPdf(salesDocumentPdfRows(input), { ink: input.ink })
+  const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
+  const continueHeader =
+    template.paperStyle === 'trade' ? tradeContinueHeader(input) : merchantContinueHeader(input)
+  return buildTextPdf(salesDocumentPdfRows(input), { ink: input.ink, continueHeader })
 }
 
 function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
@@ -396,11 +398,6 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     line(input.message, { size: 9, height: 14 })
   }
 
-  foot.push({ height: 8, runs: [] })
-  for (const text of stampPdfLines(input)) {
-    line(text, { size: 9, height: 13, color: muted })
-  }
-
   return [...rows, ...foot]
 }
 
@@ -543,7 +540,13 @@ export function renderDocumentPackPdf(input: {
       }),
     )
   })
-  return buildTextPdf(rows, { ink: input.ink })
+  const first = input.documents[0]
+  const continueHeader = first
+    ? (first.template ?? DEFAULT_DOCUMENT_TEMPLATE).paperStyle === 'trade'
+      ? tradeContinueHeader(first)
+      : merchantContinueHeader(first)
+    : []
+  return buildTextPdf(rows, { ink: input.ink, continueHeader })
 }
 
 /**
@@ -571,13 +574,81 @@ export function renderProjectQuotationsPdf(input: {
   })
 }
 
-function stampPdfLines(input: SalesDocumentPdfInput): string[] {
-  return documentStampLines({
-    createdBy: input.createdByName,
-    approvedBy: input.approvedByName,
-    approvedAt: input.approvedAt,
-    status: input.status,
-  })
+/** Page 2+ of a merchant paper: short identity + repeating column headers. */
+function merchantContinueHeader(input: SalesDocumentPdfInput): PdfRow[] {
+  const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
+  const accent = merchantAccent(template, input.paper ?? 'customer')
+  const ink = merchantPdfInk()
+  return [
+    {
+      size: 9,
+      height: 14,
+      runs: [
+        { text: input.orgName, x: PDF_PAGE.left, bold: true, color: accent },
+        {
+          text: `${input.title} ${input.number} (continued)`,
+          x: PDF_PAGE.right,
+          align: 'right',
+          bold: true,
+          color: ink,
+        },
+      ],
+    },
+    { height: 6, runs: [] },
+    merchantPdfTableHead(
+      [
+        { text: 'No', x: COL.no },
+        { text: 'Item name', x: COL.item },
+        { text: 'Qty', x: COL.qty, align: 'right' },
+        { text: 'Unit', x: COL.qty + 48, align: 'right' },
+        { text: 'Rate', x: COL.rate, align: 'right' },
+        { text: 'Amount', x: COL.amount, align: 'right' },
+      ],
+      accent,
+    ),
+  ]
+}
+
+/** Page 2+ of a trade paper: short identity + repeating column headers. */
+function tradeContinueHeader(input: SalesDocumentPdfInput): PdfRow[] {
+  const muted = merchantPdfMuted()
+  const ink = merchantPdfInk()
+  const amountX = PDF_PAGE.right
+  const rateX = amountX - 70
+  const qtyX = rateX - 70
+  const dateX = qtyX - 70
+  const taxX = dateX - 48
+  return [
+    {
+      size: 9,
+      height: 14,
+      runs: [
+        { text: input.orgName, x: PDF_PAGE.left, bold: true, color: ink },
+        {
+          text: `${input.title} #${input.number} (continued)`,
+          x: PDF_PAGE.right,
+          align: 'right',
+          bold: true,
+          color: muted,
+        },
+      ],
+    },
+    { height: 6, runs: [] },
+    {
+      size: 8,
+      height: 14,
+      rule: true,
+      runs: [
+        { text: 'Description', x: PDF_PAGE.left, bold: true },
+        { text: 'Taxes', x: taxX, align: 'right', bold: true },
+        { text: 'Date req.', x: dateX, align: 'right', bold: true },
+        { text: 'Qty', x: qtyX, align: 'right', bold: true },
+        { text: 'Unit', x: qtyX + 42, align: 'right', bold: true },
+        { text: 'Unit price', x: rateX, align: 'right', bold: true },
+        { text: 'Amount', x: amountX, align: 'right', bold: true },
+      ],
+    },
+  ]
 }
 
 /** Same Trade sheet as on-screen print: ship-to, order facts, six line columns. */
@@ -731,14 +802,12 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     })
   })
 
-  const stamp = stampPdfLines(input)
   rows.push({ size: 6, height: 10, runs: [] })
   rows.push({
     size: 9,
     height: 13,
     keepId: 'trade-totals',
     runs: [
-      { text: stamp[0] ?? '', color: muted },
       { text: 'Subtotal', x: 430 },
       { text: money(input.subtotal), x: amountX, align: 'right' },
     ],
@@ -748,7 +817,6 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     height: 13,
     keepId: 'trade-totals',
     runs: [
-      { text: stamp[1] ?? '', color: muted },
       {
         text: purchase
           ? input.documentType === 'PURCHASE_ORDER'
@@ -768,22 +836,6 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     ],
   })
   rows.push({
-    size: 9,
-    height: 13,
-    keepId: 'trade-totals',
-    runs: [
-      { text: stamp[2] ?? '', color: muted },
-    ],
-  })
-  rows.push({
-    size: 9,
-    height: 13,
-    keepId: 'trade-totals',
-    runs: [
-      { text: stamp[3] ?? '', color: muted },
-    ],
-  })
-  rows.push({
     size: 10,
     height: 16,
     keepId: 'trade-totals',
@@ -793,10 +845,6 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
       { text: money(input.total), x: amountX, align: 'right', bold: true },
     ],
   })
-  const foot = [input.orgEmail, input.orgPhone].filter(Boolean).join('  |  ')
-  if (foot) {
-    rows.push({ size: 8, height: 14, runs: [{ text: foot, x: 306, align: 'center', color: muted }], rule: true })
-  }
   return rows
 }
 

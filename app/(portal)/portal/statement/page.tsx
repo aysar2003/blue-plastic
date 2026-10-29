@@ -148,7 +148,6 @@ export default async function PortalStatementPage({
         part="invoices"
         paper="merchant"
         template={template}
-        printedBy={ctx.user.name}
         documentHref={(document) => `/portal/invoices/${document.id}`}
       />
     )

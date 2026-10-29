@@ -111,6 +111,33 @@ export const PERMISSIONS = [
   'calendar:update',
   'calendar:delete',
 
+  // To-do — personal / team checklists (not project board tasks)
+  'todo:read',
+  'todo:create',
+  'todo:update',
+  'todo:delete',
+
+  // Documents — company file library (not sales/purchase documents)
+  'docs:read',
+  'docs:create',
+  'docs:update',
+  'docs:delete',
+
+  // Knowledge — internal wiki articles
+  'knowledge:read',
+  'knowledge:create',
+  'knowledge:update',
+  'knowledge:delete',
+
+  // Employees — HR directory (not login/access; that is user:*)
+  'hr:read',
+  'hr:create',
+  'hr:update',
+  'hr:delete',
+  'hr:leave',
+  'hr:attendance',
+  'hr:payroll',
+
   // Customer portal — portal:read is CUSTOMER-only; portal:manage is staff.
   'portal:read',
   'portal:manage',
@@ -355,6 +382,53 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'calendar:create', label: 'Schedule meetings and appointments' },
       { key: 'calendar:update', label: 'Edit calendar events' },
       { key: 'calendar:delete', label: 'Delete calendar events' },
+    ],
+  },
+  {
+    id: 'todos',
+    label: 'To-do',
+    description: 'Personal and team checklists.',
+    permissions: [
+      { key: 'todo:read', label: 'View to-dos' },
+      { key: 'todo:create', label: 'Add to-dos' },
+      { key: 'todo:update', label: 'Edit and complete to-dos' },
+      { key: 'todo:delete', label: 'Delete to-dos' },
+    ],
+  },
+  {
+    id: 'documents',
+    label: 'Documents',
+    description: 'Company file library — contracts, scans, and papers.',
+    permissions: [
+      { key: 'docs:read', label: 'View documents' },
+      { key: 'docs:create', label: 'Upload documents and create folders' },
+      { key: 'docs:update', label: 'Rename, move, and edit documents' },
+      { key: 'docs:delete', label: 'Delete documents and folders' },
+    ],
+  },
+  {
+    id: 'knowledge',
+    label: 'Knowledge',
+    description: 'Internal how-to pages and company wiki.',
+    permissions: [
+      { key: 'knowledge:read', label: 'View knowledge articles' },
+      { key: 'knowledge:create', label: 'Write knowledge articles' },
+      { key: 'knowledge:update', label: 'Edit knowledge articles' },
+      { key: 'knowledge:delete', label: 'Delete knowledge articles' },
+    ],
+  },
+  {
+    id: 'employees',
+    label: 'Employees',
+    description: 'People directory, leave, attendance, and payroll.',
+    permissions: [
+      { key: 'hr:read', label: 'View employees' },
+      { key: 'hr:create', label: 'Add employees' },
+      { key: 'hr:update', label: 'Edit employees' },
+      { key: 'hr:delete', label: 'Delete employees' },
+      { key: 'hr:leave', label: 'Manage leave' },
+      { key: 'hr:attendance', label: 'Manage attendance' },
+      { key: 'hr:payroll', label: 'Run and post payroll' },
     ],
   },
   {

@@ -37,7 +37,6 @@ export function StatementInvoices({
   part,
   paper = 'merchant',
   template,
-  printedBy,
   subject = 'invoice',
   documentHref,
   ledgerRows,
@@ -67,7 +66,6 @@ export function StatementInvoices({
   /** Merchant is the bill from Settings. Classic is the older sheet, hidden until turned on. */
   paper?: 'merchant' | 'classic'
   template?: DocumentTemplate
-  printedBy?: string
   /** Override the per-document open link (portal uses `/portal/invoices/:id`). */
   documentHref?: (document: SheetDocument) => string
   /**
@@ -205,7 +203,6 @@ export function StatementInvoices({
               baseCurrency={baseCurrency}
               previousBalance={accountAt?.[document.id]?.previous ?? opening?.toString() ?? null}
               currentBalance={accountAt?.[document.id]?.current ?? closing.toString()}
-              printedBy={printedBy}
               ledger
               words={
                 subject === 'bill'

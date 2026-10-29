@@ -401,7 +401,6 @@ export default async function StatementPage({
             part={customerFilter.view === 'summary' ? 'summary' : 'invoices'}
             paper={customerFilter.view === 'classic' ? 'classic' : 'merchant'}
             template={template}
-            printedBy={ctx.user.name}
             ledgerRows={customerFilter.view === 'summary' ? toLedgerRows(statement.entries) : undefined}
           />
         </>
@@ -599,7 +598,6 @@ export default async function StatementPage({
             part={vendorFilter.view === 'summary' ? 'summary' : 'invoices'}
             paper={vendorFilter.view === 'classic' ? 'classic' : 'merchant'}
             template={template}
-            printedBy={ctx.user.name}
             subject="bill"
             ledgerRows={vendorFilter.view === 'summary' ? toLedgerRows(statement.entries) : undefined}
           />

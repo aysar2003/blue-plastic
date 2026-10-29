@@ -45,10 +45,23 @@ export function withPrintInk(href: string, ink: PrintInk): string {
   }
 }
 
+/** Ask open menus/dialogs to close before Print / Save as PDF snapshots the page. */
+function dismissPrintChrome() {
+  if (typeof document === 'undefined') return
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+}
+
 /** Apply ink mode and open the browser print dialog. */
 export function printWithInk(ink: PrintInk) {
   rememberPrintInk(ink)
-  window.print()
+  dismissPrintChrome()
+  // Radix closes menus after onSelect; print must wait or the open "Paper ink"
+  // dropdown is stamped onto the printed page / Save as PDF.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.print()
+    })
+  })
 }
 
 /** Fetch a PDF URL and save it as a file. Avoids the browser opening the PDF inline. */

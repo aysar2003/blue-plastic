@@ -109,7 +109,6 @@ export default async function PrintPurchasePage({
         template={{ ...template, paperStyle: 'trade' }}
         config={config}
         baseCurrency={ctx.organization.baseCurrency}
-        printedBy={ctx.user.name}
         words={VENDOR_WORDS}
         approval={decision ? { name: decision.decidedBy.name, at: decision.decidedAt } : null}
       />

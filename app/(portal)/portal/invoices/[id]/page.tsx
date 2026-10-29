@@ -77,7 +77,6 @@ export default async function PortalInvoicePage({
         template={{ ...template, paperStyle: 'trade' }}
         config={config}
         baseCurrency={ctx.organization.baseCurrency}
-        printedBy={ctx.user.name}
         approval={approvals.get(document.id) ?? null}
         ledger
       />

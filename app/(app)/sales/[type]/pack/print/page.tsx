@@ -48,7 +48,6 @@ export default async function SalesPackPrintPage({
       organization={organization}
       template={{ ...template, paperStyle: 'trade' }}
       baseCurrency={ctx.organization.baseCurrency}
-      printedBy={ctx.user.name}
       title={config.plural}
       paper={paper}
       backHref={`/sales/${config.slug}${queryString ? `?${queryString}` : ''}`}

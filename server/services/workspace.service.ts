@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client'
 
 import { withoutBusinessOverview } from '@/lib/business-overview-access'
 import { startOfMonth, today } from '@/lib/date'
+import { isModuleEnabled } from '@/lib/feature-flags'
 import { documentOverdueOr, overdueClock } from '@/lib/invoice-overdue'
 import { Decimal, formatMoney } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
@@ -74,7 +75,8 @@ export async function feed(ctx: OrgContext) {
 
 export async function tasks(ctx: OrgContext) {
   const clock = overdueClock(ctx.organization.timeZone)
-  const [pendingBank, overdueInvoices, openBills] = await Promise.all([
+  const todosOn = isModuleEnabled(ctx.features, 'todos') && ctx.permissions.has('todo:read')
+  const [pendingBank, overdueInvoices, openBills, assignedTodos] = await Promise.all([
     db.importedTransaction.count({ where: { orgId: ctx.orgId, status: 'PENDING' } }),
     db.salesDocument.count({
       where: {
@@ -93,9 +95,34 @@ export async function tasks(ctx: OrgContext) {
     db.purchaseDocument.count({
       where: { orgId: ctx.orgId, type: 'BILL', status: { in: ['OPEN', 'PARTIAL'] } },
     }),
+    todosOn
+      ? db.workspaceTodo.findMany({
+          where: {
+            orgId: ctx.orgId,
+            assigneeId: ctx.userId,
+            doneAt: null,
+            // Someone else sent it — not items you only assigned to yourself.
+            NOT: { userId: ctx.userId },
+          },
+          select: {
+            id: true,
+            title: true,
+            owner: { select: { name: true } },
+          },
+          orderBy: [{ sequence: 'asc' }, { createdAt: 'asc' }],
+          take: 8,
+        })
+      : Promise.resolve([]),
   ])
 
   const items: { href: string; label: string }[] = []
+  for (const todo of assignedTodos) {
+    const from = todo.owner.name.trim() || 'Someone'
+    items.push({
+      href: '/todos',
+      label: `${from} assigned: ${todo.title}`,
+    })
+  }
   if (pendingBank > 0) {
     items.push({
       href: '/banking/import',

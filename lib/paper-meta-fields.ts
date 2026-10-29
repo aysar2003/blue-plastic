@@ -16,7 +16,6 @@ export type PaperMetaFieldId =
   | 'workSite'
   | 'workScope'
   | 'email'
-  | 'printedFooter'
 
 export type PaperMetaField = { id: PaperMetaFieldId; label: string }
 
@@ -32,7 +31,6 @@ export const PAPER_META_FIELDS: PaperMetaField[] = [
   { id: 'workSite', label: 'Work site' },
   { id: 'workScope', label: 'Work / job' },
   { id: 'email', label: 'Email' },
-  { id: 'printedFooter', label: 'Printed on / by' },
 ]
 
 export const PAPER_META_IDS = PAPER_META_FIELDS.map((field) => field.id)

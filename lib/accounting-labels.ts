@@ -101,6 +101,7 @@ export const JOURNAL_SOURCE_LABELS: Record<JournalSourceType, string> = {
   ASSEMBLY_BUILD: 'Assembly build',
   POS_CASH_MOVE: 'POS cash in/out',
   POS_SESSION_CLOSE: 'POS session close',
+  PAYROLL: 'Payroll',
 }
 
 export const PERIOD_STATUS_LABELS: Record<PeriodStatus, string> = {
