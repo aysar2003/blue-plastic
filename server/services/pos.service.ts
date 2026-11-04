@@ -965,6 +965,7 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
       depositAccountId: tillAccountId,
       lines,
       saveAsDraft: false,
+      acknowledgeCreditLimit: false,
       discountKind: discountValue ? 'amount' : 'percent',
       discountValue,
       customerMessage: input.note ?? undefined,
@@ -1020,6 +1021,7 @@ export async function createQuotation(ctx: OrgContext, input: PosCreateQuotation
     date: today(ctx.organization.timeZone),
     lines,
     saveAsDraft: false,
+    acknowledgeCreditLimit: false,
     discountKind: 'percent',
     customerMessage: input.note ?? undefined,
   })
@@ -1474,6 +1476,7 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
       depositAccountId: depositLedgerAccountId ?? resolvedPayments[0]!.ledgerAccountId,
       lines,
       saveAsDraft: false,
+      acknowledgeCreditLimit: false,
       discountKind: 'percent',
       reference: order.salesDocument.number,
       memo: `POS refund of ${order.salesDocument.number}`,

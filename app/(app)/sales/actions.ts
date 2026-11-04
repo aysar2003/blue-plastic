@@ -126,6 +126,7 @@ export const createBatchInvoices = action
           date: input.date,
           memo: input.description ?? null,
           saveAsDraft: false,
+          acknowledgeCreditLimit: false,
           discountKind: 'percent',
           lines: [
             {

@@ -1080,7 +1080,17 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
   return db.$transaction(async (tx) => {
     const existing = await tx.salesDocument.findFirst({
       where: { id, orgId: ctx.orgId },
-      select: { id: true, type: true, number: true, status: true, journalId: true, version: true, total: true },
+      select: {
+        id: true,
+        type: true,
+        number: true,
+        status: true,
+        journalId: true,
+        version: true,
+        total: true,
+        currencyCode: true,
+        exchangeRate: true,
+      },
     })
     if (!existing) throw notFound('Document')
 
@@ -1373,7 +1383,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     select: {
       id: true, type: true, number: true, date: true, memo: true, customerId: true,
       status: true, depositAccountId: true, journalId: true, discountAmount: true,
-      trackingCategoryId: true,
+      trackingCategoryId: true, currencyCode: true, exchangeRate: true,
       lines: {
         orderBy: { lineNumber: 'asc' },
         select: {

@@ -12,15 +12,17 @@ describe('FX posting conversion', () => {
   })
 
   it('treats rate 1 same-currency as no FX', () => {
-    const baseCurrency = 'USD'
-    const docCurrency = 'USD'
+    const baseCurrency: string = 'USD'
+    const docCurrency: string = 'USD'
     const rate = new Decimal(1)
     const isFx = docCurrency !== baseCurrency || !rate.equals(1)
     expect(isFx).toBe(false)
   })
 
   it('flags FX when currency differs even at rate 1', () => {
-    const isFx = 'EUR' !== 'USD' || !new Decimal(1).equals(1)
+    const baseCurrency: string = 'USD'
+    const docCurrency: string = 'EUR'
+    const isFx = docCurrency !== baseCurrency || !new Decimal(1).equals(1)
     expect(isFx).toBe(true)
   })
 })
