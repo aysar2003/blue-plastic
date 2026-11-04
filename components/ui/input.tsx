@@ -1,3 +1,5 @@
+'use client'
+
 import * as React from 'react'
 
 import { filterByKind, inferInputKind, type InputKind } from '@/lib/input-guards'
