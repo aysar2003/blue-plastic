@@ -263,6 +263,27 @@ export async function closeChecklist(
     amount: obe,
   })
 
+  const foreignJournals = await client.journal.count({
+    where: {
+      orgId: ctx.orgId,
+      status: 'POSTED',
+      deletedAt: null,
+      currencyCode: { not: currency },
+      date: { lte: to },
+    },
+  })
+  checks.push({
+    key: 'fx-revaluation',
+    label: 'Foreign-currency balances reviewed',
+    detail:
+      foreignJournals === 0
+        ? 'No foreign-currency journals in this period.'
+        : `${foreignJournals} foreign-currency journal(s) exist. Revalue open AR/AP at month-end if rates moved.`,
+    severity: foreignJournals === 0 ? 'ok' : 'warning',
+    href: '/accounting/fx-revaluation',
+    count: foreignJournals,
+  })
+
   return {
     from: range.from,
     to: range.to,

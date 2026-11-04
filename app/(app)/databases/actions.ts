@@ -20,6 +20,7 @@ export const createCompany = action
   .handler(async (ctx, input) => {
     const org = await companyService.createCompany(ctx, input)
     revalidatePath('/databases')
+    revalidatePath('/databases/apps')
     revalidatePath('/reports/companies')
     revalidatePath('/', 'layout')
     return org
@@ -53,6 +54,7 @@ export const reviewSignupRequest = action
   .handler(async (ctx, input) => {
     const result = await registerService.reviewSignupRequest(ctx, input)
     revalidatePath('/databases')
+    revalidatePath('/databases/apps')
     revalidatePath('/reports/companies')
     revalidatePath('/', 'layout')
     return result
@@ -64,6 +66,7 @@ export const updateCompanyLimits = action
   .handler(async (ctx, input) => {
     const result = await companyService.updateCompanyLimits(ctx, input)
     revalidatePath('/databases')
+    revalidatePath('/databases/apps')
     revalidatePath('/', 'layout')
     return result
   })

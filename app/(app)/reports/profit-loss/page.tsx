@@ -141,6 +141,7 @@ export default async function ProfitAndLossPage({
         basis={settings.basis}
         comparison={settings.comparison}
         controls={{ mode: 'range', basis: true, comparison: true, exportAs: 'profit-loss' }}
+        memorizeTitle="Profit and Loss"
       />
 
       <ReportEntityFilters kinds={PL_FILTERS} values={filters} options={filterOptions} />

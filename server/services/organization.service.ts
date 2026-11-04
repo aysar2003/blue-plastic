@@ -221,6 +221,8 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       enableTax: previous.enableTax,
       enableCustomerPortal: input.enableCustomerPortal,
       enableDocumentApprovals: input.enableDocumentApprovals,
+      creditLimitWarn: input.creditLimitWarn,
+      payrollStandard: input.payrollStandard,
       grantedModules: previous.grantedModules,
       modules: modulesClampedToGrants(modulesFromFeaturesInput(input), previous.grantedModules),
       documentKinds: documentKindsFromFeaturesInput(input),

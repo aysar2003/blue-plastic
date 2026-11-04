@@ -9,15 +9,20 @@ import { isCalendarDate } from '@/lib/date'
 import { cuid, deleteRecordSchema } from '@/lib/validation/common'
 import {
   applyCreditSchema,
+  batchInvoiceSchema,
   convertEstimateSchema,
   convertSalesDocumentSchema,
   convertSalesOrderSchema,
+  invoiceFromSourceSchema,
   paymentSchema,
   paymentUpdateSchema,
   salesDocumentSchema,
 } from '@/lib/validation/sales'
 import { action } from '@/server/action'
+import { db } from '@/server/db'
+import { isAppError } from '@/server/errors'
 import * as paymentService from '@/server/services/payment.service'
+import * as purchaseService from '@/server/services/purchase.service'
 import * as salesService from '@/server/services/sales.service'
 import { assertDocumentDeleteAllowed } from '@/server/feature-guards'
 
@@ -84,6 +89,70 @@ export const createDocument = action
     const document = await salesService.create(ctx, type as SalesDocumentType, rest)
     revalidateSales()
     return document
+  })
+
+/**
+ * One invoice per customer, same date and line. A credit-limit refusal on one
+ * customer is recorded and the rest still go through.
+ */
+export const createBatchInvoices = action
+  .requires('invoice:create')
+  .input(batchInvoiceSchema)
+  .handler(async (ctx, input) => {
+    const people = await db.customer.findMany({
+      where: { orgId: ctx.orgId, id: { in: input.customerIds } },
+      select: { id: true, displayName: true },
+    })
+    const byId = new Map(people.map((person) => [person.id, person.displayName]))
+    const rows: {
+      customerId: string
+      customerName: string
+      ok: boolean
+      id?: string
+      number?: string
+      message?: string
+    }[] = []
+
+    for (const customerId of input.customerIds) {
+      const customerName = byId.get(customerId)
+      if (!customerName) {
+        rows.push({ customerId, customerName: 'Unknown customer', ok: false, message: 'Customer not found.' })
+        continue
+      }
+      try {
+        const document = await salesService.create(ctx, 'INVOICE', {
+          number: undefined,
+          customerId,
+          date: input.date,
+          memo: input.description ?? null,
+          saveAsDraft: false,
+          discountKind: 'percent',
+          lines: [
+            {
+              itemId: input.itemId,
+              description: input.description ?? null,
+              quantity: input.quantity,
+              unitPrice: input.unitPrice,
+              taxCodeId: input.taxCodeId ?? null,
+            },
+          ],
+        })
+        rows.push({
+          customerId,
+          customerName,
+          ok: true,
+          id: document.id,
+          number: document.number,
+        })
+      } catch (error) {
+        if (!isAppError(error)) throw error
+        rows.push({ customerId, customerName, ok: false, message: error.message })
+      }
+    }
+
+    revalidateSales()
+    revalidatePath('/sales/batch')
+    return { rows }
   })
 
 export const updateDocument = action
@@ -154,6 +223,22 @@ export const convertEstimate = action
     revalidateSales()
     return invoice
   })
+
+export const invoiceFromSource = action
+  .requires('invoice:create')
+  .input(invoiceFromSourceSchema)
+  .handler(async (ctx, input) => {
+    const invoice = await salesService.invoiceFromSource(ctx, input)
+    revalidateSales()
+    revalidatePath(`/sales/invoices/${invoice.id}`)
+    return invoice
+  })
+
+/** Posted bill and expense lines waiting to be recharged to this customer. */
+export const listBillableExpenses = action
+  .requires('invoice:read')
+  .input(z.object({ customerId: cuid }))
+  .handler((ctx, input) => purchaseService.listBillableExpenses(ctx, input.customerId))
 
 export const convertSalesDocument = action
   .requires('invoice:create')
@@ -237,6 +322,31 @@ export const deletePayment = action
 /* --- Form adapters -------------------------------------------------------- */
 
 /** Documents carry an array of lines, so the form posts JSON rather than flat fields. */
+/**
+ * Progress invoice form posts JSON: the line grid is an array, and flattening
+ * then re-parsing it would only invent a chance to lose a line.
+ */
+export async function invoiceFromSourceForm(_prev: FormState, formData: FormData): Promise<FormState> {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(String(formData.get('payload') ?? '{}'))
+  } catch {
+    return { status: 'error', message: 'The invoice could not be read. Please try again.' }
+  }
+
+  const result = await invoiceFromSource(parsed)
+  return toFormState(
+    result,
+    result.ok && 'number' in result.data
+      ? `Invoice ${result.data.number} created. ${
+          result.data.sourceStatus === 'CLOSED'
+            ? `${result.data.sourceNumber} is now fully invoiced.`
+            : `${result.data.sourceNumber} still has lines outstanding.`
+        }`
+      : 'Invoice created.',
+  )
+}
+
 export async function saveDocumentForm(_prev: FormState, formData: FormData): Promise<FormState> {
   let parsed: Record<string, unknown>
   try {

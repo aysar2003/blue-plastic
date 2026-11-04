@@ -66,6 +66,7 @@ export const deleteJournal = action
     revalidatePath('/purchases')
     revalidatePath('/banking/accounts')
     revalidatePath('/inventory/stock')
+    revalidatePath('/employees/payroll')
     return result
   })
 

@@ -14,6 +14,7 @@ import { resolveSiteUrl } from '@/lib/site-url'
 import type { CalendarDate } from '@/lib/date'
 import type { OrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
+import { sendTextNotification } from '@/lib/notify-gateway'
 import * as mailService from '@/server/services/mail.service'
 
 export type TodoNotifyResult = {
@@ -68,7 +69,7 @@ export async function deliverTodoAssignment(
       continue
     }
     if (channel === 'whatsapp') {
-      results.push(buildAssignmentWhatsapp(ctx, input, todosUrl))
+      results.push(await sendAssignmentWhatsapp(ctx, input, todosUrl))
       continue
     }
   }
@@ -145,11 +146,11 @@ async function sendAssignmentEmail(
   }
 }
 
-function buildAssignmentWhatsapp(
+async function sendAssignmentWhatsapp(
   ctx: OrgContext,
   input: DeliverTodoAssignmentInput,
   todosUrl: string,
-): TodoNotifyResult {
+): Promise<TodoNotifyResult> {
   const phone = digitsOnlyPhone(input.assignee.phone)
   if (!phone) {
     return {
@@ -171,6 +172,11 @@ function buildAssignmentWhatsapp(
     priority: input.todo.priority,
     todosUrl,
   })
+
+  const sent = await sendTextNotification('whatsapp', phone, text)
+  if (sent.ok) {
+    return { channel: 'whatsapp', ok: true, message: 'WhatsApp message sent.' }
+  }
 
   return {
     channel: 'whatsapp',

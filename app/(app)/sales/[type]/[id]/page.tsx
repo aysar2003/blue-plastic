@@ -50,7 +50,6 @@ export default async function SalesDocumentPage({
       config.type === 'QUOTATION' ||
       isSalesOrder(config.type)) &&
     ctx.permissions.has('invoice:create') &&
-    !document.convertedTo &&
     document.status !== 'VOID' &&
     document.status !== 'DECLINED' &&
     document.status !== 'CLOSED'
@@ -137,6 +136,7 @@ export default async function SalesDocumentPage({
               defaultBody={shareBody}
               whatsappPhone={document.customer.phone}
               whatsappText={shareBody}
+              canEmail={ctx.permissions.has('invoice:send')}
             />
             {deliveryNote ? (
               <Link
@@ -237,16 +237,30 @@ export default async function SalesDocumentPage({
         </div>
       ) : null}
 
-      {document.convertedTo ? (
+      {document.convertedTo.length > 0 ? (
         <div className="mb-4 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-          Became {byType(document.convertedTo.type).singular.toLowerCase()}{' '}
-          <Link
-            href={`/sales/${byType(document.convertedTo.type).slug}/${document.convertedTo.id}`}
-            className="font-medium underline underline-offset-4"
-          >
-            {document.convertedTo.number}
-          </Link>
-          .
+          {isSalesOrder(config.type) || config.type === 'ESTIMATE' || config.type === 'QUOTATION'
+            ? 'Invoiced on '
+            : 'Became '}
+          {document.convertedTo.map((child, index) => {
+            const childConfig = byType(child.type)
+            return (
+              <span key={child.id}>
+                {index > 0 ? ', ' : ''}
+                <Link
+                  href={`/sales/${childConfig.slug}/${child.id}`}
+                  className="font-medium underline underline-offset-4"
+                >
+                  {child.number}
+                </Link>
+              </span>
+            )
+          })}
+          {document.status === 'CLOSED'
+            ? '. Nothing on this paper is still to bill.'
+            : document.status === 'PARTIAL'
+              ? '. Part of it is still outstanding.'
+              : '.'}
         </div>
       ) : null}
       {document.convertedFrom ? (

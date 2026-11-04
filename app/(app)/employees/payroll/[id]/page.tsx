@@ -23,7 +23,13 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
     <>
       <PageHeader
         title={`Payroll ${run.periodStart} – ${run.periodEnd}`}
-        description={run.status === 'POSTED' ? 'Posted to the ledger' : 'Draft — review and post'}
+        description={
+          run.status === 'POSTED'
+            ? 'Posted to the ledger'
+            : run.awaitingApproval
+              ? 'Waiting for approval'
+              : 'Draft — review, then submit'
+        }
         actions={
           <Button asChild type="button" size="sm" variant="outline">
             <Link href="/employees/payroll">Back to runs</Link>
@@ -34,6 +40,7 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
         run={run}
         accounts={accounts}
         canManage={ctx.permissions.has('hr:payroll')}
+        standard={ctx.features.payrollStandard}
       />
     </>
   )

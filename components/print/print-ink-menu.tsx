@@ -107,14 +107,16 @@ export function PdfInkMenu({
     const ink: PrintInk = 'color'
     rememberPrintInk(ink)
     const name = filename || 'document.pdf'
-    // Any page that already draws the paper (print / pack / statement): PDF =
-    // that sheet. Detail pages without a paper fall through to the API PDF.
+    // Print pages: PDF must match the on-screen paper (Trade / Merchant sheet).
+    // Snapshot HTML → Chrome first; API PDF is only the fallback.
     const preferScreen = matchPrintPaper || hasPrintablePaper()
     if (preferScreen) {
       setBusy(true)
       try {
         const ok = await downloadPackPrintPdf(name, ink)
         if (ok) return
+        // matchPrintPaper: still try the API (same paper= query as the toolbar),
+        // but never open a blank tab — fall through below.
       } finally {
         setBusy(false)
       }

@@ -69,6 +69,9 @@ export const employeeInputSchema = z.object({
   wageAmount: moneyString.optional().default('0'),
   expenseAccountId: optionalId,
   payableAccountId: optionalId,
+  payMethod: z.enum(['CASH', 'BANK', 'MOBILE']).optional().default('CASH'),
+  payAccountId: optionalId,
+  structureId: optionalId,
   active: activeFlag,
 })
 

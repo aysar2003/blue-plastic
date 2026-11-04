@@ -8,6 +8,7 @@ import { requireOrgContext } from '@/server/auth/context'
 import * as employeeService from '@/server/services/employee.service'
 import * as hrService from '@/server/services/employee-hr.service'
 import * as payrollService from '@/server/services/payroll.service'
+import * as standardPayroll from '@/server/services/payroll-standard.service'
 import { EmployeeDetail } from './employee-detail'
 import { EmployeeDocumentsPanel } from './employee-documents'
 
@@ -16,6 +17,7 @@ export const metadata: Metadata = { title: 'Employee' }
 export default async function EmployeePage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireOrgContext('hr:read')
   const { id } = await params
+  const structures = ctx.features.payrollStandard ? await standardPayroll.listStructures(ctx) : []
   const [employee, linkable, managers, accounts, documents, wageChanges] = await Promise.all([
     employeeService.get(ctx, id).catch(() => null),
     employeeService.listLinkableUsers(ctx, id),
@@ -68,8 +70,12 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
           wageAmount: employee.wageAmount,
           expenseAccountId: employee.expenseAccountId,
           payableAccountId: employee.payableAccountId,
+          payMethod: employee.payMethod,
+          payAccountId: employee.payAccountId,
+          structureId: employee.structureId,
           active: employee.active,
         }}
+        structures={structures.map((row) => ({ id: row.id, name: row.name }))}
         linkableUsers={linkable}
         managers={managers}
         accounts={accounts}

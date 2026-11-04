@@ -12,19 +12,28 @@
 | 8 — Reporting               | ✅ Complete            | 2026-08-29 · [detail](./phases/phase-08-reporting.md) · no migration — reports read the ledger · 51 integrity objects · 272 tests · [ADR-0010](./decisions/0010-no-balance-rollup-table.md)                                          |
 | 9 — Period Close & Year-End | ✅ Complete            | 2026-08-29 · [detail](./phases/phase-09-period-close.md) · migration written, not yet applied · 56 integrity objects · [ADR-0011](./decisions/0011-closing-entries-excluded-from-the-profit-and-loss.md)                                |
 | 10 — Interface & Hardening  | ✅ Complete            | 2026-09-01 · [detail](./phases/phase-10-hardening.md) · migrations `receiving`, `soft_delete` · [ADR-0012](./decisions/0012-owned-combobox-and-dialog.md), [ADR-0013](./decisions/0013-soft-delete-for-transactions.md) · 304 tests · 56 integrity objects · second pass 10.12–10.22; third pass 10.23–10.28: aging agrees with the ledger, whole-chart journals, one-verb Delete everywhere, partial receiving, transaction detail by account · not clicked through in a browser |
-| 11 — The practical gaps     | 🚧 In progress         | Started 2026-10-16 · [detail](./phases/phase-11-practical-gaps.md) · [roadmap](./04-roadmap.md#phase-11--the-practical-gaps) · 11.1–11.2, 11.7, 11.9 done |
+| 11 — The practical gaps     | ✅ Complete            | Started 2026-10-16 · finished 2026-11-01 · [detail](./phases/phase-11-practical-gaps.md) · [roadmap](./04-roadmap.md#phase-11--the-practical-gaps) · 11.1–11.17 done |
+| 12 — Depth (Wave B)         | ✅ Complete            | Started/finished 2026-11-01 · [detail](./phases/phase-12-depth.md) · FX day-to-day, credit warn, timesheets, POS/KPI/equity lite; HRIS suite deferred |
+| 13 — Ledger depth           | ✅ Complete            | 2026-11-02 · [detail](./phases/phase-13-ledger-depth.md) · fixed assets, FX open AR/AP, rate limit, invite email |
+| 14 — Equity & groups lite   | ✅ Complete            | 2026-11-02 · [detail](./phases/phase-14-equity.md) · shareholders, equity events, owners equity statement |
+| 15 — HRIS lite              | ✅ Complete            | 2026-11-02 · [detail](./phases/phase-15-hris.md) · lifecycle, recruitment, appraisals |
+| 16 — Collab apps lite       | ✅ Complete            | 2026-11-02 · [detail](./phases/phase-16-collab.md) · Sign, Appointments, Discuss, Planning, Surveys |
+| 17 — Insight & SME close    | ✅ Complete            | 2026-11-02 · [detail](./phases/phase-17-insight.md) · KPI pins, cycle smoke doc, roadmap |
+| 18 — Lite → ERP depth       | ✅ Complete            | 2026-11-04 · [detail](./phases/phase-18-erp-depth.md) · Sign token, ATS stages, CRM pipeline, BOM explode, cap table, group BS |
+| 19 — Remaining gaps         | ✅ Complete            | 2026-11-04 · [detail](./phases/phase-19-full-erp.md) · MRP page, sign email, notify gateway, tickets, home KPIs, IC journals, backup extras |
+| 20 — Operating close        | ✅ Complete            | 2026-11-04 · [detail](./phases/phase-20-operating-close.md) · backup restore extras, portal quotes, appointment types |
+| 21 — Legal layers           | ✅ Complete            | 2026-11-04 · [detail](./phases/phase-21-legal-layers.md) · hedge docs, kitchen display, first-party marketplace, bins/picks, sign certificate, training, payroll backup |
 
 Phases advance only on explicit instruction from the owner.
+
+**SME ERP operating loops (phases 1–21) are complete.** Remaining non-goals are hardware, trademarks, and untrusted third-party code.
 
 ## Open items carried forward
 
 | Item                                                                                  | Phase it lands in |
 | ------------------------------------------------------------------------------------- | ----------------- |
-| Email delivery for invitations (currently the inviter sets a temporary password)      | 10                |
-| Multi-currency behaviour — the schema is already currency-aware                       | 10                |
-| Rate limiting on the sign-in endpoint                                                 | 10                |
-| An end-to-end test through `voidDocument` asserting `stockAgreesWithLedger`           | 10                |
-| End-to-end browser tests — nothing in Phase 10 has been clicked through                | 10                |
+| Qualified eIDAS / DocuSign trademark, untrusted plugins, robot/PLC, IoT printers      | out               |
+| Browser Playwright suite beyond documented vitest cycle smoke                         | optional          |
 
 ## Third pass over Phase 10 — 2026-09-01
 

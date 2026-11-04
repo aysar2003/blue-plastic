@@ -37,6 +37,8 @@ export type DraftSalesLine = {
   isPayment?: boolean
   /** PAYMENT item deposit account (Undeposited Funds or a bank). */
   depositAccountId?: string | null
+  /** Purchase bill or expense line this sale recharges (Phase 11.5). */
+  sourcePurchaseLineId?: string | null
 }
 
 export type PricedLine = {

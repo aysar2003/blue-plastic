@@ -7,15 +7,22 @@ import {
 } from '@/lib/document-email'
 import { sendDocumentEmailSchema } from '@/lib/validation/organization'
 import { action } from '@/server/action'
+import { requestMeta, writeAudit } from '@/server/audit'
+import { db } from '@/server/db'
 import { validation } from '@/server/errors'
 import * as mailService from '@/server/services/mail.service'
 
-/** Status for the Email dialog — any signed-in company user. */
+/** Status for the Email dialog — any signed-in company user may check SMTP. */
 export const getOutboundMailStatus = action.handler(async (ctx) => {
   return mailService.getOutboundSettings(ctx)
 })
 
+/**
+ * Send a document PDF/Excel from the company SMTP.
+ * Requires `invoice:send` (sales, purchasing, and bookkeeper roles that email paper).
+ */
 export const sendDocumentEmail = action
+  .requires('invoice:send')
   .input(sendDocumentEmailSchema)
   .handler(async (ctx, input) => {
     const content = Buffer.from(input.contentBase64, 'base64')
@@ -43,7 +50,7 @@ export const sendDocumentEmail = action
     const text = `${userMessage}\n\n${signatureText}`
     const html = `${plainBodyToHtml(userMessage)}${signatureHtml}`
 
-    return mailService.sendOrgMail(ctx, {
+    const result = await mailService.sendOrgMail(ctx, {
       to: input.to,
       subject: input.subject,
       text,
@@ -57,4 +64,25 @@ export const sendDocumentEmail = action
         },
       ],
     })
+
+    const meta = await requestMeta()
+    await writeAudit(
+      db,
+      ctx,
+      {
+        entity: 'OutboundEmail',
+        entityId: result.messageId || ctx.orgId,
+        action: 'CREATE',
+        after: {
+          to: input.to,
+          subject: input.subject,
+          filename: input.filename,
+          contentType: input.contentType,
+          bytes: content.length,
+        },
+      },
+      meta,
+    )
+
+    return result
   })

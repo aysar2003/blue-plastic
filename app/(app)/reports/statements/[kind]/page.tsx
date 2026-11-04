@@ -455,6 +455,7 @@ export default async function StatementPage({
               )}
               defaultBody={emailBody}
               whatsappPhone={customer.phone}
+              canEmail={ctx.permissions.has('invoice:send')}
             />
           }
         />

@@ -23,7 +23,7 @@ import { conflict, notFound, validation } from '@/server/errors'
 const ITEM_SELECT = {
   id: true, sku: true, barcode: true, name: true, description: true, type: true, categoryId: true,
   unitOfMeasure: true,
-  salesDescription: true, salesPrice: true, incomeAccountId: true, isTaxable: true, salesTaxCodeId: true,
+  salesDescription: true, salesPrice: true, wholesalePrice: true, incomeAccountId: true, isTaxable: true, salesTaxCodeId: true,
   purchaseDescription: true, purchaseCost: true, expenseAccountId: true, purchaseTaxCodeId: true,
   inventoryAccountId: true, cogsAccountId: true, reorderPoint: true, storeId: true,
   isActive: true, availableInPos: true,
@@ -46,6 +46,7 @@ const ITEM_SELECT = {
 function serialise<
   T extends {
     salesPrice: unknown
+    wholesalePrice: unknown
     purchaseCost: unknown
     reorderPoint: unknown
     bomChildren?: { componentItemId: string; quantity: unknown; sortOrder: number }[]
@@ -55,6 +56,7 @@ function serialise<
   return {
     ...rest,
     salesPrice: item.salesPrice?.toString() ?? null,
+    wholesalePrice: item.wholesalePrice?.toString() ?? null,
     purchaseCost: item.purchaseCost?.toString() ?? null,
     reorderPoint: item.reorderPoint?.toString() ?? null,
     components: (bomChildren ?? []).map((row) => ({
@@ -231,6 +233,7 @@ function attachStock<
     type: string
     reorderPoint: unknown
     salesPrice: unknown
+    wholesalePrice: unknown
     purchaseCost: unknown
   },
 >(
@@ -869,6 +872,7 @@ function toData(input: ItemInput) {
     unitOfMeasure: input.unitOfMeasure ?? null,
     salesDescription: input.salesDescription ?? null,
     salesPrice: input.salesPrice ?? null,
+    wholesalePrice: input.wholesalePrice ?? null,
     incomeAccountId: input.incomeAccountId ?? null,
     isTaxable: input.isTaxable,
     salesTaxCodeId: input.salesTaxCodeId ?? null,

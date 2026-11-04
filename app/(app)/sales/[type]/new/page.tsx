@@ -13,6 +13,7 @@ import { loadFormOptions } from '@/server/services/sales-options'
 import * as projectService from '@/server/services/project.service'
 import * as salesService from '@/server/services/sales.service'
 import * as storeService from '@/server/services/store.service'
+import * as trackingCategories from '@/server/services/tracking-category.service'
 
 /** Form options + stock for a large catalogue exceed the default 10s hobby limit. */
 export const maxDuration = 60
@@ -42,7 +43,7 @@ export default async function NewSalesDocumentPage({
     stores: [] as Awaited<ReturnType<typeof storeService.quantities>>['stores'],
     byItem: {} as Awaited<ReturnType<typeof storeService.quantities>>['byItem'],
   }
-  const [options, query, documentNumber, neighbors, shelf, openSources, formCustomization] =
+  const [options, query, documentNumber, neighbors, shelf, openSources, formCustomization, classes] =
     await Promise.all([
       loadFormOptions(ctx, { includeOnHand: false }),
       searchParams,
@@ -51,6 +52,7 @@ export default async function NewSalesDocumentPage({
       storeService.quantities(ctx).catch(() => emptyShelf),
       loadsSources ? salesService.listConvertibleSources(ctx) : Promise.resolve([]),
       loadFormCustomization(ctx, 'sales', config.type),
+      trackingCategories.list(ctx),
     ])
   const requestedProject = typeof query.project === 'string' ? query.project : undefined
   const project = requestedProject
@@ -91,6 +93,7 @@ export default async function NewSalesDocumentPage({
         initialProjectId={project?.id}
         initialWorkSite={project?.siteLocation ?? undefined}
         projects={options.projects}
+        classes={classes.map((row) => ({ id: row.id, label: row.name }))}
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}

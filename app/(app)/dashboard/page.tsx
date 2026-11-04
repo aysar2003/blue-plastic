@@ -1,11 +1,22 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { AppLauncher } from '@/components/layout/app-launcher'
+import { HomeKpiCards } from '@/components/layout/home-kpi-cards'
 import { HomePins } from '@/components/layout/home-pins'
 import { appsForPermissions } from '@/components/layout/launcher-apps'
+import { HomeKpiPrefsForm } from '@/components/layout/home-kpi-prefs-form'
+import { TeamDayPath, friendlyFirstName } from '@/components/layout/team-day-path'
+import { parseDashboardPrefs, resolvedKpiPins } from '@/lib/dashboard-prefs'
+import { startOfMonth, today } from '@/lib/date'
 import { isModuleEnabled } from '@/lib/feature-flags'
+import { formatQty } from '@/lib/quantity'
 import { requireOrgContext } from '@/server/auth/context'
+import * as inventoryService from '@/server/services/inventory.service'
+import * as businessOverview from '@/server/services/business-overview'
+import { db } from '@/server/db'
 import * as workspace from '@/server/services/workspace.service'
+import * as erpHome from '@/server/services/erp-home.service'
 
 export const metadata: Metadata = { title: 'Apps' }
 
@@ -13,21 +24,75 @@ export const metadata: Metadata = { title: 'Apps' }
 export default async function DashboardPage() {
   const ctx = await requireOrgContext()
   const apps = appsForPermissions(ctx.permissions).filter((app) => isModuleEnabled(ctx.features, app.key))
-  const first = ctx.user.name.split(' ')[0] || ctx.user.name
-  const bookmarks = await workspace.listBookmarks(ctx)
+  const first = friendlyFirstName(ctx.user.name)
+  const showReorder =
+    isModuleEnabled(ctx.features, 'inventory') && ctx.permissions.has('inventory:read')
+  const showKpis = ctx.permissions.has('report:overview')
+  const monthKey = startOfMonth(today(ctx.organization.timeZone)).slice(0, 7)
+
+  const [bookmarks, reorder, overview, userPrefs, extras] = await Promise.all([
+    workspace.listBookmarks(ctx),
+    showReorder ? inventoryService.reorderReport(ctx) : Promise.resolve([]),
+    showKpis
+      ? businessOverview.businessOverview(ctx, monthKey).catch(() => null)
+      : Promise.resolve(null),
+    db.user
+      .findUnique({ where: { id: ctx.userId }, select: { dashboardPrefs: true } })
+      .catch(() => null),
+    showKpis ? erpHome.homeExtras(ctx).catch(() => erpHome.extrasOrZero()) : Promise.resolve(erpHome.extrasOrZero()),
+  ])
+  const kpiPins = resolvedKpiPins(parseDashboardPrefs(userPrefs?.dashboardPrefs))
   const pins = bookmarks.filter((item) => item.kind === 'pin')
 
   return (
     <>
+      <TeamDayPath />
       {pins.length > 0 ? (
-        <div className="mx-auto w-full px-[clamp(0.75rem,2vw,2.5rem)] pt-8">
+        <div className="mx-auto w-full px-[clamp(0.75rem,2vw,2.5rem)] pt-6">
           <HomePins pins={pins} />
+        </div>
+      ) : null}
+      {showKpis ? (
+        <div className="mx-auto w-full px-[clamp(0.75rem,2vw,2.5rem)] pt-4">
+          <HomeKpiPrefsForm pinned={kpiPins} />
+        </div>
+      ) : null}
+      <HomeKpiCards
+        currency={ctx.organization.baseCurrency}
+        profitMtd={overview?.profit.net ?? null}
+        openAr={overview?.invoices.unpaid ?? null}
+        reorderCount={showReorder ? reorder.length : null}
+        pipelineAmount={extras.pipelineAmount.toFixed(2)}
+        pipelineCount={extras.pipelineCount}
+        unpaidAp={extras.unpaidAp.toFixed(2)}
+        followUps={extras.followUps}
+        pinnedKeys={kpiPins}
+      />
+      {reorder.length > 0 ? (
+        <div className="mx-auto w-full px-[clamp(0.75rem,2vw,2.5rem)] pt-6">
+          <div className="rounded-lg border bg-card px-4 py-3">
+            <Link href="/reports/inventory-reorder" className="text-sm font-medium hover:underline">
+              Store: products to reorder ({reorder.length})
+            </Link>
+            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+              {reorder.slice(0, 5).map((item) => (
+                <li key={item.itemId}>
+                  {item.name}
+                  {' — '}
+                  {formatQty(item.quantity.toString(), item.unitOfMeasure)} on hand
+                  {item.reorderPoint
+                    ? ` · reorder at ${formatQty(item.reorderPoint.toString(), item.unitOfMeasure)}`
+                    : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       ) : null}
       <AppLauncher
         eyebrow={ctx.organization.name}
-        title={`Welcome back, ${first}`}
-        subtitle="Choose an app to open the books."
+        title={first ? `Welcome back, ${first}` : 'Welcome back'}
+        subtitle="Pick your job below — or use the team path above if you are new."
         apps={apps}
       />
     </>

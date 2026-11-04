@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { PERMISSIONS } from '@/lib/permissions-catalog'
+import { optionalPhone } from './auth'
 import { cuid, email, password, requiredText } from './common'
 
 const assignableOrCustom = z.enum([
@@ -97,6 +98,18 @@ export type ResetSystemUserPasswordInput = z.infer<typeof resetSystemUserPasswor
 
 export const updateProfileSchema = z.object({
   name: requiredText('Name', 120),
+  phone: optionalPhone,
+})
+
+export const twoFactorCodeOnlySchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, 'Enter the 6-digit code'),
+})
+
+export const disableTwoFactorSchema = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password'),
 })
 
 export const changePasswordSchema = z

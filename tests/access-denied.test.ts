@@ -43,6 +43,7 @@ describe('section names', () => {
     expect(sectionLabel('/settings/users')).toBe('Company users')
     expect(sectionLabel('/settings/user-history')).toBe('User history')
     expect(sectionLabel('/databases/users')).toBe('System users')
+    expect(sectionLabel('/databases/apps')).toBe('Apps')
     expect(sectionLabel('/reports/profit-loss')).toBe('Profit and Loss')
     expect(sectionLabel('/reports/business-overview?period=this-month')).toBe('Business overview')
     expect(sectionLabel('/customers')).toBe('Customers')

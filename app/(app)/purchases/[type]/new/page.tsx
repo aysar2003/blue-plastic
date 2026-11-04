@@ -13,6 +13,7 @@ import { loadPurchaseOptions } from '@/server/services/purchase-options'
 import * as projectService from '@/server/services/project.service'
 import * as purchaseService from '@/server/services/purchase.service'
 import * as storeService from '@/server/services/store.service'
+import * as trackingCategories from '@/server/services/tracking-category.service'
 
 export async function generateMetadata({
   params,
@@ -38,7 +39,7 @@ export default async function NewPurchasePage({
   const requestedVendor = typeof vendorParam === 'string' ? vendorParam : undefined
   const requestedProject = typeof query.project === 'string' ? query.project : undefined
   const emptyShelf = { stores: [] as Awaited<ReturnType<typeof storeService.quantities>>['stores'], byItem: {} as Awaited<ReturnType<typeof storeService.quantities>>['byItem'] }
-  const [options, documentNumber, neighbors, shelf, project, formCustomization] = await Promise.all([
+  const [options, documentNumber, neighbors, shelf, project, formCustomization, classes] = await Promise.all([
     loadPurchaseOptions(ctx),
     peekDocumentNumber(db, ctx.orgId, config.type),
     purchaseService.neighbors(ctx, config.type, null),
@@ -48,6 +49,7 @@ export default async function NewPurchasePage({
       ? projectService.peek(ctx, requestedProject).catch(() => null)
       : Promise.resolve(null),
     loadFormCustomization(ctx, 'purchase', config.type),
+    trackingCategories.list(ctx),
   ])
   const initialVendorId = options.vendors.some((vendor) => vendor.id === requestedVendor)
     ? requestedVendor
@@ -77,6 +79,7 @@ export default async function NewPurchasePage({
         initialVendorId={initialVendorId}
         initialProjectId={project?.id}
         projects={options.projects}
+        classes={classes.map((row) => ({ id: row.id, label: row.name }))}
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}

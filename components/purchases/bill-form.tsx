@@ -13,6 +13,7 @@ import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
 import { FormCustomizePanel } from '@/components/forms/form-customize-panel'
 import { LockedNumber } from '@/components/forms/locked-number'
+import { useDuplicatePrompt } from '@/components/forms/duplicate-prompt'
 import { FormStatus } from '@/components/forms/form-status'
 import { neighborHrefs, RecordNav } from '@/components/forms/record-nav'
 import { SubmitButton } from '@/components/forms/submit-button'
@@ -103,6 +104,8 @@ type Line = {
   unitPrice: string
   taxCodeId: string
   storeId: string
+  billableCustomerId: string
+  billableUnitPrice: string
 }
 
 const empty = (key: number, account = '', kind: LineKind = 'category', storeId = ''): Line => ({
@@ -115,6 +118,8 @@ const empty = (key: number, account = '', kind: LineKind = 'category', storeId =
   unitPrice: '',
   taxCodeId: '',
   storeId,
+  billableCustomerId: '',
+  billableUnitPrice: '',
 })
 
 function withItemRows(seeded: Line[], storeId = '', minimum = 15): Line[] {
@@ -151,6 +156,7 @@ export function BillForm({
   initialVendorId,
   initialProjectId,
   projects = [],
+  classes = [],
   neighbors,
   stores = [],
   stock = {},
@@ -175,6 +181,7 @@ export function BillForm({
   initialProjectId?: string
   /** Open jobs this purchase can belong to. */
   projects?: { id: string; label: string; customerId?: string }[]
+  classes?: { id: string; label: string }[]
   /** The saved document before this one, and the one after, in date then number order. */
   neighbors?: {
     previous: { id: string; number: string } | null
@@ -191,6 +198,7 @@ export function BillForm({
     paymentAccountId: string | null
     offsetCustomerId?: string | null
     projectId?: string | null
+    trackingCategoryId?: string | null
     lines: {
       itemId: string | null
       expenseAccountId: string | null
@@ -199,6 +207,8 @@ export function BillForm({
       unitPrice: string
       taxCodeId: string | null
       storeId?: string | null
+      billableCustomerId?: string | null
+      billableUnitPrice?: string | null
     }[]
   }
   /** Stores a purchased item can be received into. The office is the default. */
@@ -223,11 +233,13 @@ export function BillForm({
     isColumnVisible(activeForm?.categoryColumns ?? activeForm?.columns, id)
   const router = useRouter()
   const [state, formAction] = useActionState(savePurchaseForm, idleState)
+  const { acknowledge, formRef, beforeSubmit } = useDuplicatePrompt(state)
   const isExpense = config.type === 'EXPENSE'
 
   const [number, setNumber] = usePropState(documentNumber)
   const [vendorId, setVendorId] = useState(document?.vendorId ?? initialVendorId ?? '')
   const [projectId, setProjectId] = useState(document?.projectId ?? initialProjectId ?? '')
+  const [trackingCategoryId, setTrackingCategoryId] = useState(document?.trackingCategoryId ?? '')
   const [date, setDate] = useState(document?.date ?? today)
   const [reference, setReference] = useState(document?.reference ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
@@ -255,6 +267,8 @@ export function BillForm({
             unitPrice: fixed2(line.unitPrice),
             taxCodeId: line.taxCodeId ?? '',
             storeId: line.storeId ?? officeId,
+            billableCustomerId: line.billableCustomerId ?? '',
+            billableUnitPrice: line.billableUnitPrice ? fixed2(line.billableUnitPrice) : '',
           }))
         : [empty(1), empty(2)],
       officeId,
@@ -300,6 +314,8 @@ export function BillForm({
           unitPrice: fixed2(line.unitPrice),
           taxCodeId: line.taxCodeId ?? '',
           storeId: line.storeId ?? officeId,
+          billableCustomerId: line.billableCustomerId ?? '',
+          billableUnitPrice: line.billableUnitPrice ? fixed2(line.billableUnitPrice) : '',
         })),
         officeId,
         itemRows,
@@ -535,6 +551,8 @@ export function BillForm({
   const filled = lines.filter((line) => lineNamed(line) && lineTouched(line))
 
   const payFromCustomer = isExpense && paymentSource === 'customer'
+  const canBillCustomer =
+    (config.type === 'BILL' || config.type === 'EXPENSE') && !payFromCustomer && customers.length > 0
   const selectedCustomer = customers.find((customer) => customer.id === offsetCustomerId)
   const customerBalance = selectedCustomer ? new Decimal(selectedCustomer.balance || 0) : null
 
@@ -551,7 +569,9 @@ export function BillForm({
       paymentAccountId: config.needsPaymentAccount && !payFromCustomer ? paymentAccountId : '',
       offsetCustomerId: payFromCustomer ? offsetCustomerId : '',
       projectId,
+      trackingCategoryId,
       saveAsDraft: draft,
+      acknowledgeDuplicate: acknowledge.current,
       lines: (draft ? lines.filter((line) => lineNamed(line) || lineTouched(line)) : filled).map((line) => ({
         // A category line has no item and always a quantity of one; an item line
         // takes its account from the item, not from this form.
@@ -562,6 +582,12 @@ export function BillForm({
         unitPrice: line.unitPrice,
         taxCodeId: line.taxCodeId,
         storeId: line.kind === 'item' ? line.storeId : '',
+        billableCustomerId:
+          line.kind === 'category' && (config.type === 'BILL' || config.type === 'EXPENSE') && !payFromCustomer
+            ? line.billableCustomerId
+            : '',
+        billableUnitPrice:
+          line.kind === 'category' && line.billableCustomerId ? line.billableUnitPrice : '',
       })),
     })
 
@@ -591,8 +617,10 @@ export function BillForm({
 
   return (
     <form
+      ref={formRef}
       action={formAction}
       onSubmit={(event) => {
+        beforeSubmit()
         if (!saveAsDraft.current && stray.length > 0) {
           event.preventDefault()
           const sample = stray.find((line) => line.description.trim())?.description.trim()
@@ -753,6 +781,21 @@ export function BillForm({
             </Field>
           ) : null}
 
+          {classes.length > 0 || trackingCategoryId ? (
+            <Field name="trackingCategoryId" label="Class" error={state.fieldErrors?.trackingCategoryId}>
+              <EntityPicker
+                id="trackingCategoryId"
+                options={classes}
+                value={trackingCategoryId || null}
+                onChange={(next) => setTrackingCategoryId(next ?? '')}
+                placeholder="Optional class"
+                clearable
+                emptyMessage="No classes"
+                error={state.fieldErrors?.trackingCategoryId}
+              />
+            </Field>
+          ) : null}
+
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {owed && showField('paymentTerms') ? (
               <Field name="paymentTermId" label="Terms" error={state.fieldErrors?.paymentTermId}>
@@ -859,6 +902,12 @@ export function BillForm({
                       <th className="w-36 px-2 py-2 text-left">Tax</th>
                     ) : null}
                     <th className="w-32 px-2 py-2 text-right">Amount</th>
+                    {canBillCustomer ? (
+                      <>
+                        <th className="w-48 px-2 py-2 text-left">Billable to</th>
+                        <th className="w-28 px-2 py-2 text-right">Charge</th>
+                      </>
+                    ) : null}
                     <th className="w-8" />
                   </tr>
                 </thead>
@@ -922,6 +971,41 @@ export function BillForm({
                           onBlur={(event) => update(line.key, { unitPrice: fixed2(event.target.value) })}
                         />
                       </td>
+                      {canBillCustomer ? (
+                        <>
+                          <td className="px-2 py-1.5">
+                            <EntityPicker
+                              kind="customer"
+                              options={customers}
+                              value={line.billableCustomerId || null}
+                              onChange={(next) =>
+                                update(line.key, {
+                                  billableCustomerId: next ?? '',
+                                  billableUnitPrice: next ? line.billableUnitPrice : '',
+                                })
+                              }
+                              placeholder="Not billable"
+                              clearable
+                            />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <Input
+                              aria-label="Amount to charge the customer"
+                              inputMode="decimal"
+                              className="tabular text-right"
+                              disabled={!line.billableCustomerId}
+                              placeholder={line.billableCustomerId ? 'Line amount' : ''}
+                              value={line.billableUnitPrice}
+                              onChange={(event) =>
+                                update(line.key, { billableUnitPrice: event.target.value })
+                              }
+                              onBlur={(event) =>
+                                update(line.key, { billableUnitPrice: fixed2(event.target.value) })
+                              }
+                            />
+                          </td>
+                        </>
+                      ) : null}
                       <td className="px-1 py-1.5">
                         <Button
                           type="button"

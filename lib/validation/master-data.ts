@@ -75,6 +75,18 @@ export const paymentTermSchema = z.object({
 
 export type PaymentTermInput = z.infer<typeof paymentTermSchema>
 
+export const trackingCategorySchema = z.object({
+  id: optionalId,
+  name: requiredText('Name', 80),
+})
+
+export type TrackingCategoryInput = z.infer<typeof trackingCategorySchema>
+
+export const trackingCategoryActiveSchema = z.object({
+  id: cuid,
+  isActive: z.coerce.boolean(),
+})
+
 /* --- Contacts ------------------------------------------------------------- */
 
 const contactBase = {
@@ -106,6 +118,21 @@ export const customerSchema = z.object({
   shippingPostalCode: optionalText(30),
   shippingCountry: countryCode,
   creditLimit: optionalMoney,
+  /** Prefer this currency on new sales. Blank = organisation base. */
+  currencyCode: z
+    .union([
+      z
+        .string()
+        .trim()
+        .toUpperCase()
+        .length(3, 'Use a 3-letter ISO currency code'),
+      z.literal(''),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+  /** Retail charges the sales price. Wholesale charges the item wholesale price when set. */
+  priceLevel: z.enum(['RETAIL', 'WHOLESALE']).default('RETAIL'),
   /** Printed on the invoice beside Sales person. */
   salesPerson: optionalText(80),
 
@@ -143,6 +170,19 @@ export const vendorSchema = z.object({
   id: optionalId,
   ...contactBase,
   defaultExpenseAccountId: optionalId,
+  /** Prefer this currency on new bills. Blank = organisation base. */
+  currencyCode: z
+    .union([
+      z
+        .string()
+        .trim()
+        .toUpperCase()
+        .length(3, 'Use a 3-letter ISO currency code'),
+      z.literal(''),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
   openingBalance: optionalMoney,
   openingBalanceDate: optionalDate,
   /** The day the payable agreement was signed. */
@@ -182,6 +222,7 @@ export const itemSchema = z
 
     salesDescription: optionalText(1000),
     salesPrice: optionalMoney,
+    wholesalePrice: optionalMoney,
     incomeAccountId: optionalId,
     isTaxable: z.coerce.boolean().default(true),
     salesTaxCodeId: optionalId,
@@ -237,7 +278,8 @@ export const itemSchema = z
   })
   .superRefine((item, ctx) => {
     const stockTracked = item.type === 'INVENTORY' || item.type === 'INVENTORY_ASSEMBLY'
-    const needsIncome = !['SUBTOTAL', 'GROUP', 'PAYMENT'].includes(item.type)
+    // GROUP is sold as one kit line, so it needs an income account like a product.
+    const needsIncome = !['SUBTOTAL', 'PAYMENT'].includes(item.type)
 
     if (needsIncome && !item.incomeAccountId) {
       ctx.addIssue({

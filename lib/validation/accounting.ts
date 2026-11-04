@@ -35,6 +35,21 @@ export const accountCreateSchema = z.object({
   parentId: optionalId,
   /** A finer name under the detail type, such as "Sales of product income". */
   detailType: optionalText(80),
+  /**
+   * For BANK / CREDIT_CARD held in a foreign currency. Blank = organisation base.
+   */
+  currencyCode: z
+    .union([
+      z
+        .string()
+        .trim()
+        .toUpperCase()
+        .length(3, 'Use a 3-letter ISO currency code'),
+      z.literal(''),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
 
   /**
    * Optional opening balance. Posts a journal against Opening Balance Equity
@@ -62,6 +77,18 @@ export const accountUpdateSchema = z.object({
   description: optionalText(500),
   parentId: optionalId,
   detailType: optionalText(80),
+  currencyCode: z
+    .union([
+      z
+        .string()
+        .trim()
+        .toUpperCase()
+        .length(3, 'Use a 3-letter ISO currency code'),
+      z.literal(''),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
 })
 
 export type AccountUpdateInput = z.infer<typeof accountUpdateSchema>
@@ -86,6 +113,8 @@ const journalLineSchema = z
      */
     customerId: optionalId,
     vendorId: optionalId,
+    /** Optional class. Blank means the line is unclassified. */
+    trackingCategoryId: optionalId,
   })
   .refine((line) => !(line.debit !== '' && line.credit !== ''), {
     message: 'Enter a debit or a credit, not both',
@@ -98,6 +127,11 @@ export const manualJournalSchema = z.object({
   /** Optional — clearing Opening Balance Equity into capital often has no memo. */
   memo: optionalText(300),
   isAdjusting: z.coerce.boolean().default(false),
+  /**
+   * Post a mirror journal dated the first day of the next period. Used for
+   * month-end accruals that must not double-count when the real bill arrives.
+   */
+  autoReverse: z.coerce.boolean().default(false),
   lines: z
     .array(journalLineSchema)
     .min(2, 'A journal needs at least two lines')

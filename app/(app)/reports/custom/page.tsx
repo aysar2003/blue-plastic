@@ -31,13 +31,13 @@ export default async function CustomReportsPage() {
       <PageHeader
         organization={ctx.organization}
         title="Custom reports"
-        description="Memorized report views (period and filters) plus starred standard favourites."
+        description="Saved report views restore period, basis, comparison, and filters from the link. Plus starred standard favourites."
       />
 
       {memorized.length > 0 ? (
         <section className="mb-8">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Memorized
+            Saved views
           </h2>
           <ul className="divide-y rounded-md border bg-card">
             {memorized.map((row) => (
@@ -56,7 +56,8 @@ export default async function CustomReportsPage() {
         </section>
       ) : (
         <p className="mb-6 text-sm text-muted-foreground">
-          Open any catalogue report and click Memorize to keep its filters here.
+          Open a report, set the period (and basis or comparison), then click{' '}
+          <strong>Save view</strong> to keep it here under a name.
         </p>
       )}
 

@@ -24,11 +24,26 @@ export function groupKey(description: string): string {
   return words.join(' ') || description.trim().toLowerCase() || '(blank)'
 }
 
+/**
+ * Bank-specific rules win over rules that apply to every bank. Within that,
+ * name order is stable so two overlapping rules do not flip between imports.
+ */
+function matchRank(rule: RuleLike, accountId: string): number {
+  if (rule.accountId === accountId) return 0
+  if (rule.accountId === null) return 1
+  return 2
+}
+
 /** The first active rule whose text sits inside the bank description. */
 export function ruleFor(description: string, accountId: string, rules: RuleLike[]): RuleLike | null {
   const text = description.toLowerCase()
+  const ordered = [...rules].sort((a, b) => {
+    const byBank = matchRank(a, accountId) - matchRank(b, accountId)
+    if (byBank !== 0) return byBank
+    return a.name.localeCompare(b.name)
+  })
   return (
-    rules.find(
+    ordered.find(
       (rule) =>
         rule.contains.trim().length > 0 &&
         text.includes(rule.contains.trim().toLowerCase()) &&

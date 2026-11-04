@@ -12,6 +12,7 @@ export const reviewAppAccessRequest = action
   .handler(async (ctx, input) => {
     const row = await appAccessService.review(ctx, input)
     revalidatePath('/databases')
+    revalidatePath('/databases/apps')
     revalidatePath('/settings/features')
     revalidatePath('/', 'layout')
     return row

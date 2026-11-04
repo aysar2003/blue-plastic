@@ -168,7 +168,34 @@ export async function invite(ctx: OrgContext, input: InviteUserInput) {
       meta,
     )
 
-    return membership
+    return {
+      membership,
+      inviteEmail: input.email,
+      inviteName: input.name,
+      temporaryPassword: input.temporaryPassword,
+    }
+  }).then(async (result) => {
+    // Best-effort invite email when SMTP is configured — invite still succeeds if send fails.
+    try {
+      const { sendOrgMail, getOutboundSettings } = await import('@/server/services/mail.service')
+      const smtp = await getOutboundSettings(ctx)
+      if (smtp.configured) {
+        await sendOrgMail(ctx, {
+          to: result.inviteEmail,
+          subject: `You are invited to ${ctx.organization.name}`,
+          text:
+            `Hello ${result.inviteName},\n\n` +
+            `You have been invited to ${ctx.organization.name} on SOM ERP.\n` +
+            `Sign in with this email and temporary password:\n\n` +
+            `${result.temporaryPassword}\n\n` +
+            `Change the password after you sign in.\n`,
+          fromName: ctx.organization.name,
+        })
+      }
+    } catch {
+      // Invitee can still use the password shown to the inviter.
+    }
+    return result.membership
   })
 }
 

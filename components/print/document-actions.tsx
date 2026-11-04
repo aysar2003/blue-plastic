@@ -55,6 +55,7 @@ export function DocumentActions({
   whatsappText,
   pdfMatchesPrint = false,
   paperStyle = 'merchant',
+  canEmail = true,
 }: {
   /** Shown in dialog copy — "statement", "delivery report", "invoice". */
   paper?: string
@@ -78,6 +79,8 @@ export function DocumentActions({
   pdfMatchesPrint?: boolean
   /** Sheet currently on this paper. Merchant or Trade. */
   paperStyle?: PaperStyle
+  /** Requires `invoice:send`. Hide Email when the role cannot send. */
+  canEmail?: boolean
 }) {
   const [emailOpen, setEmailOpen] = useState(false)
   const [waOpen, setWaOpen] = useState(false)
@@ -365,6 +368,7 @@ export function DocumentActions({
         </a>
       ) : null}
 
+      {canEmail ? (
       <Dialog
         open={emailOpen}
         onOpenChange={(next) => {
@@ -457,6 +461,7 @@ export function DocumentActions({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      ) : null}
 
       <Dialog
         open={waOpen}

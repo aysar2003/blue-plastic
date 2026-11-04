@@ -6,6 +6,7 @@ import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { DeleteButton } from '@/components/data/delete-record'
 import { DocumentAttachments } from '@/components/data/document-attachments'
+import { DocumentHistory } from '@/components/data/document-history'
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { neighborHrefs, RecordNav } from '@/components/forms/record-nav'
@@ -18,7 +19,7 @@ import { formatDate, formatDateTime, formatTransactionDate, toCalendarDate } fro
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import { listForJournal } from '@/server/files/ledger-files'
-import { trailFor } from '@/server/services/audit.service'
+import { historyFor, trailFor } from '@/server/services/audit.service'
 import * as journalService from '@/server/services/journal.service'
 import { ReverseDialog } from './reverse-dialog'
 
@@ -31,8 +32,9 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
   const journal = await journalService.get(ctx, id).catch(() => null)
   if (!journal) notFound()
   const isManual = journal.sourceType === 'MANUAL'
-  const [trail, papers, neighbors] = await Promise.all([
+  const [trail, history, papers, neighbors] = await Promise.all([
     trailFor(ctx, journal.id),
+    historyFor(ctx, journal.id),
     listForJournal(ctx, journal.id),
     isManual ? journalService.neighbors(ctx, id) : Promise.resolve(undefined),
   ])
@@ -152,7 +154,24 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
           </p>
         ) : null}
 
-        {journal.status === 'REVERSED' && journal.reversedBy ? (
+        {journal.autoReverse && journal.status === 'POSTED' && !journal.reversedBy ? (
+          <Notice>
+            Marked to reverse automatically on the first day of the next period. The mirror entry has
+            not been written yet (for example if this is still waiting on approval).
+          </Notice>
+        ) : null}
+
+        {journal.autoReverse && journal.reversedBy ? (
+          <Notice>
+            Auto-reversed into the next period by{' '}
+            <Link href={`/journals/${journal.reversedBy.id}`} className="font-medium underline underline-offset-4">
+              {journal.reversedBy.journalNumber}
+            </Link>{' '}
+            dated {formatDate(toCalendarDate(journal.reversedBy.date))}.
+          </Notice>
+        ) : null}
+
+        {journal.status === 'REVERSED' && journal.reversedBy && !journal.autoReverse ? (
           <Notice>
             This entry was reversed by{' '}
             <Link href={`/journals/${journal.reversedBy.id}`} className="font-medium underline underline-offset-4">
@@ -257,6 +276,8 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
       </p>
 
       <ApprovalTrailPanel entityType="JOURNAL" entityId={journal.id} />
+
+      <DocumentHistory events={history} timeZone={ctx.organization.timeZone} />
     </>
   )
 }

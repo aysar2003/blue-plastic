@@ -63,12 +63,14 @@ async function queryFormOptions(
         displayName: true,
         email: true,
         paymentTermId: true,
+        currencyCode: true,
         billingLine1: true,
         billingLine2: true,
         billingCity: true,
         billingRegion: true,
         billingPostalCode: true,
         billingCountry: true,
+        priceLevel: true,
         shippingLine1: true,
         shippingLine2: true,
         shippingCity: true,
@@ -84,7 +86,7 @@ async function queryFormOptions(
     db.item.findMany({
       where: { orgId, isActive: true },
       select: {
-        id: true, name: true, sku: true, barcode: true, salesPrice: true, type: true,
+        id: true, name: true, sku: true, barcode: true, salesPrice: true, wholesalePrice: true, type: true,
         unitOfMeasure: true,
         salesDescription: true, description: true, salesTaxCodeId: true,
         bomParents: {
@@ -97,6 +99,7 @@ async function queryFormOptions(
                 id: true,
                 name: true,
                 salesPrice: true,
+                wholesalePrice: true,
                 salesDescription: true,
                 description: true,
                 salesTaxCodeId: true,
@@ -155,6 +158,8 @@ async function queryFormOptions(
         label: customer.displayName,
         email: customer.email,
         paymentTermId: customer.paymentTermId,
+        currencyCode: customer.currencyCode,
+        priceLevel: customer.priceLevel,
         balance: balance.toFixed(4),
         hint: balance.isZero()
           ? 'No balance'
@@ -186,6 +191,7 @@ async function queryFormOptions(
       barcode: item.barcode,
       unitOfMeasure: item.unitOfMeasure,
       price: item.salesPrice?.toString() ?? null,
+      wholesalePrice: item.wholesalePrice?.toString() ?? null,
       description: item.salesDescription ?? item.description ?? item.name,
       taxCodeId: enableTax ? item.salesTaxCodeId : null,
       type: item.type,
@@ -203,6 +209,7 @@ async function queryFormOptions(
                 label: row.component.name,
                 quantity: row.quantity.toString(),
                 price: row.component.salesPrice?.toString() ?? null,
+                wholesalePrice: row.component.wholesalePrice?.toString() ?? null,
                 description:
                   row.component.salesDescription ??
                   row.component.description ??

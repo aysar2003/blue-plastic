@@ -309,6 +309,12 @@ const APP_NESTED: Partial<
         hint="Gated documents wait in Approvals until an assigned checker posts them. Owner and Admin post immediately; POS still posts at the till."
         defaultChecked={flags.enableDocumentApprovals}
       />
+      <SwitchRow
+        name="creditLimitWarn"
+        label="Credit limit: warn and confirm"
+        hint="When on, posting an invoice past the customer credit limit asks for confirmation. When off, posting is refused (hard block)."
+        defaultChecked={flags.creditLimitWarn}
+      />
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         <DeepLink href="/approvals">Pending</DeepLink>
         <DeepLink href="/approvals/approved">All approved</DeepLink>
@@ -330,6 +336,14 @@ const APP_NESTED: Partial<
         <DeepLink href="/settings/payment-terms">Payment terms</DeepLink>
       </div>
     </>
+  ),
+  employees: (flags) => (
+    <SwitchRow
+      name="payrollStandard"
+      label="Standard payroll"
+      hint="Gross wages, deduction liabilities, salary structures, payslip PDF, loans, and end of service. Off keeps the simple net-to-bank payroll."
+      defaultChecked={flags.payrollStandard}
+    />
   ),
   journals: (flags) => (
     <SwitchRow

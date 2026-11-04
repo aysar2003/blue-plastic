@@ -9,8 +9,13 @@ import {
   payloadFromForm,
   type RecurringTemplateFormInput,
 } from '@/lib/validation/recurring'
+import {
+  DEFAULT_FEATURE_FLAGS,
+  parseFeatureFlags,
+} from '@/lib/feature-flags'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
+import { effectivePermissions } from '@/server/auth/permissions'
 import { db } from '@/server/db'
 import { notFound, precondition, validation } from '@/server/errors'
 import * as journalService from '@/server/services/journal.service'
@@ -321,8 +326,20 @@ export async function createInstance(ctx: OrgContext, id: string) {
   }
 }
 
-/** Create every template that is due today (or overdue) for this company. */
-export async function createDue(ctx: OrgContext) {
+export type CreateDueResult = {
+  created: Awaited<ReturnType<typeof createInstance>>[]
+  skipped: { id: string; message: string }[]
+  asOf: CalendarDate
+  dueCount: number
+}
+
+/**
+ * Create every template that is due today (or overdue) for this company.
+ * When nothing is due, returns an empty result (does not throw) so cron and
+ * page-load auto-run can call this safely. The Banking UI still shows
+ * “Nothing due” when `dueCount` is 0.
+ */
+export async function createDue(ctx: OrgContext): Promise<CreateDueResult> {
   const asOf = today(ctx.organization.timeZone)
   const due = await db.recurringTemplate.findMany({
     where: {
@@ -358,9 +375,88 @@ export async function createDue(ctx: OrgContext) {
     }
   }
 
-  if (due.length === 0) {
-    throw validation('Nothing is due today.')
+  return { created, skipped, asOf, dueCount: due.length }
+}
+
+/**
+ * Cron / timer path: run due templates for every company that has active
+ * recurring rows. Uses each company's first active Owner (or Admin) so
+ * permission checks match a real books user. Requires `CRON_SECRET`.
+ */
+export async function createDueForAllOrganizations(): Promise<{
+  orgs: number
+  created: number
+  skipped: number
+}> {
+  const orgIds = await db.recurringTemplate.findMany({
+    where: { isActive: true },
+    select: { orgId: true },
+    distinct: ['orgId'],
+  })
+
+  let created = 0
+  let skipped = 0
+
+  for (const { orgId } of orgIds) {
+    const membership = await db.membership.findFirst({
+      where: {
+        orgId,
+        status: 'ACTIVE',
+        role: { in: ['OWNER', 'ADMIN'] },
+      },
+      select: {
+        role: true,
+        permissionsOverride: true,
+        user: { select: { id: true, name: true, email: true, image: true } },
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            legalName: true,
+            baseCurrency: true,
+            fiscalYearStartMonth: true,
+            timeZone: true,
+            allowNegativeStock: true,
+            posTillLedgerMode: true,
+            featureFlags: true,
+            parentOrgId: true,
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            region: true,
+            postalCode: true,
+            country: true,
+            phone: true,
+            email: true,
+            website: true,
+            brandMark: true,
+            logoStorageKey: true,
+            updatedAt: true,
+          },
+        },
+      },
+      orderBy: { role: 'asc' },
+    })
+    if (!membership) continue
+
+    const { featureFlags, logoStorageKey, ...organization } = membership.organization
+    const ctx: OrgContext = {
+      orgId: organization.id,
+      userId: membership.user.id,
+      role: membership.role,
+      permissions: effectivePermissions(membership.role, membership.permissionsOverride),
+      features: parseFeatureFlags(featureFlags) ?? DEFAULT_FEATURE_FLAGS,
+      organization: { ...organization, hasLogo: Boolean(logoStorageKey) },
+      user: membership.user,
+      portalCustomerId: null,
+      isSystemOwner: false,
+      canConnect: false,
+    }
+
+    const result = await createDue(ctx)
+    created += result.created.length
+    skipped += result.skipped.length
   }
 
-  return { created, skipped, asOf }
+  return { orgs: orgIds.length, created, skipped }
 }

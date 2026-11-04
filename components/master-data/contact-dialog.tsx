@@ -50,6 +50,8 @@ export type ContactValues = {
   shippingPostalCode?: string | null
   paymentTermId?: string | null
   creditLimit?: string | null
+  currencyCode?: string | null
+  priceLevel?: 'RETAIL' | 'WHOLESALE' | null
   defaultExpenseAccountId?: string | null
   notes?: string | null
   salesPerson?: string | null
@@ -354,6 +356,22 @@ export function ContactDialog({
 
             {side === 'customer' ? (
               <Field
+                name="priceLevel"
+                label="Price level"
+                hint="Wholesale uses the item wholesale price when one is set. Otherwise the sales price."
+                error={e?.priceLevel}
+              >
+                <NativeSelect
+                  {...fieldProps('priceLevel', e?.priceLevel)}
+                  defaultValue={contact?.priceLevel ?? 'RETAIL'}
+                >
+                  <option value="RETAIL">Retail</option>
+                  <option value="WHOLESALE">Wholesale</option>
+                </NativeSelect>
+              </Field>
+            ) : null}
+            {side === 'customer' ? (
+              <Field
                 name="salesPerson"
                 label="Sales person"
                 hint="Printed on the invoice next to Sales person."
@@ -370,11 +388,26 @@ export function ContactDialog({
             </Field>
           </div>
 
+          <Field
+            name="currencyCode"
+            label="Currency"
+            hint={`Blank uses the company base (${currency}). Used as the default on new ${side === 'customer' ? 'sales' : 'bills'}.`}
+            error={e?.currencyCode}
+          >
+            <Input
+              {...fieldProps('currencyCode', e?.currencyCode)}
+              maxLength={3}
+              placeholder={currency}
+              defaultValue={contact?.currencyCode ?? ''}
+              className="uppercase"
+            />
+          </Field>
+
           {side === 'customer' ? (
             <Field
               name="creditLimit"
               label={`Credit limit (${currency})`}
-              hint="Recorded now; invoicing warns against it in a later phase."
+              hint="Posting an invoice past this limit is refused, or warned when Settings → credit limit warn is on."
               error={e?.creditLimit}
             >
               <Input

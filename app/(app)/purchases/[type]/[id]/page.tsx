@@ -111,6 +111,7 @@ export default async function PurchaseDocumentPage({
                 .toLowerCase()
                 .replace(/[^a-z0-9]+/g, '-')}`}
               defaultTo={document.offsetCustomer?.email ?? document.vendor?.email ?? ''}
+              canEmail={ctx.permissions.has('invoice:send')}
               defaultSubject={documentEmailSubject(
                 config.singular,
                 document.number,

@@ -33,6 +33,11 @@ export type FormState = {
   mergeClash?: { id: string; name: string }
   /** Soft warning after a successful save (e.g. to-do saved but email notify failed). */
   warning?: string
+  /**
+   * A likely duplicate. The form asks once, then resubmits with
+   * acknowledgeDuplicate so the save is allowed through.
+   */
+  duplicate?: { existingId: string; existingNumber: string }
   /** WhatsApp wa.me URL to open after assigning a to-do. */
   whatsappUrl?: string
 }
@@ -64,6 +69,17 @@ export function toFormState(result: ActionResult<unknown>, successMessage: strin
       mergeClash: {
         id: details.clashId[0],
         name: details.clashName?.[0] ?? '',
+      },
+    }
+  }
+  if (result.error.code === 'CONFLICT' && details?.duplicate?.[0] === 'true') {
+    return {
+      status: 'error',
+      code: 'CONFLICT',
+      message: result.error.message,
+      duplicate: {
+        existingId: details.existingId?.[0] ?? '',
+        existingNumber: details.existingNumber?.[0] ?? '',
       },
     }
   }

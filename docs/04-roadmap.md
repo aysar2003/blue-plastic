@@ -303,3 +303,33 @@ customer-facing portal.
 
 Each is a real QuickBooks feature. Each is also a subsystem rather than a
 feature, and none of them is what stops this system being used tomorrow morning.
+
+---
+
+## Phases 13–17 — SME completion (2026-11-02)
+
+| Phase | Focus | Detail |
+| --- | --- | --- |
+| 13 | Ledger depth | [phase-13-ledger-depth.md](./phases/phase-13-ledger-depth.md) — fixed assets, FX open balances, rate limit, invite email |
+| 14 | Equity lite | [phase-14-equity.md](./phases/phase-14-equity.md) — shareholders, draws/dividends, owners equity statement, group P&L |
+| 15 | HRIS lite | [phase-15-hris.md](./phases/phase-15-hris.md) — lifecycle, recruitment, appraisals |
+| 16 | Collab lite | [phase-16-collab.md](./phases/phase-16-collab.md) — Sign, Appointments, Discuss, Planning, Surveys |
+| 17 | Insight | [phase-17-insight.md](./phases/phase-17-insight.md) — KPI pins, cycle smoke test, SME non-goals |
+
+**SME scope for phases 1–17 is complete.** Phase 18 deepens the lite people/collab/CRM/BOM modules so they follow real stage rules.
+
+## Phase 18 — Lite to ERP depth (2026-11-04)
+
+Detail: [phases/phase-18-erp-depth.md](./phases/phase-18-erp-depth.md). Sign tokens, ATS pipeline, CRM, nested BOM, cap table, group balance sheet.
+
+## Phase 21 — Legal SME layers (2026-11-04)
+
+Detail: [phases/phase-21-legal-layers.md](./phases/phase-21-legal-layers.md). Hedge documentation, kitchen display, first-party marketplace, bins/picks, sign certificate, training, payroll JSON backup.
+
+## Phase 19 — Remaining operational gaps (2026-11-04)
+
+Detail: [phases/phase-19-full-erp.md](./phases/phase-19-full-erp.md). MRP page, notify gateway, tickets, home KPIs, [IC] journals, backup dump **and restore** of BOM, people, equity, CRM, and collab. Eternal non-goals stay out.
+
+## Phase 20 — Operating close (2026-11-04)
+
+Detail: [phases/phase-20-operating-close.md](./phases/phase-20-operating-close.md). Restore extras on backup, customer portal quotes, appointment-type create. SME loops 1–20 are complete.

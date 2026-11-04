@@ -96,6 +96,18 @@ export const createBankRuleSchema = z.object({
   customerId: optionalId,
 })
 
+export const updateBankRuleSchema = createBankRuleSchema.safeExtend({
+  id: cuid,
+  active: z.coerce.boolean().optional(),
+})
+
+export const setBankRuleActiveSchema = z.object({
+  id: cuid,
+  active: z.coerce.boolean(),
+})
+
+export const deleteBankRuleSchema = z.object({ id: cuid })
+
 export const chartImportSchema = z.object({
   csv: z.string().min(1, 'Choose a spreadsheet first').max(2_000_000),
 })

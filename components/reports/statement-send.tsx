@@ -15,6 +15,7 @@ export function StatementSend({
   defaultBody,
   whatsappPhone,
   paperStyle,
+  canEmail = true,
 }: {
   pdfHref: string
   excelHref?: string
@@ -24,6 +25,7 @@ export function StatementSend({
   defaultBody: string
   whatsappPhone?: string | null
   paperStyle?: 'merchant' | 'trade'
+  canEmail?: boolean
 }) {
   return (
     <DocumentActions
@@ -37,6 +39,7 @@ export function StatementSend({
       whatsappPhone={whatsappPhone}
       whatsappText={defaultBody}
       paperStyle={paperStyle}
+      canEmail={canEmail}
     />
   )
 }

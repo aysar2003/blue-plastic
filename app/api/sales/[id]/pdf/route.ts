@@ -14,6 +14,7 @@ import * as portalService from '@/server/services/portal.service'
 import * as salesService from '@/server/services/sales.service'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 /** Sales document as a downloadable PDF — invoice, quotation, receipt, or credit. */
 export async function GET(
@@ -103,6 +104,7 @@ export async function GET(
         unitPrice: line.unitPrice,
         amount: line.amount,
         unitOfMeasure: line.item?.unitOfMeasure ?? null,
+        taxAmount: line.taxAmount ?? null,
       })),
       subtotal: document.subtotal,
       discountAmount: document.discountAmount,

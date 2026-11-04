@@ -12,6 +12,7 @@ export const APPROVAL_ENTITY_TYPES: ApprovalEntityType[] = [
   'DEPOSIT',
   'CUSTOMER',
   'VENDOR',
+  'PAYROLL',
 ]
 
 /** Plain labels for the Approvals inbox and policy form. */
@@ -27,6 +28,7 @@ export function entityTypeLabel(type: ApprovalEntityType): string {
     DEPOSIT: 'Deposit',
     CUSTOMER: 'Customer (opening / credit)',
     VENDOR: 'Vendor (opening)',
+    PAYROLL: 'Payroll',
   }
   return labels[type]
 }
@@ -64,6 +66,7 @@ export const APPROVAL_DOCUMENT_KINDS: Record<
   DEPOSIT: [],
   CUSTOMER: [],
   VENDOR: [],
+  PAYROLL: [],
 }
 
 export function documentKindLabel(

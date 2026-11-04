@@ -86,11 +86,11 @@ export default async function PrintPurchasePage({
         <DocumentActions
           paper={config.singular.toLowerCase()}
           backHref={`/purchases/${config.slug}/${id}`}
-          pdfHref={`/api/purchases/${id}/pdf`}
+          pdfHref={`/api/purchases/${id}/pdf?paper=trade`}
           excelHref={`/api/purchases/${id}/xlsx`}
           filename={filename}
           pdfMatchesPrint
-          paperStyle={template.paperStyle}
+          paperStyle="trade"
           defaultTo={vendor.email ?? ''}
           defaultSubject={documentEmailSubject(
             config.singular,

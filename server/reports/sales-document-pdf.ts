@@ -64,6 +64,7 @@ export type SalesDocumentPdfInput = {
     unitPrice: string
     amount: string
     unitOfMeasure?: string | null
+    taxAmount?: string | null
   }[]
   subtotal: string
   discountAmount: string
@@ -609,15 +610,21 @@ function merchantContinueHeader(input: SalesDocumentPdfInput): PdfRow[] {
   ]
 }
 
+/** Trade line table columns — room for Unit and Unit price without overlap. */
+const TRADE_COL = {
+  tax: 268,
+  date: 340,
+  qty: 400,
+  unit: 445,
+  rate: 505,
+  amount: PDF_PAGE.right,
+} as const
+
 /** Page 2+ of a trade paper: short identity + repeating column headers. */
 function tradeContinueHeader(input: SalesDocumentPdfInput): PdfRow[] {
   const muted = merchantPdfMuted()
   const ink = merchantPdfInk()
-  const amountX = PDF_PAGE.right
-  const rateX = amountX - 70
-  const qtyX = rateX - 70
-  const dateX = qtyX - 70
-  const taxX = dateX - 48
+  const docTitle = tradeDocTitle(input)
   return [
     {
       size: 9,
@@ -625,7 +632,7 @@ function tradeContinueHeader(input: SalesDocumentPdfInput): PdfRow[] {
       runs: [
         { text: input.orgName, x: PDF_PAGE.left, bold: true, color: ink },
         {
-          text: `${input.title} #${input.number} (continued)`,
+          text: `${docTitle} #${input.number} (continued)`,
           x: PDF_PAGE.right,
           align: 'right',
           bold: true,
@@ -640,24 +647,26 @@ function tradeContinueHeader(input: SalesDocumentPdfInput): PdfRow[] {
       rule: true,
       runs: [
         { text: 'Description', x: PDF_PAGE.left, bold: true },
-        { text: 'Taxes', x: taxX, align: 'right', bold: true },
-        { text: 'Date req.', x: dateX, align: 'right', bold: true },
-        { text: 'Qty', x: qtyX, align: 'right', bold: true },
-        { text: 'Unit', x: qtyX + 42, align: 'right', bold: true },
-        { text: 'Unit price', x: rateX, align: 'right', bold: true },
-        { text: 'Amount', x: amountX, align: 'right', bold: true },
+        { text: 'Taxes', x: TRADE_COL.tax, align: 'right', bold: true },
+        { text: 'Date req.', x: TRADE_COL.date, align: 'right', bold: true },
+        { text: 'Qty', x: TRADE_COL.qty, align: 'right', bold: true },
+        { text: 'Unit', x: TRADE_COL.unit, align: 'right', bold: true },
+        { text: 'Unit price', x: TRADE_COL.rate, align: 'right', bold: true },
+        { text: 'Amount', x: TRADE_COL.amount, align: 'right', bold: true },
       ],
     },
   ]
 }
 
-/** Same Trade sheet as on-screen print: ship-to, order facts, six line columns. */
+/** Same Trade sheet as on-screen TradePaper print. */
 function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   const muted = merchantPdfMuted()
+  const ink = merchantPdfInk()
   const money = (value: string) => formatMoney(value, input.currency)
   const rows: PdfRow[] = []
-  const purchase = (input.partyLabel ?? '').toLowerCase() === 'vendor'
-  const title = `${input.title} #${input.number}`
+  const purchase = (input.partyLabel ?? '').toLowerCase() === 'vendor' || input.paper === 'vendor'
+  const docTitle = tradeDocTitle(input)
+  const headline = `${docTitle} #${input.number}`
   const calendar =
     typeof input.date === 'string' && isCalendarDate(input.date)
       ? input.date
@@ -667,11 +676,19 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   const date = calendar
     ? formatLongTransactionDate(calendar, input.createdAt, input.timeZone || 'UTC')
     : String(input.date)
+  /** Narrow Date req. cell — same short form the Trade paper table shows. */
+  const dateReq = calendar ? formatDate(calendar, 'en-GB') : date
   const accent = merchantAccent(input.template, purchase ? 'vendor' : 'customer')
   const party = (input.partyLabel ?? (purchase ? 'Vendor' : 'Bill to')).toUpperCase()
-  const docTitle = input.title.toUpperCase()
   const status = (STATUS_LABELS[input.status ?? ''] ?? input.status ?? '').replaceAll('_', ' ').toUpperCase()
-  const addressLine = input.customerAddress.map(cleanPart).filter(Boolean).join(', ')
+  const statusFill =
+    status === 'PAID' ? ([0.016, 0.471, 0.341] as const) : status === 'UNPAID' ? ([0.745, 0.071, 0.235] as const) : accent
+  const addressLine = input.customerAddress
+    .map(cleanPart)
+    .filter(Boolean)
+    .filter((part) => part.toLowerCase() !== input.customerName.trim().toLowerCase())
+    .join(', ')
+  const dateCaption = purchase ? 'Bill date' : paperDateLabel(input.documentType)
 
   rows.push(
     ...merchantPdfLetterhead({
@@ -694,8 +711,8 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     size: 11,
     height: 14,
     runs: [
-      { text: input.customerName, bold: true },
-      { text: input.number, x: PDF_PAGE.right, align: 'right', bold: true },
+      { text: input.customerName, bold: true, color: ink },
+      { text: input.number, x: PDF_PAGE.right, align: 'right', bold: true, color: ink },
     ],
   })
   if (addressLine) {
@@ -704,7 +721,17 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
       height: 12,
       runs: [
         { text: 'Address', color: muted },
-        { text: addressLine.slice(0, 48), x: 90 },
+        { text: addressLine.slice(0, 56), x: 90, color: ink },
+      ],
+    })
+  }
+  if (input.customerPhone?.trim()) {
+    rows.push({
+      size: 9,
+      height: 12,
+      runs: [
+        { text: 'Phone', color: muted },
+        { text: input.customerPhone.trim(), x: 90, color: ink },
       ],
     })
   }
@@ -714,90 +741,116 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     rows.push({
       size: 8,
       height: 14,
-      runs: [{ text: status, x: PDF_PAGE.right, align: 'right', bold: true, color: accent }],
+      fill: statusFill,
+      fillFrom: PDF_PAGE.right - 72,
+      fillTo: PDF_PAGE.right,
+      runs: [{ text: status, x: PDF_PAGE.right - 8, align: 'right', bold: true, color: WHITE }],
     })
   }
   rows.push({
     size: 8,
     height: 12,
     runs: [
-      { text: paperDateLabel(input.documentType).toUpperCase(), x: PDF_PAGE.right, align: 'right', bold: true, color: accent },
+      { text: dateCaption.toUpperCase(), x: PDF_PAGE.right, align: 'right', bold: true, color: accent },
     ],
   })
   rows.push({
     size: 9,
     height: 13,
-    runs: [{ text: date, x: PDF_PAGE.right, align: 'right' }],
+    runs: [{ text: date, x: PDF_PAGE.right, align: 'right', color: ink }],
   })
 
-  rows.push({ size: 18, height: 28, runs: [{ text: title }] })
+  // Black headline — same as TradePaper <h2>, not accent teal.
+  rows.push({ size: 18, height: 28, runs: [{ text: headline, color: ink }] })
   rows.push({
     size: 8,
     height: 12,
     runs: [
-      { text: purchase ? 'Purchase Representative:' : 'Sales person:', bold: true },
-      { text: purchase ? 'Your Order Reference:' : 'Reference:', x: 220, bold: true },
-      { text: 'Order Date:', x: 400, bold: true },
+      { text: purchase ? 'Purchase Representative:' : 'Sales person:', bold: true, color: ink },
+      { text: purchase ? 'Your Order Reference:' : 'Reference:', x: 220, bold: true, color: ink },
+      { text: 'Order Date:', x: 400, bold: true, color: ink },
     ],
   })
   rows.push({
     size: 9,
     height: 14,
     runs: [
-      { text: input.createdByName?.trim() || '—' },
-      { text: input.reference?.trim() || '—', x: 220 },
-      { text: date, x: 400 },
+      { text: input.createdByName?.trim() || '—', color: ink },
+      { text: input.reference?.trim() || '—', x: 220, color: ink },
+      { text: date, x: 400, color: ink },
     ],
   })
+  if (input.workSite?.trim() || input.workScope?.trim()) {
+    rows.push({
+      size: 8,
+      height: 12,
+      runs: [
+        { text: 'Work site:', bold: true, color: ink },
+        { text: 'Work / job:', x: 300, bold: true, color: ink },
+      ],
+    })
+    rows.push({
+      size: 9,
+      height: 14,
+      runs: [
+        { text: input.workSite?.trim() || '—', color: ink },
+        {
+          text: input.workScope?.trim()
+            ? `${input.workScope.trim()} · Client: ${input.customerName}`
+            : '—',
+          x: 300,
+          color: ink,
+        },
+      ],
+    })
+  }
   const remarks = input.message?.trim() || (input.template ?? DEFAULT_DOCUMENT_TEMPLATE).terms.trim() || '—'
   rows.push({
     size: 9,
     height: 14,
     runs: [
-      { text: 'Remarks:', bold: true },
-      { text: ` ${remarks.slice(0, 180)}` },
+      { text: 'Remarks:', bold: true, color: ink },
+      { text: ` ${remarks.slice(0, 180)}`, color: ink },
     ],
   })
 
-  const taxX = 250
-  const dateX = 330
-  const qtyX = 420
-  const rateX = 490
-  const amountX = PDF_PAGE.right
   rows.push({
     size: 8,
     height: 14,
     runs: [
-      { text: 'Description', bold: true },
-      { text: 'Taxes', x: taxX, align: 'right', bold: true },
-      { text: 'Date req.', x: dateX, align: 'right', bold: true },
-      { text: 'Qty', x: qtyX, align: 'right', bold: true },
-      { text: 'Unit', x: qtyX + 42, align: 'right', bold: true },
-      { text: 'Unit price', x: rateX, align: 'right', bold: true },
-      { text: 'Amount', x: amountX, align: 'right', bold: true },
+      { text: 'Description', bold: true, color: ink },
+      { text: 'Taxes', x: TRADE_COL.tax, align: 'right', bold: true, color: ink },
+      { text: 'Date req.', x: TRADE_COL.date, align: 'right', bold: true, color: ink },
+      { text: 'Qty', x: TRADE_COL.qty, align: 'right', bold: true, color: ink },
+      { text: 'Unit', x: TRADE_COL.unit, align: 'right', bold: true, color: ink },
+      { text: 'Unit price', x: TRADE_COL.rate, align: 'right', bold: true, color: ink },
+      { text: 'Amount', x: TRADE_COL.amount, align: 'right', bold: true, color: ink },
     ],
     rule: true,
   })
   input.lines.forEach((line, index) => {
     const qty = Number.isFinite(Number(line.quantity)) ? Number(line.quantity).toFixed(3) : line.quantity
     const unit = line.unitOfMeasure?.trim() || 'EACH'
+    const taxText =
+      line.taxAmount != null && Number(line.taxAmount) > 0 ? money(String(line.taxAmount)) : ''
     rows.push({
       size: 8,
       height: 14,
       fill: index % 2 === 1 ? [0.953, 0.957, 0.965] : undefined,
       fillInset: PDF_PAGE.left,
       runs: [
-        { text: (line.description || line.sku || '').slice(0, 36) },
-        { text: '', x: taxX, align: 'right' },
-        { text: date, x: dateX, align: 'right' },
-        { text: qty, x: qtyX, align: 'right' },
-        { text: unit.toUpperCase(), x: qtyX + 42, align: 'right' },
+        { text: (line.description || line.sku || '').slice(0, 34), color: ink },
+        { text: taxText, x: TRADE_COL.tax, align: 'right', color: ink },
+        { text: dateReq, x: TRADE_COL.date, align: 'right', color: ink },
+        { text: qty, x: TRADE_COL.qty, align: 'right', color: ink },
+        { text: unit.toUpperCase(), x: TRADE_COL.unit, align: 'right', color: ink },
         {
           text: Number.isFinite(Number(line.unitPrice)) ? Number(line.unitPrice).toFixed(3) : line.unitPrice,
-          x: rateX,
+          x: TRADE_COL.rate,
           align: 'right',
+          color: ink,
         },
-        { text: money(line.amount), x: amountX, align: 'right' },
+        { text: money(line.amount), x: TRADE_COL.amount, align: 'right', color: ink },
       ],
     })
   })
@@ -808,31 +861,26 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     height: 13,
     keepId: 'trade-totals',
     runs: [
-      { text: 'Subtotal', x: 430 },
-      { text: money(input.subtotal), x: amountX, align: 'right' },
+      { text: 'Subtotal', x: 430, color: ink },
+      { text: money(input.subtotal), x: TRADE_COL.amount, align: 'right', color: ink },
     ],
   })
+  const middleLabel = purchase
+    ? input.documentType === 'PURCHASE_ORDER'
+      ? 'Bill payment'
+      : 'Taxes'
+    : 'Payment'
+  const middleValue =
+    purchase && input.documentType !== 'PURCHASE_ORDER'
+      ? money(input.taxTotal)
+      : money(input.amountApplied || '0')
   rows.push({
     size: 9,
     height: 13,
     keepId: 'trade-totals',
     runs: [
-      {
-        text: purchase
-          ? input.documentType === 'PURCHASE_ORDER'
-            ? 'Bill payment'
-            : 'Taxes'
-          : 'Payment',
-        x: 430,
-      },
-      {
-        text:
-          purchase && input.documentType !== 'PURCHASE_ORDER'
-            ? money(input.taxTotal)
-            : money(input.amountApplied || '0'),
-        x: amountX,
-        align: 'right',
-      },
+      { text: middleLabel, x: 430, color: ink },
+      { text: middleValue, x: TRADE_COL.amount, align: 'right', color: ink },
     ],
   })
   rows.push({
@@ -841,11 +889,39 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
     keepId: 'trade-totals',
     rule: true,
     runs: [
-      { text: 'Total', x: 430, bold: true },
-      { text: money(input.total), x: amountX, align: 'right', bold: true },
+      { text: 'Total', x: 430, bold: true, color: ink },
+      { text: money(input.total), x: TRADE_COL.amount, align: 'right', bold: true, color: ink },
     ],
   })
   return rows
+}
+
+/** Same labels as TradePaper / MerchantInvoice TITLES on screen. */
+const PAPER_TITLES: Record<string, string> = {
+  INVOICE: 'INVOICE',
+  CREDIT_MEMO: 'CREDIT NOTE',
+  ESTIMATE: 'ESTIMATE',
+  QUOTATION: 'QUOTATION',
+  SALES_ORDER: 'SALES ORDER',
+  SALES_RECEIPT: 'SALES RECEIPT',
+  REFUND_RECEIPT: 'REFUND',
+  BILL: 'BILL',
+  EXPENSE: 'EXPENSE',
+  VENDOR_CREDIT: 'VENDOR CREDIT',
+  PURCHASE_ORDER: 'PURCHASE ORDER',
+  PURCHASE_REQUEST: 'PURCHASE REQUEST',
+  RFQ: 'RFQ',
+}
+
+function tradeDocTitle(input: SalesDocumentPdfInput): string {
+  if (input.documentType && PAPER_TITLES[input.documentType]) {
+    return PAPER_TITLES[input.documentType]
+  }
+  const fromType = input.documentType
+    ? (SALES_TYPES.find((row) => row.type === input.documentType)?.singular ??
+        PURCHASE_TYPES.find((row) => row.type === input.documentType)?.singular)
+    : null
+  return (fromType ?? input.title).toUpperCase()
 }
 
 function lineItemLabel(row: { sku: string | null; description: string }): string {

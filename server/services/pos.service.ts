@@ -1049,7 +1049,7 @@ export async function getEstimateCart(ctx: OrgContext, estimateId: string) {
       orgId: ctx.orgId,
       type: { in: ['ESTIMATE', 'QUOTATION'] },
       status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
-      convertedTo: { is: null },
+      convertedTo: { none: {} },
     },
     select: {
       id: true,
@@ -1103,7 +1103,7 @@ async function assertOpenEstimate(ctx: OrgContext, estimateId: string) {
       orgId: ctx.orgId,
       type: { in: ['ESTIMATE', 'QUOTATION'] },
       status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
-      convertedTo: { is: null },
+      convertedTo: { none: {} },
     },
     select: { id: true, number: true },
   })

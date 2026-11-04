@@ -58,6 +58,15 @@ export const REPORT_SECTIONS: LauncherSection[] = [
         blurb: 'Debits equal credits',
       },
       {
+        key: 'profit-loss-by-class',
+        label: 'Profit and Loss by Class',
+        href: '/reports/profit-loss/by-class',
+        icon: 'trending',
+        accent: '#7C3AED',
+        wash: '#EDE9FE',
+        blurb: 'Income and expenses by class',
+      },
+      {
         key: 'profit-loss-by-month',
         label: 'Profit and Loss by Month',
         href: '/reports/profit-loss/by-month',

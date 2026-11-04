@@ -127,4 +127,59 @@ describe('document PDF barcode', () => {
     expect(text).toContain('BILL')
     expect(text).toMatch(/\sre f/)
   })
+
+  it('matches Trade print paper titles and columns on vendor bills', () => {
+    const bytes = renderSalesDocumentPdf({
+      orgName: 'AL FURAAT MATERIALS',
+      orgAddress: [],
+      orgPhone: null,
+      orgEmail: null,
+      title: 'Bill',
+      documentType: 'BILL',
+      number: 'BILL-00001',
+      date: '2026-11-01',
+      customerName: 'CASH',
+      customerAddress: [],
+      customerEmail: null,
+      currency: 'USD',
+      partyLabel: 'Vendor',
+      paper: 'vendor',
+      createdByName: 'Abdisalam',
+      status: 'OPEN',
+      template: {
+        accent: '#1eb8ae',
+        vendorAccent: '#0e7490',
+        banks: [],
+        footerTitle: '',
+        footerNote: '',
+        footerLayout: 'side',
+        terms: '',
+        showClassicPaper: false,
+        paperStyle: 'trade',
+      },
+      lines: [
+        {
+          quantity: '100',
+          sku: null,
+          description: 'WARAQ A4',
+          unitPrice: '4',
+          amount: '400',
+          unitOfMeasure: 'EACH',
+        },
+      ],
+      subtotal: '400',
+      discountAmount: '0',
+      taxTotal: '0',
+      total: '400',
+    })
+    const text = new TextDecoder().decode(bytes)
+    expect(text).toContain('BILL #BILL-00001')
+    expect(text).not.toContain('Bill #BILL-00001')
+    expect(text).toContain('BILL DATE')
+    expect(text).toContain('Purchase Representative')
+    expect(text).toContain('Your Order Reference')
+    expect(text).toContain('Unit price')
+    expect(text).toContain('EACH')
+    expect(text).toContain('Remarks')
+  })
 })

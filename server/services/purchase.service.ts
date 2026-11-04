@@ -17,6 +17,7 @@ import { dueDateFor } from '@/lib/payment-terms'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import {
   unnamedPurchaseLineIndexes,
+  type MarkBillableInput,
   type PurchaseDocumentInput,
   type ReceiveOrderInput,
 } from '@/lib/validation/purchases'
@@ -42,6 +43,7 @@ import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import { workbookRecords } from '@/server/services/workbook'
 import * as approvalService from '@/server/services/approval.service'
 import { resolveProjectId } from '@/server/services/project.service'
+import { resolveId as resolveTrackingCategoryId } from '@/server/services/tracking-category.service'
 import * as storeService from '@/server/services/store.service'
 import { loadCodeForCalculation } from '@/server/services/tax.service'
 
@@ -79,6 +81,7 @@ const DOCUMENT_SELECT = {
   currencyCode: true, paymentAccountId: true, offsetCustomerId: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
   projectId: true,
+  trackingCategoryId: true,
   project: { select: { id: true, number: true, name: true } },
   vendor: {
     select: {
@@ -399,6 +402,7 @@ export async function get(ctx: OrgContext, id: string) {
         select: {
           id: true, lineNumber: true, description: true, quantity: true, unitPrice: true,
           quantityReceived: true, storeId: true,
+          billableCustomerId: true, billableUnitPrice: true,
           discountPercent: true, amount: true, taxAmount: true,
           item: { select: { id: true, name: true, sku: true, unitOfMeasure: true } },
           taxCode: { select: { id: true, name: true } },
@@ -436,6 +440,7 @@ export async function get(ctx: OrgContext, id: string) {
         0,
       ).toString(),
       unitPrice: line.unitPrice.toString(),
+      billableUnitPrice: line.billableUnitPrice?.toString() ?? null,
       discountPercent: line.discountPercent?.toString() ?? null,
       amount: line.amount.toString(),
       taxAmount: line.taxAmount.toString(),
@@ -832,6 +837,42 @@ export async function purchaseOrderHome(ctx: OrgContext) {
   }
 }
 
+/**
+ * Another live bill from the same vendor already quotes this reference.
+ * The clerk can keep both by saving again with the warning acknowledged.
+ * A voided or deleted bill does not count — those are no longer the vendor's paper.
+ */
+async function assertBillReference(
+  tx: Tx,
+  ctx: OrgContext,
+  vendorId: string | null,
+  input: PurchaseDocumentInput,
+  excludeId?: string,
+) {
+  const reference = input.reference?.trim()
+  if (!vendorId || !reference || input.acknowledgeDuplicate) return
+
+  const existing = await tx.purchaseDocument.findFirst({
+    where: {
+      orgId: ctx.orgId,
+      type: 'BILL',
+      vendorId,
+      deletedAt: null,
+      voidedAt: null,
+      status: { not: 'VOID' },
+      reference: { equals: reference, mode: 'insensitive' },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: { id: true, number: true },
+  })
+  if (!existing) return
+
+  throw conflict(
+    `${existing.number} already uses reference “${reference}” for this vendor. Save again to keep both.`,
+    { duplicate: ['true'], existingId: [existing.id], existingNumber: [existing.number] },
+  )
+}
+
 export async function create(
   ctx: OrgContext,
   type: PurchaseDocumentType,
@@ -861,6 +902,7 @@ async function createWithin(
   {
     const { vendor, offsetCustomerId } = await resolvePurchaseParty(tx, ctx, type, input)
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
+    const trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
     const isDraft = input.saveAsDraft === true
     assertNamedPurchaseLines(isDraft, input.lines)
     const lines = await resolveLines(tx, ctx, input.lines, vendor?.defaultExpenseAccountId ?? null)
@@ -869,6 +911,8 @@ async function createWithin(
     if (priced.total.isZero() && !isDraft && !ALLOWS_ZERO_TOTAL.has(type)) {
       throw validation('A document with no value has nothing to record.')
     }
+
+    if (type === 'BILL') await assertBillReference(tx, ctx, vendor?.id ?? null, input)
 
     const term = input.paymentTermId
       ? await tx.paymentTerm.findFirst({
@@ -915,6 +959,7 @@ async function createWithin(
         paymentAccountId: input.paymentAccountId ?? null,
         offsetCustomerId,
         projectId,
+        trackingCategoryId,
         createdById: ctx.userId,
         lines: {
           create: priced.lines.map((line) => ({
@@ -932,6 +977,7 @@ async function createWithin(
             taxCodeId: line.taxCodeId,
             taxAmount: line.taxAmount.toFixed(4),
             expenseAccountId: line.incomeAccountId,
+            ...billableColumns(input.lines[line.lineNumber - 1], offsetCustomerId),
           })),
         },
       },
@@ -992,6 +1038,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
 
     const { vendor, offsetCustomerId } = await resolvePurchaseParty(tx, ctx, existing.type, input)
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
+    const trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
 
     if (existing.type === 'EXPENSE' && !input.saveAsDraft) {
       await requireExpenseSettlement(tx, ctx, input.paymentAccountId, offsetCustomerId)
@@ -1001,6 +1048,8 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
     const lines = await resolveLines(tx, ctx, input.lines, vendor?.defaultExpenseAccountId ?? null)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency)
+
+    if (existing.type === 'BILL') await assertBillReference(tx, ctx, vendor?.id ?? null, input, id)
 
     const term = input.paymentTermId
       ? await tx.paymentTerm.findFirst({
@@ -1058,6 +1107,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
         paymentAccountId: input.paymentAccountId ?? null,
         offsetCustomerId,
         projectId,
+        trackingCategoryId,
         journalId: null,
         version: { increment: 1 },
         status: input.saveAsDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
@@ -1077,6 +1127,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
             taxCodeId: line.taxCodeId,
             taxAmount: line.taxAmount.toFixed(4),
             expenseAccountId: line.incomeAccountId,
+            ...billableColumns(input.lines[line.lineNumber - 1], offsetCustomerId),
           })),
         },
       },
@@ -1120,6 +1171,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     select: {
       id: true, type: true, number: true, date: true, memo: true, vendorId: true,
       status: true, paymentAccountId: true, offsetCustomerId: true, journalId: true,
+      trackingCategoryId: true,
       lines: {
         orderBy: { lineNumber: 'asc' },
         select: {
@@ -1281,6 +1333,10 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       : document.type === 'EXPENSE'
         ? buildExpenseJournal(input)
         : buildVendorCreditJournal(input)
+
+  if (document.trackingCategoryId) {
+    for (const line of draft.lines) line.trackingCategoryId = document.trackingCategoryId
+  }
 
   const journal = await postJournal(tx, ctx, draft)
 
@@ -1695,7 +1751,7 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
       where: { id: input.orderId, orgId: ctx.orgId, type: 'PURCHASE_ORDER' },
       select: {
         id: true, number: true, status: true, vendorId: true, reference: true, memo: true,
-        paymentTermId: true, projectId: true,
+        paymentTermId: true, projectId: true, trackingCategoryId: true,
         lines: {
           orderBy: { lineNumber: 'asc' },
           select: {
@@ -1795,6 +1851,7 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
           [`Received against ${order.number}`, order.memo].filter(Boolean).join(' — '),
         paymentTermId: order.paymentTermId,
         projectId: order.projectId,
+        trackingCategoryId: order.trackingCategoryId,
         lines: order.lines
           .filter((line) => receiving.has(line.id))
           .map((line) => {
@@ -1903,6 +1960,7 @@ export async function convertPurchaseDocument(
         status: true,
         vendorId: true,
         projectId: true,
+        trackingCategoryId: true,
         reference: true,
         memo: true,
         paymentTermId: true,
@@ -1965,6 +2023,7 @@ export async function convertPurchaseDocument(
         memo: source.memo,
         paymentTermId: source.paymentTermId,
         projectId: source.projectId,
+        trackingCategoryId: source.trackingCategoryId,
         saveAsDraft: false,
         lines: source.lines.map((line) => ({
           itemId: line.itemId,
@@ -2302,6 +2361,127 @@ function assertNamedPurchaseLines(isDraft: boolean, lines: PurchaseDocumentInput
  * A tracked item is different: its cost belongs to the inventory asset, not to an
  * expense account, so its line carries the item's inventory account instead.
  */
+/**
+ * Customer and price stored on a purchase line so a later invoice can pull it.
+ * Settling the whole expense against a customer now and also marking a line
+ * billable would charge them twice, so the two cannot be set together.
+ */
+function billableColumns(
+  source: PurchaseDocumentInput['lines'][number] | undefined,
+  offsetCustomerId: string | null,
+) {
+  if (offsetCustomerId && source?.billableCustomerId) {
+    throw precondition(
+      'A cost settled against a customer now cannot also be marked billable for a later invoice.',
+    )
+  }
+  return {
+    billableCustomerId: offsetCustomerId ? null : (source?.billableCustomerId ?? null),
+    billableUnitPrice:
+      offsetCustomerId || !source?.billableCustomerId ? null : (source.billableUnitPrice ?? null),
+  }
+}
+
+/**
+ * Set or clear which customer a purchase line should be recharged to.
+ * Refused when the parent document already offsets a customer balance.
+ */
+export async function markLinesBillable(ctx: OrgContext, input: MarkBillableInput) {
+  const meta = await requestMeta()
+  return db.$transaction(async (tx) => {
+    const updated: string[] = []
+    let documentId = input.lines[0]!.lineId
+    for (const row of input.lines) {
+      const line = await tx.purchaseDocumentLine.findFirst({
+        where: { id: row.lineId, orgId: ctx.orgId },
+        select: {
+          id: true,
+          documentId: true,
+          document: {
+            select: { number: true, offsetCustomerId: true, deletedAt: true, status: true },
+          },
+          billedInvoiceLine: { select: { id: true } },
+        },
+      })
+      if (!line || line.document.deletedAt) throw notFound('Document line')
+      if (line.document.status === 'VOID') {
+        throw precondition(`${line.document.number} is void and its lines cannot be marked billable.`)
+      }
+      if (line.document.offsetCustomerId) {
+        throw precondition(
+          `${line.document.number} is already settled against a customer. That and a billable line cannot both be set.`,
+        )
+      }
+      if (line.billedInvoiceLine) {
+        throw conflict('That line is already on an invoice, so who it is billable to cannot change.')
+      }
+      if (row.billableCustomerId) {
+        const customer = await tx.customer.findFirst({
+          where: { id: row.billableCustomerId, orgId: ctx.orgId },
+          select: { id: true },
+        })
+        if (!customer) throw notFound('Customer')
+      }
+      await tx.purchaseDocumentLine.update({
+        where: { id: line.id },
+        data: {
+          billableCustomerId: row.billableCustomerId ?? null,
+          billableUnitPrice: row.billableCustomerId ? (row.billableUnitPrice ?? null) : null,
+        },
+      })
+      updated.push(line.id)
+      documentId = line.documentId
+    }
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'PurchaseDocument',
+        entityId: documentId,
+        action: 'UPDATE',
+        after: { billable: updated.length },
+      },
+      meta,
+    )
+    return { updated }
+  })
+}
+
+/** Posted bill and expense lines waiting to be pulled onto this customer's invoice. */
+export async function listBillableExpenses(ctx: OrgContext, customerId: string) {
+  const rows = await db.purchaseDocumentLine.findMany({
+    where: {
+      orgId: ctx.orgId,
+      billableCustomerId: customerId,
+      billedInvoiceLine: { is: null },
+      document: {
+        type: { in: ['BILL', 'EXPENSE'] },
+        deletedAt: null,
+        status: { notIn: ['VOID', 'DRAFT', 'PENDING_APPROVAL'] },
+      },
+    },
+    select: {
+      id: true,
+      description: true,
+      amount: true,
+      billableUnitPrice: true,
+      document: { select: { id: true, number: true, type: true, date: true } },
+    },
+    orderBy: [{ document: { date: 'asc' } }, { lineNumber: 'asc' }],
+  })
+
+  return rows.map((row) => ({
+    lineId: row.id,
+    description: row.description,
+    amount: row.amount.toString(),
+    billableUnitPrice: row.billableUnitPrice?.toString() ?? null,
+    documentId: row.document.id,
+    documentNumber: row.document.number,
+    documentType: row.document.type,
+    date: toCalendarDate(row.document.date),
+  }))
+}
+
 async function resolveLines(
   tx: Tx,
   ctx: OrgContext,

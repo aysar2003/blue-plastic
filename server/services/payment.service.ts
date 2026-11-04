@@ -15,7 +15,7 @@ import { postJournal, reverseJournal } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
-import { notFound, precondition, validation } from '@/server/errors'
+import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import * as approvalService from '@/server/services/approval.service'
 import { outstandingBalances, refreshStatus } from '@/server/services/sales.service'
@@ -318,13 +318,44 @@ export async function invoicesForEdit(ctx: OrgContext, paymentId: string) {
  * the oldest remaining ones. Leftover after every open invoice stays as a
  * customer credit.
  */
+/**
+ * Same customer, same day, same amount is usually the receipt entered twice.
+ * A deleted or voided payment is ignored. Saving again after the warning records it.
+ */
+async function assertDuplicateCustomerPayment(
+  tx: Tx,
+  ctx: OrgContext,
+  input: PaymentInput,
+  amount: Decimal,
+  excludeId?: string,
+) {
+  if (input.acknowledgeDuplicate) return
+  const existing = await tx.customerPayment.findFirst({
+    where: {
+      orgId: ctx.orgId,
+      customerId: input.customerId,
+      date: toDate(input.date),
+      amount: amount.toFixed(4),
+      deletedAt: null,
+      voidedAt: null,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: { id: true, number: true },
+  })
+  if (!existing) return
+  throw conflict(
+    `${existing.number} is already ${toMoneyString(amount, 2)} from this customer on this date. Save again to record another.`,
+    { duplicate: ['true'], existingId: [existing.id], existingNumber: [existing.number] },
+  )
+}
+
 export async function create(ctx: OrgContext, input: PaymentInput) {
   const meta = await requestMeta()
 
   return db.$transaction(async (tx) => {
     const customer = await tx.customer.findFirst({
       where: { id: input.customerId, orgId: ctx.orgId },
-      select: { id: true, displayName: true, isActive: true },
+      select: { id: true, displayName: true, isActive: true, currencyCode: true },
     })
     if (!customer) throw notFound('Customer')
 
@@ -341,6 +372,7 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
     }
 
     const amount = new Decimal(input.amount)
+    await assertDuplicateCustomerPayment(tx, ctx, input, amount)
     let applications = input.applications
       .map((application) => ({ ...application, amount: new Decimal(application.amount) }))
       .filter((application) => application.amount.greaterThan(0))
@@ -378,7 +410,12 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
         reference: input.reference ?? null,
         memo: input.memo ?? null,
         depositAccountId: deposit.id,
-        currencyCode: ctx.organization.baseCurrency,
+        currencyCode: (
+          input.currencyCode ??
+          customer.currencyCode ??
+          ctx.organization.baseCurrency
+        ).toUpperCase(),
+        exchangeRate: new Decimal(input.exchangeRate ?? 1).toFixed(9),
         status: holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         createdById: ctx.userId,
       },
@@ -397,6 +434,12 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
       })
     }
 
+    const payCurrency = (
+      input.currencyCode ??
+      customer.currencyCode ??
+      ctx.organization.baseCurrency
+    ).toUpperCase()
+
     if (holdForApproval) {
       await approvalService.submitRequest(tx, ctx, {
         entityType: 'CUSTOMER_PAYMENT',
@@ -404,7 +447,7 @@ export async function create(ctx: OrgContext, input: PaymentInput) {
         title: `Payment ${payment.number}`,
         href: `/payments/${payment.id}`,
         amount,
-        currencyCode: ctx.organization.baseCurrency,
+        currencyCode: payCurrency,
         levels: gate.levels,
       })
     } else {
@@ -447,11 +490,41 @@ export async function postPayment(tx: Tx, ctx: OrgContext, id: string) {
       depositAccountId: true,
       journalId: true,
       status: true,
-      applications: { select: { invoiceId: true } },
+      currencyCode: true,
+      exchangeRate: true,
+      applications: {
+        select: {
+          invoiceId: true,
+          amount: true,
+          invoice: { select: { currencyCode: true, exchangeRate: true } },
+        },
+      },
     },
   })
   if (!payment) throw notFound('Payment')
   if (payment.journalId) throw precondition(`Payment ${payment.number} is already posted.`)
+
+  const payRate = new Decimal(payment.exchangeRate?.toString() ?? 1)
+  const foreignAmount = new Decimal(payment.amount.toString())
+  const bankBase = foreignAmount.times(payRate)
+
+  let arBase = ZERO
+  let appliedForeign = ZERO
+  for (const application of payment.applications) {
+    const f = new Decimal(application.amount.toString())
+    appliedForeign = appliedForeign.plus(f)
+    const invRate = new Decimal(application.invoice.exchangeRate?.toString() ?? 1)
+    arBase = arBase.plus(f.times(invRate))
+  }
+  const unapplied = foreignAmount.minus(appliedForeign)
+  if (unapplied.greaterThan(0)) {
+    arBase = arBase.plus(unapplied.times(payRate))
+  }
+
+  const needsFx = !bankBase.equals(arBase)
+  const fxAccountId = needsFx
+    ? await systemAccountId(tx, ctx.orgId, 'EXCHANGE_GAIN_LOSS')
+    : null
 
   const journal = await postJournal(
     tx,
@@ -461,10 +534,14 @@ export async function postPayment(tx: Tx, ctx: OrgContext, id: string) {
       number: payment.number,
       paymentId: payment.id,
       customerId: payment.customerId,
-      amount: new Decimal(payment.amount.toString()),
+      amount: bankBase,
+      arAmount: arBase,
+      fxAccountId,
       depositAccountId: payment.depositAccountId,
       receivableAccountId: await systemAccountId(tx, ctx.orgId, 'ACCOUNTS_RECEIVABLE'),
       memo: payment.memo,
+      currencyCode: payment.currencyCode,
+      exchangeRate: payRate,
     }),
   )
 
@@ -530,6 +607,7 @@ export async function update(ctx: OrgContext, id: string, input: PaymentInput) {
     }
 
     const amount = new Decimal(input.amount)
+    await assertDuplicateCustomerPayment(tx, ctx, input, amount, id)
     let applications = input.applications
       .map((application) => ({ ...application, amount: new Decimal(application.amount) }))
       .filter((application) => application.amount.greaterThan(0))

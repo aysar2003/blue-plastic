@@ -95,10 +95,18 @@ function DialogContent({
   const [box, setBox] = React.useState<{ w: number; h: number } | null>(null)
 
   // Shell Back closes this form first and reveals the page / dialog under it.
+  // `live` drops stale stack entries after close/unmount races so Back can
+  // still leave the page when no dialog is actually open.
   React.useEffect(() => {
-    return registerDialogCloser(() => {
-      closeRef.current?.click()
-    })
+    return registerDialogCloser(
+      () => {
+        closeRef.current?.click()
+      },
+      () => {
+        const panel = panelRef.current
+        return Boolean(panel && panel.getAttribute('data-state') === 'open')
+      },
+    )
   }, [])
 
   const beginDrag = (event: React.PointerEvent, from: 'header' | 'grip') => {

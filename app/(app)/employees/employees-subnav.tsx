@@ -6,6 +6,8 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 
 const SECTION_HREFS = [
+  '/employees/training',
+  '/employees/recruitment',
   '/employees/contracts',
   '/employees/leave',
   '/employees/attendance',
@@ -18,6 +20,8 @@ const SECTION_HREFS = [
 
 const TABS = [
   { href: '/employees', label: 'Directory', permission: 'hr:read', exact: true },
+  { href: '/employees/recruitment', label: 'Recruitment', permission: 'hr:read' },
+  { href: '/employees/training', label: 'Training', permission: 'hr:read' },
   { href: '/employees/contracts', label: 'Contracts', permission: 'hr:read' },
   { href: '/employees/leave', label: 'Leave', permission: 'hr:leave' },
   { href: '/employees/attendance', label: 'Attendance', permission: 'hr:attendance' },

@@ -163,6 +163,8 @@ export async function updateFeatureFlagsForm(
     'showCreatorBrand',
     'enableCustomerPortal',
     'enableDocumentApprovals',
+    'creditLimitWarn',
+    'payrollStandard',
     ...MODULE_FORM_KEY_LIST,
     ...DOCUMENT_KIND_FORM_KEY_LIST,
   ] as const

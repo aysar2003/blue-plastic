@@ -20,7 +20,10 @@ import type { Permission } from '@/server/auth/permissions'
 import { requireOrgContext } from '@/server/auth/context'
 import * as projectService from '@/server/services/project.service'
 
+import { TimesheetPanel } from '@/components/projects/timesheet-panel'
+import { today } from '@/lib/date'
 import * as projectTaskService from '@/server/services/project-task.service'
+import * as projectTimeService from '@/server/services/project-time.service'
 import * as userHistoryService from '@/server/services/user-history.service'
 import { DeleteProjectButton } from './delete-button'
 import { ProjectStatusForm } from './status-form'
@@ -52,9 +55,10 @@ export default async function ProjectDetailPage({
   const ctx = await requireOrgContext('project:read')
   const project = await projectService.get(ctx, id).catch(() => null)
   if (!project) notFound()
-  const [tasks, members] = await Promise.all([
+  const [tasks, members, timeEntries] = await Promise.all([
     projectTaskService.listForProject(ctx, project.id),
     userHistoryService.listMembers(ctx),
+    projectTimeService.listForProject(ctx, project.id),
   ])
 
   const currency = ctx.organization.baseCurrency
@@ -171,6 +175,15 @@ export default async function ProjectDetailPage({
         tasks={tasks}
         members={members}
         canEdit={canUpdate}
+      />
+
+      <TimesheetPanel
+        projectId={project.id}
+        today={today(ctx.organization.timeZone)}
+        currency={currency}
+        canEdit={canUpdate}
+        tasks={tasks.map((task) => ({ id: task.id, name: task.name }))}
+        entries={timeEntries}
       />
 
       <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">

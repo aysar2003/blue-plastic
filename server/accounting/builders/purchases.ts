@@ -216,29 +216,57 @@ export function buildBillPaymentJournal(input: {
   number: string
   paymentId: string
   vendorId: string
+  /** Bank credit in organisation base currency. */
   amount: Decimal.Value
   paymentAccountId: string
   payableAccountId: string
   memo?: string | null
+  /** AP debit in base. Defaults to `amount`. */
+  apAmount?: Decimal.Value
+  fxAccountId?: string | null
+  currencyCode?: string | null
+  exchangeRate?: Decimal.Value | null
 }): DraftJournal {
+  const bank = new Decimal(input.amount)
+  const ap = new Decimal(input.apAmount ?? input.amount)
+  const diff = bank.minus(ap)
+  const lines: DraftLine[] = [
+    {
+      accountId: input.payableAccountId,
+      debit: ap,
+      vendorId: input.vendorId,
+      description: `Bill payment ${input.number}`,
+    },
+    {
+      accountId: input.paymentAccountId,
+      credit: bank,
+      description: `Bill payment ${input.number}`,
+    },
+  ]
+  if (!diff.isZero() && input.fxAccountId) {
+    // Paying more base than AP cleared → FX loss (debit). Paying less → gain.
+    if (diff.isPositive()) {
+      lines.push({
+        accountId: input.fxAccountId,
+        debit: diff,
+        description: `Realised FX · bill payment ${input.number}`,
+      })
+    } else {
+      lines.push({
+        accountId: input.fxAccountId,
+        credit: diff.abs(),
+        description: `Realised FX · bill payment ${input.number}`,
+      })
+    }
+  }
   return {
     date: input.date,
     memo: input.memo ?? `Bill payment ${input.number}`,
     sourceType: 'BILL_PAYMENT',
     sourceId: input.paymentId,
-    lines: [
-      {
-        accountId: input.payableAccountId,
-        debit: input.amount,
-        vendorId: input.vendorId,
-        description: `Bill payment ${input.number}`,
-      },
-      {
-        accountId: input.paymentAccountId,
-        credit: input.amount,
-        description: `Bill payment ${input.number}`,
-      },
-    ],
+    currencyCode: input.currencyCode ?? null,
+    exchangeRate: input.exchangeRate ?? 1,
+    lines,
   }
 }
 

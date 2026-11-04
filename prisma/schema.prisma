@@ -112,6 +112,7 @@ enum ApprovalEntityType {
   DEPOSIT
   CUSTOMER
   VENDOR
+  PAYROLL
 }
 
 enum ApprovalRequestStatus {
@@ -531,6 +532,7 @@ enum JournalSourceType {
   POS_CASH_MOVE
   POS_SESSION_CLOSE
   PAYROLL
+  PAYROLL_SETTLEMENT
 }
 
 // ---------------------------------------------------------------------------
@@ -654,6 +656,7 @@ model Organization {
   itemCategories ItemCategory[]
   stores         Store[]
   paymentTerms   PaymentTerm[]
+  trackingCategories TrackingCategory[]
   taxAgencies    TaxAgency[]
   taxRates       TaxRate[]
   taxCodes       TaxCode[]
@@ -674,6 +677,11 @@ model Organization {
   attendanceDays    AttendanceDay[]
   payrollRuns       PayrollRun[]
   payslips          Payslip[]
+  salaryStructures  SalaryStructure[]
+  salaryRules       SalaryRule[]
+  employeeAdvances  EmployeeAdvance[]
+  advanceRecoveries AdvanceRecovery[]
+  endOfService      EndOfService[]
   employeeContracts EmployeeContract[]
   employeeDocuments EmployeeDocument[]
   hrSettings            HrSettings?
@@ -696,11 +704,36 @@ model Organization {
   approvalRequests  ApprovalRequest[]
   projects            Project[]
   projectTasks        ProjectTask[]
+  projectTimeEntries  ProjectTimeEntry[]
   appAccessRequests   AppAccessRequest[]
   recurringTemplates  RecurringTemplate[]
   companyAgreements   CompanyAgreement[]
   companyRentPayments CompanyRentPayment[]
   budgets             Budget[]
+  fixedAssetCategories FixedAssetCategory[]
+  fixedAssets          FixedAsset[]
+  fixedAssetDeps       FixedAssetDepreciation[]
+  shareholders         Shareholder[]
+  equityEvents         EquityEvent[]
+  jobOpenings          JobOpening[]
+  applicants           Applicant[]
+  appraisals           Appraisal[]
+  discussChannels      DiscussChannel[]
+  discussMessages      DiscussMessage[]
+  appointmentTypes     AppointmentType[]
+  appointments         Appointment[]
+  signRequests         SignRequest[]
+  surveys              Survey[]
+  surveyResponses      SurveyResponse[]
+  planningAssignments  PlanningAssignment[]
+  crmOpportunities     CrmOpportunity[]
+  crmActivities        CrmActivity[]
+  fxHedges             FxHedge[]
+  kitchenTickets       KitchenTicket[]
+  stockBins            StockBin[]
+  pickTasks            PickTask[]
+  trainingCourses      TrainingCourse[]
+  trainingEnrollments  TrainingEnrollment[]
 
   @@index([parentOrgId])
   @@map("organizations")
@@ -861,8 +894,14 @@ model User {
   passwordHash  String?
   image         String?
   emailVerified DateTime? @db.Timestamptz(6)
-  /// Optional mobile (country code, digits). Reserved for WhatsApp to-do notify later.
-  phone         String?
+  /// Optional mobile (E.164). Login alias + future WhatsApp/SMS notify.
+  phone         String?   @unique
+
+  /// Authenticator app (TOTP). Secret sealed with AUTH_SECRET; null when off.
+  totpSecretSealed String?
+  totpEnabledAt    DateTime? @db.Timestamptz(6)
+  /// Email one-time codes as a second factor at sign-in.
+  otp2faEnabledAt  DateTime? @db.Timestamptz(6)
 
   lastLoginAt DateTime? @db.Timestamptz(6)
 
@@ -873,6 +912,9 @@ model User {
   /// Company opened at sign-in. Set when the person is first added, and kept
   /// so a later invite into another company does not move them.
   homeOrgId String?
+
+  /// Home dashboard KPI pin order. Shape: `{ kpiPins?: ('profitMtd'|'openAr'|'reorder')[] }`.
+  dashboardPrefs Json?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -897,6 +939,7 @@ model User {
   leaveRequestsDecided LeaveRequest[] @relation("LeaveRequestDecidedBy")
   leaveRequestsCreated LeaveRequest[] @relation("LeaveRequestCreatedBy")
   payrollRunsCreated   PayrollRun[]   @relation("PayrollRunCreatedBy")
+  endOfServiceCreated  EndOfService[] @relation("EndOfServiceCreatedBy")
   employeeContractsCreated EmployeeContract[] @relation("EmployeeContractCreatedBy")
   employeeDocumentsCreated EmployeeDocument[] @relation("EmployeeDocumentCreatedBy")
   hrPoliciesCreated        HrPolicy[]         @relation("HrPolicyCreatedBy")
@@ -909,9 +952,13 @@ model User {
   projectsCreated           Project[]          @relation("ProjectCreatedBy")
   projectTasksCreated       ProjectTask[]      @relation("ProjectTaskCreatedBy")
   projectTasksAssigned      ProjectTask[]      @relation("ProjectTaskAssignee")
+  projectTimeEntries        ProjectTimeEntry[] @relation("ProjectTimeEntryUser")
   appAccessRequests         AppAccessRequest[] @relation("AppAccessRequestedBy")
   appAccessReviews          AppAccessRequest[] @relation("AppAccessReviewedBy")
   recurringTemplatesCreated RecurringTemplate[] @relation("RecurringCreatedBy")
+  authChallenges            AuthChallenge[]
+  discussMessagesAuthored   DiscussMessage[] @relation("DiscussMessageAuthor")
+  crmActivitiesCreated      CrmActivity[]    @relation("CrmActivityCreatedBy")
 
   @@map("users")
 }
@@ -1031,6 +1078,24 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+/// Short-lived hashed OTP / setup codes for optional 2FA (not Auth.js email tokens).
+model AuthChallenge {
+  id         String    @id @default(cuid())
+  userId     String
+  /// LOGIN_OTP | ENABLE_OTP | ENABLE_TOTP
+  purpose    String
+  codeHash   String
+  expiresAt  DateTime  @db.Timestamptz(6)
+  attempts   Int       @default(0)
+  consumedAt DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, expiresAt])
+  @@map("auth_challenges")
 }
 
 // ---------------------------------------------------------------------------
@@ -1188,7 +1253,20 @@ model LedgerAccount {
   budgetLines               BudgetLine[]
   employeeWageExpense       Employee[]    @relation("EmployeeWageExpense")
   employeeWagePayable       Employee[]    @relation("EmployeeWagePayable")
+  employeePayAccount        Employee[]    @relation("EmployeePayAccount")
   payrollRunPayFrom         PayrollRun[]  @relation("PayrollRunPayFrom")
+  payrollRunLiability       PayrollRun[]  @relation("PayrollRunLiability")
+  salaryRuleExpense         SalaryRule[]  @relation("SalaryRuleExpense")
+  salaryRuleLiability       SalaryRule[]  @relation("SalaryRuleLiability")
+  advanceAccounts           EmployeeAdvance[] @relation("AdvanceAccount")
+  endOfServiceExpense       EndOfService[] @relation("EndOfServiceExpense")
+  endOfServicePay           EndOfService[] @relation("EndOfServicePay")
+  fixedAssetCostAccounts    FixedAssetCategory[] @relation("FixedAssetCostAccount")
+  fixedAssetAccumAccounts   FixedAssetCategory[] @relation("FixedAssetAccumAccount")
+  fixedAssetExpenseAccounts FixedAssetCategory[] @relation("FixedAssetExpenseAccount")
+  shareholderCapitalAccounts Shareholder[] @relation("ShareholderCapitalAccount")
+  equityEventBanks          EquityEvent[] @relation("EquityEventBank")
+  equityEventEquityAccounts EquityEvent[] @relation("EquityEventEquity")
 
   @@unique([orgId, code])
   @@unique([orgId, systemKey])
@@ -1278,6 +1356,11 @@ model Journal {
   isAdjusting    Boolean       @default(false)
   isClosingEntry Boolean       @default(false)
 
+  /// When set on a posted manual accrual, a mirror journal is written dated the
+  /// first day of the next accounting period (Phase 11.8). The flag stays on the
+  /// original for display; the reversal is the ordinary `reversedBy` row.
+  autoReverse Boolean @default(false)
+
   /// Set on a reversing journal, pointing at what it reverses. Unique, because a
   /// journal may be reversed exactly once — the back-relation `reversedBy` reads
   /// it from the other side.
@@ -1320,7 +1403,11 @@ model Journal {
   files LedgerFile[]
   posCashMovements PosCashMovement[]
   posSessionCloses PosSession[] @relation("PosSessionCloseJournal")
-  payrollRun       PayrollRun?
+  payrollRun            PayrollRun? @relation("PayrollRunAccrual")
+  payrollRunSettlement  PayrollRun? @relation("PayrollRunSettlement")
+  endOfService          EndOfService?
+  fixedAssetDepreciations FixedAssetDepreciation[]
+  equityEvents            EquityEvent[]
 
   reversalOf Journal? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedBy Journal? @relation("JournalReversal")
@@ -1368,6 +1455,10 @@ model JournalLine {
   customerId String?
   vendorId   String?
 
+  /// Optional class (QuickBooks language). One tracking dimension so a profit
+  /// and loss can split income and expense by shop, site, or department.
+  trackingCategoryId String?
+
   /// Foreign-currency amounts, unused until multi-currency lands (ADR-0006).
   foreignDebit  Decimal? @db.Decimal(19, 4)
   foreignCredit Decimal? @db.Decimal(19, 4)
@@ -1378,6 +1469,7 @@ model JournalLine {
   account  LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
   customer Customer?     @relation(fields: [customerId], references: [id], onDelete: Restrict)
   vendor   Vendor?       @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  trackingCategory TrackingCategory? @relation(fields: [trackingCategoryId], references: [id], onDelete: Restrict)
 
   /// Whether this line has been reconciled is recorded in a separate table, not
   /// as a column here. A posted line is immutable (R4), and marking it cleared
@@ -1404,7 +1496,34 @@ model JournalLine {
   @@index([journalId])
   @@index([orgId, customerId])
   @@index([orgId, vendorId])
+  @@index([orgId, trackingCategoryId])
   @@map("journal_lines")
+}
+
+/// One optional reporting dimension (class / location / department).
+///
+/// QuickBooks calls this a Class. It is not a second ledger and not a project:
+/// a name a journal line can carry so profit and loss can be read by shop.
+model TrackingCategory {
+  id    String @id @default(cuid())
+  orgId String
+
+  name     String
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  journalLines      JournalLine[]
+  salesDocuments    SalesDocument[]
+  purchaseDocuments PurchaseDocument[]
+
+  @@unique([orgId, name])
+  /// Target for the composite foreign keys that keep a class inside its company.
+  @@unique([id, orgId])
+  @@index([orgId, isActive])
+  @@map("tracking_categories")
 }
 
 // ---------------------------------------------------------------------------
@@ -1481,6 +1600,12 @@ model Customer {
   /// Informational in Phase 3; Phase 4 warns when an invoice would exceed it.
   creditLimit   Decimal? @db.Decimal(19, 4)
 
+  /// Prefer this currency on new sales. Null means the organisation base (ADR-0006).
+  currencyCode String? @db.Char(3)
+
+  /// Retail uses the item sales price. Wholesale uses wholesale price when the item has one.
+  priceLevel CustomerPriceLevel @default(RETAIL)
+
   notes    String?
   /// Printed on the invoice as Sales person. The person who looks after this customer.
   salesPerson String?
@@ -1511,8 +1636,13 @@ model Customer {
   posRegisters  PosRegister[]
   /// Expenses settled by reducing what this customer owes (or building a credit).
   offsetPurchases PurchaseDocument[] @relation("PurchaseOffsetCustomer")
+  /// Purchase lines marked to recharge on a later invoice (Phase 11.5).
+  billablePurchaseLines PurchaseDocumentLine[] @relation("BillableExpenseCustomer")
   portalUsers  CustomerPortalUser[]
   projects     Project[]
+  appointments Appointment[]
+  crmOpportunities CrmOpportunity[]
+  crmActivities    CrmActivity[]
 
   /// Same trading party on the purchase side (e.g. Mall Group as customer and supplier).
   /// One customer ↔ one vendor. Cleared if the vendor is removed.
@@ -1543,6 +1673,12 @@ model CustomerPortalUser {
   @@unique([orgId, userId])
   @@index([orgId, customerId])
   @@map("customer_portal_users")
+}
+
+/// Which list price a customer is charged. Retail is the item sales price.
+enum CustomerPriceLevel {
+  RETAIL
+  WHOLESALE
 }
 
 /// A portrait or a debt-agreement paper kept with the customer who was registered.
@@ -1598,6 +1734,9 @@ model Vendor {
   /// Pre-selected on a bill, so routine spending is categorised the same way
   /// every time instead of landing in Uncategorised Expense.
   defaultExpenseAccountId String?
+
+  /// Prefer this currency on new bills. Null means the organisation base (ADR-0006).
+  currencyCode String? @db.Char(3)
 
   notes    String?
   isActive Boolean @default(true)
@@ -1680,6 +1819,8 @@ model Item {
 
   salesDescription String?
   salesPrice       Decimal? @db.Decimal(19, 4)
+  /// Charged instead of the sales price when the customer is wholesale and this is set.
+  wholesalePrice   Decimal? @db.Decimal(19, 4)
   incomeAccountId  String?
   isTaxable        Boolean  @default(true)
   salesTaxCodeId   String?
@@ -1741,6 +1882,7 @@ model Item {
   deliveryNoteLines DeliveryNoteLine[]
   bomParents       ItemComponent[] @relation("ItemBomParent")
   bomChildren      ItemComponent[] @relation("ItemBomChild")
+  pickTasks        PickTask[]
 
   @@unique([orgId, name])
   @@unique([orgId, sku])
@@ -1811,6 +1953,8 @@ model Store {
   assemblyBuilds AssemblyBuild[]
   adjustments  InventoryAdjustment[]
   posRegisters  PosRegister[]
+  bins          StockBin[]
+  pickTasks     PickTask[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
@@ -2168,6 +2312,7 @@ model Project {
   salesDocuments    SalesDocument[]
   purchaseDocuments PurchaseDocument[]
   tasks             ProjectTask[]
+  timeEntries       ProjectTimeEntry[]
 
   @@unique([orgId, number])
   @@unique([id, orgId])
@@ -2199,10 +2344,43 @@ model ProjectTask {
   project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   assignee     User?        @relation("ProjectTaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   createdBy    User?        @relation("ProjectTaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  timeEntries  ProjectTimeEntry[]
 
   @@index([orgId, projectId, stage, sequence])
   @@index([orgId, assigneeId, stage])
   @@map("project_tasks")
+}
+
+/// Hours worked on a project, optionally billable onto a later invoice.
+model ProjectTimeEntry {
+  id        String @id @default(cuid())
+  orgId     String
+  projectId String
+  taskId    String?
+
+  userId String
+  workDate DateTime @db.Date
+  hours    Decimal  @db.Decimal(19, 4)
+  description String?
+
+  billable     Boolean  @default(true)
+  /// Charge-out rate in organisation base currency (per hour).
+  billableRate Decimal? @db.Decimal(19, 4)
+
+  /// When set, this entry was pulled onto an invoice line and must not be billed again.
+  invoicedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task         ProjectTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  user         User         @relation("ProjectTimeEntryUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([orgId, projectId, workDate(sort: Desc)])
+  @@index([orgId, billable, invoicedAt])
+  @@map("project_time_entries")
 }
 
 /// Company asks the ERP system owner for apps beyond the current grant.
@@ -2326,11 +2504,16 @@ model SalesDocument {
   /// Bumped on every re-post, so the audit trail can be read in order.
   version   Int    @default(1)
 
-  /// Set on the invoice or sales receipt an estimate, quotation, or sales order became.
-  convertedFromId String? @unique
+  /// Set on an invoice (or receipt) raised from an estimate, quotation, or sales
+  /// order. Not unique: progress invoicing allows several invoices per source
+  /// (Phase 11.4), mirroring many bills per purchase order.
+  convertedFromId String?
 
   /// Optional job this sale belongs to (Projects app).
   projectId String?
+
+  /// Optional class. Stamped onto every journal line when the document posts.
+  trackingCategoryId String?
 
   voidedAt   DateTime? @db.Timestamptz(6)
   voidReason String?
@@ -2351,10 +2534,11 @@ model SalesDocument {
   depositAccount LedgerAccount?      @relation("SalesDepositAccount", fields: [depositAccountId], references: [id], onDelete: Restrict)
   journal        Journal?            @relation(fields: [journalId], references: [id], onDelete: Restrict)
   project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  trackingCategory TrackingCategory? @relation(fields: [trackingCategoryId], references: [id], onDelete: SetNull)
   lines          SalesDocumentLine[]
 
-  convertedFrom SalesDocument? @relation("EstimateConversion", fields: [convertedFromId], references: [id], onDelete: SetNull)
-  convertedTo   SalesDocument? @relation("EstimateConversion")
+  convertedFrom SalesDocument?  @relation("EstimateConversion", fields: [convertedFromId], references: [id], onDelete: SetNull)
+  convertedTo   SalesDocument[] @relation("EstimateConversion")
 
   /// Applications *against* this document — what has settled it.
   applications    SalesApplication[] @relation("AppliedToInvoice")
@@ -2373,6 +2557,7 @@ model SalesDocument {
   @@index([orgId, projectId, date(sort: Desc)])
   @@index([orgId, dueDate])
   @@index([orgId, deletedAt])
+  @@index([convertedFromId])
   @@map("sales_documents")
 }
 
@@ -2388,6 +2573,11 @@ model SalesDocumentLine {
 
   quantity  Decimal @default(1) @db.Decimal(19, 4)
   unitPrice Decimal @default(0) @db.Decimal(19, 4)
+
+  /// How much of this line has been invoiced. Meaningful on estimates,
+  /// quotations, and sales orders — the only writers are progress-invoice
+  /// and delete/restore (Phase 11.4), mirroring `quantityReceived` on POs.
+  quantityInvoiced Decimal @default(0) @db.Decimal(19, 4)
 
   /// Line-level discount, taken off before tax.
   discountPercent Decimal? @db.Decimal(9, 4)
@@ -2408,11 +2598,15 @@ model SalesDocumentLine {
 
   serviceDate DateTime? @db.Date
 
+  /// When this invoice line recharged a purchase cost (Phase 11.5).
+  sourcePurchaseLineId String? @unique
+
   document      SalesDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
   item          Item?          @relation(fields: [itemId], references: [id], onDelete: Restrict)
   taxCode       TaxCode?       @relation(fields: [taxCodeId], references: [id], onDelete: Restrict)
   incomeAccount LedgerAccount? @relation("SalesLineIncome", fields: [incomeAccountId], references: [id], onDelete: Restrict)
   store         Store?         @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  sourcePurchaseLine PurchaseDocumentLine? @relation("BillableExpenseInvoice", fields: [sourcePurchaseLineId], references: [id], onDelete: SetNull)
 
   @@unique([documentId, lineNumber])
   @@index([orgId, itemId])
@@ -2569,6 +2763,9 @@ model PurchaseDocument {
   /// Optional job this purchase belongs to (Projects app).
   projectId String?
 
+  /// Optional class. Stamped onto every journal line when the document posts.
+  trackingCategoryId String?
+
   voidedAt   DateTime? @db.Timestamptz(6)
   voidReason String?
 
@@ -2589,6 +2786,7 @@ model PurchaseDocument {
   offsetCustomer Customer?              @relation("PurchaseOffsetCustomer", fields: [offsetCustomerId], references: [id], onDelete: Restrict)
   journal        Journal?               @relation(fields: [journalId], references: [id], onDelete: Restrict)
   project        Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  trackingCategory TrackingCategory?    @relation(fields: [trackingCategoryId], references: [id], onDelete: SetNull)
   lines          PurchaseDocumentLine[]
 
   convertedFrom PurchaseDocument?  @relation("OrderConversion", fields: [convertedFromId], references: [id], onDelete: SetNull)
@@ -2648,14 +2846,23 @@ model PurchaseDocumentLine {
   /// The store this line is received into, or returned from.
   storeId String?
 
+  /// Customer to recharge this cost on a later invoice (Phase 11.5). Mutually
+  /// exclusive with document-level `offsetCustomerId` (pay-from-AR now).
+  billableCustomerId String?
+  /// Unit price when pulled onto an invoice; defaults to the cost line amount.
+  billableUnitPrice  Decimal? @db.Decimal(19, 4)
+
   document        PurchaseDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   item            Item?            @relation(fields: [itemId], references: [id], onDelete: Restrict)
   taxCode         TaxCode?         @relation(fields: [taxCodeId], references: [id], onDelete: Restrict)
   expenseAccount  LedgerAccount?   @relation("PurchaseLineExpense", fields: [expenseAccountId], references: [id], onDelete: Restrict)
   store           Store?           @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  billableCustomer Customer?       @relation("BillableExpenseCustomer", fields: [billableCustomerId], references: [id], onDelete: SetNull)
+  billedInvoiceLine SalesDocumentLine? @relation("BillableExpenseInvoice")
 
   @@unique([documentId, lineNumber])
   @@index([orgId, itemId])
+  @@index([orgId, billableCustomerId])
   @@map("purchase_document_lines")
 }
 
@@ -3664,6 +3871,34 @@ enum PayrollRunStatus {
   POSTED
 }
 
+enum PayMethod {
+  CASH
+  BANK
+  MOBILE
+}
+
+enum PayrollPayMode {
+  IMMEDIATE
+  ACCRUE
+}
+
+enum SalaryCalc {
+  BASE
+  FIXED
+  PERCENT
+}
+
+enum SalaryRuleKind {
+  EARNING
+  DEDUCTION
+  EMPLOYER
+}
+
+enum AdvanceKind {
+  LOAN
+  ADVANCE
+}
+
 enum PayslipLineKind {
   EARNING
   DEDUCTION
@@ -3681,6 +3916,12 @@ enum EmployeeDocumentKind {
   ID
   CERTIFICATE
   OTHER
+}
+
+enum EmployeeLifecycleStatus {
+  DRAFT
+  ACTIVE
+  LEFT
 }
 
 /// Company people directory (Odoo Employees-style). Not login/access — that is Membership.
@@ -3714,6 +3955,8 @@ model Employee {
 
   notes  String?
   active Boolean @default(true)
+  /// Payroll and planning use ACTIVE only; LEFT cannot be added to new runs.
+  lifecycleStatus EmployeeLifecycleStatus @default(ACTIVE)
 
   employmentType EmploymentType @default(EMPLOYEE)
   hiredAt        DateTime?      @db.Date
@@ -3729,6 +3972,11 @@ model Employee {
   wageAmount        Decimal  @default(0) @db.Decimal(19, 4)
   expenseAccountId  String?
   payableAccountId  String?
+  /// Where this person's net pay is credited when the run pays immediately.
+  payMethod         PayMethod @default(CASH)
+  payAccountId      String?
+  /// Optional salary structure. Empty means the card wage alone.
+  structureId       String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -3739,18 +3987,27 @@ model Employee {
   reports        Employee[]    @relation("EmployeeManager")
   expenseAccount LedgerAccount? @relation("EmployeeWageExpense", fields: [expenseAccountId], references: [id], onDelete: Restrict)
   payableAccount LedgerAccount? @relation("EmployeeWagePayable", fields: [payableAccountId], references: [id], onDelete: Restrict)
+  payAccount     LedgerAccount? @relation("EmployeePayAccount", fields: [payAccountId], references: [id], onDelete: Restrict)
+  structure      SalaryStructure? @relation(fields: [structureId], references: [id], onDelete: SetNull)
 
   leaveAllocations LeaveAllocation[]
   leaveRequests    LeaveRequest[]
   attendanceDays   AttendanceDay[]
   payslips         Payslip[]
+  advances         EmployeeAdvance[]
+  endOfService     EndOfService[]
   contracts        EmployeeContract[]
   documents        EmployeeDocument[]
   deviceUsers      AttendanceDeviceUser[]
   punches          AttendancePunch[]
+  applicants       Applicant[]
+  appraisals       Appraisal[]
+  planningAssignments PlanningAssignment[]
+  trainingEnrollments TrainingEnrollment[]
 
   @@unique([orgId, userId])
   @@index([orgId, active])
+  @@index([orgId, lifecycleStatus])
   @@index([orgId, name])
   @@index([orgId, managerId])
   @@index([orgId, department])
@@ -4084,16 +4341,27 @@ model PayrollRun {
   status     PayrollRunStatus @default(DRAFT)
   journalId  String?          @unique
   postedAt   DateTime?        @db.Timestamptz(6)
+  /// When payMode was ACCRUE: journal that pays the payable (Dr payable, Cr bank/cash).
+  settlementJournalId String? @unique
+  paidAt              DateTime? @db.Timestamptz(6)
   /// Bank / cash (or payable) credited when posting.
   payFromAccountId String?
+  /// IMMEDIATE credits the pay account. ACCRUE credits wages payable.
+  payMode PayrollPayMode @default(IMMEDIATE)
+  /// Draft is waiting for Approve & post. Cleared when the journal is posted or withdrawn.
+  awaitingApproval Boolean @default(false)
+  /// Credit for deductions and employer costs that have no account of their own.
+  liabilityAccountId String?
 
   createdById String?
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
   organization   Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  journal        Journal?      @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  journal        Journal?      @relation("PayrollRunAccrual", fields: [journalId], references: [id], onDelete: Restrict)
+  settlementJournal Journal?   @relation("PayrollRunSettlement", fields: [settlementJournalId], references: [id], onDelete: Restrict)
   payFromAccount LedgerAccount? @relation("PayrollRunPayFrom", fields: [payFromAccountId], references: [id], onDelete: Restrict)
+  liabilityAccount LedgerAccount? @relation("PayrollRunLiability", fields: [liabilityAccountId], references: [id], onDelete: Restrict)
   createdBy      User?         @relation("PayrollRunCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   payslips       Payslip[]
 
@@ -4110,7 +4378,17 @@ model Payslip {
 
   gross       Decimal @db.Decimal(19, 4)
   deductions  Decimal @db.Decimal(19, 4)
+  employer    Decimal @default(0) @db.Decimal(19, 4)
   net         Decimal @db.Decimal(19, 4)
+  /// PS-00001. Null on runs created before standard payroll.
+  number    String?
+  /// Excluded slips stay on the draft and are left out of the journal.
+  included  Boolean @default(true)
+  /// When set, recompute uses these instead of attendance for the period.
+  workedDaysOverride       Int?
+  workedHoursOverride      Decimal? @db.Decimal(19, 4)
+  /// When set, replaces the calculated OT line amount (0 removes OT).
+  overtimeAmountOverride   Decimal? @db.Decimal(19, 4)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -4119,8 +4397,10 @@ model Payslip {
   run          PayrollRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
   employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   lines        PayslipLine[]
+  recoveries   AdvanceRecovery[]
 
   @@unique([runId, employeeId])
+  @@unique([orgId, number])
   @@index([orgId, employeeId])
   @@map("payslips")
 }
@@ -4135,12 +4415,140 @@ model PayslipLine {
   amount Decimal         @db.Decimal(19, 4)
   kind   PayslipLineKind
   sortOrder Int @default(0)
+  /// Employer cost: shown on the slip, omitted from net pay.
+  affectsNet Boolean @default(true)
+  expenseAccountId   String?
+  liabilityAccountId String?
+  /// Set on an ADVANCE line so posting can reduce that balance.
+  advanceId String?
 
   payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
 
   @@index([payslipId, sortOrder])
   @@index([orgId])
   @@map("payslip_lines")
+}
+
+/// Reusable pay components (basic, housing, transport, employer pension).
+model SalaryStructure {
+  id     String @id @default(cuid())
+  orgId  String
+  name   String
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  rules        SalaryRule[]
+  employees    Employee[]
+
+  @@unique([orgId, name])
+  @@index([orgId, active])
+  @@map("salary_structures")
+}
+
+model SalaryRule {
+  id          String @id @default(cuid())
+  orgId       String
+  structureId String
+
+  code String
+  name String
+  kind SalaryRuleKind
+  calc SalaryCalc
+  /// Fixed amount, or a percent when calc is PERCENT. Ignored for BASE.
+  amount Decimal @default(0) @db.Decimal(19, 4)
+  expenseAccountId   String?
+  liabilityAccountId String?
+  sortOrder Int @default(0)
+
+  structure          SalaryStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  organization       Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  expenseAccount     LedgerAccount?  @relation("SalaryRuleExpense", fields: [expenseAccountId], references: [id], onDelete: Restrict)
+  liabilityAccount   LedgerAccount?  @relation("SalaryRuleLiability", fields: [liabilityAccountId], references: [id], onDelete: Restrict)
+
+  @@unique([structureId, code])
+  @@index([orgId, structureId])
+  @@map("salary_rules")
+}
+
+/// Loan or salary advance recovered on each payroll run.
+model EmployeeAdvance {
+  id         String @id @default(cuid())
+  orgId      String
+  employeeId String
+
+  kind        AdvanceKind
+  label       String
+  principal   Decimal @db.Decimal(19, 4)
+  balance     Decimal @db.Decimal(19, 4)
+  installment Decimal @db.Decimal(19, 4)
+  /// Credited when a payslip recovers this balance (advance asset or liability).
+  accountId String?
+  active    Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  account      LedgerAccount? @relation("AdvanceAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  recoveries   AdvanceRecovery[]
+
+  @@index([orgId, employeeId, active])
+  @@map("employee_advances")
+}
+
+model AdvanceRecovery {
+  id        String @id @default(cuid())
+  orgId     String
+  advanceId String
+  payslipId String
+  amount    Decimal @db.Decimal(19, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  advance      EmployeeAdvance @relation(fields: [advanceId], references: [id], onDelete: Cascade)
+  payslip      Payslip         @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+
+  @@unique([advanceId, payslipId])
+  @@index([orgId, payslipId])
+  @@map("advance_recoveries")
+}
+
+/// Gratuity when someone leaves. One month of wage per year is the default rate.
+model EndOfService {
+  id         String @id @default(cuid())
+  orgId      String
+  employeeId String
+
+  asOf          DateTime @db.Date
+  years         Decimal  @db.Decimal(19, 4)
+  monthlyWage   Decimal  @db.Decimal(19, 4)
+  monthsPerYear Decimal  @db.Decimal(19, 4)
+  amount        Decimal  @db.Decimal(19, 4)
+  memo          String?
+  status        PayrollRunStatus @default(DRAFT)
+  journalId     String?          @unique
+  expenseAccountId String?
+  payAccountId     String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization   Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  employee       Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  journal        Journal?      @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  expenseAccount LedgerAccount? @relation("EndOfServiceExpense", fields: [expenseAccountId], references: [id], onDelete: Restrict)
+  payAccount     LedgerAccount? @relation("EndOfServicePay", fields: [payAccountId], references: [id], onDelete: Restrict)
+  createdBy      User?         @relation("EndOfServiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status])
+  @@index([orgId, employeeId])
+  @@map("end_of_service")
 }
 
 /// Named budget covering a date range (QBD-style Budget vs Actual).
@@ -4372,4 +4780,638 @@ model LedgerFile {
   @@index([orgId, purchaseDocumentId])
   @@index([orgId, salesDocumentId])
   @@map("ledger_files")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 13–16 — fixed assets, equity register, HRIS lite, collab apps
+// ---------------------------------------------------------------------------
+
+enum FixedAssetStatus {
+  ACTIVE
+  DISPOSED
+}
+
+model FixedAssetCategory {
+  id    String @id @default(cuid())
+  orgId String
+
+  name              String
+  usefulLifeMonths  Int      @db.SmallInt
+  assetAccountId    String
+  accumDepAccountId String
+  expenseAccountId  String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization    Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assetAccount    LedgerAccount @relation("FixedAssetCostAccount", fields: [assetAccountId], references: [id], onDelete: Restrict)
+  accumDepAccount LedgerAccount @relation("FixedAssetAccumAccount", fields: [accumDepAccountId], references: [id], onDelete: Restrict)
+  expenseAccount  LedgerAccount @relation("FixedAssetExpenseAccount", fields: [expenseAccountId], references: [id], onDelete: Restrict)
+  assets          FixedAsset[]
+
+  @@unique([orgId, name])
+  @@map("fixed_asset_categories")
+}
+
+model FixedAsset {
+  id         String @id @default(cuid())
+  orgId      String
+  categoryId String
+
+  number           String
+  name             String
+  acquiredOn       DateTime @db.Date
+  cost             Decimal  @db.Decimal(19, 4)
+  salvageValue     Decimal  @default(0) @db.Decimal(19, 4)
+  usefulLifeMonths Int      @db.SmallInt
+  status           FixedAssetStatus @default(ACTIVE)
+
+  accumulatedDepreciation Decimal @default(0) @db.Decimal(19, 4)
+  lastDepreciatedThrough  DateTime? @db.Date
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  category     FixedAssetCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  depreciations FixedAssetDepreciation[]
+
+  @@unique([orgId, number])
+  @@index([orgId, status])
+  @@map("fixed_assets")
+}
+
+model FixedAssetDepreciation {
+  id      String @id @default(cuid())
+  orgId   String
+  assetId String
+
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  amount      Decimal  @db.Decimal(19, 4)
+  journalId   String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  asset        FixedAsset   @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  journal      Journal?     @relation(fields: [journalId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, assetId, periodEnd])
+  @@map("fixed_asset_depreciations")
+}
+
+model Shareholder {
+  id    String @id @default(cuid())
+  orgId String
+
+  name             String
+  shares           Decimal @default(0) @db.Decimal(19, 4)
+  ownershipPercent Decimal @default(0) @db.Decimal(9, 4)
+  capitalAccountId String?
+  notes            String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization   Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  capitalAccount LedgerAccount? @relation("ShareholderCapitalAccount", fields: [capitalAccountId], references: [id], onDelete: SetNull)
+  equityEvents   EquityEvent[]
+
+  @@index([orgId, name])
+  @@map("shareholders")
+}
+
+enum EquityEventKind {
+  CONTRIBUTION
+  DRAW
+  DIVIDEND
+}
+
+model EquityEvent {
+  id             String @id @default(cuid())
+  orgId          String
+  shareholderId  String?
+
+  kind      EquityEventKind
+  date      DateTime @db.Date
+  amount    Decimal  @db.Decimal(19, 4)
+  memo      String?
+  bankAccountId String
+  equityAccountId String
+  journalId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  shareholder   Shareholder? @relation(fields: [shareholderId], references: [id], onDelete: SetNull)
+  bankAccount   LedgerAccount @relation("EquityEventBank", fields: [bankAccountId], references: [id], onDelete: Restrict)
+  equityAccount LedgerAccount @relation("EquityEventEquity", fields: [equityAccountId], references: [id], onDelete: Restrict)
+  journal       Journal?      @relation(fields: [journalId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, date(sort: Desc)])
+  @@map("equity_events")
+}
+
+enum JobOpeningStatus {
+  OPEN
+  FILLED
+  CANCELLED
+}
+
+model JobOpening {
+  id    String @id @default(cuid())
+  orgId String
+
+  title       String
+  department  String?
+  description String?
+  status      JobOpeningStatus @default(OPEN)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  applicants   Applicant[]
+
+  @@index([orgId, status])
+  @@map("job_openings")
+}
+
+enum ApplicantStatus {
+  NEW
+  SCREENING
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+}
+
+model Applicant {
+  id           String @id @default(cuid())
+  orgId        String
+  jobOpeningId String
+
+  name   String
+  email  String?
+  phone  String?
+  notes  String?
+  status ApplicantStatus @default(NEW)
+  employeeId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  jobOpening   JobOpening   @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
+  employee     Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, jobOpeningId, status])
+  @@map("applicants")
+}
+
+model Appraisal {
+  id         String @id @default(cuid())
+  orgId      String
+  employeeId String
+
+  periodLabel String
+  score       Decimal? @db.Decimal(5, 2)
+  notes       String?
+  /// Written goals for the period.
+  goals       String?
+  /// JSON map skill → score (0–100).
+  competencies Json?
+  reviewedAt  DateTime? @db.Date
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, employeeId])
+  @@map("appraisals")
+}
+
+model DiscussChannel {
+  id    String @id @default(cuid())
+  orgId String
+
+  name        String
+  description String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  messages     DiscussMessage[]
+
+  @@unique([orgId, name])
+  @@map("discuss_channels")
+}
+
+model DiscussMessage {
+  id        String @id @default(cuid())
+  orgId     String
+  channelId String
+  authorId  String
+  parentId  String?
+
+  body     String
+  pinnedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  channel      DiscussChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author       User           @relation("DiscussMessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  parent       DiscussMessage?  @relation("DiscussThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      DiscussMessage[] @relation("DiscussThread")
+
+  @@index([orgId, channelId, createdAt(sort: Desc)])
+  @@index([orgId, parentId])
+  @@map("discuss_messages")
+}
+
+model AppointmentType {
+  id    String @id @default(cuid())
+  orgId String
+
+  name         String
+  durationMins Int @default(30) @db.SmallInt
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@unique([orgId, name])
+  @@map("appointment_types")
+}
+
+enum AppointmentStatus {
+  BOOKED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model Appointment {
+  id     String @id @default(cuid())
+  orgId  String
+  typeId String
+
+  status      AppointmentStatus @default(BOOKED)
+  startsAt    DateTime @db.Timestamptz(6)
+  endsAt      DateTime @db.Timestamptz(6)
+  customerId  String?
+  guestName   String?
+  guestEmail  String?
+  notes       String?
+  calendarEventId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  type         AppointmentType @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  customer     Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, startsAt])
+  @@index([orgId, status])
+  @@map("appointments")
+}
+
+enum SignRequestStatus {
+  DRAFT
+  SENT
+  SIGNED
+  DECLINED
+  CANCELLED
+}
+
+model SignRequest {
+  id    String @id @default(cuid())
+  orgId String
+
+  title          String
+  status         SignRequestStatus @default(DRAFT)
+  token          String? @unique
+  message        String?
+  storageKey     String?
+  originalName   String?
+  signerName     String?
+  signerEmail    String?
+  signatureData  String?
+  signedAt       DateTime? @db.Timestamptz(6)
+  declinedAt     DateTime? @db.Timestamptz(6)
+  declineReason  String?
+  cancelledAt    DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status])
+  @@map("sign_requests")
+}
+
+enum SurveyStatus {
+  OPEN
+  CLOSED
+}
+
+model Survey {
+  id    String @id @default(cuid())
+  orgId String
+
+  title       String
+  description String?
+  status      SurveyStatus @default(OPEN)
+  /// JSON array of { id, label, type: text|choice|score, options? }
+  questions   Json
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  responses    SurveyResponse[]
+
+  @@index([orgId, updatedAt(sort: Desc)])
+  @@index([orgId, status])
+  @@map("surveys")
+}
+
+model SurveyResponse {
+  id       String @id @default(cuid())
+  orgId    String
+  surveyId String
+
+  respondent String?
+  /// JSON map questionId → answer
+  answers    Json
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  survey       Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, surveyId])
+  @@map("survey_responses")
+}
+
+/// Hours a person is booked onto a task for a calendar day (Planning app).
+model PlanningAssignment {
+  id         String @id @default(cuid())
+  orgId      String
+  employeeId String
+  taskId     String?
+
+  workDate DateTime @db.Date
+  hours    Decimal  @default(0) @db.Decimal(19, 4)
+  notes    String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, workDate])
+  @@index([orgId, employeeId, workDate])
+  @@map("planning_assignments")
+}
+
+enum CrmOpportunityStage {
+  LEAD
+  QUALIFIED
+  PROPOSAL
+  WON
+  LOST
+}
+
+model CrmOpportunity {
+  id         String @id @default(cuid())
+  orgId      String
+  customerId String
+
+  title         String
+  amount        Decimal? @db.Decimal(19, 4)
+  stage         CrmOpportunityStage @default(LEAD)
+  expectedClose DateTime? @db.Date
+  notes         String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  activities   CrmActivity[]
+
+  @@index([orgId, stage, updatedAt(sort: Desc)])
+  @@index([orgId, customerId])
+  @@map("crm_opportunities")
+}
+
+enum CrmActivityKind {
+  CALL
+  EMAIL
+  MEETING
+  TASK
+  NOTE
+}
+
+model CrmActivity {
+  id             String @id @default(cuid())
+  orgId          String
+  customerId     String
+  opportunityId  String?
+  createdById    String?
+
+  kind    CrmActivityKind @default(NOTE)
+  subject String
+  dueAt   DateTime? @db.Timestamptz(6)
+  doneAt  DateTime? @db.Timestamptz(6)
+  notes   String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  opportunity  CrmOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  createdBy    User?           @relation("CrmActivityCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, customerId, dueAt])
+  @@index([orgId, doneAt])
+  @@map("crm_activities")
+}
+
+enum FxHedgeKind {
+  CASH_FLOW
+  FAIR_VALUE
+}
+
+enum FxHedgeStatus {
+  OPEN
+  SETTLED
+  CANCELLED
+}
+
+/// IFRS 9 / IAS 39 hedge *documentation* on the books. Not a dealing desk.
+model FxHedge {
+  id    String @id @default(cuid())
+  orgId String
+
+  kind   FxHedgeKind   @default(CASH_FLOW)
+  status FxHedgeStatus @default(OPEN)
+
+  currencyCode String
+  contractRate Decimal  @db.Decimal(19, 9)
+  notional     Decimal  @db.Decimal(19, 4)
+  maturityDate DateTime @db.Date
+
+  risk        String
+  hedgedItem  String
+  instrument  String
+  counterpart String?
+  memo        String?
+
+  journalId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status, maturityDate])
+  @@map("fx_hedges")
+}
+
+enum KitchenTicketStatus {
+  OPEN
+  FIRED
+  READY
+  DONE
+}
+
+model KitchenTicket {
+  id    String @id @default(cuid())
+  orgId String
+
+  tableLabel String?
+  covers     Int     @default(1) @db.SmallInt
+  status     KitchenTicketStatus @default(OPEN)
+  /// JSON array of { name, qty }
+  lines      Json
+  notes      String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status, createdAt(sort: Desc)])
+  @@map("kitchen_tickets")
+}
+
+model StockBin {
+  id      String @id @default(cuid())
+  orgId   String
+  storeId String
+
+  code  String
+  name  String
+  notes String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  picks        PickTask[]
+
+  @@unique([storeId, code])
+  @@index([orgId, storeId])
+  @@map("stock_bins")
+}
+
+enum PickTaskStatus {
+  OPEN
+  PICKING
+  PICKED
+  CANCELLED
+}
+
+model PickTask {
+  id      String @id @default(cuid())
+  orgId   String
+  storeId String
+  binId   String?
+  itemId  String
+
+  qty    Decimal         @db.Decimal(19, 4)
+  status PickTaskStatus  @default(OPEN)
+  notes  String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  bin          StockBin?    @relation(fields: [binId], references: [id], onDelete: SetNull)
+  item         Item         @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([orgId, status, createdAt])
+  @@index([orgId, storeId])
+  @@map("pick_tasks")
+}
+
+model TrainingCourse {
+  id    String @id @default(cuid())
+  orgId String
+
+  title       String
+  hours       Decimal @default(0) @db.Decimal(19, 4)
+  description String?
+  active      Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  enrollments  TrainingEnrollment[]
+
+  @@index([orgId, active])
+  @@map("training_courses")
+}
+
+enum TrainingEnrollmentStatus {
+  ENROLLED
+  COMPLETED
+  FAILED
+}
+
+model TrainingEnrollment {
+  id         String @id @default(cuid())
+  orgId      String
+  courseId   String
+  employeeId String
+
+  status      TrainingEnrollmentStatus @default(ENROLLED)
+  completedAt DateTime? @db.Timestamptz(6)
+  notes       String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  course       TrainingCourse  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  employee     Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, employeeId])
+  @@index([orgId, status])
+  @@map("training_enrollments")
 }

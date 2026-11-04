@@ -8,6 +8,9 @@ import { cuid, deleteRecordSchema } from '@/lib/validation/common'
 import {
   depositSchema,
   createBankRuleSchema,
+  deleteBankRuleSchema,
+  setBankRuleActiveSchema,
+  updateBankRuleSchema,
   excludeTransactionSchema,
   finishReconciliationSchema,
   matchFeedBillSchema,
@@ -171,6 +174,45 @@ export const createBankRule = action
       customerId: input.customerId ?? null,
     })
     revalidatePath('/banking/import')
+    revalidatePath('/banking/rules')
+    return result
+  })
+
+export const updateBankRule = action
+  .requires('bank:import')
+  .input(updateBankRuleSchema)
+  .handler(async (ctx, input) => {
+    const result = await feedService.updateRule(ctx, input.id, {
+      name: input.name,
+      contains: input.contains,
+      accountId: input.accountId ?? null,
+      categoryAccountId: input.categoryAccountId,
+      vendorId: input.vendorId ?? null,
+      customerId: input.customerId ?? null,
+      active: input.active,
+    })
+    revalidatePath('/banking/import')
+    revalidatePath('/banking/rules')
+    return result
+  })
+
+export const setBankRuleActive = action
+  .requires('bank:import')
+  .input(setBankRuleActiveSchema)
+  .handler(async (ctx, input) => {
+    const result = await feedService.setRuleActive(ctx, input.id, input.active)
+    revalidatePath('/banking/import')
+    revalidatePath('/banking/rules')
+    return result
+  })
+
+export const deleteBankRule = action
+  .requires('bank:import')
+  .input(deleteBankRuleSchema)
+  .handler(async (ctx, input) => {
+    const result = await feedService.deleteRule(ctx, input.id)
+    revalidatePath('/banking/import')
+    revalidatePath('/banking/rules')
     return result
   })
 

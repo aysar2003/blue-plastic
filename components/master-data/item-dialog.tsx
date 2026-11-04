@@ -50,6 +50,7 @@ export type ItemValues = {
   unitOfMeasure?: string | null
   salesDescription?: string | null
   salesPrice?: string | null
+  wholesalePrice?: string | null
   incomeAccountId?: string | null
   isTaxable?: boolean
   salesTaxCodeId?: string | null
@@ -528,13 +529,25 @@ export function ItemDialog({
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Sales information
                 </p>
-                <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+                <div className="grid gap-4 sm:grid-cols-[10rem_10rem_1fr]">
                   <Field name="salesPrice" label={`Rate (${currency})`} error={e?.salesPrice}>
                     <Input
                       {...fieldProps('salesPrice', e?.salesPrice)}
                       inputMode="decimal"
                       className="tabular"
                       defaultValue={item?.salesPrice ?? ''}
+                    />
+                  </Field>
+                  <Field
+                    name="wholesalePrice"
+                    label={`Wholesale (${currency})`}
+                    error={e?.wholesalePrice}
+                  >
+                    <Input
+                      {...fieldProps('wholesalePrice', e?.wholesalePrice)}
+                      inputMode="decimal"
+                      className="tabular"
+                      defaultValue={item?.wholesalePrice ?? ''}
                     />
                   </Field>
                   <Field
@@ -781,13 +794,25 @@ export function ItemDialog({
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Selling
                 </p>
-                <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+                <div className="grid gap-4 sm:grid-cols-[10rem_10rem_1fr]">
                   <Field name="salesPrice" label={`Sales price (${currency})`} error={e?.salesPrice}>
                     <Input
                       {...fieldProps('salesPrice', e?.salesPrice)}
                       inputMode="decimal"
                       className="tabular"
                       defaultValue={item?.salesPrice ?? ''}
+                    />
+                  </Field>
+                  <Field
+                    name="wholesalePrice"
+                    label={`Wholesale (${currency})`}
+                    error={e?.wholesalePrice}
+                  >
+                    <Input
+                      {...fieldProps('wholesalePrice', e?.wholesalePrice)}
+                      inputMode="decimal"
+                      className="tabular"
+                      defaultValue={item?.wholesalePrice ?? ''}
                     />
                   </Field>
                   <Field

@@ -103,6 +103,16 @@ const STANDARD_RULES: ApprovalTemplateRule[] = [
     levels: 1,
     ...SOX,
   },
+  {
+    name: 'Payroll',
+    entityType: 'PAYROLL',
+    documentKind: null,
+    minAmount: '0',
+    maxAmount: null,
+    priority: 40,
+    levels: 1,
+    ...SOX,
+  },
 ]
 
 /** Same as standard, plus a second signer on invoices and bills of 1,000 or more. */

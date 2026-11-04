@@ -91,6 +91,7 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
   pos: [
     { label: 'Dashboard', href: '/pos', permission: 'pos:read' },
     { label: 'Orders', href: '/pos/orders', permission: 'pos:read' },
+    { label: 'Kitchen', href: '/pos/kitchen', permission: 'pos:read' },
     { label: 'Quotations', href: '/pos/quotations', permission: 'invoice:read' },
     { label: 'Sessions', href: '/pos/sessions', permission: 'pos:read' },
     { label: 'Configuration', href: '/pos/settings', permission: 'pos:manage' },
@@ -116,6 +117,8 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
   help: fromHub(HELP_HUB_APPS),
   customers: [
     { label: 'All customers', href: '/customers', permission: 'customer:read' },
+    { label: 'Pipeline', href: '/customers/pipeline', permission: 'customer:read' },
+    { label: 'Tickets', href: '/customers/tickets', permission: 'customer:read' },
     { label: 'Portal users', href: '/customers/portal-users', permission: 'customer:read' },
     { label: 'Reports', href: '/sales/reports', permission: 'report:read' },
   ],
@@ -148,6 +151,7 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
   ],
   databases: [
     { label: 'All databases', href: '/databases', permission: 'org:update' },
+    { label: 'Apps', href: '/databases/apps', permission: 'org:update' },
     { label: 'System users', href: '/databases/users', permission: 'org:update' },
     { label: 'Create company', href: '/databases?create=1', permission: 'org:update' },
     { label: 'Import backup', href: '/databases?import=1', permission: 'org:update' },

@@ -7,7 +7,12 @@ import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { ManualJournalInput } from '@/lib/validation/accounting'
 import { partyRequiredBy } from '@/lib/account-options'
 import { deleteJournals, restoreJournals } from '@/server/accounting/deletion'
-import { postJournal, promoteDraftJournal, reverseJournal } from '@/server/accounting/posting'
+import {
+  autoReversePostedJournal,
+  postJournal,
+  promoteDraftJournal,
+  reverseJournal,
+} from '@/server/accounting/posting'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { notFound, validation } from '@/server/errors'
@@ -18,6 +23,7 @@ import * as billPaymentService from '@/server/services/bill-payment.service'
 import * as inventoryService from '@/server/services/inventory.service'
 import { resolveSources, sourceFor, type JournalSource } from '@/server/services/journal-sources'
 import * as paymentService from '@/server/services/payment.service'
+import * as payrollService from '@/server/services/payroll.service'
 import * as purchaseService from '@/server/services/purchase.service'
 import * as salesService from '@/server/services/sales.service'
 
@@ -353,6 +359,7 @@ export async function get(ctx: OrgContext, id: string) {
       status: true,
       isAdjusting: true,
       isClosingEntry: true,
+      autoReverse: true,
       currencyCode: true,
       postedAt: true,
       deletedAt: true,
@@ -441,6 +448,7 @@ export async function createManual(ctx: OrgContext, input: ManualJournalInput) {
       description: line.description.trim() || null,
       customerId: line.customerId ?? null,
       vendorId: line.vendorId ?? null,
+      trackingCategoryId: line.trackingCategoryId ?? null,
     }))
     .filter((line) => line.accountId && (line.debit !== '' || line.credit !== ''))
 
@@ -507,6 +515,7 @@ export async function createManual(ctx: OrgContext, input: ManualJournalInput) {
   }
 
   await assertPartiesExist(ctx, lines)
+  await assertClassesExist(ctx, lines)
 
   const draftLines = lines.map((line) => ({
     accountId: line.accountId,
@@ -515,6 +524,7 @@ export async function createManual(ctx: OrgContext, input: ManualJournalInput) {
     description: line.description,
     customerId: line.customerId,
     vendorId: line.vendorId,
+    trackingCategoryId: line.trackingCategoryId,
   }))
   const total = draftLines.reduce((sum, line) => {
     const debit = line.debit === '' || line.debit === 0 ? ZERO : new Decimal(line.debit)
@@ -531,6 +541,7 @@ export async function createManual(ctx: OrgContext, input: ManualJournalInput) {
       journalNumber: input.number,
       sourceType: 'MANUAL',
       isAdjusting: input.isAdjusting,
+      autoReverse: input.autoReverse,
       asDraft: holdForApproval,
       lines: draftLines,
     })
@@ -545,6 +556,8 @@ export async function createManual(ctx: OrgContext, input: ManualJournalInput) {
         currencyCode: ctx.organization.baseCurrency,
         levels: gate.levels,
       })
+    } else if (input.autoReverse) {
+      await autoReversePostedJournal(tx, ctx, journal.id, journal.date)
     }
 
     return journal
@@ -573,6 +586,16 @@ async function assertPartiesExist(
 
   if (customers !== customerIds.length) throw notFound('Customer')
   if (vendors !== vendorIds.length) throw notFound('Vendor')
+}
+
+async function assertClassesExist(
+  ctx: OrgContext,
+  lines: { trackingCategoryId: string | null }[],
+) {
+  const ids = [...new Set(lines.map((line) => line.trackingCategoryId).filter(Boolean) as string[])]
+  if (ids.length === 0) return
+  const found = await db.trackingCategory.count({ where: { orgId: ctx.orgId, id: { in: ids } } })
+  if (found !== ids.length) throw notFound('Class')
 }
 
 /**
@@ -656,6 +679,8 @@ const OWNED_BY: Partial<
   DEPOSIT: (ctx, id, reason) => bankingService.removeDeposit(ctx, id, reason),
   INVENTORY_ADJUSTMENT: (ctx, id, reason) => inventoryService.removeAdjustment(ctx, id, reason),
   ASSEMBLY_BUILD: (ctx, id, reason) => assemblyBuildService.remove(ctx, id, reason),
+  PAYROLL: (ctx, id, reason) => payrollService.remove(ctx, id, reason),
+  PAYROLL_SETTLEMENT: (ctx, id, reason) => payrollService.unsettle(ctx, id, reason),
 }
 
 const RESTORED_BY: Partial<
@@ -677,6 +702,8 @@ const RESTORED_BY: Partial<
   DEPOSIT: (ctx, id) => bankingService.restoreDeposit(ctx, id),
   INVENTORY_ADJUSTMENT: (ctx, id) => inventoryService.restoreAdjustment(ctx, id),
   ASSEMBLY_BUILD: (ctx, id) => assemblyBuildService.restore(ctx, id),
+  PAYROLL: (ctx, id) => payrollService.restore(ctx, id),
+  PAYROLL_SETTLEMENT: (ctx, id) => payrollService.restoreSettlement(ctx, id),
 }
 
 export async function reverse(

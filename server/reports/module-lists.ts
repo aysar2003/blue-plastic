@@ -1300,7 +1300,7 @@ function openSalesPipeline(spec: {
           type: spec.type,
           status: { in: ['OPEN', 'PARTIAL', 'PENDING_APPROVAL', 'ACCEPTED'] },
           deletedAt: null,
-          convertedTo: { is: null },
+          convertedTo: { none: {} },
           date: { lte: toDate(input.asOf) },
           ...(input.filters?.customerId ? { customerId: input.filters.customerId } : {}),
         },

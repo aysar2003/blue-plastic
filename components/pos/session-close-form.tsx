@@ -37,6 +37,11 @@ export function SessionCloseForm({
   return (
     <div className="rounded-lg border border-border bg-muted/40 p-3">
       <p className="text-xs text-muted-foreground">Close session · {registerName}</p>
+      <ol className="mt-2 list-decimal space-y-1 pl-4 text-[0.6875rem] text-muted-foreground">
+        <li>Record any cash in / cash out moves for this register first.</li>
+        <li>Count the drawer and enter the counted cash below.</li>
+        <li>Close — over/short posts to the till difference accounts.</li>
+      </ol>
       <label className="mt-2 block text-xs text-muted-foreground">
         Closing cash ({currency})
         <input

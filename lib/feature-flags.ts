@@ -30,6 +30,11 @@ export type ModuleFlag =
   | 'documents'
   | 'knowledge'
   | 'employees'
+  | 'sign'
+  | 'appointments'
+  | 'discuss'
+  | 'planning'
+  | 'surveys'
   | 'databases'
 
 /** Ordered list for Apps & features and Databases → Limits. */
@@ -56,6 +61,11 @@ export const MODULE_FLAGS: readonly ModuleFlag[] = [
   'documents',
   'knowledge',
   'employees',
+  'sign',
+  'appointments',
+  'discuss',
+  'planning',
+  'surveys',
   'databases',
 ] as const
 
@@ -68,6 +78,11 @@ export const OPT_IN_MODULE_FLAGS: readonly ModuleFlag[] = [
   'documents',
   'knowledge',
   'employees',
+  'sign',
+  'appointments',
+  'discuss',
+  'planning',
+  'surveys',
 ] as const
 
 export const MODULE_FLAG_LABELS: Record<ModuleFlag, { label: string; hint: string }> = {
@@ -93,6 +108,11 @@ export const MODULE_FLAG_LABELS: Record<ModuleFlag, { label: string; hint: strin
   documents: { label: 'Documents', hint: 'Company file library' },
   knowledge: { label: 'Knowledge', hint: 'Internal wiki and how-tos' },
   employees: { label: 'Employees', hint: 'People, leave, attendance, and payroll' },
+  sign: { label: 'Sign', hint: 'Request signatures on documents' },
+  appointments: { label: 'Appointments', hint: 'Bookable slots and calendar events' },
+  discuss: { label: 'Discuss', hint: 'Team channels and messages' },
+  planning: { label: 'Planning', hint: 'Week grid from tasks and people' },
+  surveys: { label: 'Surveys', hint: 'Simple forms and responses' },
   databases: { label: 'Databases', hint: 'Companies and backups' },
 }
 
@@ -146,6 +166,18 @@ export type OrgFeatureFlags = {
    * checker posts them. POS till sales still post immediately.
    */
   enableDocumentApprovals: boolean
+  /**
+   * When on, posting an invoice past the customer credit limit asks for
+   * confirmation instead of hard-blocking. Off (default) keeps the hard refuse.
+   */
+  creditLimitWarn: boolean
+  /**
+   * Standard payroll (QuickBooks / Odoo style). When on, a run posts gross
+   * wages and deduction liabilities, prorates joiners, and opens structures,
+   * payslip PDF, loans, and end of service. When off, payroll stays the
+   * simple net-to-bank journal.
+   */
+  payrollStandard: boolean
   /**
    * Apps the ERP system owner granted this company (create / Limits / approve).
    * The company may turn granted apps off for its own screens, but cannot turn
@@ -312,6 +344,8 @@ export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   enableTax: true,
   enableCustomerPortal: false,
   enableDocumentApprovals: false,
+  creditLimitWarn: false,
+  payrollStandard: true,
   /** Opt-in apps are granted so Apps & features can turn them on. */
   grantedModules: allModules(true),
   modules: defaultModules(),
@@ -360,6 +394,11 @@ export const MODULE_PATH_PREFIXES: readonly { prefix: string; module: ModuleFlag
   { prefix: '/documents', module: 'documents' },
   { prefix: '/knowledge', module: 'knowledge' },
   { prefix: '/employees', module: 'employees' },
+  { prefix: '/sign', module: 'sign' },
+  { prefix: '/appointments', module: 'appointments' },
+  { prefix: '/discuss', module: 'discuss' },
+  { prefix: '/planning', module: 'planning' },
+  { prefix: '/surveys', module: 'surveys' },
   { prefix: '/databases', module: 'databases' },
 ] as const
 
@@ -420,6 +459,11 @@ export const MODULE_KEY_TO_FLAG: Record<string, ModuleFlag | null> = {
   documents: 'documents',
   knowledge: 'knowledge',
   employees: 'employees',
+  sign: 'sign',
+  appointments: 'appointments',
+  discuss: 'discuss',
+  planning: 'planning',
+  surveys: 'surveys',
   databases: 'databases',
 }
 
@@ -438,6 +482,8 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
   if (typeof data.enableDocumentApprovals === 'boolean') {
     base.enableDocumentApprovals = data.enableDocumentApprovals
   }
+  if (typeof data.creditLimitWarn === 'boolean') base.creditLimitWarn = data.creditLimitWarn
+  if (typeof data.payrollStandard === 'boolean') base.payrollStandard = data.payrollStandard
 
   // Legacy single switch → both contact sides until the new keys are saved.
   if (typeof data.allowContactDelete === 'boolean') {

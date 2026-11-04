@@ -11,6 +11,7 @@ import { loadFormCustomization } from '@/server/services/form-customization'
 import { loadFormOptions } from '@/server/services/sales-options'
 import * as salesService from '@/server/services/sales.service'
 import * as storeService from '@/server/services/store.service'
+import * as trackingCategories from '@/server/services/tracking-category.service'
 
 export const metadata: Metadata = { title: 'Edit document' }
 
@@ -42,12 +43,13 @@ export default async function EditSalesDocumentPage({
     stores: [] as Awaited<ReturnType<typeof storeService.quantities>>['stores'],
     byItem: {} as Awaited<ReturnType<typeof storeService.quantities>>['byItem'],
   }
-  const [document, options, neighbors, shelf, formCustomization] = await Promise.all([
+  const [document, options, neighbors, shelf, formCustomization, classes] = await Promise.all([
     salesService.get(ctx, id),
     loadFormOptions(ctx, { includeOnHand: false }),
     salesService.neighbors(ctx, config.type, id),
     storeService.quantities(ctx).catch(() => emptyShelf),
     loadFormCustomization(ctx, 'sales', config.type),
+    trackingCategories.list(ctx),
   ])
 
   if (document.type !== config.type) notFound()
@@ -89,7 +91,10 @@ export default async function EditSalesDocumentPage({
           depositAccountId: document.depositAccount?.id ?? null,
           paymentMethod: document.paymentMethod,
           projectId: document.projectId ?? null,
+          trackingCategoryId: document.trackingCategoryId ?? null,
           discountAmount: document.discountAmount,
+          currencyCode: document.currencyCode,
+          exchangeRate: document.exchangeRate?.toString() ?? '1',
           lines: document.lines.map((line) => ({
             itemId: line.item?.id ?? null,
             description: line.description,
@@ -101,6 +106,7 @@ export default async function EditSalesDocumentPage({
           })),
         }}
         projects={options.projects}
+        classes={classes.map((row) => ({ id: row.id, label: row.name }))}
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}

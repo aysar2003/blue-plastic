@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { settleNumberInput } from '@/lib/money'
 import { calculatedDecimal, calendarDate, chosenNumber, cuid, moneyString, optionalText, requiredText } from './common'
 
 const optionalId = z
@@ -39,6 +40,8 @@ export const salesLineSchema = z.object({
   serviceDate: optionalDate,
   /** The store this line is taken from. Blank means the office when one exists. */
   storeId: optionalId,
+  /** A purchase line marked billable to this customer, pulled onto the invoice. */
+  sourcePurchaseLineId: optionalId,
 })
 
 export const salesDocumentSchema = z.object({
@@ -72,6 +75,41 @@ export const salesDocumentSchema = z.object({
   convertedFromId: optionalId,
   /** Optional Projects job this sale belongs to. */
   projectId: optionalId,
+  /** Optional class. Copied onto every journal line when the document posts. */
+  trackingCategoryId: optionalId,
+  /**
+   * Document currency (ISO). Blank / omitted = organisation base. Amounts on
+   * the form are in this currency; the ledger posts base via exchangeRate.
+   */
+  currencyCode: z
+    .union([
+      z
+        .string()
+        .trim()
+        .toUpperCase()
+        .length(3, 'Use a 3-letter ISO currency code'),
+      z.literal(''),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+  /** Base units per one unit of document currency. Blank = 1. */
+  exchangeRate: z
+    .union([
+      z
+        .string()
+        .trim()
+        .regex(/^\d{1,12}(\.\d{1,9})?$/, 'Enter an exchange rate'),
+      z.literal(''),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+  /**
+   * When credit-limit mode is warn, confirm to post past the limit.
+   * Hard block ignores this and always refuses.
+   */
+  acknowledgeCreditLimit: z.coerce.boolean().default(false),
   /** Whole-document discount on an invoice or a sales receipt. Blank means none. */
   discountKind: z.enum(['amount', 'percent']).default('percent'),
   discountValue: z
@@ -136,6 +174,33 @@ export const paymentSchema = z.object({
   depositAccountId: cuid,
   reference: optionalText(60),
   memo: optionalText(500),
+  /** Payment currency. Blank = organisation base. */
+  currencyCode: z
+    .union([
+      z
+        .string()
+        .trim()
+        .toUpperCase()
+        .length(3, 'Use a 3-letter ISO currency code'),
+      z.literal(''),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+  /** Base units per 1 unit of payment currency. Blank = 1. */
+  exchangeRate: z
+    .union([
+      z
+        .string()
+        .trim()
+        .regex(/^\d{1,12}(\.\d{1,9})?$/, 'Enter an exchange rate'),
+      z.literal(''),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+  /** Set after the same-day payment warning has been accepted. */
+  acknowledgeDuplicate: z.coerce.boolean().optional(),
   /** Which invoices this settles, and by how much. */
   applications: z
     .array(z.object({ invoiceId: cuid, amount: moneyString }))
@@ -149,6 +214,19 @@ export const paymentUpdateSchema = paymentSchema.safeExtend({ id: cuid })
 
 export type PaymentUpdateInput = z.infer<typeof paymentUpdateSchema>
 
+/** One invoice, same lines, written once for each chosen customer. */
+export const batchInvoiceSchema = z.object({
+  customerIds: z.array(cuid).min(1, 'Choose at least one customer').max(100),
+  date: calendarDate,
+  description: optionalText(1000),
+  quantity: quantity.default('1'),
+  unitPrice: price,
+  itemId: cuid,
+  taxCodeId: optionalId,
+})
+
+export type BatchInvoiceInput = z.infer<typeof batchInvoiceSchema>
+
 export const applyCreditSchema = z.object({
   creditDocumentId: cuid,
   applications: z.array(z.object({ invoiceId: cuid, amount: moneyString })).min(1).max(200),
@@ -158,3 +236,41 @@ export const voidPaymentSchema = z.object({
   id: cuid,
   reason: requiredText('Reason', 300),
 })
+
+/* --- Progress invoicing --------------------------------------------------- */
+
+/**
+ * An invoice against an estimate, quotation, or sales order: how much of each
+ * line to bill now.
+ *
+ * Quantities are strings, like every other quantity in the system, so a decimal
+ * survives the round trip without going through a float.
+ */
+export const invoiceFromSourceSchema = z.object({
+  sourceId: cuid,
+  date: calendarDate,
+  reference: optionalText(100),
+  memo: optionalText(500),
+  lines: z
+    .array(
+      z.object({
+        lineId: cuid,
+        /** Blank and "0" both mean "none of this line this time". */
+        quantity: z
+          .string()
+          .trim()
+          .transform((value, ctx) => {
+            const next = settleNumberInput(value) ?? value
+            if (!/^\d{0,12}(\.\d{1,4})?$/.test(next)) {
+              ctx.addIssue({ code: 'custom', message: 'Enter a quantity' })
+              return z.NEVER
+            }
+            return next === '' || next === '.' ? '0' : next
+          }),
+      }),
+    )
+    .min(1, 'Enter a quantity against at least one line')
+    .max(200),
+})
+
+export type InvoiceFromSourceInput = z.infer<typeof invoiceFromSourceSchema>

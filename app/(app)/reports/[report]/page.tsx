@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation'
 
 import { PrintButton } from '@/app/(app)/sales/[type]/[id]/print/print-button'
 import { PageHeader } from '@/components/data/page-header'
-import { MemorizeReportButton } from '@/components/reports/memorize-report-button'
 import { ReportEntityFilters } from '@/components/reports/report-entity-filters'
 import { ReportTable } from '@/components/reports/report-table'
 import { formatDate } from '@/lib/date'
@@ -75,7 +74,6 @@ export default async function TableReportPage({
         }
         actions={
           <div className="flex flex-wrap items-center gap-2 print:hidden">
-            <MemorizeReportButton title={definition.title} />
             <PrintButton
               paper={definition.title}
               defaultSubject={`${definition.title} — ${ctx.organization.name}`}
@@ -93,6 +91,7 @@ export default async function TableReportPage({
         basis={settings.basis}
         comparison={settings.comparison}
         controls={{ mode: definition.mode, exportAs: definition.key }}
+        memorizeTitle={definition.title}
       />
 
       {filterOptions ? (

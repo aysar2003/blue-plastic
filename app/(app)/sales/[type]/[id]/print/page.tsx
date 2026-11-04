@@ -82,11 +82,11 @@ export default async function PrintDocumentPage({
         <PrintButton
           paper={config.singular.toLowerCase()}
           backHref={`/sales/${config.slug}/${id}`}
-          pdfHref={`/api/sales/${id}/pdf`}
+          pdfHref={`/api/sales/${id}/pdf?paper=${document.type === 'QUOTATION' ? 'merchant' : 'trade'}`}
           excelHref={`/api/sales/${id}/xlsx`}
           filename={filename}
           pdfMatchesPrint
-          paperStyle={template.paperStyle}
+          paperStyle={document.type === 'QUOTATION' ? 'merchant' : 'trade'}
           defaultTo={customer.email ?? ''}
           defaultSubject={documentEmailSubject(
             config.singular,

@@ -14,5 +14,8 @@ rate that applied on each historical transaction was never recorded. Carrying th
 columns from the start costs almost nothing; recovering them later is impossible.
 
 ## Consequences
-Until Phase 10, `currencyCode` is always the organisation's base and `exchangeRate`
-is always 1. The posting engine still writes them, so no backfill is ever needed.
+Until Phase 12 Wave B1, `currencyCode` was always the organisation's base and
+`exchangeRate` was always 1. The posting engine still wrote them, so no backfill
+was needed. Wave B1 uses the columns for day-to-day foreign invoices/bills,
+foreign bank account currency, and a minimal revaluation journal; full treasury
+behaviour remains out of scope.

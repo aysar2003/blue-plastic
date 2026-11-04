@@ -69,13 +69,21 @@ export function InvoiceHome({
           </p>
         </div>
         {canCreate ? (
-          <Link
-            href="/sales/invoices/new"
-            className="inline-flex items-center gap-2 rounded-full bg-card px-5 py-2.5 text-sm font-semibold text-primary shadow-sm transition hover:bg-accent"
-          >
-            <PlusIcon className="size-4" aria-hidden />
-            New invoice
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/sales/batch"
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-primary-foreground/90 underline-offset-4 hover:underline"
+            >
+              Invoice a batch
+            </Link>
+            <Link
+              href="/sales/invoices/new"
+              className="inline-flex items-center gap-2 rounded-full bg-card px-5 py-2.5 text-sm font-semibold text-primary shadow-sm transition hover:bg-accent"
+            >
+              <PlusIcon className="size-4" aria-hidden />
+              New invoice
+            </Link>
+          </div>
         ) : null}
       </div>
 

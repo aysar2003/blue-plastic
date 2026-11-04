@@ -841,6 +841,72 @@ export async function getInvoice(ctx: PortalContext, id: string) {
   return document
 }
 
+export async function listQuotes(ctx: PortalContext, query: ListQuery) {
+  const customerId = ctx.portalCustomerId
+  const where: Prisma.SalesDocumentWhereInput = {
+    orgId: ctx.orgId,
+    customerId,
+    type: { in: ['ESTIMATE', 'QUOTATION'] },
+    deletedAt: null,
+    status: { notIn: ['DRAFT', 'VOID'] },
+    ...(query.q
+      ? {
+          OR: [
+            { number: { contains: query.q, mode: 'insensitive' } },
+            { reference: { contains: query.q, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  }
+
+  const [rows, total] = await Promise.all([
+    db.salesDocument.findMany({
+      where,
+      select: {
+        id: true,
+        number: true,
+        type: true,
+        date: true,
+        expiryDate: true,
+        status: true,
+        total: true,
+      },
+      orderBy: [{ date: 'desc' }, { number: 'desc' }],
+      ...paginate(query),
+    }),
+    db.salesDocument.count({ where }),
+  ])
+
+  return paged(
+    rows.map((row) => ({
+      id: row.id,
+      number: row.number,
+      kind: row.type === 'QUOTATION' ? 'Quotation' : 'Estimate',
+      date: toCalendarDate(row.date),
+      expiryDate: row.expiryDate ? toCalendarDate(row.expiryDate) : null,
+      status: row.status,
+      total: toMoneyString(row.total.toString(), 2),
+    })),
+    total,
+    query,
+  )
+}
+
+/** One estimate or quotation the portal customer may open — view only. */
+export async function getQuote(ctx: PortalContext, id: string) {
+  assertPortalFeatureEnabled(ctx)
+  const document = await salesService.get(ctx, id)
+  if (
+    (document.type !== 'ESTIMATE' && document.type !== 'QUOTATION') ||
+    document.customer.id !== ctx.portalCustomerId ||
+    document.status === 'DRAFT' ||
+    document.status === 'VOID'
+  ) {
+    throw notFound('Quote')
+  }
+  return document
+}
+
 export async function listPayments(ctx: PortalContext, query: ListQuery) {
   const customerId = ctx.portalCustomerId
   const where: Prisma.CustomerPaymentWhereInput = {

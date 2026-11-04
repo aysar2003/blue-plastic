@@ -27,7 +27,13 @@ export function ApprovalDecideButtons({
         toast.error(result.error.message)
         return
       }
-      toast.success(decision === 'APPROVED' ? 'Approved and posted.' : 'Rejected — returned to draft.')
+      if (decision === 'REJECTED') {
+        toast.success('Rejected — returned to draft.')
+      } else if (result.data.status === 'PENDING') {
+        toast.success('Approved — waiting for the next approval level.')
+      } else {
+        toast.success('Approved and posted.')
+      }
       router.refresh()
     })
   }

@@ -28,6 +28,7 @@ export const STANDARD_FAVOURITES: StandardReport[] = [
   { label: 'Product/Service List', href: '/reports/product-service-list', group: 'favourite' },
   { label: 'Journal', href: '/reports/journal-report', group: 'favourite' },
   { label: 'Profit and Loss', href: '/reports/profit-loss', group: 'favourite' },
+  { label: 'Profit and Loss by Class', href: '/reports/profit-loss/by-class', group: 'favourite' },
   { label: 'Profit and Loss by Customer', href: '/reports/profit-loss/by-customer', group: 'favourite' },
   { label: 'Profit and Loss by Month', href: '/reports/profit-loss/by-month', group: 'favourite' },
   { label: 'Profit and Loss Detail', href: '/reports/profit-loss/detail', group: 'favourite' },

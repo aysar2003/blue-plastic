@@ -119,6 +119,17 @@ export default async function HelpPage() {
         description="How this system expects to be used, and why it behaves the way it does."
       />
 
+      <p className="mb-6 text-sm text-muted-foreground">
+        Full step-by-step book:{' '}
+        <Link href="/help/manual" className="text-foreground underline underline-offset-4">
+          User manual (EN + SO)
+        </Link>
+        {' · '}
+        <Link href="/help/guide-so" className="text-foreground underline underline-offset-4">
+          Hagitaan Soomaali
+        </Link>
+      </p>
+
       <div className="space-y-8">
         <section>
           <h2 className="mb-3 text-sm font-semibold">The order of work</h2>

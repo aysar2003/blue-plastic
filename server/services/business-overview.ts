@@ -41,7 +41,7 @@ export function businessOverview(ctx: OrgContext, requestedMonth?: string) {
 const cachedOverview = cache((orgId: string, timeZone: string, currency: string, month: string) =>
   unstable_cache(
     () => queryBusinessOverview(orgId, timeZone, currency, month),
-    ['business-overview-v1', orgId, timeZone, month],
+    ['business-overview-v2', orgId, timeZone, month],
     { revalidate: 60 },
   )(),
 )
@@ -104,8 +104,10 @@ async function queryBusinessOverview(orgId: string, timeZone: string, _currency:
            AND d.type = 'INVOICE'
            AND d.status IN ('OPEN', 'PARTIAL')
            AND d."deletedAt" IS NULL
-           AND d.date BETWEEN ${toDate(yearStart)} AND ${toDate(yearEnd)}
       `,
+      // Open AR is every unpaid invoice still on the books — not only those dated
+      // this calendar year. Filtering by year made Home disagree with Sales.
+
       db.$queryRaw<{ paid: string; undeposited: string; deposited: string }[]>`
         SELECT COALESCE(SUM(p.amount), 0)::text AS paid,
                COALESCE(SUM(CASE WHEN a.subtype = 'UNDEPOSITED_FUNDS' THEN p.amount ELSE 0 END), 0)::text AS undeposited,

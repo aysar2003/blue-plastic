@@ -2,6 +2,8 @@ import 'server-only'
 
 import { createHash, randomBytes } from 'crypto'
 
+import { Prisma } from '@prisma/client'
+
 import type { CompanyBackup } from '@/lib/backup-format'
 import type { OrgContext } from '@/server/auth/context'
 import { wipeCompanyBooks } from '@/server/company-wipe'
@@ -262,6 +264,34 @@ function seedEntityIds(backup: CompanyBackup, mapReq: IdMaps['mapReq']): void {
     'stores',
     'posPaymentMethods',
     'posRegisters',
+    'itemComponents',
+    'employees',
+    'leaveTypes',
+    'leaveAllocations',
+    'planningAssignments',
+    'shareholders',
+    'equityEvents',
+    'jobOpenings',
+    'applicants',
+    'appraisals',
+    'payrollRuns',
+    'payslips',
+    'payslipLines',
+    'fxHedges',
+    'kitchenTickets',
+    'stockBins',
+    'pickTasks',
+    'trainingCourses',
+    'trainingEnrollments',
+    'signRequests',
+    'surveys',
+    'surveyResponses',
+    'crmOpportunities',
+    'crmActivities',
+    'discussChannels',
+    'discussMessages',
+    'appointmentTypes',
+    'appointments',
   ] as const
   for (const key of bags) {
     for (const row of asRows(backup[key])) {
@@ -1212,6 +1242,646 @@ export async function insertBackupRows(
     if (rows.length) {
       await tx.workspaceBookmark.createMany({ data: rows, skipDuplicates: true })
     }
+  }
+
+  await restoreOperatingExtras(tx, backup, orgId, map, mapReq)
+}
+
+async function restoreOperatingExtras(
+  tx: Tx,
+  backup: CompanyBackup,
+  orgId: string,
+  map: IdMaps['map'],
+  mapReq: IdMaps['mapReq'],
+) {
+  const itemComponents = asRows(backup.itemComponents)
+  if (itemComponents.length) {
+    await tx.itemComponent.createMany({
+      data: itemComponents
+        .filter((row) => row.parentItemId && row.componentItemId)
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          parentItemId: mapReq(row.parentItemId),
+          componentItemId: mapReq(row.componentItemId),
+          quantity: dec(row.quantity, '1'),
+          sortOrder: num(row.sortOrder),
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const employees = asRows(backup.employees)
+  const employeeOldIds = new Set(employees.map((row) => str(row.id)).filter(Boolean))
+  if (employees.length) {
+    const wantedUserIds = employees.map((row) => str(row.userId)).filter(Boolean)
+    const userIds = new Set(
+      wantedUserIds.length
+        ? (
+            await tx.user.findMany({
+              where: { id: { in: wantedUserIds } },
+              select: { id: true },
+            })
+          ).map((row) => row.id)
+        : [],
+    )
+    await tx.employee.createMany({
+      data: employees.map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        name: str(row.name),
+        jobTitle: strOrNull(row.jobTitle),
+        department: strOrNull(row.department),
+        photoUrl: strOrNull(row.photoUrl),
+        workEmail: strOrNull(row.workEmail),
+        workPhone: strOrNull(row.workPhone),
+        mobile: strOrNull(row.mobile),
+        workStreet: strOrNull(row.workStreet),
+        workCity: strOrNull(row.workCity),
+        workCountry: strOrNull(row.workCountry),
+        privateStreet: strOrNull(row.privateStreet),
+        privateCity: strOrNull(row.privateCity),
+        privateCountry: strOrNull(row.privateCountry),
+        emergencyContact: strOrNull(row.emergencyContact),
+        emergencyPhone: strOrNull(row.emergencyPhone),
+        skills: strOrNull(row.skills),
+        notes: strOrNull(row.notes),
+        active: bool(row.active, true),
+        lifecycleStatus: (['DRAFT', 'ACTIVE', 'LEFT'] as const).includes(row.lifecycleStatus as never)
+          ? (row.lifecycleStatus as 'DRAFT' | 'ACTIVE' | 'LEFT')
+          : 'ACTIVE',
+        employmentType: (['EMPLOYEE', 'CONTRACTOR', 'INTERN'] as const).includes(
+          row.employmentType as never,
+        )
+          ? (row.employmentType as 'EMPLOYEE' | 'CONTRACTOR' | 'INTERN')
+          : 'EMPLOYEE',
+        hiredAt: dateOrNull(row.hiredAt),
+        leftAt: dateOrNull(row.leftAt),
+        managerId: employeeOldIds.has(str(row.managerId)) ? map(row.managerId) : null,
+        userId: userIds.has(str(row.userId)) ? str(row.userId) : null,
+        wageType: (['MONTHLY', 'DAILY', 'HOURLY'] as const).includes(row.wageType as never)
+          ? (row.wageType as 'MONTHLY' | 'DAILY' | 'HOURLY')
+          : 'MONTHLY',
+        wageAmount: dec(row.wageAmount),
+        expenseAccountId: map(row.expenseAccountId),
+        payableAccountId: map(row.payableAccountId),
+        payMethod: (['CASH', 'BANK', 'MOBILE'] as const).includes(row.payMethod as never)
+          ? (row.payMethod as 'CASH' | 'BANK' | 'MOBILE')
+          : 'CASH',
+        payAccountId: map(row.payAccountId),
+        structureId: null,
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+  const payrollRuns = asRows(backup.payrollRuns)
+  if (payrollRuns.length) {
+    await tx.payrollRun.createMany({
+      data: payrollRuns.map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        periodStart: dateRequired(row.periodStart),
+        periodEnd: dateRequired(row.periodEnd),
+        memo: strOrNull(row.memo),
+        status: row.status === 'POSTED' ? 'POSTED' : 'DRAFT',
+        journalId: map(row.journalId),
+        postedAt: dateOrNull(row.postedAt),
+        settlementJournalId: map(row.settlementJournalId),
+        paidAt: dateOrNull(row.paidAt),
+        payFromAccountId: map(row.payFromAccountId),
+        payMode: row.payMode === 'ACCRUE' ? 'ACCRUE' : 'IMMEDIATE',
+        awaitingApproval: bool(row.awaitingApproval, false),
+        liabilityAccountId: map(row.liabilityAccountId),
+        createdById: strOrNull(row.createdById),
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+  const payslips = asRows(backup.payslips)
+  if (payslips.length) {
+    await tx.payslip.createMany({
+      data: payslips
+        .filter((row) => row.runId && employeeOldIds.has(str(row.employeeId)))
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          runId: mapReq(row.runId),
+          employeeId: mapReq(row.employeeId),
+          gross: dec(row.gross),
+          deductions: dec(row.deductions),
+          employer: dec(row.employer),
+          net: dec(row.net),
+          number: strOrNull(row.number),
+          included: bool(row.included, true),
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const payslipLines = asRows(backup.payslipLines)
+  if (payslipLines.length) {
+    await tx.payslipLine.createMany({
+      data: payslipLines
+        .filter((row) => row.payslipId)
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          payslipId: mapReq(row.payslipId),
+          code: str(row.code),
+          label: str(row.label),
+          amount: dec(row.amount),
+          kind: (row.kind as never) ?? 'EARNING',
+          sortOrder: num(row.sortOrder),
+          affectsNet: bool(row.affectsNet, true),
+          expenseAccountId: map(row.expenseAccountId),
+          liabilityAccountId: map(row.liabilityAccountId),
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const fxHedges = asRows(backup.fxHedges)
+  if (fxHedges.length) {
+    await tx.fxHedge.createMany({
+      data: fxHedges.map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        kind: row.kind === 'FAIR_VALUE' ? 'FAIR_VALUE' : 'CASH_FLOW',
+        status: (['OPEN', 'SETTLED', 'CANCELLED'] as const).includes(row.status as never)
+          ? (row.status as 'OPEN' | 'SETTLED' | 'CANCELLED')
+          : 'OPEN',
+        currencyCode: str(row.currencyCode, 'USD'),
+        contractRate: dec(row.contractRate, '1'),
+        notional: dec(row.notional),
+        maturityDate: dateRequired(row.maturityDate),
+        risk: str(row.risk, 'FX'),
+        hedgedItem: str(row.hedgedItem, 'Open AR/AP'),
+        instrument: str(row.instrument, 'Forward'),
+        counterpart: strOrNull(row.counterpart),
+        memo: strOrNull(row.memo),
+        journalId: map(row.journalId),
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+  const kitchenTickets = asRows(backup.kitchenTickets)
+  if (kitchenTickets.length) {
+    await tx.kitchenTicket.createMany({
+      data: kitchenTickets.map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        tableLabel: strOrNull(row.tableLabel),
+        covers: num(row.covers, 1),
+        status: (['OPEN', 'FIRED', 'READY', 'DONE'] as const).includes(row.status as never)
+          ? (row.status as 'OPEN' | 'FIRED' | 'READY' | 'DONE')
+          : 'OPEN',
+        lines: (row.lines as object) ?? [],
+        notes: strOrNull(row.notes),
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+  const stockBins = asRows(backup.stockBins)
+  if (stockBins.length) {
+    await tx.stockBin.createMany({
+      data: stockBins
+        .filter((row) => row.storeId)
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          storeId: mapReq(row.storeId),
+          code: str(row.code),
+          name: str(row.name, str(row.code)),
+          notes: strOrNull(row.notes),
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const pickTasks = asRows(backup.pickTasks)
+  if (pickTasks.length) {
+    await tx.pickTask.createMany({
+      data: pickTasks
+        .filter((row) => row.storeId && row.itemId)
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          storeId: mapReq(row.storeId),
+          binId: map(row.binId),
+          itemId: mapReq(row.itemId),
+          qty: dec(row.qty, '1'),
+          status: (['OPEN', 'PICKING', 'PICKED', 'CANCELLED'] as const).includes(row.status as never)
+            ? (row.status as 'OPEN' | 'PICKING' | 'PICKED' | 'CANCELLED')
+            : 'OPEN',
+          notes: strOrNull(row.notes),
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const trainingCourses = asRows(backup.trainingCourses)
+  if (trainingCourses.length) {
+    await tx.trainingCourse.createMany({
+      data: trainingCourses.map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        title: str(row.title),
+        hours: dec(row.hours),
+        description: strOrNull(row.description),
+        active: bool(row.active, true),
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+  const trainingEnrollments = asRows(backup.trainingEnrollments)
+  if (trainingEnrollments.length) {
+    await tx.trainingEnrollment.createMany({
+      data: trainingEnrollments
+        .filter((row) => row.courseId && employeeOldIds.has(str(row.employeeId)))
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          courseId: mapReq(row.courseId),
+          employeeId: mapReq(row.employeeId),
+          status: (['ENROLLED', 'COMPLETED', 'FAILED'] as const).includes(row.status as never)
+            ? (row.status as 'ENROLLED' | 'COMPLETED' | 'FAILED')
+            : 'ENROLLED',
+          completedAt: dateOrNull(row.completedAt),
+          notes: strOrNull(row.notes),
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const leaveTypes = asRows(backup.leaveTypes)
+  if (leaveTypes.length) {
+    await tx.leaveType.createMany({
+      data: leaveTypes.map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        name: str(row.name),
+        paid: bool(row.paid, true),
+        daysPerYear: dec(row.daysPerYear),
+        active: bool(row.active, true),
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+  const leaveAllocations = asRows(backup.leaveAllocations)
+  if (leaveAllocations.length) {
+    await tx.leaveAllocation.createMany({
+      data: leaveAllocations
+        .filter((row) => employeeOldIds.has(str(row.employeeId)) && row.leaveTypeId)
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          employeeId: mapReq(row.employeeId),
+          leaveTypeId: mapReq(row.leaveTypeId),
+          year: num(row.year, new Date().getFullYear()),
+          entitledDays: dec(row.entitledDays),
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const planningAssignments = asRows(backup.planningAssignments)
+  if (planningAssignments.length) {
+    await tx.planningAssignment.createMany({
+      data: planningAssignments
+        .filter((row) => employeeOldIds.has(str(row.employeeId)))
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          employeeId: mapReq(row.employeeId),
+          taskId: strOrNull(row.taskId),
+          workDate: dateRequired(row.workDate),
+          hours: dec(row.hours),
+          notes: strOrNull(row.notes),
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const shareholders = asRows(backup.shareholders)
+  if (shareholders.length) {
+    await tx.shareholder.createMany({
+      data: shareholders.map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        name: str(row.name),
+        shares: dec(row.shares),
+        ownershipPercent: dec(row.ownershipPercent),
+        capitalAccountId: map(row.capitalAccountId),
+        notes: strOrNull(row.notes),
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+  const equityEvents = asRows(backup.equityEvents)
+  if (equityEvents.length) {
+    const rows = equityEvents
+      .filter((row) => row.bankAccountId && row.equityAccountId)
+      .map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        shareholderId: map(row.shareholderId),
+        kind: (['CONTRIBUTION', 'DRAW', 'DIVIDEND'] as const).includes(row.kind as never)
+          ? (row.kind as 'CONTRIBUTION' | 'DRAW' | 'DIVIDEND')
+          : 'CONTRIBUTION',
+        date: dateRequired(row.date),
+        amount: dec(row.amount),
+        memo: strOrNull(row.memo),
+        bankAccountId: mapReq(row.bankAccountId),
+        equityAccountId: mapReq(row.equityAccountId),
+        journalId: map(row.journalId),
+      }))
+    if (rows.length) {
+      await tx.equityEvent.createMany({ data: rows, skipDuplicates: true })
+    }
+  }
+
+  const openings = asRows(backup.jobOpenings)
+  if (openings.length) {
+    await tx.jobOpening.createMany({
+      data: openings.map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        title: str(row.title),
+        department: strOrNull(row.department),
+        description: strOrNull(row.description),
+        status: (['OPEN', 'FILLED', 'CANCELLED'] as const).includes(row.status as never)
+          ? (row.status as 'OPEN' | 'FILLED' | 'CANCELLED')
+          : 'OPEN',
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+  const applicants = asRows(backup.applicants)
+  if (applicants.length) {
+    await tx.applicant.createMany({
+      data: applicants
+        .filter((row) => row.jobOpeningId)
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          jobOpeningId: mapReq(row.jobOpeningId),
+          name: str(row.name),
+          email: strOrNull(row.email),
+          phone: strOrNull(row.phone),
+          notes: strOrNull(row.notes),
+          status: (['NEW', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'REJECTED'] as const).includes(
+            row.status as never,
+          )
+            ? (row.status as 'NEW' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'REJECTED')
+            : 'NEW',
+          employeeId: employeeOldIds.has(str(row.employeeId)) ? map(row.employeeId) : null,
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const appraisals = asRows(backup.appraisals)
+  if (appraisals.length) {
+    await tx.appraisal.createMany({
+      data: appraisals
+        .filter((row) => employeeOldIds.has(str(row.employeeId)))
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          employeeId: mapReq(row.employeeId),
+          periodLabel: str(row.periodLabel),
+          score: row.score == null ? null : dec(row.score),
+          notes: strOrNull(row.notes),
+          goals: strOrNull(row.goals),
+          competencies: (row.competencies as object) ?? undefined,
+          reviewedAt: dateOrNull(row.reviewedAt),
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const signs = asRows(backup.signRequests)
+  if (signs.length) {
+    await tx.signRequest.createMany({
+      data: signs.map((row) => {
+        const id = mapReq(row.id)
+        const keepToken = id === str(row.id)
+        return {
+        id,
+        orgId,
+        title: str(row.title),
+        status: (['DRAFT', 'SENT', 'SIGNED', 'DECLINED', 'CANCELLED'] as const).includes(
+          row.status as never,
+        )
+          ? (row.status as 'DRAFT' | 'SENT' | 'SIGNED' | 'DECLINED' | 'CANCELLED')
+          : 'SENT',
+        token: keepToken
+          ? strOrNull(row.token)
+          : strOrNull(row.token)
+            ? `s${randomBytes(12).toString('hex')}`
+            : null,
+        message: strOrNull(row.message),
+        storageKey: strOrNull(row.storageKey),
+        originalName: strOrNull(row.originalName),
+        signerName: strOrNull(row.signerName),
+        signerEmail: strOrNull(row.signerEmail),
+        signatureData: strOrNull(row.signatureData),
+        signedAt: dateOrNull(row.signedAt),
+        declinedAt: dateOrNull(row.declinedAt),
+        declineReason: strOrNull(row.declineReason),
+        cancelledAt: dateOrNull(row.cancelledAt),
+        }
+      }),
+      skipDuplicates: true,
+    })
+  }
+
+  const surveys = asRows(backup.surveys)
+  if (surveys.length) {
+    await tx.survey.createMany({
+      data: surveys.map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        title: str(row.title),
+        description: strOrNull(row.description),
+        status: row.status === 'CLOSED' ? 'CLOSED' : 'OPEN',
+        questions: (row.questions as Prisma.InputJsonValue) ?? [],
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+  const surveyResponses = asRows(backup.surveyResponses)
+  if (surveyResponses.length) {
+    await tx.surveyResponse.createMany({
+      data: surveyResponses
+        .filter((row) => row.surveyId)
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          surveyId: mapReq(row.surveyId),
+          respondent: strOrNull(row.respondent),
+          answers: (row.answers as Prisma.InputJsonValue) ?? {},
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const opportunities = asRows(backup.crmOpportunities)
+  const opportunityOldIds = new Set(opportunities.map((row) => str(row.id)).filter(Boolean))
+  if (opportunities.length) {
+    await tx.crmOpportunity.createMany({
+      data: opportunities
+        .filter((row) => row.customerId)
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          customerId: mapReq(row.customerId),
+          title: str(row.title),
+          amount: row.amount == null ? null : dec(row.amount),
+          stage: (['LEAD', 'QUALIFIED', 'PROPOSAL', 'WON', 'LOST'] as const).includes(row.stage as never)
+            ? (row.stage as 'LEAD' | 'QUALIFIED' | 'PROPOSAL' | 'WON' | 'LOST')
+            : 'LEAD',
+          expectedClose: dateOrNull(row.expectedClose),
+          notes: strOrNull(row.notes),
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const activities = asRows(backup.crmActivities)
+  if (activities.length) {
+    const wantedCreatedBy = activities.map((row) => str(row.createdById)).filter(Boolean)
+    const createdByIds = new Set(
+      wantedCreatedBy.length
+        ? (
+            await tx.user.findMany({
+              where: { id: { in: wantedCreatedBy } },
+              select: { id: true },
+            })
+          ).map((row) => row.id)
+        : [],
+    )
+    await tx.crmActivity.createMany({
+      data: activities
+        .filter((row) => row.customerId)
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          customerId: mapReq(row.customerId),
+          opportunityId: opportunityOldIds.has(str(row.opportunityId))
+            ? map(row.opportunityId)
+            : null,
+          createdById: createdByIds.has(str(row.createdById)) ? str(row.createdById) : null,
+          kind: (['CALL', 'EMAIL', 'MEETING', 'TASK', 'NOTE'] as const).includes(row.kind as never)
+            ? (row.kind as 'CALL' | 'EMAIL' | 'MEETING' | 'TASK' | 'NOTE')
+            : 'NOTE',
+          subject: str(row.subject),
+          notes: strOrNull(row.notes),
+          dueAt: dateOrNull(row.dueAt),
+          doneAt: dateOrNull(row.doneAt),
+        })),
+      skipDuplicates: true,
+    })
+  }
+
+  const channels = asRows(backup.discussChannels)
+  if (channels.length) {
+    await tx.discussChannel.createMany({
+      data: channels.map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        name: str(row.name),
+        description: strOrNull(row.description),
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+  const messages = asRows(backup.discussMessages)
+  if (messages.length) {
+    const userIds = new Set(
+      (
+        await tx.user.findMany({
+          where: { id: { in: messages.map((row) => str(row.authorId)).filter(Boolean) } },
+          select: { id: true },
+        })
+      ).map((row) => row.id),
+    )
+    const eligible = messages.filter((row) => row.channelId && userIds.has(str(row.authorId)))
+    const remaining = [...eligible]
+    const restoredOldIds = new Set<string>()
+    for (let pass = 0; pass < 8 && remaining.length > 0; pass += 1) {
+      const batch: Record<string, unknown>[] = []
+      const deferred: Record<string, unknown>[] = []
+      for (const row of remaining) {
+        const parentOld = strOrNull(row.parentId)
+        if (parentOld && !restoredOldIds.has(parentOld)) {
+          deferred.push(row)
+          continue
+        }
+        batch.push(row)
+        restoredOldIds.add(str(row.id))
+      }
+      if (!batch.length) break
+      await tx.discussMessage.createMany({
+        data: batch.map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          channelId: mapReq(row.channelId),
+          authorId: str(row.authorId),
+          parentId: strOrNull(row.parentId) ? mapReq(row.parentId) : null,
+          body: str(row.body),
+          pinnedAt: dateOrNull(row.pinnedAt),
+        })),
+        skipDuplicates: true,
+      })
+      remaining.splice(0, remaining.length, ...deferred)
+    }
+  }
+
+  const types = asRows(backup.appointmentTypes)
+  if (types.length) {
+    await tx.appointmentType.createMany({
+      data: types.map((row) => ({
+        id: mapReq(row.id),
+        orgId,
+        name: str(row.name, 'Meeting'),
+        durationMins: num(row.durationMins, 30),
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+  const appointments = asRows(backup.appointments)
+  if (appointments.length) {
+    await tx.appointment.createMany({
+      data: appointments
+        .filter((row) => row.typeId)
+        .map((row) => ({
+          id: mapReq(row.id),
+          orgId,
+          typeId: mapReq(row.typeId),
+          status: (['BOOKED', 'COMPLETED', 'CANCELLED', 'NO_SHOW'] as const).includes(row.status as never)
+            ? (row.status as 'BOOKED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW')
+            : 'BOOKED',
+          startsAt: dateRequired(row.startsAt),
+          endsAt: dateRequired(row.endsAt),
+          customerId: map(row.customerId),
+          guestName: strOrNull(row.guestName),
+          guestEmail: strOrNull(row.guestEmail),
+          notes: strOrNull(row.notes),
+        })),
+      skipDuplicates: true,
+    })
   }
 }
 

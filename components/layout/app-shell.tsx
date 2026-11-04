@@ -3,7 +3,7 @@ import { ROLE_LABELS } from '@/lib/roles'
 import type { OrgContext } from '@/server/auth/context'
 import { LAUNCHER_APPS } from './launcher-apps'
 import { MODULES } from './nav-items'
-import { ShellChrome } from './shell-chrome'
+import { ShellGate } from './shell-gate'
 
 /**
  * A Server Component. Permission filtering happens here, once, and the client
@@ -71,7 +71,8 @@ export async function AppShell({
   }
 
   return (
-    <ShellChrome
+    <ShellGate
+      isSystemOwner={ctx.isSystemOwner}
       orgName={ctx.organization.name}
       organization={organization}
       brandMark={ctx.organization.brandMark}
@@ -96,6 +97,6 @@ export async function AppShell({
       monthChartSlot={monthChartSlot}
     >
       {children}
-    </ShellChrome>
+    </ShellGate>
   )
 }

@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { DownloadIcon, FileDownIcon, Loader2Icon, PrinterIcon } from 'lucide-react'
 
+import { MemorizeReportButton } from '@/components/reports/memorize-report-button'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { DateField } from '@/components/ui/date-field'
 import { NativeSelect } from '@/components/ui/native-select'
@@ -50,6 +51,7 @@ export function ReportControls({
   basis,
   comparison,
   controls,
+  memorizeTitle,
 }: {
   period: PeriodKey
   from: string
@@ -58,6 +60,8 @@ export function ReportControls({
   basis: 'accrual' | 'cash'
   comparison: ComparisonKey
   controls: ControlSet
+  /** Suggested name when saving this view (Phase 11.15). */
+  memorizeTitle?: string
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -289,6 +293,8 @@ export function ReportControls({
       >
         <FileDownIcon /> PDF
       </Button>
+
+      <MemorizeReportButton title={memorizeTitle} />
     </div>
   )
 }

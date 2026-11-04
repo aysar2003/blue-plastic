@@ -18,7 +18,8 @@ import * as importService from '@/server/services/statement-import.service'
 
 /**
  * The bank feed: decide what each statement line is, then post it through the
- * same documents the rest of the books use.
+ * same documents the rest of the books use. A rule only suggests a category
+ * and a payee. Posting stays a separate action on the statement screen.
  *
  * Reconciliation is not touched here. A line that a reconciliation has already
  * cleared cannot be undone from this screen — the reconciliation still owns that
@@ -582,4 +583,79 @@ export async function createRule(
     },
     select: { id: true, name: true },
   })
+}
+
+async function requireRule(ctx: OrgContext, id: string) {
+  const rule = await db.bankRule.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: { id: true, name: true },
+  })
+  if (!rule) throw notFound('Rule')
+  return rule
+}
+
+async function requireRuleCategory(ctx: OrgContext, categoryAccountId: string) {
+  const category = await db.ledgerAccount.findFirst({
+    where: { id: categoryAccountId, orgId: ctx.orgId, isActive: true },
+    select: { id: true },
+  })
+  if (!category) throw notFound('Category')
+}
+
+/** Change the text, the bank, or the suggestion a rule offers. */
+export async function updateRule(
+  ctx: OrgContext,
+  id: string,
+  input: {
+    name: string
+    contains: string
+    accountId: string | null
+    categoryAccountId: string
+    vendorId: string | null
+    customerId: string | null
+    active?: boolean
+  },
+) {
+  if (!ctx.permissions.has('bank:import')) throw forbidden()
+  await requireRule(ctx, id)
+  await requireRuleCategory(ctx, input.categoryAccountId)
+  if (input.accountId) {
+    const bank = await db.ledgerAccount.findFirst({
+      where: { id: input.accountId, orgId: ctx.orgId },
+      select: { id: true },
+    })
+    if (!bank) throw notFound('Bank account')
+  }
+
+  return db.bankRule.update({
+    where: { id },
+    data: {
+      name: input.name,
+      contains: input.contains.trim(),
+      accountId: input.accountId,
+      categoryAccountId: input.categoryAccountId,
+      vendorId: input.vendorId,
+      customerId: input.customerId,
+      ...(input.active === undefined ? {} : { active: input.active }),
+    },
+    select: { id: true, name: true, active: true },
+  })
+}
+
+/** Turn a rule off without losing it, or turn it back on. */
+export async function setRuleActive(ctx: OrgContext, id: string, active: boolean) {
+  if (!ctx.permissions.has('bank:import')) throw forbidden()
+  await requireRule(ctx, id)
+  return db.bankRule.update({
+    where: { id },
+    data: { active },
+    select: { id: true, name: true, active: true },
+  })
+}
+
+export async function deleteRule(ctx: OrgContext, id: string) {
+  if (!ctx.permissions.has('bank:import')) throw forbidden()
+  const rule = await requireRule(ctx, id)
+  await db.bankRule.delete({ where: { id: rule.id } })
+  return { id: rule.id, name: rule.name }
 }

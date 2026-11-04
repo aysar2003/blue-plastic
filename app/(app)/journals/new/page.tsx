@@ -10,6 +10,7 @@ import { peekDocumentNumber } from '@/server/sequences'
 import * as accountService from '@/server/services/account.service'
 import { subledgerBalances } from '@/server/services/contact.service'
 import * as journalService from '@/server/services/journal.service'
+import * as trackingCategories from '@/server/services/tracking-category.service'
 import { JournalEntryForm } from './journal-entry-form'
 
 export const metadata: Metadata = { title: 'New journal entry' }
@@ -17,7 +18,7 @@ export const metadata: Metadata = { title: 'New journal entry' }
 export default async function NewJournalPage() {
   const ctx = await requireOrgContext('journal:post')
 
-  const [chart, customers, vendors, entryNumber, register, neighbors] = await Promise.all([
+  const [chart, customers, vendors, entryNumber, register, neighbors, classes] = await Promise.all([
     // The whole chart. Every postable account, receivables, payables, stock and
     // system accounts included. The screen used to hide those three, on the
     // theory that a hand-written entry against a control account would break the
@@ -38,6 +39,7 @@ export default async function NewJournalPage() {
     peekDocumentNumber(db, ctx.orgId, 'JOURNAL'),
     journalService.registerLines(ctx),
     journalService.neighbors(ctx, null),
+    trackingCategories.list(ctx),
   ])
   const [customerBalances, vendorBalances] = await Promise.all([
     subledgerBalances(db, ctx, 'customer', customers.map((customer) => customer.id)),
@@ -78,6 +80,7 @@ export default async function NewJournalPage() {
         currency={ctx.organization.baseCurrency}
         register={register}
         neighbors={neighbors}
+        classes={classes}
       />
     </>
   )

@@ -35,6 +35,14 @@ export const purchaseLineSchema = z.object({
   taxCodeId: optionalId,
   /** The store this line is received into. Blank means the office when one exists. */
   storeId: optionalId,
+  /** Customer to recharge this cost on a later invoice. Blank clears it. */
+  billableCustomerId: optionalId,
+  /** What to charge the customer. Blank means the line's own amount when pulled. */
+  billableUnitPrice: z
+    .union([z.literal(''), calculatedDecimal(/^\d{1,15}(\.\d{1,4})?$/, 'Enter a price')])
+    .transform((value) => (value === '' ? null : value))
+    .nullable()
+    .optional(),
 })
 
 export const purchaseDocumentSchema = z.object({
@@ -55,7 +63,14 @@ export const purchaseDocumentSchema = z.object({
   offsetCustomerId: optionalId,
   /** Optional Projects job this purchase belongs to. */
   projectId: optionalId,
+  /** Optional class. Copied onto every journal line when the document posts. */
+  trackingCategoryId: optionalId,
   saveAsDraft: z.coerce.boolean().default(false),
+  /**
+   * Set after the clerk has seen the duplicate-reference warning and chosen
+   * to keep the bill. Missing means the warning still applies.
+   */
+  acknowledgeDuplicate: z.coerce.boolean().optional(),
   lines: z.array(purchaseLineSchema).min(1, 'Add at least one line').max(200),
 })
 
@@ -101,6 +116,31 @@ export const billPaymentSchema = z.object({
   paymentAccountId: cuid,
   reference: optionalText(60),
   memo: optionalText(500),
+  currencyCode: z
+    .union([
+      z
+        .string()
+        .trim()
+        .toUpperCase()
+        .length(3, 'Use a 3-letter ISO currency code'),
+      z.literal(''),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+  exchangeRate: z
+    .union([
+      z
+        .string()
+        .trim()
+        .regex(/^\d{1,12}(\.\d{1,9})?$/, 'Enter an exchange rate'),
+      z.literal(''),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+  /** Set after the same-day payment warning has been accepted. */
+  acknowledgeDuplicate: z.coerce.boolean().optional(),
   applications: z.array(z.object({ billId: cuid, amount: moneyString })).max(200).default([]),
 })
 
@@ -152,3 +192,26 @@ export const receiveOrderSchema = z.object({
 })
 
 export type ReceiveOrderInput = z.infer<typeof receiveOrderSchema>
+
+/**
+ * Mark purchase lines as rechargeable to a customer, or clear that mark.
+ * A document already settled against a customer (offset) cannot also be billable.
+ */
+export const markBillableSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        lineId: cuid,
+        billableCustomerId: optionalId,
+        billableUnitPrice: z
+          .union([z.literal(''), calculatedDecimal(/^\d{1,15}(\.\d{1,4})?$/, 'Enter a price')])
+          .transform((value) => (value === '' ? null : value))
+          .nullable()
+          .optional(),
+      }),
+    )
+    .min(1, 'Choose at least one line')
+    .max(200),
+})
+
+export type MarkBillableInput = z.infer<typeof markBillableSchema>

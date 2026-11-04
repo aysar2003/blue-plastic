@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ClipboardListIcon, FileCheck2Icon, Loader2Icon, ReceiptIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { convertSalesDocument } from '@/app/(app)/sales/actions'
 import { AccountPicker } from '@/components/forms/account-picker'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -54,6 +55,7 @@ export function ConvertSalesDocumentActions({
   const [receiptOpen, setReceiptOpen] = useState(false)
   const [depositAccountId, setDepositAccountId] = useState(depositAccounts[0]?.id ?? '')
   const proposal = sourceType === 'ESTIMATE' || sourceType === 'QUOTATION'
+  const invoiceHref = `/sales/${byType(sourceType).slug}/${id}/invoice`
 
   const fulfill = (target: ConvertTarget, accountId?: string) => {
     startTransition(async () => {
@@ -78,16 +80,14 @@ export function ConvertSalesDocumentActions({
   return (
     <>
       <span className="inline-flex flex-wrap items-center gap-1.5">
-        <Button
-          size="sm"
-          variant={variant}
-          disabled={isPending}
-          title={`Create an invoice from ${number}`}
-          onClick={() => fulfill('INVOICE')}
+        <Link
+          href={invoiceHref}
+          title={`Invoice part or all of ${number}`}
+          className={buttonVariants({ size: 'sm', variant })}
         >
-          {isPending ? <Loader2Icon className="animate-spin" /> : <FileCheck2Icon />}
+          <FileCheck2Icon />
           {compact ? 'Invoice' : 'Create invoice'}
-        </Button>
+        </Link>
         <Button
           size="sm"
           variant={variant === 'default' ? 'outline' : variant}

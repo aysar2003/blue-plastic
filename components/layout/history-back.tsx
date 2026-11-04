@@ -48,11 +48,21 @@ function HistoryBackInner() {
       type="button"
       onClick={() => {
         // Nested form (customer / item / …) on top of another form: close it
-        // first and stay on the screen underneath.
+        // first and stay on the screen underneath. Stale closers are ignored
+        // inside closeTopDialog so a stuck stack cannot trap Back on the page.
         if (closeTopDialog()) return
 
         const { target, trail } = popScreen(readTrail(), href)
         const next = stayInPosHub(pathname, target ?? parentOf(pathname))
+        if (normalizeHref(next) === href) {
+          // Nowhere else to go on the trail — climb to the list parent.
+          const fallback = stayInPosHub(pathname, parentOf(pathname))
+          if (normalizeHref(fallback) === href) return
+          writeTrail([normalizeHref(fallback)])
+          startNavigationProgress()
+          router.push(fallback)
+          return
+        }
         writeTrail(trail.length > 0 ? trail : [normalizeHref(next)])
         startNavigationProgress()
         router.push(next)

@@ -15,6 +15,16 @@ export default async function EmployeesGuidePage() {
         title="Guide"
         description="Sida Employees / Leave / Attendance / Payroll / Settings / Budget / Policies u shaqeeyaan."
       />
+      <p className="mb-6 text-sm text-muted-foreground">
+        Buugga guud (cutubka HR):{' '}
+        <Link href="/help/manual/so/hr" className="text-primary hover:underline">
+          Help → User manual → Shaqaalaha…
+        </Link>
+        {' · '}
+        <Link href="/help/guide-so" className="text-primary hover:underline">
+          Hagitaan Soomaali
+        </Link>
+      </p>
       <div className="prose prose-sm dark:prose-invert max-w-3xl space-y-8 text-foreground">
         <section className="space-y-2">
           <h2 className="text-base font-semibold">1. Directory (employee card)</h2>

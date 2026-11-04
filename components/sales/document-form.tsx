@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { listBillableExpenses } from '@/app/(app)/sales/actions'
 import {
   FromSourcePicker,
   type AppliedSource,
@@ -100,6 +101,8 @@ export type ItemOption = {
   id: string
   label: string
   price: string | null
+  /** Used when the customer is wholesale. Empty means the sales price still applies. */
+  wholesalePrice?: string | null
   description: string | null
   taxCodeId: string | null
   type?: string
@@ -116,6 +119,7 @@ export type ItemOption = {
     label: string
     quantity: string
     price: string | null
+    wholesalePrice?: string | null
     description: string | null
     taxCodeId: string | null
     type?: string
@@ -125,6 +129,10 @@ export type Option = { id: string; label: string }
 export type CustomerOption = Option & {
   email: string | null
   paymentTermId: string | null
+  /** Prefer this currency on new sales when the document has none yet. */
+  currencyCode?: string | null
+  /** RETAIL charges the sales price. WHOLESALE charges wholesale when the item has one. */
+  priceLevel?: 'RETAIL' | 'WHOLESALE'
   /** Open A/R balance before this document. Positive = customer owes. */
   balance?: string | null
   hint?: string
@@ -146,6 +154,7 @@ type Line = {
   discountPercent: string
   taxCodeId: string
   storeId: string
+  sourcePurchaseLineId?: string
 }
 
 const empty = (key: number, storeId = ''): Line => ({
@@ -182,7 +191,10 @@ type DocumentSeed = {
   depositAccountId: string | null
   paymentMethod?: string | null
   projectId?: string | null
+  trackingCategoryId?: string | null
   discountAmount?: string | null
+  currencyCode?: string | null
+  exchangeRate?: string | null
   lines: {
     itemId: string | null
     description: string | null
@@ -223,6 +235,7 @@ export function DocumentForm({
   initialProjectId,
   initialWorkSite,
   projects = [],
+  classes = [],
   neighbors,
   stores = [],
   stock = {},
@@ -251,6 +264,8 @@ export function DocumentForm({
   initialWorkSite?: string
   /** Open jobs this sale can belong to. */
   projects?: { id: string; label: string; customerId: string; siteLocation?: string | null }[]
+  /** Active classes. Hidden when the company has none. */
+  classes?: { id: string; label: string }[]
   /** The saved document before this one, and the one after, in date then number order. */
   neighbors?: {
     previous: { id: string; number: string } | null
@@ -324,8 +339,23 @@ export function DocumentForm({
 
   const [number, setNumber] = usePropState(documentNumber)
   const [customerId, setCustomerId] = useState(document?.customerId ?? initialCustomerId ?? '')
+  const [billableOpen, setBillableOpen] = useState(false)
+  const [billableLoading, setBillableLoading] = useState(false)
+  const [billableRows, setBillableRows] = useState<
+    {
+      lineId: string
+      description: string | null
+      amount: string
+      billableUnitPrice: string | null
+      documentNumber: string
+    }[]
+  >([])
   const [projectId, setProjectId] = useState(document?.projectId ?? initialProjectId ?? '')
+  const [trackingCategoryId, setTrackingCategoryId] = useState(document?.trackingCategoryId ?? '')
   const [date, setDate] = useState(document?.date ?? today)
+  const [currencyCode, setCurrencyCode] = useState(document?.currencyCode ?? currency)
+  const [exchangeRate, setExchangeRate] = useState(document?.exchangeRate ?? '1')
+  const [acknowledgeCreditLimit, setAcknowledgeCreditLimit] = useState(false)
   const [reference, setReference] = useState(document?.reference ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
   const [customerMessage, setCustomerMessage] = useState(document?.customerMessage ?? '')
@@ -380,6 +410,7 @@ export function DocumentForm({
       setNumber(documentNumber)
       setCustomerId(document.customerId)
       setProjectId(document.projectId ?? '')
+      setTrackingCategoryId(document.trackingCategoryId ?? '')
       setDate(document.date)
       setReference(document.reference ?? '')
       setMemo(document.memo ?? '')
@@ -646,39 +677,24 @@ export function DocumentForm({
   const update = (key: number, patch: Partial<Line>) =>
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)))
 
+  const priceFor = (
+    item: { price: string | null; wholesalePrice?: string | null; type?: string } | null | undefined,
+    level: 'RETAIL' | 'WHOLESALE' | undefined,
+  ) => {
+    if (item?.type === 'SUBTOTAL') return ''
+    if (level === 'WHOLESALE' && item?.wholesalePrice) return fixed2(item.wholesalePrice)
+    return fixed2(item?.price)
+  }
+
   const chooseItem = (key: number, itemId: string) => {
     const item = itemId ? itemById.get(itemId) : null
 
-    // GROUP expands into its members (QuickBooks Desktop).
-    if (item?.type === 'GROUP') {
-      if (!item.components || item.components.length === 0) {
-        toast.error(
-          `"${item.label}" has no items. Open the group and add members before using it on a sale.`,
-        )
-        return
-      }
-      setLines((current) => {
-        const index = current.findIndex((line) => line.key === key)
-        if (index < 0) return current
-        const host = current[index]!
-        const groupQty = parseMoneyInput(host.quantity)?.greaterThan(0)
-          ? parseMoneyInput(host.quantity)!
-          : new Decimal(1)
-        const members: Line[] = item.components!.map((component) => {
-          const memberQty = (parseMoneyInput(component.quantity) ?? new Decimal(1)).times(groupQty)
-          return {
-            key: nextKey.current++,
-            itemId: component.itemId,
-            description: component.description ?? component.label,
-            quantity: fixed2(memberQty.toString()),
-            unitPrice: fixed2(component.price),
-            discountPercent: '',
-            taxCodeId: component.taxCodeId ?? '',
-            storeId: host.storeId || defaultStoreId,
-          }
-        })
-        return [...current.slice(0, index), ...members, ...current.slice(index + 1)]
-      })
+    // A GROUP is one priced kit line. Members move stock when the sale posts
+    // (Phase 11.13) — they are no longer exploded onto the form.
+    if (item?.type === 'GROUP' && (!item.components || item.components.length === 0)) {
+      toast.error(
+        `"${item.label}" has no items. Open the group and add members before using it on a sale.`,
+      )
       return
     }
 
@@ -689,7 +705,7 @@ export function DocumentForm({
               ...line,
               itemId,
               description: item?.description ?? '',
-              unitPrice: item?.type === 'SUBTOTAL' ? '' : fixed2(item?.price),
+              unitPrice: priceFor(item, customers.find((row) => row.id === customerId)?.priceLevel),
               taxCodeId: item?.type === 'SUBTOTAL' || item?.type === 'PAYMENT' ? '' : (item?.taxCodeId ?? ''),
               quantity:
                 item?.type === 'SUBTOTAL'
@@ -709,6 +725,41 @@ export function DocumentForm({
       ...Array.from({ length: count }, () => empty(nextKey.current++, defaultStoreId)),
     ])
   const addLine = () => addLines(1)
+  const openBillable = () => {
+    if (!customerId) {
+      toast.error('Choose a customer first.')
+      return
+    }
+    setBillableOpen(true)
+    setBillableLoading(true)
+    void listBillableExpenses({ customerId }).then((result) => {
+      setBillableLoading(false)
+      if (result.ok) setBillableRows(result.data)
+      else {
+        setBillableRows([])
+        toast.error(result.error.message)
+      }
+    })
+  }
+  const appendBillable = (row: (typeof billableRows)[number]) => {
+    setLines((current) => {
+      if (current.some((line) => line.sourcePurchaseLineId === row.lineId)) return current
+      return [
+        ...current,
+        {
+          key: nextKey.current++,
+          itemId: '',
+          description: row.description?.trim() || `Recharge ${row.documentNumber}`,
+          quantity: '1.00',
+          unitPrice: fixed2(row.billableUnitPrice ?? row.amount),
+          discountPercent: '',
+          taxCodeId: '',
+          storeId: defaultStoreId,
+          sourcePurchaseLineId: row.lineId,
+        },
+      ]
+    })
+  }
   const clearLines = () => {
     setLines(Array.from({ length: minimumLines }, (_, index) => empty(index + 1, defaultStoreId)))
     nextKey.current = minimumLines + 1
@@ -748,7 +799,20 @@ export function DocumentForm({
   }
 
   const changeCustomer = (id: string) => {
+    const previous = customers.find((row) => row.id === customerId)
+    const next = customers.find((row) => row.id === id)
+    setLines((current) =>
+      current.map((line) => {
+        if (!line.itemId || line.sourcePurchaseLineId) return line
+        const item = itemById.get(line.itemId)
+        const previousDefault = priceFor(item, previous?.priceLevel)
+        const stillDefault = line.unitPrice.trim() === '' || fixed2(line.unitPrice) === previousDefault
+        if (!stillDefault) return line
+        return { ...line, unitPrice: priceFor(item, next?.priceLevel) }
+      }),
+    )
     setCustomerId(id)
+    if (next?.currencyCode) setCurrencyCode(next.currencyCode)
     if (convertedFromId) {
       setConvertedFromId(null)
       setConvertedFromLabel(null)
@@ -776,6 +840,7 @@ export function DocumentForm({
       paymentMethod:
         config.type === 'SALES_RECEIPT' || config.type === 'REFUND_RECEIPT' ? paymentMethod : '',
       projectId,
+      trackingCategoryId,
       saveAsDraft: draft,
       ...(convertedFromId && !document?.id ? { convertedFromId } : {}),
       ...(offersDocumentDiscount ? { discountKind, discountValue } : {}),
@@ -787,6 +852,7 @@ export function DocumentForm({
         discountPercent: line.discountPercent,
         taxCodeId: line.taxCodeId,
         storeId: line.storeId,
+        sourcePurchaseLineId: line.sourcePurchaseLineId || '',
       })),
     })
 
@@ -831,8 +897,17 @@ export function DocumentForm({
       if (site) setWorkSite((current) => current.trim() ? current : site)
     },
     projects,
+    trackingCategoryId,
+    setTrackingCategoryId,
+    classes,
     date,
     setDate,
+    currencyCode,
+    setCurrencyCode,
+    exchangeRate,
+    setExchangeRate,
+    acknowledgeCreditLimit,
+    setAcknowledgeCreditLimit,
     reference,
     setReference,
     memo,
@@ -908,8 +983,54 @@ export function DocumentForm({
             {...neighborHrefs(`/sales/${config.slug}`, neighbors, document?.id)}
           />
           <DocumentFinder type={config.type} slug={config.slug} singular={config.singular} />
+          {config.type === 'INVOICE' ? (
+            <Button type="button" variant="outline" size="sm" onClick={openBillable}>
+              Add billable expenses
+            </Button>
+          ) : null}
         </div>
       )}
+
+      <Dialog open={billableOpen} onOpenChange={setBillableOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Billable expenses</DialogTitle>
+            <DialogDescription>
+              Costs marked billable to this customer that are not on an invoice yet.
+            </DialogDescription>
+          </DialogHeader>
+          {billableLoading ? (
+            <p className="text-sm text-muted-foreground">Looking up costs…</p>
+          ) : billableRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing waiting to be recharged.</p>
+          ) : (
+            <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
+              {billableRows.map((row) => {
+                const added = lines.some((line) => line.sourcePurchaseLineId === row.lineId)
+                return (
+                  <li key={row.lineId} className="flex items-center justify-between gap-3">
+                    <span>
+                      <span className="font-medium">{row.documentNumber}</span>
+                      <span className="block text-muted-foreground">
+                        {row.description ?? 'Expense'} · {formatMoney(row.billableUnitPrice ?? row.amount, currency)}
+                      </span>
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={added}
+                      onClick={() => appendBillable(row)}
+                    >
+                      {added ? 'Added' : 'Add'}
+                    </Button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {formCustomization && activeForm ? (
         <FormCustomizePanel
@@ -1118,6 +1239,24 @@ function TemplateThumb({ kind, active }: { kind: SalesFormTemplateId; active: bo
   )
 }
 
+function ClassField({ props }: { props: LayoutProps }) {
+  if (props.classes.length === 0 && !props.trackingCategoryId) return null
+  return (
+    <Field name="trackingCategoryId" label="Class" error={props.state.fieldErrors?.trackingCategoryId}>
+      <EntityPicker
+        id="trackingCategoryId"
+        options={props.classes}
+        value={props.trackingCategoryId || null}
+        onChange={(next) => props.setTrackingCategoryId(next ?? '')}
+        placeholder="Optional class"
+        clearable
+        emptyMessage="No classes"
+        error={props.state.fieldErrors?.trackingCategoryId}
+      />
+    </Field>
+  )
+}
+
 function ProjectField({ props }: { props: LayoutProps }) {
   if (!props.showField('project')) return null
   if (props.projects.length === 0 && !props.projectId) return null
@@ -1173,8 +1312,17 @@ type LayoutProps = {
   projectId: string
   setProjectId: (value: string) => void
   projects: { id: string; label: string; customerId: string; siteLocation?: string | null }[]
+  trackingCategoryId: string
+  setTrackingCategoryId: (value: string) => void
+  classes: { id: string; label: string }[]
   date: string
   setDate: (value: string) => void
+  currencyCode: string
+  setCurrencyCode: (value: string) => void
+  exchangeRate: string
+  setExchangeRate: (value: string) => void
+  acknowledgeCreditLimit: boolean
+  setAcknowledgeCreditLimit: (value: boolean) => void
   reference: string
   setReference: (value: string) => void
   memo: string
@@ -1254,6 +1402,7 @@ function HeaderFields({
               props.setCustomerId(id)
               const chosen = customers.find((row) => row.id === id)
               if (chosen?.paymentTermId) props.setPaymentTermId(chosen.paymentTermId)
+              if (chosen?.currencyCode) props.setCurrencyCode(chosen.currencyCode)
             }}
             placeholder="Search or add a customer"
             required
@@ -1262,6 +1411,7 @@ function HeaderFields({
         </Field>
 
         <ProjectField props={props} />
+        <ClassField props={props} />
 
         <Field name="date" label="Date" required error={state.fieldErrors?.date}>
           <DateField
@@ -1281,6 +1431,51 @@ function HeaderFields({
           error={state.fieldErrors?.number}
           recordId={props.recordId}
         />
+
+        <Field name="currencyCode" label="Currency" error={state.fieldErrors?.currencyCode}>
+          <Input
+            name="currencyCode"
+            value={props.currencyCode}
+            onChange={(event) => props.setCurrencyCode(event.target.value.toUpperCase())}
+            maxLength={3}
+            className="uppercase"
+            aria-invalid={state.fieldErrors?.currencyCode ? true : undefined}
+          />
+        </Field>
+        <Field
+          name="exchangeRate"
+          label="FX rate"
+          hint={`Base (${props.currency}) per 1 ${props.currencyCode || props.currency}. Use 1 when same currency.`}
+          error={state.fieldErrors?.exchangeRate}
+        >
+          <Input
+            name="exchangeRate"
+            value={props.exchangeRate}
+            onChange={(event) => props.setExchangeRate(event.target.value)}
+            inputMode="decimal"
+            className="tabular"
+            aria-invalid={state.fieldErrors?.exchangeRate ? true : undefined}
+          />
+        </Field>
+        <input
+          type="hidden"
+          name="acknowledgeCreditLimit"
+          value={props.acknowledgeCreditLimit ? 'true' : 'false'}
+        />
+        {state.fieldErrors?.acknowledgeCreditLimit ? (
+          <label className="col-span-full flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            <input
+              type="checkbox"
+              checked={props.acknowledgeCreditLimit}
+              onChange={(event) => props.setAcknowledgeCreditLimit(event.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              {state.fieldErrors.acknowledgeCreditLimit[0] ??
+                'This invoice exceeds the credit limit. Tick to confirm and save again.'}
+            </span>
+          </label>
+        ) : null}
 
         {showDue && props.showField('dueDate') ? (
           <Field name="dueDate" label={dueLabel}>
@@ -1557,6 +1752,7 @@ function InvoiceLayout(props: LayoutProps) {
                 <Input id="customerEmail" value={customer?.email ?? ''} readOnly placeholder="No email on this customer" />
               </Field>
               <ProjectField props={props} />
+              <ClassField props={props} />
             </div>
             {props.showField('addresses') &&
             (customer?.billingAddress || customer?.shippingAddress) ? (
@@ -1611,6 +1807,40 @@ function InvoiceLayout(props: LayoutProps) {
             error={state.fieldErrors?.number}
             recordId={props.recordId}
           />
+          <Field name="currencyCode" label="Currency" error={state.fieldErrors?.currencyCode}>
+            <Input
+              name="currencyCode"
+              value={props.currencyCode}
+              onChange={(event) => props.setCurrencyCode(event.target.value.toUpperCase())}
+              maxLength={3}
+              className="uppercase"
+            />
+          </Field>
+          <Field name="exchangeRate" label="FX rate" error={state.fieldErrors?.exchangeRate}>
+            <Input
+              name="exchangeRate"
+              value={props.exchangeRate}
+              onChange={(event) => props.setExchangeRate(event.target.value)}
+              inputMode="decimal"
+              className="tabular"
+            />
+          </Field>
+          <input
+            type="hidden"
+            name="acknowledgeCreditLimit"
+            value={props.acknowledgeCreditLimit ? 'true' : 'false'}
+          />
+          {state.fieldErrors?.acknowledgeCreditLimit ? (
+            <label className="col-span-full flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              <input
+                type="checkbox"
+                checked={props.acknowledgeCreditLimit}
+                onChange={(event) => props.setAcknowledgeCreditLimit(event.target.checked)}
+                className="mt-0.5"
+              />
+              <span>{state.fieldErrors.acknowledgeCreditLimit[0]}</span>
+            </label>
+          ) : null}
           {props.config.needsDeposit || !props.showField('dueDate') ? null : (
             <Field
               name="dueDate"

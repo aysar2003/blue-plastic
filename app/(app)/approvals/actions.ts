@@ -17,6 +17,7 @@ const entityTypeSchema = z.enum([
   'DEPOSIT',
   'CUSTOMER',
   'VENDOR',
+  'PAYROLL',
 ])
 
 export const decideApproval = action
@@ -42,6 +43,7 @@ export const decideApproval = action
     revalidatePath('/inventory', 'layout')
     revalidatePath('/customers', 'layout')
     revalidatePath('/vendors', 'layout')
+    revalidatePath('/employees/payroll', 'layout')
     return result
   })
 

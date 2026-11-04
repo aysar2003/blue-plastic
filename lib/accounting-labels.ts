@@ -102,6 +102,7 @@ export const JOURNAL_SOURCE_LABELS: Record<JournalSourceType, string> = {
   POS_CASH_MOVE: 'POS cash in/out',
   POS_SESSION_CLOSE: 'POS session close',
   PAYROLL: 'Payroll',
+  PAYROLL_SETTLEMENT: 'Payroll settlement',
 }
 
 export const PERIOD_STATUS_LABELS: Record<PeriodStatus, string> = {

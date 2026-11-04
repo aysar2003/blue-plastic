@@ -167,6 +167,21 @@ export function RegisterForm() {
           />
         </Field>
 
+        <Field
+          name="phone"
+          label="Mobile (optional)"
+          hint="You can also sign in with this number later."
+          error={state.fieldErrors?.phone}
+        >
+          <Input
+            {...fieldProps('phone', state.fieldErrors?.phone)}
+            type="tel"
+            autoComplete="tel"
+            placeholder="+252 61 2345678"
+            defaultValue={v.phone}
+          />
+        </Field>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             name="password"

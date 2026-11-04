@@ -26,6 +26,16 @@ const schema = z.object({
   APP_URL: z.string().url().optional(),
   AUTH_URL: z.string().url().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  /** Platform SMTP for auth OTP (not per-company document mail). Optional in dev. */
+  AUTH_SMTP_HOST: z.string().min(1).optional(),
+  AUTH_SMTP_PORT: z.coerce.number().int().positive().optional(),
+  AUTH_SMTP_USER: z.string().min(1).optional(),
+  AUTH_SMTP_PASS: z.string().min(1).optional(),
+  AUTH_SMTP_FROM: z.string().email().optional(),
+  AUTH_SMTP_SECURE: z
+    .union([z.literal('true'), z.literal('false'), z.boolean()])
+    .optional()
+    .transform((v) => v === true || v === 'true'),
 })
 
 type Env = z.infer<typeof schema>
@@ -40,6 +50,12 @@ function load(): Env {
     APP_URL: process.env.APP_URL || undefined,
     AUTH_URL: process.env.AUTH_URL || undefined,
     NODE_ENV: process.env.NODE_ENV,
+    AUTH_SMTP_HOST: process.env.AUTH_SMTP_HOST || undefined,
+    AUTH_SMTP_PORT: process.env.AUTH_SMTP_PORT || undefined,
+    AUTH_SMTP_USER: process.env.AUTH_SMTP_USER || undefined,
+    AUTH_SMTP_PASS: process.env.AUTH_SMTP_PASS || undefined,
+    AUTH_SMTP_FROM: process.env.AUTH_SMTP_FROM || undefined,
+    AUTH_SMTP_SECURE: process.env.AUTH_SMTP_SECURE || undefined,
   })
 
   if (!parsed.success) {

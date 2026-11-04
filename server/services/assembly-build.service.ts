@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { toDate } from '@/lib/date'
+import { explodeBom, leafNeeds, shortage, type BomComponent } from '@/lib/erp/bom-explode'
 import { Decimal, ZERO } from '@/lib/money'
 import type { AssemblyBuildInput } from '@/lib/validation/inventory'
 import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
@@ -433,4 +434,75 @@ export async function listAssemblies(ctx: OrgContext) {
       components,
     }
   })
+}
+
+/**
+ * Multi-level materials plan: explode nested assemblies into leaf parts
+ * and compare against on-hand.
+ */
+export async function materialsPlan(ctx: OrgContext, itemId: string, quantity: string) {
+  const qty = new Decimal(quantity)
+  const item = await db.item.findFirst({
+    where: { id: itemId, orgId: ctx.orgId, deletedAt: null },
+    select: { id: true, name: true, type: true },
+  })
+  if (!item) throw notFound('Item')
+
+  async function tree(
+    id: string,
+    name: string,
+    perParent: Decimal,
+    seen: Set<string>,
+  ): Promise<BomComponent> {
+    if (seen.has(id)) return { id, name, quantity: perParent }
+    const next = new Set(seen)
+    next.add(id)
+    const rows = await db.itemComponent.findMany({
+      where: { orgId: ctx.orgId, parentItemId: id },
+      select: {
+        quantity: true,
+        component: { select: { id: true, name: true, type: true, isActive: true } },
+      },
+    })
+    const children: BomComponent[] = []
+    for (const row of rows) {
+      if (!row.component.isActive) continue
+      const childQty = new Decimal(row.quantity.toString())
+      if (row.component.type === 'INVENTORY_ASSEMBLY') {
+        children.push(await tree(row.component.id, row.component.name, childQty, next))
+      } else {
+        children.push({
+          id: row.component.id,
+          name: row.component.name,
+          quantity: childQty,
+        })
+      }
+    }
+    return { id, name, quantity: perParent, children }
+  }
+
+  const root = await tree(item.id, item.name, new Decimal(1), new Set())
+  const exploded = explodeBom(root, qty)
+  const leaves = leafNeeds(exploded)
+  const positions = await positionsOf(
+    db as unknown as Tx,
+    ctx.orgId,
+    leaves.map((row) => row.id),
+  )
+  return {
+    item: { id: item.id, name: item.name },
+    quantity: qty.toFixed(4),
+    lines: leaves.map((row) => {
+      const onHand = positions.get(row.id)?.quantity ?? ZERO
+      const short = shortage(row.quantity, onHand)
+      return {
+        id: row.id,
+        name: row.name,
+        needed: row.quantity.toFixed(4),
+        onHand: onHand.toFixed(4),
+        short: short.toFixed(4),
+        isShort: short.greaterThan(0),
+      }
+    }),
+  }
 }

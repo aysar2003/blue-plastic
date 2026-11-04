@@ -3,11 +3,11 @@ import Link from 'next/link'
 import { ListFilterIcon } from 'lucide-react'
 
 import { BooksTabs } from '@/components/accounts/books-tabs'
+import { BankRuleList } from '@/components/banking/bank-rule-list'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 
@@ -51,32 +51,18 @@ export default async function BankRulesPage() {
         />
       ) : (
         <Card className="overflow-hidden p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Contains</TableHead>
-                <TableHead>Bank</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Payee</TableHead>
-                <TableHead>Active</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rules.map((rule) => (
-                <TableRow key={rule.id}>
-                  <TableCell className="font-medium">{rule.name}</TableCell>
-                  <TableCell>{rule.contains}</TableCell>
-                  <TableCell className="text-muted-foreground">{rule.account?.name ?? 'Every bank'}</TableCell>
-                  <TableCell>
-                    {rule.categoryAccount.code} {rule.categoryAccount.name}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{rule.vendor?.displayName ?? '—'}</TableCell>
-                  <TableCell>{rule.active ? 'Yes' : 'No'}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <BankRuleList
+            canManage={ctx.permissions.has('bank:import')}
+            rules={rules.map((rule) => ({
+              id: rule.id,
+              name: rule.name,
+              contains: rule.contains,
+              active: rule.active,
+              bank: rule.account?.name ?? 'Every bank',
+              category: `${rule.categoryAccount.code} ${rule.categoryAccount.name}`,
+              payee: rule.vendor?.displayName ?? '—',
+            }))}
+          />
         </Card>
       )}
     </>

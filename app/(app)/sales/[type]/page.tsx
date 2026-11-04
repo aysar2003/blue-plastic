@@ -21,6 +21,7 @@ import { SalesOrderRegister } from '@/components/sales/sales-order-register'
 import { SalesSheetRegister } from '@/components/sales/sales-sheet-register'
 import { bySlug, isProposal, isSalesOrder, STATUS_LABELS } from '@/lib/sales-types'
 import { parseListQuery } from '@/lib/validation/common'
+import { isDatabaseUnavailable } from '@/lib/db-error'
 import { requireOrgContext } from '@/server/auth/context'
 import { trailsFor } from '@/server/services/audit.service'
 import { loadDepositAccounts } from '@/server/services/sales-options'
@@ -53,6 +54,7 @@ const INVOICE_DATES = [
   { value: 'last', label: 'Last month' },
   { value: 'last3', label: 'Last 3 months' },
   { value: 'year', label: 'This year' },
+  { value: 'last12', label: 'Last 12 months' },
 ]
 
 const RECEIPT_FILTERS = [
@@ -84,6 +86,7 @@ const ESTIMATE_DATES = [
   { value: 'last', label: 'Last month' },
   { value: 'last3', label: 'Last 3 months' },
   { value: 'year', label: 'This year' },
+  { value: 'last12', label: 'Last 12 months' },
 ]
 
 export default async function SalesListPage({
@@ -130,8 +133,8 @@ export default async function SalesListPage({
   const range = presetRange(datePreset, today(ctx.organization.timeZone))
   const sort = readSort(search, SORTABLE, { sort: 'date', dir: 'desc' })
 
-  const [page, receiptHome, invoiceHome, estimateHome, orderHome, choices, depositAccounts] =
-    await Promise.all([
+  const loadLists = () =>
+    Promise.all([
       salesService.list(ctx, config.type, query, {
         status,
         customerId,
@@ -151,6 +154,20 @@ export default async function SalesListPage({
         ? loadDepositAccounts(ctx)
         : Promise.resolve([]),
     ])
+  let page: Awaited<ReturnType<typeof salesService.list>>
+  let receiptHome: Awaited<ReturnType<typeof salesService.receiptHome>> | null
+  let invoiceHome: Awaited<ReturnType<typeof salesService.invoiceHome>> | null
+  let estimateHome: Awaited<ReturnType<typeof salesService.estimateHome>> | null
+  let orderHome: Awaited<ReturnType<typeof salesService.salesOrderHome>> | null
+  let choices: Awaited<ReturnType<typeof salesService.customerChoices>>
+  let depositAccounts: Awaited<ReturnType<typeof loadDepositAccounts>>
+  try {
+    ;[page, receiptHome, invoiceHome, estimateHome, orderHome, choices, depositAccounts] = await loadLists()
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    ;[page, receiptHome, invoiceHome, estimateHome, orderHome, choices, depositAccounts] = await loadLists()
+  }
   const trails = await trailsFor(ctx, page.rows.map((row) => row.id))
   const currency = ctx.organization.baseCurrency
   const timeZone = ctx.organization.timeZone
@@ -335,7 +352,6 @@ export default async function SalesListPage({
             const later = trail?.changed && trail.changed.name !== trail.entered?.name
             const canConvert =
               canCreateInvoice &&
-              !row.convertedTo &&
               row.status !== 'VOID' &&
               row.status !== 'DECLINED' &&
               row.status !== 'CLOSED'
@@ -388,12 +404,11 @@ export default async function SalesListPage({
             const later = trail?.changed && trail.changed.name !== trail.entered?.name
             const canFulfill =
               canCreateInvoice &&
-              !row.convertedTo &&
               row.status !== 'VOID' &&
               row.status !== 'CLOSED'
             const statusText =
               row.status === 'CLOSED'
-                ? row.convertedTo?.type === 'SALES_RECEIPT'
+                ? row.convertedTo.some((child) => child.type === 'SALES_RECEIPT')
                   ? 'Receipt'
                   : 'Invoiced'
                 : (STATUS_LABELS[row.status] ?? row.status)

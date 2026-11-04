@@ -49,4 +49,15 @@ describe('dialog stack + Back', () => {
     unreg()
     expect(openDialogCount()).toBe(0)
   })
+
+  it('skips stale closers so route Back can still run', () => {
+    const closed: string[] = []
+    registerDialogCloser(
+      () => closed.push('dead'),
+      () => false,
+    )
+    expect(openDialogCount()).toBe(0)
+    expect(closeTopDialog()).toBe(false)
+    expect(closed).toEqual([])
+  })
 })

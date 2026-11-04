@@ -187,7 +187,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'invoice:create', label: 'Create sales documents' },
       { key: 'invoice:update', label: 'Edit sales documents' },
       { key: 'invoice:void', label: 'Void / delete sales documents' },
-      { key: 'invoice:send', label: 'Send sales documents' },
+      { key: 'invoice:send', label: 'Email documents (invoices, POs, statements)' },
       {
         key: 'invoice:approve',
         label: 'Approve sales documents',

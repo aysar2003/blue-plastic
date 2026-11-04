@@ -12,6 +12,7 @@ import { AccountPicker } from '@/components/forms/account-picker'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
 import { LockedNumber } from '@/components/forms/locked-number'
+import { useDuplicatePrompt } from '@/components/forms/duplicate-prompt'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { Button } from '@/components/ui/button'
@@ -91,6 +92,7 @@ export function BillPaymentForm({
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveBillPaymentForm, idleState)
+  const { acknowledge, formRef, beforeSubmit } = useDuplicatePrompt(state)
 
   const [number, setNumber] = usePropState(documentNumber)
   const [vendorId, setVendorId] = useState(initialVendorId ?? '')
@@ -176,27 +178,38 @@ export function BillPaymentForm({
 
   const overApplied = bills.some((bill) => amountFor(bill.id).greaterThan(new Decimal(bill.balance)))
 
-  const payload = JSON.stringify({
-    number,
-    vendorId,
-    date,
-    // The payment is exactly what is being settled: batch payment is the point.
-    amount: appliedTotal.toFixed(2),
-    method,
-    paymentAccountId,
-    reference,
-    memo,
-    applications: bills
-      .filter((bill) => amountFor(bill.id).greaterThan(0))
-      .map((bill) => ({ billId: bill.id, amount: amountFor(bill.id).toFixed(2) })),
-  })
+  const payloadInput = useRef<HTMLInputElement>(null)
+  const payloadFor = () =>
+    JSON.stringify({
+      number,
+      vendorId,
+      date,
+      // The payment is exactly what is being settled: batch payment is the point.
+      amount: appliedTotal.toFixed(2),
+      method,
+      paymentAccountId,
+      reference,
+      memo,
+      acknowledgeDuplicate: acknowledge.current,
+      applications: bills
+        .filter((bill) => amountFor(bill.id).greaterThan(0))
+        .map((bill) => ({ billId: bill.id, amount: amountFor(bill.id).toFixed(2) })),
+    })
 
   const canSave =
     vendorId !== '' && paymentAccountId !== '' && appliedTotal.greaterThan(0) && !overApplied
 
   return (
-    <form action={formAction} className="space-y-2">
-      <input type="hidden" name="payload" value={payload} />
+    <form
+      ref={formRef}
+      action={formAction}
+      className="space-y-2"
+      onSubmit={() => {
+        beforeSubmit()
+        if (payloadInput.current) payloadInput.current.value = payloadFor()
+      }}
+    >
+      <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor()} />
 
       <Card>
         <CardContent className="space-y-3 p-3 sm:p-4">

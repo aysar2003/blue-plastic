@@ -123,7 +123,12 @@ export function OrganizationForm({ organization, canEdit }: { organization: Orga
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field name="country" label="Country code" hint="Two letters, e.g. US." error={e?.country}>
+            <Field
+              name="country"
+              label="Country code"
+              hint="Two letters (ISO). Somalia = SO, Kenya = KE, UAE = AE."
+              error={e?.country}
+            >
               <Input
                 {...fieldProps('country', e?.country, true)}
                 defaultValue={organization.country ?? ''}

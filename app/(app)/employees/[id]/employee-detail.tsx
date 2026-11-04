@@ -48,6 +48,9 @@ type Employee = {
   wageAmount: string
   expenseAccountId: string | null
   payableAccountId: string | null
+  payMethod?: 'CASH' | 'BANK' | 'MOBILE'
+  payAccountId?: string | null
+  structureId?: string | null
   active: boolean
 }
 
@@ -60,6 +63,7 @@ export function EmployeeDetail({
   linkableUsers,
   managers,
   accounts,
+  structures = [],
   canUpdate,
   canDelete,
   wageChanges = [],
@@ -69,6 +73,7 @@ export function EmployeeDetail({
   linkableUsers: Linkable[]
   managers: Manager[]
   accounts: Account[]
+  structures?: { id: string; name: string }[]
   canUpdate: boolean
   canDelete: boolean
   wageChanges?: WageChange[]
@@ -103,6 +108,9 @@ export function EmployeeDetail({
   const [wageRaiseNote, setWageRaiseNote] = useState('')
   const [expenseAccountId, setExpenseAccountId] = useState(employee.expenseAccountId ?? '')
   const [payableAccountId, setPayableAccountId] = useState(employee.payableAccountId ?? '')
+  const [payMethod, setPayMethod] = useState(employee.payMethod ?? 'CASH')
+  const [payAccountId, setPayAccountId] = useState(employee.payAccountId ?? '')
+  const [structureId, setStructureId] = useState(employee.structureId ?? '')
 
   const wageChanged = useMemo(() => {
     const amount = wageAmount.trim() || '0'
@@ -143,6 +151,9 @@ export function EmployeeDetail({
       wageAmount: wageAmount.trim() || '0',
       expenseAccountId: expenseAccountId || null,
       payableAccountId: payableAccountId || null,
+      payMethod,
+      payAccountId: payAccountId || null,
+      structureId: structureId || null,
       active: employee.active,
       wageRaiseNote: wageChanged ? wageRaiseNote.trim() || null : null,
     }
@@ -369,6 +380,48 @@ export function EmployeeDetail({
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Pay method">
+          <select
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm disabled:opacity-50"
+            value={payMethod}
+            onChange={(e) => setPayMethod(e.target.value as 'CASH' | 'BANK' | 'MOBILE')}
+            disabled={!canUpdate}
+          >
+            <option value="CASH">Cash</option>
+            <option value="BANK">Bank</option>
+            <option value="MOBILE">Mobile money</option>
+          </select>
+        </Field>
+        <Field label="Pay account">
+          <select
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm disabled:opacity-50"
+            value={payAccountId}
+            onChange={(e) => setPayAccountId(e.target.value)}
+            disabled={!canUpdate}
+          >
+            <option value="">Use the run account</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Salary structure">
+          <select
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm disabled:opacity-50"
+            value={structureId}
+            onChange={(e) => setStructureId(e.target.value)}
+            disabled={!canUpdate}
+          >
+            <option value="">Wage only</option>
+            {structures.map((structure) => (
+              <option key={structure.id} value={structure.id}>
+                {structure.name}
               </option>
             ))}
           </select>

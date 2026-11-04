@@ -28,6 +28,7 @@ import {
 import { Input } from '@/components/ui/input'
 import type { AccountPickerOption, PartyRequirement } from '@/lib/account-options'
 import { formatDate } from '@/lib/date'
+import { withIntercompanyMemo } from '@/lib/erp/intercompany-memo'
 import { Decimal, formatMoney, parseMoneyInput } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import { findJournals, postManualJournalForm } from '../actions'
@@ -103,6 +104,7 @@ type Line = {
   credit: string
   description: string
   party: PartyValue
+  trackingCategoryId: string
 }
 
 const ROW_COUNT = 10
@@ -114,6 +116,7 @@ const EMPTY = (key: number): Line => ({
   credit: '',
   description: '',
   party: null,
+  trackingCategoryId: '',
 })
 
 const blankLines = () => Array.from({ length: ROW_COUNT }, (_, index) => EMPTY(index + 1))
@@ -147,6 +150,7 @@ export function JournalEntryForm({
   currency,
   register,
   neighbors,
+  classes = [],
 }: {
   accounts: AccountPickerOption[]
   customers: PartyOption[]
@@ -161,6 +165,8 @@ export function JournalEntryForm({
     previous: { id: string; number: string } | null
     next: { id: string; number: string } | null
   }
+  /** Active classes. Hidden when the company has none. */
+  classes?: { id: string; name: string }[]
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(postManualJournalForm, idleState)
@@ -168,7 +174,9 @@ export function JournalEntryForm({
   const [lines, setLines] = useState<Line[]>(blankLines)
   const [date, setDate] = useState(today)
   const [memo, setMemo] = useState('')
+  const [intercompany, setIntercompany] = useState(false)
   const [isAdjusting, setIsAdjusting] = useState(false)
+  const [autoReverse, setAutoReverse] = useState(false)
   const [listOpen, setListOpen] = useState(true)
   const [listFilter, setListFilter] = useState<'all' | 'manual' | 'adjusting'>('all')
   const nextKey = useRef(ROW_COUNT + 1)
@@ -183,6 +191,7 @@ export function JournalEntryForm({
       if (afterSave.current === 'new') {
         setMemo('')
         setIsAdjusting(false)
+        setAutoReverse(false)
         setDate(today)
         setLines(blankLines())
         nextKey.current = ROW_COUNT + 1
@@ -346,6 +355,7 @@ export function JournalEntryForm({
     setDate(today)
     setMemo('')
     setIsAdjusting(false)
+    setAutoReverse(false)
     setLines(blankLines())
     nextKey.current = ROW_COUNT + 1
   }
@@ -358,8 +368,9 @@ export function JournalEntryForm({
   const payload = JSON.stringify({
     number,
     date,
-    memo,
+    memo: withIntercompanyMemo(memo, intercompany),
     isAdjusting,
+    autoReverse,
     lines: filled.map((line) => {
       const party = partyForLine(line, lines, requirementOf(accountsById.get(line.accountId)))
       return {
@@ -369,6 +380,7 @@ export function JournalEntryForm({
         description: line.description,
         customerId: party?.kind === 'customer' ? party.id : null,
         vendorId: party?.kind === 'vendor' ? party.id : null,
+        trackingCategoryId: line.trackingCategoryId,
       }
     }),
   })
@@ -454,15 +466,26 @@ export function JournalEntryForm({
               />
             </Field>
 
-            <label className="flex items-end gap-2 pb-2 text-sm">
-              <input
-                type="checkbox"
-                checked={isAdjusting}
-                onChange={(event) => setIsAdjusting(event.target.checked)}
-                className="size-4 rounded border-input"
-              />
-              Adjusting entry
-            </label>
+            <div className="flex flex-wrap items-end gap-4 pb-2 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={isAdjusting}
+                  onChange={(event) => setIsAdjusting(event.target.checked)}
+                  className="size-4 rounded border-input"
+                />
+                Adjusting entry
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={autoReverse}
+                  onChange={(event) => setAutoReverse(event.target.checked)}
+                  className="size-4 rounded border-input"
+                />
+                Reverse next period
+              </label>
+            </div>
           </div>
 
           <Field
@@ -478,6 +501,15 @@ export function JournalEntryForm({
               placeholder="Optional — what this entry is for"
             />
           </Field>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={intercompany}
+              onChange={(event) => setIntercompany(event.target.checked)}
+              className="size-4 rounded border-input"
+            />
+            Intercompany — prefix memo with [IC] so group consolidation skips this journal
+          </label>
 
           <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
             To move money from <strong>Opening Balance Equity</strong> into{' '}
@@ -498,6 +530,7 @@ export function JournalEntryForm({
                 <th className="w-32 px-2 py-1.5 text-right">Credit ({currency})</th>
                 <th className="min-w-40 px-2 py-1.5 text-left">Memo</th>
                 <th className="min-w-52 px-2 py-1.5 text-left">Name</th>
+                {classes.length > 0 ? <th className="min-w-40 px-2 py-1.5 text-left">Class</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -604,6 +637,19 @@ export function JournalEntryForm({
                         </span>
                       ) : null}
                     </td>
+                    {classes.length > 0 ? (
+                      <td className="px-1 py-0.5">
+                        <Combobox
+                          options={classes.map((row) => ({ value: row.id, label: row.name }))}
+                          value={line.trackingCategoryId || null}
+                          onChange={(next) => update(line.key, { trackingCategoryId: next ?? '' })}
+                          placeholder="Class"
+                          emptyMessage="No class matches."
+                          clearable
+                          aria-label="Class"
+                        />
+                      </td>
+                    ) : null}
                   </tr>
                 )
               })}
@@ -613,7 +659,7 @@ export function JournalEntryForm({
                 <td className="px-3 py-2">Totals</td>
                 <td className="tabular px-3 py-2 text-right">{formatMoney(totals.debit, currency)}</td>
                 <td className="tabular px-3 py-2 text-right">{formatMoney(totals.credit, currency)}</td>
-                <td colSpan={2} className="px-3 py-2 text-xs font-normal text-muted-foreground">
+                <td colSpan={classes.length > 0 ? 3 : 2} className="px-3 py-2 text-xs font-normal text-muted-foreground">
                   {!totals.difference.isZero()
                     ? `Out of balance by ${formatMoney(totals.difference.abs(), currency)}`
                     : wrongParty

@@ -11,6 +11,7 @@ import { loadFormCustomization } from '@/server/services/form-customization'
 import { loadPurchaseOptions } from '@/server/services/purchase-options'
 import * as purchaseService from '@/server/services/purchase.service'
 import * as storeService from '@/server/services/store.service'
+import * as trackingCategories from '@/server/services/tracking-category.service'
 
 export const metadata: Metadata = { title: 'Edit document' }
 
@@ -28,12 +29,13 @@ export default async function EditPurchasePage({
   if (!config) notFound()
 
   const ctx = await requireOrgContext('bill:update')
-  const [document, options, neighbors, shelf, formCustomization] = await Promise.all([
+  const [document, options, neighbors, shelf, formCustomization, classes] = await Promise.all([
     purchaseService.get(ctx, id),
     loadPurchaseOptions(ctx),
     purchaseService.neighbors(ctx, config.type, id),
     storeService.quantities(ctx),
     loadFormCustomization(ctx, 'purchase', config.type),
+    trackingCategories.list(ctx),
   ])
 
   if (document.type !== config.type) notFound()
@@ -73,6 +75,7 @@ export default async function EditPurchasePage({
           paymentAccountId: document.paymentAccount?.id ?? null,
           offsetCustomerId: document.offsetCustomer?.id ?? null,
           projectId: document.projectId ?? null,
+          trackingCategoryId: document.trackingCategoryId ?? null,
           lines: document.lines.map((line) => ({
             itemId: line.item?.id ?? null,
             expenseAccountId: line.expenseAccount?.id ?? null,
@@ -81,9 +84,12 @@ export default async function EditPurchasePage({
             unitPrice: line.unitPrice.toString(),
             taxCodeId: line.taxCode?.id ?? null,
             storeId: line.storeId,
+            billableCustomerId: line.billableCustomerId,
+            billableUnitPrice: line.billableUnitPrice,
           })),
         }}
         projects={options.projects}
+        classes={classes.map((row) => ({ id: row.id, label: row.name }))}
         neighbors={neighbors}
         stores={shelf.stores}
         stock={shelf.byItem}

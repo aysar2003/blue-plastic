@@ -1,0 +1,108 @@
+﻿{
+  "dir": "C:\\Users\\Zmart\\Desktop\\qb-alfuraat-export",
+  "invoices": {
+    "total": 503,
+    "withItemLines": 459,
+    "noItemLines": 44,
+    "noLineSamples": [
+      {
+        "n": "0834.",
+        "lineCount": 1,
+        "hasDescOnly": true,
+        "snippet": "\n<TxnLineID>F90-1614951274</TxnLineID>\n<Desc>CLOSE</Desc>\n"
+      },
+      {
+        "n": "0880.",
+        "lineCount": 1,
+        "hasDescOnly": true,
+        "snippet": "\n<TxnLineID>1734-1649062275</TxnLineID>\n<Desc>CADAAN AHAA LO ISTCMALAY DEQA AYA LASIYAY</Desc>\n"
+      },
+      {
+        "n": "0884.",
+        "lineCount": 1,
+        "hasDescOnly": true,
+        "snippet": "\n<TxnLineID>1749-1649062775</TxnLineID>\n<Desc>HUBIN AYE KU MAQANTAHAY AYAA LA DHAHAY</Desc>\n"
+      },
+      {
+        "n": "0885.",
+        "lineCount": 1,
+        "hasDescOnly": true,
+        "snippet": "\n<TxnLineID>174C-1649062802</TxnLineID>\n<Desc>WAY MAQANTAHAY</Desc>\n"
+      },
+      {
+        "n": "0886.",
+        "lineCount": 1,
+        "hasDescOnly": true,
+        "snippet": "\n<TxnLineID>174F-1649062822</TxnLineID>\n<Desc>HUBIN AYE KU JIRATAH</Desc>\n"
+      }
+    ]
+  },
+  "customers": {
+    "total": 12,
+    "names": [
+      "abdi rahman deeqa",
+      "ASAL FOOD",
+      "BADEECO MAQAN",
+      "CAASH DEQA CONSTRACTION",
+      "DEEQA CONSTRACTION",
+      "DEEQA CONSTRACTION ---",
+      "DEEQA CONSTRACTION 1111",
+      "DEEQA CONSTRACTION CASH",
+      "DEEQA CONSTRACTION SAXITAN",
+      "DEEQA CONSTRACTION WITING",
+      "DHEELI TIR",
+      "HERO"
+    ]
+  },
+  "vendors": {
+    "total": 11,
+    "names": [
+      "01DEEQA BILLS",
+      "ALFURAAT 1",
+      "ALFURAAT 2023",
+      "ALMUNIUM",
+      "BADEECO",
+      "CASH",
+      "DAAHYO",
+      "fiilo xamar",
+      "KUBERTO",
+      "MACUUN",
+      "UNION"
+    ]
+  },
+  "items": {
+    "uniqueNoColon": 639,
+    "withColon": 0,
+    "colonSamples": []
+  },
+  "journals": {
+    "total": 795,
+    "uniqueAccounts": [
+      "Accounts Payable",
+      "Accounts Receivable",
+      "Auto and Truck Expenses",
+      "BANK",
+      "CASH DEQA KU MAQAN",
+      "COMMOSION",
+      "Computer and Internet Expenses",
+      "Cost of Goods Sold",
+      "Depreciation Expense",
+      "Freight Costs",
+      "HANTIDA GUUD:ABDIRAHMAAN",
+      "HANTIDA GUUD:AHMED SALAD",
+      "Insurance Expense",
+      "Inventory Asset",
+      "MUSHAAR",
+      "Office Supplies",
+      "Payroll Expenses",
+      "Professional Fees",
+      "Rent Expense",
+      "Retained Earnings",
+      "Sales",
+      "Utilities",
+      "XAMALI",
+      "XAMALI:KIRO GAARI",
+      "witing"
+    ]
+  }
+}

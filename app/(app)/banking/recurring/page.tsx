@@ -29,9 +29,19 @@ function lastHref(kind: string | null, id: string | null) {
 
 export default async function RecurringPage() {
   const ctx = await requireOrgContext()
-  const rows = await recurringService.list(ctx)
   const canCreate =
     ctx.permissions.has('bill:create') || ctx.permissions.has('journal:post')
+
+  // Auto-run due templates when someone with posting rights opens this screen.
+  // Cron (`POST /api/cron/recurring` with CRON_SECRET) covers companies that
+  // nobody visits that day. Create due / Create now remain available.
+  let autoCreated = 0
+  if (canCreate) {
+    const auto = await recurringService.createDue(ctx)
+    autoCreated = auto.created.length
+  }
+
+  const rows = await recurringService.list(ctx)
   const dueCount = rows.filter((row) => row.due).length
 
   return (
@@ -39,7 +49,11 @@ export default async function RecurringPage() {
       <BooksTabs active="recurring" />
       <PageHeader
         title="Recurring transactions"
-        description="Templates for bills, expenses, and journals that repeat on a schedule. Create due ones when you are ready — nothing posts on its own."
+        description={
+          autoCreated > 0
+            ? `Created ${autoCreated} due transaction${autoCreated === 1 ? '' : 's'} when you opened this page. A scheduled job can also run Create due for every company (CRON_SECRET → /api/cron/recurring).`
+            : 'Templates for bills, expenses, and journals that repeat on a schedule. Due ones create when you open this page (if you can post), when you press Create due, or when the recurring cron runs.'
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             {canCreate ? <CreateDueButton dueCount={dueCount} /> : null}

@@ -12,7 +12,7 @@ import { postJournal } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
-import { notFound, precondition, validation } from '@/server/errors'
+import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import * as approvalService from '@/server/services/approval.service'
 import { outstandingBalances, refreshStatus } from '@/server/services/purchase.service'
@@ -183,13 +183,43 @@ export async function openCreditsFor(ctx: OrgContext, vendorId: string) {
  * a bill sits as a debit on payables, which is exactly what it is — the vendor
  * owes it back until something is invoiced against it.
  */
+/**
+ * Same vendor, same day, same amount is usually the bill being paid twice.
+ * A deleted payment is ignored. The clerk can record the second one after
+ * the warning.
+ */
+async function assertDuplicateBillPayment(
+  tx: Tx,
+  ctx: OrgContext,
+  input: BillPaymentInput,
+  amount: Decimal,
+) {
+  if (input.acknowledgeDuplicate) return
+  const existing = await tx.billPayment.findFirst({
+    where: {
+      orgId: ctx.orgId,
+      vendorId: input.vendorId,
+      date: toDate(input.date),
+      amount: amount.toFixed(4),
+      deletedAt: null,
+      voidedAt: null,
+    },
+    select: { id: true, number: true },
+  })
+  if (!existing) return
+  throw conflict(
+    `${existing.number} is already ${toMoneyString(amount, 2)} to this vendor on this date. Save again to record another.`,
+    { duplicate: ['true'], existingId: [existing.id], existingNumber: [existing.number] },
+  )
+}
+
 export async function create(ctx: OrgContext, input: BillPaymentInput) {
   const meta = await requestMeta()
 
   return db.$transaction(async (tx) => {
     const vendor = await tx.vendor.findFirst({
       where: { id: input.vendorId, orgId: ctx.orgId },
-      select: { id: true, displayName: true },
+      select: { id: true, displayName: true, currencyCode: true },
     })
     if (!vendor) throw notFound('Vendor')
 
@@ -210,6 +240,7 @@ export async function create(ctx: OrgContext, input: BillPaymentInput) {
     }
 
     const amount = new Decimal(input.amount)
+    await assertDuplicateBillPayment(tx, ctx, input, amount)
     const applications = input.applications
       .map((application) => ({ ...application, amount: new Decimal(application.amount) }))
       .filter((application) => application.amount.greaterThan(0))
@@ -242,7 +273,12 @@ export async function create(ctx: OrgContext, input: BillPaymentInput) {
         reference: input.reference ?? null,
         memo: input.memo ?? null,
         paymentAccountId: account.id,
-        currencyCode: ctx.organization.baseCurrency,
+        currencyCode: (
+          input.currencyCode ??
+          vendor.currencyCode ??
+          ctx.organization.baseCurrency
+        ).toUpperCase(),
+        exchangeRate: new Decimal(input.exchangeRate ?? 1).toFixed(9),
         status: holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         createdById: ctx.userId,
       },
@@ -261,6 +297,12 @@ export async function create(ctx: OrgContext, input: BillPaymentInput) {
       })
     }
 
+    const payCurrency = (
+      input.currencyCode ??
+      vendor.currencyCode ??
+      ctx.organization.baseCurrency
+    ).toUpperCase()
+
     if (holdForApproval) {
       await approvalService.submitRequest(tx, ctx, {
         entityType: 'BILL_PAYMENT',
@@ -268,7 +310,7 @@ export async function create(ctx: OrgContext, input: BillPaymentInput) {
         title: `Bill payment ${payment.number}`,
         href: `/bill-payments?q=${encodeURIComponent(payment.number)}`,
         amount,
-        currencyCode: ctx.organization.baseCurrency,
+        currencyCode: payCurrency,
         levels: gate.levels,
       })
     } else {
@@ -309,11 +351,41 @@ export async function postBillPayment(tx: Tx, ctx: OrgContext, id: string) {
       vendorId: true,
       paymentAccountId: true,
       journalId: true,
-      applications: { select: { billId: true } },
+      currencyCode: true,
+      exchangeRate: true,
+      applications: {
+        select: {
+          billId: true,
+          amount: true,
+          bill: { select: { currencyCode: true, exchangeRate: true } },
+        },
+      },
     },
   })
   if (!payment) throw notFound('Bill payment')
   if (payment.journalId) throw precondition(`Bill payment ${payment.number} is already posted.`)
+
+  const payRate = new Decimal(payment.exchangeRate?.toString() ?? 1)
+  const foreignAmount = new Decimal(payment.amount.toString())
+  const bankBase = foreignAmount.times(payRate)
+
+  let apBase = ZERO
+  let appliedForeign = ZERO
+  for (const application of payment.applications) {
+    const f = new Decimal(application.amount.toString())
+    appliedForeign = appliedForeign.plus(f)
+    const invRate = new Decimal(application.bill.exchangeRate?.toString() ?? 1)
+    apBase = apBase.plus(f.times(invRate))
+  }
+  const unapplied = foreignAmount.minus(appliedForeign)
+  if (unapplied.greaterThan(0)) {
+    apBase = apBase.plus(unapplied.times(payRate))
+  }
+
+  const needsFx = !bankBase.equals(apBase)
+  const fxAccountId = needsFx
+    ? await systemAccountId(tx, ctx.orgId, 'EXCHANGE_GAIN_LOSS')
+    : null
 
   const journal = await postJournal(
     tx,
@@ -323,10 +395,14 @@ export async function postBillPayment(tx: Tx, ctx: OrgContext, id: string) {
       number: payment.number,
       paymentId: payment.id,
       vendorId: payment.vendorId,
-      amount: new Decimal(payment.amount.toString()),
+      amount: bankBase,
+      apAmount: apBase,
+      fxAccountId,
       paymentAccountId: payment.paymentAccountId,
       payableAccountId: await systemAccountId(tx, ctx.orgId, 'ACCOUNTS_PAYABLE'),
       memo: payment.memo,
+      currencyCode: payment.currencyCode,
+      exchangeRate: payRate,
     }),
   )
 

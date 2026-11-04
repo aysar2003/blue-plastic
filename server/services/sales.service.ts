@@ -5,14 +5,14 @@ import { unstable_cache } from 'next/cache'
 import type { DocumentType, Prisma, SalesDocumentType } from '@prisma/client'
 
 import { endOfMonth, isCalendarDate, startOfMonth, toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
-import { documentOverdueOr, isCollectionOverdue, overdueClock, partyFromContact } from '@/lib/invoice-overdue'
+import { documentOverdueOr, overdueClock } from '@/lib/invoice-overdue'
 import { Decimal, formatMoney, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
 import { dueDateFor } from '@/lib/payment-terms'
 import { isCashMethodName } from '@/lib/pos-payment'
 import { posPostedAccounts } from '@/lib/pos-register-posting'
 import { byType as salesByType } from '@/lib/sales-types'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
-import type { SalesDocumentInput } from '@/lib/validation/sales'
+import type { InvoiceFromSourceInput, SalesDocumentInput } from '@/lib/validation/sales'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
 import { positionOf, recordMovement, restoreMovementsFor, reverseMovementsFor } from '@/server/accounting/inventory'
@@ -35,6 +35,7 @@ import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import * as approvalService from '@/server/services/approval.service'
 import { subledgerBalances } from '@/server/services/contact.service'
 import { resolveProjectId } from '@/server/services/project.service'
+import { resolveId as resolveTrackingCategoryId } from '@/server/services/tracking-category.service'
 import * as storeService from '@/server/services/store.service'
 import * as salesDelivery from '@/server/services/sales-delivery.service'
 import { loadCodeForCalculation } from '@/server/services/tax.service'
@@ -86,9 +87,10 @@ const DOCUMENT_SELECT = {
   promisedDate: true, promiseNote: true, excludeFromOverdue: true,
   status: true, reference: true, memo: true, customerMessage: true, workScope: true, workSite: true,
   subtotal: true, discountAmount: true, taxTotal: true, total: true,
-  currencyCode: true, depositAccountId: true, paymentMethod: true, journalId: true, version: true,
+  currencyCode: true, exchangeRate: true, depositAccountId: true, paymentMethod: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
   projectId: true,
+  trackingCategoryId: true,
   createdById: true,
   project: { select: { id: true, number: true, name: true, siteLocation: true } },
   customer: {
@@ -193,11 +195,11 @@ export async function list(
     ...(options.status === 'declined' ? { status: 'DECLINED' } : {}),
     ...(options.status === 'invoiced'
       ? type === 'SALES_ORDER'
-        ? { status: 'CLOSED' as const, convertedTo: { is: { type: 'INVOICE' as const } } }
+        ? { status: 'CLOSED' as const, convertedTo: { some: { type: 'INVOICE' as const } } }
         : { status: 'CLOSED' as const }
       : {}),
     ...(options.status === 'receipt' && type === 'SALES_ORDER'
-      ? { status: 'CLOSED' as const, convertedTo: { is: { type: 'SALES_RECEIPT' as const } } }
+      ? { status: 'CLOSED' as const, convertedTo: { some: { type: 'SALES_RECEIPT' as const } } }
       : {}),
     ...(options.from || options.to
       ? {
@@ -255,77 +257,85 @@ export async function list(
  */
 export async function invoiceHome(ctx: OrgContext) {
   const clock = overdueClock(ctx.organization.timeZone)
-  const now = clock.asOf
-  const rows = await db.salesDocument.findMany({
-    where: { orgId: ctx.orgId, type: 'INVOICE', deletedAt: null, status: { not: 'VOID' } },
-    select: {
-      id: true,
-      status: true,
-      dueDate: true,
-      promisedDate: true,
-      excludeFromOverdue: true,
-      total: true,
-      customerId: true,
-    },
-  })
-  const openRows = rows.filter((row) => row.status === 'OPEN' || row.status === 'PARTIAL')
-  const partyByCustomer = new Map(
-    (
-      await db.customer.findMany({
-        where: { orgId: ctx.orgId, id: { in: [...new Set(openRows.map((row) => row.customerId))] } },
-        select: { id: true, balanceDate: true, agreementDate: true, balanceTime: true },
-      })
-    ).map((person) => [person.id, person]),
-  )
-  const openIds = rows.filter((row) => row.status === 'OPEN' || row.status === 'PARTIAL').map((row) => row.id)
-  const balances = await outstandingBalances(db, openIds)
-
-  let unpaid = ZERO
-  let overdue = ZERO
-  let notDue = ZERO
-  let paid = ZERO
-  let draftTotal = ZERO
-  let unpaidCount = 0
-  let overdueCount = 0
-  let notDueCount = 0
-  let paidCount = 0
-  let draftCount = 0
-
-  for (const row of rows) {
-    if (row.status === 'DRAFT') {
-      draftCount += 1
-      draftTotal = draftTotal.plus(row.total.toString())
-      continue
-    }
-    if (row.status === 'PAID') {
-      paidCount += 1
-      paid = paid.plus(row.total.toString())
-      continue
-    }
-    if (row.status !== 'OPEN' && row.status !== 'PARTIAL') continue
-    const owing = balances.get(row.id) ?? new Decimal(row.total.toString())
-    unpaid = unpaid.plus(owing)
-    unpaidCount += 1
-    if (isCollectionOverdue({ ...row, ...partyFromContact(partyByCustomer.get(row.customerId)) }, now, clock)) {
-      overdue = overdue.plus(owing)
-      overdueCount += 1
-    } else {
-      notDue = notDue.plus(owing)
-      notDueCount += 1
-    }
-  }
+  const asOf = toDate(clock.asOf)
+  const nowTime = clock.nowTime
+  // One aggregate. Loading every invoice into the app held a connection long
+  // enough for the pooler to drop it, and the invoices page then showed a blank error.
+  const [row] = await db.$queryRaw<
+    {
+      unpaid: string
+      unpaid_count: number
+      overdue: string
+      overdue_count: number
+      paid: string
+      paid_count: number
+      draft_total: string
+      draft_count: number
+    }[]
+  >`
+    SELECT
+      COALESCE(SUM(CASE WHEN d.status IN ('OPEN', 'PARTIAL')
+        THEN d.total - COALESCE(a.applied, 0) ELSE 0 END), 0)::text AS unpaid,
+      COUNT(*) FILTER (WHERE d.status IN ('OPEN', 'PARTIAL'))::int AS unpaid_count,
+      COALESCE(SUM(CASE WHEN d.status IN ('OPEN', 'PARTIAL')
+        AND d."excludeFromOverdue" = false
+        AND (
+          (d."promisedDate" IS NOT NULL AND d."promisedDate" < ${asOf})
+          OR (d."promisedDate" IS NULL AND c."balanceDate" IS NOT NULL AND (
+               c."balanceDate" < ${asOf}
+               OR (c."balanceDate" = ${asOf} AND c."balanceTime" IS NOT NULL AND c."balanceTime" <= ${nowTime})
+          ))
+          OR (d."promisedDate" IS NULL AND c."balanceDate" IS NULL AND c."agreementDate" IS NOT NULL
+              AND c."agreementDate" < ${asOf})
+          OR (d."promisedDate" IS NULL AND c."balanceDate" IS NULL AND c."agreementDate" IS NULL
+              AND COALESCE(d."dueDate", d.date) < ${asOf})
+        )
+        THEN d.total - COALESCE(a.applied, 0) ELSE 0 END), 0)::text AS overdue,
+      COUNT(*) FILTER (WHERE d.status IN ('OPEN', 'PARTIAL')
+        AND d."excludeFromOverdue" = false
+        AND (
+          (d."promisedDate" IS NOT NULL AND d."promisedDate" < ${asOf})
+          OR (d."promisedDate" IS NULL AND c."balanceDate" IS NOT NULL AND (
+               c."balanceDate" < ${asOf}
+               OR (c."balanceDate" = ${asOf} AND c."balanceTime" IS NOT NULL AND c."balanceTime" <= ${nowTime})
+          ))
+          OR (d."promisedDate" IS NULL AND c."balanceDate" IS NULL AND c."agreementDate" IS NOT NULL
+              AND c."agreementDate" < ${asOf})
+          OR (d."promisedDate" IS NULL AND c."balanceDate" IS NULL AND c."agreementDate" IS NULL
+              AND COALESCE(d."dueDate", d.date) < ${asOf})
+        ))::int AS overdue_count,
+      COALESCE(SUM(CASE WHEN d.status = 'PAID' THEN d.total ELSE 0 END), 0)::text AS paid,
+      COUNT(*) FILTER (WHERE d.status = 'PAID')::int AS paid_count,
+      COALESCE(SUM(CASE WHEN d.status = 'DRAFT' THEN d.total ELSE 0 END), 0)::text AS draft_total,
+      COUNT(*) FILTER (WHERE d.status = 'DRAFT')::int AS draft_count
+    FROM sales_documents d
+    JOIN customers c ON c.id = d."customerId"
+    LEFT JOIN (
+      SELECT "invoiceId", SUM(amount) AS applied
+        FROM sales_applications
+       GROUP BY "invoiceId"
+    ) a ON a."invoiceId" = d.id
+    WHERE d."orgId" = ${ctx.orgId}
+      AND d.type = 'INVOICE'
+      AND d."deletedAt" IS NULL
+      AND d.status <> 'VOID'
+  `
+  const unpaid = new Decimal(row?.unpaid ?? '0')
+  const overdue = new Decimal(row?.overdue ?? '0')
+  const unpaidCount = Number(row?.unpaid_count ?? 0)
+  const overdueCount = Number(row?.overdue_count ?? 0)
 
   return {
     unpaid: toMoneyString(unpaid, 2),
     unpaidCount,
     overdue: toMoneyString(overdue, 2),
     overdueCount,
-    notDue: toMoneyString(notDue, 2),
-    notDueCount,
-    paid: toMoneyString(paid, 2),
-    paidCount,
-    draftTotal: toMoneyString(draftTotal, 2),
-    draftCount,
+    notDue: toMoneyString(unpaid.minus(overdue), 2),
+    notDueCount: unpaidCount - overdueCount,
+    paid: toMoneyString(new Decimal(row?.paid ?? '0'), 2),
+    paidCount: Number(row?.paid_count ?? 0),
+    draftTotal: toMoneyString(new Decimal(row?.draft_total ?? '0'), 2),
+    draftCount: Number(row?.draft_count ?? 0),
   }
 }
 
@@ -421,7 +431,7 @@ export async function salesOrderHome(ctx: OrgContext) {
       draftTotal = draftTotal.plus(amount)
       continue
     }
-    if (row.status === 'CLOSED' && row.convertedTo?.type === 'SALES_RECEIPT') {
+    if (row.status === 'CLOSED' && row.convertedTo.some((child) => child.type === 'SALES_RECEIPT')) {
       receiptCount += 1
       receipt = receipt.plus(amount)
       continue
@@ -431,7 +441,7 @@ export async function salesOrderHome(ctx: OrgContext) {
       invoiced = invoiced.plus(amount)
       continue
     }
-    if (row.status === 'OPEN') {
+    if (row.status === 'OPEN' || row.status === 'PARTIAL') {
       openCount += 1
       open = open.plus(amount)
     }
@@ -669,7 +679,7 @@ const DETAIL_SELECT = {
   lines: {
     orderBy: { lineNumber: 'asc' },
     select: {
-      id: true, lineNumber: true, description: true, quantity: true, unitPrice: true,
+      id: true, lineNumber: true, description: true, quantity: true, quantityInvoiced: true, unitPrice: true,
       discountPercent: true, amount: true, taxAmount: true, serviceDate: true, storeId: true,
       item: { select: { id: true, name: true, sku: true, unitOfMeasure: true } },
       taxCode: { select: { id: true, name: true } },
@@ -700,6 +710,7 @@ function toDetail(document: DetailRow) {
     lines: document.lines.map((line) => ({
       ...line,
       quantity: line.quantity.toString(),
+      quantityInvoiced: line.quantityInvoiced.toString(),
       unitPrice: line.unitPrice.toString(),
       discountPercent: line.discountPercent?.toString() ?? null,
       amount: line.amount.toString(),
@@ -812,11 +823,31 @@ export async function create(
   options?: { pos?: PosCheckoutMeta },
 ) {
   const meta = await requestMeta()
+  return db.$transaction((tx) => createWithin(tx, ctx, type, input, meta, options))
+}
 
-  return db.$transaction(async (tx) => {
+/**
+ * The body of `create`, taking the caller's transaction.
+ *
+ * Split out because invoicing against an estimate, quotation, or sales order —
+ * and converting one outright — creates the new paper and updates the source in
+ * the same breath. When creation opened its own transaction, a failure after the
+ * invoice was written left it in the books with the source still showing nothing
+ * invoiced. One unit of work or none.
+ */
+async function createWithin(
+  tx: Tx,
+  ctx: OrgContext,
+  type: SalesDocumentType,
+  input: SalesDocumentInput,
+  meta: Awaited<ReturnType<typeof requestMeta>>,
+  options?: { pos?: PosCheckoutMeta },
+) {
+  {
     const customer = await requireCustomer(tx, ctx, input.customerId)
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
-    const lines = await resolveLines(tx, ctx, input.lines)
+    const trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
+    const lines = await resolveLines(tx, ctx, input.lines, { customerId: input.customerId })
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency, documentDiscount(input))
 
@@ -837,7 +868,9 @@ export async function create(
       throw validation('A document with no value has nothing to record.')
     }
 
-    await assertCreditLimit(tx, ctx, customer, type, isDraft, priced.total)
+    await assertCreditLimit(tx, ctx, customer, type, isDraft, priced.total, {
+      acknowledgeCreditLimit: input.acknowledgeCreditLimit,
+    })
 
     const term = input.paymentTermId
       ? await tx.paymentTerm.findFirst({
@@ -852,6 +885,13 @@ export async function create(
       select: { id: true },
     })
     if (clash) throw numberTaken()
+
+    const docCurrency =
+      (input.currencyCode ?? customer.currencyCode ?? ctx.organization.baseCurrency).toUpperCase()
+    const exchangeRate = new Decimal(input.exchangeRate ?? 1)
+    if (exchangeRate.lessThanOrEqualTo(0)) {
+      throw validation('Exchange rate must be greater than zero.')
+    }
 
     // POS must post immediately. Desk sales (incl. orders / estimates) may wait.
     const gate =
@@ -884,11 +924,13 @@ export async function create(
         discountAmount: priced.discountAmount.toFixed(4),
         taxTotal: priced.taxTotal.toFixed(4),
         total: priced.total.toFixed(4),
-        currencyCode: ctx.organization.baseCurrency,
+        currencyCode: docCurrency,
+        exchangeRate: exchangeRate.toFixed(9),
         depositAccountId: input.depositAccountId ?? null,
         paymentMethod:
           type === 'SALES_RECEIPT' || type === 'REFUND_RECEIPT' ? (input.paymentMethod ?? null) : null,
         projectId,
+        trackingCategoryId,
         createdById: ctx.userId,
         lines: {
           create: priced.lines.map((line) => ({
@@ -907,6 +949,7 @@ export async function create(
             taxAmount: line.taxAmount.toFixed(4),
             incomeAccountId: line.incomeAccountId,
             serviceDate: line.source.serviceDate ? toDate(line.source.serviceDate) : null,
+            sourcePurchaseLineId: line.source.sourcePurchaseLineId ?? null,
           })),
         },
       },
@@ -943,7 +986,7 @@ export async function create(
         title: `${cfg.singular} ${document.number}`,
         href: `/sales/${cfg.slug}/${document.id}`,
         amount: document.total,
-        currencyCode: ctx.organization.baseCurrency,
+        currencyCode: docCurrency,
         levels: gate.levels,
       })
     } else if (!isDraft && POSTS_A_JOURNAL[type]) {
@@ -972,7 +1015,7 @@ export async function create(
     )
 
     return { id: document.id, number: document.number, total: document.total.toString() }
-  })
+  }
 }
 
 /** Link a new invoice/receipt to the proposal or order it came from, and close that source. */
@@ -998,12 +1041,13 @@ async function closeConvertedSource(
       type: true,
       status: true,
       customerId: true,
-      convertedTo: { select: { number: true } },
+      convertedTo: { select: { number: true }, take: 1 },
     },
   })
   if (!source) throw notFound('Document')
-  if (source.convertedTo) {
-    throw conflict(`${source.number} has already become ${source.convertedTo.number}.`)
+  if (source.convertedTo.length > 0) {
+    const prior = source.convertedTo[0]!
+    throw conflict(`${source.number} has already become ${prior.number}.`)
   }
   if (source.status === 'VOID' || source.status === 'DECLINED' || source.status === 'CLOSED') {
     throw precondition(`${source.number} is ${source.status.toLowerCase()} and cannot be converted.`)
@@ -1059,7 +1103,11 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
 
     const customer = await requireCustomer(tx, ctx, input.customerId)
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
-    const lines = await resolveLines(tx, ctx, input.lines)
+    const trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
+    const lines = await resolveLines(tx, ctx, input.lines, {
+      customerId: input.customerId,
+      excludeDocumentId: id,
+    })
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency, documentDiscount(input))
 
@@ -1082,6 +1130,7 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
 
     await assertCreditLimit(tx, ctx, customer, existing.type, isDraft, priced.total, {
       excludeDocumentId: existing.id,
+      acknowledgeCreditLimit: input.acknowledgeCreditLimit,
     })
 
     const term = input.paymentTermId
@@ -1090,6 +1139,13 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
           select: { id: true, type: true, dueDays: true },
         })
       : customer.paymentTerm
+
+    const docCurrency =
+      (input.currencyCode ?? customer.currencyCode ?? existing.currencyCode ?? ctx.organization.baseCurrency).toUpperCase()
+    const exchangeRate = new Decimal(input.exchangeRate ?? existing.exchangeRate?.toString() ?? 1)
+    if (exchangeRate.lessThanOrEqualTo(0)) {
+      throw validation('Exchange rate must be greater than zero.')
+    }
 
     // The old journal comes out before the new one goes in — and so does the
     // stock it moved. Reversing only the journal would leave the stock ledger
@@ -1142,11 +1198,14 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
         discountAmount: priced.discountAmount.toFixed(4),
         taxTotal: priced.taxTotal.toFixed(4),
         total: priced.total.toFixed(4),
+        currencyCode: docCurrency,
+        exchangeRate: exchangeRate.toFixed(9),
         depositAccountId: input.depositAccountId ?? null,
         ...(existing.type === 'SALES_RECEIPT' || existing.type === 'REFUND_RECEIPT'
           ? { paymentMethod: input.paymentMethod ?? null }
           : {}),
         projectId,
+        trackingCategoryId,
         journalId: null,
         version: { increment: 1 },
         status: input.saveAsDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
@@ -1167,6 +1226,7 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
             taxAmount: line.taxAmount.toFixed(4),
             incomeAccountId: line.incomeAccountId,
             serviceDate: line.source.serviceDate ? toDate(line.source.serviceDate) : null,
+            sourcePurchaseLineId: line.source.sourcePurchaseLineId ?? null,
           })),
         },
       },
@@ -1180,7 +1240,7 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
         title: `${cfg.singular} ${number}`,
         href: `/sales/${cfg.slug}/${id}`,
         amount: priced.total,
-        currencyCode: ctx.organization.baseCurrency,
+        currencyCode: docCurrency,
         levels: gate.levels,
       })
     } else if (!input.saveAsDraft && POSTS_A_JOURNAL[existing.type]) {
@@ -1313,6 +1373,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     select: {
       id: true, type: true, number: true, date: true, memo: true, customerId: true,
       status: true, depositAccountId: true, journalId: true, discountAmount: true,
+      trackingCategoryId: true,
       lines: {
         orderBy: { lineNumber: 'asc' },
         select: {
@@ -1326,6 +1387,21 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
               inventoryAccountId: true,
               cogsAccountId: true,
               depositAccountId: true,
+              incomeAccountId: true,
+              bomParents: {
+                orderBy: { sortOrder: 'asc' },
+                select: {
+                  quantity: true,
+                  component: {
+                    select: {
+                      id: true,
+                      name: true,
+                      type: true,
+                      inventoryAccountId: true,
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -1353,10 +1429,16 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       )
     }
     if (line.item?.type === 'GROUP') {
-      throw validation(
-        `"${line.item.name}" is a group — pick it on the form so its members are added as lines.`,
-        { lines: ['Expand the group into its items'] },
-      )
+      if (!line.item.bomParents.length) {
+        throw precondition(
+          `"${line.item.name}" has no members, so it cannot be sold as a kit.`,
+        )
+      }
+      if (!line.item.incomeAccountId && !line.incomeAccountId) {
+        throw precondition(
+          `"${line.item.name}" needs an income account on the group before it can post as one line.`,
+        )
+      }
     }
   }
 
@@ -1483,16 +1565,64 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       value: Decimal
     }[] = []
 
-    // Assemblies must be built before they are sold. Selling an unbuilt unit
-    // would issue stock at $0 cost and leave the bill of materials untouched.
+    // Stock issues from a sale: inventory and assembly lines move themselves;
+    // a GROUP kit issues each member (Phase 11.13). Assemblies that are sold
+    // as finished goods (or as kit members) must already be built.
+    type StockIssue = {
+      lineId: string
+      itemId: string
+      itemName: string
+      itemType: string
+      inventoryAccountId: string
+      quantity: Decimal
+      storeId: string | null
+    }
+    const stockIssues: StockIssue[] = []
+    for (const line of document.lines) {
+      const item = line.item
+      if (!item) continue
+      const lineQty = new Decimal(line.quantity.toString())
+      if (item.type === 'INVENTORY' || item.type === 'INVENTORY_ASSEMBLY') {
+        if (!item.inventoryAccountId) {
+          throw precondition(`"${item.name}" has no inventory account.`)
+        }
+        stockIssues.push({
+          lineId: line.id,
+          itemId: item.id,
+          itemName: item.name,
+          itemType: item.type,
+          inventoryAccountId: item.inventoryAccountId,
+          quantity: lineQty,
+          storeId: line.storeId,
+        })
+        continue
+      }
+      if (item.type !== 'GROUP') continue
+      for (const row of item.bomParents) {
+        const member = row.component
+        if (member.type !== 'INVENTORY' && member.type !== 'INVENTORY_ASSEMBLY') continue
+        if (!member.inventoryAccountId) {
+          throw precondition(`"${member.name}" (in kit "${item.name}") has no inventory account.`)
+        }
+        stockIssues.push({
+          lineId: line.id,
+          itemId: member.id,
+          itemName: member.name,
+          itemType: member.type,
+          inventoryAccountId: member.inventoryAccountId,
+          quantity: lineQty.times(new Decimal(row.quantity.toString())),
+          storeId: line.storeId,
+        })
+      }
+    }
+
     if (movesStockOut) {
       const assemblyNeed = new Map<string, { name: string; needed: Decimal }>()
-      for (const line of document.lines) {
-        if (line.item?.type !== 'INVENTORY_ASSEMBLY') continue
-        const needed = new Decimal(line.quantity.toString())
-        const prior = assemblyNeed.get(line.item.id)
-        if (prior) prior.needed = prior.needed.plus(needed)
-        else assemblyNeed.set(line.item.id, { name: line.item.name, needed })
+      for (const issue of stockIssues) {
+        if (issue.itemType !== 'INVENTORY_ASSEMBLY') continue
+        const prior = assemblyNeed.get(issue.itemId)
+        if (prior) prior.needed = prior.needed.plus(issue.quantity)
+        else assemblyNeed.set(issue.itemId, { name: issue.itemName, needed: issue.quantity })
       }
       for (const [itemId, row] of assemblyNeed) {
         const onHand = (await positionOf(tx, itemId)).quantity
@@ -1506,31 +1636,26 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       }
     }
 
-    for (const line of document.lines) {
-      if (line.item?.type !== 'INVENTORY' && line.item?.type !== 'INVENTORY_ASSEMBLY') continue
-      if (!line.item.inventoryAccountId) {
-        throw precondition(`"${line.item.name}" has no inventory account.`)
-      }
-
+    for (const issue of stockIssues) {
       const inventoryAccountId =
-        (line.storeId && storeAccounts.get(line.storeId)) || line.item.inventoryAccountId
-      const quantity = new Decimal(line.quantity.toString())
+        (issue.storeId && storeAccounts.get(issue.storeId)) || issue.inventoryAccountId
+      const quantity = issue.quantity
       const movement = await recordMovement(tx, ctx, {
-        itemId: line.item.id,
+        itemId: issue.itemId,
         date: toCalendarDate(document.date),
         type: movesStockOut ? 'SALE' : 'SALE_RETURN',
         sourceType: document.type as never,
         sourceId: document.id,
-        sourceLineId: line.id,
+        sourceLineId: issue.lineId,
         quantity: movesStockOut ? quantity.negated() : quantity,
-        storeId: line.storeId,
+        storeId: issue.storeId,
       })
 
       if (movesStockOut) {
         saleMovements.push({
-          lineId: line.id,
-          itemId: line.item.id,
-          storeId: line.storeId,
+          lineId: issue.lineId,
+          itemId: issue.itemId,
+          storeId: issue.storeId,
           quantity,
           unitCost: movement.unitCost,
           value: movement.value,
@@ -1564,6 +1689,13 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         : document.type === 'CREDIT_MEMO'
           ? buildCreditMemoJournal(input)
           : buildRefundReceiptJournal(input)
+
+  if (document.trackingCategoryId) {
+    for (const line of draft.lines) line.trackingCategoryId = document.trackingCategoryId
+  }
+
+  draft.currencyCode = document.currencyCode
+  draft.exchangeRate = document.exchangeRate?.toString() ?? 1
 
   const journal = await postJournal(tx, ctx, draft)
 
@@ -1603,7 +1735,7 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
       where: { id, orgId: ctx.orgId, deletedAt: undefined },
       select: {
         id: true, type: true, number: true, status: true, journalId: true, total: true,
-        deletedAt: true,
+        deletedAt: true, convertedFromId: true,
         applications: { select: { id: true, paymentId: true, invoiceId: true } },
         creditsApplied: { select: { id: true, paymentId: true, invoiceId: true } },
       },
@@ -1624,6 +1756,13 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
       await tx.salesApplication.deleteMany({
         where: { id: { in: applications.map((application) => application.id) } },
       })
+    }
+
+    // An invoice raised against an estimate, quotation, or sales order hands its
+    // quantities back first — before the link is cleared, which is the only
+    // record of which source it billed.
+    if (document.convertedFromId) {
+      await restoreSourceQuantities(tx, ctx, document.convertedFromId, id)
     }
 
     // An estimate this became, or that became this, loses its link for the same
@@ -1686,6 +1825,7 @@ export async function restore(ctx: OrgContext, id: string) {
         number: true,
         journalId: true,
         deletedAt: true,
+        convertedFromId: true,
       },
     })
     if (!document) throw notFound('Document')
@@ -1697,6 +1837,10 @@ export async function restore(ctx: OrgContext, id: string) {
       await restoreMovementsFor(tx, ctx, { sourceId: id, journalId: document.journalId })
     }
     await salesDelivery.restoreForSale(tx, ctx, id)
+
+    if (document.convertedFromId) {
+      await applySourceQuantities(tx, ctx, document.convertedFromId, id)
+    }
 
     await restoreSoftDeletedDocument(tx, ctx, {
       clear: () => tx.salesDocument.update({ where: { id }, data: CLEAR_DELETION }),
@@ -1746,7 +1890,7 @@ async function queryConvertibleSources(orgId: string, types: SalesDocumentType[]
       orgId,
       type: { in: types },
       status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
-      convertedTo: { is: null },
+      convertedTo: { none: {} },
     },
     orderBy: [{ date: 'desc' }, { number: 'desc' }],
     select: {
@@ -1789,7 +1933,7 @@ export async function getConvertibleSource(ctx: OrgContext, id: string) {
       orgId: ctx.orgId,
       type: { in: CONVERTIBLE_SOURCES },
       status: { notIn: ['VOID', 'DECLINED', 'CLOSED'] },
-      convertedTo: { is: null },
+      convertedTo: { none: {} },
     },
     select: {
       id: true,
@@ -1858,15 +2002,415 @@ export async function getConvertibleSource(ctx: OrgContext, id: string) {
 }
 
 /**
+ * What is on an estimate, quotation, or sales order, what has been invoiced,
+ * and what is still to bill.
+ *
+ * The invoicing screen is built from this and nothing else, so what it shows and
+ * what the service will accept cannot drift apart.
+ */
+export type InvoiceableLine = {
+  lineId: string
+  lineNumber: number
+  itemId: string | null
+  itemName: string | null
+  sku: string | null
+  unitOfMeasure: string | null
+  isTracked: boolean
+  /** Store named on the source line — where the goods leave from. */
+  storeId: string | null
+  description: string | null
+  unitPrice: string
+  ordered: string
+  invoiced: string
+  remaining: string
+}
+
+export async function invoiceableSource(
+  ctx: OrgContext,
+  sourceId: string,
+  options: { client?: Tx } = {},
+) {
+  const client = options.client ?? db
+  const source = await client.salesDocument.findFirst({
+    where: { id: sourceId, orgId: ctx.orgId, type: { in: CONVERTIBLE_SOURCES } },
+    select: {
+      id: true, number: true, type: true, status: true, date: true, reference: true, memo: true,
+      customer: { select: { id: true, displayName: true } },
+      convertedTo: {
+        select: { id: true, number: true, type: true, date: true, status: true },
+        orderBy: { date: 'asc' },
+      },
+      lines: {
+        orderBy: { lineNumber: 'asc' },
+        select: {
+          id: true, lineNumber: true, itemId: true, storeId: true, description: true,
+          quantity: true, quantityInvoiced: true, unitPrice: true,
+          item: { select: { name: true, sku: true, type: true, unitOfMeasure: true } },
+        },
+      },
+    },
+  })
+  if (!source) throw notFound('Document')
+
+  const lines: InvoiceableLine[] = source.lines.map((line) => {
+    const ordered = new Decimal(line.quantity.toString())
+    const invoiced = new Decimal(line.quantityInvoiced.toString())
+    return {
+      lineId: line.id,
+      lineNumber: line.lineNumber,
+      itemId: line.itemId,
+      itemName: line.item?.name ?? null,
+      sku: line.item?.sku ?? null,
+      unitOfMeasure: line.item?.unitOfMeasure ?? null,
+      isTracked: line.item?.type === 'INVENTORY' || line.item?.type === 'INVENTORY_ASSEMBLY',
+      storeId: line.storeId,
+      description: line.description,
+      unitPrice: line.unitPrice.toString(),
+      ordered: ordered.toFixed(2),
+      invoiced: invoiced.toFixed(2),
+      // Over-billing is refused, so nothing outstanding is ever negative even if
+      // an earlier invoice was withdrawn by hand.
+      remaining: Decimal.max(ordered.minus(invoiced), 0).toFixed(2),
+    }
+  })
+
+  return {
+    id: source.id,
+    number: source.number,
+    type: source.type,
+    status: source.status,
+    date: source.date,
+    reference: source.reference,
+    memo: source.memo,
+    customer: source.customer,
+    invoices: source.convertedTo,
+    lines,
+    fullyInvoiced: lines.every((line) => new Decimal(line.remaining).isZero()),
+  }
+}
+
+/**
+ * Invoice part of an estimate, quotation, or sales order.
+ *
+ * A proposal is rarely billed in one go, and this used to be all or nothing:
+ * one button that turned the whole paper into an invoice for everything on it,
+ * whether or not that much was ready to bill. If half was done, the choice was
+ * to invoice work that had not happened — inflating receivables — or to record
+ * nothing until the rest was finished. Both are wrong, and the second is what
+ * people did.
+ *
+ * So an invoice is a quantity per line. It raises an invoice for exactly what
+ * is being billed now; the source keeps count of what is still open and closes
+ * itself when nothing is left. Billing the balance later is the same act again.
+ *
+ * The invoice is the accounting document — this is not a second ledger. All the
+ * source carries is the count, and this service is its only writer.
+ */
+export async function invoiceFromSource(ctx: OrgContext, input: InvoiceFromSourceInput) {
+  const meta = await requestMeta()
+  return db.$transaction((tx) =>
+    invoiceSourceWithin(tx, ctx, meta, { ...input, target: 'INVOICE' }),
+  )
+}
+
+async function invoiceSourceWithin(
+  tx: Tx,
+  ctx: OrgContext,
+  meta: Awaited<ReturnType<typeof requestMeta>>,
+  input: InvoiceFromSourceInput & {
+    target: 'INVOICE' | 'SALES_RECEIPT'
+    depositAccountId?: string | null
+  },
+) {
+  const source = await tx.salesDocument.findFirst({
+    where: { id: input.sourceId, orgId: ctx.orgId, type: { in: CONVERTIBLE_SOURCES } },
+    select: {
+      id: true, number: true, type: true, status: true, customerId: true, reference: true, memo: true,
+      customerMessage: true, workScope: true, workSite: true, paymentTermId: true, projectId: true,
+      trackingCategoryId: true,
+      discountAmount: true,
+      lines: {
+        orderBy: { lineNumber: 'asc' },
+        select: {
+          id: true, lineNumber: true, itemId: true, storeId: true, description: true,
+          quantity: true, quantityInvoiced: true, unitPrice: true,
+          discountPercent: true, taxCodeId: true, serviceDate: true,
+        },
+      },
+    },
+  })
+  if (!source) throw notFound('Document')
+
+  if (source.status === 'VOID' || source.status === 'DECLINED') {
+    throw precondition(`${source.number} is ${source.status.toLowerCase()} and cannot be invoiced.`)
+  }
+  if (source.status === 'DRAFT') {
+    throw precondition(
+      `${source.number} is still a draft. Save it before invoicing against it.`,
+    )
+  }
+  if (source.status === 'CLOSED') {
+    throw conflict(`${source.number} is closed — everything on it has already been invoiced.`)
+  }
+
+  const byId = new Map(source.lines.map((line) => [line.id, line]))
+  const invoicing = new Map<string, Decimal>()
+
+  for (const request of input.lines) {
+    const line = byId.get(request.lineId)
+    if (!line) throw notFound('Document line')
+
+    const quantity = new Decimal(request.quantity)
+    if (quantity.isZero()) continue
+    if (quantity.isNegative()) {
+      throw validation('An invoiced quantity cannot be negative. To give money back, raise a credit memo.')
+    }
+
+    const remaining = new Decimal(line.quantity.toString()).minus(line.quantityInvoiced.toString())
+    if (quantity.greaterThan(remaining)) {
+      throw validation(
+        `Line ${line.lineNumber} has ${remaining.toFixed(2)} still to bill and you have entered ` +
+          `${quantity.toFixed(2)}. Invoice what is due; if more was agreed than is on the paper, ` +
+          `amend it first so the paperwork matches the bill.`,
+        { [`lines.${line.lineNumber}.quantity`]: [`At most ${remaining.toFixed(2)}`] },
+      )
+    }
+
+    invoicing.set(line.id, quantity)
+  }
+
+  if (invoicing.size === 0) {
+    throw validation('Enter a quantity against at least one line.')
+  }
+
+  const coversEverything = source.lines.every((line) => {
+    const already = new Decimal(line.quantityInvoiced.toString())
+    const now = invoicing.get(line.id) ?? ZERO
+    return already.isZero() && now.equals(new Decimal(line.quantity.toString()))
+  })
+  const discount = new Decimal(source.discountAmount.toString())
+
+  const created = await createWithin(
+    tx,
+    ctx,
+    input.target,
+    {
+      customerId: source.customerId,
+      date: input.date,
+      reference: input.reference ?? source.reference,
+      memo:
+        input.memo ??
+        [`Invoiced against ${source.number}`, source.memo].filter(Boolean).join(' — '),
+      customerMessage: source.customerMessage,
+      workScope: source.workScope,
+      workSite: source.workSite,
+      paymentTermId: input.target === 'INVOICE' ? source.paymentTermId : null,
+      depositAccountId: input.target === 'SALES_RECEIPT' ? (input.depositAccountId ?? null) : null,
+      projectId: source.projectId,
+      trackingCategoryId: source.trackingCategoryId,
+      discountKind: 'amount',
+      discountValue: coversEverything && discount.greaterThan(0) ? discount.toString() : null,
+      lines: source.lines
+        .filter((line) => invoicing.has(line.id))
+        .map((line) => ({
+          itemId: line.itemId,
+          storeId: line.storeId,
+          description: line.description,
+          quantity: invoicing.get(line.id)!.toString(),
+          unitPrice: line.unitPrice.toString(),
+          discountPercent: line.discountPercent?.toString() ?? null,
+          taxCodeId: line.taxCodeId,
+          serviceDate: line.serviceDate ? toCalendarDate(line.serviceDate) : null,
+        })),
+    } as SalesDocumentInput,
+    meta,
+  )
+
+  await tx.salesDocument.update({
+    where: { id: created.id },
+    data: { convertedFromId: source.id },
+  })
+
+  for (const [lineId, quantity] of invoicing) {
+    await tx.salesDocumentLine.update({
+      where: { id: lineId },
+      data: { quantityInvoiced: { increment: quantity.toFixed(4) } },
+    })
+  }
+
+  // Closed once nothing is outstanding; otherwise it stays open, showing what
+  // is still to bill rather than disappearing off the list of live papers.
+  const outstanding = source.lines.reduce((total, line) => {
+    const invoiced = new Decimal(line.quantityInvoiced.toString()).plus(invoicing.get(line.id) ?? 0)
+    return total.plus(Decimal.max(new Decimal(line.quantity.toString()).minus(invoiced), 0))
+  }, new Decimal(0))
+
+  const status = outstanding.isZero() ? 'CLOSED' : 'PARTIAL'
+  await tx.salesDocument.update({ where: { id: source.id }, data: { status } })
+
+  await writeAudit(
+    tx,
+    ctx,
+    {
+      entity: 'SalesDocument',
+      entityId: source.id,
+      action: 'UPDATE',
+      after: {
+        invoiced: created.number,
+        lines: invoicing.size,
+        status,
+        outstanding: outstanding.toFixed(2),
+      },
+    },
+    meta,
+  )
+
+  return { ...created, sourceNumber: source.number, sourceStatus: status }
+}
+
+/**
+ * Put a deleted invoice's quantities back on the estimate, quotation, or sales
+ * order it was billed against.
+ *
+ * The source's count is the only thing in the system that would otherwise be
+ * left stating something untrue: it would still say ten were invoiced when the
+ * invoice saying so has been withdrawn. The status follows the count back — a
+ * paper with nothing invoiced is open again, not closed.
+ */
+async function restoreSourceQuantities(
+  tx: Tx,
+  ctx: OrgContext,
+  sourceId: string,
+  invoiceId: string,
+): Promise<void> {
+  const [source, invoice] = await Promise.all([
+    tx.salesDocument.findFirst({
+      where: { id: sourceId, orgId: ctx.orgId, type: { in: CONVERTIBLE_SOURCES } },
+      select: {
+        id: true, status: true,
+        lines: { select: { id: true, itemId: true, description: true, quantity: true, quantityInvoiced: true } },
+      },
+    }),
+    tx.salesDocument.findFirst({
+      where: { id: invoiceId, orgId: ctx.orgId },
+      select: { lines: { select: { itemId: true, description: true, quantity: true } } },
+    }),
+  ])
+  if (!source || !invoice) return
+
+  // Invoice lines are copied from the source's, so they match on what identifies
+  // a line: the item, or the description where there is no item.
+  const remainingByKey = new Map<string, Decimal>()
+  for (const line of invoice.lines) {
+    const key = line.itemId ?? `text:${line.description ?? ''}`
+    remainingByKey.set(key, (remainingByKey.get(key) ?? ZERO).plus(new Decimal(line.quantity.toString())))
+  }
+
+  for (const line of source.lines) {
+    const key = line.itemId ?? `text:${line.description ?? ''}`
+    const giveBack = remainingByKey.get(key)
+    if (!giveBack || giveBack.isZero()) continue
+
+    const invoiced = new Decimal(line.quantityInvoiced.toString())
+    const restored = Decimal.max(invoiced.minus(giveBack), 0)
+
+    await tx.salesDocumentLine.update({
+      where: { id: line.id },
+      data: { quantityInvoiced: restored.toFixed(4) },
+    })
+
+    remainingByKey.set(key, ZERO)
+  }
+
+  await refreshSourceInvoiceStatus(tx, sourceId, source.status)
+}
+
+/** Put invoiced quantities back on the source when a deleted invoice is restored. */
+async function applySourceQuantities(
+  tx: Tx,
+  ctx: OrgContext,
+  sourceId: string,
+  invoiceId: string,
+): Promise<void> {
+  const [source, invoice] = await Promise.all([
+    tx.salesDocument.findFirst({
+      where: { id: sourceId, orgId: ctx.orgId, type: { in: CONVERTIBLE_SOURCES } },
+      select: {
+        id: true, status: true,
+        lines: { select: { id: true, itemId: true, description: true, quantity: true, quantityInvoiced: true } },
+      },
+    }),
+    tx.salesDocument.findFirst({
+      where: { id: invoiceId, orgId: ctx.orgId, deletedAt: undefined },
+      select: { lines: { select: { itemId: true, description: true, quantity: true } } },
+    }),
+  ])
+  if (!source || !invoice) return
+
+  const remainingByKey = new Map<string, Decimal>()
+  for (const line of invoice.lines) {
+    const key = line.itemId ?? `text:${line.description ?? ''}`
+    remainingByKey.set(key, (remainingByKey.get(key) ?? ZERO).plus(new Decimal(line.quantity.toString())))
+  }
+
+  for (const line of source.lines) {
+    const key = line.itemId ?? `text:${line.description ?? ''}`
+    const addBack = remainingByKey.get(key)
+    if (!addBack || addBack.isZero()) continue
+
+    const invoiced = new Decimal(line.quantityInvoiced.toString())
+    const ordered = new Decimal(line.quantity.toString())
+    const next = Decimal.min(invoiced.plus(addBack), ordered)
+
+    await tx.salesDocumentLine.update({
+      where: { id: line.id },
+      data: { quantityInvoiced: next.toFixed(4) },
+    })
+
+    remainingByKey.set(key, ZERO)
+  }
+
+  await refreshSourceInvoiceStatus(tx, sourceId, source.status)
+}
+
+async function refreshSourceInvoiceStatus(
+  tx: Tx,
+  sourceId: string,
+  status: string,
+) {
+  const refreshed = await tx.salesDocumentLine.findMany({
+    where: { documentId: sourceId },
+    select: { quantity: true, quantityInvoiced: true },
+  })
+
+  const outstanding = refreshed.reduce(
+    (total, line) =>
+      total.plus(
+        Decimal.max(new Decimal(line.quantity.toString()).minus(line.quantityInvoiced.toString()), 0),
+      ),
+    ZERO,
+  )
+  const anyInvoiced = refreshed.some((line) => !new Decimal(line.quantityInvoiced.toString()).isZero())
+
+  if (status !== 'VOID' && status !== 'DRAFT' && status !== 'DECLINED') {
+    await tx.salesDocument.update({
+      where: { id: sourceId },
+      data: { status: outstanding.isZero() ? 'CLOSED' : anyInvoiced ? 'PARTIAL' : 'OPEN' },
+    })
+  }
+}
+
+/**
  * Turn an estimate, quotation, or sales order into the next paper.
  *
  * Paths match QuickBooks Online + Desktop:
- * - Proposal → invoice (bill later)
- * - Proposal → sales receipt (paid now)
- * - Proposal → sales order (Desktop: accept, fulfill later)
- * - Sales order → invoice or sales receipt (collect)
+ * - Proposal → invoice (bill later) — the quantity still open, and again later
+ * - Proposal → sales receipt (paid now) — the same, until nothing is left
+ * - Proposal → sales order (Desktop: accept, fulfill later) — once, and it closes
+ * - Sales order → invoice or sales receipt (collect) — the quantity still open
  *
- * The source is kept and closed so what was sent stays readable.
+ * The source is kept. An invoice or receipt leaves it open while anything
+ * remains; a sales order closes it in one step.
  */
 export async function convertSalesDocument(
   ctx: OrgContext,
@@ -1894,6 +2438,32 @@ export async function convertSalesDocument(
     }
   }
 
+  // Invoice and sales receipt bill whatever is still open, and may be repeated
+  // until the source is fully invoiced. A sales order is one paper, once.
+  if (target === 'INVOICE' || target === 'SALES_RECEIPT') {
+    const view = await invoiceableSource(ctx, sourceId)
+    const lines = view.lines
+      .filter((line) => !new Decimal(line.remaining).isZero())
+      .map((line) => ({ lineId: line.lineId, quantity: line.remaining }))
+    if (lines.length === 0) {
+      throw conflict(`${view.number} is closed — everything on it has already been invoiced.`)
+    }
+    if (target === 'INVOICE') {
+      const created = await invoiceFromSource(ctx, { sourceId, date, lines })
+      return { ...created, type: target }
+    }
+    return db.$transaction(async (tx) => {
+      const created = await invoiceSourceWithin(tx, ctx, meta, {
+        sourceId,
+        date,
+        lines,
+        target,
+        depositAccountId,
+      })
+      return { ...created, type: target }
+    })
+  }
+
   return db.$transaction(async (tx) => {
     const source = await tx.salesDocument.findFirst({
       where: { id: sourceId, orgId: ctx.orgId, type: { in: CONVERTIBLE_SOURCES } },
@@ -1904,6 +2474,7 @@ export async function convertSalesDocument(
         status: true,
         customerId: true,
         projectId: true,
+        trackingCategoryId: true,
         reference: true,
         memo: true,
         customerMessage: true,
@@ -1911,62 +2482,73 @@ export async function convertSalesDocument(
         workSite: true,
         paymentTermId: true,
         discountAmount: true,
-        convertedTo: { select: { number: true, type: true } },
+        convertedTo: { select: { number: true, type: true }, take: 1 },
         lines: {
           orderBy: { lineNumber: 'asc' },
           select: {
             itemId: true,
             description: true,
             quantity: true,
+            quantityInvoiced: true,
             unitPrice: true,
             discountPercent: true,
             taxCodeId: true,
-            incomeAccountId: true,
             storeId: true,
+            serviceDate: true,
           },
         },
       },
     })
     if (!source) throw notFound('Document')
-    if (source.convertedTo) {
-      throw conflict(`${source.number} has already become ${source.convertedTo.number}.`)
+    if (source.convertedTo.length > 0) {
+      const prior = source.convertedTo[0]!
+      throw conflict(`${source.number} has already become ${prior.number}.`)
+    }
+    if (source.lines.some((line) => !new Decimal(line.quantityInvoiced.toString()).isZero())) {
+      throw conflict(
+        `${source.number} has already been invoiced in part. Finish it with an invoice or a sales receipt.`,
+      )
     }
     if (source.status === 'VOID' || source.status === 'DECLINED' || source.status === 'CLOSED') {
       throw precondition(
         `${source.number} is ${source.status.toLowerCase()} and cannot be converted.`,
       )
     }
-    if (source.type === 'SALES_ORDER' && target === 'SALES_ORDER') {
+    if (source.type === 'SALES_ORDER') {
       throw precondition('A sales order cannot become another sales order.')
-    }
-    if (source.type === target) {
-      throw precondition(`${source.number} is already that kind of document.`)
     }
 
     const discount = new Decimal(source.discountAmount.toString())
-    const created = await create(ctx, target, {
-      customerId: source.customerId,
-      date,
-      reference: source.reference,
-      memo: source.memo,
-      customerMessage: source.customerMessage,
-      workScope: source.workScope,
-      workSite: source.workSite,
-      paymentTermId: target === 'INVOICE' || target === 'SALES_ORDER' ? source.paymentTermId : null,
-      depositAccountId: target === 'SALES_RECEIPT' ? depositAccountId : null,
-      projectId: source.projectId,
-      discountKind: 'amount',
-      discountValue: discount.greaterThan(0) ? discount.toString() : null,
-      lines: source.lines.map((line) => ({
-        itemId: line.itemId,
-        storeId: line.storeId,
-        description: line.description,
-        quantity: line.quantity.toString(),
-        unitPrice: line.unitPrice.toString(),
-        discountPercent: line.discountPercent?.toString() ?? null,
-        taxCodeId: line.taxCodeId,
-      })),
-    } as SalesDocumentInput)
+    const created = await createWithin(
+      tx,
+      ctx,
+      'SALES_ORDER',
+      {
+        customerId: source.customerId,
+        date,
+        reference: source.reference,
+        memo: source.memo,
+        customerMessage: source.customerMessage,
+        workScope: source.workScope,
+        workSite: source.workSite,
+        paymentTermId: source.paymentTermId,
+        projectId: source.projectId,
+        trackingCategoryId: source.trackingCategoryId,
+        discountKind: 'amount',
+        discountValue: discount.greaterThan(0) ? discount.toString() : null,
+        lines: source.lines.map((line) => ({
+          itemId: line.itemId,
+          storeId: line.storeId,
+          description: line.description,
+          quantity: line.quantity.toString(),
+          unitPrice: line.unitPrice.toString(),
+          discountPercent: line.discountPercent?.toString() ?? null,
+          taxCodeId: line.taxCodeId,
+          serviceDate: line.serviceDate ? toCalendarDate(line.serviceDate) : null,
+        })),
+      } as SalesDocumentInput,
+      meta,
+    )
 
     await tx.salesDocument.update({
       where: { id: created.id },
@@ -2051,6 +2633,7 @@ async function requireCustomer(tx: Tx, ctx: OrgContext, customerId: string) {
       isActive: true,
       displayName: true,
       creditLimit: true,
+      currencyCode: true,
       paymentTerm: { select: { id: true, type: true, dueDays: true } },
     },
   })
@@ -2074,7 +2657,7 @@ async function assertCreditLimit(
   type: SalesDocumentType,
   isDraft: boolean,
   invoiceTotal: Decimal,
-  options?: { excludeDocumentId?: string },
+  options?: { excludeDocumentId?: string; acknowledgeCreditLimit?: boolean },
 ) {
   if (isDraft || type !== 'INVOICE') return
   if (!customer.creditLimit) return
@@ -2094,11 +2677,19 @@ async function assertCreditLimit(
   const projected = owed.plus(invoiceTotal)
   if (projected.greaterThan(limit)) {
     const currency = ctx.organization.baseCurrency
-    throw precondition(
+    const message =
       `${customer.displayName} would owe ${formatMoney(projected, currency)} after this invoice, ` +
-        `which exceeds their credit limit of ${formatMoney(limit, currency)}. ` +
-        `Collect a payment, raise the limit, or save the invoice as a draft.`,
-    )
+      `which exceeds their credit limit of ${formatMoney(limit, currency)}. ` +
+      `Collect a payment, raise the limit, or save the invoice as a draft.`
+    if (ctx.features.creditLimitWarn) {
+      if (options?.acknowledgeCreditLimit) return
+      throw validation(message, {
+        acknowledgeCreditLimit: [
+          'This invoice exceeds the credit limit. Confirm to post anyway, or save as a draft.',
+        ],
+      })
+    }
+    throw precondition(message)
   }
 }
 
@@ -2124,7 +2715,7 @@ function assertPostedSaleLines(
 
   for (const [index, line] of lines.entries()) {
     if (line.isSubtotal) continue
-    if (line.itemId) continue
+    if (line.itemId || line.sourcePurchaseLineId) continue
     throw validation(
       'Every posted sales line must use a product or service from the item list. A name typed by hand is not a registered sale.',
       { lines: [`Line ${index + 1}: choose an item from Products and services`] },
@@ -2140,6 +2731,7 @@ async function resolveLines(
   tx: Tx,
   ctx: OrgContext,
   lines: SalesDocumentInput['lines'],
+  options?: { customerId?: string; excludeDocumentId?: string },
 ): Promise<DraftSalesLine[]> {
   const itemIds = lines.map((line) => line.itemId).filter(Boolean) as string[]
 
@@ -2147,7 +2739,7 @@ async function resolveLines(
     ? await tx.item.findMany({
         where: { id: { in: itemIds }, orgId: ctx.orgId },
         select: {
-          id: true, name: true, type: true, isActive: true, salesPrice: true,
+          id: true, name: true, type: true, isActive: true, salesPrice: true, wholesalePrice: true,
           salesDescription: true, description: true, incomeAccountId: true, salesTaxCodeId: true,
           inventoryAccountId: true, cogsAccountId: true, depositAccountId: true,
         },
@@ -2155,6 +2747,39 @@ async function resolveLines(
     : []
 
   const byId = new Map(items.map((item) => [item.id, item]))
+  // Blank unit price follows the customer's price level: wholesale when that
+  // price is set, otherwise the retail sales price.
+  const priceLevel = options?.customerId
+    ? (
+        await tx.customer.findFirst({
+          where: { id: options.customerId, orgId: ctx.orgId },
+          select: { priceLevel: true },
+        })
+      )?.priceLevel ?? 'RETAIL'
+    : 'RETAIL'
+  const purchaseLineIds = [
+    ...new Set(lines.map((line) => line.sourcePurchaseLineId).filter((id): id is string => Boolean(id))),
+  ]
+  const billableRows = purchaseLineIds.length
+    ? await tx.purchaseDocumentLine.findMany({
+        where: { id: { in: purchaseLineIds }, orgId: ctx.orgId },
+        select: {
+          id: true,
+          billableCustomerId: true,
+          document: { select: { type: true, status: true, deletedAt: true, number: true } },
+          billedInvoiceLine: { select: { id: true, documentId: true } },
+        },
+      })
+    : []
+  const billableById = new Map(billableRows.map((row) => [row.id, row]))
+  const seenPurchaseLines = new Set<string>()
+  // A recharged cost with no item still has to post somewhere visible. The same
+  // uncategorised income used as the journal fallback is frozen on the line so
+  // the invoice shows where the money went without inventing a second default.
+  const uncategorisedIncomeId =
+    purchaseLineIds.length > 0
+      ? await systemAccountId(tx, ctx.orgId, 'UNCATEGORISED_INCOME')
+      : null
   const storeIds = [...new Set(lines.map((line) => line.storeId).filter((id): id is string => Boolean(id)))]
   const knownStores = storeIds.length
     ? new Set(
@@ -2173,17 +2798,46 @@ async function resolveLines(
     if (item && !item.isActive) {
       throw precondition(`"${item.name}" is archived and cannot be sold.`)
     }
-    if (item?.type === 'GROUP') {
-      throw validation(
-        `"${item.name}" is a group — pick it on the form so its members are added as lines.`,
-        { lines: ['Expand the group into its items'] },
+    if (item?.type === 'GROUP' && !item.incomeAccountId) {
+      throw precondition(
+        `"${item.name}" is a group with no income account. Set the group's sales account before selling it as a kit.`,
       )
     }
     if (line.storeId && !knownStores.has(line.storeId)) throw notFound('Store')
 
+    if (line.sourcePurchaseLineId) {
+      if (seenPurchaseLines.has(line.sourcePurchaseLineId)) {
+        throw validation('The same billable expense cannot be added twice on one invoice.')
+      }
+      seenPurchaseLines.add(line.sourcePurchaseLineId)
+      const purchaseLine = billableById.get(line.sourcePurchaseLineId)
+      if (!purchaseLine) throw notFound('Billable expense')
+      const parent = purchaseLine.document
+      const posted =
+        (parent.type === 'BILL' || parent.type === 'EXPENSE') &&
+        !parent.deletedAt &&
+        parent.status !== 'VOID' &&
+        parent.status !== 'DRAFT' &&
+        parent.status !== 'PENDING_APPROVAL'
+      if (!posted) {
+        throw precondition(`${parent.number} is not a posted bill or expense, so its cost cannot be recharged.`)
+      }
+      if (!options?.customerId || purchaseLine.billableCustomerId !== options.customerId) {
+        throw validation('That cost is not billable to this customer.')
+      }
+      const already = purchaseLine.billedInvoiceLine
+      if (already && already.documentId !== options.excludeDocumentId) {
+        throw conflict('That expense has already been pulled onto an invoice.')
+      }
+    }
+
     const isDiscount = item?.type === 'DISCOUNT'
     const isSubtotal = item?.type === 'SUBTOTAL'
     const isPayment = item?.type === 'PAYMENT'
+    const incomeAccountId = isPayment || isSubtotal
+      ? null
+      : (item?.incomeAccountId ??
+        (line.sourcePurchaseLineId ? uncategorisedIncomeId : null))
 
     return {
       itemId: line.itemId ?? null,
@@ -2191,18 +2845,24 @@ async function resolveLines(
       description:
         line.description ?? item?.salesDescription ?? item?.description ?? item?.name ?? null,
       quantity: line.quantity,
-      unitPrice: line.unitPrice !== '' ? line.unitPrice : (item?.salesPrice?.toString() ?? '0'),
+      unitPrice:
+        line.unitPrice !== ''
+          ? line.unitPrice
+          : priceLevel === 'WHOLESALE' && item?.wholesalePrice != null
+            ? item.wholesalePrice.toString()
+            : (item?.salesPrice?.toString() ?? '0'),
       discountPercent: line.discountPercent ?? null,
       taxCodeId: ctx.features.enableTax && !isPayment && !isSubtotal
         ? (line.taxCodeId ?? item?.salesTaxCodeId ?? null)
         : null,
-      incomeAccountId: isPayment || isSubtotal ? null : (item?.incomeAccountId ?? null),
+      incomeAccountId,
       depositAccountId: isPayment ? (item?.depositAccountId ?? null) : null,
       serviceDate: line.serviceDate ?? null,
       isDiscount,
       isSubtotal,
       isPayment,
       isStock: item?.type === 'INVENTORY' || item?.type === 'INVENTORY_ASSEMBLY',
+      sourcePurchaseLineId: line.sourcePurchaseLineId ?? null,
     }
   })
 }

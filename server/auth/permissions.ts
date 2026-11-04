@@ -142,6 +142,8 @@ const PURCHASING: Permission[] = [
   'expense:update',
   'expense:void',
   'expense:approve',
+  /** POs and vendor statements share the same send permission as sales paper. */
+  'invoice:send',
   'inventory:read',
   'inventory:adjust',
   'inventory:approve',
@@ -195,6 +197,7 @@ const AP_CLERK: Permission[] = [
   'expense:create',
   'expense:update',
   'expense:void',
+  'invoice:send',
   'inventory:read',
   'report:read',
   'calendar:read',

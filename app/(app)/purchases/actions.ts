@@ -11,6 +11,7 @@ import {
   billPaymentSchema,
   convertOrderSchema,
   convertPurchaseDocumentSchema,
+  markBillableSchema,
   purchaseDocumentSchema,
   receiveOrderSchema,
 } from '@/lib/validation/purchases'
@@ -142,6 +143,15 @@ export const convertPurchaseDocument = action
  * Guarded by `bill:create` rather than a receiving permission of its own,
  * because that is precisely what it does: it raises a bill for what arrived.
  */
+export const markBillable = action
+  .requires('bill:update')
+  .input(markBillableSchema)
+  .handler(async (ctx, input) => {
+    const result = await purchaseService.markLinesBillable(ctx, input)
+    revalidatePurchases()
+    return result
+  })
+
 export const receiveOrder = action
   .requires('bill:create')
   .input(receiveOrderSchema)

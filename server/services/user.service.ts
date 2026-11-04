@@ -10,20 +10,38 @@ import { hashPassword, verifyPassword } from '@/server/auth/password'
 import { db } from '@/server/db'
 import { forbidden, notFound, precondition, validation } from '@/server/errors'
 
-export async function updateProfile(ctx: OrgContext, input: { name: string }) {
+export async function updateProfile(
+  ctx: OrgContext,
+  input: { name: string; phone?: string | null },
+) {
   const meta = await requestMeta()
+
+  if (input.phone) {
+    const taken = await db.user.findFirst({
+      where: { phone: input.phone, NOT: { id: ctx.userId } },
+      select: { id: true },
+    })
+    if (taken) {
+      throw validation('That mobile number is already used on another login.', {
+        phone: ['That mobile number is already used on another login.'],
+      })
+    }
+  }
 
   return db.$transaction(async (tx) => {
     const before = await tx.user.findUnique({
       where: { id: ctx.userId },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, phone: true },
     })
     if (!before) throw notFound('User')
 
     const after = await tx.user.update({
       where: { id: ctx.userId },
-      data: { name: input.name },
-      select: { id: true, name: true, email: true },
+      data: {
+        name: input.name,
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+      },
+      select: { id: true, name: true, email: true, phone: true },
     })
 
     await writeAudit(

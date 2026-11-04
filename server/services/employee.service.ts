@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { EmploymentType, Prisma, WageType } from '@prisma/client'
+import type { EmploymentType, PayMethod, Prisma, WageType } from '@prisma/client'
 
 import { toCalendarDate, toDate } from '@/lib/date'
 import { money } from '@/lib/money'
@@ -39,6 +39,9 @@ const SELECT = {
   wageAmount: true,
   expenseAccountId: true,
   payableAccountId: true,
+  payMethod: true,
+  payAccountId: true,
+  structureId: true,
   createdAt: true,
   updatedAt: true,
   user: { select: { id: true, name: true, email: true } },
@@ -78,6 +81,9 @@ export type EmployeeRow = {
   wageAmount: string
   expenseAccountId: string | null
   payableAccountId: string | null
+  payMethod: PayMethod
+  payAccountId: string | null
+  structureId: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -123,6 +129,9 @@ function mapRow(row: {
   wageAmount: { toFixed: (digits: number) => string } | string
   expenseAccountId: string | null
   payableAccountId: string | null
+  payMethod: PayMethod
+  payAccountId: string | null
+  structureId: string | null
   createdAt: Date
   updatedAt: Date
   user: { id: string; name: string; email: string } | null
@@ -161,6 +170,9 @@ function mapRow(row: {
     wageAmount: typeof row.wageAmount === 'string' ? row.wageAmount : row.wageAmount.toFixed(4),
     expenseAccountId: row.expenseAccountId,
     payableAccountId: row.payableAccountId,
+    payMethod: row.payMethod,
+    payAccountId: row.payAccountId,
+    structureId: row.structureId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
@@ -271,7 +283,11 @@ function writeData(
     wageAmount: money(input.wageAmount ?? '0'),
     expenseAccountId: input.expenseAccountId ?? null,
     payableAccountId: input.payableAccountId ?? null,
+    payMethod: input.payMethod ?? 'CASH',
+    payAccountId: input.payAccountId ?? null,
+    structureId: input.structureId ?? null,
     active: input.active ?? true,
+    lifecycleStatus: input.active === false ? 'LEFT' : 'ACTIVE',
   }
 }
 

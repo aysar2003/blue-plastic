@@ -12,6 +12,7 @@ import * as organizationService from '@/server/services/organization.service'
 import * as purchaseService from '@/server/services/purchase.service'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 /** Purchase document as a downloadable PDF — bill, expense, credit, or order. */
 export async function GET(
@@ -93,6 +94,7 @@ export async function GET(
       approvedByName: approval?.name ?? null,
       approvedAt: approval?.at ?? null,
       currency,
+      message: document.customerMessage,
       lines: document.lines.map((line) => ({
         quantity: line.quantity,
         sku: line.item?.sku ?? null,
@@ -100,6 +102,7 @@ export async function GET(
         unitPrice: line.unitPrice,
         amount: line.amount,
         unitOfMeasure: line.item?.unitOfMeasure ?? null,
+        taxAmount: line.taxAmount ?? null,
       })),
       subtotal: document.subtotal,
       discountAmount: document.discountAmount,

@@ -101,6 +101,7 @@ export default async function BalanceSheetPage({
         asOf={settings.asOf}
         basis={settings.basis}
         comparison={settings.comparison}
+        memorizeTitle="Balance Sheet"
         controls={{ mode: 'range', basis: true, comparison: true, exportAs: 'balance-sheet' }}
       />
 

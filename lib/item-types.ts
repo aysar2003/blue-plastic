@@ -97,8 +97,9 @@ export const ITEM_TYPE_PROFILES: ItemTypeProfile[] = [
   {
     value: 'GROUP',
     label: 'Group',
-    blurb: 'Use to quickly enter a group of individual items on an invoice.',
-    accounts: { income: false, expense: false, cogs: false, inventory: false, deposit: false },
+    blurb:
+      'Use for a kit sold as one line on the invoice. The income account and sales price are on the group; stock of the member items moves when the sale posts.',
+    accounts: { income: true, expense: false, cogs: false, inventory: false, deposit: false },
     buying: false,
     stock: false,
     components: true,

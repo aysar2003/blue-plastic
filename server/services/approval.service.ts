@@ -40,6 +40,7 @@ const APPROVE_PERMISSION: Partial<Record<ApprovalEntityType, Permission>> = {
   DEPOSIT: 'bank:approve',
   CUSTOMER: 'customer:approve',
   VENDOR: 'vendor:approve',
+  PAYROLL: 'hr:payroll',
 }
 
 export function approvalsEnabled(ctx: OrgContext): boolean {
@@ -873,6 +874,13 @@ async function revertEntityToDraft(
         status: 'DRAFT',
       },
     })
+    return
+  }
+  if (entityType === 'PAYROLL') {
+    await tx.payrollRun.updateMany({
+      where: { id: entityId, orgId: ctx.orgId, status: 'DRAFT' },
+      data: { awaitingApproval: false },
+    })
   }
 }
 
@@ -930,6 +938,11 @@ async function postApprovedEntity(
   if (entityType === 'VENDOR') {
     const contacts = await import('@/server/services/contact.service')
     await contacts.postOpeningBalanceApproval(tx, ctx, 'vendor', entityId)
+    return
+  }
+  if (entityType === 'PAYROLL') {
+    const payroll = await import('@/server/services/payroll-standard.service')
+    await payroll.standardPost(ctx, entityId, {}, tx)
   }
 }
 

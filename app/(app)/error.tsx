@@ -17,7 +17,9 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
       <div className="space-y-1">
         <p className="text-sm font-medium">Something went wrong</p>
         <p className="mx-auto max-w-md text-sm text-muted-foreground">
-          The page could not be loaded. Nothing was changed.
+          {/timeout|terminated|connection/i.test(error.message)
+            ? 'The database was busy for a moment. Nothing was changed. Try again.'
+            : 'The page could not be loaded. Nothing was changed.'}
         </p>
         {error.digest ? (
           <p className="text-xs text-muted-foreground">

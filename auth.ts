@@ -5,15 +5,68 @@ import { z } from 'zod'
 
 import { authConfig } from '@/auth.config'
 import { homeCompanyId, sessionCompanyId } from '@/lib/company-access'
+import { env } from '@/lib/env'
+import { openLoginTicket } from '@/lib/login-ticket'
+import { parseLoginIdentifier } from '@/lib/phone'
 import { db } from '@/server/db'
 import { loadCompanyAccess } from '@/server/auth/company-access'
 import { fakeVerify, verifyPassword } from '@/server/auth/password'
 import { recordEvent } from '@/server/audit'
+import { userNeedsTwoFactor } from '@/server/services/auth-2fa.service'
 
-const credentialsSchema = z.object({
-  email: z.string().email(),
+const passwordCredentialsSchema = z.object({
+  email: z.string().min(1),
   password: z.string().min(1),
+  loginTicket: z.string().optional(),
 })
+
+const ticketCredentialsSchema = z.object({
+  loginTicket: z.string().min(1),
+  email: z.string().optional(),
+  password: z.string().optional(),
+})
+
+async function sessionUserFromId(userId: string) {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      image: true,
+      homeOrgId: true,
+      memberships: {
+        where: { status: 'ACTIVE' },
+        select: { orgId: true, role: true, version: true },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+  })
+  if (!user) return null
+
+  const homeId = homeCompanyId(user.homeOrgId, user.memberships)
+  const membership = user.memberships.find((row) => row.orgId === homeId)
+  if (!membership) return null
+
+  await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
+  await recordEvent({
+    orgId: membership.orgId,
+    actorId: user.id,
+    entity: 'User',
+    entityId: user.id,
+    action: 'LOGIN',
+  })
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    image: user.image,
+    orgId: membership.orgId,
+    role: membership.role,
+    membershipVersion: membership.version,
+  }
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -23,14 +76,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // `next build` — see the note in lib/env.ts.
   providers: [
     Credentials({
-      credentials: { email: {}, password: {} },
+      credentials: { email: {}, password: {}, loginTicket: {} },
       async authorize(raw) {
-        const parsed = credentialsSchema.safeParse(raw)
+        const ticketParsed = ticketCredentialsSchema.safeParse(raw)
+        if (ticketParsed.success && ticketParsed.data.loginTicket && !ticketParsed.data.password) {
+          const ticket = openLoginTicket(ticketParsed.data.loginTicket, env.AUTH_SECRET)
+          if (!ticket) return null
+          return sessionUserFromId(ticket.userId)
+        }
+
+        const parsed = passwordCredentialsSchema.safeParse(raw)
         if (!parsed.success) return null
 
-        const email = parsed.data.email.trim().toLowerCase()
+        // Prefer a post-2FA ticket when both are present.
+        if (parsed.data.loginTicket) {
+          const ticket = openLoginTicket(parsed.data.loginTicket, env.AUTH_SECRET)
+          if (!ticket) return null
+          return sessionUserFromId(ticket.userId)
+        }
+
+        const identifier = parseLoginIdentifier(parsed.data.email)
+        if (!identifier) {
+          await fakeVerify()
+          return null
+        }
+
         const user = await db.user.findUnique({
-          where: { email },
+          where: identifier.kind === 'email' ? { email: identifier.value } : { phone: identifier.value },
           select: {
             id: true,
             email: true,
@@ -38,6 +110,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             image: true,
             passwordHash: true,
             homeOrgId: true,
+            totpEnabledAt: true,
+            otp2faEnabledAt: true,
             memberships: {
               where: { status: 'ACTIVE' },
               select: { orgId: true, role: true, version: true },
@@ -67,8 +141,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null
         }
 
-        // Staff land in the company they work for. The system owner does too,
-        // and opens the others afterwards from the Databases app.
+        // Password alone must not create a session when 2FA is on.
+        if (userNeedsTwoFactor(user)) return null
+
         const homeId = homeCompanyId(user.homeOrgId, user.memberships)
         const membership = user.memberships.find((row) => row.orgId === homeId)
         if (!membership) return null

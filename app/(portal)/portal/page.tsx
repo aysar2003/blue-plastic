@@ -78,6 +78,9 @@ export default async function PortalHomePage() {
         <Link href="/portal/invoices" className={cn(buttonVariants())}>
           View invoices
         </Link>
+        <Link href="/portal/quotes" className={cn(buttonVariants({ variant: 'outline' }))}>
+          Quotes
+        </Link>
         <Link href="/portal/payments" className={cn(buttonVariants({ variant: 'outline' }))}>
           Payment history
         </Link>

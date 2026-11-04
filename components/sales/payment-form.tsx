@@ -11,6 +11,7 @@ import { EntityPicker } from '@/components/forms/entity-picker'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { Field, fieldProps } from '@/components/forms/field'
 import { LockedNumber } from '@/components/forms/locked-number'
+import { useDuplicatePrompt } from '@/components/forms/duplicate-prompt'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { Button } from '@/components/ui/button'
@@ -80,6 +81,7 @@ export function PaymentForm({
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(savePaymentForm, idleState)
+  const { acknowledge, formRef, beforeSubmit } = useDuplicatePrompt(state)
   const editing = Boolean(payment)
 
   const [number, setNumber] = usePropState(documentNumber)
@@ -180,7 +182,9 @@ export function PaymentForm({
     setApplied(suggested)
   }
 
-  const payload = JSON.stringify({
+  const payloadInput = useRef<HTMLInputElement>(null)
+  const payloadFor = () =>
+    JSON.stringify({
     ...(payment ? { id: payment.id } : {}),
     number,
     customerId,
@@ -190,6 +194,7 @@ export function PaymentForm({
     depositAccountId,
     reference,
     memo,
+    acknowledgeDuplicate: acknowledge.current,
     applications: Object.entries(applied)
       .filter(([, value]) => (parseMoneyInput(value) ?? ZERO).greaterThan(0))
       .map(([invoiceId, value]) => ({ invoiceId, amount: value })),
@@ -199,8 +204,16 @@ export function PaymentForm({
   const canSave = customerId !== '' && totals.received.greaterThan(0) && !overApplied
 
   return (
-    <form action={formAction} className="space-y-2">
-      <input type="hidden" name="payload" value={payload} />
+    <form
+      ref={formRef}
+      action={formAction}
+      className="space-y-2"
+      onSubmit={() => {
+        beforeSubmit()
+        if (payloadInput.current) payloadInput.current.value = payloadFor()
+      }}
+    >
+      <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor()} />
 
       <Card>
         <CardContent className="space-y-3 p-3 sm:p-4">

@@ -239,29 +239,57 @@ export function buildCustomerPaymentJournal(input: {
   number: string
   paymentId: string
   customerId: string
+  /** Bank debit in organisation base currency. */
   amount: Decimal.Value
   depositAccountId: string
   receivableAccountId: string
   memo?: string | null
+  /** AR credit in base. Defaults to `amount`. Differs when settling foreign invoices at a new rate. */
+  arAmount?: Decimal.Value
+  fxAccountId?: string | null
+  currencyCode?: string | null
+  exchangeRate?: Decimal.Value | null
 }): DraftJournal {
+  const bank = new Decimal(input.amount)
+  const ar = new Decimal(input.arAmount ?? input.amount)
+  const diff = bank.minus(ar)
+  const lines: DraftLine[] = [
+    {
+      accountId: input.depositAccountId,
+      debit: bank,
+      description: `Payment ${input.number}`,
+    },
+    {
+      accountId: input.receivableAccountId,
+      credit: ar,
+      customerId: input.customerId,
+      description: `Payment ${input.number}`,
+    },
+  ]
+  if (!diff.isZero() && input.fxAccountId) {
+    if (diff.isPositive()) {
+      // More cash than AR cleared → realised FX gain (credit income).
+      lines.push({
+        accountId: input.fxAccountId,
+        credit: diff,
+        description: `Realised FX · payment ${input.number}`,
+      })
+    } else {
+      lines.push({
+        accountId: input.fxAccountId,
+        debit: diff.abs(),
+        description: `Realised FX · payment ${input.number}`,
+      })
+    }
+  }
   return {
     date: input.date,
     memo: input.memo ?? `Payment ${input.number}`,
     sourceType: 'CUSTOMER_PAYMENT',
     sourceId: input.paymentId,
-    lines: [
-      {
-        accountId: input.depositAccountId,
-        debit: input.amount,
-        description: `Payment ${input.number}`,
-      },
-      {
-        accountId: input.receivableAccountId,
-        credit: input.amount,
-        customerId: input.customerId,
-        description: `Payment ${input.number}`,
-      },
-    ],
+    currencyCode: input.currencyCode ?? null,
+    exchangeRate: input.exchangeRate ?? 1,
+    lines,
   }
 }
 

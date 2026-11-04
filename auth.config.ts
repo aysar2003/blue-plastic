@@ -39,7 +39,8 @@ export const authConfig = {
         pathname === '/setup' ||
         pathname === '/register' ||
         pathname === '/portal/login' ||
-        pathname === '/portal/accept'
+        pathname === '/portal/accept' ||
+        pathname.startsWith('/sign-request/')
       if (isPublic) return true
 
       return Boolean(auth?.user)
