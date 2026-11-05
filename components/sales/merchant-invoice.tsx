@@ -95,7 +95,7 @@ export function MerchantInvoice({
     account: 'Customer account',
     date: paperDateLabel(config.type),
     person: 'Sales person',
-    reference: 'Cust P.O no',
+    reference: 'P.O. NO.',
     order: 'Sales order',
   }
   const accent = paperAccent(template, words?.party === 'Vendor' ? 'vendor' : 'customer')
@@ -128,6 +128,7 @@ export function MerchantInvoice({
 
   const metaCatalog = useMemo(
     () => [
+      { id: 'inRef' as const, label: 'IN/' },
       { id: 'reference' as const, label: label.reference },
       { id: 'dueDate' as const, label: 'Due date' },
       { id: 'payment' as const, label: 'Payment' },
@@ -146,6 +147,9 @@ export function MerchantInvoice({
   const metaRows = useMemo(() => {
     const workSite = document.workSite || document.project?.siteLocation || ''
     const available: { id: PaperMetaFieldId; label: string; value: string }[] = []
+    if (document.inRef) {
+      available.push({ id: 'inRef', label: 'IN/', value: document.inRef })
+    }
     if (document.reference) {
       available.push({ id: 'reference', label: label.reference, value: document.reference })
     }
@@ -191,6 +195,7 @@ export function MerchantInvoice({
     document.dueDate,
     document.paymentTerm,
     document.project?.siteLocation,
+    document.inRef,
     document.reference,
     document.workScope,
     document.workSite,

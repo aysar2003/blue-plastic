@@ -158,8 +158,17 @@ enum DocumentType {
   DELIVERY_NOTE
   /// Finished goods built from a bill of materials.
   ASSEMBLY_BUILD
+  /// Planned manufacturing build (Phase 28) — completes into an assembly build.
+  WORK_ORDER
   /// Customer job / project folder (Odoo-style).
   PROJECT
+}
+
+enum WorkOrderStatus {
+  DRAFT
+  RELEASED
+  DONE
+  CANCELLED
 }
 
 /// Lifecycle of a customer job (Projects app).
@@ -412,6 +421,8 @@ enum PurchaseDocumentStatus {
   DRAFT
   /// Submitted for maker-checker approval; not on the ledger yet.
   PENDING_APPROVAL
+  /// Bill vs PO/receive mismatch; not on the ledger until variance is approved.
+  MATCH_HOLD
   OPEN
   PARTIAL
   PAID
@@ -734,9 +745,76 @@ model Organization {
   pickTasks            PickTask[]
   trainingCourses      TrainingCourse[]
   trainingEnrollments  TrainingEnrollment[]
+  apiKeys              ApiKey[]
+  reportPacks          ReportPack[]
+  reportPackRuns       ReportPackRun[]
+  workOrders           WorkOrder[]
+  dashboards           Dashboard[]
 
   @@index([parentOrgId])
   @@map("organizations")
+}
+
+enum ReportPackCadence {
+  MANUAL
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+/// Phase 26: named bundle of table-report keys, optionally on a schedule.
+model ReportPack {
+  id    String @id @default(cuid())
+  orgId String
+
+  name        String
+  description String?
+
+  /// Catalogue keys from `TABLE_REPORTS` / standard report paths (slug after /reports/).
+  reportKeys Json
+
+  cadence ReportPackCadence @default(MANUAL)
+  /// When cadence is not MANUAL, email this address after each successful run (optional).
+  emailTo String?
+
+  /// Next time the cron should build this pack (UTC). Null when MANUAL or paused.
+  nextRunAt DateTime? @db.Timestamptz(6)
+  lastRunAt DateTime? @db.Timestamptz(6)
+  isActive  Boolean   @default(true)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+  createdById String?
+
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  runs         ReportPackRun[]
+
+  @@index([orgId, isActive, nextRunAt])
+  @@map("report_packs")
+}
+
+model ReportPackRun {
+  id     String @id @default(cuid())
+  orgId  String
+  packId String
+
+  ranAt DateTime @default(now()) @db.Timestamptz(6)
+  /// Inclusive calendar range used for every report in the pack.
+  fromDate DateTime @db.Date
+  toDate   DateTime @db.Date
+
+  status  String  @default("OK")
+  message String?
+  /// Multi-report CSV body (sections separated). Kept for download.
+  body    String  @db.Text
+
+  createdById String?
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  pack         ReportPack   @relation(fields: [packId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, packId, ranAt(sort: Desc)])
+  @@map("report_pack_runs")
 }
 
 enum CompanyAgreementStatus {
@@ -959,8 +1037,40 @@ model User {
   authChallenges            AuthChallenge[]
   discussMessagesAuthored   DiscussMessage[] @relation("DiscussMessageAuthor")
   crmActivitiesCreated      CrmActivity[]    @relation("CrmActivityCreatedBy")
+  apiKeysCreated            ApiKey[]         @relation("ApiKeyCreatedBy")
 
   @@map("users")
+}
+
+/// Organisation machine credential for /api/v1 and MCP (Phase 22).
+/// Plain token is shown once; only lookup hash + bcrypt hash are stored.
+model ApiKey {
+  id    String @id @default(cuid())
+  orgId String
+
+  name   String
+  /// Display prefix (e.g. som_ab12…).
+  prefix String
+  /// sha256 hex of the full token — unique lookup index.
+  tokenLookup String @unique
+  /// bcrypt of the full token.
+  tokenHash String
+  /// Permission scopes granted to this key (subset of staff permissions).
+  scopes String[]
+
+  createdById String
+  lastUsedAt  DateTime? @db.Timestamptz(6)
+  revokedAt   DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("ApiKeyCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([orgId, revokedAt])
+  @@index([orgId, name])
+  @@map("api_keys")
 }
 
 model Membership {
@@ -1835,6 +1945,11 @@ model Item {
   cogsAccountId      String?
   reorderPoint       Decimal? @db.Decimal(19, 4)
 
+  /// Phase 24: receive/issue must name a lot (batch) when true.
+  trackLots Boolean @default(false)
+  /// Phase 24: each unit needs a unique serial on receive/issue when true.
+  trackSerials Boolean @default(false)
+
   /// Which store holds this product. The store has its own inventory account.
   storeId String?
 
@@ -1877,6 +1992,8 @@ model Item {
   adjustmentLines  InventoryAdjustmentLine[]
   assemblyBuilds   AssemblyBuild[] @relation("AssemblyBuildItem")
   assemblyBuildLines AssemblyBuildLine[]
+  workOrders       WorkOrder[] @relation("WorkOrderItem")
+  workOrderLines   WorkOrderLine[] @relation("WorkOrderLineItem")
   storeTransfers   StoreTransfer[]
   storeTickets     StoreTicket[]
   deliveryNoteLines DeliveryNoteLine[]
@@ -1951,6 +2068,7 @@ model Store {
   ticketsIn    StoreTicket[]   @relation("TicketToStore")
   deliveryNotes DeliveryNote[]
   assemblyBuilds AssemblyBuild[]
+  workOrders    WorkOrder[]
   adjustments  InventoryAdjustment[]
   posRegisters  PosRegister[]
   bins          StockBin[]
@@ -2473,8 +2591,10 @@ model SalesDocument {
 
   status SalesDocumentStatus @default(DRAFT)
 
-  /// The customer's own order number, printed on the document.
+  /// Customer P.O. NO. (QuickBooks PONumber).
   reference       String?
+  /// Template field IN/ — GRN / internal refs (QuickBooks custom or Other).
+  inRef           String?
   memo            String?
   customerMessage String?
   /// Nature / section of work on a quotation or estimate (e.g. foundation works
@@ -2595,6 +2715,10 @@ model SalesDocumentLine {
 
   /// The store this line is issued from, or returned to.
   storeId String?
+
+  /// Phase 24: lot / serial for tracked inventory on this issue line.
+  lotNumber    String?
+  serialNumber String?
 
   serviceDate DateTime? @db.Date
 
@@ -2727,8 +2851,10 @@ model PurchaseDocument {
 
   status PurchaseDocumentStatus @default(DRAFT)
 
-  /// The vendor's own document number — what to quote when querying it.
+  /// Vendor P.O. NO. / their reference on the bill.
   reference String?
+  /// Template field IN/ — GRN / internal refs (QuickBooks-style).
+  inRef     String?
   memo      String?
 
   subtotal Decimal @default(0) @db.Decimal(19, 4)
@@ -2759,6 +2885,13 @@ model PurchaseDocument {
   /// forced the whole order to be received at once whether or not it had all
   /// turned up.
   convertedFromId String?
+
+  /// Phase 23: why a bill linked to a PO is on MATCH_HOLD (qty/price vs order/receive).
+  matchVarianceNote String?
+  /// When set, postDocument skips the hard 3-way check (variance already approved).
+  matchVarianceApproved Boolean @default(false)
+  matchApprovedAt       DateTime? @db.Timestamptz(6)
+  matchApprovedById     String?
 
   /// Optional job this purchase belongs to (Projects app).
   projectId String?
@@ -2845,6 +2978,10 @@ model PurchaseDocumentLine {
 
   /// The store this line is received into, or returned from.
   storeId String?
+
+  /// Phase 24: lot / serial for tracked inventory on this receipt line.
+  lotNumber    String?
+  serialNumber String?
 
   /// Customer to recharge this cost on a later invoice (Phase 11.5). Mutually
   /// exclusive with document-level `offsetCustomerId` (pay-from-AR now).
@@ -3225,6 +3362,10 @@ model InventoryTransaction {
   /// Which store this quantity belongs to. Null is counted at the office.
   storeId String?
 
+  /// Phase 24: lot (batch) and/or serial for tracked items.
+  lotNumber    String?
+  serialNumber String?
+
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   createdById String?
 
@@ -3236,6 +3377,8 @@ model InventoryTransaction {
   @@unique([itemId, sequence])
   @@index([orgId, itemId, sequence(sort: Desc)])
   @@index([orgId, itemId, storeId])
+  @@index([orgId, itemId, lotNumber])
+  @@index([orgId, itemId, serialNumber])
   @@index([orgId, date])
   @@index([orgId, sourceType, sourceId])
   @@map("inventory_transactions")
@@ -3345,6 +3488,9 @@ model AssemblyBuild {
 
   journalId String?
 
+  /// Phase 28: work order this build completed.
+  workOrderId String? @unique
+
   deletedAt    DateTime? @db.Timestamptz(6)
   deletedById  String?
   deleteReason String?
@@ -3357,6 +3503,7 @@ model AssemblyBuild {
   item         Item               @relation("AssemblyBuildItem", fields: [itemId], references: [id], onDelete: Restrict)
   store        Store?             @relation(fields: [storeId], references: [id], onDelete: SetNull)
   journal      Journal?           @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  workOrder    WorkOrder?         @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
   lines        AssemblyBuildLine[]
 
   @@unique([orgId, number])
@@ -3365,6 +3512,57 @@ model AssemblyBuild {
   @@index([orgId, deletedAt])
   @@index([orgId, itemId])
   @@map("assembly_builds")
+}
+
+/// Phase 28: planned assembly build. Completing posts via AssemblyBuild.
+model WorkOrder {
+  id    String @id @default(cuid())
+  orgId String
+
+  number String
+  date   DateTime @db.Date
+  dueDate DateTime? @db.Date
+
+  itemId  String
+  storeId String?
+  quantity Decimal @db.Decimal(19, 4)
+  memo    String?
+
+  status WorkOrderStatus @default(DRAFT)
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  item         Item         @relation("WorkOrderItem", fields: [itemId], references: [id], onDelete: Restrict)
+  store        Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  build        AssemblyBuild?
+  lines        WorkOrderLine[]
+
+  @@unique([orgId, number])
+  @@index([orgId, status, date(sort: Desc)])
+  @@index([orgId, itemId])
+  @@map("work_orders")
+}
+
+/// Planned component needs snapped from the BOM when the work order is created.
+model WorkOrderLine {
+  id          String @id @default(cuid())
+  workOrderId String
+  orgId       String
+
+  lineNumber Int @db.SmallInt
+  itemId     String
+  /// Total quantity needed for the work order (BOM qty × build qty).
+  quantity   Decimal @db.Decimal(19, 4)
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  item      Item      @relation("WorkOrderLineItem", fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([workOrderId, lineNumber])
+  @@index([orgId, itemId])
+  @@map("work_order_lines")
 }
 
 model AssemblyBuildLine {
@@ -5356,6 +5554,14 @@ model PickTask {
   status PickTaskStatus  @default(OPEN)
   notes  String?
 
+  /// Optional link to a sales order or delivery note (Phase 29).
+  sourceType String?
+  sourceId   String?
+
+  /// Phase 24 tracking when the item requires it.
+  lotNumber    String?
+  serialNumber String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -5366,7 +5572,56 @@ model PickTask {
 
   @@index([orgId, status, createdAt])
   @@index([orgId, storeId])
+  @@index([orgId, sourceType, sourceId])
   @@map("pick_tasks")
+}
+
+enum DashboardTileKind {
+  KPI
+  REPORT
+  SPARK
+}
+
+/// Phase 30: configurable SME board above home KPI pins.
+model Dashboard {
+  id    String @id @default(cuid())
+  orgId String
+
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  tiles        DashboardTile[]
+
+  @@index([orgId, isActive, name])
+  @@map("dashboards")
+}
+
+model DashboardTile {
+  id          String @id @default(cuid())
+  dashboardId String
+  orgId       String
+
+  kind      DashboardTileKind
+  /// KPI key, report path key, or spark metric id.
+  refKey    String
+  title     String?
+  sortOrder Int     @default(0)
+  /// Optional threshold; board shows a banner when the resolved value crosses it.
+  threshold Decimal? @db.Decimal(19, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, dashboardId, sortOrder])
+  @@map("dashboard_tiles")
 }
 
 model TrainingCourse {

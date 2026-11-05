@@ -6,8 +6,14 @@ import type { AccountType } from '@prisma/client'
 import { CheckIcon, ChevronDownIcon, PlusIcon } from 'lucide-react'
 
 import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
+import { floatingPanelZIndex } from '@/lib/dialog-stack'
 import { focusNextField, moveInLineGrid } from '@/lib/keyboard'
 import { cn } from '@/lib/utils'
+
+/** Tallest list we allow — matches former `max-h-72`. */
+const LIST_MAX_PX = 288
+const LIST_MIN_PX = 120
+const VIEWPORT_PAD = 8
 
 /**
  * A record picker that is a text box.
@@ -156,14 +162,20 @@ export function Combobox({
     left: number
     width: number
     above: boolean
+    maxHeight: number
+    zIndex: number
   }>()
 
   const place = React.useCallback(() => {
     const rect = rootRef.current?.getBoundingClientRect()
     if (!rect) return
 
-    const below = window.innerHeight - rect.bottom
-    const above = below < 280 && rect.top > below
+    const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_PAD
+    const spaceAbove = rect.top - VIEWPORT_PAD
+    // Prefer below; flip when the list would not fit and there is more room up.
+    const above = spaceBelow < LIST_MAX_PX && spaceAbove > spaceBelow
+    const available = above ? spaceAbove : spaceBelow
+    const maxHeight = Math.min(LIST_MAX_PX, Math.max(LIST_MIN_PX, available))
     // The box on the form is often a narrow column (e.g. inside a dialog). The
     // list must be wide enough for long customer names to wrap and read in full.
     const width = Math.min(Math.max(rect.width, 520), window.innerWidth - 16)
@@ -173,6 +185,8 @@ export function Combobox({
       left,
       width,
       above,
+      maxHeight,
+      zIndex: floatingPanelZIndex(),
     }
 
     setAnchor((prev) =>
@@ -180,7 +194,9 @@ export function Combobox({
       prev.top === next.top &&
       prev.left === next.left &&
       prev.width === next.width &&
-      prev.above === next.above
+      prev.above === next.above &&
+      prev.maxHeight === next.maxHeight &&
+      prev.zIndex === next.zIndex
         ? prev
         : next,
     )
@@ -463,9 +479,10 @@ export function Combobox({
                 bottom: anchor.above ? window.innerHeight - anchor.top : undefined,
                 left: anchor.left,
                 width: anchor.width,
+                zIndex: anchor.zIndex,
               }}
               className={cn(
-                'pointer-events-auto z-[60] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg print:hidden',
+                'pointer-events-auto overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg print:hidden',
                 'animate-in fade-in-0 zoom-in-95',
               )}
             >
@@ -473,7 +490,8 @@ export function Combobox({
                 ref={listRef}
                 id={`${id ?? name ?? 'combobox'}-list`}
                 role="listbox"
-                className="max-h-72 overflow-y-auto p-1"
+                style={{ maxHeight: anchor.maxHeight }}
+                className="overflow-y-auto p-1"
               >
                 {rows.length === 0 ? (
                   <p className="px-2 py-6 text-center text-sm text-muted-foreground">{emptyMessage}</p>

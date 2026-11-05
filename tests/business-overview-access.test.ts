@@ -81,15 +81,20 @@ describe('business overview access', () => {
       '/reports/balance-sheet',
       '/reports/cash-flow',
       '/reports/trial-balance',
+      '/reports/packs',
+      '/reports/dashboards',
+      '/reports/profit-loss/by-class',
       '/reports/profit-loss/by-month',
     ])
   })
 
-  it('refuses the overview figures when the caller lacks the capability', async () => {
+  it('refuses the overview figures when the caller lacks the capability', () => {
     const ctx = { permissions: sales } as unknown as OrgContext
-    await expect(businessOverview(ctx)).rejects.toMatchObject({
-      code: 'FORBIDDEN',
-      status: 403,
-    })
+    try {
+      businessOverview(ctx)
+      expect.fail('expected FORBIDDEN')
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'FORBIDDEN', status: 403 })
+    }
   })
 })

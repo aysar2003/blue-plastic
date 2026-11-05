@@ -14,6 +14,7 @@ export type SheetDocument = {
   createdAt: Date
   status: string
   reference: string | null
+  inRef?: string | null
   type: string
   currencyCode: string
   subtotal: string

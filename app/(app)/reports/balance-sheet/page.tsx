@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { AlertTriangleIcon, CheckCircle2Icon } from 'lucide-react'
 
 import { readSort } from '@/components/data/sortable-header'
@@ -106,6 +107,21 @@ export default async function BalanceSheetPage({
       />
 
       <ReportEntityFilters kinds={BS_FILTERS} values={filters} options={filterOptions} />
+      <p className="mb-3 text-sm text-muted-foreground">
+        Accounts receivable on this sheet is the same open balance QuickBooks shows on the
+        customer — drill an AR account for movements, or open{' '}
+        <Link href="/reports/customer-balances" className="text-primary underline-offset-4 hover:underline">
+          Customer balances
+        </Link>{' '}
+        /{' '}
+        <Link
+          href="/reports/statements/customer?period=all-dates&view=summary"
+          className="text-primary underline-offset-4 hover:underline"
+        >
+          Customer statement
+        </Link>{' '}
+        to see invoices and payments in order.
+      </p>
       {filtered ? (
         <p className="mb-3 text-sm text-muted-foreground">
           Showing only journals that match the filters above. A filtered balance sheet may not

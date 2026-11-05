@@ -6,6 +6,7 @@
 export const PAPER_META_STORAGE_KEY = 'merchant-paper-meta-v1'
 
 export type PaperMetaFieldId =
+  | 'inRef'
   | 'reference'
   | 'dueDate'
   | 'payment'
@@ -21,7 +22,8 @@ export type PaperMetaField = { id: PaperMetaFieldId; label: string }
 
 /** Default order on the customer paper. */
 export const PAPER_META_FIELDS: PaperMetaField[] = [
-  { id: 'reference', label: 'Cust P.O no' },
+  { id: 'inRef', label: 'IN/' },
+  { id: 'reference', label: 'P.O. NO.' },
   { id: 'dueDate', label: 'Due date' },
   { id: 'payment', label: 'Payment' },
   { id: 'address', label: 'Address' },

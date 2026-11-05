@@ -156,6 +156,7 @@ export const byType = (type: SalesDocumentType): SalesTypeConfig =>
 export const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Draft',
   PENDING_APPROVAL: 'Awaiting approval',
+  MATCH_HOLD: 'Match hold',
   OPEN: 'Open',
   PARTIAL: 'Part paid',
   PAID: 'Paid',
@@ -168,6 +169,7 @@ export const STATUS_LABELS: Record<string, string> = {
 export const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'destructive' | 'warning' | 'outline'> = {
   DRAFT: 'outline',
   PENDING_APPROVAL: 'warning',
+  MATCH_HOLD: 'warning',
   OPEN: 'default',
   PARTIAL: 'warning',
   PAID: 'success',

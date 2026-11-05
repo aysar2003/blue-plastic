@@ -35,7 +35,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <PrintInkSync />
         {children}
         <ForbiddenWatcher />
-        <Toaster richColors closeButton position="bottom-right" />
+        <Toaster richColors closeButton position="bottom-right" style={{ zIndex: 400 }} />
       </ThemeProvider>
     </SessionProvider>
   )

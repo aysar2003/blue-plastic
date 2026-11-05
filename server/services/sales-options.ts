@@ -40,7 +40,7 @@ const cachedFormOptions = cache(
   (orgId: string, enableTax: boolean, includeOnHand: boolean, canReadProjects: boolean) =>
     unstable_cache(
       () => queryFormOptions(orgId, enableTax, includeOnHand, canReadProjects),
-      ['sales-form-options-v2', orgId, String(enableTax), String(includeOnHand), String(canReadProjects)],
+      ['sales-form-options-v3', orgId, String(enableTax), String(includeOnHand), String(canReadProjects)],
       { revalidate: 30 },
     )(),
 )
@@ -87,7 +87,7 @@ async function queryFormOptions(
       where: { orgId, isActive: true },
       select: {
         id: true, name: true, sku: true, barcode: true, salesPrice: true, wholesalePrice: true, type: true,
-        unitOfMeasure: true,
+        unitOfMeasure: true, trackLots: true, trackSerials: true,
         salesDescription: true, description: true, salesTaxCodeId: true,
         bomParents: {
           where: { parent: { type: 'GROUP' } },
@@ -190,6 +190,8 @@ async function queryFormOptions(
       sku: item.sku,
       barcode: item.barcode,
       unitOfMeasure: item.unitOfMeasure,
+      trackLots: Boolean(item.trackLots),
+      trackSerials: Boolean(item.trackSerials),
       price: item.salesPrice?.toString() ?? null,
       wholesalePrice: item.wholesalePrice?.toString() ?? null,
       description: item.salesDescription ?? item.description ?? item.name,

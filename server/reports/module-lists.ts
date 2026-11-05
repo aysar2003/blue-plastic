@@ -1823,100 +1823,49 @@ const projectList: TableReport = {
 const projectProfitability: TableReport = {
   key: 'project-profitability',
   title: 'Project Profitability',
-  description: 'Income against vendor cost on each job in the period.',
+  description: 'Job P&L: sales income, purchases, stock COGS, and timesheet labour.',
   group: 'Projects',
   mode: 'range',
   async build(input) {
     const { ctx, range } = input
-    const client = books(input)
-    const [projects, sales, purchases] = await Promise.all([
-      client.project.findMany({
-        where: { orgId: ctx.orgId },
-        select: { id: true, number: true, name: true, customer: { select: { displayName: true } } },
-        orderBy: { number: 'asc' },
-      }),
-      client.salesDocument.findMany({
-        where: {
-          orgId: ctx.orgId,
-          projectId: { not: null },
-          type: { in: POSTED_SALES },
-          status: { notIn: ['DRAFT', 'VOID', 'PENDING_APPROVAL'] },
-          deletedAt: null,
-          date: { gte: toDate(range.from), lte: toDate(range.to) },
-        },
-        select: { projectId: true, type: true, subtotal: true },
-      }),
-      client.purchaseDocument.findMany({
-        where: {
-          orgId: ctx.orgId,
-          projectId: { not: null },
-          type: { in: POSTED_PURCHASES },
-          status: { notIn: ['DRAFT', 'VOID', 'PENDING_APPROVAL'] },
-          deletedAt: null,
-          date: { gte: toDate(range.from), lte: toDate(range.to) },
-        },
-        select: { projectId: true, type: true, subtotal: true },
-      }),
-    ])
-
-    const income = new Map<string, Decimal>()
-    const cost = new Map<string, Decimal>()
-    for (const document of sales) {
-      if (!document.projectId) continue
-      income.set(
-        document.projectId,
-        (income.get(document.projectId) ?? ZERO).plus(signedSales(document.type, document.subtotal.toString())),
-      )
-    }
-    for (const document of purchases) {
-      if (!document.projectId) continue
-      cost.set(
-        document.projectId,
-        (cost.get(document.projectId) ?? ZERO).plus(signedPurchase(document.type, document.subtotal.toString())),
-      )
-    }
-
-    let incomeTotal = ZERO
-    let costTotal = ZERO
-    const rows = projects.flatMap((project) => {
-      const earned = income.get(project.id) ?? ZERO
-      const spent = cost.get(project.id) ?? ZERO
-      if (earned.isZero() && spent.isZero()) return []
-      incomeTotal = incomeTotal.plus(earned)
-      costTotal = costTotal.plus(spent)
-      return [
-        {
-          href: `/projects/${project.id}`,
-          cells: {
-            number: project.number,
-            name: project.name,
-            customer: project.customer.displayName,
-            income: money(earned),
-            cost: money(spent),
-            profit: money(earned.minus(spent)),
-          },
-        },
-      ]
-    })
+    const { profitabilityByRange } = await import('@/server/services/project-profitability.service')
+    const { rows: built, totals } = await profitabilityByRange(ctx, range)
 
     return {
       columns: [
         { key: 'number', label: 'No.', width: 'w-28' },
         { key: 'name', label: 'Project' },
         { key: 'customer', label: 'Customer' },
-        { key: 'income', label: 'Income', format: 'money', width: 'w-32' },
-        { key: 'cost', label: 'Cost', format: 'money', width: 'w-32' },
-        { key: 'profit', label: 'Profit', format: 'money', width: 'w-32' },
+        { key: 'income', label: 'Income', format: 'money', width: 'w-28' },
+        { key: 'purchases', label: 'Purchases', format: 'money', width: 'w-28' },
+        { key: 'stock', label: 'Stock', format: 'money', width: 'w-28' },
+        { key: 'labor', label: 'Labour', format: 'money', width: 'w-28' },
+        { key: 'profit', label: 'Profit', format: 'money', width: 'w-28' },
       ],
-      rows,
+      rows: built.map((row) => ({
+        href: `/projects/${row.projectId}`,
+        cells: {
+          number: row.number,
+          name: row.name,
+          customer: row.customerName,
+          income: money(row.income),
+          purchases: money(row.purchaseCost),
+          stock: money(row.stockCost),
+          labor: money(row.laborCost),
+          profit: money(row.profit),
+        },
+      })),
       totals: {
         number: 'Total',
-        income: money(incomeTotal),
-        cost: money(costTotal),
-        profit: money(incomeTotal.minus(costTotal)),
+        income: money(totals.income),
+        purchases: money(totals.purchaseCost),
+        stock: money(totals.stockCost),
+        labor: money(totals.laborCost),
+        profit: money(totals.profit),
       },
       empty: 'No project activity in this period.',
-      note: 'Income is invoices and receipts net of credits. Cost is bills and expenses net of vendor credits. Both exclude tax.',
+      note:
+        'Income is posted invoices and receipts net of credits (ex-tax). Purchases are bills and expenses net of vendor credits. Stock is COGS from inventory issued on those sales. Labour is timesheet hours × billable rate.',
     }
   },
 }

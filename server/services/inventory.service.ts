@@ -13,6 +13,7 @@ import type {
   StoreTicketInput,
   StoreTransferInput,
 } from '@/lib/validation/inventory'
+import { onHandByLot } from '@/lib/inventory-lot-serial'
 import {
   positionsOf,
   recordMovement,
@@ -122,6 +123,95 @@ async function queryStockAlerts(orgId: string): Promise<StockAlertSummary> {
 /** Does the stock ledger agree with the Inventory Asset account? */
 export async function agreement(ctx: OrgContext) {
   return stockAgreesWithLedger(db as unknown as Tx, ctx.orgId)
+}
+
+/**
+ * Phase 24: on-hand quantity split by lot (and serial rows when tracked).
+ * Only items with trackLots or trackSerials appear.
+ */
+export async function stockByLot(ctx: OrgContext) {
+  const items = await db.item.findMany({
+    where: {
+      orgId: ctx.orgId,
+      deletedAt: null,
+      OR: [{ trackLots: true }, { trackSerials: true }],
+    },
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      unitOfMeasure: true,
+      trackLots: true,
+      trackSerials: true,
+    },
+    orderBy: { name: 'asc' },
+  })
+  if (items.length === 0) return { items: [] as const }
+
+  const itemIds = items.map((item) => item.id)
+  const movements = await db.inventoryTransaction.findMany({
+    where: { orgId: ctx.orgId, itemId: { in: itemIds } },
+    select: {
+      itemId: true,
+      lotNumber: true,
+      serialNumber: true,
+      quantity: true,
+    },
+  })
+
+  const byItem = new Map<string, typeof movements>()
+  for (const row of movements) {
+    const list = byItem.get(row.itemId) ?? []
+    list.push(row)
+    byItem.set(row.itemId, list)
+  }
+
+  return {
+    items: items.map((item) => {
+      const rows = byItem.get(item.id) ?? []
+      if (item.trackSerials) {
+        const serials = new Map<string, Decimal>()
+        for (const row of rows) {
+          const serial = row.serialNumber?.trim()
+          if (!serial) continue
+          serials.set(
+            serial,
+            (serials.get(serial) ?? new Decimal(0)).plus(row.quantity.toString()),
+          )
+        }
+        return {
+          ...item,
+          slices: [...serials.entries()]
+            .filter(([, qty]) => !qty.isZero())
+            .map(([serial, quantity]) => ({
+              kind: 'serial' as const,
+              lotNumber: null as string | null,
+              serialNumber: serial,
+              quantity,
+            }))
+            .sort((a, b) => a.serialNumber.localeCompare(b.serialNumber)),
+        }
+      }
+
+      const lots = onHandByLot(
+        rows.map((row) => ({
+          lotNumber: row.lotNumber,
+          quantity: row.quantity.toString(),
+        })),
+      )
+      return {
+        ...item,
+        slices: [...lots.entries()]
+          .map(([lot, quantity]) => ({
+            kind: 'lot' as const,
+            lotNumber: lot || null,
+            serialNumber: null as string | null,
+            quantity,
+          }))
+          .sort((a, b) => (a.lotNumber ?? '').localeCompare(b.lotNumber ?? '')),
+      }
+    }),
+  }
 }
 
 /** Every movement of one item, oldest first, as a register. */

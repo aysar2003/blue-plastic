@@ -32,6 +32,7 @@ import { PartyInfo } from '@/components/forms/party-info'
 import { LockedNumber } from '@/components/forms/locked-number'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
+import { CustomerBalancePanel } from '@/components/sales/customer-balance-panel'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -113,6 +114,8 @@ export type ItemOption = {
   barcode?: string | null
   /** Piece / meter / kg — shown next to qty everywhere. */
   unitOfMeasure?: string | null
+  trackLots?: boolean
+  trackSerials?: boolean
   /** GROUP members expanded onto the form when the group is chosen. */
   components?: {
     itemId: string
@@ -154,6 +157,8 @@ type Line = {
   discountPercent: string
   taxCodeId: string
   storeId: string
+  lotNumber: string
+  serialNumber: string
   sourcePurchaseLineId?: string
 }
 
@@ -166,6 +171,8 @@ const empty = (key: number, storeId = ''): Line => ({
   discountPercent: '',
   taxCodeId: '',
   storeId,
+  lotNumber: '',
+  serialNumber: '',
 })
 
 function withMinimumLines(seeded: Line[], minimum: number, storeId: string): Line[] {
@@ -183,6 +190,7 @@ type DocumentSeed = {
   customerId: string
   date: string
   reference: string | null
+  inRef?: string | null
   memo: string | null
   customerMessage: string | null
   workScope?: string | null
@@ -203,6 +211,8 @@ type DocumentSeed = {
     discountPercent: string | null
     taxCodeId: string | null
     storeId?: string | null
+    lotNumber?: string | null
+    serialNumber?: string | null
   }[]
 }
 
@@ -357,6 +367,7 @@ export function DocumentForm({
   const [exchangeRate, setExchangeRate] = useState(document?.exchangeRate ?? '1')
   const [acknowledgeCreditLimit, setAcknowledgeCreditLimit] = useState(false)
   const [reference, setReference] = useState(document?.reference ?? '')
+  const [inRef, setInRef] = useState(document?.inRef ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
   const [customerMessage, setCustomerMessage] = useState(document?.customerMessage ?? '')
   const [workScope, setWorkScope] = useState(document?.workScope ?? '')
@@ -387,6 +398,8 @@ export function DocumentForm({
             discountPercent: liftedPercent ? '' : (line.discountPercent ?? ''),
             taxCodeId: line.taxCodeId ?? '',
             storeId: line.storeId ?? defaultStoreId,
+            lotNumber: line.lotNumber ?? '',
+            serialNumber: line.serialNumber ?? '',
           }))
         : [],
       minimumLines,
@@ -413,6 +426,7 @@ export function DocumentForm({
       setTrackingCategoryId(document.trackingCategoryId ?? '')
       setDate(document.date)
       setReference(document.reference ?? '')
+      setInRef(document.inRef ?? '')
       setMemo(document.memo ?? '')
       setCustomerMessage(document.customerMessage ?? '')
       setWorkScope(document.workScope ?? '')
@@ -435,6 +449,8 @@ export function DocumentForm({
             discountPercent: restoredPercent ? '' : (line.discountPercent ?? ''),
             taxCodeId: line.taxCodeId ?? '',
             storeId: line.storeId ?? defaultStoreId,
+            lotNumber: line.lotNumber ?? '',
+            serialNumber: line.serialNumber ?? '',
           })),
           minimumLines,
           defaultStoreId,
@@ -447,12 +463,13 @@ export function DocumentForm({
     setProjectId(initialProjectId ?? '')
     setDate(today)
     setReference('')
+    setInRef('')
     setMemo('')
     setCustomerMessage('')
     setWorkScope('')
     setWorkSite(
       initialWorkSite ??
-        projects.find((row) => row.id === initialProjectId)?.siteLocation ??
+        projects.find((row) => row.id === (initialProjectId ?? ''))?.siteLocation ??
         '',
     )
     setPaymentTermId('')
@@ -484,6 +501,7 @@ export function DocumentForm({
         setProjectId(initialProjectId ?? '')
         setDate(today)
         setReference('')
+        setInRef('')
         setMemo('')
         setCustomerMessage('')
         setWorkScope('')
@@ -755,6 +773,8 @@ export function DocumentForm({
           discountPercent: '',
           taxCodeId: '',
           storeId: defaultStoreId,
+          lotNumber: '',
+          serialNumber: '',
           sourcePurchaseLineId: row.lineId,
         },
       ]
@@ -785,12 +805,15 @@ export function DocumentForm({
       discountPercent: line.discountPercent,
       taxCodeId: line.taxCodeId,
       storeId: line.storeId || defaultStoreId,
+      lotNumber: line.lotNumber ?? '',
+      serialNumber: line.serialNumber ?? '',
     }))
     setLines(withMinimumLines(seeded, minimumLines, defaultStoreId))
     nextKey.current = Math.max(seeded.length, minimumLines) + 1
     setConvertedFromId(applied.sourceId)
     setConvertedFromLabel(`${byType(applied.sourceType).singular} ${applied.sourceNumber}`)
     if (applied.reference && !reference) setReference(applied.reference)
+    if (applied.inRef && !inRef) setInRef(applied.inRef)
     if (applied.memo && !memo) setMemo(applied.memo)
     if (applied.customerMessage && !customerMessage) setCustomerMessage(applied.customerMessage)
     if (applied.workScope && !workScope) setWorkScope(applied.workScope)
@@ -831,6 +854,7 @@ export function DocumentForm({
       customerId,
       date,
       reference,
+      inRef,
       memo,
       customerMessage,
       workScope,
@@ -852,6 +876,8 @@ export function DocumentForm({
         discountPercent: line.discountPercent,
         taxCodeId: line.taxCodeId,
         storeId: line.storeId,
+        lotNumber: line.lotNumber,
+        serialNumber: line.serialNumber,
         sourcePurchaseLineId: line.sourcePurchaseLineId || '',
       })),
     })
@@ -910,6 +936,8 @@ export function DocumentForm({
     setAcknowledgeCreditLimit,
     reference,
     setReference,
+    inRef,
+    setInRef,
     memo,
     setMemo,
     customerMessage,
@@ -1289,6 +1317,8 @@ type LayoutProps = {
     group?: string
     hint?: string
     unitOfMeasure?: string | null
+    trackLots?: boolean
+    trackSerials?: boolean
   }[]
   /** Item ids whose type is Discount — line amount reduces the document. */
   discountItemIds: Set<string>
@@ -1325,6 +1355,8 @@ type LayoutProps = {
   setAcknowledgeCreditLimit: (value: boolean) => void
   reference: string
   setReference: (value: string) => void
+  inRef: string
+  setInRef: (value: string) => void
   memo: string
   setMemo: (value: string) => void
   customerMessage: string
@@ -1483,13 +1515,24 @@ function HeaderFields({
           </Field>
         ) : null}
 
+        {props.showField('inRef') ? (
+          <Field name="inRef" label="IN/" error={state.fieldErrors?.inRef}>
+            <Input
+              {...fieldProps('inRef', state.fieldErrors?.inRef)}
+              value={props.inRef}
+              onChange={(event) => props.setInRef(event.target.value)}
+              placeholder="GRN / IN/"
+            />
+          </Field>
+        ) : null}
+
         {props.showField('reference') ? (
-          <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
+          <Field name="reference" label="P.O. NO." error={state.fieldErrors?.reference}>
             <Input
               {...fieldProps('reference', state.fieldErrors?.reference)}
               value={props.reference}
               onChange={(event) => props.setReference(event.target.value)}
-              placeholder="PO number"
+              placeholder="P.O. number"
             />
           </Field>
         ) : null}
@@ -1560,28 +1603,16 @@ function HeaderFields({
               />
             </Field>
           ) : null}
-
-          {config.type === 'INVOICE' && props.showField('customerBalance') ? (
-            <Field
-              name="customerBalance"
-              label="Balance"
-              className="ml-auto w-full min-w-[10rem] sm:w-44"
-            >
-              <Input
-                id="customerBalance"
-                className="tabular text-right"
-                value={
-                  customer
-                    ? formatMoney(customer.balance ?? '0', props.currency)
-                    : ''
-                }
-                readOnly
-                placeholder="Choose a customer"
-              />
-            </Field>
-          ) : null}
         </div>
       )}
+
+      {config.type === 'INVOICE' && props.showField('customerBalance') ? (
+        <CustomerBalancePanel
+          customerId={props.customerId || null}
+          currency={props.currency}
+          className="mt-4 rounded-md border border-border/70 bg-muted/20 p-3 sm:max-w-sm sm:ml-auto"
+        />
+      ) : null}
     </div>
   )
 }
@@ -1853,13 +1884,23 @@ function InvoiceLayout(props: LayoutProps) {
               <Input id="dueDate" value={isCalendarDate(due) ? formatDate(due) : ''} readOnly />
             </Field>
           )}
+          {props.showField('inRef') ? (
+            <Field name="inRef" label="IN/" error={state.fieldErrors?.inRef}>
+              <Input
+                {...fieldProps('inRef', state.fieldErrors?.inRef)}
+                value={props.inRef}
+                onChange={(event) => props.setInRef(event.target.value)}
+                placeholder="GRN / IN/"
+              />
+            </Field>
+          ) : null}
           {props.showField('reference') ? (
-            <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
+            <Field name="reference" label="P.O. NO." error={state.fieldErrors?.reference}>
               <Input
                 {...fieldProps('reference', state.fieldErrors?.reference)}
                 value={props.reference}
                 onChange={(event) => props.setReference(event.target.value)}
-                placeholder="PO number"
+                placeholder="P.O. number"
               />
             </Field>
           ) : null}
@@ -1895,21 +1936,6 @@ function InvoiceLayout(props: LayoutProps) {
               </NativeSelect>
             </Field>
           ) : null}
-          {props.config.type === 'INVOICE' && props.showField('customerBalance') ? (
-            <Field name="customerBalance" label="Balance" className="lg:col-start-5">
-              <Input
-                id="customerBalance"
-                className="tabular text-right"
-                value={
-                  customer
-                    ? formatMoney(customer.balance ?? '0', props.currency)
-                    : ''
-                }
-                readOnly
-                placeholder="Choose a customer"
-              />
-            </Field>
-          ) : null}
         </div>
 
         <InvoiceLines props={props} />
@@ -1943,27 +1969,36 @@ function InvoiceLayout(props: LayoutProps) {
               />
             </Field>
           </div>
-          <dl className="space-y-2 text-sm">
-            <div className="flex justify-between gap-6">
-              <dt className="text-muted-foreground">Subtotal</dt>
-              <dd className="tabular">{formatMoney(props.totals.subtotal, props.currency)}</dd>
-            </div>
-            <DiscountControl props={props} />
-            {props.showTax ? (
-              <div className="flex justify-between gap-6">
-                <dt className="text-muted-foreground">Tax</dt>
-                <dd className="tabular">{formatMoney(props.totals.tax, props.currency)}</dd>
-              </div>
+          <div className="space-y-4">
+            {props.config.type === 'INVOICE' && props.showField('customerBalance') ? (
+              <CustomerBalancePanel
+                customerId={props.customerId || null}
+                currency={props.currency}
+                className="rounded-md border border-border/70 bg-muted/20 p-3"
+              />
             ) : null}
-            <div className="flex justify-between gap-6 border-t pt-2 font-medium">
-              <dt>Total</dt>
-              <dd className="tabular">{formatMoney(props.totals.total, props.currency)}</dd>
-            </div>
-            <div className="flex justify-between gap-6 text-base font-semibold">
-              <dt>{customerPaperTotalLabel(props.config.type, props.config.needsDeposit)}</dt>
-              <dd className="tabular text-primary">{formatMoney(props.totals.total, props.currency)}</dd>
-            </div>
-          </dl>
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-6">
+                <dt className="text-muted-foreground">Subtotal</dt>
+                <dd className="tabular">{formatMoney(props.totals.subtotal, props.currency)}</dd>
+              </div>
+              <DiscountControl props={props} />
+              {props.showTax ? (
+                <div className="flex justify-between gap-6">
+                  <dt className="text-muted-foreground">Tax</dt>
+                  <dd className="tabular">{formatMoney(props.totals.tax, props.currency)}</dd>
+                </div>
+              ) : null}
+              <div className="flex justify-between gap-6 border-t pt-2 font-medium">
+                <dt>Total</dt>
+                <dd className="tabular">{formatMoney(props.totals.total, props.currency)}</dd>
+              </div>
+              <div className="flex justify-between gap-6 text-base font-semibold">
+                <dt>{customerPaperTotalLabel(props.config.type, props.config.needsDeposit)}</dt>
+                <dd className="tabular text-primary">{formatMoney(props.totals.total, props.currency)}</dd>
+              </div>
+            </dl>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -2110,6 +2145,15 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                     />
                   </td>
                 ) : null}
+                <td className="px-1 py-1 align-top">
+                  <LotSerialFields
+                    item={props.itemOptions.find((row) => row.id === line.itemId)}
+                    lotNumber={line.lotNumber}
+                    serialNumber={line.serialNumber}
+                    onChange={(next) => props.update(line.key, next)}
+                    lineIndex={index + 1}
+                  />
+                </td>
                 <td className="px-0.5 py-1">
                   <Button
                     type="button"
@@ -2767,6 +2811,15 @@ function StripedLines({ props }: { props: LayoutProps }) {
                     />
                   </td>
                 ) : null}
+                <td className="px-1 py-1 align-top">
+                  <LotSerialFields
+                    item={props.itemOptions.find((row) => row.id === line.itemId)}
+                    lotNumber={line.lotNumber}
+                    serialNumber={line.serialNumber}
+                    onChange={(next) => props.update(line.key, next)}
+                    lineIndex={index + 1}
+                  />
+                </td>
                 <td className="px-0.5 py-1">
                   <Button
                     type="button"
@@ -2792,6 +2845,46 @@ function StripedLines({ props }: { props: LayoutProps }) {
         </Button>
         <TotalsBlock props={props} />
       </div>
+    </div>
+  )
+}
+
+function LotSerialFields({
+  item,
+  lotNumber,
+  serialNumber,
+  onChange,
+  lineIndex,
+}: {
+  item: { trackLots?: boolean; trackSerials?: boolean } | undefined
+  lotNumber: string
+  serialNumber: string
+  onChange: (next: { lotNumber?: string; serialNumber?: string }) => void
+  lineIndex: number
+}) {
+  if (!item?.trackLots && !item?.trackSerials) {
+    return <span className="text-xs text-muted-foreground">—</span>
+  }
+  return (
+    <div className="flex min-w-[7rem] flex-col gap-1">
+      {item.trackLots ? (
+        <Input
+          aria-label={`Lot, line ${lineIndex}`}
+          className="h-8 text-xs"
+          placeholder="Lot"
+          value={lotNumber}
+          onChange={(event) => onChange({ lotNumber: event.target.value })}
+        />
+      ) : null}
+      {item.trackSerials ? (
+        <Input
+          aria-label={`Serial, line ${lineIndex}`}
+          className="h-8 text-xs"
+          placeholder="Serial"
+          value={serialNumber}
+          onChange={(event) => onChange({ serialNumber: event.target.value })}
+        />
+      ) : null}
     </div>
   )
 }

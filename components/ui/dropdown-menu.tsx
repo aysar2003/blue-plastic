@@ -2,6 +2,7 @@
 
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 
+import { floatingPanelZIndex } from '@/lib/dialog-stack'
 import { cn } from '@/lib/utils'
 
 const DropdownMenu = DropdownMenuPrimitive.Root
@@ -12,6 +13,7 @@ const DropdownMenuPortal = DropdownMenuPrimitive.Portal
 function DropdownMenuContent({
   className,
   sideOffset = 4,
+  style,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
@@ -19,9 +21,10 @@ function DropdownMenuContent({
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
+        style={{ zIndex: floatingPanelZIndex(), ...style }}
         className={cn(
           /* max-h + scroll: long menus (e.g. Quick role) must not clip off-screen */
-          'z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[10rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg print:hidden',
+          'max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[10rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg print:hidden',
           'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
           className,
         )}

@@ -88,6 +88,7 @@ export async function GET(
       customerEmail: document.customer.email,
       customerPhone: document.customer.phone,
       reference: document.reference,
+      inRef: document.inRef,
       paymentTerm: document.paymentTerm?.name ?? null,
       workScope: document.workScope,
       workSite: document.workSite || document.project?.siteLocation || null,

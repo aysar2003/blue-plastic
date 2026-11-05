@@ -4,10 +4,14 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { CalendarIcon } from 'lucide-react'
 
+import { floatingPanelZIndex } from '@/lib/dialog-stack'
 import { formatDate, isCalendarDate, type CalendarDate } from '@/lib/date'
 import { filterDateInput } from '@/lib/input-guards'
 import { cn } from '@/lib/utils'
 import { Calendar } from './calendar'
+
+const CALENDAR_MAX_PX = 380
+const VIEWPORT_PAD = 8
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
@@ -59,15 +63,26 @@ export function DateField({
   const rootRef = React.useRef<HTMLDivElement>(null)
   const hiddenRef = React.useRef<HTMLInputElement>(null)
   const panelRef = React.useRef<HTMLDivElement>(null)
-  const [anchor, setAnchor] = React.useState<{ top: number; left: number; above: boolean }>()
+  const [anchor, setAnchor] = React.useState<{
+    top: number
+    left: number
+    above: boolean
+    zIndex: number
+  }>()
 
   const place = React.useCallback(() => {
     const rect = rootRef.current?.getBoundingClientRect()
     if (!rect) return
 
-    const below = window.innerHeight - rect.bottom
-    const above = below < 380 && rect.top > below
-    setAnchor({ top: above ? rect.top - 4 : rect.bottom + 4, left: rect.left, above })
+    const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_PAD
+    const spaceAbove = rect.top - VIEWPORT_PAD
+    const above = spaceBelow < CALENDAR_MAX_PX && spaceAbove > spaceBelow
+    setAnchor({
+      top: above ? rect.top - 4 : rect.bottom + 4,
+      left: rect.left,
+      above,
+      zIndex: floatingPanelZIndex(),
+    })
   }, [])
 
   React.useEffect(() => {
@@ -204,8 +219,9 @@ export function DateField({
                 top: anchor.above ? undefined : anchor.top,
                 bottom: anchor.above ? window.innerHeight - anchor.top : undefined,
                 left: anchor.left,
+                zIndex: anchor.zIndex,
               }}
-              className="pointer-events-auto z-[60] overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-[0_8px_28px_-12px_rgba(15,23,42,0.28)] animate-in fade-in-0 zoom-in-95"
+              className="pointer-events-auto overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-[0_8px_28px_-12px_rgba(15,23,42,0.28)] animate-in fade-in-0 zoom-in-95"
             >
               <Calendar
                 value={isCalendarDate(value) ? value : null}

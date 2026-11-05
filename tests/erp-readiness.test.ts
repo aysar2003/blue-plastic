@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { ERP_READY_LOOPS } from '@/lib/erp/readiness'
+import { ERP_LAYERS, ERP_READY_LOOPS } from '@/lib/erp/readiness'
 
 const root = process.cwd()
 
@@ -20,7 +20,9 @@ const REQUIRED_PAGES = [
   'app/(app)/reports/consolidation/page.tsx',
   'app/(app)/accounting/equity/page.tsx',
   'app/(app)/inventory/builds/new/page.tsx',
+  'app/(app)/inventory/work-orders/page.tsx',
   'app/(app)/inventory/mrp/page.tsx',
+  'app/(app)/reports/dashboards/page.tsx',
   'app/(app)/customers/tickets/page.tsx',
   'app/(portal)/portal/quotes/page.tsx',
   'app/(portal)/portal/quotes/[id]/page.tsx',
@@ -50,6 +52,11 @@ describe('ERP depth readiness (general)', () => {
 
   it('keeps the operating loops named for operators', () => {
     expect(ERP_READY_LOOPS).toHaveLength(9)
+  })
+
+  it('tracks world-ERP layers L0–L9 after Phase 22', () => {
+    expect(ERP_LAYERS).toHaveLength(10)
+    expect(ERP_LAYERS.find((l) => l.id === 'L9')?.status).toBe('complete')
   })
 
   it('dumps BOM and people so restore can replay the extra loops', () => {

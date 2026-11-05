@@ -46,6 +46,8 @@ export type SalesDocumentPdfInput = {
   customerEmail: string | null
   customerPhone?: string | null
   reference?: string | null
+  /** IN/ — GRN / internal refs. */
+  inRef?: string | null
   paymentTerm?: string | null
   /** Nature / section of work on a quotation or estimate. */
   workScope?: string | null
@@ -179,7 +181,7 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   const words = vendorPaper
     ? { reference: 'Vendor ref', date: 'Bill date', person: 'Entered by', order: 'Reference' }
     : {
-        reference: 'Cust P.O no',
+        reference: 'P.O. NO.',
         date: paperDateLabel(docType),
         person: 'Sales person',
         order: 'Sales order',
@@ -216,6 +218,9 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   const hiddenMeta = new Set(input.hiddenMeta ?? [])
   const showMeta = (id: string) => !hiddenMeta.has(id)
   const metaLeft: { label: string; value: string }[] = []
+  if (showMeta('inRef') && input.inRef?.trim()) {
+    metaLeft.push({ label: 'IN/', value: input.inRef.trim() })
+  }
   if (showMeta('reference') && input.reference?.trim()) {
     metaLeft.push({ label: words.reference, value: input.reference.trim() })
   }
@@ -419,6 +424,7 @@ export type PackableSheetDocument = {
     phone?: string | null
   }
   reference?: string | null
+  inRef?: string | null
   paymentTerm?: { name: string } | null
   workScope?: string | null
   workSite?: string | null
@@ -477,6 +483,7 @@ export function salesDetailToPdfInput(
     customerEmail: document.customer.email ?? null,
     customerPhone: document.customer.phone ?? null,
     reference: document.reference,
+    inRef: document.inRef,
     paymentTerm: document.paymentTerm?.name ?? null,
     workScope: document.workScope,
     workSite: document.workSite || document.project?.siteLocation || null,

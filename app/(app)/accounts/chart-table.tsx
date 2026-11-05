@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import type { AccountSubtype, AccountType } from '@prisma/client'
 import { Columns3Icon } from 'lucide-react'
@@ -13,6 +14,7 @@ import { SortableHeader, type SortState } from '@/components/data/sortable-heade
 import { ReportRowStyleControls, ReportSheet, useReportSheetTemplate } from '@/components/reports/report-sheet'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { PortaledFloatingPanel } from '@/components/ui/portaled-floating-panel'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ACCOUNT_SUBTYPE_LABELS, ACCOUNT_TYPE_LABELS } from '@/lib/accounting-labels'
 import { chartSubIndentPadStyle, chartSubIndentStyle, childDisplayName } from '@/lib/chart-tree'
@@ -98,18 +100,32 @@ export function ChartTable({
   const striped = template !== 'plain'
   const headClass = striped ? 'ledger-head hover:bg-[var(--band)]' : 'hover:bg-muted/40'
   const headCell = striped ? 'bg-[var(--band)]' : undefined
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const columnsTriggerRef = useRef<HTMLButtonElement>(null)
 
   return (
     <ReportSheet>
       <div className="mb-3 flex flex-wrap items-center justify-end gap-2 print:hidden">
         <FontToolbarControls />
         <ReportRowStyleControls />
-        <details className="relative">
-          <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm">
-            <Columns3Icon className="size-3.5 text-muted-foreground" aria-hidden />
-            Columns
-          </summary>
-          <div className="absolute right-0 z-20 mt-1 max-h-80 w-72 overflow-y-auto rounded-md border bg-card p-2 shadow-md">
+        <button
+          ref={columnsTriggerRef}
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={columnsOpen}
+          onClick={() => setColumnsOpen((open) => !open)}
+          className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm"
+        >
+          <Columns3Icon className="size-3.5 text-muted-foreground" aria-hidden />
+          Columns
+        </button>
+        <PortaledFloatingPanel
+          open={columnsOpen}
+          anchorRef={columnsTriggerRef}
+          align="end"
+          onClose={() => setColumnsOpen(false)}
+        >
+          <div className="max-h-80 w-72 overflow-y-auto rounded-md border bg-card p-2 shadow-md">
             {CHART_COLUMNS.map((column) => (
               <label
                 key={column.id}
@@ -125,7 +141,7 @@ export function ChartTable({
               </label>
             ))}
           </div>
-        </details>
+        </PortaledFloatingPanel>
       </div>
 
       <Card className="overflow-hidden p-0">

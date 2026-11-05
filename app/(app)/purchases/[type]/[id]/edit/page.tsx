@@ -70,6 +70,7 @@ export default async function EditPurchasePage({
           vendorId: document.vendor?.id ?? '',
           date: toCalendarDate(document.date),
           reference: document.reference,
+          inRef: document.inRef,
           memo: document.memo,
           paymentTermId: document.paymentTerm?.id ?? null,
           paymentAccountId: document.paymentAccount?.id ?? null,

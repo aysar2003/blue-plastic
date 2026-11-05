@@ -9,10 +9,11 @@ export type FormColumnDef = { id: string; label: string; locked?: boolean }
 /** Sales header fields that may be toggled. */
 export const SALES_FORM_FIELDS: FormFieldDef[] = [
   { id: 'project', label: 'Project' },
-  { id: 'reference', label: 'PO' },
+  { id: 'inRef', label: 'IN/' },
+  { id: 'reference', label: 'P.O. NO.' },
   { id: 'dueDate', label: 'Due date' },
   { id: 'paymentTerms', label: 'Terms' },
-  { id: 'customerBalance', label: 'Balance' },
+  { id: 'customerBalance', label: 'Open balance' },
   { id: 'paymentMethod', label: 'Payment method' },
   { id: 'addresses', label: 'Billing & shipping' },
   { id: 'workSite', label: 'Work site' },
@@ -35,7 +36,8 @@ export const SALES_FORM_COLUMNS: FormColumnDef[] = [
 /** Purchase header fields that may be toggled. */
 export const PURCHASE_FORM_FIELDS: FormFieldDef[] = [
   { id: 'project', label: 'Project' },
-  { id: 'reference', label: 'PO' },
+  { id: 'inRef', label: 'IN/' },
+  { id: 'reference', label: 'P.O. NO.' },
   { id: 'paymentTerms', label: 'Terms' },
 ]
 

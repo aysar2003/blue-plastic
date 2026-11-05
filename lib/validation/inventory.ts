@@ -132,6 +132,8 @@ export const assemblyBuildSchema = z.object({
     'Quantity must be more than zero',
   ),
   memo: optionalText(1000),
+  /** Phase 28: completing a work order posts through this build. */
+  workOrderId: cuid.optional().nullable(),
 })
 
 export type AssemblyBuildInput = z.infer<typeof assemblyBuildSchema>

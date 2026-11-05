@@ -381,3 +381,83 @@ export async function savePaymentForm(_prev: FormState, formData: FormData): Pro
         : 'Recorded.',
   )
 }
+
+/** Open balance + recent rows for the invoice form (QuickBooks-style customer strip). */
+export const customerOpenBalancePanel = action
+  .requires('invoice:read')
+  .input(z.object({ customerId: cuid }))
+  .handler(async (ctx, { customerId }) => {
+    const [balanceRow, estimatesOpen, documents, payments] = await Promise.all([
+      db.$queryRaw<{ balance: string }[]>`
+        SELECT COALESCE(SUM(l.debit - l.credit), 0)::text AS balance
+          FROM journal_lines l
+          JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
+          JOIN ledger_accounts a ON a.id = l."accountId"
+         WHERE l."orgId" = ${ctx.orgId}
+           AND l."customerId" = ${customerId}
+           AND a.subtype::text = 'ACCOUNTS_RECEIVABLE'
+      `,
+      db.salesDocument.count({
+        where: {
+          orgId: ctx.orgId,
+          customerId,
+          type: 'ESTIMATE',
+          status: { in: ['OPEN', 'ACCEPTED'] },
+        },
+      }),
+      db.salesDocument.findMany({
+        where: {
+          orgId: ctx.orgId,
+          customerId,
+          type: { in: ['INVOICE', 'CREDIT_MEMO'] },
+          status: { notIn: ['DRAFT', 'VOID', 'DECLINED'] },
+        },
+        orderBy: [{ date: 'desc' }, { number: 'desc' }],
+        take: 8,
+        select: { id: true, type: true, number: true, date: true, total: true },
+      }),
+      db.customerPayment.findMany({
+        where: { orgId: ctx.orgId, customerId, status: { not: 'VOID' } },
+        orderBy: [{ date: 'desc' }, { number: 'desc' }],
+        take: 8,
+        select: { id: true, number: true, date: true, amount: true },
+      }),
+    ])
+
+    const recent = [
+      ...documents.map((row) => ({
+        id: row.id,
+        kind: row.type as 'INVOICE' | 'CREDIT_MEMO',
+        number: row.number,
+        date: row.date.toISOString().slice(0, 10),
+        amount: row.total.toString(),
+        href:
+          row.type === 'CREDIT_MEMO' ? `/sales/credit-memos/${row.id}` : `/sales/invoices/${row.id}`,
+        sort: row.date.getTime(),
+      })),
+      ...payments.map((row) => ({
+        id: row.id,
+        kind: 'PAYMENT' as const,
+        number: row.number,
+        date: row.date.toISOString().slice(0, 10),
+        amount: row.amount.toString(),
+        href: `/payments/${row.id}`,
+        sort: row.date.getTime(),
+      })),
+    ]
+      .sort((a, b) => b.sort - a.sort)
+      .slice(0, 8)
+      .map(({ sort: _sort, ...row }) => row)
+
+    const short = (iso: string) => {
+      const [y, m, d] = iso.split('-')
+      return `${d}-${m}-${y?.slice(2)}`
+    }
+
+    return {
+      openBalance: balanceRow[0]?.balance ?? '0',
+      estimatesOpen,
+      recent: recent.map((row) => ({ ...row, date: short(row.date) })),
+      statementHref: `/reports/statements/customer?customerId=${customerId}&period=all-dates&view=summary`,
+    }
+  })

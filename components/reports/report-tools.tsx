@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -9,6 +9,7 @@ import { Columns3Icon, SearchIcon } from 'lucide-react'
 import { FontToolbarControls } from '@/components/appearance/font-controls'
 import { ReportRowStyleControls } from '@/components/reports/report-sheet'
 import { Input } from '@/components/ui/input'
+import { PortaledFloatingPanel } from '@/components/ui/portaled-floating-panel'
 import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
 import { parseReportStyle, REPORT_STYLE_KEY, REPORT_STYLES } from '@/lib/report-styles'
 
@@ -50,6 +51,8 @@ export function ReportTools() {
   // empty one, is a choice the person already made.
   const shownSplits = useMemo(() => (splitRaw === null ? null : parseList(splitRaw)), [splitRaw])
   const [match, setMatch] = useState<{ shown: number; total: number } | null>(null)
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const columnsTriggerRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     const root = document.querySelector('[data-report-root]')
@@ -184,12 +187,24 @@ export function ReportTools() {
         <FontToolbarControls />
         <ReportRowStyleControls />
       </div>
-      <details className="relative">
-        <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm">
-          <Columns3Icon className="size-3.5 text-muted-foreground" aria-hidden />
-          Columns
-        </summary>
-        <div className="absolute right-0 z-20 mt-1 max-h-80 w-72 overflow-y-auto rounded-md border bg-card p-2 shadow-md">
+      <button
+        ref={columnsTriggerRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={columnsOpen}
+        onClick={() => setColumnsOpen((open) => !open)}
+        className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm"
+      >
+        <Columns3Icon className="size-3.5 text-muted-foreground" aria-hidden />
+        Columns
+      </button>
+      <PortaledFloatingPanel
+        open={columnsOpen}
+        anchorRef={columnsTriggerRef}
+        align="end"
+        onClose={() => setColumnsOpen(false)}
+      >
+        <div className="max-h-80 w-72 overflow-y-auto rounded-md border bg-card p-2 shadow-md">
           {headers.map((label) => (
             <label key={label} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent">
               <input
@@ -220,7 +235,7 @@ export function ReportTools() {
             </>
           ) : null}
         </div>
-      </details>
+      </PortaledFloatingPanel>
     </div>
   )
 }

@@ -167,6 +167,7 @@ export const MODULES: NavModule[] = [
       { label: 'Stores', href: '/stores', permission: 'inventory:read' },
       { label: 'Adjust stock', href: '/inventory/adjustments/new', permission: 'inventory:adjust' },
       { label: 'Build assemblies', href: '/inventory/builds/new', permission: 'inventory:adjust' },
+      { label: 'Work orders', href: '/inventory/work-orders', permission: 'inventory:read' },
       { label: 'Materials plan', href: '/inventory/mrp', permission: 'inventory:read' },
       { label: 'Bins & picks', href: '/inventory/bins', permission: 'inventory:read' },
     ],

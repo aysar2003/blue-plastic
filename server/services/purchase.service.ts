@@ -13,6 +13,7 @@ import {
 } from '@/lib/date'
 import { documentOverdueOr, isCollectionOverdue, overdueClock, partyFromContact } from '@/lib/invoice-overdue'
 import { Decimal, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
+import { evaluateThreeWayMatch } from '@/lib/purchase-three-way-match'
 import { dueDateFor } from '@/lib/payment-terms'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import {
@@ -36,7 +37,7 @@ import {
 } from '@/server/accounting/builders/purchases'
 import type { TaxCodeShape } from '@/server/accounting/tax'
 import { requestMeta, writeAudit } from '@/server/audit'
-import type { OrgContext } from '@/server/auth/context'
+import { assertPermission, type OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
@@ -76,10 +77,11 @@ export type PurchaseConvertTarget = (typeof PURCHASE_CONVERT_TARGETS)[number]
 
 const DOCUMENT_SELECT = {
   id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true, createdById: true,
-  status: true, reference: true, memo: true,
+  status: true, reference: true, inRef: true, memo: true,
   subtotal: true, taxTotal: true, total: true,
   currencyCode: true, paymentAccountId: true, offsetCustomerId: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
+  matchVarianceNote: true, matchVarianceApproved: true, matchApprovedAt: true,
   projectId: true,
   trackingCategoryId: true,
   project: { select: { id: true, number: true, name: true } },
@@ -97,6 +99,7 @@ const DOCUMENT_SELECT = {
   offsetCustomer: { select: { id: true, displayName: true, email: true, phone: true } },
   paymentTerm: { select: { id: true, name: true, type: true, dueDays: true } },
   paymentAccount: { select: { id: true, code: true, name: true } },
+  convertedFrom: { select: { id: true, number: true, type: true } },
   convertedTo: { select: { id: true, number: true, type: true } },
 } satisfies Prisma.PurchaseDocumentSelect
 
@@ -951,6 +954,7 @@ async function createWithin(
         paymentTermId: term?.id ?? null,
         status: isDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         reference: input.reference ?? null,
+        inRef: input.inRef ?? null,
         memo: input.memo ?? null,
         subtotal: priced.subtotal.toFixed(4),
         taxTotal: priced.taxTotal.toFixed(4),
@@ -967,6 +971,8 @@ async function createWithin(
             lineNumber: line.lineNumber,
             itemId: line.source.itemId ?? null,
             storeId: line.source.storeId ?? null,
+            lotNumber: line.source.lotNumber?.trim() || null,
+            serialNumber: line.source.serialNumber?.trim() || null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
             unitPrice: line.unitPrice.toFixed(4),
@@ -1100,6 +1106,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
           HAS_EXPIRY.has(existing.type) && input.expiryDate ? toDate(input.expiryDate) : null,
         paymentTermId: term?.id ?? null,
         reference: input.reference ?? null,
+        inRef: input.inRef ?? null,
         memo: input.memo ?? null,
         subtotal: priced.subtotal.toFixed(4),
         taxTotal: priced.taxTotal.toFixed(4),
@@ -1117,6 +1124,8 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
             lineNumber: line.lineNumber,
             itemId: line.source.itemId ?? null,
             storeId: line.source.storeId ?? null,
+            lotNumber: line.source.lotNumber?.trim() || null,
+            serialNumber: line.source.serialNumber?.trim() || null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
             unitPrice: line.unitPrice.toFixed(4),
@@ -1171,12 +1180,13 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     select: {
       id: true, type: true, number: true, date: true, memo: true, vendorId: true,
       status: true, paymentAccountId: true, offsetCustomerId: true, journalId: true,
-      trackingCategoryId: true,
+      trackingCategoryId: true, convertedFromId: true, matchVarianceApproved: true,
       lines: {
         orderBy: { lineNumber: 'asc' },
         select: {
           id: true, amount: true, taxAmount: true, taxCodeId: true, expenseAccountId: true,
           description: true, quantity: true, unitPrice: true, discountPercent: true, itemId: true, storeId: true,
+          lotNumber: true, serialNumber: true,
           item: { select: { id: true, name: true, type: true, inventoryAccountId: true } },
         },
       },
@@ -1194,6 +1204,16 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     return null
   }
   if (document.journalId) throw conflict(`${document.number} is already posted.`)
+
+  if (document.type === 'BILL' && document.convertedFromId && !document.matchVarianceApproved) {
+    const held = await applyThreeWayMatchHold(tx, ctx, {
+      id: document.id,
+      number: document.number,
+      convertedFromId: document.convertedFromId,
+      lines: document.lines,
+    })
+    if (held) return null
+  }
 
   for (const line of document.lines) {
     const type = line.item?.type
@@ -1302,6 +1322,8 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         quantity: receivesStock ? quantity : quantity.negated(),
         unitCost: receivesStock ? unitCost : undefined,
         storeId: line.storeId,
+        lotNumber: line.lotNumber,
+        serialNumber: line.serialNumber,
       })
 
       stock.set(
@@ -1347,13 +1369,181 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
 
   await tx.purchaseDocument.update({
     where: { id },
-    data: { journalId: journal.id, status: 'OPEN' },
+    data: {
+      journalId: journal.id,
+      status: 'OPEN',
+      matchVarianceNote: null,
+    },
   })
 
   await refreshStatus(tx, id)
   return journal
 }
 
+type MatchCandidate = {
+  id: string
+  number: string
+  convertedFromId: string | null
+  matchVarianceApproved: boolean
+  lines: {
+    itemId: string | null
+    description: string | null
+    quantity: Prisma.Decimal
+    unitPrice: Prisma.Decimal
+    item: { name: true } | { id: string; name: string; type: string; inventoryAccountId: string | null } | null
+  }[]
+}
+
+/**
+ * Phase 23: if this bill disagrees with its PO / received qty, park it on
+ * MATCH_HOLD instead of posting. Returns true when held.
+ */
+async function applyThreeWayMatchHold(
+  tx: Tx,
+  ctx: OrgContext,
+  document: {
+    id: string
+    number: string
+    convertedFromId: string
+    lines: {
+      itemId: string | null
+      description: string | null
+      quantity: Prisma.Decimal
+      unitPrice: Prisma.Decimal
+    }[]
+  },
+): Promise<boolean> {
+  const order = await tx.purchaseDocument.findFirst({
+    where: { id: document.convertedFromId, orgId: ctx.orgId, type: 'PURCHASE_ORDER' },
+    select: {
+      id: true,
+      number: true,
+      lines: {
+        orderBy: { lineNumber: 'asc' },
+        select: {
+          itemId: true,
+          description: true,
+          quantity: true,
+          quantityReceived: true,
+          unitPrice: true,
+        },
+      },
+    },
+  })
+  if (!order) return false
+
+  const siblings = await tx.purchaseDocument.findMany({
+    where: {
+      orgId: ctx.orgId,
+      type: 'BILL',
+      convertedFromId: order.id,
+      id: { not: document.id },
+      deletedAt: null,
+      status: { notIn: ['VOID', 'DRAFT', 'MATCH_HOLD', 'PENDING_APPROVAL'] },
+    },
+    select: {
+      lines: {
+        select: { itemId: true, description: true, quantity: true },
+      },
+    },
+  })
+
+  const result = evaluateThreeWayMatch({
+    poLines: order.lines.map((line) => ({
+      itemId: line.itemId,
+      description: line.description,
+      quantity: new Decimal(line.quantity.toString()),
+      quantityReceived: new Decimal(line.quantityReceived.toString()),
+      unitPrice: new Decimal(line.unitPrice.toString()),
+    })),
+    billLines: document.lines.map((line) => ({
+      itemId: line.itemId,
+      description: line.description,
+      quantity: new Decimal(line.quantity.toString()),
+      unitPrice: new Decimal(line.unitPrice.toString()),
+    })),
+    siblingBillLines: siblings.flatMap((bill) =>
+      bill.lines.map((line) => ({
+        itemId: line.itemId,
+        description: line.description,
+        quantity: new Decimal(line.quantity.toString()),
+      })),
+    ),
+  })
+
+  if (result.ok) {
+    await tx.purchaseDocument.update({
+      where: { id: document.id },
+      data: { matchVarianceNote: null },
+    })
+    return false
+  }
+
+  const note = result.reasons.join(' ')
+  await tx.purchaseDocument.update({
+    where: { id: document.id },
+    data: {
+      status: 'MATCH_HOLD',
+      matchVarianceNote: note.slice(0, 2000),
+      journalId: null,
+    },
+  })
+  await writeAudit(
+    tx,
+    ctx,
+    {
+      entity: 'PurchaseDocument',
+      entityId: document.id,
+      action: 'UPDATE',
+      after: { matchHold: true, reasons: result.reasons },
+    },
+    await requestMeta(),
+  )
+  return true
+}
+
+/**
+ * Approve a bill on MATCH_HOLD so it can post despite PO/receive variance.
+ */
+export async function approveMatchVariance(ctx: OrgContext, id: string) {
+  assertPermission(ctx, 'bill:approve')
+
+  return db.$transaction(async (tx) => {
+    const document = await tx.purchaseDocument.findFirst({
+      where: { id, orgId: ctx.orgId, type: 'BILL' },
+      select: { id: true, number: true, status: true, journalId: true },
+    })
+    if (!document) throw notFound('Document')
+    if (document.journalId) throw conflict(`${document.number} is already posted.`)
+    if (document.status !== 'MATCH_HOLD') {
+      throw validation(`${document.number} is not waiting on a match variance.`)
+    }
+
+    await tx.purchaseDocument.update({
+      where: { id: document.id },
+      data: {
+        matchVarianceApproved: true,
+        matchApprovedAt: new Date(),
+        matchApprovedById: ctx.userId,
+        status: 'OPEN',
+      },
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'PurchaseDocument',
+        entityId: document.id,
+        action: 'UPDATE',
+        after: { matchVarianceApproved: true },
+      },
+      await requestMeta(),
+    )
+
+    return postDocument(tx, ctx, document.id)
+  })
+}
 
 /**
  * Delete a purchase document.
@@ -1653,6 +1843,8 @@ export type ReceivableLine = {
   sku: string | null
   unitOfMeasure: string | null
   isTracked: boolean
+  trackLots: boolean
+  trackSerials: boolean
   /** Store named on the purchase order line — the planned shelf, not a lock. */
   storeId: string | null
   description: string | null
@@ -1682,7 +1874,16 @@ export async function receivableOrder(
         select: {
           id: true, lineNumber: true, itemId: true, storeId: true, description: true,
           quantity: true, quantityReceived: true, unitPrice: true,
-          item: { select: { name: true, sku: true, type: true, unitOfMeasure: true } },
+          item: {
+            select: {
+              name: true,
+              sku: true,
+              type: true,
+              unitOfMeasure: true,
+              trackLots: true,
+              trackSerials: true,
+            },
+          },
         },
       },
     },
@@ -1692,6 +1893,7 @@ export async function receivableOrder(
   const lines: ReceivableLine[] = order.lines.map((line) => {
     const ordered = new Decimal(line.quantity.toString())
     const received = new Decimal(line.quantityReceived.toString())
+    const isTracked = line.item?.type === 'INVENTORY' || line.item?.type === 'INVENTORY_ASSEMBLY'
     return {
       lineId: line.id,
       lineNumber: line.lineNumber,
@@ -1699,7 +1901,9 @@ export async function receivableOrder(
       itemName: line.item?.name ?? null,
       sku: line.item?.sku ?? null,
       unitOfMeasure: line.item?.unitOfMeasure ?? null,
-      isTracked: line.item?.type === 'INVENTORY' || line.item?.type === 'INVENTORY_ASSEMBLY',
+      isTracked: Boolean(isTracked),
+      trackLots: Boolean(isTracked && line.item?.trackLots),
+      trackSerials: Boolean(isTracked && line.item?.trackSerials),
       storeId: line.storeId,
       description: line.description,
       unitPrice: line.unitPrice.toString(),
@@ -1780,7 +1984,10 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
     }
 
     const byId = new Map(order.lines.map((line) => [line.id, line]))
-    const receiving = new Map<string, { quantity: Decimal; storeId: string | null }>()
+    const receiving = new Map<
+      string,
+      { quantity: Decimal; storeId: string | null; lotNumber: string | null; serialNumber: string | null }
+    >()
 
     for (const request of input.lines) {
       const line = byId.get(request.lineId)
@@ -1810,6 +2017,8 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
       receiving.set(line.id, {
         quantity,
         storeId: request.storeId ?? line.storeId,
+        lotNumber: request.lotNumber?.trim() || null,
+        serialNumber: request.serialNumber?.trim() || null,
       })
     }
 
@@ -1859,6 +2068,8 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
             return {
               itemId: line.itemId,
               storeId: entry.storeId,
+              lotNumber: entry.lotNumber,
+              serialNumber: entry.serialNumber,
               expenseAccountId: line.expenseAccountId,
               description: line.description,
               quantity: entry.quantity.toString(),

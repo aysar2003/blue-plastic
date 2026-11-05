@@ -58,6 +58,24 @@ export const REPORT_SECTIONS: LauncherSection[] = [
         blurb: 'Debits equal credits',
       },
       {
+        key: 'report-packs',
+        label: 'Report packs',
+        href: '/reports/packs',
+        icon: 'clipboard',
+        accent: '#0E7490',
+        wash: '#CFFAFE',
+        blurb: 'Scheduled bundles · CSV',
+      },
+      {
+        key: 'dashboards',
+        label: 'Dashboards',
+        href: '/reports/dashboards',
+        icon: 'trending',
+        accent: '#0369A1',
+        wash: '#E0F2FE',
+        blurb: 'KPI boards from existing reports',
+      },
+      {
         key: 'profit-loss-by-class',
         label: 'Profit and Loss by Class',
         href: '/reports/profit-loss/by-class',
@@ -556,6 +574,15 @@ export const REPORT_SECTIONS: LauncherSection[] = [
     blurb: 'Tax collected and tax paid.',
     apps: [
       {
+        key: 'vat-return',
+        label: 'VAT return',
+        href: '/reports/vat-return',
+        icon: 'percent',
+        accent: '#B45309',
+        wash: '#FEF3C7',
+        blurb: 'One-jurisdiction boxes from tax lines',
+      },
+      {
         key: 'tax-summary',
         label: 'Sales Tax Liability',
         href: '/reports/tax-summary',
@@ -934,7 +961,7 @@ export function reportSectionsFor(
   return REPORT_SECTIONS.map((section) => ({
     ...section,
     apps: withoutBusinessOverview(section.apps, permissions).filter(
-      (app) => enableTax || app.key !== 'tax-summary',
+      (app) => enableTax || (app.key !== 'tax-summary' && app.key !== 'vat-return'),
     ),
   })).filter((section) => section.apps.length > 0)
 }

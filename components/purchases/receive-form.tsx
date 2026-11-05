@@ -84,8 +84,11 @@ export function ReceiveForm({
     ),
   )
   const [quantities, setQuantities] = useState<Record<string, string>>({})
+  const [lotByLine, setLotByLine] = useState<Record<string, string>>({})
+  const [serialByLine, setSerialByLine] = useState<Record<string, string>>({})
   const handled = useRef(false)
   const showStores = stores.length > 0
+  const showLotSerial = lines.some((line) => line.trackLots || line.trackSerials)
 
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
@@ -129,6 +132,8 @@ export function ReceiveForm({
         lineId: line.lineId,
         quantity: quantities[line.lineId] ?? '0',
         storeId: showStores ? (storeByLine[line.lineId] ?? '') : '',
+        lotNumber: line.trackLots ? (lotByLine[line.lineId] ?? '') : '',
+        serialNumber: line.trackSerials ? (serialByLine[line.lineId] ?? '') : '',
       }))
       .filter((line) => line.quantity !== '' && Number(line.quantity) > 0),
   })
@@ -143,7 +148,7 @@ export function ReceiveForm({
     )
   }
 
-  const valueColSpan = showStores ? 6 : 5
+  const valueColSpan = 4 + (showStores ? 1 : 0) + (showLotSerial ? 1 : 0) + 1
 
   return (
     <form action={formAction} className="space-y-2">
@@ -208,6 +213,11 @@ export function ReceiveForm({
                 {showStores ? (
                   <th className="w-40 px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                     Store
+                  </th>
+                ) : null}
+                {showLotSerial ? (
+                  <th className="w-44 px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                    Lot / serial
                   </th>
                 ) : null}
                 <th className="w-32 px-3 py-2 text-right text-xs font-medium text-muted-foreground">Value</th>
@@ -298,6 +308,44 @@ export function ReceiveForm({
                               </option>
                             ))}
                           </NativeSelect>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    ) : null}
+                    {showLotSerial ? (
+                      <td className="px-2 py-1.5">
+                        {line.isTracked && !done && (line.trackLots || line.trackSerials) ? (
+                          <div className="flex flex-col gap-1">
+                            {line.trackLots ? (
+                              <Input
+                                aria-label={`Lot for ${line.itemName ?? line.description ?? 'line'}`}
+                                className="h-8 text-xs"
+                                placeholder="Lot"
+                                value={lotByLine[line.lineId] ?? ''}
+                                onChange={(event) =>
+                                  setLotByLine((current) => ({
+                                    ...current,
+                                    [line.lineId]: event.target.value,
+                                  }))
+                                }
+                              />
+                            ) : null}
+                            {line.trackSerials ? (
+                              <Input
+                                aria-label={`Serial for ${line.itemName ?? line.description ?? 'line'}`}
+                                className="h-8 text-xs"
+                                placeholder="Serial"
+                                value={serialByLine[line.lineId] ?? ''}
+                                onChange={(event) =>
+                                  setSerialByLine((current) => ({
+                                    ...current,
+                                    [line.lineId]: event.target.value,
+                                  }))
+                                }
+                              />
+                            ) : null}
+                          </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}

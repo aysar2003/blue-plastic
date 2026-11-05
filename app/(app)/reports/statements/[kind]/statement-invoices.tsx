@@ -102,7 +102,7 @@ export function StatementInvoices({
       </p>
 
       {part === 'summary' ? (
-      <article className="invoice-sheet merchant-invoice relative overflow-hidden bg-white text-[13px] text-[#1f2933] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:shadow-none">
+      <article className="invoice-sheet merchant-invoice relative bg-white text-[13px] text-[#1f2933] shadow-[0_12px_40px_rgb(15_23_42/0.08)] print:shadow-none">
         <div className="flex items-start justify-between gap-6 px-8 pb-4 pt-6">
           <h1 className="text-3xl font-black tracking-tight" style={{ color: accent }}>
             {company.name}
@@ -126,7 +126,7 @@ export function StatementInvoices({
               <p key={line} className="text-[12px] text-[#3d4c5c]">{line}</p>
             ))}
             <p className="mt-3 text-[12px] leading-relaxed text-[#3d4c5c]">
-              {noun.summary}. {period}. {count}. Debit adds the amount. Credit is what was paid, and it comes off the current balance.
+              {noun.summary}. {period}. {count}. Debit is an invoice or charge. Credit is a payment or credit memo. Current balance is what is still owed.
             </p>
             {caption ? <p className="mt-2 text-[12px] text-[#5C6B7A]">{caption}</p> : null}
           </div>

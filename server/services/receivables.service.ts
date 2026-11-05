@@ -447,7 +447,12 @@ export async function statement(
   })
 
   const entries: Omit<StatementEntry, 'balance'>[] = [
-    ...documents.map((document) => {
+    ...documents.flatMap((document) => {
+      // Trial-balance imports kept invoice paper without a journal. Those rows
+      // must not hit the statement as new charges — AR already holds the balance.
+      if (!document.journalId && (document.type === 'INVOICE' || document.type === 'CREDIT_MEMO')) {
+        return []
+      }
       const total = new Decimal(document.total.toString())
       const applied = sumAmounts(document.applications)
       const creditUsed = sumAmounts(document.creditsApplied)
@@ -456,12 +461,26 @@ export async function statement(
       // shown for completeness with no effect on the running balance.
       const isCharge = document.type === 'INVOICE'
       const isCredit = document.type === 'CREDIT_MEMO'
-      const openAmount = isCharge ? total.minus(applied) : isCredit ? total.minus(creditUsed) : ZERO
       const posted = postedChargeCredit(
         document.journalId ? arByJournalId.get(document.journalId) : undefined,
         isCharge ? total : ZERO,
         isCredit ? total : ZERO,
       )
+      // Prefer the AR journal (open-item conversion posts remaining only) over
+      // document total minus applications when the two disagree.
+      const openFromLedger =
+        document.journalId && arByJournalId.has(document.journalId)
+          ? arByJournalId.get(document.journalId)!
+          : null
+      const openAmount = isCharge
+        ? openFromLedger
+          ? openFromLedger.isNegative()
+            ? ZERO
+            : openFromLedger
+          : total.minus(applied)
+        : isCredit
+          ? total.minus(creditUsed)
+          : ZERO
       const items: StatementItem[] = document.lines.map((line) => {
         const name = line.item?.name
         const note = line.description
@@ -490,21 +509,23 @@ export async function statement(
           amount: document.taxTotal.toString(),
         })
       }
-      return {
-        id: document.id,
-        kind: document.type as StatementKind,
-        number: document.number,
-        date: document.date,
-        dueDate: document.dueDate,
-        description: document.memo ?? document.reference ?? labelFor(document.type),
-        charge: posted.charge,
-        credit: posted.credit,
-        openAmount,
-        original: total,
-        status: document.status,
-        lines: items,
-        href: `/sales/${SLUG[document.type] ?? 'invoices'}/${document.id}`,
-      }
+      return [
+        {
+          id: document.id,
+          kind: document.type as StatementKind,
+          number: document.number,
+          date: document.date,
+          dueDate: document.dueDate,
+          description: document.memo ?? document.reference ?? labelFor(document.type),
+          charge: posted.charge,
+          credit: posted.credit,
+          openAmount,
+          original: total,
+          status: document.status,
+          lines: items,
+          href: `/sales/${SLUG[document.type] ?? 'invoices'}/${document.id}`,
+        },
+      ]
     }),
     ...payments.map((payment) => {
       const amount = new Decimal(payment.amount.toString())

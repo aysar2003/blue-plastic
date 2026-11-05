@@ -35,6 +35,9 @@ export const purchaseLineSchema = z.object({
   taxCodeId: optionalId,
   /** The store this line is received into. Blank means the office when one exists. */
   storeId: optionalId,
+  /** Phase 24: lot / serial for tracked inventory lines. */
+  lotNumber: optionalText(80),
+  serialNumber: optionalText(80),
   /** Customer to recharge this cost on a later invoice. Blank clears it. */
   billableCustomerId: optionalId,
   /** What to charge the customer. Blank means the line's own amount when pulled. */
@@ -57,6 +60,8 @@ export const purchaseDocumentSchema = z.object({
   paymentTermId: optionalId,
   expiryDate: optionalDate,
   reference: optionalText(60),
+  /** IN/ — GRN / internal refs (QuickBooks-style template field). */
+  inRef: optionalText(120),
   memo: optionalText(1000),
   paymentAccountId: optionalId,
   /** Settle an expense by crediting this customer's receivable. */
@@ -185,6 +190,8 @@ export const receiveOrderSchema = z.object({
          * store. Different lines may name different stores on the same receipt.
          */
         storeId: optionalId,
+        lotNumber: optionalText(80),
+        serialNumber: optionalText(80),
       }),
     )
     .min(1, 'Enter a quantity against at least one line')

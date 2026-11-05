@@ -2,6 +2,12 @@ import 'server-only'
 import type { InventoryMovementType, JournalSourceType } from '@prisma/client'
 
 import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
+import {
+  assertLotSerialForMovement,
+  normalizeLotSerial,
+  onHandByLot,
+  onHandForSerial,
+} from '@/lib/inventory-lot-serial'
 import { Decimal, roundToCurrency, ZERO } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import type { Tx } from '@/server/db'
@@ -74,6 +80,10 @@ export type MovementRequest = {
    * bill can fill it. Movements with no store keep the organisation rule.
    */
   storeId?: string | null
+  /** Phase 24: lot (batch) when the item tracks lots. */
+  lotNumber?: string | null
+  /** Phase 24: serial when the item tracks serials (qty ±1). */
+  serialNumber?: string | null
 }
 
 function mayGoNegative(ctx: OrgContext, request: MovementRequest): boolean {
@@ -170,7 +180,7 @@ export async function recordMovement(
 ): Promise<RecordedMovement> {
   const item = await tx.item.findFirst({
     where: { id: request.itemId, orgId: ctx.orgId },
-    select: { id: true, name: true, type: true },
+    select: { id: true, name: true, type: true, trackLots: true, trackSerials: true },
   })
   if (!item) throw precondition('That item does not exist.')
   if (item.type !== 'INVENTORY' && item.type !== 'INVENTORY_ASSEMBLY') {
@@ -179,6 +189,31 @@ export async function recordMovement(
 
   const before = await positionOf(tx, request.itemId)
   const quantity = new Decimal(request.quantity)
+  const { lot, serial } = normalizeLotSerial(request.lotNumber, request.serialNumber)
+  const lotSerialError = assertLotSerialForMovement(item, quantity, lot, serial)
+  if (lotSerialError) throw precondition(lotSerialError)
+
+  if (quantity.isPositive() && item.trackSerials && serial) {
+    const rows = await tx.inventoryTransaction.findMany({
+      where: { orgId: ctx.orgId, itemId: request.itemId, serialNumber: serial },
+      select: { serialNumber: true, quantity: true },
+    })
+    const onHand = onHandForSerial(
+      rows.map((row) => ({
+        serialNumber: row.serialNumber,
+        quantity: row.quantity.toString(),
+      })),
+      serial,
+    )
+    if (onHand.greaterThan(0)) {
+      throw precondition(`Serial "${serial}" for "${item.name}" is already on hand.`)
+    }
+  }
+
+  if (quantity.isNegative() && (item.trackLots || item.trackSerials)) {
+    await assertLotSerialAvailable(tx, ctx.orgId, request.itemId, item, quantity, lot, serial)
+  }
+
   const currency = ctx.organization.baseCurrency
 
   let unitCost: Decimal
@@ -281,6 +316,8 @@ export async function recordMovement(
       sequence: position.sequence,
       journalId: options.journalId ?? null,
       storeId: request.storeId ?? null,
+      lotNumber: lot,
+      serialNumber: serial,
       createdById: ctx.userId,
     },
     select: { id: true },
@@ -297,6 +334,58 @@ export async function recordMovement(
   })
 
   return { id: movement.id, itemId: request.itemId, quantity, unitCost, value, position }
+}
+
+async function assertLotSerialAvailable(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+  item: { name: string; trackLots: boolean; trackSerials: boolean },
+  quantity: Decimal,
+  lot: string | null,
+  serial: string | null,
+) {
+  const needed = quantity.abs()
+
+  if (item.trackSerials && serial) {
+    const rows = await tx.inventoryTransaction.findMany({
+      where: { orgId, itemId, serialNumber: serial },
+      select: { serialNumber: true, quantity: true },
+    })
+    const onHand = onHandForSerial(
+      rows.map((row) => ({
+        serialNumber: row.serialNumber,
+        quantity: row.quantity.toString(),
+      })),
+      serial,
+    )
+    if (onHand.lessThan(needed)) {
+      throw precondition(
+        `Serial "${serial}" for "${item.name}" is not on hand` +
+          (onHand.isZero() ? '.' : ` (only ${onHand.toFixed(2)} left).`),
+      )
+    }
+  }
+
+  if (item.trackLots && lot) {
+    const rows = await tx.inventoryTransaction.findMany({
+      where: { orgId, itemId, lotNumber: lot },
+      select: { lotNumber: true, quantity: true },
+    })
+    const byLot = onHandByLot(
+      rows.map((row) => ({
+        lotNumber: row.lotNumber,
+        quantity: row.quantity.toString(),
+      })),
+    )
+    const onHand = byLot.get(lot) ?? new Decimal(0)
+    if (onHand.lessThan(needed)) {
+      throw precondition(
+        `Lot "${lot}" for "${item.name}" has ${onHand.toFixed(2)} on hand` +
+          ` and this needs ${needed.toFixed(2)}.`,
+      )
+    }
+  }
 }
 
 /** The cost of the last receipt, for costing an issue made against no stock. */
@@ -444,18 +533,30 @@ export async function reverseMovementsFor(
     orderBy: { sequence: 'asc' },
     select: {
       id: true, itemId: true, date: true, type: true, sourceType: true, sourceLineId: true,
-      quantity: true, unitCost: true, value: true,
+      quantity: true, unitCost: true, value: true, lotNumber: true, serialNumber: true, storeId: true,
     },
   })
 
   if (movements.length === 0) return { reversed: 0, value: ZERO }
 
-  // Net per item first. Two movements of the same item on one document net to a
-  // single compensating row, which keeps the register readable.
-  const byItem = new Map<string, { quantity: Decimal; value: Decimal; unitCost: Decimal; type: InventoryMovementType; sourceType: JournalSourceType }>()
+  // Net per item + lot + serial. Two movements of the same slice on one document
+  // net to a single compensating row, which keeps the register readable.
+  type NetSlice = {
+    itemId: string
+    lotNumber: string | null
+    serialNumber: string | null
+    storeId: string | null
+    quantity: Decimal
+    value: Decimal
+    unitCost: Decimal
+    type: InventoryMovementType
+    sourceType: JournalSourceType
+  }
+  const bySlice = new Map<string, NetSlice>()
 
   for (const movement of movements) {
-    const existing = byItem.get(movement.itemId)
+    const key = `${movement.itemId}|${movement.lotNumber ?? ''}|${movement.serialNumber ?? ''}|${movement.storeId ?? ''}`
+    const existing = bySlice.get(key)
     const quantity = new Decimal(movement.quantity.toString())
     const value = new Decimal(movement.value.toString())
 
@@ -463,7 +564,11 @@ export async function reverseMovementsFor(
       existing.quantity = existing.quantity.plus(quantity)
       existing.value = existing.value.plus(value)
     } else {
-      byItem.set(movement.itemId, {
+      bySlice.set(key, {
+        itemId: movement.itemId,
+        lotNumber: movement.lotNumber,
+        serialNumber: movement.serialNumber,
+        storeId: movement.storeId,
         quantity,
         value,
         unitCost: new Decimal(movement.unitCost.toString()),
@@ -476,17 +581,17 @@ export async function reverseMovementsFor(
   let removed = ZERO
   let reversed = 0
 
-  for (const [itemId, net] of byItem) {
+  for (const net of bySlice.values()) {
     if (net.quantity.isZero() && net.value.isZero()) continue
 
-    const before = await positionOf(tx, itemId)
+    const before = await positionOf(tx, net.itemId)
     const quantity = net.quantity.negated()
     const value = net.value.negated()
 
     await tx.inventoryTransaction.create({
       data: {
         orgId: ctx.orgId,
-        itemId,
+        itemId: net.itemId,
         date: toDate(source.date ?? toCalendarDate(movements[0].date)),
         type: net.type,
         sourceType: net.sourceType,
@@ -501,6 +606,9 @@ export async function reverseMovementsFor(
         // Tied to the reversing journal, so the stock register and the ledger
         // tell the same story about the undo as they do about the original.
         journalId: source.journalId ?? null,
+        storeId: net.storeId,
+        lotNumber: net.lotNumber,
+        serialNumber: net.serialNumber,
         createdById: ctx.userId,
       },
     })

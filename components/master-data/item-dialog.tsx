@@ -64,6 +64,8 @@ export type ItemValues = {
   reorderPoint?: string | null
   categoryId?: string | null
   storeId?: string | null
+  trackLots?: boolean
+  trackSerials?: boolean
   availableInPos?: boolean
   printGroupItems?: boolean
   itemPaymentMethod?: string | null
@@ -913,60 +915,94 @@ export function ItemDialog({
                 </div>
 
                 {stock ? (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field
-                      name="inventoryAccountId"
-                      label="Inventory account"
-                      hint="Where the value of stock on hand is held."
-                      required
-                      error={e?.inventoryAccountId}
-                    >
-                      <AccountPicker
-                        id="inventoryAccountId"
+                  <>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field
                         name="inventoryAccountId"
-                        options={inventory}
-                        value={inventoryAccountId || null}
-                        onChange={(next) => setInventoryAccountId(next ?? '')}
+                        label="Inventory account"
+                        hint="Where the value of stock on hand is held."
                         required
                         error={e?.inventoryAccountId}
-                      />
-                    </Field>
-                    <Field
-                      name="storeId"
-                      label="Store"
-                      hint="Where this item is kept. A new item posts to that store’s account."
-                      error={e?.storeId}
-                    >
-                      <NativeSelect
-                        {...fieldProps('storeId', e?.storeId)}
-                        defaultValue={item?.storeId ?? office?.id ?? ''}
-                        onChange={(event) => {
-                          const store = stores.find((row) => row.id === event.target.value)
-                          if (store && mode === 'create') {
-                            const account = accounts.find(
-                              (row) => row.name === store.label && row.subtype === 'INVENTORY',
-                            )
-                            if (account) setInventoryAccountId(account.id)
-                          }
-                        }}
                       >
-                        <option value="">— no store —</option>
-                        {stores.map((store) => (
-                          <option key={store.id} value={store.id}>
-                            {store.label}
-                          </option>
-                        ))}
-                      </NativeSelect>
-                    </Field>
-                    <Field name="reorderPoint" label="Reorder at" error={e?.reorderPoint}>
-                      <Input
-                        {...fieldProps('reorderPoint', e?.reorderPoint)}
-                        inputMode="decimal"
-                        className="tabular"
-                        defaultValue={item?.reorderPoint ?? ''}
-                      />
-                    </Field>
-                  </div>
+                        <AccountPicker
+                          id="inventoryAccountId"
+                          name="inventoryAccountId"
+                          options={inventory}
+                          value={inventoryAccountId || null}
+                          onChange={(next) => setInventoryAccountId(next ?? '')}
+                          required
+                          error={e?.inventoryAccountId}
+                        />
+                      </Field>
+                      <Field
+                        name="storeId"
+                        label="Store"
+                        hint="Where this item is kept. A new item posts to that store’s account."
+                        error={e?.storeId}
+                      >
+                        <NativeSelect
+                          {...fieldProps('storeId', e?.storeId)}
+                          defaultValue={item?.storeId ?? office?.id ?? ''}
+                          onChange={(event) => {
+                            const store = stores.find((row) => row.id === event.target.value)
+                            if (store && mode === 'create') {
+                              const account = accounts.find(
+                                (row) => row.name === store.label && row.subtype === 'INVENTORY',
+                              )
+                              if (account) setInventoryAccountId(account.id)
+                            }
+                          }}
+                        >
+                          <option value="">— no store —</option>
+                          {stores.map((store) => (
+                            <option key={store.id} value={store.id}>
+                              {store.label}
+                            </option>
+                          ))}
+                        </NativeSelect>
+                      </Field>
+                      <Field name="reorderPoint" label="Reorder at" error={e?.reorderPoint}>
+                        <Input
+                          {...fieldProps('reorderPoint', e?.reorderPoint)}
+                          inputMode="decimal"
+                          className="tabular"
+                          defaultValue={item?.reorderPoint ?? ''}
+                        />
+                      </Field>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          name="trackLots"
+                          value="true"
+                          defaultChecked={Boolean(item?.trackLots)}
+                          className="mt-0.5"
+                        />
+                        <span>
+                          <span className="font-medium">Track lots</span>
+                          <span className="block text-xs text-muted-foreground">
+                            Receive and issue must name a lot (batch).
+                          </span>
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          name="trackSerials"
+                          value="true"
+                          defaultChecked={Boolean(item?.trackSerials)}
+                          className="mt-0.5"
+                        />
+                        <span>
+                          <span className="font-medium">Track serials</span>
+                          <span className="block text-xs text-muted-foreground">
+                            Each unit needs a unique serial (quantity 1).
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  </>
                 ) : null}
 
                 {type === 'INVENTORY_ASSEMBLY' ? (

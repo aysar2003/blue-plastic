@@ -4,6 +4,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ChevronDownIcon, ShoppingBagIcon } from 'lucide-react'
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ODOO } from '@/lib/odoo-brand'
 import type { Permission } from '@/lib/permissions-catalog'
 import { cn } from '@/lib/utils'
@@ -172,9 +178,8 @@ function PosNavItem({ item, pathname }: { item: NavItem; pathname: string }) {
   }
 
   return (
-    <div className="group relative">
-      <button
-        type="button"
+    <DropdownMenu>
+      <DropdownMenuTrigger
         className={cn(
           'inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground',
           active && 'bg-accent text-foreground',
@@ -182,20 +187,14 @@ function PosNavItem({ item, pathname }: { item: NavItem; pathname: string }) {
       >
         {item.label}
         <ChevronDownIcon className="size-3.5 opacity-70" />
-      </button>
-      <div className="invisible absolute left-0 top-full z-30 min-w-[12rem] pt-1 opacity-0 transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
-        <div className="rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-md">
-          {item.children.map((child) => (
-            <Link
-              key={child.href}
-              href={child.href}
-              className="block px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-            >
-              {child.label}
-            </Link>
-          ))}
-        </div>
-      </div>
-    </div>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[12rem]">
+        {item.children.map((child) => (
+          <DropdownMenuItem key={child.href} asChild>
+            <Link href={child.href}>{child.label}</Link>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

@@ -47,13 +47,22 @@ describe('feature flags', () => {
     const flags = parseFeatureFlags({ modules: { sales: false, inventory: false } })
     const hidden = LAUNCHER_APPS.filter((app) => !isModuleEnabled(flags, app.key)).map((app) => app.key)
     expect(hidden.sort()).toEqual([
+      'appointments',
       'barcodes',
       'customers',
+      'discuss',
+      'documents',
+      'employees',
       'inventory',
+      'knowledge',
       'payments',
+      'planning',
       'projects',
       'sales',
+      'sign',
       'stores',
+      'surveys',
+      'todos',
     ])
   })
 

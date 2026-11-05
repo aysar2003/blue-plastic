@@ -100,7 +100,7 @@ describe('itemSchema by type', () => {
     expect(parsed.success).toBe(true)
   })
 
-  it('accepts Subtotal and Group without income', () => {
+  it('accepts Subtotal without income; Group needs income', () => {
     expect(
       itemSchema.safeParse({ name: 'Subtotal', type: 'SUBTOTAL' }).success,
     ).toBe(true)
@@ -108,6 +108,15 @@ describe('itemSchema by type', () => {
       itemSchema.safeParse({
         name: 'Starter kit',
         type: 'GROUP',
+        printGroupItems: 'true',
+        componentsJson: JSON.stringify([{ itemId: income, quantity: '1' }]),
+      }).success,
+    ).toBe(false)
+    expect(
+      itemSchema.safeParse({
+        name: 'Starter kit',
+        type: 'GROUP',
+        incomeAccountId: income,
         printGroupItems: 'true',
         componentsJson: JSON.stringify([{ itemId: income, quantity: '1' }]),
       }).success,

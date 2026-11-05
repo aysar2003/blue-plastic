@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CornerDownLeftIcon, SearchIcon } from 'lucide-react'
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { floatingPanelZIndex } from '@/lib/dialog-stack'
 import {
   documentKindForPath,
   isDocumentKindEnabled,
@@ -432,7 +433,8 @@ export function CommandPalette({
       {waiting.length > 0 ? (
         <div
           role="status"
-          className="fixed inset-x-3 bottom-4 z-50 mx-auto flex max-w-3xl flex-wrap items-center gap-1.5 rounded-lg border border-primary/20 bg-white/95 p-2 shadow-lg backdrop-blur-md print:hidden"
+          style={{ zIndex: floatingPanelZIndex() }}
+          className="fixed inset-x-3 bottom-4 mx-auto flex max-w-3xl flex-wrap items-center gap-1.5 rounded-lg border border-primary/20 bg-white/95 p-2 shadow-lg backdrop-blur-md print:hidden"
         >
           <span className="px-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
             {pending === 'c' ? 'Create' : 'Go to'}

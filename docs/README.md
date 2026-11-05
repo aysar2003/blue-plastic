@@ -14,6 +14,7 @@ Tailwind CSS, shadcn/ui and TanStack Query. Product brand: **SOM ERP**.
 | [03-database-design.md](./03-database-design.md) | Full data model across all phases |
 | [04-roadmap.md](./04-roadmap.md) | Phases, dependencies, exit criteria |
 | [05-conventions.md](./05-conventions.md) | Code conventions, error handling, testing, naming |
+| [06-erp-layers.md](./06-erp-layers.md) | World-ERP layer model (L0–L9) and how phases deepen them |
 | [progress.md](./progress.md) | Live status board — updated at the end of every phase |
 | [decisions/](./decisions/) | Architecture Decision Records (ADRs) |
 | [phases/](./phases/) | Task breakdown per phase |

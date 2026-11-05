@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import Link from 'next/link'
 import { AppGlyph, isAppGlyph, type AppGlyphName } from '@/components/layout/app-glyphs'
 import { usePathname } from 'next/navigation'
@@ -38,6 +38,7 @@ import {
   WalletIcon,
 } from 'lucide-react'
 
+import { PortaledFloatingPanel } from '@/components/ui/portaled-floating-panel'
 import type { OrgFeatureFlags } from '@/lib/feature-flags'
 import { cn } from '@/lib/utils'
 import { menuForApp } from './header-app-menus'
@@ -137,32 +138,16 @@ export function HeaderApps({
     setOpenPath(pathname)
     setOpenKey(null)
   }
-  const navRef = useRef<HTMLElement>(null)
+  const appsTriggerRef = useRef<HTMLButtonElement>(null)
 
-  useEffect(() => {
-    if (!openKey) return
-    function onPointerDown(event: MouseEvent) {
-      if (!(event.target instanceof Node)) return
-      if (navRef.current?.contains(event.target)) return
-      setOpenKey(null)
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpenKey(null)
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [openKey])
-
+  const closeMenus = () => setOpenKey(null)
   const appsMenuOpen = openKey === '__apps__'
 
   return (
-    <nav ref={navRef} aria-label="Apps" data-app-nav className="flex flex-wrap items-center gap-1">
+    <nav aria-label="Apps" data-app-nav className="flex flex-wrap items-center gap-1">
       <div className="relative">
         <button
+          ref={appsTriggerRef}
           type="button"
           aria-haspopup="menu"
           aria-expanded={appsMenuOpen}
@@ -180,21 +165,22 @@ export function HeaderApps({
             aria-hidden
           />
         </button>
-        <div
-          role="menu"
-          aria-label="All apps"
-          hidden={!appsMenuOpen}
-          className={cn(
-            'absolute left-0 top-full z-50 min-w-[14rem] pt-1.5',
-            !appsMenuOpen && 'pointer-events-none',
-          )}
+        <PortaledFloatingPanel
+          open={appsMenuOpen}
+          anchorRef={appsTriggerRef}
+          onClose={closeMenus}
+          className="min-w-[14rem]"
         >
-          <ul className="max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-border bg-popover py-1.5 text-popover-foreground shadow-[0_8px_28px_-8px_rgba(15,23,42,0.28)] ring-1 ring-black/5">
+          <ul
+            role="menu"
+            aria-label="All apps"
+            className="max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-border bg-popover py-1.5 text-popover-foreground shadow-[0_8px_28px_-8px_rgba(15,23,42,0.28)] ring-1 ring-black/5"
+          >
             <li>
               <Link
                 href="/dashboard"
                 role="menuitem"
-                onClick={() => setOpenKey(null)}
+                onClick={closeMenus}
                 className="block px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted"
               >
                 Apps home
@@ -202,107 +188,141 @@ export function HeaderApps({
             </li>
             <li className="my-1 border-t border-border" aria-hidden />
             {apps.map((app) => (
-              <AppsMenuRow key={app.key} app={app} onDone={() => setOpenKey(null)} />
+              <AppsMenuRow key={app.key} app={app} onDone={closeMenus} />
             ))}
-            <ForgetPlacesRow onDone={() => setOpenKey(null)} />
+            <ForgetPlacesRow onDone={closeMenus} />
           </ul>
-        </div>
+        </PortaledFloatingPanel>
       </div>
-      {apps.map((app) => {
-        const Icon = ICONS[app.icon]
-        const current = appIsCurrent(pathname, app.href, APP_ALSO[app.key])
-        const children = menuForApp(app.key, permissions, features)
-        const hasMenu = children.length > 0
-        const open = openKey === app.key && hasMenu
-        return (
-          <div key={app.key} className="relative inline-flex items-center">
-            <AppChipLink
-              app={app}
-              current={current}
-              hasMenu={hasMenu}
-              open={open}
-              onToggleMenu={() =>
-                setOpenKey((key) => (key === app.key ? null : app.key))
-              }
-              onDone={() => setOpenKey(null)}
-            >
-              <span
-                className="grid size-4 place-items-center rounded"
-                style={{ backgroundColor: app.wash, color: app.accent }}
-              >
-                <Icon className="size-3" strokeWidth={2} aria-hidden />
-              </span>
-              {app.label}
-              {hasMenu ? (
-                <ChevronDownIcon
-                  className={cn('size-3 opacity-60 transition-transform', open && 'rotate-180')}
-                  aria-hidden
-                />
-              ) : null}
-            </AppChipLink>
-            {hasMenu ? (
-              <div
-                role="menu"
-                aria-label={`${app.label} apps`}
-                hidden={!open}
-                className={cn(
-                  'absolute left-0 top-full z-50 min-w-[13.5rem] pt-1.5',
-                  app.key === 'reports' && 'min-w-[18rem]',
-                  !open && 'pointer-events-none',
-                )}
-              >
-                {app.key === 'reports' ? (
-                  <div className="rounded-xl border border-border bg-popover shadow-[0_8px_28px_-8px_rgba(15,23,42,0.28)] ring-1 ring-black/5">
-                    <div className="border-b border-border px-3 py-1.5">
-                      <Link
-                        href={app.href}
-                        role="menuitem"
-                        onClick={() => setOpenKey(null)}
-                        className="block text-xs font-bold text-foreground hover:underline"
-                      >
-                        Reports home
-                      </Link>
-                    </div>
-                    <ReportsMenuPanel items={children} onDone={() => setOpenKey(null)} />
-                  </div>
-                ) : (
-                  <ul className="max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-border bg-popover py-1.5 text-popover-foreground shadow-[0_8px_28px_-8px_rgba(15,23,42,0.28)] ring-1 ring-black/5">
-                    <li>
-                      <Link
-                        href={app.href}
-                        role="menuitem"
-                        onClick={() => setOpenKey(null)}
-                        className="block px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted"
-                      >
-                        {app.label} home
-                      </Link>
-                    </li>
-                    <li className="my-1 border-t border-border" aria-hidden />
-                    {children.map((item) => (
-                      <li key={`${app.key}-${item.href ?? item.label}-${item.label}`}>
-                        <Link
-                          href={item.href ?? app.href}
-                          role="menuitem"
-                          onClick={() => setOpenKey(null)}
-                          className="block px-3 py-1.5 hover:bg-muted"
-                        >
-                          <span className="block text-xs font-semibold text-foreground">{item.label}</span>
-                          {item.blurb ? (
-                            <span className="block text-[0.65rem] leading-snug text-muted-foreground">
-                              {item.blurb}
-                            </span>
-                          ) : null}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ) : null}
-          </div>
-        )
-      })}
+      {apps.map((app) => (
+        <HeaderAppChip
+          key={app.key}
+          app={app}
+          pathname={pathname}
+          permissions={permissions}
+          features={features}
+          open={openKey === app.key}
+          onClose={closeMenus}
+          onToggle={() => setOpenKey((key) => (key === app.key ? null : app.key))}
+        />
+      ))}
     </nav>
+  )
+}
+
+function HeaderAppChip({
+  app,
+  pathname,
+  permissions,
+  features,
+  open,
+  onClose,
+  onToggle,
+}: {
+  app: LauncherApp
+  pathname: string
+  permissions: string[]
+  features?: OrgFeatureFlags
+  open: boolean
+  onClose: () => void
+  onToggle: () => void
+}) {
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const Icon = ICONS[app.icon]
+  const current = appIsCurrent(pathname, app.href, APP_ALSO[app.key])
+  const children = menuForApp(app.key, permissions, features)
+  const hasMenu = children.length > 0
+  const menuOpen = open && hasMenu
+
+  return (
+    <div className="relative inline-flex items-center">
+      <AppChipLink
+        app={app}
+        current={current}
+        hasMenu={hasMenu}
+        open={menuOpen}
+        triggerRef={triggerRef}
+        onToggleMenu={onToggle}
+        onDone={onClose}
+      >
+        <span
+          className="grid size-4 place-items-center rounded"
+          style={{ backgroundColor: app.wash, color: app.accent }}
+        >
+          <Icon className="size-3" strokeWidth={2} aria-hidden />
+        </span>
+        {app.label}
+        {hasMenu ? (
+          <ChevronDownIcon
+            className={cn('size-3 opacity-60 transition-transform', menuOpen && 'rotate-180')}
+            aria-hidden
+          />
+        ) : null}
+      </AppChipLink>
+      {hasMenu ? (
+        <PortaledFloatingPanel
+          open={menuOpen}
+          anchorRef={triggerRef}
+          onClose={onClose}
+          className={cn('min-w-[13.5rem]', app.key === 'reports' && 'min-w-[18rem]')}
+        >
+          {app.key === 'reports' ? (
+            <div
+              role="menu"
+              aria-label={`${app.label} apps`}
+              className="rounded-xl border border-border bg-popover shadow-[0_8px_28px_-8px_rgba(15,23,42,0.28)] ring-1 ring-black/5"
+            >
+              <div className="border-b border-border px-3 py-1.5">
+                <Link
+                  href={app.href}
+                  role="menuitem"
+                  onClick={onClose}
+                  className="block text-xs font-bold text-foreground hover:underline"
+                >
+                  Reports home
+                </Link>
+              </div>
+              <ReportsMenuPanel items={children} onDone={onClose} />
+            </div>
+          ) : (
+            <ul
+              role="menu"
+              aria-label={`${app.label} apps`}
+              className="max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-border bg-popover py-1.5 text-popover-foreground shadow-[0_8px_28px_-8px_rgba(15,23,42,0.28)] ring-1 ring-black/5"
+            >
+              <li>
+                <Link
+                  href={app.href}
+                  role="menuitem"
+                  onClick={onClose}
+                  className="block px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted"
+                >
+                  {app.label} home
+                </Link>
+              </li>
+              <li className="my-1 border-t border-border" aria-hidden />
+              {children.map((item) => (
+                <li key={`${app.key}-${item.href ?? item.label}-${item.label}`}>
+                  <Link
+                    href={item.href ?? app.href}
+                    role="menuitem"
+                    onClick={onClose}
+                    className="block px-3 py-1.5 hover:bg-muted"
+                  >
+                    <span className="block text-xs font-semibold text-foreground">{item.label}</span>
+                    {item.blurb ? (
+                      <span className="block text-[0.65rem] leading-snug text-muted-foreground">
+                        {item.blurb}
+                      </span>
+                    ) : null}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </PortaledFloatingPanel>
+      ) : null}
+    </div>
   )
 }
 
@@ -315,6 +335,7 @@ function AppChipLink({
   current,
   hasMenu,
   open,
+  triggerRef,
   onToggleMenu,
   onDone,
   children,
@@ -323,6 +344,7 @@ function AppChipLink({
   current: boolean
   hasMenu: boolean
   open: boolean
+  triggerRef?: RefObject<HTMLButtonElement | null>
   onToggleMenu: () => void
   onDone: () => void
   children: ReactNode
@@ -332,6 +354,7 @@ function AppChipLink({
   if (hasMenu) {
     return (
       <button
+        ref={triggerRef}
         type="button"
         aria-current={current ? 'page' : undefined}
         aria-haspopup="menu"

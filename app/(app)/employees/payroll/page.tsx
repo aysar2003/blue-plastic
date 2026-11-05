@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { PageHeader } from '@/components/data/page-header'
+import { buttonVariants } from '@/components/ui/button'
 import { requireOrgContext } from '@/server/auth/context'
 import * as payrollService from '@/server/services/payroll.service'
 import * as standardPayroll from '@/server/services/payroll-standard.service'
@@ -25,6 +27,22 @@ export default async function PayrollPage() {
           ctx.features.payrollStandard
             ? 'Standard payroll is on. Gross wages, liabilities, then approve and post.'
             : 'Draft payslips from wages, then post to the ledger.'
+        }
+        actions={
+          <>
+            <Link
+              href="/employees/payroll/report"
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
+              Report
+            </Link>
+            <Link
+              href="/employees/payroll/statutory"
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
+              Statutory export
+            </Link>
+          </>
         }
       />
       <PayrollBoard

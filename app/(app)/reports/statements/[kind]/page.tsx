@@ -64,13 +64,15 @@ const KINDS = ['customer', 'vendor', 'account'] as const
 type Kind = (typeof KINDS)[number]
 
 /**
- * The period a statement opens on when the link does not name one. A party's
- * statement starts on 1 January of this year (year to date): the usual "what
- * happened this year" paper, with everything earlier carried in as the balance
- * brought forward. "All dates" stays one choice away in the period menu.
+ * The period a statement opens on when the link does not name one. Customer
+ * statements default to all dates so open-item history (invoices, payments,
+ * plugs) stays sequenced like QuickBooks instead of collapsing into brought
+ * forward. Vendor / account keep their usual year windows.
  */
 const DEFAULT_PERIOD: Record<Kind, PeriodKey> = {
-  customer: 'year-to-date',
+  // Open-item conversions (and QuickBooks-style history) live across years —
+  // All dates keeps invoice / payment order visible instead of a bare brought-forward.
+  customer: 'all-dates',
   vendor: 'year-to-date',
   account: 'this-fiscal-year',
 }
@@ -871,13 +873,19 @@ function toLedgerRows(
 ) {
   return entries.map((entry) => ({
     id: entry.id,
-    number: `${LEDGER_KIND[entry.kind] ?? entry.kind} ${entry.number}`.trim(),
+    number: ledgerNumber(entry.kind, entry.number),
     date: entry.date.toISOString(),
     dueDate: entry.dueDate ? entry.dueDate.toISOString() : null,
     amount: entry.original.toString(),
     debit: entry.charge.toString(),
     credit: entry.credit.toString(),
   }))
+}
+
+function ledgerNumber(kind: string, number: string) {
+  if (kind === 'INVOICE' || kind === 'BILL') return number
+  const label = LEDGER_KIND[kind]
+  return label ? `${label} ${number}` : number
 }
 
 /** Customer, vendor, or account — the three statement types, picked in place. */

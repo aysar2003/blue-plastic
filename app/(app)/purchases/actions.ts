@@ -110,6 +110,18 @@ export const convertOrder = action
     return bill
   })
 
+/** Phase 23: post a bill that was held for PO/receive variance. */
+export const approveMatchVariance = action
+  .requires('bill:approve')
+  .input(z.object({ id: cuid }))
+  .handler(async (ctx, input) => {
+    const journal = await purchaseService.approveMatchVariance(ctx, input.id)
+    revalidatePurchases()
+    revalidatePath('/reports')
+    revalidatePath('/inventory/stock')
+    return journal
+  })
+
 /** Write supplier rates from the RFQ Excel back onto the document. */
 export const importRfqPrices = action
   .requires('bill:update')

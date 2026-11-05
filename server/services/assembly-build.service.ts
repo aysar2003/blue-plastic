@@ -151,6 +151,21 @@ export async function createInTx(
   })
   if (clash) throw numberTaken()
 
+  const workOrderId = input.workOrderId ?? null
+  if (workOrderId) {
+    const wo = await tx.workOrder.findFirst({
+      where: { id: workOrderId, orgId: ctx.orgId },
+      select: { id: true, status: true, itemId: true, quantity: true },
+    })
+    if (!wo) throw notFound('Work order')
+    if (wo.status !== 'RELEASED') {
+      throw precondition('Only a released work order can post a build.')
+    }
+    if (wo.itemId !== assembly.id) {
+      throw validation('Work order assembly does not match this build.')
+    }
+  }
+
   const build = await tx.assemblyBuild.create({
     data: {
       orgId: ctx.orgId,
@@ -162,6 +177,7 @@ export async function createInTx(
       unitCost: '0',
       value: '0',
       memo: input.memo ?? null,
+      workOrderId,
       createdById: ctx.userId,
     },
     select: { id: true, number: true },

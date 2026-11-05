@@ -83,6 +83,7 @@ export default async function EditSalesDocumentPage({
           customerId: document.customer.id,
           date: toCalendarDate(document.date),
           reference: document.reference,
+          inRef: document.inRef,
           memo: document.memo,
           customerMessage: document.customerMessage,
           workScope: document.workScope,

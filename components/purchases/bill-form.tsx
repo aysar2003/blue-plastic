@@ -193,6 +193,7 @@ export function BillForm({
     vendorId: string
     date: string
     reference: string | null
+    inRef?: string | null
     memo: string | null
     paymentTermId: string | null
     paymentAccountId: string | null
@@ -242,6 +243,7 @@ export function BillForm({
   const [trackingCategoryId, setTrackingCategoryId] = useState(document?.trackingCategoryId ?? '')
   const [date, setDate] = useState(document?.date ?? today)
   const [reference, setReference] = useState(document?.reference ?? '')
+  const [inRef, setInRef] = useState(document?.inRef ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
   const [paymentTermId, setPaymentTermId] = useState(document?.paymentTermId ?? '')
   const [paymentSource, setPaymentSource] = useState<'bank' | 'customer'>(() =>
@@ -298,6 +300,7 @@ export function BillForm({
       setVendorId(document.vendorId)
       setDate(document.date)
       setReference(document.reference ?? '')
+      setInRef(document.inRef ?? '')
       setMemo(document.memo ?? '')
       setPaymentTermId(document.paymentTermId ?? '')
       setPaymentSource(document.offsetCustomerId ? 'customer' : 'bank')
@@ -340,6 +343,7 @@ export function BillForm({
     setPaymentSource('bank')
     setDate(today)
     setReference('')
+    setInRef('')
     setMemo('')
     setPaymentTermId(
       initialVendorId
@@ -401,6 +405,7 @@ export function BillForm({
         setPaymentSource('bank')
         setDate(today)
         setReference('')
+    setInRef('')
         setMemo('')
         setPaymentTermId('')
         setPaymentAccountId(paymentAccounts[0]?.id ?? '')
@@ -564,6 +569,7 @@ export function BillForm({
       vendorId: payFromCustomer ? '' : vendorId,
       date,
       reference,
+      inRef,
       memo,
       paymentTermId,
       paymentAccountId: config.needsPaymentAccount && !payFromCustomer ? paymentAccountId : '',
@@ -754,13 +760,23 @@ export function BillForm({
             ) : (
               <div />
             )}
+            {showField('inRef') ? (
+              <Field name="inRef" label="IN/" error={state.fieldErrors?.inRef}>
+                <Input
+                  {...fieldProps('inRef', state.fieldErrors?.inRef, true)}
+                  value={inRef}
+                  onChange={(event) => setInRef(event.target.value)}
+                  placeholder="GRN / IN/"
+                />
+              </Field>
+            ) : null}
             {showField('reference') ? (
-              <Field name="reference" label="PO" error={state.fieldErrors?.reference}>
+              <Field name="reference" label="P.O. NO." error={state.fieldErrors?.reference}>
                 <Input
                   {...fieldProps('reference', state.fieldErrors?.reference, true)}
                   value={reference}
                   onChange={(event) => setReference(event.target.value)}
-                  placeholder="PO / bill no."
+                  placeholder="P.O. / bill no."
                 />
               </Field>
             ) : null}

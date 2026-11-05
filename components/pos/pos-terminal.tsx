@@ -82,6 +82,7 @@ import {
   prefilledPaymentAmounts,
   settlePosPayments,
 } from '@/lib/pos-payment'
+import { fullScreenOverlayZIndex } from '@/lib/dialog-stack'
 import { POS_SHORTFALL_DISCOUNT_MAX } from '@/lib/pos-shortfall'
 import { resolveUnit } from '@/lib/quantity'
 import { formatStockQty, negativeStockWarning } from '@/lib/store-stock'
@@ -1990,7 +1991,10 @@ function Modal({
   children: React.ReactNode
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-3 sm:items-center">
+    <div
+      className="fixed inset-0 flex items-end justify-center bg-black/55 p-3 sm:items-center"
+      style={{ zIndex: fullScreenOverlayZIndex(70) }}
+    >
       <div
         className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-4 shadow-2xl sm:p-5"
         style={{

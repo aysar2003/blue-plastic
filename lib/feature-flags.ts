@@ -653,7 +653,11 @@ export function documentKindForPath(
   if (path === '/items' || path.startsWith('/items/')) {
     return { family: 'inventory', kind: 'products' }
   }
-  if (path.startsWith('/inventory/adjustments') || path.startsWith('/inventory/builds')) {
+  if (
+    path.startsWith('/inventory/adjustments') ||
+    path.startsWith('/inventory/builds') ||
+    path.startsWith('/inventory/work-orders')
+  ) {
     return { family: 'inventory', kind: 'adjustments' }
   }
   if (path.startsWith('/stores/transfer') || path === '/stores/transfer') {

@@ -4,6 +4,8 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { CameraIcon, ShoppingBasketIcon } from 'lucide-react'
 
+import { fullScreenOverlayZIndex } from '@/lib/dialog-stack'
+
 export function lockStorageKey(registerId: string) {
   return `bp-register-lock:${registerId}`
 }
@@ -112,7 +114,10 @@ export function RegisterLock({
   )
 
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col overflow-hidden bg-[#ece7f6] text-[#1c1730]">
+    <div
+      className="fixed inset-0 flex flex-col overflow-hidden bg-[#ece7f6] text-[#1c1730]"
+      style={{ zIndex: fullScreenOverlayZIndex(80) }}
+    >
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"

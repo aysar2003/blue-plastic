@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Loader2Icon, Settings2Icon } from 'lucide-react'
@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { NativeSelect } from '@/components/ui/native-select'
+import { PortaledFloatingPanel } from '@/components/ui/portaled-floating-panel'
 import { groupKey } from '@/lib/bank-feed'
 import { formatDate } from '@/lib/date'
 import { Decimal, formatMoney } from '@/lib/money'
@@ -77,6 +78,8 @@ export function BankFeed({
   const [columns, setColumns] = useState(loadColumns)
   const [group, setGroup] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const columnsTriggerRef = useRef<HTMLButtonElement>(null)
   const [openMatch, setOpenMatch] = useState<string | null>(null)
   const [bookMatches, setBookMatches] = useState<
     { journalLineId: string; journalNumber: string; description: string | null; amount: string }[]
@@ -122,11 +125,23 @@ export function BankFeed({
             <input type="checkbox" checked={group} onChange={(event) => setGroup(event.target.checked)} />
             Group similar
           </label>
-          <details className="relative ml-auto">
-            <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-primary">
-              <Settings2Icon className="size-3.5" /> Columns
-            </summary>
-            <div className="absolute right-0 z-20 mt-1 w-44 rounded-md border bg-popover p-2 text-popover-foreground shadow-lg">
+          <button
+            ref={columnsTriggerRef}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={columnsOpen}
+            onClick={() => setColumnsOpen((open) => !open)}
+            className="ml-auto flex items-center gap-1 text-xs font-medium text-primary"
+          >
+            <Settings2Icon className="size-3.5" /> Columns
+          </button>
+          <PortaledFloatingPanel
+            open={columnsOpen}
+            anchorRef={columnsTriggerRef}
+            align="end"
+            onClose={() => setColumnsOpen(false)}
+          >
+            <div className="w-44 rounded-md border bg-popover p-2 text-popover-foreground shadow-lg">
               {COLUMNS.map((column) => (
                 <label key={column.key} className="flex items-center gap-2 px-1 py-1 text-sm">
                   <input
@@ -138,7 +153,7 @@ export function BankFeed({
                 </label>
               ))}
             </div>
-          </details>
+          </PortaledFloatingPanel>
           <Button size="sm" disabled={pending || picked.length === 0} onClick={() => post(picked)}>
             {pending ? <Loader2Icon className="animate-spin" /> : null}
             Post selected

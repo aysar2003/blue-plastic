@@ -40,6 +40,9 @@ export const salesLineSchema = z.object({
   serviceDate: optionalDate,
   /** The store this line is taken from. Blank means the office when one exists. */
   storeId: optionalId,
+  /** Phase 24: lot / serial for tracked inventory lines. */
+  lotNumber: optionalText(80),
+  serialNumber: optionalText(80),
   /** A purchase line marked billable to this customer, pulled onto the invoice. */
   sourcePurchaseLineId: optionalId,
 })
@@ -51,6 +54,8 @@ export const salesDocumentSchema = z.object({
   paymentTermId: optionalId,
   expiryDate: optionalDate,
   reference: optionalText(60),
+  /** IN/ — GRN / internal refs (QuickBooks template field). */
+  inRef: optionalText(120),
   memo: optionalText(1000),
   customerMessage: optionalText(1000),
   /** Nature / section of work — printed on quotations and estimates. */

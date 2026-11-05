@@ -23,10 +23,19 @@
 | 19 — Remaining gaps         | ✅ Complete            | 2026-11-04 · [detail](./phases/phase-19-full-erp.md) · MRP page, sign email, notify gateway, tickets, home KPIs, IC journals, backup extras |
 | 20 — Operating close        | ✅ Complete            | 2026-11-04 · [detail](./phases/phase-20-operating-close.md) · backup restore extras, portal quotes, appointment types |
 | 21 — Legal layers           | ✅ Complete            | 2026-11-04 · [detail](./phases/phase-21-legal-layers.md) · hedge docs, kitchen display, first-party marketplace, bins/picks, sign certificate, training, payroll backup |
+| 22 — Platform + AI surface  | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-22-platform-ai.md) · [layers](./06-erp-layers.md) · API keys, OpenAPI, capabilities, MCP mirror · [ADR-0014](./decisions/0014-machine-api-single-service.md) |
+| 23 — Hard 3-way match       | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-23-three-way-match.md) · MATCH_HOLD + variance approve · migration `20261105200000_phase23_three_way_match` |
+| 24 — Lot / serial           | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-24-lot-serial.md) · receive/issue lots & serials · stock by lot · migration `20261105210000_phase24_lot_serial` |
+| 25 — Project profitability  | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-25-project-profitability.md) · job P&L from sales, purchases, COGS, timesheets |
+| 26 — Report packs           | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-26-report-packs.md) · scheduled packs · migration `20261105220000_phase26_report_packs` |
+| 27 — Statutory payroll+VAT  | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-27-statutory.md) · payroll CSV/JSON + one-jurisdiction VAT return |
+| 28 — Manufacturing WOs      | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-28-work-orders.md) · SME work orders → assembly posting |
+| 29 — WMS picks post stock   | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-29-wms-picks.md) · pick completion issues inventory |
+| 30 — SME BI dashboards      | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-30-dashboards.md) · KPI/report tiles · migration `20261105230000_phase28_30_work_orders_wms_dashboards` |
 
 Phases advance only on explicit instruction from the owner.
 
-**SME ERP operating loops (phases 1–21) are complete.** Remaining non-goals are hardware, trademarks, and untrusted third-party code.
+**SME ERP operating loops (phases 1–21) and layer waves 22–30 are complete.** Remaining non-goals: hardware, trademarks, untrusted plugins.
 
 ## Open items carried forward
 

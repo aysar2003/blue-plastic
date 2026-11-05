@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatDate } from '@/lib/date'
+import { addMonths, formatDate, startOfMonth, today } from '@/lib/date'
 import { isDocumentKindEnabled, isModuleEnabled } from '@/lib/feature-flags'
 import { formatMoney } from '@/lib/money'
 import { printableProjectQuotations } from '@/lib/project-quotations'
@@ -21,7 +21,7 @@ import { requireOrgContext } from '@/server/auth/context'
 import * as projectService from '@/server/services/project.service'
 
 import { TimesheetPanel } from '@/components/projects/timesheet-panel'
-import { today } from '@/lib/date'
+import * as projectProfitability from '@/server/services/project-profitability.service'
 import * as projectTaskService from '@/server/services/project-task.service'
 import * as projectTimeService from '@/server/services/project-time.service'
 import * as userHistoryService from '@/server/services/user-history.service'
@@ -55,13 +55,20 @@ export default async function ProjectDetailPage({
   const ctx = await requireOrgContext('project:read')
   const project = await projectService.get(ctx, id).catch(() => null)
   if (!project) notFound()
-  const [tasks, members, timeEntries] = await Promise.all([
+  const asOf = today(ctx.organization.timeZone)
+  const profitFrom = startOfMonth(addMonths(asOf, -11))
+  const [tasks, members, timeEntries, profit] = await Promise.all([
     projectTaskService.listForProject(ctx, project.id),
     userHistoryService.listMembers(ctx),
     projectTimeService.listForProject(ctx, project.id),
+    projectProfitability.profitabilityForProject(ctx, project.id, {
+      from: profitFrom,
+      to: asOf,
+    }),
   ])
 
   const currency = ctx.organization.baseCurrency
+  const pl = profit.row
   const salesOn = isModuleEnabled(ctx.features, 'sales')
   const purchasesOn = isModuleEnabled(ctx.features, 'purchases')
   const canCreateSales = ctx.permissions.has('invoice:create') && salesOn
@@ -169,6 +176,51 @@ export default async function ProjectDetailPage({
       {project.description ? (
         <p className="mb-6 max-w-3xl text-sm text-muted-foreground">{project.description}</p>
       ) : null}
+
+      <section className="mb-6">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Job P&amp;L</h2>
+          <Link
+            href={`/reports/project-profitability?from=${profitFrom}&to=${asOf}`}
+            className="text-xs text-primary hover:underline"
+          >
+            Full profitability report
+          </Link>
+        </div>
+        {pl ? (
+          <Card className="p-4">
+            <div className="grid gap-3 sm:grid-cols-5">
+              <div>
+                <p className="text-xs text-muted-foreground">Income</p>
+                <p className="tabular font-medium">{formatMoney(pl.income, currency)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Purchases</p>
+                <p className="tabular font-medium">{formatMoney(pl.purchaseCost, currency)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Stock (COGS)</p>
+                <p className="tabular font-medium">{formatMoney(pl.stockCost, currency)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Labour</p>
+                <p className="tabular font-medium">{formatMoney(pl.laborCost, currency)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Profit</p>
+                <p className="tabular text-base font-semibold">{formatMoney(pl.profit, currency)}</p>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Last 12 months through {formatDate(asOf)}. Excludes tax.
+            </p>
+          </Card>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No posted sales, purchases, stock issues, or timed labour on this job in the last 12 months.
+          </p>
+        )}
+      </section>
 
       <ProjectTaskBoard
         projectId={project.id}

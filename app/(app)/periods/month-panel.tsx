@@ -190,7 +190,7 @@ async function monthBody(
       ) : (
         <div className="max-h-[70vh] overflow-y-auto rounded-xl ring-1 ring-slate-300/70">
           <table className="w-full caption-bottom text-sm">
-            <TableHeader className="sticky top-0 z-10">
+            <TableHeader>
               <TableRow className="ledger-head hover:bg-[var(--band)]">
                 <TableHead className="bg-[var(--band)]">Entry</TableHead>
                 <TableHead className="bg-[var(--band)]">Date</TableHead>

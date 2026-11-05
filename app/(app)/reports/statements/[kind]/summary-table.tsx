@@ -22,7 +22,10 @@ const COLUMNS = [
 
 type ColumnId = (typeof COLUMNS)[number]['id']
 
-const DEFAULT_COLUMNS: ColumnId[] = ['date', 'number', 'due', 'debit', 'credit', 'amount', 'total', 'balance']
+/** Paper-width columns. Amount / due / total stay in the picker. */
+const DEFAULT_COLUMNS: ColumnId[] = ['date', 'number', 'debit', 'credit', 'balance']
+
+const MONEY_COLUMNS = new Set<ColumnId>(['amount', 'debit', 'credit', 'total', 'balance'])
 
 export type SummaryRow = {
   id: string
@@ -112,9 +115,6 @@ export function SummaryTable({
   const rule = density === 'lined' ? 'border-b border-[#d7dee4]' : ''
 
   const visible = COLUMNS.filter((column) => columns.includes(column.id))
-  const template = visible
-    .map((column) => (column.id === 'number' ? 'minmax(0,1fr)' : column.id === 'balance' ? '8.5rem' : '6.2rem'))
-    .join(' ')
 
   const prepared = useMemo(() => {
     const brought = new Decimal(opening)
@@ -172,74 +172,79 @@ export function SummaryTable({
   }
 
   return (
-    <div className="mt-6">
-      <div
-        className={`grid px-2 text-[11px] font-bold uppercase tracking-wide text-white ${pad}`}
-        style={{ background: accent, gridTemplateColumns: template }}
-      >
-        {visible.map((column) => (
-          <span key={column.id} className={column.id === 'date' || column.id === 'number' || column.id === 'due' ? '' : 'text-right'}>
-            {column.id === 'number' ? numberLabel : column.label}
-          </span>
-        ))}
-      </div>
-      {prepared.map((line, index) => (
-        <div
-          key={line.row.id}
-          className={`grid items-center px-2 text-[12px] ${pad} ${rule}`}
-          style={{ background: index % 2 === 0 ? '#ffffff' : zebra, gridTemplateColumns: template }}
-        >
-          {visible.map((column) => (
-            <span
-              key={column.id}
-              className={
-                column.id === 'number'
-                  ? 'truncate pr-2'
-                  : column.id === 'date' || column.id === 'due'
-                    ? 'tabular'
-                    : column.id === 'balance'
-                      ? 'tabular text-right font-semibold'
-                      : 'tabular text-right'
-              }
-              style={
-                column.id === 'balance'
-                  ? { color: '#1f2933' }
-                  : column.id === 'credit' && line.credit.greaterThan('0.004')
-                    ? { color: '#9f1239' }
-                    : undefined
-              }
+    <div className="mt-6 overflow-x-auto">
+      <table className="w-full border-collapse text-[12px]">
+        <thead>
+          <tr className={`text-[11px] font-bold uppercase tracking-wide text-white ${pad}`} style={{ background: accent }}>
+            {visible.map((column) => (
+              <th
+                key={column.id}
+                className={`px-2 ${MONEY_COLUMNS.has(column.id) ? 'text-right' : 'text-left'} ${column.id === 'number' ? 'w-[28%]' : ''}`}
+              >
+                {column.id === 'number' ? numberLabel : column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {prepared.map((line, index) => (
+            <tr
+              key={line.row.id}
+              className={rule}
+              style={{ background: index % 2 === 0 ? '#ffffff' : zebra }}
             >
-              {column.id === 'number' ? (
-                <a href={`#invoice-${line.row.id}`} className="underline-offset-4 hover:underline print:no-underline">
-                  {line.row.number}
-                </a>
-              ) : (
-                cell(column.id, line)
-              )}
-            </span>
+              {visible.map((column) => (
+                <td
+                  key={column.id}
+                  className={`px-2 ${pad} ${
+                    column.id === 'number'
+                      ? 'pr-3 break-words'
+                      : column.id === 'date' || column.id === 'due'
+                        ? 'tabular whitespace-nowrap'
+                        : column.id === 'balance'
+                          ? 'tabular whitespace-nowrap text-right font-semibold'
+                          : 'tabular whitespace-nowrap text-right'
+                  }`}
+                  style={
+                    column.id === 'balance'
+                      ? { color: '#1f2933' }
+                      : column.id === 'credit' && line.credit.greaterThan('0.004')
+                        ? { color: '#9f1239' }
+                        : undefined
+                  }
+                >
+                  {column.id === 'number' ? (
+                    <a href={`#invoice-${line.row.id}`} className="underline-offset-4 hover:underline print:no-underline">
+                      {line.row.number}
+                    </a>
+                  ) : (
+                    cell(column.id, line)
+                  )}
+                </td>
+              ))}
+            </tr>
           ))}
-        </div>
-      ))}
-      <div
-        className="grid border-t-2 px-2 py-2 text-[12px] font-bold"
-        style={{ borderColor: accent, color: accent, gridTemplateColumns: template }}
-      >
-        {visible.map((column, index) => (
-          <span key={column.id} className={index === 0 ? '' : 'tabular text-right'}>
-            {index === 0
-              ? 'Total'
-              : column.id === 'amount' || column.id === 'debit'
-                ? formatMoney(totals.amount, currency)
-                : column.id === 'credit'
-                  ? formatMoney(totals.credit, currency)
-                  : column.id === 'total'
+        </tbody>
+        <tfoot>
+          <tr className="text-[12px] font-bold" style={{ borderTop: `2px solid ${accent}`, color: accent }}>
+            {visible.map((column, index) => (
+              <td key={column.id} className={`px-2 py-2 ${index === 0 ? '' : 'tabular text-right'}`}>
+                {index === 0
+                  ? 'Total'
+                  : column.id === 'amount' || column.id === 'debit'
                     ? formatMoney(totals.amount, currency)
-                    : column.id === 'balance'
-                      ? signed(totals.balance, currency)
-                      : ''}
-          </span>
-        ))}
-      </div>
+                    : column.id === 'credit'
+                      ? formatMoney(totals.credit, currency)
+                      : column.id === 'total'
+                        ? formatMoney(totals.amount, currency)
+                        : column.id === 'balance'
+                          ? signed(totals.balance, currency)
+                          : ''}
+              </td>
+            ))}
+          </tr>
+        </tfoot>
+      </table>
       <div className="ml-auto mt-6 w-full max-w-xs text-[12px] text-white">
         <div className="flex justify-between gap-4 px-2 py-1" style={{ background: accent }}>
           <span>Brought forward</span>

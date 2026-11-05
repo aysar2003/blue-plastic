@@ -11,6 +11,7 @@ import {
   documentEmailBody,
   documentEmailSubject,
 } from '@/lib/document-email'
+import { ApproveMatchButton } from '@/components/purchases/approve-match-button'
 import { ConvertPurchaseDocumentActions } from '@/components/purchases/convert-actions'
 import { RfqPriceUpload } from '@/components/purchases/rfq-price-upload'
 import { Badge } from '@/components/ui/badge'
@@ -255,6 +256,30 @@ export default async function PurchaseDocumentPage({
           Voided{document.voidReason ? ` — ${document.voidReason}` : ''}. Its entry was reversed; both
           remain in the ledger. Voiding was replaced by deleting — no new document reaches this
           state.
+        </div>
+      ) : null}
+
+      {document.status === 'MATCH_HOLD' ? (
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+          <div>
+            <p className="font-medium text-amber-950 dark:text-amber-100">Held for 3-way match</p>
+            <p className="mt-1 text-muted-foreground">
+              {document.matchVarianceNote ??
+                'This bill does not agree with the purchase order or goods received.'}
+            </p>
+            {document.convertedFrom ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Against{' '}
+                <Link
+                  href={`/purchases/${purchaseByType(document.convertedFrom.type).slug}/${document.convertedFrom.id}`}
+                  className="underline-offset-2 hover:underline"
+                >
+                  {document.convertedFrom.number}
+                </Link>
+              </p>
+            ) : null}
+          </div>
+          {ctx.permissions.has('bill:approve') ? <ApproveMatchButton id={id} /> : null}
         </div>
       ) : null}
 

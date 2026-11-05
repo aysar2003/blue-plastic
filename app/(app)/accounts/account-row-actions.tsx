@@ -10,6 +10,7 @@ import type { AccountSubtype } from '@prisma/client'
 import { StartReconciliationButton } from '@/components/banking/start-reconciliation'
 import { Button } from '@/components/ui/button'
 import { TableCell, TableRow } from '@/components/ui/table'
+import { floatingPanelZIndex } from '@/lib/dialog-stack'
 import { cn } from '@/lib/utils'
 import { deleteAccount, setAccountActive } from '@/app/(app)/accounts/actions'
 import {
@@ -172,8 +173,8 @@ export function AccountTableRow({
         ? createPortal(
             <div
               role="menu"
-              className="fixed z-50 min-w-60 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg"
-              style={{ left: point.x, top: point.y }}
+              className="fixed min-w-60 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg"
+              style={{ left: point.x, top: point.y, zIndex: floatingPanelZIndex() }}
               onMouseDown={(event) => event.stopPropagation()}
             >
               <MenuItem onSelect={() => go(`/accounts/${account.id}`)}>

@@ -28,6 +28,7 @@ const DEFAULT_PREFIX: Record<DocumentType, string> = {
   STORE_TICKET: 'TKT-',
   DELIVERY_NOTE: 'DN-',
   ASSEMBLY_BUILD: 'BLD-',
+  WORK_ORDER: 'WO-',
   PROJECT: 'PRJ-',
 }
 

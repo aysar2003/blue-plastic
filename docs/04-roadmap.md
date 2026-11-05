@@ -333,3 +333,17 @@ Detail: [phases/phase-19-full-erp.md](./phases/phase-19-full-erp.md). MRP page, 
 ## Phase 20 — Operating close (2026-11-04)
 
 Detail: [phases/phase-20-operating-close.md](./phases/phase-20-operating-close.md). Restore extras on backup, customer portal quotes, appointment-type create. SME loops 1–20 are complete.
+
+## Phase 22 — Platform + AI surface (2026-11-05)
+
+Detail: [phases/phase-22-platform-ai.md](./phases/phase-22-platform-ai.md). Layer model in [06-erp-layers.md](./06-erp-layers.md). Capability registry, org API keys, `/api/v1` + OpenAPI, MCP tool mirror. Domain logic stays in services ([ADR-0014](./decisions/0014-machine-api-single-service.md)).
+
+### Waves after 22 (owner-gated)
+
+| Phase | Layer | Slice |
+| --- | --- | --- |
+| 23 | L3 | Hard 3-way match + variance hold on bill post |
+| 24 | L4 | Lot/serial on receive/issue |
+| 25 | L6 | Project profitability |
+| 26 | L8 | Scheduled report packs |
+| 27 | L1 / L7 | One-jurisdiction VAT or payroll statutory export |

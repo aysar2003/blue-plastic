@@ -20,7 +20,7 @@ export default async function BinsPage() {
 
   return (
     <>
-      <PageHeader title="Bins & picks" description="Name a bin, then pick stock by hand." />
+      <PageHeader title="Bins & picks" description="Name a bin, then pick stock by hand. Completing a pick issues inventory." />
       <p className="mb-4 max-w-2xl text-xs text-muted-foreground">{WMS_LEGAL}</p>
       {canAdjust ? (
         <div className="mb-6 grid gap-4 lg:grid-cols-2">
@@ -66,7 +66,17 @@ export default async function BinsPage() {
                   </option>
                 ))}
               </NativeSelect>
+              <NativeSelect name="salesOrderId">
+                <option value="">No sales order</option>
+                {board.openOrders.map((order) => (
+                  <option key={order.id} value={order.id}>
+                    {order.number}
+                  </option>
+                ))}
+              </NativeSelect>
               <Input name="qty" placeholder="Qty" required />
+              <Input name="lotNumber" placeholder="Lot (if tracked)" />
+              <Input name="serialNumber" placeholder="Serial (if tracked)" />
               <Button type="submit" size="sm">
                 Create pick
               </Button>
@@ -91,7 +101,10 @@ export default async function BinsPage() {
           <li key={row.id} className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
             <span>
               {row.qty} {row.item.name} · {row.store.name}
-              {row.bin ? ` · ${row.bin.code}` : ''} · {row.status}
+              {row.bin ? ` · ${row.bin.code}` : ''}
+              {row.sourceType === 'SALES_ORDER' ? ' · SO' : ''}
+              {row.lotNumber ? ` · lot ${row.lotNumber}` : ''}
+              {row.serialNumber ? ` · sn ${row.serialNumber}` : ''} · {row.status}
             </span>
             {canAdjust && canStartPick(row.status as PickStatus) ? (
               <form action={startPick}>

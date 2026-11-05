@@ -85,7 +85,7 @@ const SEQUENCE_FOR: Record<SalesDocumentType, DocumentType> = {
 const DOCUMENT_SELECT = {
   id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true,
   promisedDate: true, promiseNote: true, excludeFromOverdue: true,
-  status: true, reference: true, memo: true, customerMessage: true, workScope: true, workSite: true,
+  status: true, reference: true, inRef: true, memo: true, customerMessage: true, workScope: true, workSite: true,
   subtotal: true, discountAmount: true, taxTotal: true, total: true,
   currencyCode: true, exchangeRate: true, depositAccountId: true, paymentMethod: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
@@ -681,6 +681,7 @@ const DETAIL_SELECT = {
     select: {
       id: true, lineNumber: true, description: true, quantity: true, quantityInvoiced: true, unitPrice: true,
       discountPercent: true, amount: true, taxAmount: true, serviceDate: true, storeId: true,
+      lotNumber: true, serialNumber: true,
       item: { select: { id: true, name: true, sku: true, unitOfMeasure: true } },
       taxCode: { select: { id: true, name: true } },
       incomeAccount: { select: { id: true, code: true, name: true } },
@@ -916,6 +917,7 @@ async function createWithin(
         paymentTermId: term?.id ?? null,
         status: isDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         reference: input.reference ?? null,
+        inRef: input.inRef ?? null,
         memo: input.memo ?? null,
         customerMessage: input.customerMessage ?? null,
         workScope: input.workScope ?? null,
@@ -938,6 +940,8 @@ async function createWithin(
             lineNumber: line.lineNumber,
             itemId: line.source.itemId ?? null,
             storeId: line.source.storeId ?? null,
+            lotNumber: line.source.lotNumber?.trim() || null,
+            serialNumber: line.source.serialNumber?.trim() || null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
             unitPrice: line.unitPrice.toFixed(4),
@@ -1200,6 +1204,7 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
             : null,
         paymentTermId: term?.id ?? null,
         reference: input.reference ?? null,
+        inRef: input.inRef ?? null,
         memo: input.memo ?? null,
         customerMessage: input.customerMessage ?? null,
         workScope: input.workScope ?? null,
@@ -1225,6 +1230,8 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
             lineNumber: line.lineNumber,
             itemId: line.source.itemId ?? null,
             storeId: line.source.storeId ?? null,
+            lotNumber: line.source.lotNumber?.trim() || null,
+            serialNumber: line.source.serialNumber?.trim() || null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
             unitPrice: line.unitPrice.toFixed(4),
@@ -1389,6 +1396,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         select: {
           id: true, amount: true, taxAmount: true, taxCodeId: true, incomeAccountId: true,
           description: true, quantity: true, unitPrice: true, discountPercent: true, itemId: true, storeId: true,
+          lotNumber: true, serialNumber: true,
           item: {
             select: {
               id: true,
@@ -1586,6 +1594,8 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       inventoryAccountId: string
       quantity: Decimal
       storeId: string | null
+      lotNumber: string | null
+      serialNumber: string | null
     }
     const stockIssues: StockIssue[] = []
     for (const line of document.lines) {
@@ -1604,6 +1614,8 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
           inventoryAccountId: item.inventoryAccountId,
           quantity: lineQty,
           storeId: line.storeId,
+          lotNumber: line.lotNumber ?? null,
+          serialNumber: line.serialNumber ?? null,
         })
         continue
       }
@@ -1622,6 +1634,9 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
           inventoryAccountId: member.inventoryAccountId,
           quantity: lineQty.times(new Decimal(row.quantity.toString())),
           storeId: line.storeId,
+          // Kit members inherit the parent line's lot/serial when present.
+          lotNumber: line.lotNumber ?? null,
+          serialNumber: line.serialNumber ?? null,
         })
       }
     }
@@ -1659,6 +1674,8 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         sourceLineId: issue.lineId,
         quantity: movesStockOut ? quantity.negated() : quantity,
         storeId: issue.storeId,
+        lotNumber: issue.lotNumber,
+        serialNumber: issue.serialNumber,
       })
 
       if (movesStockOut) {
@@ -2044,7 +2061,7 @@ export async function invoiceableSource(
   const source = await client.salesDocument.findFirst({
     where: { id: sourceId, orgId: ctx.orgId, type: { in: CONVERTIBLE_SOURCES } },
     select: {
-      id: true, number: true, type: true, status: true, date: true, reference: true, memo: true,
+      id: true, number: true, type: true, status: true, date: true, reference: true, inRef: true, memo: true,
       customer: { select: { id: true, displayName: true } },
       convertedTo: {
         select: { id: true, number: true, type: true, date: true, status: true },
@@ -2091,6 +2108,7 @@ export async function invoiceableSource(
     status: source.status,
     date: source.date,
     reference: source.reference,
+    inRef: source.inRef,
     memo: source.memo,
     customer: source.customer,
     invoices: source.convertedTo,
@@ -2135,7 +2153,7 @@ async function invoiceSourceWithin(
   const source = await tx.salesDocument.findFirst({
     where: { id: input.sourceId, orgId: ctx.orgId, type: { in: CONVERTIBLE_SOURCES } },
     select: {
-      id: true, number: true, type: true, status: true, customerId: true, reference: true, memo: true,
+      id: true, number: true, type: true, status: true, customerId: true, reference: true, inRef: true, memo: true,
       customerMessage: true, workScope: true, workSite: true, paymentTermId: true, projectId: true,
       trackingCategoryId: true,
       discountAmount: true,
@@ -2208,6 +2226,7 @@ async function invoiceSourceWithin(
       customerId: source.customerId,
       date: input.date,
       reference: input.reference ?? source.reference,
+      inRef: source.inRef,
       memo:
         input.memo ??
         [`Invoiced against ${source.number}`, source.memo].filter(Boolean).join(' — '),
@@ -2486,6 +2505,7 @@ export async function convertSalesDocument(
         projectId: true,
         trackingCategoryId: true,
         reference: true,
+        inRef: true,
         memo: true,
         customerMessage: true,
         workScope: true,
@@ -2537,6 +2557,7 @@ export async function convertSalesDocument(
         customerId: source.customerId,
         date,
         reference: source.reference,
+        inRef: source.inRef,
         memo: source.memo,
         customerMessage: source.customerMessage,
         workScope: source.workScope,

@@ -42,6 +42,8 @@ export type PickedSourceLine = {
   discountPercent: string
   taxCodeId: string
   storeId: string
+  lotNumber?: string
+  serialNumber?: string
 }
 
 export type AppliedSource = {
@@ -49,6 +51,7 @@ export type AppliedSource = {
   sourceNumber: string
   sourceType: SalesDocumentType
   reference: string | null
+  inRef: string | null
   memo: string | null
   customerMessage: string | null
   workScope: string | null
@@ -76,7 +79,12 @@ type SourceDetail = {
   id: string
   type: SalesDocumentType
   number: string
+  date?: string
+  total?: string
+  customerId?: string
+  customerName?: string
   reference: string | null
+  inRef: string | null
   memo: string | null
   customerMessage: string | null
   workScope: string | null
@@ -145,7 +153,7 @@ export function FromSourcePicker({
       const data = result.data
       const initial: Record<string, boolean> = {}
       for (const line of data.lines) initial[line.id] = true
-      setDetail(data)
+      setDetail(data as unknown as SourceDetail)
       setChecked(initial)
       setDialogOpen(true)
     })
@@ -166,6 +174,7 @@ export function FromSourcePicker({
       sourceNumber: detail.number,
       sourceType: detail.type,
       reference: detail.reference,
+      inRef: detail.inRef,
       memo: detail.memo,
       customerMessage: detail.customerMessage,
       workScope: detail.workScope,
@@ -179,6 +188,8 @@ export function FromSourcePicker({
         discountPercent: line.discountPercent ?? '',
         taxCodeId: line.taxCodeId ?? '',
         storeId: line.storeId ?? '',
+        lotNumber: '',
+        serialNumber: '',
       })),
     })
     setDialogOpen(false)
@@ -245,7 +256,7 @@ export function FromSourcePicker({
           {detail ? (
             <div className="max-h-[min(24rem,50vh)] overflow-auto rounded-md border">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-muted/80 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead className="sticky top-0 z-30 bg-muted/80 text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="w-10 px-3 py-2">
                       <input

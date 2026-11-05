@@ -541,6 +541,16 @@ export const INVENTORY_HUB_APPS: HubApp[] = [
     blurb: 'Quantity and value',
   },
   {
+    key: 'lots',
+    label: 'Stock by lot',
+    href: '/inventory/lots',
+    icon: 'barcode',
+    permission: 'inventory:read',
+    accent: '#0E7490',
+    wash: '#CFFAFE',
+    blurb: 'Lots and serials on hand',
+  },
+  {
     key: 'stores',
     label: 'Store',
     href: '/stores',
@@ -569,6 +579,16 @@ export const INVENTORY_HUB_APPS: HubApp[] = [
     accent: '#0369A1',
     wash: '#E0F2FE',
     blurb: 'Combine parts into finished goods',
+  },
+  {
+    key: 'work-orders',
+    label: 'Work orders',
+    href: '/inventory/work-orders',
+    icon: 'clipboard',
+    permission: 'inventory:read',
+    accent: '#0F766E',
+    wash: '#CCFBF1',
+    blurb: 'Plan builds, then post on complete',
   },
   {
     key: 'mrp',
@@ -1259,6 +1279,16 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     blurb: 'Roles, apps & who can sign in',
   },
   {
+    key: 'api-keys',
+    label: 'API keys',
+    href: '/settings/api-keys',
+    icon: 'sliders',
+    permission: 'org:update',
+    accent: '#0F766E',
+    wash: '#CCFBF1',
+    blurb: 'Machine API & MCP for integrations',
+  },
+  {
     key: 'user-history',
     label: 'User history',
     href: '/settings/user-history',
@@ -1333,7 +1363,7 @@ export const SETTINGS_HUB_SECTIONS: { label: string; blurb: string; keys: string
   {
     label: 'People & access',
     blurb: 'Who works in this company and your own login.',
-    keys: ['users', 'user-history', 'profile'],
+    keys: ['users', 'api-keys', 'user-history', 'profile'],
   },
   {
     label: 'Data & companies',
