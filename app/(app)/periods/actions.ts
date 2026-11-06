@@ -13,6 +13,7 @@ import { action } from '@/server/action'
 import * as closeService from '@/server/services/close.service'
 import * as equityOwnersService from '@/server/services/equity-owners.service'
 import * as periodService from '@/server/services/period.service'
+import * as yearArchiveService from '@/server/services/year-archive.service'
 
 export const setPeriodStatus = action
   .input(periodStatusSchema)
@@ -83,5 +84,33 @@ export const importOwnersEquityAllocation = action
     revalidatePath('/accounts')
     revalidatePath('/reports/balance-sheet')
     revalidatePath('/reports/trial-balance')
+    return result
+  })
+
+/** Move one locked year outside the live window into cold storage. */
+export const archiveFiscalYear = action
+  .requires('period:close')
+  .input(closeYearSchema)
+  .handler(async (ctx, input) => {
+    const result = await yearArchiveService.archiveFiscalYear(ctx, input.fiscalYearId)
+    revalidatePath('/periods')
+    revalidatePath('/journals')
+    revalidatePath('/reports/balance-sheet')
+    return result
+  })
+
+/** Bring the newest archived year back into the hot ledger (owner/admin). */
+export const restoreFiscalYear = action
+  .requires('period:close')
+  .input(closeYearSchema)
+  .handler(async (ctx, input) => {
+    if (!ctx.permissions.has('org:update')) {
+      const { forbidden } = await import('@/server/errors')
+      throw forbidden('Only an owner can restore an archived fiscal year.')
+    }
+    const result = await yearArchiveService.restoreFiscalYear(ctx, input.fiscalYearId)
+    revalidatePath('/periods')
+    revalidatePath('/journals')
+    revalidatePath('/reports/balance-sheet')
     return result
   })

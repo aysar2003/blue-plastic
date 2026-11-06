@@ -136,7 +136,17 @@ export async function resolveBoard(ctx: OrgContext, id: string): Promise<{
     }
   }
 
-  const sparkValue = (key: string): string | null => {
+  const sparkValue = async (key: string): Promise<string | null> => {
+    try {
+      const { series } = await import('@/server/services/metric-snapshot.service')
+      if (key === 'cashMovement' || key === 'profitTrend') {
+        const snapKey = key === 'profitTrend' ? 'profitMtd' : 'cashMovement'
+        const points = await series(ctx, snapKey, 7)
+        if (points.length > 0) return points[points.length - 1]!.value
+      }
+    } catch {
+      // Fall through to live overview.
+    }
     if (!overview) return null
     if (key === 'cashMovement') {
       const last = overview.cashMonths[overview.cashMonths.length - 1]
@@ -146,12 +156,13 @@ export async function resolveBoard(ctx: OrgContext, id: string): Promise<{
     return null
   }
 
-  const tiles: ResolvedTile[] = board.tiles.map((tile) => {
+  const tiles: ResolvedTile[] = []
+  for (const tile of board.tiles) {
     const kind = tile.kind as DashboardTileKind
     let value: string | null = null
     let href: string | undefined
     if (kind === 'KPI') value = kpiValue(tile.refKey)
-    else if (kind === 'SPARK') value = sparkValue(tile.refKey)
+    else if (kind === 'SPARK') value = await sparkValue(tile.refKey)
     else {
       value = 'Open'
       href = reportHref(tile.refKey)
@@ -160,15 +171,15 @@ export async function resolveBoard(ctx: OrgContext, id: string): Promise<{
       value,
       tile.threshold != null ? tile.threshold.toString() : null,
     )
-    return {
+    tiles.push({
       kind,
       refKey: tile.refKey,
       title: tileTitle(kind, tile.refKey, tile.title),
       value,
       href,
       thresholdBreached: breached,
-    }
-  })
+    })
+  }
 
   const banners = tiles
     .filter((tile) => tile.thresholdBreached)

@@ -223,6 +223,7 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       enableDocumentApprovals: input.enableDocumentApprovals,
       creditLimitWarn: input.creditLimitWarn,
       payrollStandard: input.payrollStandard,
+      closeHardGates: previous.closeHardGates,
       grantedModules: previous.grantedModules,
       modules: modulesClampedToGrants(modulesFromFeaturesInput(input), previous.grantedModules),
       documentKinds: documentKindsFromFeaturesInput(input),

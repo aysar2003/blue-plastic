@@ -289,8 +289,13 @@ export async function runPack(
         subject: `${pack.name} · ${from} to ${to}`,
         text: `Your report pack "${pack.name}" is ready.\n\nDownload from Reports → Packs in Som ERP, or see run ${run.id}.\n\n${body.slice(0, 4000)}`,
       })
-    } catch {
-      // Pack still saved; SMTP may be unset.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Email delivery failed'
+      await db.reportPackRun.update({
+        where: { id: run.id },
+        data: { status: 'FAILED', message: `Pack built; email failed: ${message}` },
+      })
+      return { id: run.id, packId: pack.id, from, to, emailFailed: true as const }
     }
   }
 

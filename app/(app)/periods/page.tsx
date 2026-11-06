@@ -3,6 +3,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { CloseChecklistCard } from '@/components/periods/close-checklist'
+import { ClosingAccountsBoard } from '@/components/periods/closing-accounts-board'
+import { ClosingGuide } from '@/components/periods/closing-guide'
 import { PageHeader } from '@/components/data/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -19,7 +21,9 @@ import { MonthPanel, monthLabel } from './month-panel'
 import { OwnersEquityTools } from './owners-equity-tools'
 import { ClosedPeriodsBoard } from './closed-periods-board'
 import { OpenMonthButton, PeriodToggle } from './period-actions'
+import { YearArchiveCard } from './year-archive-card'
 import { CloseYearButton, ReopenYearButton } from './year-end-actions'
+import * as yearArchiveService from '@/server/services/year-archive.service'
 
 export const metadata: Metadata = { title: 'Accounting periods' }
 
@@ -37,9 +41,11 @@ export default async function PeriodsPage({
   // Periods are created on demand by posting; this makes sure the page has
   // something to show before anything has been posted.
   await periodService.ensureCurrentFiscalYear(ctx)
-  const [years, closures] = await Promise.all([
+  const [years, closures, closingBoards, archiveStatus] = await Promise.all([
     periodService.listFiscalYears(ctx),
     periodService.listClosures(ctx),
+    closeService.listClosingAccountsBoards(ctx),
+    yearArchiveService.listArchiveStatus(ctx),
   ])
 
   const canClose = ctx.permissions.has('period:close')
@@ -71,29 +77,17 @@ export default async function PeriodsPage({
         description="Close a month to stop posting into it. Close the fiscal year to zero Profit & Loss and move net income into Retained Earnings — then distribute to owners from the card below."
       />
 
+      <ClosingGuide />
+
       <Card className="mb-6 p-4">
-        <p className="text-sm font-medium">How closing works</p>
-        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>
-            <span className="font-medium text-foreground">Month close</span> — locks that month so
-            nothing else posts into it. Does not clear Profit &amp; Loss.
-          </li>
-          <li>
-            <span className="font-medium text-foreground">Fiscal year close</span> — zeros every
-            income and expense account and puts the full net income into Retained Earnings, then
-            locks the year.
-          </li>
-          <li>
-            <span className="font-medium text-foreground">Unlock / reopen</span> — only an{' '}
-            <span className="font-medium text-foreground">Owner or Admin</span> can reopen a closed
-            or year-locked period. Accountants can close, but cannot unlock.
-          </li>
-          <li>
-            <span className="font-medium text-foreground">Owners distribution</span> — export the
-            owners list, fill amounts in Excel, import once to move Retained Earnings into each
-            Owner&apos;s equity account.
-          </li>
-        </ol>
+        <p className="text-sm font-medium">Accounts in the year-end close</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Every income and expense line the closing entry zeros, plus Retained Earnings. Filter by
+          year, kind, or search — preview before you close, or audit after the year is locked.
+        </p>
+        <div className="mt-3">
+          <ClosingAccountsBoard boards={closingBoards} />
+        </div>
       </Card>
 
       <Card className="mb-6 p-4">
@@ -106,6 +100,22 @@ export default async function PeriodsPage({
         <div className="mt-3">
           <ClosedPeriodsBoard rows={closures} />
         </div>
+      </Card>
+
+      <Card className="mb-6 p-4">
+        <YearArchiveCard
+          liveFromYear={archiveStatus.liveFromYear}
+          currentFiscalYear={archiveStatus.currentFiscalYear}
+          liveWindowYears={archiveStatus.liveWindowYears}
+          nextToArchive={archiveStatus.nextToArchive}
+          archived={archiveStatus.archived.map((row) => ({
+            id: row.id,
+            year: row.year,
+            archivedAt: row.archivedAt.toISOString(),
+            canRestore: row.canRestore,
+          }))}
+          canManage={canClose && ctx.permissions.has('org:update')}
+        />
       </Card>
 
       {ownersSnap ? (
@@ -182,9 +192,12 @@ export default async function PeriodsPage({
                   {formatDate(toCalendarDate(year.startDate))} — {formatDate(toCalendarDate(year.endDate))}
                 </span>
               </h2>
-              <Badge variant={year.status === 'OPEN' ? 'success' : 'secondary'}>
-                {year.status === 'OPEN' ? 'Year open' : PERIOD_STATUS_LABELS[year.status]}
-              </Badge>
+              <div className="flex flex-wrap gap-2">
+                {year.archivedAt ? <Badge variant="secondary">Archived</Badge> : null}
+                <Badge variant={year.status === 'OPEN' ? 'success' : 'secondary'}>
+                  {year.status === 'OPEN' ? 'Year open' : PERIOD_STATUS_LABELS[year.status]}
+                </Badge>
+              </div>
             </div>
 
             <Table>

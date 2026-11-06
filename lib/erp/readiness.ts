@@ -120,7 +120,7 @@ export const ERP_LAYERS: readonly ErpLayer[] = [
     title: 'Inventory / WMS',
     status: 'complete',
     nextPhase: null,
-    note: 'Lot/serial (Phase 24); picks post stock (Phase 29). Not robotics.',
+    note: 'Lot/serial, picks post stock, bin qty / putaway / waves (Phase 31). Not robotics.',
   },
   {
     id: 'L5',
@@ -148,7 +148,7 @@ export const ERP_LAYERS: readonly ErpLayer[] = [
     title: 'Reporting / close',
     status: 'complete',
     nextPhase: null,
-    note: 'Statements + packs (Phase 26) + SME dashboards (Phase 30). Not a warehouse.',
+    note: 'Statements, packs, dashboards, snapshots (32), close pack/gates (33). Not a warehouse.',
   },
   {
     id: 'L9',

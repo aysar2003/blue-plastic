@@ -179,6 +179,11 @@ export type OrgFeatureFlags = {
    */
   payrollStandard: boolean
   /**
+   * Phase 33: elevate selected close checklist warnings (bank recon, MATCH_HOLD,
+   * open pick waves) to blocked so month close refuses until fixed.
+   */
+  closeHardGates: boolean
+  /**
    * Apps the ERP system owner granted this company (create / Limits / approve).
    * The company may turn granted apps off for its own screens, but cannot turn
    * on an app that was never granted — that needs a request the owner accepts.
@@ -346,6 +351,7 @@ export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   enableDocumentApprovals: false,
   creditLimitWarn: false,
   payrollStandard: true,
+  closeHardGates: false,
   /** Opt-in apps are granted so Apps & features can turn them on. */
   grantedModules: allModules(true),
   modules: defaultModules(),
@@ -484,6 +490,7 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
   }
   if (typeof data.creditLimitWarn === 'boolean') base.creditLimitWarn = data.creditLimitWarn
   if (typeof data.payrollStandard === 'boolean') base.payrollStandard = data.payrollStandard
+  if (typeof data.closeHardGates === 'boolean') base.closeHardGates = data.closeHardGates
 
   // Legacy single switch → both contact sides until the new keys are saved.
   if (typeof data.allowContactDelete === 'boolean') {

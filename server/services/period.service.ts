@@ -27,6 +27,7 @@ export type FiscalYearRow = {
   startDate: Date
   endDate: Date
   status: PeriodStatus
+  archivedAt: Date | null
   periods: PeriodRow[]
 }
 
@@ -40,6 +41,7 @@ export async function listFiscalYears(ctx: OrgContext): Promise<FiscalYearRow[]>
       startDate: true,
       endDate: true,
       status: true,
+      archivedAt: true,
       periods: {
         orderBy: { periodNumber: 'asc' },
         select: {

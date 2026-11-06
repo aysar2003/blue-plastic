@@ -643,9 +643,10 @@ model Organization {
   auditLogs      AuditLog[]
   sequences      DocumentSequence[]
   ledgerAccounts LedgerAccount[]
-  fiscalYears    FiscalYear[]
-  periods        AccountingPeriod[]
-  journals       Journal[]
+  fiscalYears      FiscalYear[]
+  yearArchiveBlobs YearArchiveBlob[]
+  periods          AccountingPeriod[]
+  journals         Journal[]
   customers      Customer[]
   customerPortalUsers CustomerPortalUser[]
   vendors        Vendor[]
@@ -743,6 +744,9 @@ model Organization {
   kitchenTickets       KitchenTicket[]
   stockBins            StockBin[]
   pickTasks            PickTask[]
+  binMovements         BinMovement[]
+  putawayTasks         PutawayTask[]
+  pickWaves            PickWave[]
   trainingCourses      TrainingCourse[]
   trainingEnrollments  TrainingEnrollment[]
   apiKeys              ApiKey[]
@@ -750,6 +754,7 @@ model Organization {
   reportPackRuns       ReportPackRun[]
   workOrders           WorkOrder[]
   dashboards           Dashboard[]
+  metricSnapshots      MetricSnapshot[]
 
   @@index([parentOrgId])
   @@map("organizations")
@@ -1403,15 +1408,45 @@ model FiscalYear {
   closedAt         DateTime? @db.Timestamptz(6)
   closingJournalId String?   @unique
 
+  /// When set, transactional detail for this year lives in object storage and was
+  /// removed from the hot ledger. Restore reloads the package. Live window keeps
+  /// the newest 5 fiscal years; older locked years may be archived one at a time.
+  archivedAt         DateTime? @db.Timestamptz(6)
+  archiveChecksum    String?
+  /// Cold package id in `year_archive_blobs` (not joined by day-to-day posting).
+  archiveBlobId      String?   @unique
+  /// Journal that replaces archived year BS movements so the live ledger still
+  /// balances after purge. Cleared on restore.
+  archiveBridgeJournalId String? @unique
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   periods      AccountingPeriod[]
+  archiveBlob  YearArchiveBlob?   @relation(fields: [archiveBlobId], references: [id], onDelete: SetNull)
 
   @@unique([orgId, year])
   @@index([orgId, startDate])
+  @@index([orgId, archivedAt])
   @@map("fiscal_years")
+}
+
+/// Gzip JSON package for one archived fiscal year. Kept out of the hot journal path.
+model YearArchiveBlob {
+  id        String   @id @default(cuid())
+  orgId     String
+  year      Int
+  checksum  String
+  /// gzip(JSON year package)
+  payload   Bytes
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  fiscalYear   FiscalYear?
+
+  @@index([orgId, year])
+  @@map("year_archive_blobs")
 }
 
 /// Twelve monthly periods per fiscal year, plus period 0 — a zero-length period
@@ -2000,6 +2035,8 @@ model Item {
   bomParents       ItemComponent[] @relation("ItemBomParent")
   bomChildren      ItemComponent[] @relation("ItemBomChild")
   pickTasks        PickTask[]
+  binMovements     BinMovement[]
+  putawayTasks     PutawayTask[]
 
   @@unique([orgId, name])
   @@unique([orgId, sku])
@@ -2073,6 +2110,7 @@ model Store {
   posRegisters  PosRegister[]
   bins          StockBin[]
   pickTasks     PickTask[]
+  putawayTasks  PutawayTask[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
@@ -5530,10 +5568,99 @@ model StockBin {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
   picks        PickTask[]
+  movements    BinMovement[]
+  putaways     PutawayTask[]
 
   @@unique([storeId, code])
   @@index([orgId, storeId])
   @@map("stock_bins")
+}
+
+/// Phase 31: perpetual quantity by bin. Valuation stays on the item stock ledger.
+model BinMovement {
+  id      String @id @default(cuid())
+  orgId   String
+  binId   String
+  itemId  String
+
+  /// Signed: positive putaway / inbound, negative pick / outbound.
+  quantity Decimal @db.Decimal(19, 4)
+  /// Running on-hand for this bin+item after the movement.
+  runningQuantity Decimal @db.Decimal(19, 4)
+
+  sourceType String
+  sourceId   String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  bin          StockBin     @relation(fields: [binId], references: [id], onDelete: Cascade)
+  item         Item         @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([orgId, binId, itemId, createdAt])
+  @@index([orgId, sourceType, sourceId])
+  @@map("bin_movements")
+}
+
+enum PutawayTaskStatus {
+  OPEN
+  DONE
+  CANCELLED
+}
+
+/// Phase 31: place received stock into a bin (location only; item ledger already has qty).
+model PutawayTask {
+  id      String @id @default(cuid())
+  orgId   String
+  storeId String
+  binId   String?
+  itemId  String
+
+  qty    Decimal           @db.Decimal(19, 4)
+  status PutawayTaskStatus @default(OPEN)
+  notes  String?
+
+  sourceType String?
+  sourceId   String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  bin          StockBin?    @relation(fields: [binId], references: [id], onDelete: SetNull)
+  item         Item         @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([orgId, status, createdAt])
+  @@index([orgId, storeId])
+  @@map("putaway_tasks")
+}
+
+enum PickWaveStatus {
+  OPEN
+  RELEASED
+  DONE
+  CANCELLED
+}
+
+/// Phase 31: group of pick tasks released together.
+model PickWave {
+  id    String @id @default(cuid())
+  orgId String
+
+  number String
+  status PickWaveStatus @default(OPEN)
+  notes  String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  picks        PickTask[]
+
+  @@unique([orgId, number])
+  @@index([orgId, status, createdAt])
+  @@map("pick_waves")
 }
 
 enum PickTaskStatus {
@@ -5549,6 +5676,7 @@ model PickTask {
   storeId String
   binId   String?
   itemId  String
+  waveId  String?
 
   qty    Decimal         @db.Decimal(19, 4)
   status PickTaskStatus  @default(OPEN)
@@ -5569,10 +5697,12 @@ model PickTask {
   store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
   bin          StockBin?    @relation(fields: [binId], references: [id], onDelete: SetNull)
   item         Item         @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  wave         PickWave?    @relation(fields: [waveId], references: [id], onDelete: SetNull)
 
   @@index([orgId, status, createdAt])
   @@index([orgId, storeId])
   @@index([orgId, sourceType, sourceId])
+  @@index([orgId, waveId])
   @@map("pick_tasks")
 }
 
@@ -5622,6 +5752,25 @@ model DashboardTile {
 
   @@index([orgId, dashboardId, sortOrder])
   @@map("dashboard_tiles")
+}
+
+/// Phase 32: daily KPI/metric snapshots from business-overview (not a second ledger).
+model MetricSnapshot {
+  id    String @id @default(cuid())
+  orgId String
+
+  /// Calendar day the snapshot represents.
+  date    DateTime @db.Date
+  metricKey String
+  value   Decimal  @db.Decimal(19, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, date, metricKey])
+  @@index([orgId, metricKey, date])
+  @@map("metric_snapshots")
 }
 
 model TrainingCourse {

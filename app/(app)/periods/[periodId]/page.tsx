@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
+import { buttonVariants } from '@/components/ui/button'
 import { formatDate, toCalendarDate } from '@/lib/date'
 import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
@@ -27,11 +29,23 @@ export default async function PeriodMonthPage({
   const from = toCalendarDate(period.startDate)
   const to = toCalendarDate(period.endDate)
 
+  const canExport = ctx.permissions.has('report:export')
+
   return (
     <>
       <PageHeader
         title={label}
         description={`${formatDate(from)} — ${formatDate(to)}. The entries posted in this month, and the reports for the same dates.`}
+        actions={
+          canExport ? (
+            <Link
+              href={`/api/periods/${period.id}/close-pack`}
+              className={buttonVariants({ size: 'sm', variant: 'secondary' })}
+            >
+              Download close pack
+            </Link>
+          ) : null
+        }
       />
       <MonthPanel
         periodId={period.id}

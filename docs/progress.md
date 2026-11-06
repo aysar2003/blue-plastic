@@ -32,10 +32,13 @@
 | 28 — Manufacturing WOs      | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-28-work-orders.md) · SME work orders → assembly posting |
 | 29 — WMS picks post stock   | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-29-wms-picks.md) · pick completion issues inventory |
 | 30 — SME BI dashboards      | ✅ Complete            | 2026-11-05 · [detail](./phases/phase-30-dashboards.md) · KPI/report tiles · migration `20261105230000_phase28_30_work_orders_wms_dashboards` |
+| 31 — WMS enterprise         | ✅ Complete            | 2026-11-06 · [detail](./phases/phase-31-wms-enterprise.md) · bin qty + putaway + waves |
+| 32 — BI enterprise          | ✅ Complete            | 2026-11-06 · [detail](./phases/phase-32-bi-enterprise.md) · metric snapshots + pack email harden |
+| 33 — Close enterprise UX    | ✅ Complete            | 2026-11-06 · [detail](./phases/phase-33-close-enterprise.md) · close pack + hard gates · migration `20261106200000_phase31_33_wms_bi_close` |
 
 Phases advance only on explicit instruction from the owner.
 
-**SME ERP operating loops (phases 1–21) and layer waves 22–30 are complete.** Remaining non-goals: hardware, trademarks, untrusted plugins.
+**SME loops 1–21, layer waves 22–30, and enterprise WMS/BI/close 31–33 are complete.** Remaining non-goals: hardware, trademarks, untrusted plugins.
 
 ## Open items carried forward
 
