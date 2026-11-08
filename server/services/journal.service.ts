@@ -235,25 +235,70 @@ export async function registerLines(ctx: OrgContext) {
 /**
  * The manual journal before and after this one, in date then number order.
  * A blank new form sits after the last manual entry.
+ *
+ * Two keyed lookups — never the whole manual register. Large QB migrations
+ * otherwise time out the detail page while building Back / Forward.
  */
 export async function neighbors(ctx: OrgContext, currentId: string | null) {
-  const rows = await db.journal.findMany({
-    where: {
-      orgId: ctx.orgId,
-      sourceType: 'MANUAL',
-      status: { not: 'DELETED' },
-    },
-    select: { id: true, journalNumber: true },
-    orderBy: [{ date: 'asc' }, { journalNumber: 'asc' }],
-  })
-  const index = currentId == null ? rows.length : rows.findIndex((row) => row.id === currentId)
-  const place = index < 0 ? rows.length : index
-  return {
-    previous: place > 0 ? { id: rows[place - 1]!.id, number: rows[place - 1]!.journalNumber } : null,
-    next: place < rows.length - 1
-      ? { id: rows[place + 1]!.id, number: rows[place + 1]!.journalNumber }
-      : null,
+  const base = {
+    orgId: ctx.orgId,
+    sourceType: 'MANUAL' as const,
+    status: { not: 'DELETED' as const },
   }
+  const pick = { id: true, journalNumber: true } as const
+
+  const asNeighbor = (row: { id: string; journalNumber: string } | null) =>
+    row ? { id: row.id, number: row.journalNumber } : null
+
+  if (currentId == null) {
+    const previous = await db.journal.findFirst({
+      where: base,
+      select: pick,
+      orderBy: [{ date: 'desc' }, { journalNumber: 'desc' }],
+    })
+    return { previous: asNeighbor(previous), next: null }
+  }
+
+  const current = await db.journal.findFirst({
+    where: { ...base, id: currentId },
+    select: { id: true, journalNumber: true, date: true },
+  })
+  if (!current) {
+    const previous = await db.journal.findFirst({
+      where: base,
+      select: pick,
+      orderBy: [{ date: 'desc' }, { journalNumber: 'desc' }],
+    })
+    return { previous: asNeighbor(previous), next: null }
+  }
+
+  const before = {
+    OR: [
+      { date: { lt: current.date } },
+      { date: current.date, journalNumber: { lt: current.journalNumber } },
+    ],
+  }
+  const after = {
+    OR: [
+      { date: { gt: current.date } },
+      { date: current.date, journalNumber: { gt: current.journalNumber } },
+    ],
+  }
+
+  const [previous, next] = await Promise.all([
+    db.journal.findFirst({
+      where: { ...base, ...before },
+      select: pick,
+      orderBy: [{ date: 'desc' }, { journalNumber: 'desc' }],
+    }),
+    db.journal.findFirst({
+      where: { ...base, ...after },
+      select: pick,
+      orderBy: [{ date: 'asc' }, { journalNumber: 'asc' }],
+    }),
+  ])
+
+  return { previous: asNeighbor(previous), next: asNeighbor(next) }
 }
 
 /**
