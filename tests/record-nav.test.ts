@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { neighborHrefs } from '@/components/forms/record-nav'
+import { neighborHrefs } from '@/lib/record-nav'
 
 /** Mirrors sales/purchase/journal neighbors placement: new form sits after the last. */
 function placeNeighbors(
