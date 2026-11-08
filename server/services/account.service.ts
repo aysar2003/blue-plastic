@@ -5,7 +5,7 @@ import { isDebitNormalType } from '@/lib/accounting-labels'
 import type { AccountChoice } from '@/lib/account-options'
 import { Decimal, ZERO, toMoneyString } from '@/lib/money'
 import { today } from '@/lib/date'
-import { linkColonParents } from '@/lib/chart-tree'
+import { linkColonParents, planColonHierarchyRepairs } from '@/lib/chart-tree'
 import { rollupParentBalances } from '@/lib/pos-till-ledger'
 import type { AccountCreateInput, AccountUpdateInput } from '@/lib/validation/accounting'
 import { balancesAsOf } from '@/server/accounting/balances'
@@ -68,9 +68,9 @@ export async function list(
   })
 
   const balances = await balancesAsOf(ctx.orgId, today(ctx.organization.timeZone))
-  // Imported QBO charts often use "Parent:Child" names without parentId — link
-  // them for nesting on the chart (display only; the row is not written back).
-  const linked = linkColonParents(accounts)
+  // Imported QBO charts often use "Parent:Child" names without parentId. Persist
+  // those links (and short child names) once so the tree stays clear forever.
+  const linked = await persistColonHierarchy(ctx.orgId, accounts)
   const childCount = new Map<string, number>()
   for (const account of linked) {
     if (account.parentId) childCount.set(account.parentId, (childCount.get(account.parentId) ?? 0) + 1)
@@ -327,6 +327,46 @@ export async function setActive(ctx: OrgContext, id: string, isActive: boolean) 
   })
 }
 
+/**
+ * Write durable parentId (+ short child name) for QBO-style `Parent:Child`
+ * rows that still only nest in memory. Idempotent — no-op when already linked.
+ */
+async function persistColonHierarchy<
+  T extends {
+    id: string
+    name: string
+    type: AccountType
+    parentId: string | null
+  },
+>(orgId: string, accounts: T[]): Promise<T[]> {
+  const repairs = planColonHierarchyRepairs(accounts)
+  if (repairs.length === 0) return linkColonParents(accounts)
+
+  await db.$transaction(
+    repairs.map((repair) =>
+      db.ledgerAccount.update({
+        where: { id: repair.id },
+        data: {
+          parentId: repair.parentId,
+          ...(repair.name ? { name: repair.name } : {}),
+        },
+      }),
+    ),
+  )
+
+  const byId = new Map(accounts.map((account) => [account.id, account]))
+  for (const repair of repairs) {
+    const row = byId.get(repair.id)
+    if (!row) continue
+    byId.set(repair.id, {
+      ...row,
+      parentId: repair.parentId,
+      ...(repair.name ? { name: repair.name } : {}),
+    })
+  }
+  return [...byId.values()]
+}
+
 /** Accounts that can actually receive a posting: active, and not a grouping heading. */
 export async function postableAccounts(ctx: OrgContext) {
   const accounts = await db.ledgerAccount.findMany({
@@ -337,8 +377,17 @@ export async function postableAccounts(ctx: OrgContext) {
     orderBy: [{ code: 'asc' }],
   })
 
-  const parents = new Set(accounts.map((a) => a.parentId).filter(Boolean) as string[])
-  return accounts.filter((account) => !parents.has(account.id))
+  // Persist any leftover QBO `Parent:Child` names so every type nests the same way.
+  const linked = await persistColonHierarchy(ctx.orgId, accounts)
+  const byId = new Map(linked.map((account) => [account.id, account]))
+  const parents = new Set(linked.map((a) => a.parentId).filter(Boolean) as string[])
+
+  return linked
+    .filter((account) => !parents.has(account.id))
+    .map((account) => ({
+      ...account,
+      parentName: account.parentId ? (byId.get(account.parentId)?.name ?? null) : null,
+    }))
 }
 
 async function assertParentIsUsable(
@@ -412,6 +461,8 @@ export async function selectableAccounts(
     type: account.type,
     subtype: account.subtype,
     systemKey: account.systemKey,
+    parentId: account.parentId,
+    parentName: account.parentName,
     balance: balances ? toMoneyString(balances.get(account.id)?.natural ?? 0, 2) : null,
   }))
 }

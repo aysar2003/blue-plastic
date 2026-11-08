@@ -27,6 +27,9 @@ export type AccountChoice = {
   systemKey?: SystemAccountKey | null
   /** Natural-side balance as at today, pre-formatted. Optional. */
   balance?: string | null
+  /** When set, this row is a Sub under that Main account. */
+  parentId?: string | null
+  parentName?: string | null
 }
 
 /**
@@ -119,22 +122,32 @@ export function accountOptions(
       a.code.localeCompare(b.code),
   )
 
-  const toOption = (account: AccountChoice, group: string): AccountPickerOption => ({
-    id: account.id,
-    label: `${account.code} — ${account.name}`,
-    // The hint is searched as well as shown, so typing "bank" finds the bank
-    // accounts even when none of them has "bank" in its name. The kind is
-    // always there: "3200" and "Owner drawings" mean nothing without it.
-    hint:
-      config.showBalance && account.balance != null
-        ? `${ACCOUNT_SUBTYPE_LABELS[account.subtype]} · ${account.balance}`
-        : ACCOUNT_SUBTYPE_LABELS[account.subtype],
-    group,
-    type: account.type,
-    subtype: account.subtype,
-    requiresParty: partyRequiredBy(account.subtype),
-    balance: account.subtype === 'BANK' ? (account.balance ?? null) : null,
-  })
+  const toOption = (account: AccountChoice, group: string): AccountPickerOption => {
+    const hierarchy = account.parentName
+      ? `${account.parentName} › ${account.name}`
+      : account.name
+    const kind = ACCOUNT_SUBTYPE_LABELS[account.subtype]
+    const role = account.parentName ? 'Sub' : null
+    const hintParts = [
+      role,
+      kind,
+      config.showBalance && account.balance != null ? account.balance : null,
+    ].filter(Boolean)
+
+    return {
+      id: account.id,
+      label: `${account.code} — ${hierarchy}`,
+      // The hint is searched as well as shown, so typing "bank" finds the bank
+      // accounts even when none of them has "bank" in its name. The kind is
+      // always there: "3200" and "Owner drawings" mean nothing without it.
+      hint: hintParts.join(' · '),
+      group,
+      type: account.type,
+      subtype: account.subtype,
+      requiresParty: partyRequiredBy(account.subtype),
+      balance: account.subtype === 'BANK' ? (account.balance ?? null) : null,
+    }
+  }
 
   return [
     ...suggested.map((account) => toOption(account, SUGGESTED_GROUP)),
@@ -148,6 +161,12 @@ export const balanceOf = (option: { hint?: string }): string | null => {
   return parts && parts.length > 1 ? parts[parts.length - 1] : null
 }
 
-/** `code — name`, the label used wherever an account is named outside a picker. */
-export const accountLabel = (account: { code: string; name: string }) =>
-  `${account.code} — ${account.name}`
+/** `code — name`, or `code — Main › Sub` when a parent is known. */
+export const accountLabel = (account: {
+  code: string
+  name: string
+  parentName?: string | null
+}) =>
+  account.parentName
+    ? `${account.code} — ${account.parentName} › ${account.name}`
+    : `${account.code} — ${account.name}`

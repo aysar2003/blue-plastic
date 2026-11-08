@@ -188,8 +188,8 @@ function AccountDialog({
 
           <Field
             name="parentId"
-            label="Sub-account of"
-            hint="Optional. A parent becomes a grouping heading and stops accepting postings of its own."
+            label="Sub-account of (main account)"
+            hint="Optional. Choose a Main account to nest this one under it — like QuickBooks. The Main account becomes a heading (balance = sum of its Subs) and no longer accepts postings."
             error={e?.parentId}
           >
             <NativeSelect

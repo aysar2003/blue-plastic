@@ -164,9 +164,11 @@ function SiteHeader({
           <a className="transition-colors hover:text-foreground" href="#contact">
             Contact
           </a>
-          <a className="transition-colors hover:text-foreground" href="#sign-in">
-            Sign in
-          </a>
+          {!signedIn ? (
+            <Link className="transition-colors hover:text-foreground" href={LOGIN_HUB}>
+              Sign in
+            </Link>
+          ) : null}
         </nav>
 
         <div className="flex items-center gap-2">

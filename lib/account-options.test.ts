@@ -57,6 +57,25 @@ describe('account options', () => {
     expect(first.label).toBe('1000 — Business current account')
   })
 
+  it('shows Main › Sub in the picker when a parent is known', () => {
+    const options = accountOptions(
+      [
+        {
+          id: 'branch',
+          code: '1046',
+          name: 'AL-FURAAT 3 EQ',
+          type: 'ASSET',
+          subtype: 'BANK',
+          parentId: 'main',
+          parentName: 'BRANCHIYADA',
+        },
+      ],
+      {},
+    )
+    expect(options[0].label).toBe('1046 — BRANCHIYADA › AL-FURAAT 3 EQ')
+    expect(options[0].hint).toBe('Sub · Bank')
+  })
+
   it('reads no balance out of a hint that carries only the kind', () => {
     expect(balanceOf({ hint: 'Bank' })).toBeNull()
     expect(balanceOf({})).toBeNull()

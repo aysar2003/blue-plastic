@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowLeftRightIcon, BanknoteIcon, UploadIcon } from 'lucide-react'
 
+import { ChartRoleMark, ChartSubElbow } from '@/components/accounts/chart-hierarchy'
 import { AccountTypeIcon, AccountTypeMark } from '@/components/accounts/account-type-icon'
 import { BooksTabs } from '@/components/accounts/books-tabs'
 import { ClickableRow } from '@/components/data/clickable-row'
@@ -15,7 +16,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DeleteButton } from '@/components/data/delete-record'
 import { ACCOUNT_SUBTYPE_LABELS, ACCOUNT_TYPE_LABELS } from '@/lib/accounting-labels'
-import { chartSubIndentStyle, nestChartRows } from '@/lib/chart-tree'
+import { chartSubIndentStyle, childDisplayName, nestChartRows } from '@/lib/chart-tree'
 import { formatDate, formatTransactionDate, toCalendarDate, today } from '@/lib/date'
 import { Decimal, formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
@@ -202,12 +203,17 @@ export default async function BankingPage({
                   )
                 }
 
+                const parentName = account.parentId
+                  ? accounts.find((row) => row.id === account.parentId)?.name
+                  : null
+                const label = childDisplayName(account.name, parentName)
+
                 nodes.push(
                   <AccountTableRow
                     key={account.id}
                     className={cn(
                       index % 2 === 1 ? 'ledger-row-alt' : 'ledger-row',
-                      account.hasChildren && 'font-medium',
+                      account.hasChildren && 'bg-muted/40 font-medium',
                     )}
                     account={{
                       id: account.id,
@@ -237,37 +243,27 @@ export default async function BankingPage({
                       <span
                         className={cn(
                           'inline-flex items-center gap-2 whitespace-nowrap',
-                          depth > 0 && 'border-l-2 border-sky-400/60 pl-3',
-                          account.hasChildren ? 'font-semibold' : 'font-medium',
+                          depth > 0 && 'relative border-l-2 border-primary/35 pl-3',
+                          account.hasChildren ? 'font-semibold text-foreground' : 'font-medium text-foreground',
                         )}
                         style={chartSubIndentStyle(depth)}
                       >
-                        {depth > 0 ? (
-                          <span className="shrink-0 text-muted-foreground" aria-hidden>
-                            └
-                          </span>
-                        ) : null}
+                        {depth > 0 ? <ChartSubElbow /> : null}
                         <span className="whitespace-nowrap">
                           <span className="tabular text-muted-foreground">{account.code}</span>{' '}
-                          {account.name}
+                          {label}
                         </span>
                         {account.hasChildren ? (
-                          <Badge
-                            variant="outline"
-                            className="shrink-0"
-                            title="A grouping heading; postings go to its sub-accounts."
-                          >
-                            heading
-                          </Badge>
+                          <ChartRoleMark
+                            role="main"
+                            title="Grouping heading; postings go to its sub-accounts."
+                          />
                         ) : null}
                         {depth > 0 ? (
-                          <Badge
-                            variant="outline"
-                            className="shrink-0"
-                            title="Sub-account under a heading above."
-                          >
-                            sub
-                          </Badge>
+                          <ChartRoleMark
+                            role="sub"
+                            title={parentName ? `Sub-account of ${parentName}` : 'Sub-account'}
+                          />
                         ) : null}
                       </span>
                     </TableCell>

@@ -3,7 +3,7 @@ import type { AccountSubtype, AccountType } from '@prisma/client'
 import { ACCOUNT_SUBTYPE_ORDER, ACCOUNT_TYPE_ORDER } from '@/lib/accounting-labels'
 
 /** Indent for each nested level — rem so it scales with the UI, not the page width. */
-export const CHART_SUB_INDENT = '1.25rem'
+export const CHART_SUB_INDENT = '1.5rem'
 
 /** Inline style for the name / code cells of a nested row. */
 export function chartSubIndentStyle(depth: number): { paddingLeft: string } | undefined {
@@ -60,6 +60,59 @@ export function childDisplayName(name: string, parentName: string | null | undef
     return rest || name
   }
   return name
+}
+
+export type HierarchyRepair = {
+  id: string
+  parentId: string
+  /** Short child name after dropping `Parent:` — omitted when unchanged. */
+  name?: string
+}
+
+/**
+ * Turn display-only `Parent:Child` links into durable parentId (+ short name)
+ * updates so the chart stays nested like QuickBooks after refresh/import.
+ */
+export function planColonHierarchyRepairs<
+  T extends { id: string; name: string; type: AccountType; parentId: string | null },
+>(accounts: T[]): HierarchyRepair[] {
+  const linked = linkColonParents(accounts)
+  const byId = new Map(accounts.map((account) => [account.id, account]))
+  const names = new Set(accounts.map((account) => account.name.toLowerCase()))
+  const repairs: HierarchyRepair[] = []
+
+  for (const account of linked) {
+    if (!account.parentId) continue
+    const before = byId.get(account.id)
+    if (!before) continue
+    const parent = byId.get(account.parentId)
+    if (!parent) continue
+
+    const short = childDisplayName(account.name, parent.name)
+    const needsParent = before.parentId !== account.parentId
+    const needsRename = short !== account.name
+    if (!needsParent && !needsRename) continue
+
+    // Keep the long name if the short one would collide with another account.
+    let nextName: string | undefined
+    if (needsRename) {
+      const taken = names.has(short.toLowerCase())
+      if (!taken) {
+        nextName = short
+        names.delete(account.name.toLowerCase())
+        names.add(short.toLowerCase())
+      }
+    }
+
+    if (!needsParent && !nextName) continue
+    repairs.push({
+      id: account.id,
+      parentId: account.parentId,
+      ...(nextName ? { name: nextName } : {}),
+    })
+  }
+
+  return repairs
 }
 
 /**

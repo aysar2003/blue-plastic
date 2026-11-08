@@ -7,6 +7,7 @@ import {
   keepChartFamily,
   linkColonParents,
   nestChartRows,
+  planColonHierarchyRepairs,
 } from '@/lib/chart-tree'
 
 describe('chart tree', () => {
@@ -18,9 +19,9 @@ describe('chart tree', () => {
   ]
 
   it('indents each nested level', () => {
-    expect(CHART_SUB_INDENT).toBe('1.25rem')
-    expect(chartSubIndentStyle(1)).toEqual({ paddingLeft: 'calc(1.25rem * 1)' })
-    expect(chartSubIndentStyle(2)).toEqual({ paddingLeft: 'calc(1.25rem * 2)' })
+    expect(CHART_SUB_INDENT).toBe('1.5rem')
+    expect(chartSubIndentStyle(1)).toEqual({ paddingLeft: 'calc(1.5rem * 1)' })
+    expect(chartSubIndentStyle(2)).toEqual({ paddingLeft: 'calc(1.5rem * 2)' })
     expect(chartSubIndentStyle(0)).toBeUndefined()
   })
 
@@ -102,5 +103,28 @@ describe('chart tree', () => {
       { id: 'child', depth: 1 },
     ])
     expect(childDisplayName('KALA GUUR:ahmed salad bank', 'KALA GUUR')).toBe('ahmed salad bank')
+  })
+
+  it('plans durable parentId + short name repairs for colon orphans', () => {
+    const flat = [
+      { id: 'parent', parentId: null, code: '1033', type: 'ASSET' as const, name: 'KALA GUUR' },
+      {
+        id: 'child',
+        parentId: null,
+        code: '1058',
+        type: 'ASSET' as const,
+        name: 'KALA GUUR:ahmed salad bank',
+      },
+      {
+        id: 'linked',
+        parentId: 'parent',
+        code: '1059',
+        type: 'ASSET' as const,
+        name: 'bank abdiraxiin',
+      },
+    ]
+    expect(planColonHierarchyRepairs(flat)).toEqual([
+      { id: 'child', parentId: 'parent', name: 'ahmed salad bank' },
+    ])
   })
 })

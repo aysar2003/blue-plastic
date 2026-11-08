@@ -184,8 +184,10 @@ export default async function AccountsPage({
         ))}
       </div>
       <p className="mb-3 text-xs text-muted-foreground print:hidden">
-        Click a name to open its register. Right-click for the report, edit, and archive. Type a few
-        letters in the search and the list narrows.
+        <span className="font-medium text-foreground">Main</span> accounts are headings — their
+        balance is the total of the indented <span className="font-medium text-foreground">Sub</span>{' '}
+        accounts underneath (like QuickBooks). Post money to the sub-accounts, not the main.
+        Click a name for its register; right-click to edit or archive.
       </p>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">

@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { AccountType } from '@prisma/client'
 
+import { ChartRoleMark, ChartSubElbow } from '@/components/accounts/chart-hierarchy'
 import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { SortableHeader, type SortState } from '@/components/data/sortable-header'
 import { ClickableRow } from '@/components/reports/clickable-row'
@@ -293,21 +294,36 @@ function SectionRows({
           const lines = group.rows.map((row) => {
             const depth = row.depth ?? 0
             const href = drillTo?.(row.accountId)
-            const label = childDisplayName(
-              row.name,
-              row.parentId ? nameById.get(row.parentId) : null,
-            )
+            const parentName = row.parentId ? nameById.get(row.parentId) : null
+            const isMain =
+              depth === 0 && section.rows.some((other) => other.parentId === row.accountId)
+            const label = childDisplayName(row.name, parentName)
             const accountLabel = (
-              <>
-                <span className="tabular opacity-70">{row.code}</span> {label}
-              </>
+              <span className="inline-flex items-center gap-2">
+                {depth > 0 ? <ChartSubElbow /> : null}
+                <span>
+                  <span className="tabular text-muted-foreground">{row.code}</span> {label}
+                </span>
+                {isMain ? (
+                  <ChartRoleMark
+                    role="main"
+                    title="Main account — total of its sub-accounts"
+                  />
+                ) : null}
+                {depth > 0 ? (
+                  <ChartRoleMark
+                    role="sub"
+                    title={parentName ? `Sub-account of ${parentName}` : 'Sub-account'}
+                  />
+                ) : null}
+              </span>
             )
             return (
             <ClickableRow
               key={row.accountId}
               href={href}
               title={href ? 'Open transactions for this account' : undefined}
-              className={cn(depth === 0 && section.rows.some((other) => other.parentId === row.accountId) && 'font-medium')}
+              className={cn(isMain && 'bg-muted/40 font-medium')}
             >
               <TableCell className="pl-6">
                 <span
@@ -318,7 +334,7 @@ function SectionRows({
                   style={chartSubIndentPadStyle(depth)}
                 >
                   {href ? (
-                    <Link href={href} className={REPORT_DRILL_LINK}>
+                    <Link href={href} className={cn(REPORT_DRILL_LINK, 'text-foreground')}>
                       {accountLabel}
                     </Link>
                   ) : (

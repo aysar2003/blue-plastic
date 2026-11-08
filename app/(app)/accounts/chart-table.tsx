@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { AccountSubtype, AccountType } from '@prisma/client'
 import { Columns3Icon } from 'lucide-react'
 
+import { ChartRoleMark, ChartSubElbow } from '@/components/accounts/chart-hierarchy'
 import { AccountTypeIcon, AccountTypeMark } from '@/components/accounts/account-type-icon'
 import { FontToolbarControls } from '@/components/appearance/font-controls'
 import { Pagination } from '@/components/data/pagination'
@@ -195,7 +196,7 @@ export function ChartTable({
                     className={cn(
                       striped && (index % 2 === 1 ? 'ledger-row-alt' : 'ledger-row'),
                       !account.isActive && 'opacity-55',
-                      account.hasChildren && 'font-medium',
+                      account.hasChildren && 'bg-muted/40 font-medium',
                     )}
                     account={{
                       id: account.id,
@@ -279,43 +280,43 @@ function ChartCell({
         <span
           className={cn(
             'inline-flex items-center gap-2 whitespace-nowrap',
-            depth > 0 && 'relative border-l-2 border-sky-400/60 pl-3',
+            depth > 0 && 'relative border-l-2 border-primary/35 pl-3',
           )}
           style={chartSubIndentStyle(depth)}
         >
-          {depth > 0 ? (
-            <span className="shrink-0 text-muted-foreground" aria-hidden>
-              └
-            </span>
-          ) : null}
+          {depth > 0 ? <ChartSubElbow /> : null}
           <Link
             href={`/accounts/${account.id}`}
             className={cn(
               REPORT_DRILL_LINK,
               'whitespace-nowrap',
-              account.hasChildren ? 'font-semibold' : 'font-medium',
+              account.hasChildren ? 'font-semibold text-foreground' : 'font-medium text-foreground',
             )}
-            title="Open this account"
+            title={
+              account.hasChildren
+                ? 'Main account (heading) — total of its sub-accounts'
+                : depth > 0
+                  ? `Sub-account under ${parentName ?? 'main account'}`
+                  : 'Open this account'
+            }
           >
             {label}
           </Link>
+          {account.hasChildren ? (
+            <ChartRoleMark
+              role="main"
+              title="Grouping heading: post only to its sub-accounts. Balance is the sum of those subs."
+            />
+          ) : null}
+          {depth > 0 ? (
+            <ChartRoleMark
+              role="sub"
+              title={`Belongs under ${parentName ?? 'the main account'}`}
+            />
+          ) : null}
           {account.isSystem ? (
             <Badge variant="secondary" className="shrink-0" title="Posted to by the system. Cannot be deleted.">
               system
-            </Badge>
-          ) : null}
-          {account.hasChildren ? (
-            <Badge
-              variant="outline"
-              className="shrink-0"
-              title="A grouping heading; postings go to its sub-accounts."
-            >
-              heading
-            </Badge>
-          ) : null}
-          {depth > 0 ? (
-            <Badge variant="outline" className="shrink-0" title="Sub-account under a heading above.">
-              sub
             </Badge>
           ) : null}
           {!account.isActive ? (
