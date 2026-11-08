@@ -25,14 +25,14 @@ export default async function PayrollStatutoryPage({
     <>
       <PageHeader
         title="Payroll statutory export"
-        description={`Posted payslips ${from} → ${to} as CSV or JSON for filing.`}
+        description={`Posted payslips ${from} → ${to} as Excel or JSON for filing.`}
         actions={
           <>
             <Link
-              href={`/api/employees/payroll/statutory?from=${from}&to=${to}&format=csv`}
+              href={`/api/employees/payroll/statutory?from=${from}&to=${to}`}
               className={buttonVariants({ size: 'sm' })}
             >
-              Download CSV
+              Download Excel
             </Link>
             <Link
               href={`/api/employees/payroll/statutory?from=${from}&to=${to}&format=json`}

@@ -35,6 +35,11 @@
 | 31 — WMS enterprise         | ✅ Complete            | 2026-11-06 · [detail](./phases/phase-31-wms-enterprise.md) · bin qty + putaway + waves |
 | 32 — BI enterprise          | ✅ Complete            | 2026-11-06 · [detail](./phases/phase-32-bi-enterprise.md) · metric snapshots + pack email harden |
 | 33 — Close enterprise UX    | ✅ Complete            | 2026-11-06 · [detail](./phases/phase-33-close-enterprise.md) · close pack + hard gates · migration `20261106200000_phase31_33_wms_bi_close` |
+| 34 — Industry pack framework | ✅ Framework complete | 2026-11-07 · [detail](./phases/phase-34-industry-packs.md) · 16 packs, installPack, Help Coverage, migration `20261107220000_phase34_industry_packs` |
+| Hospitality ERP (restaurant + hotel) | ✅ Complete | 2026-11-07 · [detail](./phases/phase-hospitality-erp.md) · tables, tips, night audit, kitchen link; rooms/folio→invoice · migration `20261107230000_phase_hospitality` |
+| P2–P5 institution verticals | ✅ Complete | 2026-11-08 · pharmacy, school/university, hospital billing, NGO/services/construction/mfg/distribution |
+| P6 Coverage gate + P7 Wizard | ✅ Complete | 2026-11-08 · [detail](./phases/phase-p6-p7-onboarding.md) · all packs ready · `/onboarding` · Settings Setup · migration `20261108120000_phase_p6_p7_onboarding` |
+| P8–P11 Vertical lite → full | ✅ Complete | 2026-11-08 · [detail](./phases/phase-p8-p11-vertical-full.md) · ASN receive, WIP bill, retention GL, work-center capacity · migration `20261108130000_phase_p8_p11_vertical_full` |
 
 Phases advance only on explicit instruction from the owner.
 

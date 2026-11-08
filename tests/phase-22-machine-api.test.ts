@@ -38,7 +38,7 @@ describe('Phase 22 — ERP layers', () => {
   })
 
   it('keeps operating loops while layers deepen the product', () => {
-    expect(ERP_READY_LOOPS).toHaveLength(9)
+    expect(ERP_READY_LOOPS).toHaveLength(10)
   })
 })
 

@@ -116,6 +116,7 @@ export type ItemOption = {
   unitOfMeasure?: string | null
   trackLots?: boolean
   trackSerials?: boolean
+  pharmacyControlled?: boolean
   /** GROUP members expanded onto the form when the group is chosen. */
   components?: {
     itemId: string
@@ -159,6 +160,7 @@ type Line = {
   storeId: string
   lotNumber: string
   serialNumber: string
+  lotExpiryDate: string
   sourcePurchaseLineId?: string
 }
 
@@ -173,6 +175,7 @@ const empty = (key: number, storeId = ''): Line => ({
   storeId,
   lotNumber: '',
   serialNumber: '',
+  lotExpiryDate: '',
 })
 
 function withMinimumLines(seeded: Line[], minimum: number, storeId: string): Line[] {
@@ -203,6 +206,7 @@ type DocumentSeed = {
   discountAmount?: string | null
   currencyCode?: string | null
   exchangeRate?: string | null
+  prescriptionRef?: string | null
   lines: {
     itemId: string | null
     description: string | null
@@ -213,6 +217,7 @@ type DocumentSeed = {
     storeId?: string | null
     lotNumber?: string | null
     serialNumber?: string | null
+    lotExpiryDate?: string | null
   }[]
 }
 
@@ -368,6 +373,7 @@ export function DocumentForm({
   const [acknowledgeCreditLimit, setAcknowledgeCreditLimit] = useState(false)
   const [reference, setReference] = useState(document?.reference ?? '')
   const [inRef, setInRef] = useState(document?.inRef ?? '')
+  const [prescriptionRef, setPrescriptionRef] = useState(document?.prescriptionRef ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
   const [customerMessage, setCustomerMessage] = useState(document?.customerMessage ?? '')
   const [workScope, setWorkScope] = useState(document?.workScope ?? '')
@@ -400,6 +406,7 @@ export function DocumentForm({
             storeId: line.storeId ?? defaultStoreId,
             lotNumber: line.lotNumber ?? '',
             serialNumber: line.serialNumber ?? '',
+            lotExpiryDate: line.lotExpiryDate ?? '',
           }))
         : [],
       minimumLines,
@@ -427,6 +434,7 @@ export function DocumentForm({
       setDate(document.date)
       setReference(document.reference ?? '')
       setInRef(document.inRef ?? '')
+      setPrescriptionRef(document.prescriptionRef ?? '')
       setMemo(document.memo ?? '')
       setCustomerMessage(document.customerMessage ?? '')
       setWorkScope(document.workScope ?? '')
@@ -451,6 +459,7 @@ export function DocumentForm({
             storeId: line.storeId ?? defaultStoreId,
             lotNumber: line.lotNumber ?? '',
             serialNumber: line.serialNumber ?? '',
+            lotExpiryDate: line.lotExpiryDate ?? '',
           })),
           minimumLines,
           defaultStoreId,
@@ -464,6 +473,7 @@ export function DocumentForm({
     setDate(today)
     setReference('')
     setInRef('')
+    setPrescriptionRef('')
     setMemo('')
     setCustomerMessage('')
     setWorkScope('')
@@ -502,6 +512,7 @@ export function DocumentForm({
         setDate(today)
         setReference('')
         setInRef('')
+        setPrescriptionRef('')
         setMemo('')
         setCustomerMessage('')
         setWorkScope('')
@@ -556,6 +567,9 @@ export function DocumentForm({
           label: item.label,
           group: item.group,
           unitOfMeasure: item.unitOfMeasure ?? null,
+          trackLots: item.trackLots,
+          trackSerials: item.trackSerials,
+          pharmacyControlled: item.pharmacyControlled,
           hint:
             [
               item.barcode,
@@ -775,6 +789,7 @@ export function DocumentForm({
           storeId: defaultStoreId,
           lotNumber: '',
           serialNumber: '',
+          lotExpiryDate: '',
           sourcePurchaseLineId: row.lineId,
         },
       ]
@@ -807,6 +822,7 @@ export function DocumentForm({
       storeId: line.storeId || defaultStoreId,
       lotNumber: line.lotNumber ?? '',
       serialNumber: line.serialNumber ?? '',
+      lotExpiryDate: '',
     }))
     setLines(withMinimumLines(seeded, minimumLines, defaultStoreId))
     nextKey.current = Math.max(seeded.length, minimumLines) + 1
@@ -878,8 +894,10 @@ export function DocumentForm({
         storeId: line.storeId,
         lotNumber: line.lotNumber,
         serialNumber: line.serialNumber,
+        lotExpiryDate: line.lotExpiryDate,
         sourcePurchaseLineId: line.sourcePurchaseLineId || '',
       })),
+      prescriptionRef,
     })
 
   // Payment items can bring amount due to zero (still a real sale — cash already taken).
@@ -938,6 +956,8 @@ export function DocumentForm({
     setReference,
     inRef,
     setInRef,
+    prescriptionRef,
+    setPrescriptionRef,
     memo,
     setMemo,
     customerMessage,
@@ -1319,6 +1339,7 @@ type LayoutProps = {
     unitOfMeasure?: string | null
     trackLots?: boolean
     trackSerials?: boolean
+    pharmacyControlled?: boolean
   }[]
   /** Item ids whose type is Discount — line amount reduces the document. */
   discountItemIds: Set<string>
@@ -1357,6 +1378,8 @@ type LayoutProps = {
   setReference: (value: string) => void
   inRef: string
   setInRef: (value: string) => void
+  prescriptionRef: string
+  setPrescriptionRef: (value: string) => void
   memo: string
   setMemo: (value: string) => void
   customerMessage: string
@@ -1536,6 +1559,20 @@ function HeaderFields({
             />
           </Field>
         ) : null}
+
+        <Field
+          name="prescriptionRef"
+          label="Rx / prescription"
+          error={state.fieldErrors?.prescriptionRef}
+        >
+          <Input
+            {...fieldProps('prescriptionRef', state.fieldErrors?.prescriptionRef)}
+            value={props.prescriptionRef}
+            onChange={(event) => props.setPrescriptionRef(event.target.value)}
+            placeholder="Optional"
+            maxLength={120}
+          />
+        </Field>
       </div>
 
       {(config.type === 'INVOICE' || config.needsDeposit) && (
@@ -1904,6 +1941,19 @@ function InvoiceLayout(props: LayoutProps) {
               />
             </Field>
           ) : null}
+          <Field
+            name="prescriptionRef"
+            label="Rx / prescription"
+            error={state.fieldErrors?.prescriptionRef}
+          >
+            <Input
+              {...fieldProps('prescriptionRef', state.fieldErrors?.prescriptionRef)}
+              value={props.prescriptionRef}
+              onChange={(event) => props.setPrescriptionRef(event.target.value)}
+              placeholder="Optional"
+              maxLength={120}
+            />
+          </Field>
           {props.config.needsDeposit ? (
             <Field
               name="depositAccountId"
@@ -2150,6 +2200,7 @@ function InvoiceLines({ props }: { props: LayoutProps }) {
                     item={props.itemOptions.find((row) => row.id === line.itemId)}
                     lotNumber={line.lotNumber}
                     serialNumber={line.serialNumber}
+                    lotExpiryDate={line.lotExpiryDate}
                     onChange={(next) => props.update(line.key, next)}
                     lineIndex={index + 1}
                   />
@@ -2816,6 +2867,7 @@ function StripedLines({ props }: { props: LayoutProps }) {
                     item={props.itemOptions.find((row) => row.id === line.itemId)}
                     lotNumber={line.lotNumber}
                     serialNumber={line.serialNumber}
+                    lotExpiryDate={line.lotExpiryDate}
                     onChange={(next) => props.update(line.key, next)}
                     lineIndex={index + 1}
                   />
@@ -2853,30 +2905,46 @@ function LotSerialFields({
   item,
   lotNumber,
   serialNumber,
+  lotExpiryDate,
   onChange,
   lineIndex,
 }: {
-  item: { trackLots?: boolean; trackSerials?: boolean } | undefined
+  item: { trackLots?: boolean; trackSerials?: boolean; pharmacyControlled?: boolean } | undefined
   lotNumber: string
   serialNumber: string
-  onChange: (next: { lotNumber?: string; serialNumber?: string }) => void
+  lotExpiryDate: string
+  onChange: (next: {
+    lotNumber?: string
+    serialNumber?: string
+    lotExpiryDate?: string
+  }) => void
   lineIndex: number
 }) {
-  if (!item?.trackLots && !item?.trackSerials) {
+  const needsLot = Boolean(item?.trackLots || item?.pharmacyControlled)
+  if (!needsLot && !item?.trackSerials) {
     return <span className="text-xs text-muted-foreground">—</span>
   }
   return (
     <div className="flex min-w-[7rem] flex-col gap-1">
-      {item.trackLots ? (
-        <Input
-          aria-label={`Lot, line ${lineIndex}`}
-          className="h-8 text-xs"
-          placeholder="Lot"
-          value={lotNumber}
-          onChange={(event) => onChange({ lotNumber: event.target.value })}
-        />
+      {needsLot ? (
+        <>
+          <Input
+            aria-label={`Lot, line ${lineIndex}`}
+            className="h-8 text-xs"
+            placeholder="Lot"
+            value={lotNumber}
+            onChange={(event) => onChange({ lotNumber: event.target.value })}
+          />
+          <Input
+            type="date"
+            aria-label={`Lot expiry, line ${lineIndex}`}
+            className="h-8 text-xs"
+            value={lotExpiryDate}
+            onChange={(event) => onChange({ lotExpiryDate: event.target.value })}
+          />
+        </>
       ) : null}
-      {item.trackSerials ? (
+      {item?.trackSerials ? (
         <Input
           aria-label={`Serial, line ${lineIndex}`}
           className="h-8 text-xs"

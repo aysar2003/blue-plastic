@@ -26,7 +26,7 @@ const ITEM_SELECT = {
   salesDescription: true, salesPrice: true, wholesalePrice: true, incomeAccountId: true, isTaxable: true, salesTaxCodeId: true,
   purchaseDescription: true, purchaseCost: true, expenseAccountId: true, purchaseTaxCodeId: true,
   inventoryAccountId: true, cogsAccountId: true, reorderPoint: true, storeId: true,
-  trackLots: true, trackSerials: true,
+  trackLots: true, trackSerials: true, pharmacyControlled: true,
   isActive: true, availableInPos: true,
   printGroupItems: true, itemPaymentMethod: true, depositAccountId: true,
   category: { select: { id: true, name: true } },
@@ -885,8 +885,11 @@ function toData(input: ItemInput) {
     cogsAccountId: input.cogsAccountId ?? null,
     reorderPoint: input.reorderPoint ?? null,
     storeId: isStockTracked(input.type) ? (input.storeId ?? null) : null,
-    trackLots: isStockTracked(input.type) ? Boolean(input.trackLots) : false,
+    trackLots: isStockTracked(input.type)
+      ? Boolean(input.trackLots) || Boolean(input.pharmacyControlled)
+      : false,
     trackSerials: isStockTracked(input.type) ? Boolean(input.trackSerials) : false,
+    pharmacyControlled: isStockTracked(input.type) ? Boolean(input.pharmacyControlled) : false,
     availableInPos: input.type === 'PAYMENT' || input.type === 'SUBTOTAL' || input.type === 'GROUP'
       ? false
       : input.availableInPos,

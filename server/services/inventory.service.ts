@@ -264,9 +264,10 @@ export async function getAdjustment(ctx: OrgContext, id: string) {
   const adjustment = await db.inventoryAdjustment.findFirst({
     where: { id, orgId: ctx.orgId },
     select: {
-      id: true, number: true, date: true, memo: true, reason: true, status: true,
+      id: true, number: true, date: true, createdAt: true, memo: true, reason: true, status: true,
       account: { select: { id: true, code: true, name: true } },
       journal: { select: { id: true, journalNumber: true } },
+      store: { select: { id: true, name: true } },
       lines: {
         orderBy: { lineNumber: 'asc' },
         select: {
@@ -497,7 +498,7 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
         entityType: 'INVENTORY_ADJUSTMENT',
         entityId: adjustment.id,
         title: `Stock adjustment ${adjustment.number}`,
-        href: '/inventory#adjustments',
+        href: `/inventory/adjustments/${adjustment.id}`,
         amount: totalValue.abs(),
         currencyCode: ctx.organization.baseCurrency,
         levels: gate.levels,

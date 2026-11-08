@@ -17,6 +17,7 @@ import { AppMemoryProvider } from './app-memory'
 import { AccountantNav } from './accountant-nav'
 import { CompanySwitcher, type CompanyOption } from './company-switcher'
 import { HistoryBack } from './history-back'
+import { ListReturnRecorder } from './list-return'
 import { ModuleTabs } from './module-tabs'
 import { NavTrailRecorder } from './nav-trail-recorder'
 import { moduleFor } from './nav-items'
@@ -187,6 +188,7 @@ export function ShellChrome({
     <div className="app-surface relative flex min-h-svh overflow-x-clip">
       <ScrollChain />
       <NavTrailRecorder />
+      <ListReturnRecorder />
       <NavigationProgress />
       {isPos ? null : <AppAtmosphere />}
 

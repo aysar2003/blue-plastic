@@ -313,6 +313,10 @@ enum SystemAccountKey {
   POS_CASH_SHORT
   /// Counted drawer cash above expected at session close.
   POS_CASH_OVER
+  /// Tips collected at POS, owed to staff (not revenue).
+  TIP_LIABILITY
+  /// Construction progress retention held by the customer (asset until released).
+  RETENTION_RECEIVABLE
 }
 
 /// How an item behaves. The distinction drives which accounts it must map to and
@@ -542,6 +546,8 @@ enum JournalSourceType {
   ASSEMBLY_BUILD
   POS_CASH_MOVE
   POS_SESSION_CLOSE
+  /// Tip portion of a POS tender held for staff.
+  POS_TIP
   PAYROLL
   PAYROLL_SETTLEMENT
 }
@@ -593,6 +599,16 @@ model Organization {
   /// Odoo-style Configuration switches: which deletes are offered, which apps are on.
   /// Shape: `lib/feature-flags.ts` (`OrgFeatureFlags`). Null means defaults (all on).
   featureFlags Json?
+
+  /// Industry / institution pack id from `lib/packs` (e.g. retail, hospital_admin).
+  /// Null = no pack installed yet. Vertical deepen may still be planned for some ids.
+  installedPackId String?
+
+  /// When set, the institution onboarding wizard was finished or skipped.
+  onboardingCompletedAt DateTime? @db.Timestamptz(6)
+
+  /// Pack checklist item ids the company marked done. Shape: `string[]`.
+  onboardingChecklistDone Json?
 
   /// How invoices and statements are drawn. Shape: `lib/document-template.ts`.
   /// Null means the merchant paper (teal bill) with the classic sheet hidden.
@@ -742,6 +758,22 @@ model Organization {
   crmActivities        CrmActivity[]
   fxHedges             FxHedge[]
   kitchenTickets       KitchenTicket[]
+  diningTables         DiningTable[]
+  nightAuditRuns       NightAuditRun[]
+  roomTypes            RoomType[]
+  rooms                Room[]
+  stays                Stay[]
+  folios               Folio[]
+  itemLots             ItemLot[]
+  academicPrograms     AcademicProgram[]
+  academicTerms        AcademicTerm[]
+  feePlans             FeePlan[]
+  studentEnrollments   StudentEnrollment[]
+  patientVisits        PatientVisit[]
+  donorPledges         DonorPledge[]
+  routingSteps         RoutingStep[]
+  workCenters          WorkCenter[]
+  asnShipments         AsnShipment[]
   stockBins            StockBin[]
   pickTasks            PickTask[]
   binMovements         BinMovement[]
@@ -810,7 +842,7 @@ model ReportPackRun {
 
   status  String  @default("OK")
   message String?
-  /// Multi-report CSV body (sections separated). Kept for download.
+  /// Multi-report Excel body (XLSX1: base64). Legacy CSV runs still download as CSV.
   body    String  @db.Text
 
   createdById String?
@@ -1548,6 +1580,7 @@ model Journal {
   files LedgerFile[]
   posCashMovements PosCashMovement[]
   posSessionCloses PosSession[] @relation("PosSessionCloseJournal")
+  posOrderTips     PosOrder[]   @relation("PosOrderTipJournal")
   payrollRun            PayrollRun? @relation("PayrollRunAccrual")
   payrollRunSettlement  PayrollRun? @relation("PayrollRunSettlement")
   endOfService          EndOfService?
@@ -1663,6 +1696,9 @@ model TrackingCategory {
   journalLines      JournalLine[]
   salesDocuments    SalesDocument[]
   purchaseDocuments PurchaseDocument[]
+  patientVisits     PatientVisit[]
+  donorPledges      DonorPledge[]
+  budgets           Budget[]
 
   @@unique([orgId, name])
   /// Target for the composite foreign keys that keep a class inside its company.
@@ -1788,6 +1824,10 @@ model Customer {
   appointments Appointment[]
   crmOpportunities CrmOpportunity[]
   crmActivities    CrmActivity[]
+  stays            Stay[]
+  studentEnrollments StudentEnrollment[]
+  patientVisits    PatientVisit[]
+  donorPledges     DonorPledge[]
 
   /// Same trading party on the purchase side (e.g. Mall Group as customer and supplier).
   /// One customer ↔ one vendor. Cleared if the vendor is removed.
@@ -1907,6 +1947,7 @@ model Vendor {
   importedLines         ImportedTransaction[]
   bankRules             BankRule[]
   calendarEvents        CalendarEvent[]
+  asnShipments          AsnShipment[]
   /// Reverse of Customer.linkedVendorId — same party as a customer.
   linkedCustomer        Customer? @relation("CustomerVendorLink")
 
@@ -1984,6 +2025,8 @@ model Item {
   trackLots Boolean @default(false)
   /// Phase 24: each unit needs a unique serial on receive/issue when true.
   trackSerials Boolean @default(false)
+  /// Pharmacy: controlled / Rx stock — requires a lot on sale; refuses expired lots.
+  pharmacyControlled Boolean @default(false)
 
   /// Which store holds this product. The store has its own inventory account.
   storeId String?
@@ -2037,6 +2080,13 @@ model Item {
   pickTasks        PickTask[]
   binMovements     BinMovement[]
   putawayTasks     PutawayTask[]
+  roomTypes        RoomType[]  @relation("RoomTypeRateItem")
+  folioLines       FolioLine[]
+  lots             ItemLot[]
+  feePlanLines     FeePlanLine[]
+  visitCharges     VisitCharge[]
+  routingSteps     RoutingStep[]
+  asnShipmentLines AsnShipmentLine[]
 
   @@unique([orgId, name])
   @@unique([orgId, sku])
@@ -2045,7 +2095,28 @@ model Item {
   @@index([orgId, type])
   @@index([orgId, deletedAt])
   @@index([orgId, storeId])
+  @@index([orgId, pharmacyControlled])
   @@map("items")
+}
+
+/// Pharmacy / batch registry: lot number → expiry (Phase pharmacy).
+model ItemLot {
+  id         String    @id @default(cuid())
+  orgId      String
+  itemId     String
+  lotNumber  String
+  expiryDate DateTime? @db.Date
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  item         Item         @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, itemId, lotNumber])
+  @@index([orgId, expiryDate])
+  @@index([itemId, expiryDate])
+  @@map("item_lots")
 }
 
 /// Members of a GROUP or bill-of-materials lines of an INVENTORY_ASSEMBLY.
@@ -2111,6 +2182,7 @@ model Store {
   bins          StockBin[]
   pickTasks     PickTask[]
   putawayTasks  PutawayTask[]
+  workCenters   WorkCenter[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
@@ -2288,6 +2360,10 @@ model PosOrder {
   /// Register bank account this order posts to. Null on receipts posted before
   /// tills had their own bank account; those journals stay on the wallet accounts.
   depositLedgerAccountId  String?
+  /// Tip collected with the sale (held in TIP_LIABILITY). Not sale revenue.
+  tipAmount               Decimal @default(0) @db.Decimal(19, 4)
+  tipJournalId            String? @unique
+  diningTableId           String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
@@ -2298,12 +2374,16 @@ model PosOrder {
   changePaymentMethod PosPaymentMethod? @relation("PosChangeMethod", fields: [changePaymentMethodId], references: [id], onDelete: Restrict)
   changeAccount       LedgerAccount?    @relation("PosChangeAccount", fields: [changeLedgerAccountId], references: [id], onDelete: Restrict)
   depositAccount      LedgerAccount?    @relation("PosOrderDeposit", fields: [depositLedgerAccountId], references: [id], onDelete: Restrict)
+  tipJournal          Journal?          @relation("PosOrderTipJournal", fields: [tipJournalId], references: [id], onDelete: Restrict)
+  diningTable         DiningTable?      @relation(fields: [diningTableId], references: [id], onDelete: SetNull)
   payments      PosOrderPayment[]
+  kitchenTickets KitchenTicket[]
 
   @@index([orgId, registerId, createdAt(sort: Desc)])
   @@index([sessionId, createdAt(sort: Desc)])
   @@index([changePaymentMethodId])
   @@index([depositLedgerAccountId])
+  @@index([diningTableId])
   @@map("pos_orders")
 }
 
@@ -2456,6 +2536,15 @@ model Project {
 
   startDate DateTime? @db.Date
   endDate   DateTime? @db.Date
+
+  /// Construction / services: contract value for progress billing.
+  contractValue Decimal? @db.Decimal(19, 4)
+  /// Construction: retention % held on progress invoices (0–100).
+  retentionPercent Decimal? @db.Decimal(7, 4)
+  /// Cumulative progress % already billed (0–100).
+  billedPercent Decimal @default(0) @db.Decimal(7, 4)
+  /// Professional services: retainer balance held (memo; billed via retainer invoices).
+  retainerAmount Decimal? @db.Decimal(19, 4)
 
   createdById String?
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
@@ -2673,6 +2762,16 @@ model SalesDocument {
   /// Optional class. Stamped onto every journal line when the document posts.
   trackingCategoryId String?
 
+  /// Pharmacy: optional prescription / Rx reference (text only — not e-Rx).
+  prescriptionRef String?
+
+  /// Construction: retention held on this invoice (recognised on GL as receivable).
+  retentionAmount Decimal? @db.Decimal(19, 4)
+  /// Construction: progress % this invoice represents (0–100).
+  progressPercent Decimal? @db.Decimal(7, 4)
+  /// When retention was released into AR (Dr AR / Cr retention receivable).
+  retentionReleasedAt DateTime? @db.Timestamptz(6)
+
   voidedAt   DateTime? @db.Timestamptz(6)
   voidReason String?
 
@@ -2706,6 +2805,9 @@ model SalesDocument {
   deliveryNotes DeliveryNote[]
   storeTickets  StoreTicket[]
   posOrder      PosOrder?
+  folio         Folio?
+  studentEnrollment StudentEnrollment?
+  patientVisit  PatientVisit?
   files         LedgerFile[]
 
   @@unique([orgId, type, number])
@@ -2757,6 +2859,8 @@ model SalesDocumentLine {
   /// Phase 24: lot / serial for tracked inventory on this issue line.
   lotNumber    String?
   serialNumber String?
+  /// Pharmacy: expiry recorded/validated for this lot on the sale line.
+  lotExpiryDate DateTime? @db.Date
 
   serviceDate DateTime? @db.Date
 
@@ -2823,6 +2927,7 @@ model CustomerPayment {
   journal        Journal?           @relation(fields: [journalId], references: [id], onDelete: Restrict)
   applications   SalesApplication[]
   depositLines   DepositLine[]
+  donorPledges   DonorPledge[]
 
   @@unique([orgId, number])
   @@unique([id, orgId])
@@ -2967,6 +3072,7 @@ model PurchaseDocument {
   applications   PurchaseApplication[] @relation("AppliedToBill")
   creditsApplied PurchaseApplication[] @relation("AppliedFromVendorCredit")
   files          LedgerFile[]
+  asnShipments   AsnShipment[]
 
   @@unique([orgId, type, number])
   @@unique([id, orgId])
@@ -3020,6 +3126,8 @@ model PurchaseDocumentLine {
   /// Phase 24: lot / serial for tracked inventory on this receipt line.
   lotNumber    String?
   serialNumber String?
+  /// Pharmacy: expiry for the received lot (upserts ItemLot).
+  lotExpiryDate DateTime? @db.Date
 
   /// Customer to recharge this cost on a later invoice (Phase 11.5). Mutually
   /// exclusive with document-level `offsetCustomerId` (pay-from-AR now).
@@ -4796,14 +4904,18 @@ model Budget {
   startDate DateTime @db.Date
   endDate   DateTime @db.Date
   notes     String?
+  /// NGO: optional fund / programme class this grant budget belongs to.
+  trackingCategoryId String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  lines        BudgetLine[]
+  organization     Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  trackingCategory TrackingCategory? @relation(fields: [trackingCategoryId], references: [id], onDelete: SetNull)
+  lines            BudgetLine[]
 
   @@index([orgId, startDate, endDate])
+  @@index([trackingCategoryId])
   @@map("budgets")
 }
 
@@ -5543,14 +5655,298 @@ model KitchenTicket {
   /// JSON array of { name, qty }
   lines      Json
   notes      String?
+  diningTableId String?
+  posOrderId    String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  diningTable  DiningTable? @relation(fields: [diningTableId], references: [id], onDelete: SetNull)
+  posOrder     PosOrder?    @relation(fields: [posOrderId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status, createdAt(sort: Desc)])
+  @@index([diningTableId])
+  @@index([posOrderId])
+  @@map("kitchen_tickets")
+}
+
+/// Restaurant floor table (Phase hospitality).
+model DiningTable {
+  id      String @id @default(cuid())
+  orgId   String
+  code    String
+  name    String
+  seats   Int    @default(4) @db.SmallInt
+  zone    String?
+  /// OPEN = free, SEATED = guests at table, BILL = waiting payment.
+  status  DiningTableStatus @default(OPEN)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  posOrders      PosOrder[]
+  kitchenTickets KitchenTicket[]
+
+  @@unique([orgId, code])
+  @@index([orgId, status, isActive])
+  @@map("dining_tables")
+}
+
+enum DiningTableStatus {
+  OPEN
+  SEATED
+  BILL
+}
+
+/// End-of-day restaurant / POS close snapshot.
+model NightAuditRun {
+  id           String @id @default(cuid())
+  orgId        String
+  businessDate DateTime @db.Date
+  status       NightAuditStatus @default(DRAFT)
+  /// JSON summary: sales, tips, cash expected, session ids…
+  summary      Json
+  closedAt     DateTime? @db.Timestamptz(6)
+  closedById   String?
+  memo         String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  @@index([orgId, status, createdAt(sort: Desc)])
-  @@map("kitchen_tickets")
+  @@unique([orgId, businessDate])
+  @@index([orgId, status, businessDate(sort: Desc)])
+  @@map("night_audit_runs")
+}
+
+enum NightAuditStatus {
+  DRAFT
+  CLOSED
+}
+
+enum RoomStatus {
+  VACANT
+  OCCUPIED
+  DIRTY
+  CLEAN
+  OOO
+}
+
+enum StayStatus {
+  RESERVED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+enum FolioStatus {
+  OPEN
+  CLOSED
+}
+
+model RoomType {
+  id             String @id @default(cuid())
+  orgId          String
+  name           String
+  /// Default nightly rate item (SERVICE / NON_INVENTORY).
+  baseRateItemId String?
+  capacity       Int    @default(2) @db.SmallInt
+  isActive       Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  baseRateItem Item?        @relation("RoomTypeRateItem", fields: [baseRateItemId], references: [id], onDelete: SetNull)
+  rooms        Room[]
+
+  @@unique([orgId, name])
+  @@index([orgId, isActive])
+  @@map("room_types")
+}
+
+model Room {
+  id         String     @id @default(cuid())
+  orgId      String
+  roomTypeId String
+  code       String
+  floor      String?
+  status     RoomStatus @default(VACANT)
+  isActive   Boolean    @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  roomType     RoomType     @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+  stays        Stay[]
+
+  @@unique([orgId, code])
+  @@index([orgId, status, isActive])
+  @@index([roomTypeId])
+  @@map("rooms")
+}
+
+model Stay {
+  id         String     @id @default(cuid())
+  orgId      String
+  roomId     String
+  customerId String
+  status     StayStatus @default(RESERVED)
+  checkInAt  DateTime   @db.Timestamptz(6)
+  checkOutAt DateTime?  @db.Timestamptz(6)
+  adults     Int        @default(1) @db.SmallInt
+  notes      String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  room         Room         @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  folio        Folio?
+
+  @@index([orgId, status, checkInAt(sort: Desc)])
+  @@index([roomId, status])
+  @@index([customerId])
+  @@map("stays")
+}
+
+model Folio {
+  id              String      @id @default(cuid())
+  orgId           String
+  stayId          String      @unique
+  status          FolioStatus @default(OPEN)
+  salesDocumentId String?     @unique
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  stay          Stay           @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  salesDocument SalesDocument? @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
+  lines         FolioLine[]
+
+  @@index([orgId, status])
+  @@map("folios")
+}
+
+model FolioLine {
+  id          String  @id @default(cuid())
+  folioId     String
+  itemId      String?
+  description String
+  quantity    Decimal @db.Decimal(19, 4)
+  unitPrice   Decimal @db.Decimal(19, 4)
+  amount      Decimal @db.Decimal(19, 4)
+  postedAt    DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  folio Folio @relation(fields: [folioId], references: [id], onDelete: Cascade)
+  item  Item? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([folioId])
+  @@map("folio_lines")
+}
+
+/// Manufacturing: simple routing steps on an assembly / finished good.
+/// Manufacturing work center with weekly capacity (software calendar — not MES).
+model WorkCenter {
+  id                      String  @id @default(cuid())
+  orgId                   String
+  name                    String
+  storeId                 String?
+  /// Planned available minutes per week (default 40h = 2400).
+  capacityMinutesPerWeek  Decimal @default(2400) @db.Decimal(19, 4)
+  isActive                Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store        Store?        @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  routingSteps RoutingStep[]
+
+  @@unique([orgId, name])
+  @@index([orgId, isActive])
+  @@map("work_centers")
+}
+
+model RoutingStep {
+  id           String  @id @default(cuid())
+  orgId        String
+  itemId       String
+  workCenterId String?
+  name         String
+  sequence     Int     @default(0)
+  /// Planned minutes for this operation.
+  minutes      Decimal @default(0) @db.Decimal(19, 4)
+  notes        String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  item         Item         @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  workCenter   WorkCenter?  @relation(fields: [workCenterId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, itemId, sequence])
+  @@index([workCenterId])
+  @@map("routing_steps")
+}
+
+/// Distribution: advance ship notice (expected inbound; receive posts PO bill/stock).
+enum AsnStatus {
+  EXPECTED
+  RECEIVED
+  CANCELLED
+}
+
+model AsnShipment {
+  id                 String    @id @default(cuid())
+  orgId              String
+  vendorId           String
+  purchaseDocumentId String?
+  number             String
+  status             AsnStatus @default(EXPECTED)
+  expectedAt         DateTime? @db.Date
+  notes              String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization     Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  vendor           Vendor            @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  purchaseDocument PurchaseDocument? @relation(fields: [purchaseDocumentId], references: [id], onDelete: SetNull)
+  lines            AsnShipmentLine[]
+
+  @@unique([orgId, number])
+  @@index([orgId, status, expectedAt])
+  @@index([vendorId])
+  @@index([purchaseDocumentId])
+  @@map("asn_shipments")
+}
+
+model AsnShipmentLine {
+  id          String  @id @default(cuid())
+  asnId       String
+  itemId      String?
+  description String
+  quantity    Decimal @db.Decimal(19, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  asn  AsnShipment @relation(fields: [asnId], references: [id], onDelete: Cascade)
+  item Item?       @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([asnId])
+  @@index([itemId])
+  @@map("asn_shipment_lines")
 }
 
 model StockBin {
@@ -5818,4 +6214,218 @@ model TrainingEnrollment {
   @@unique([courseId, employeeId])
   @@index([orgId, status])
   @@map("training_enrollments")
+}
+
+/// Education: programs / terms / fee plans → student enrollments → AR invoices.
+enum EnrollmentStatus {
+  ENROLLED
+  WITHDRAWN
+  COMPLETED
+}
+
+model AcademicProgram {
+  id       String  @id @default(cuid())
+  orgId    String
+  name     String
+  code     String?
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  feePlans     FeePlan[]
+  enrollments  StudentEnrollment[]
+
+  @@unique([orgId, name])
+  @@index([orgId, isActive])
+  @@map("academic_programs")
+}
+
+model AcademicTerm {
+  id       String   @id @default(cuid())
+  orgId    String
+  name     String
+  startsOn DateTime @db.Date
+  endsOn   DateTime @db.Date
+  isActive Boolean  @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  enrollments  StudentEnrollment[]
+
+  @@unique([orgId, name])
+  @@index([orgId, isActive, startsOn])
+  @@map("academic_terms")
+}
+
+model FeePlan {
+  id        String  @id @default(cuid())
+  orgId     String
+  programId String?
+  name      String
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  program      AcademicProgram?    @relation(fields: [programId], references: [id], onDelete: SetNull)
+  lines        FeePlanLine[]
+  enrollments  StudentEnrollment[]
+
+  @@unique([orgId, name])
+  @@index([orgId, isActive])
+  @@index([programId])
+  @@map("fee_plans")
+}
+
+model FeePlanLine {
+  id          String  @id @default(cuid())
+  feePlanId   String
+  itemId      String
+  description String?
+  quantity    Decimal @default(1) @db.Decimal(19, 4)
+  /// Null = use the item's sales price at billing time.
+  unitPrice   Decimal? @db.Decimal(19, 4)
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  feePlan FeePlan @relation(fields: [feePlanId], references: [id], onDelete: Cascade)
+  item    Item    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([feePlanId, sortOrder])
+  @@index([itemId])
+  @@map("fee_plan_lines")
+}
+
+model StudentEnrollment {
+  id                  String           @id @default(cuid())
+  orgId               String
+  customerId          String
+  programId           String
+  termId              String
+  feePlanId           String?
+  status              EnrollmentStatus @default(ENROLLED)
+  /// Scholarship / grant as percent off the fee invoice (0–100).
+  scholarshipPercent  Decimal          @default(0) @db.Decimal(7, 4)
+  salesDocumentId     String?          @unique
+  notes               String?
+  enrolledAt          DateTime         @default(now()) @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  program       AcademicProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+  term          AcademicTerm   @relation(fields: [termId], references: [id], onDelete: Restrict)
+  feePlan       FeePlan?       @relation(fields: [feePlanId], references: [id], onDelete: SetNull)
+  salesDocument SalesDocument? @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
+
+  @@unique([orgId, customerId, programId, termId])
+  @@index([orgId, status, enrolledAt(sort: Desc)])
+  @@index([termId, status])
+  @@index([customerId])
+  @@map("student_enrollments")
+}
+
+/// Hospital billing admin only — not a clinical chart / EMR.
+enum PatientVisitStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+model PatientVisit {
+  id                  String             @id @default(cuid())
+  orgId               String
+  customerId          String
+  status              PatientVisitStatus @default(OPEN)
+  /// Department / class (optional).
+  trackingCategoryId  String?
+  /// Payer label (self-pay, insurer name) — text only.
+  payerName           String?
+  /// External claim / policy reference.
+  payerRef            String?
+  notes               String?
+  openedAt            DateTime           @default(now()) @db.Timestamptz(6)
+  closedAt            DateTime?          @db.Timestamptz(6)
+  salesDocumentId     String?            @unique
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization     Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  trackingCategory TrackingCategory? @relation(fields: [trackingCategoryId], references: [id], onDelete: SetNull)
+  salesDocument    SalesDocument?    @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
+  charges          VisitCharge[]
+
+  @@index([orgId, status, openedAt(sort: Desc)])
+  @@index([customerId])
+  @@index([trackingCategoryId])
+  @@map("patient_visits")
+}
+
+model VisitCharge {
+  id          String  @id @default(cuid())
+  visitId     String
+  itemId      String?
+  description String
+  quantity    Decimal @db.Decimal(19, 4)
+  unitPrice   Decimal @db.Decimal(19, 4)
+  amount      Decimal @db.Decimal(19, 4)
+  /// Service / billing code for claims export (not clinical coding).
+  billCode    String?
+  postedAt    DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  visit PatientVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  item  Item?        @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([visitId])
+  @@index([itemId])
+  @@map("visit_charges")
+}
+
+/// NGO: donor pledge tracked until received as a customer payment.
+enum DonorPledgeStatus {
+  PLEDGED
+  RECEIVED
+  CANCELLED
+}
+
+model DonorPledge {
+  id                 String            @id @default(cuid())
+  orgId              String
+  customerId         String
+  /// Fund / programme class (restriction tag lite).
+  trackingCategoryId String?
+  amount             Decimal           @db.Decimal(19, 4)
+  pledgedAt          DateTime          @db.Date
+  dueDate            DateTime?         @db.Date
+  status             DonorPledgeStatus @default(PLEDGED)
+  purpose            String?
+  notes              String?
+  paymentId          String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization     Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  trackingCategory TrackingCategory? @relation(fields: [trackingCategoryId], references: [id], onDelete: SetNull)
+  payment          CustomerPayment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status, pledgedAt(sort: Desc)])
+  @@index([customerId])
+  @@index([trackingCategoryId])
+  @@index([paymentId])
+  @@map("donor_pledges")
 }

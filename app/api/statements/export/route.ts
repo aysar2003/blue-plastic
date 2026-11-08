@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import type { Workbook as ExcelWorkbook } from 'exceljs'
 
 import { readSettings, type SearchParams } from '@/app/(app)/reports/params'
-import { formatDate, toCalendarDate } from '@/lib/date'
+import { formatDate, toCalendarDate, today } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
 import { getOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { isAppError, unauthenticated } from '@/server/errors'
+import { renderListXlsx, xlsxResponse } from '@/server/reports/list-xlsx'
 import * as portalService from '@/server/services/portal.service'
 import { generalLedger } from '@/server/accounting/balances'
 import * as payables from '@/server/services/payables.service'
@@ -25,7 +25,7 @@ type Movement = {
   credit: Decimal
 }
 
-/** Ledger spreadsheet for a customer or vendor statement. Same rows as the summary. */
+/** Ledger spreadsheet for a customer, vendor, or account statement. */
 export async function GET(request: Request) {
   try {
     const ctx = await getOrgContext()
@@ -89,78 +89,64 @@ export async function GET(request: Request) {
       entries = statement.entries
     }
 
-    const loaded = (await import('exceljs')) as unknown as {
-      Workbook?: new () => ExcelWorkbook
-      default?: { Workbook: new () => ExcelWorkbook }
-    }
-    const Workbook = loaded.Workbook ?? loaded.default?.Workbook
-    if (!Workbook) throw new Error('The Excel writer did not load')
-
-    const workbook = new Workbook()
-    workbook.creator = 'SOM ERP'
-    const sheet = workbook.addWorksheet(
-      party === 'vendor' ? 'Vendor statement' : party === 'account' ? 'Account statement' : 'Customer statement',
-      {
-      views: [{ state: 'frozen', ySplit: 1 }],
-    })
-    sheet.columns = [
-      { header: 'Date', key: 'date', width: 14 },
-      { header: 'Document', key: 'document', width: 22 },
-      { header: 'Description', key: 'description', width: 32 },
-      { header: 'Due', key: 'due', width: 14 },
-      { header: 'Amount', key: 'amount', width: 14 },
-      { header: 'Debit', key: 'debit', width: 14 },
-      { header: 'Credit', key: 'credit', width: 14 },
-      { header: 'Total debit', key: 'totalDebit', width: 16 },
-      { header: 'Current balance', key: 'balance', width: 18 },
-    ]
-    sheet.getRow(1).font = { bold: true }
-
+    const title =
+      party === 'vendor'
+        ? 'Vendor statement'
+        : party === 'account'
+          ? 'Account statement'
+          : 'Customer statement'
+    const rows: (string | number)[][] = []
     let runningDebit = ZERO
     let balance = opening
-    sheet.addRow({
-      date: '',
-      document: 'Brought forward',
-      description: name,
-      due: '',
-      amount: 0,
-      debit: 0,
-      credit: 0,
-      totalDebit: 0,
-      balance: Number(opening.toString()),
-    })
+    rows.push(['', 'Brought forward', name, '', 0, 0, 0, 0, Number(opening.toString())])
     for (const entry of entries) {
       runningDebit = runningDebit.plus(entry.charge)
       balance = balance.plus(entry.charge).minus(entry.credit)
-      sheet.addRow({
-        date: formatDate(toCalendarDate(entry.date)),
-        document: `${entry.kind} ${entry.number}`.trim(),
-        description: entry.description,
-        due: entry.dueDate ? formatDate(toCalendarDate(entry.dueDate)) : '',
-        amount: Number(entry.original.toString()),
-        debit: Number(entry.charge.toString()),
-        credit: Number(entry.credit.toString()),
-        totalDebit: Number(runningDebit.toString()),
-        balance: Number(balance.toString()),
-      })
+      rows.push([
+        formatDate(toCalendarDate(entry.date)),
+        `${entry.kind} ${entry.number}`.trim(),
+        entry.description,
+        entry.dueDate ? formatDate(toCalendarDate(entry.dueDate)) : '',
+        Number(entry.original.toString()),
+        Number(entry.charge.toString()),
+        Number(entry.credit.toString()),
+        Number(runningDebit.toString()),
+        Number(balance.toString()),
+      ])
     }
-    const totals = sheet.addRow({
-      document: 'Balance',
-      debit: Number(runningDebit.toString()),
-      credit: Number(entries.reduce((sum, entry) => sum.plus(entry.credit), ZERO).toString()),
-      balance: Number(balance.toString()),
-    })
-    totals.font = { bold: true }
+    rows.push([
+      '',
+      'Balance',
+      '',
+      '',
+      '',
+      Number(runningDebit.toString()),
+      Number(entries.reduce((sum, entry) => sum.plus(entry.credit), ZERO).toString()),
+      '',
+      Number(balance.toString()),
+    ])
 
-    const buffer = await workbook.xlsx.writeBuffer()
-    const filename = `${party}-statement-${slug(name)}.xlsx`
-    return new NextResponse(Buffer.from(buffer), {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Cache-Control': 'no-store',
-      },
+    const bytes = await renderListXlsx({
+      org: ctx.organization,
+      title,
+      subtitle: `${name} · ${formatDate(settings.range.from)} to ${formatDate(settings.range.to)}`,
+      currency: ctx.organization.baseCurrency,
+      exportedAt: today(ctx.organization.timeZone),
+      sheetName: title,
+      columns: [
+        { header: 'Date', width: 14, kind: 'date' },
+        { header: 'Document', width: 22, kind: 'text' },
+        { header: 'Description', width: 32, kind: 'text' },
+        { header: 'Due', width: 14, kind: 'date' },
+        { header: 'Amount', width: 14, kind: 'money' },
+        { header: 'Debit', width: 14, kind: 'money' },
+        { header: 'Credit', width: 14, kind: 'money' },
+        { header: 'Total debit', width: 16, kind: 'money' },
+        { header: 'Current balance', width: 18, kind: 'money' },
+      ],
+      rows,
     })
+    return xlsxResponse(`${party}-statement-${slug(name)}.xlsx`, bytes)
   } catch (error) {
     if (isAppError(error)) {
       return NextResponse.json(

@@ -469,7 +469,10 @@ export function InteractiveGrid({
               const showBand = extraCells.some((item) => item.text)
               return (
               <Fragment key={row.id}>
-                <TableRow className={cn(row.emphasis && 'bg-muted/40', showBand && 'border-b-0', row.className)}>
+                <TableRow
+                  data-row-id={row.id}
+                  className={cn(row.emphasis && 'bg-muted/40', showBand && 'border-b-0', row.className)}
+                >
                   {main.map((column, columnIndex) => (
                     <GridCellView
                       key={column.id}

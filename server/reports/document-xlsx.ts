@@ -1,8 +1,9 @@
 import 'server-only'
 
-import type { Workbook as ExcelWorkbook } from 'exceljs'
+import type { Borders, Workbook as ExcelWorkbook, Worksheet } from 'exceljs'
 
 import { formatDate, isCalendarDate, toCalendarDate } from '@/lib/date'
+import { applyPrintChrome, XLSX_LOOK } from '@/server/reports/list-xlsx'
 import type { SalesDocumentPdfInput } from '@/server/reports/sales-document-pdf'
 
 async function loadWorkbookCtor() {
@@ -22,120 +23,134 @@ function calendarLabel(value: Date | string | null | undefined): string {
   return String(value)
 }
 
+function solid(argb: string) {
+  return { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } }
+}
+
+function thin(argb: string): Partial<Borders> {
+  return {
+    top: { style: 'thin', color: { argb } },
+    left: { style: 'thin', color: { argb } },
+    bottom: { style: 'thin', color: { argb } },
+    right: { style: 'thin', color: { argb } },
+  }
+}
+
+function font(partial: { bold?: boolean; size?: number; color?: string; italic?: boolean } = {}) {
+  return {
+    name: XLSX_LOOK.font,
+    size: partial.size ?? 11,
+    bold: partial.bold,
+    italic: partial.italic,
+    color: partial.color ? { argb: partial.color } : { argb: XLSX_LOOK.ink },
+  }
+}
+
+function paintBrandBand(sheet: Worksheet, orgName: string, contactBits: string[], colCount: number): number {
+  let row = 1
+  const brand = sheet.getCell(row, 1)
+  brand.value = orgName
+  brand.font = font({ bold: true, size: 16, color: XLSX_LOOK.white })
+  brand.fill = solid(XLSX_LOOK.brand)
+  brand.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }
+  if (colCount > 1) sheet.mergeCells(row, 1, row, colCount)
+  for (let c = 2; c <= colCount; c++) sheet.getCell(row, c).fill = solid(XLSX_LOOK.brand)
+  sheet.getRow(row).height = 28
+  row += 1
+
+  if (contactBits.length > 0) {
+    const contact = sheet.getCell(row, 1)
+    contact.value = contactBits.join('  ·  ')
+    contact.font = font({ size: 9, color: XLSX_LOOK.muted })
+    contact.fill = solid(XLSX_LOOK.brandSoft)
+    contact.alignment = { vertical: 'middle', horizontal: 'left', indent: 1, wrapText: true }
+    if (colCount > 1) sheet.mergeCells(row, 1, row, colCount)
+    for (let c = 2; c <= colCount; c++) sheet.getCell(row, c).fill = solid(XLSX_LOOK.brandSoft)
+    sheet.getRow(row).height = 20
+    row += 1
+  }
+
+  return row + 1
+}
+
+function asText(sheet: Worksheet, row: number, col: number, value: string) {
+  const cell = sheet.getCell(row, col)
+  cell.value = value
+  cell.numFmt = '@'
+  return cell
+}
+
 /**
- * Odoo-style single-document spreadsheet: company header, party, lines, totals.
+ * Professional single-document spreadsheet: company band, party, lines, totals.
  * Same payload shape as the PDF renderer so sales and purchases share one builder.
  */
 export async function renderDocumentXlsx(input: SalesDocumentPdfInput): Promise<Uint8Array> {
   const Workbook = await loadWorkbookCtor()
   const workbook = new Workbook()
   workbook.creator = 'SOM ERP'
-  const sheet = workbook.addWorksheet(input.title.slice(0, 31) || 'Document', {
-    views: [{ state: 'frozen', ySplit: 10 }],
-  })
+  workbook.company = input.orgName || 'SOM ERP'
 
   const partyLabel = input.partyLabel ?? 'Customer'
   const isRfq = input.documentType === 'RFQ'
+  const colCount = isRfq ? 7 : 7
   const asNumber = (value: string | null | undefined) => {
     const amount = Number(value)
     return Number.isFinite(amount) ? amount : 0
   }
 
-  let row = 1
-  const put = (col: number, text: string, opts?: { bold?: boolean; size?: number }) => {
-    const cell = sheet.getCell(row, col)
-    cell.value = text
-    if (opts?.bold) cell.font = { ...(cell.font ?? {}), bold: true, size: opts.size ?? 11 }
-    else if (opts?.size) cell.font = { ...(cell.font ?? {}), size: opts.size }
-  }
+  const sheet = workbook.addWorksheet(input.title.slice(0, 31) || 'Document', {
+    properties: { defaultRowHeight: 18 },
+    views: [{ showGridLines: false }],
+  })
 
-  // An RFQ is a blank price sheet: no company name, document title, or vendor name,
-  // and no rate copied from the item.
-  if (!isRfq) {
-    put(1, input.orgName, { bold: true, size: 14 })
-    row += 1
-    for (const line of input.orgAddress) {
-      put(1, line, { size: 10 })
-      row += 1
-    }
-    if (input.orgPhone) {
-      put(1, `Phone: ${input.orgPhone}`, { size: 10 })
-      row += 1
-    }
-    if (input.orgEmail) {
-      put(1, `Email: ${input.orgEmail}`, { size: 10 })
-      row += 1
-    }
+  const contactBits = [
+    ...input.orgAddress,
+    input.orgPhone ? `Phone ${input.orgPhone}` : '',
+    input.orgEmail ? `Email ${input.orgEmail}` : '',
+  ].filter(Boolean)
 
-    row += 1
-    put(1, `${input.title} ${input.number}`, { bold: true, size: 13 })
-    row += 1
-    put(1, `Date: ${calendarLabel(input.date)}`)
-    row += 1
-    if (input.dueDate) {
-      put(1, `Due: ${calendarLabel(input.dueDate)}`)
-      row += 1
-    }
-    if (input.reference) {
-      put(1, `Reference: ${input.reference}`)
-      row += 1
-    }
-    if (input.status) {
-      put(1, `Status: ${input.status}`)
-      row += 1
-    }
-
-    row += 1
-    put(1, partyLabel, { bold: true })
-    row += 1
-    put(1, input.customerName, { bold: true })
-    row += 1
-    for (const line of input.customerAddress) {
-      put(1, line, { size: 10 })
-      row += 1
-    }
-    if (input.customerEmail) {
-      put(1, input.customerEmail, { size: 10 })
-      row += 1
-    }
-    if (input.customerPhone) {
-      put(1, input.customerPhone, { size: 10 })
-      row += 1
-    }
-
-    row += 1
-  }
+  let row = paintBrandBand(sheet, input.orgName || 'Company', contactBits, colCount)
 
   if (isRfq) {
-    const thin = { style: 'thin' as const, color: { argb: 'FF000000' } }
-    const border = { top: thin, left: thin, bottom: thin, right: thin }
+    const titleCell = sheet.getCell(row, 1)
+    titleCell.value = `Request for quotation ${input.number}`
+    titleCell.font = font({ bold: true, size: 14 })
+    sheet.mergeCells(row, 1, row, colCount)
+    row += 1
+    const meta = sheet.getCell(row, 1)
+    meta.value = `Date ${calendarLabel(input.date)}  ·  Fill Unit Price; Amount calculates automatically`
+    meta.font = font({ size: 9, color: XLSX_LOOK.muted })
+    sheet.mergeCells(row, 1, row, colCount)
+    row += 2
+
     const headers = ['RFQ Ref', 'Product SKU', 'Product', 'Quantity', 'UOM', 'Unit Price', 'Amount']
+    const headerRow = row
     headers.forEach((label, index) => {
-      const cell = sheet.getCell(1, index + 1)
+      const cell = sheet.getCell(headerRow, index + 1)
       cell.value = label
-      cell.font = { bold: true, size: 11 }
-      cell.alignment = { vertical: 'middle', horizontal: index >= 3 ? 'center' : 'left' }
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }
-      cell.border = border
+      cell.font = font({ bold: true, size: 10, color: XLSX_LOOK.white })
+      cell.fill = solid(XLSX_LOOK.brand)
+      cell.border = thin(XLSX_LOOK.brand)
+      cell.alignment = { vertical: 'middle', horizontal: index >= 3 ? 'center' : 'left', indent: 1 }
     })
-    sheet.getRow(1).height = 22
+    sheet.getRow(headerRow).height = 24
+    row += 1
 
     input.lines.forEach((line, index) => {
-      const r = 2 + index
+      const r = row + index
       const qty = asNumber(line.quantity)
-      sheet.getCell(r, 1).value = input.number
-      sheet.getCell(r, 2).value = line.sku ?? ''
-      sheet.getCell(r, 3).value = line.description
+      asText(sheet, r, 1, input.number)
+      asText(sheet, r, 2, line.sku ?? '')
+      asText(sheet, r, 3, line.description)
       sheet.getCell(r, 4).value = qty
-      sheet.getCell(r, 5).value = line.unitOfMeasure ?? ''
+      asText(sheet, r, 5, line.unitOfMeasure ?? '')
       sheet.getCell(r, 6).value = null
-      sheet.getCell(r, 7).value = {
-        formula: `IF(F${r}="","",D${r}*F${r})`,
-        result: 0,
-      }
+      sheet.getCell(r, 7).value = { formula: `IF(F${r}="","",D${r}*F${r})`, result: 0 }
       for (let col = 1; col <= 7; col++) {
         const cell = sheet.getCell(r, col)
-        cell.border = border
+        cell.border = thin(XLSX_LOOK.grid)
+        cell.font = font({ size: 10 })
+        if (index % 2 === 1) cell.fill = solid(XLSX_LOOK.stripe)
         cell.alignment = { vertical: 'middle', horizontal: col >= 4 ? 'center' : 'left' }
       }
       sheet.getCell(r, 4).numFmt = '#,##0.##'
@@ -143,15 +158,19 @@ export async function renderDocumentXlsx(input: SalesDocumentPdfInput): Promise<
       sheet.getCell(r, 7).numFmt = '#,##0.00'
     })
 
-    const lastLine = 1 + Math.max(input.lines.length, 1)
+    const lastLine = row + Math.max(input.lines.length, 1) - 1
     const totalRow = lastLine + 1
     sheet.getCell(totalRow, 6).value = 'Total'
-    sheet.getCell(totalRow, 6).font = { bold: true }
+    sheet.getCell(totalRow, 6).font = font({ bold: true })
     sheet.getCell(totalRow, 6).alignment = { horizontal: 'right' }
-    sheet.getCell(totalRow, 7).value = { formula: `SUM(G2:G${lastLine})`, result: 0 }
-    sheet.getCell(totalRow, 7).font = { bold: true }
+    sheet.getCell(totalRow, 7).value = { formula: `SUM(G${row}:G${lastLine})`, result: 0 }
+    sheet.getCell(totalRow, 7).font = font({ bold: true })
     sheet.getCell(totalRow, 7).numFmt = '#,##0.00'
-    for (let col = 1; col <= 7; col++) sheet.getCell(totalRow, col).border = border
+    for (let col = 1; col <= 7; col++) sheet.getCell(totalRow, col).border = thin(XLSX_LOOK.grid)
+
+    const foot = sheet.getCell(totalRow + 2, 1)
+    foot.value = 'Prepared with SOM ERP'
+    foot.font = font({ size: 8, italic: true, color: XLSX_LOOK.muted })
 
     sheet.getColumn(1).width = 16
     sheet.getColumn(2).width = 18
@@ -160,24 +179,73 @@ export async function renderDocumentXlsx(input: SalesDocumentPdfInput): Promise<
     sheet.getColumn(5).width = 12
     sheet.getColumn(6).width = 14
     sheet.getColumn(7).width = 14
-    sheet.views = [{ state: 'frozen', ySplit: 1 }]
+    sheet.views = [{ state: 'frozen', ySplit: headerRow, showGridLines: false }]
+    applyPrintChrome(sheet, {
+      companyName: input.orgName || 'Company',
+      title: `RFQ ${input.number}`,
+      headerRowIndex: headerRow,
+      colCount: 7,
+    })
 
     const buffer = await workbook.xlsx.writeBuffer()
     return new Uint8Array(buffer)
   }
 
-  const headerRow = row
+  const titleCell = sheet.getCell(row, 1)
+  titleCell.value = `${input.title} ${input.number}`
+  titleCell.font = font({ bold: true, size: 14 })
+  sheet.mergeCells(row, 1, row, colCount)
+  row += 1
+
+  const metaBits = [
+    `Date ${calendarLabel(input.date)}`,
+    input.dueDate ? `Due ${calendarLabel(input.dueDate)}` : '',
+    input.reference ? `Reference ${input.reference}` : '',
+    input.status ? `Status ${input.status}` : '',
+    input.currency ? `Currency ${input.currency}` : '',
+  ].filter(Boolean)
+  const meta = sheet.getCell(row, 1)
+  meta.value = metaBits.join('  ·  ')
+  meta.font = font({ size: 9, color: XLSX_LOOK.muted })
+  sheet.mergeCells(row, 1, row, colCount)
+  row += 2
+
+  sheet.getCell(row, 1).value = partyLabel
+  sheet.getCell(row, 1).font = font({ bold: true, size: 10, color: XLSX_LOOK.muted })
+  row += 1
+  sheet.getCell(row, 1).value = input.customerName
+  sheet.getCell(row, 1).font = font({ bold: true, size: 12 })
+  row += 1
+  for (const line of input.customerAddress) {
+    sheet.getCell(row, 1).value = line
+    sheet.getCell(row, 1).font = font({ size: 10, color: XLSX_LOOK.muted })
+    row += 1
+  }
+  if (input.customerEmail) {
+    asText(sheet, row, 1, input.customerEmail).font = font({ size: 10, color: XLSX_LOOK.muted })
+    row += 1
+  }
+  if (input.customerPhone) {
+    asText(sheet, row, 1, input.customerPhone).font = font({ size: 10, color: XLSX_LOOK.muted })
+    row += 1
+  }
+  row += 1
+
   const headers = ['No', 'Item', 'SKU', 'Qty', 'UoM', 'Rate', 'Amount']
+  const headerRow = row
   headers.forEach((label, index) => {
     const cell = sheet.getCell(headerRow, index + 1)
     cell.value = label
-    cell.font = { bold: true }
+    cell.font = font({ bold: true, size: 10, color: XLSX_LOOK.white })
+    cell.fill = solid(XLSX_LOOK.brand)
+    cell.border = thin(XLSX_LOOK.brand)
+    cell.alignment = {
+      vertical: 'middle',
+      horizontal: index === 0 || index >= 3 ? 'center' : 'left',
+      indent: 1,
+    }
   })
-  sheet.getRow(headerRow).fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: 'FFE8EEF2' },
-  }
+  sheet.getRow(headerRow).height = 24
 
   const firstLine = headerRow + 1
   input.lines.forEach((line, index) => {
@@ -185,16 +253,24 @@ export async function renderDocumentXlsx(input: SalesDocumentPdfInput): Promise<
     const qty = asNumber(line.quantity)
     const rate = asNumber(line.unitPrice)
     sheet.getCell(r, 1).value = index + 1
-    sheet.getCell(r, 2).value = line.description
-    sheet.getCell(r, 3).value = line.sku ?? ''
+    asText(sheet, r, 2, line.description)
+    asText(sheet, r, 3, line.sku ?? '')
     sheet.getCell(r, 4).value = qty
-    sheet.getCell(r, 5).value = line.unitOfMeasure ?? ''
-    if (isRfq) sheet.getCell(r, 6).value = null
-    else sheet.getCell(r, 6).value = rate
-    // Amount follows Qty × Rate, including a rate typed in after the file is opened.
+    asText(sheet, r, 5, line.unitOfMeasure ?? '')
+    sheet.getCell(r, 6).value = rate
     sheet.getCell(r, 7).value = {
       formula: `IF(OR(D${r}="",F${r}=""),"",D${r}*F${r})`,
-      result: isRfq ? 0 : qty * rate,
+      result: qty * rate,
+    }
+    for (let col = 1; col <= 7; col++) {
+      const cell = sheet.getCell(r, col)
+      cell.border = thin(XLSX_LOOK.grid)
+      cell.font = font({ size: 10 })
+      if (index % 2 === 1) cell.fill = solid(XLSX_LOOK.stripe)
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: col === 1 || col >= 4 ? 'center' : 'left',
+      }
     }
     sheet.getCell(r, 4).numFmt = '#,##0.##'
     sheet.getCell(r, 6).numFmt = '#,##0.00'
@@ -203,10 +279,6 @@ export async function renderDocumentXlsx(input: SalesDocumentPdfInput): Promise<
 
   const lastLine = firstLine + Math.max(input.lines.length, 1) - 1
   const totalsStart = headerRow + 1 + input.lines.length + 1
-  const subtotalRow = totalsStart
-  const discountRow = totalsStart + 1
-  const taxRow = totalsStart + 2
-  const totalRow = totalsStart + 3
   const amountRange = `G${firstLine}:G${lastLine}`
 
   const writeTotal = (
@@ -215,47 +287,56 @@ export async function renderDocumentXlsx(input: SalesDocumentPdfInput): Promise<
     value: number | { formula: string; result: number },
   ) => {
     sheet.getCell(r, 6).value = label
-    sheet.getCell(r, 6).font = { bold: label === 'Total' || label === 'Balance' }
+    sheet.getCell(r, 6).font = font({ bold: label === 'Total' || label === 'Balance' })
+    sheet.getCell(r, 6).alignment = { horizontal: 'right', vertical: 'middle' }
     sheet.getCell(r, 7).value = value
-    sheet.getCell(r, 7).font = { bold: label === 'Total' || label === 'Balance' }
+    sheet.getCell(r, 7).font = font({ bold: label === 'Total' || label === 'Balance' })
     sheet.getCell(r, 7).numFmt = '#,##0.00'
+    sheet.getCell(r, 7).border = thin(XLSX_LOOK.grid)
   }
 
-  writeTotal(subtotalRow, 'Subtotal', {
+  writeTotal(totalsStart, 'Subtotal', {
     formula: `SUM(${amountRange})`,
-    result: isRfq ? 0 : asNumber(input.subtotal),
+    result: asNumber(input.subtotal),
   })
-  writeTotal(discountRow, 'Discount', isRfq ? 0 : asNumber(input.discountAmount))
-  writeTotal(taxRow, 'Tax', isRfq ? 0 : asNumber(input.taxTotal))
-  writeTotal(totalRow, 'Total', {
-    formula: `G${subtotalRow}-G${discountRow}+G${taxRow}`,
-    result: isRfq ? 0 : asNumber(input.total),
+  writeTotal(totalsStart + 1, 'Discount', asNumber(input.discountAmount))
+  writeTotal(totalsStart + 2, 'Tax', asNumber(input.taxTotal))
+  writeTotal(totalsStart + 3, 'Total', {
+    formula: `G${totalsStart}-G${totalsStart + 1}+G${totalsStart + 2}`,
+    result: asNumber(input.total),
   })
 
-  let next = totalRow + 1
+  let next = totalsStart + 4
   if (input.amountApplied != null) {
     writeTotal(next, 'Applied', asNumber(input.amountApplied))
     const appliedRow = next
     next += 1
     if (input.balance != null) {
       writeTotal(next, 'Balance', {
-        formula: `G${totalRow}-G${appliedRow}`,
+        formula: `G${totalsStart + 3}-G${appliedRow}`,
         result: asNumber(input.balance),
       })
+      next += 1
     }
   } else if (input.balance != null) {
     writeTotal(next, 'Balance', {
-      formula: `G${totalRow}`,
+      formula: `G${totalsStart + 3}`,
       result: asNumber(input.balance),
     })
+    next += 1
   }
 
   if (input.message) {
-    const msgRow = next + 1
-    sheet.getCell(msgRow, 1).value = 'Message'
-    sheet.getCell(msgRow, 1).font = { bold: true }
-    sheet.getCell(msgRow + 1, 1).value = input.message
+    sheet.getCell(next + 1, 1).value = 'Message'
+    sheet.getCell(next + 1, 1).font = font({ bold: true, size: 10 })
+    sheet.getCell(next + 2, 1).value = input.message
+    sheet.getCell(next + 2, 1).font = font({ size: 10, color: XLSX_LOOK.muted })
+    next += 3
   }
+
+  const foot = sheet.getCell(next + 1, 1)
+  foot.value = 'Prepared with SOM ERP'
+  foot.font = font({ size: 8, italic: true, color: XLSX_LOOK.muted })
 
   sheet.getColumn(1).width = 6
   sheet.getColumn(2).width = 36
@@ -264,6 +345,13 @@ export async function renderDocumentXlsx(input: SalesDocumentPdfInput): Promise<
   sheet.getColumn(5).width = 8
   sheet.getColumn(6).width = 14
   sheet.getColumn(7).width = 14
+  sheet.views = [{ state: 'frozen', ySplit: headerRow, showGridLines: false }]
+  applyPrintChrome(sheet, {
+    companyName: input.orgName || 'Company',
+    title: `${input.title} ${input.number}`,
+    headerRowIndex: headerRow,
+    colCount: 7,
+  })
 
   const buffer = await workbook.xlsx.writeBuffer()
   return new Uint8Array(buffer)

@@ -1,17 +1,21 @@
 import 'server-only'
 
 import { addMonths, startOfMonth, toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
-import { letterheadLines } from '@/lib/letterhead'
 import {
   assertPackReportKeys,
-  composePackCsv,
   nextRunAfter,
 } from '@/lib/report-packs'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, precondition, validation } from '@/server/errors'
-import { csvValue, toCsv, type CsvCell } from '@/server/reports/csv'
+import type { CsvCell } from '@/server/reports/csv'
 import { tableReport } from '@/server/reports/catalogue'
+import {
+  encodePackXlsxBody,
+  renderMultiSheetXlsx,
+  type ListXlsxColumn,
+  type ListXlsxSheet,
+} from '@/server/reports/list-xlsx'
 import { balanceSheet, cashFlow, profitAndLoss } from '@/server/reports/statements'
 import * as mailService from '@/server/services/mail.service'
 
@@ -164,11 +168,11 @@ export async function remove(ctx: OrgContext, id: string) {
   return { id }
 }
 
-async function csvForKey(
+async function sheetForKey(
   ctx: OrgContext,
   key: string,
   range: { from: CalendarDate; to: CalendarDate },
-): Promise<{ title: string; csv: string }> {
+): Promise<ListXlsxSheet> {
   const asOf = range.to
   const catalogue = tableReport(key)
   if (catalogue) {
@@ -178,56 +182,85 @@ async function csvForKey(
       asOf,
       filters: {},
     })
-    const rows: CsvCell[][] = [
-      table.columns.map((column) => column.label),
-      ...table.rows.map((row) => table.columns.map((column) => row.cells[column.key] ?? '')),
-    ]
+    const columns: ListXlsxColumn[] = table.columns.map((column) => {
+      const format = column.kind ?? column.format
+      return {
+        header: column.label,
+        width: Math.min(40, Math.max(12, column.label.length + 4)),
+        kind:
+          format === 'money' || format === 'signed'
+            ? 'money'
+            : format === 'number'
+              ? 'number'
+              : format === 'date' || format === 'datetime'
+                ? 'date'
+                : 'text',
+      }
+    })
+    const rows: CsvCell[][] = table.rows.map((row) =>
+      table.columns.map((column) => row.cells[column.key] ?? ''),
+    )
     if (table.totals) {
       rows.push(table.columns.map((column) => table.totals?.[column.key] ?? ''))
     }
-    return { title: catalogue.title, csv: toCsv(rows) }
+    return { name: catalogue.title, title: catalogue.title, columns, rows }
   }
 
   if (key === 'profit-loss') {
     const statement = await profitAndLoss(ctx.orgId, { from: range.from, to: range.to })
-    const rows: CsvCell[][] = [
-      ['Account', 'Amount'],
-      ...statement.sections.flatMap((section) =>
-        section.rows.map((row) => [`${row.code} ${row.name}`, csvValue(row.amount)] as CsvCell[]),
+    return {
+      name: 'Profit and Loss',
+      title: 'Profit and Loss',
+      columns: [
+        { header: 'Account', width: 40 },
+        { header: 'Amount', width: 14, kind: 'money' },
+      ],
+      rows: statement.sections.flatMap((section) =>
+        section.rows.map((row) => [`${row.code} ${row.name}`, row.amount] as CsvCell[]),
       ),
-    ]
-    return { title: 'Profit and Loss', csv: toCsv(rows) }
+    }
   }
   if (key === 'balance-sheet') {
     const statement = await balanceSheet(ctx.orgId, asOf)
-    const rows: CsvCell[][] = [
-      ['Account', 'Amount'],
-      ...statement.sections.flatMap((section) =>
-        section.rows.map((row) => [`${row.code} ${row.name}`, csvValue(row.amount)] as CsvCell[]),
+    return {
+      name: 'Balance Sheet',
+      title: 'Balance Sheet',
+      columns: [
+        { header: 'Account', width: 40 },
+        { header: 'Amount', width: 14, kind: 'money' },
+      ],
+      rows: statement.sections.flatMap((section) =>
+        section.rows.map((row) => [`${row.code} ${row.name}`, row.amount] as CsvCell[]),
       ),
-    ]
-    return { title: 'Balance Sheet', csv: toCsv(rows) }
+    }
   }
   if (key === 'cash-flow') {
     const statement = await cashFlow(ctx.orgId, { from: range.from, to: range.to })
-    const rows: CsvCell[][] = [
-      ['Section', 'Line', 'Amount'],
-      ['operating', 'Net income', csvValue(statement.netIncome)],
-      ...statement.operating.lines.map(
-        (row) => ['operating', row.label, csvValue(row.amount)] as CsvCell[],
-      ),
-      ...statement.investing.lines.map(
-        (row) => ['investing', row.label, csvValue(row.amount)] as CsvCell[],
-      ),
-      ...statement.financing.lines.map(
-        (row) => ['financing', row.label, csvValue(row.amount)] as CsvCell[],
-      ),
-      ['', 'Net change in cash', csvValue(statement.netChange)],
-    ]
-    return { title: 'Statement of Cash Flows', csv: toCsv(rows) }
+    return {
+      name: 'Cash Flows',
+      title: 'Statement of Cash Flows',
+      columns: [
+        { header: 'Section', width: 14 },
+        { header: 'Line', width: 36 },
+        { header: 'Amount', width: 14, kind: 'money' },
+      ],
+      rows: [
+        ['operating', 'Net income', statement.netIncome],
+        ...statement.operating.lines.map(
+          (row) => ['operating', row.label, row.amount] as CsvCell[],
+        ),
+        ...statement.investing.lines.map(
+          (row) => ['investing', row.label, row.amount] as CsvCell[],
+        ),
+        ...statement.financing.lines.map(
+          (row) => ['financing', row.label, row.amount] as CsvCell[],
+        ),
+        ['', 'Net change in cash', statement.netChange],
+      ],
+    }
   }
 
-  throw precondition(`Report "${key}" cannot be built into a pack yet.`)
+throw precondition(`Report "${key}" cannot be built into a pack yet.`)
 }
 
 export async function runPack(
@@ -245,19 +278,20 @@ export async function runPack(
   const from = range?.from ?? startOfMonth(addMonths(to, -1))
   const keys = parseKeys(pack.reportKeys)
 
-  const sections: { title: string; key: string; csv: string }[] = []
+  const sheets: ListXlsxSheet[] = []
   for (const key of keys) {
-    const built = await csvForKey(ctx, key, { from, to })
-    sections.push({ title: built.title, key, csv: built.csv })
+    sheets.push(await sheetForKey(ctx, key, { from, to }))
   }
 
-  const header = [
-    ...letterheadLines(ctx.organization),
-    `Pack: ${pack.name}`,
-    `Range: ${from} to ${to}`,
-    '',
-  ].join('\n')
-  const body = `${header}\n${composePackCsv(sections)}`
+  const xlsx = await renderMultiSheetXlsx({
+    org: ctx.organization,
+    title: pack.name,
+    subtitle: `${from} to ${to}`,
+    currency: ctx.organization.baseCurrency,
+    sheets,
+  })
+  const body = encodePackXlsxBody(xlsx)
+  const sectionList = sheets.map((sheet) => `· ${sheet.title ?? sheet.name}`).join('\n')
 
   const run = await db.reportPackRun.create({
     data: {
@@ -287,7 +321,7 @@ export async function runPack(
       await mailService.sendOrgMail(ctx, {
         to: pack.emailTo,
         subject: `${pack.name} · ${from} to ${to}`,
-        text: `Your report pack "${pack.name}" is ready.\n\nDownload from Reports → Packs in Som ERP, or see run ${run.id}.\n\n${body.slice(0, 4000)}`,
+        text: `Your report pack "${pack.name}" is ready as Excel.\n\nRange: ${from} to ${to}\nReports:\n${sectionList}\n\nDownload from Reports → Packs in Som ERP (run ${run.id}).`,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Email delivery failed'

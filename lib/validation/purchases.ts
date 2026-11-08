@@ -38,6 +38,8 @@ export const purchaseLineSchema = z.object({
   /** Phase 24: lot / serial for tracked inventory lines. */
   lotNumber: optionalText(80),
   serialNumber: optionalText(80),
+  /** Pharmacy: expiry for the received lot. */
+  lotExpiryDate: optionalDate,
   /** Customer to recharge this cost on a later invoice. Blank clears it. */
   billableCustomerId: optionalId,
   /** What to charge the customer. Blank means the line's own amount when pulled. */
@@ -192,6 +194,8 @@ export const receiveOrderSchema = z.object({
         storeId: optionalId,
         lotNumber: optionalText(80),
         serialNumber: optionalText(80),
+        /** Pharmacy / batch expiry for the received lot. */
+        lotExpiryDate: optionalDate,
       }),
     )
     .min(1, 'Enter a quantity against at least one line')

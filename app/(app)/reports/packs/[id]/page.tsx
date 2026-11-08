@@ -64,7 +64,7 @@ export default async function ReportPackDetailPage({
 
       <h2 className="mb-2 text-sm font-semibold">Runs</h2>
       {pack.runs.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No runs yet. Build the pack to download a combined CSV.</p>
+        <p className="text-sm text-muted-foreground">No runs yet. Build the pack to download a combined Excel workbook.</p>
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -90,7 +90,7 @@ export default async function ReportPackDetailPage({
                         href={`/api/reports/packs/runs/${run.id}`}
                         className={buttonVariants({ variant: 'ghost', size: 'sm' })}
                       >
-                        CSV
+                        Excel
                       </Link>
                     </TableCell>
                   </TableRow>

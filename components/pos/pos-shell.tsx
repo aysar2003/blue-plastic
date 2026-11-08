@@ -39,6 +39,8 @@ const NAV: NavItem[] = [
     children: [
       { label: 'Orders', href: '/pos/orders' },
       { label: 'Kitchen', href: '/pos/kitchen' },
+      { label: 'Tables', href: '/pos/tables' },
+      { label: 'Night audit', href: '/pos/night-audit' },
       { label: 'Quotations', href: '/pos/quotations' },
       { label: 'Sessions', href: '/pos/sessions' },
       { label: 'Sales receipts', href: '/sales/sales-receipts' },
@@ -74,7 +76,15 @@ const NAV: NavItem[] = [
 ]
 
 /** Hub pages keep the POS chrome; only the live till (+ lock/display) hide it. */
-const POS_HUB_SEGMENTS = new Set(['orders', 'quotations', 'sessions', 'settings', 'kitchen'])
+const POS_HUB_SEGMENTS = new Set([
+  'orders',
+  'quotations',
+  'sessions',
+  'settings',
+  'kitchen',
+  'tables',
+  'night-audit',
+])
 
 function isPosTillRoute(pathname: string) {
   const segments = pathname.split('/').filter(Boolean)

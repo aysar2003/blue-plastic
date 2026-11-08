@@ -104,7 +104,11 @@ function writeDataSheet(
     const excelColumn = sheet.getColumn(index + 1)
     excelColumn.width = Math.min(36, Math.max(14, column.header.length + 4))
     if (column.entry === 'money') excelColumn.numFmt = '#,##0.00'
-    if (column.entry === 'date') excelColumn.numFmt = 'yyyy-mm-dd'
+    else if (column.entry === 'date') excelColumn.numFmt = 'yyyy-mm-dd'
+    else if (/phone|mobile|sku|barcode|tax registration|postal|zip/i.test(column.header)) {
+      // Keep phones/codes as text so Excel never shows 6.14E+08.
+      excelColumn.numFmt = '@'
+    }
 
     const choices = column.entry && column.entry in LIST_COLUMN ? lists[column.entry as TemplateList] : undefined
     if (choices && choices.length > 0) {
@@ -130,10 +134,13 @@ function writeDataSheet(
   header.height = 22
   examples.slice(0, 3).forEach((example, rowIndex) => {
     const row = sheet.getRow(rowIndex + 2)
-    columns.forEach((_, index) => {
+    columns.forEach((column, index) => {
       const cell = row.getCell(index + 1)
       cell.value = example[index] ?? ''
-      cell.font = { italic: true, color: { argb: 'FF3D4C5C' } }
+      if (/phone|mobile|sku|barcode|tax registration|postal|zip/i.test(column.header)) {
+        cell.numFmt = '@'
+      }
+      cell.font = { italic: true, color: { argb: 'FF3D4C5C' }, name: 'Calibri' }
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7E6' } }
     })
   })
@@ -162,7 +169,7 @@ function writeGuide(
     ? ' The tinted rows are examples. Replace them with your own data before you import.'
     : ''
   sheet.getCell(3, 1).value =
-    `Type on the sheet named "${sheetName}". One row is one record. Do not rename or delete the column headings — the import reads each heading and puts that cell in the matching field. A column marked Required must be filled. A column marked Optional can be left blank.${exampleNote} Save this file and import it. A CSV of the same headings imports the same way.`
+    `Type on the sheet named "${sheetName}". One row is one record. Do not rename or delete the column headings — the import reads each heading and puts that cell in the matching field. A column marked Required must be filled. A column marked Optional can be left blank.${exampleNote} Save this Excel file and import it.`
   sheet.getCell(3, 1).alignment = { wrapText: true, vertical: 'top' }
   sheet.mergeCells(3, 1, 3, 4)
   sheet.getRow(3).height = 72

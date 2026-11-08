@@ -2,6 +2,7 @@ import 'server-only'
 import type { InventoryMovementType, JournalSourceType } from '@prisma/client'
 
 import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
+import { assertPharmacyIssue } from '@/lib/erp/pharmacy'
 import {
   assertLotSerialForMovement,
   normalizeLotSerial,
@@ -180,7 +181,14 @@ export async function recordMovement(
 ): Promise<RecordedMovement> {
   const item = await tx.item.findFirst({
     where: { id: request.itemId, orgId: ctx.orgId },
-    select: { id: true, name: true, type: true, trackLots: true, trackSerials: true },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      trackLots: true,
+      trackSerials: true,
+      pharmacyControlled: true,
+    },
   })
   if (!item) throw precondition('That item does not exist.')
   if (item.type !== 'INVENTORY' && item.type !== 'INVENTORY_ASSEMBLY') {
@@ -190,8 +198,48 @@ export async function recordMovement(
   const before = await positionOf(tx, request.itemId)
   const quantity = new Decimal(request.quantity)
   const { lot, serial } = normalizeLotSerial(request.lotNumber, request.serialNumber)
-  const lotSerialError = assertLotSerialForMovement(item, quantity, lot, serial)
+  // Pharmacy-controlled stock always behaves as lot-tracked on movements.
+  const lotFlags = {
+    name: item.name,
+    trackLots: item.trackLots || item.pharmacyControlled,
+    trackSerials: item.trackSerials,
+  }
+  const lotSerialError = assertLotSerialForMovement(lotFlags, quantity, lot, serial)
   if (lotSerialError) throw precondition(lotSerialError)
+
+  if (quantity.isNegative() && item.pharmacyControlled) {
+    if (!lot) {
+      throw precondition(
+        `"${item.name}" is pharmacy-controlled and requires a lot number to dispense.`,
+      )
+    }
+    const registered = await tx.itemLot.findUnique({
+      where: {
+        orgId_itemId_lotNumber: {
+          orgId: ctx.orgId,
+          itemId: request.itemId,
+          lotNumber: lot,
+        },
+      },
+      select: { expiryDate: true },
+    })
+    if (!registered) {
+      throw precondition(
+        `Lot "${lot}" for "${item.name}" is not on file. Receive the stock with an expiry date first.`,
+      )
+    }
+    const pharmacyError = assertPharmacyIssue({
+      item: {
+        name: item.name,
+        trackLots: true,
+        pharmacyControlled: true,
+      },
+      lotNumber: lot,
+      lotExpiry: registered.expiryDate,
+      asOf: request.date,
+    })
+    if (pharmacyError) throw precondition(pharmacyError)
+  }
 
   if (quantity.isPositive() && item.trackSerials && serial) {
     const rows = await tx.inventoryTransaction.findMany({

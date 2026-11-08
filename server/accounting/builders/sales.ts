@@ -51,6 +51,13 @@ export type SalesJournalInput = {
    * and show a gross margin that was never real.
    */
   cogs?: { cogsAccountId: string; inventoryAccountId: string; amount: Decimal }[]
+  /**
+   * Construction progress retention held by the customer.
+   * Invoice lines are net; these lines recognise the held slice:
+   *   Dr Retention receivable   held
+   *     Cr Income                 held
+   */
+  retention?: { accountId: string; amount: Decimal } | null
 }
 
 /**
@@ -61,6 +68,7 @@ export type SalesJournalInput = {
  *     Cr Sales Tax Payable          tax, one line per rate
  */
 export function buildInvoiceJournal(input: SalesJournalInput): DraftJournal {
+  const retention = retentionLines(input)
   return {
     date: input.date,
     memo: input.memo ?? `Invoice ${input.number}`,
@@ -73,11 +81,40 @@ export function buildInvoiceJournal(input: SalesJournalInput): DraftJournal {
         customerId: input.customerId,
         description: `Invoice ${input.number}`,
       },
+      ...retention.debits,
       ...discountLines(input, 'debit'),
       ...paymentItemLines(input, 'debit'),
       ...incomeLines(input, 'credit'),
+      ...retention.credits,
       ...taxLines(input, 'credit'),
       ...cogsLines(input, 'out'),
+    ],
+  }
+}
+
+function retentionLines(input: SalesJournalInput): { debits: DraftLine[]; credits: DraftLine[] } {
+  const held = input.retention?.amount
+  if (!input.retention?.accountId || !held || held.isZero() || held.isNegative()) {
+    return { debits: [], credits: [] }
+  }
+  const incomeAccountId =
+    input.priced.lines.find((line) => Boolean(line.incomeAccountId))?.incomeAccountId ??
+    input.fallbackIncomeAccountId
+  return {
+    debits: [
+      {
+        accountId: input.retention.accountId,
+        debit: held,
+        customerId: input.customerId,
+        description: `Retention held · ${input.number}`,
+      },
+    ],
+    credits: [
+      {
+        accountId: incomeAccountId,
+        credit: held,
+        description: `Retention income · ${input.number}`,
+      },
     ],
   }
 }

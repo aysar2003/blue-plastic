@@ -4,6 +4,7 @@ import { toCalendarDate } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
 import { db } from '@/server/db'
+import { xlsxResponse } from '@/server/reports/list-xlsx'
 import * as closePack from '@/server/services/close-pack.service'
 
 export const runtime = 'nodejs'
@@ -26,13 +27,7 @@ export async function GET(
       from: toCalendarDate(period.startDate),
       to: toCalendarDate(period.endDate),
     })
-    return new NextResponse(pack.body, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${pack.filename}"`,
-      },
-    })
+    return xlsxResponse(pack.filename, pack.body)
   } catch (error) {
     if (isAppError(error)) {
       return NextResponse.json({ error: error.message }, { status: error.status })

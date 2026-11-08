@@ -132,9 +132,7 @@ export function ImportDialog({
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               <DownloadLink href={`/api/import-templates/${kind}`} label="Blank Excel" />
-              <DownloadLink href={`/api/import-templates/${kind}?format=csv`} label="Blank CSV" />
               <DownloadLink href={`/api/import-templates/${kind}?sample=1`} label="Sample Excel" />
-              <DownloadLink href={`/api/import-templates/${kind}?sample=1&format=csv`} label="Sample CSV" />
             </div>
           </li>
           <li>

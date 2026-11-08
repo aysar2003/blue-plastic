@@ -252,6 +252,14 @@ export const itemSchema = z
         if (value === true || value === 'true' || value === 'on') return true
         return false
       }),
+    pharmacyControlled: z
+      .union([z.boolean(), z.enum(['true', 'false', 'on', 'off', ''])])
+      .optional()
+      .transform((value) => {
+        if (value === undefined || value === '') return false
+        if (value === true || value === 'true' || value === 'on') return true
+        return false
+      }),
 
     printGroupItems: z
       .union([z.boolean(), z.enum(['true', 'false', 'on', 'off', ''])])

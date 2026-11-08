@@ -42,21 +42,24 @@ export function ReportTable({
     defaultWidth: widthOf(column),
   }))
 
-  const rows: InteractiveRow[] = table.rows.map((row, index) => ({
-    id: `${index}`,
-    emphasis: row.emphasis,
-    excludeFromTotal: row.emphasis,
-    className: row.emphasis ? 'bg-muted/40' : undefined,
-    cells: Object.fromEntries(
-      table.columns.map((column) => {
-        const value = row.cells[column.key] ?? null
-        const href =
-          row.cellHrefs?.[column.key] ??
-          (row.href && (column.key === lead || isNumeric(column) || LINK_KEYS.has(column.key)) ? row.href : null)
-        return [column.key, { value, href }]
-      }),
-    ),
-  }))
+  const rows: InteractiveRow[] = table.rows.map((row, index) => {
+    const drill = row.href ?? Object.values(row.cellHrefs ?? {}).find(Boolean) ?? null
+    return {
+      id: drill ? `${drill}#${index}` : `${index}`,
+      emphasis: row.emphasis,
+      excludeFromTotal: row.emphasis,
+      className: row.emphasis ? 'bg-muted/40' : undefined,
+      cells: Object.fromEntries(
+        table.columns.map((column) => {
+          const value = row.cells[column.key] ?? null
+          const href =
+            row.cellHrefs?.[column.key] ??
+            (row.href && (column.key === lead || isNumeric(column) || LINK_KEYS.has(column.key)) ? row.href : null)
+          return [column.key, { value, href }]
+        }),
+      ),
+    }
+  })
 
   const explicit = table.totals
     ? [

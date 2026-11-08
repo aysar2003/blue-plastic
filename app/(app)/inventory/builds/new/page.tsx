@@ -19,6 +19,7 @@ export default async function NewAssemblyBuildPage({
   const ctx = await requireOrgContext('inventory:adjust')
   const query = await searchParams
   const itemId = typeof query.item === 'string' ? query.item : undefined
+  const qty = typeof query.qty === 'string' ? query.qty : undefined
 
   const [assemblies, shelf, documentNumber] = await Promise.all([
     assemblyBuildService.listAssemblies(ctx),
@@ -44,6 +45,7 @@ export default async function NewAssemblyBuildPage({
         currency={ctx.organization.baseCurrency}
         documentNumber={documentNumber}
         initialItemId={itemId}
+        initialQuantity={qty}
       />
     </>
   )

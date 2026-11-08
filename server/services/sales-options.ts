@@ -87,7 +87,7 @@ async function queryFormOptions(
       where: { orgId, isActive: true },
       select: {
         id: true, name: true, sku: true, barcode: true, salesPrice: true, wholesalePrice: true, type: true,
-        unitOfMeasure: true, trackLots: true, trackSerials: true,
+        unitOfMeasure: true, trackLots: true, trackSerials: true, pharmacyControlled: true,
         salesDescription: true, description: true, salesTaxCodeId: true,
         bomParents: {
           where: { parent: { type: 'GROUP' } },
@@ -190,8 +190,9 @@ async function queryFormOptions(
       sku: item.sku,
       barcode: item.barcode,
       unitOfMeasure: item.unitOfMeasure,
-      trackLots: Boolean(item.trackLots),
+      trackLots: Boolean(item.trackLots || item.pharmacyControlled),
       trackSerials: Boolean(item.trackSerials),
+      pharmacyControlled: Boolean(item.pharmacyControlled),
       price: item.salesPrice?.toString() ?? null,
       wholesalePrice: item.wholesalePrice?.toString() ?? null,
       description: item.salesDescription ?? item.description ?? item.name,

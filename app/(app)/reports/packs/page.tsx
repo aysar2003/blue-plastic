@@ -22,7 +22,7 @@ export default async function ReportPacksPage() {
     <>
       <PageHeader
         title="Report packs"
-        description="Bundle standard reports on a schedule. Run now to download a combined CSV, or set daily / weekly / monthly email when SMTP is configured."
+        description="Bundle standard reports on a schedule. Run now to download a combined Excel workbook, or set daily / weekly / monthly email when SMTP is configured."
         actions={
           canEdit ? (
             <Link href="/reports/packs/new" className={buttonVariants({ size: 'sm' })}>

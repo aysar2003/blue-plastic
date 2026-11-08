@@ -69,20 +69,20 @@ export const PERFORMANCE_REPORTS: StandardReport[] = [
 ]
 
 export const SPREADSHEET_EXPORTS: { label: string; href: string }[] = [
-  { label: 'Profit and Loss (CSV)', href: '/api/reports/profit-loss' },
-  { label: 'Balance Sheet (CSV)', href: '/api/reports/balance-sheet' },
-  { label: 'Statement of Cash Flows (CSV)', href: '/api/reports/cash-flow' },
-  { label: 'Invoice List (CSV)', href: '/api/reports/invoice-list' },
-  { label: 'Bill List (CSV)', href: '/api/reports/bill-list' },
-  { label: 'Account List (CSV)', href: '/api/exports/accounts' },
-  { label: 'Expenses (CSV)', href: '/api/exports/expenses' },
-  { label: 'Purchase orders (CSV)', href: '/api/exports/purchase-orders' },
-  { label: 'Estimate List (CSV)', href: '/api/reports/estimate-list' },
-  { label: 'Quotation List (CSV)', href: '/api/reports/quotation-list' },
-  { label: 'Customer Contact List (CSV)', href: '/api/reports/customer-contact-list' },
-  { label: 'Vendor Contact List (CSV)', href: '/api/reports/vendor-contact-list' },
-  { label: 'Inventory by Store (CSV)', href: '/api/reports/stock-by-store' },
-  { label: 'Project Profitability (CSV)', href: '/api/reports/project-profitability' },
+  { label: 'Profit and Loss (Excel)', href: '/api/reports/profit-loss' },
+  { label: 'Balance Sheet (Excel)', href: '/api/reports/balance-sheet' },
+  { label: 'Statement of Cash Flows (Excel)', href: '/api/reports/cash-flow' },
+  { label: 'Invoice List (Excel)', href: '/api/reports/invoice-list' },
+  { label: 'Bill List (Excel)', href: '/api/reports/bill-list' },
+  { label: 'Account List (Excel)', href: '/api/exports/accounts' },
+  { label: 'Expenses (Excel)', href: '/api/exports/expenses' },
+  { label: 'Purchase orders (Excel)', href: '/api/exports/purchase-orders' },
+  { label: 'Estimate List (Excel)', href: '/api/reports/estimate-list' },
+  { label: 'Quotation List (Excel)', href: '/api/reports/quotation-list' },
+  { label: 'Customer Contact List (Excel)', href: '/api/reports/customer-contact-list' },
+  { label: 'Vendor Contact List (Excel)', href: '/api/reports/vendor-contact-list' },
+  { label: 'Inventory by Store (Excel)', href: '/api/reports/stock-by-store' },
+  { label: 'Project Profitability (Excel)', href: '/api/reports/project-profitability' },
 ]
 
 export const REPORT_CENTRE_TABS = [

@@ -16,7 +16,7 @@ export default async function SpreadsheetReportsPage() {
       <PageHeader
         organization={ctx.organization}
         title="Spreadsheet sync"
-        description="Download a CSV of a report that already exists, then open it in a spreadsheet."
+        description="Download Excel of a report that already exists — company letterhead and tidy columns."
       />
       <NamedReportList reports={SPREADSHEET_EXPORTS} />
     </>

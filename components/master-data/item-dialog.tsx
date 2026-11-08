@@ -65,6 +65,7 @@ export type ItemValues = {
   categoryId?: string | null
   storeId?: string | null
   trackLots?: boolean
+  pharmacyControlled?: boolean
   trackSerials?: boolean
   availableInPos?: boolean
   printGroupItems?: boolean
@@ -998,6 +999,21 @@ export function ItemDialog({
                           <span className="font-medium">Track serials</span>
                           <span className="block text-xs text-muted-foreground">
                             Each unit needs a unique serial (quantity 1).
+                          </span>
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          name="pharmacyControlled"
+                          value="true"
+                          defaultChecked={Boolean(item?.pharmacyControlled)}
+                          className="mt-0.5"
+                        />
+                        <span>
+                          <span className="font-medium">Pharmacy / controlled</span>
+                          <span className="block text-xs text-muted-foreground">
+                            Requires a lot on sale; refuses expired lots. Turns on lot tracking.
                           </span>
                         </span>
                       </label>

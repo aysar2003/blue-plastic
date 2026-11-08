@@ -96,6 +96,9 @@ type Product = {
   category: string | null
   unitOfMeasure?: string | null
   price: string
+  trackLots?: boolean
+  trackSerials?: boolean
+  pharmacyControlled?: boolean
   /** On hand in this register's store; null for services / non-stock items. */
   onHand: string | null
   /** store id → on hand; null for services / non-stock items. */
@@ -243,6 +246,7 @@ export function PosTerminal(props: {
   const [customerQuery, setCustomerQuery] = useState('')
   /** When the cart was loaded from a quotation, checkout closes that quote. */
   const [loadedEstimateId, setLoadedEstimateId] = useState<string | null>(null)
+  const [prescriptionRef, setPrescriptionRef] = useState('')
   const [payOpen, setPayOpen] = useState(false)
   const [amounts, setAmounts] = useState<Record<string, string>>({})
   const [changeMethodId, setChangeMethodId] = useState('')
@@ -381,6 +385,18 @@ export function PosTerminal(props: {
 
   function setLineStore(itemId: string, storeId: string | null) {
     setCart((prev) => prev.map((line) => (line.itemId === itemId ? { ...line, storeId } : line)))
+  }
+
+  function setLineLot(itemId: string, lotNumber: string) {
+    setCart((prev) =>
+      prev.map((line) => (line.itemId === itemId ? { ...line, lotNumber } : line)),
+    )
+  }
+
+  function setLineSerial(itemId: string, serialNumber: string) {
+    setCart((prev) =>
+      prev.map((line) => (line.itemId === itemId ? { ...line, serialNumber } : line)),
+    )
   }
 
   const subtotal = useMemo(
@@ -552,6 +568,8 @@ export function PosTerminal(props: {
       quantity: String(line.quantity),
       unitPrice: line.price.trim() || undefined,
       storeId: line.storeId ?? undefined,
+      lotNumber: line.lotNumber?.trim() || undefined,
+      serialNumber: line.serialNumber?.trim() || undefined,
     }))
   }
 
@@ -730,6 +748,7 @@ export function PosTerminal(props: {
         sessionId: props.session.id,
         customerId: selling.customerId ?? undefined,
         note: selling.note || null,
+        prescriptionRef: prescriptionRef.trim() || undefined,
         lines,
         payments,
         estimateId,
@@ -742,6 +761,7 @@ export function PosTerminal(props: {
       leavePayment()
       commitBook((current) => settlePosOrder(current, selling.id))
       setLoadedEstimateId(null)
+      setPrescriptionRef('')
       setLastReceiptId(result.data.id)
       setToast(`Receipt ${result.data.number} · ${formatMoney(result.data.total, props.currency)}`)
       openReceiptPrint(result.data.id, { autoprint: true, change: changeAtSale })
@@ -1244,6 +1264,52 @@ export function PosTerminal(props: {
                       </>
                     )
                   })()}
+                  {(() => {
+                    const product = productById.get(line.itemId)
+                    if (!product?.trackLots && !product?.pharmacyControlled && !product?.trackSerials) {
+                      return null
+                    }
+                    return (
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs" style={{ color: muted }}>
+                        {product.trackLots || product.pharmacyControlled ? (
+                          <label className="flex flex-wrap items-center gap-1.5">
+                            Lot
+                            <input
+                              type="text"
+                              value={line.lotNumber ?? ''}
+                              onChange={(event) => setLineLot(line.itemId, event.target.value)}
+                              placeholder={product.pharmacyControlled ? 'Required' : 'Optional'}
+                              className="min-w-0 max-w-[9rem] rounded border px-1.5 py-0.5 text-xs outline-none"
+                              style={{
+                                borderColor: border,
+                                background: dark ? '#1f1f23' : '#ffffff',
+                                color: text,
+                              }}
+                              aria-label={`Lot for ${line.name}`}
+                            />
+                          </label>
+                        ) : null}
+                        {product.trackSerials ? (
+                          <label className="flex flex-wrap items-center gap-1.5">
+                            Serial
+                            <input
+                              type="text"
+                              value={line.serialNumber ?? ''}
+                              onChange={(event) => setLineSerial(line.itemId, event.target.value)}
+                              placeholder="Required"
+                              className="min-w-0 max-w-[9rem] rounded border px-1.5 py-0.5 text-xs outline-none"
+                              style={{
+                                borderColor: border,
+                                background: dark ? '#1f1f23' : '#ffffff',
+                                color: text,
+                              }}
+                              aria-label={`Serial for ${line.name}`}
+                            />
+                          </label>
+                        ) : null}
+                      </div>
+                    )
+                  })()}
                 </div>
                 <label className="flex flex-col items-center gap-0.5">
                   <span className="text-[0.65rem] uppercase tracking-wide" style={{ color: muted }}>
@@ -1693,6 +1759,18 @@ export function PosTerminal(props: {
             className="w-full rounded-lg border p-3 text-sm outline-none"
             style={{ background: chip, borderColor: border, color: text }}
           />
+          <label className="mt-3 block text-sm">
+            <span className="font-medium">Prescription / Rx ref</span>
+            <input
+              type="text"
+              value={prescriptionRef}
+              onChange={(event) => setPrescriptionRef(event.target.value)}
+              placeholder="Optional pharmacy reference"
+              maxLength={120}
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ background: chip, borderColor: border, color: text }}
+            />
+          </label>
           <button
             type="button"
             className="mt-3 rounded-lg px-4 py-2 text-sm font-semibold text-white"

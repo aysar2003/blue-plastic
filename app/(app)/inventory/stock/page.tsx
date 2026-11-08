@@ -340,7 +340,12 @@ export default async function InventoryPage({
               {adjustments.map((adjustment) => (
                 <TableRow key={adjustment.id}>
                   <TableCell className="tabular font-medium">
-                    {adjustment.number}
+                    <Link
+                      href={`/inventory/adjustments/${adjustment.id}`}
+                      className="underline-offset-4 hover:underline"
+                    >
+                      {adjustment.number}
+                    </Link>
                     {adjustment.status === 'VOID' ? (
                       <Badge variant="destructive" className="ml-2">
                         void

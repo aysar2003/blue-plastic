@@ -13,7 +13,7 @@ import { posPostedAccounts } from '@/lib/pos-register-posting'
 import { byType as salesByType } from '@/lib/sales-types'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { InvoiceFromSourceInput, SalesDocumentInput } from '@/lib/validation/sales'
-import { systemAccountId } from '@/server/accounting/chart-of-accounts'
+import { seedChartOfAccounts, systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
 import { positionOf, recordMovement, restoreMovementsFor, reverseMovementsFor } from '@/server/accounting/inventory'
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
@@ -58,6 +58,9 @@ export type PosCheckoutMeta = {
    * behaviour: each payment posts to its own wallet account.
    */
   depositLedgerAccountId?: string | null
+  /** Tip held for staff (separate POS_TIP journal). */
+  tipAmount?: string
+  diningTableId?: string | null
 }
 
 async function salesDiscountAccountId(tx: Tx, orgId: string) {
@@ -85,7 +88,7 @@ const SEQUENCE_FOR: Record<SalesDocumentType, DocumentType> = {
 const DOCUMENT_SELECT = {
   id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true,
   promisedDate: true, promiseNote: true, excludeFromOverdue: true,
-  status: true, reference: true, inRef: true, memo: true, customerMessage: true, workScope: true, workSite: true,
+  status: true, reference: true, inRef: true, prescriptionRef: true, memo: true, customerMessage: true, workScope: true, workSite: true,
   subtotal: true, discountAmount: true, taxTotal: true, total: true,
   currencyCode: true, exchangeRate: true, depositAccountId: true, paymentMethod: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
@@ -681,7 +684,7 @@ const DETAIL_SELECT = {
     select: {
       id: true, lineNumber: true, description: true, quantity: true, quantityInvoiced: true, unitPrice: true,
       discountPercent: true, amount: true, taxAmount: true, serviceDate: true, storeId: true,
-      lotNumber: true, serialNumber: true,
+      lotNumber: true, serialNumber: true, lotExpiryDate: true,
       item: { select: { id: true, name: true, sku: true, unitOfMeasure: true } },
       taxCode: { select: { id: true, name: true } },
       incomeAccount: { select: { id: true, code: true, name: true } },
@@ -716,6 +719,7 @@ function toDetail(document: DetailRow) {
       discountPercent: line.discountPercent?.toString() ?? null,
       amount: line.amount.toString(),
       taxAmount: line.taxAmount.toString(),
+      lotExpiryDate: line.lotExpiryDate ? toCalendarDate(line.lotExpiryDate) : null,
     })),
     applications: document.applications.map((application) => ({
       ...application,
@@ -918,6 +922,9 @@ async function createWithin(
         status: isDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
         reference: input.reference ?? null,
         inRef: input.inRef ?? null,
+        prescriptionRef: input.prescriptionRef ?? null,
+        retentionAmount: input.retentionAmount ? input.retentionAmount : null,
+        progressPercent: input.progressPercent ? input.progressPercent : null,
         memo: input.memo ?? null,
         customerMessage: input.customerMessage ?? null,
         workScope: input.workScope ?? null,
@@ -942,6 +949,9 @@ async function createWithin(
             storeId: line.source.storeId ?? null,
             lotNumber: line.source.lotNumber?.trim() || null,
             serialNumber: line.source.serialNumber?.trim() || null,
+            lotExpiryDate: line.source.lotExpiryDate
+              ? toDate(line.source.lotExpiryDate)
+              : null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
             unitPrice: line.unitPrice.toFixed(4),
@@ -971,6 +981,8 @@ async function createWithin(
           changePaymentMethodId: options.pos.change?.paymentMethodId ?? null,
           changeLedgerAccountId: options.pos.change?.ledgerAccountId ?? null,
           depositLedgerAccountId: options.pos.depositLedgerAccountId ?? null,
+          tipAmount: options.pos.tipAmount ?? '0',
+          diningTableId: options.pos.diningTableId ?? null,
           payments: {
             create: options.pos.payments.map((payment) => ({
               paymentMethodId: payment.paymentMethodId,
@@ -1205,6 +1217,9 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
         paymentTermId: term?.id ?? null,
         reference: input.reference ?? null,
         inRef: input.inRef ?? null,
+        prescriptionRef: input.prescriptionRef ?? null,
+        retentionAmount: input.retentionAmount ? input.retentionAmount : null,
+        progressPercent: input.progressPercent ? input.progressPercent : null,
         memo: input.memo ?? null,
         customerMessage: input.customerMessage ?? null,
         workScope: input.workScope ?? null,
@@ -1232,6 +1247,9 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
             storeId: line.source.storeId ?? null,
             lotNumber: line.source.lotNumber?.trim() || null,
             serialNumber: line.source.serialNumber?.trim() || null,
+            lotExpiryDate: line.source.lotExpiryDate
+              ? toDate(line.source.lotExpiryDate)
+              : null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
             unitPrice: line.unitPrice.toFixed(4),
@@ -1390,6 +1408,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     select: {
       id: true, type: true, number: true, date: true, memo: true, customerId: true,
       status: true, depositAccountId: true, journalId: true, discountAmount: true,
+      retentionAmount: true,
       trackingCategoryId: true, currencyCode: true, exchangeRate: true,
       lines: {
         orderBy: { lineNumber: 'asc' },
@@ -1494,6 +1513,11 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
   )
 
   const hasPaymentItem = priced.lines.some((line) => line.source.isPayment)
+  const retentionHeld = new Decimal(document.retentionAmount?.toString() ?? '0')
+  if (document.type === 'INVOICE' && retentionHeld.greaterThan(0)) {
+    // Ensure Contract Retention Receivable exists on older charts.
+    await seedChartOfAccounts(tx, ctx.orgId)
+  }
   const input: SalesJournalInput = {
     date: toCalendarDate(document.date),
     number: document.number,
@@ -1508,6 +1532,13 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       ? await systemAccountId(tx, ctx.orgId, 'UNDEPOSITED_FUNDS')
       : null,
     memo: document.memo,
+    retention:
+      document.type === 'INVOICE' && retentionHeld.greaterThan(0)
+        ? {
+            accountId: await systemAccountId(tx, ctx.orgId, 'RETENTION_RECEIVABLE'),
+            amount: retentionHeld,
+          }
+        : null,
   }
 
   const posOrder = await tx.posOrder.findUnique({
@@ -2889,6 +2920,9 @@ async function resolveLines(
       incomeAccountId,
       depositAccountId: isPayment ? (item?.depositAccountId ?? null) : null,
       serviceDate: line.serviceDate ?? null,
+      lotNumber: line.lotNumber ?? null,
+      serialNumber: line.serialNumber ?? null,
+      lotExpiryDate: line.lotExpiryDate ?? null,
       isDiscount,
       isSubtotal,
       isPayment,

@@ -13,6 +13,10 @@ export type PosOpenCartLine = {
   price: string
   quantity: number
   storeId: string | null
+  /** Pharmacy / lot-tracked dispense. */
+  lotNumber?: string | null
+  /** Serial-tracked dispense. */
+  serialNumber?: string | null
 }
 
 export type PosOpenOrder = {
@@ -245,7 +249,23 @@ function parseLine(value: unknown): PosOpenCartLine | null {
   if (storeId !== null && (typeof storeId !== 'string' || storeId.length === 0 || storeId.length > 64)) {
     return null
   }
-  return { itemId, name, price, quantity, storeId }
+  const lotNumber =
+    typeof value.lotNumber === 'string' && value.lotNumber.trim() && value.lotNumber.length <= 80
+      ? value.lotNumber.trim()
+      : undefined
+  const serialNumber =
+    typeof value.serialNumber === 'string' && value.serialNumber.trim() && value.serialNumber.length <= 80
+      ? value.serialNumber.trim()
+      : undefined
+  return {
+    itemId,
+    name,
+    price,
+    quantity,
+    storeId,
+    ...(lotNumber ? { lotNumber } : {}),
+    ...(serialNumber ? { serialNumber } : {}),
+  }
 }
 
 function parseOrder(value: unknown): PosOpenOrder | null {

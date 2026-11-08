@@ -27,6 +27,7 @@ import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
 import { priceDocument, type DraftSalesLine } from '@/server/accounting/sales-pricing'
 import { recordMovement, restoreMovementsFor, reverseMovementsFor } from '@/server/accounting/inventory'
+import { upsertItemLot } from '@/server/services/item-lot.service'
 import { purchaseByType } from '@/lib/purchase-types'
 import {
   buildBillJournal,
@@ -972,6 +973,9 @@ async function createWithin(
             itemId: line.source.itemId ?? null,
             storeId: line.source.storeId ?? null,
             lotNumber: line.source.lotNumber?.trim() || null,
+            lotExpiryDate: line.source.lotExpiryDate
+              ? toDate(line.source.lotExpiryDate)
+              : null,
             serialNumber: line.source.serialNumber?.trim() || null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
@@ -1125,6 +1129,9 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
             itemId: line.source.itemId ?? null,
             storeId: line.source.storeId ?? null,
             lotNumber: line.source.lotNumber?.trim() || null,
+            lotExpiryDate: line.source.lotExpiryDate
+              ? toDate(line.source.lotExpiryDate)
+              : null,
             serialNumber: line.source.serialNumber?.trim() || null,
             description: line.source.description ?? null,
             quantity: line.quantity.toFixed(4),
@@ -1186,7 +1193,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         select: {
           id: true, amount: true, taxAmount: true, taxCodeId: true, expenseAccountId: true,
           description: true, quantity: true, unitPrice: true, discountPercent: true, itemId: true, storeId: true,
-          lotNumber: true, serialNumber: true,
+          lotNumber: true, serialNumber: true, lotExpiryDate: true,
           item: { select: { id: true, name: true, type: true, inventoryAccountId: true } },
         },
       },
@@ -1325,6 +1332,16 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         lotNumber: line.lotNumber,
         serialNumber: line.serialNumber,
       })
+
+      if (receivesStock && line.lotNumber?.trim()) {
+        await upsertItemLot(tx, ctx.orgId, {
+          itemId: line.item.id,
+          lotNumber: line.lotNumber,
+          expiryDate: line.lotExpiryDate
+            ? toCalendarDate(line.lotExpiryDate)
+            : null,
+        })
+      }
 
       stock.set(
         inventoryAccountId,
@@ -1882,6 +1899,7 @@ export async function receivableOrder(
               unitOfMeasure: true,
               trackLots: true,
               trackSerials: true,
+              pharmacyControlled: true,
             },
           },
         },
@@ -1902,7 +1920,7 @@ export async function receivableOrder(
       sku: line.item?.sku ?? null,
       unitOfMeasure: line.item?.unitOfMeasure ?? null,
       isTracked: Boolean(isTracked),
-      trackLots: Boolean(isTracked && line.item?.trackLots),
+      trackLots: Boolean(isTracked && (line.item?.trackLots || line.item?.pharmacyControlled)),
       trackSerials: Boolean(isTracked && line.item?.trackSerials),
       storeId: line.storeId,
       description: line.description,
@@ -1986,7 +2004,13 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
     const byId = new Map(order.lines.map((line) => [line.id, line]))
     const receiving = new Map<
       string,
-      { quantity: Decimal; storeId: string | null; lotNumber: string | null; serialNumber: string | null }
+      {
+        quantity: Decimal
+        storeId: string | null
+        lotNumber: string | null
+        serialNumber: string | null
+        lotExpiryDate: string | null
+      }
     >()
 
     for (const request of input.lines) {
@@ -2019,6 +2043,7 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
         storeId: request.storeId ?? line.storeId,
         lotNumber: request.lotNumber?.trim() || null,
         serialNumber: request.serialNumber?.trim() || null,
+        lotExpiryDate: request.lotExpiryDate ?? null,
       })
     }
 
@@ -2070,6 +2095,7 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
               storeId: entry.storeId,
               lotNumber: entry.lotNumber,
               serialNumber: entry.serialNumber,
+              lotExpiryDate: entry.lotExpiryDate,
               expenseAccountId: line.expenseAccountId,
               description: line.description,
               quantity: entry.quantity.toString(),
@@ -2762,6 +2788,9 @@ async function resolveLines(
         : item?.type === 'NON_INVENTORY'
           ? systemCogsAccountId
           : (line.expenseAccountId ?? item?.expenseAccountId ?? vendorDefaultAccountId ?? null),
+      lotNumber: line.lotNumber ?? null,
+      serialNumber: line.serialNumber ?? null,
+      lotExpiryDate: line.lotExpiryDate ?? null,
       isStock: stocked,
     }
   })

@@ -9,9 +9,11 @@ import {
   switchCompanySchema,
   updateCompanyLimitsSchema,
 } from '@/lib/validation/company'
+import { installIndustryPackSchema } from '@/lib/validation/pack'
 import { reviewSignupRequestSchema } from '@/lib/validation/signup-request'
 import { action } from '@/server/action'
 import * as companyService from '@/server/services/company.service'
+import * as packService from '@/server/services/pack.service'
 import * as registerService from '@/server/services/register.service'
 
 /** Create another separate company (database) on this instance. */
@@ -76,4 +78,19 @@ export const openCompany = action
   .input(switchCompanySchema)
   .handler(async (ctx, input) => {
     return companyService.assertCanOpenCompany(ctx, input.orgId)
+  })
+
+/** Apply an industry / institution pack (apps + optional CoA) — system owner. */
+export const installIndustryPack = action
+  .input(installIndustryPackSchema)
+  .handler(async (ctx, input) => {
+    const result = await packService.installPackForOrg(ctx, input.orgId, input.packId, {
+      seedChart: input.seedChart,
+      replaceGrants: true,
+    })
+    revalidatePath('/databases')
+    revalidatePath('/databases/apps')
+    revalidatePath('/settings/features')
+    revalidatePath('/', 'layout')
+    return result
   })

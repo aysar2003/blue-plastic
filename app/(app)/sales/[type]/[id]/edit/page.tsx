@@ -84,6 +84,7 @@ export default async function EditSalesDocumentPage({
           date: toCalendarDate(document.date),
           reference: document.reference,
           inRef: document.inRef,
+          prescriptionRef: document.prescriptionRef,
           memo: document.memo,
           customerMessage: document.customerMessage,
           workScope: document.workScope,
@@ -104,6 +105,9 @@ export default async function EditSalesDocumentPage({
             discountPercent: line.discountPercent?.toString() ?? null,
             taxCodeId: line.taxCode?.id ?? null,
             storeId: line.storeId,
+            lotNumber: line.lotNumber,
+            serialNumber: line.serialNumber,
+            lotExpiryDate: line.lotExpiryDate,
           })),
         }}
         projects={options.projects}

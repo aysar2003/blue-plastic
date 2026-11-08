@@ -17,6 +17,8 @@ export type DraftSalesLine = {
   /** Phase 24: lot / serial carried onto the document line. */
   lotNumber?: string | null
   serialNumber?: string | null
+  /** Pharmacy lot expiry. */
+  lotExpiryDate?: string | null
   /**
    * Tracked stock. Its cost belongs to the inventory asset, so the journal
    * builder must not also post it to an expense account — doing both would debit

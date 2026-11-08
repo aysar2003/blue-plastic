@@ -31,9 +31,15 @@ export default async function MrpPage({
         title="Materials plan"
         description="Explode a bill of materials, see leaf shortages, then build or buy."
         actions={
-          <Button asChild variant="outline" size="sm">
-            <Link href="/inventory/builds/new">Build assemblies</Link>
-          </Button>
+          itemId && short.length === 0 ? (
+            <Button asChild size="sm">
+              <Link href={`/inventory/builds/new?item=${itemId}&qty=${qty}`}>Build assemblies</Link>
+            </Button>
+          ) : (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/inventory/builds/new">Build assemblies</Link>
+            </Button>
+          )
         }
       />
       <Card className="mb-6 max-w-xl p-4">

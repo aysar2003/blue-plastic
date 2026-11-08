@@ -188,7 +188,7 @@ describe('legal layers', () => {
 })
 
 describe('ERP ready loops', () => {
-  it('covers sell-collect-buy-stock-books-crm-people-collab-marketplace', () => {
+  it('covers sell-collect-buy-stock-books-crm-people-collab-marketplace-institutions', () => {
     expect(ERP_READY_LOOPS.map((loop) => loop.id)).toEqual([
       'sell',
       'collect',
@@ -199,6 +199,7 @@ describe('ERP ready loops', () => {
       'people',
       'collab',
       'marketplace',
+      'institutions',
     ])
     expect(ERP_READY_LOOPS.every((loop) => loop.ready)).toBe(true)
     expect(ERP_NON_GOALS.length).toBeGreaterThanOrEqual(4)

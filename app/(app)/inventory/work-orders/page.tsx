@@ -74,7 +74,20 @@ export default async function WorkOrdersPage() {
           </li>
         ))}
         {rows.length === 0 ? (
-          <Card className="px-3 py-6 text-muted-foreground">No work orders yet.</Card>
+          <Card className="space-y-3 px-4 py-8 text-sm">
+            <p className="font-medium text-foreground">No work orders yet</p>
+            <p className="text-muted-foreground">
+              A work order plans an assembly: draft → release → complete. Completing posts the bill of
+              materials and finished goods into stock.
+            </p>
+            {canAdjust ? (
+              <Link href="/inventory/work-orders/new" className={buttonVariants({ size: 'sm' })}>
+                Create the first work order
+              </Link>
+            ) : (
+              <p className="text-muted-foreground">You need inventory adjust permission to create one.</p>
+            )}
+          </Card>
         ) : null}
       </ul>
     </>

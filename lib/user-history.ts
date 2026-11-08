@@ -128,7 +128,7 @@ export function userHistoryHref(
   if (entity === 'Item') return `/items/${entityId}`
   if (entity === 'LedgerAccount') return `/accounts/${entityId}`
   if (entity === 'BankTransfer') return '/banking'
-  if (entity === 'InventoryAdjustment') return '/inventory/adjustments/new'
+  if (entity === 'InventoryAdjustment') return `/inventory/adjustments/${entityId}`
   if (entity === 'AssemblyBuild') return '/inventory/builds/new'
   return null
 }

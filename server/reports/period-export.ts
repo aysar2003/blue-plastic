@@ -140,105 +140,39 @@ export function renderMonthPdf(input: MonthExport): Uint8Array {
 }
 
 export async function renderMonthWorkbook(input: MonthExport): Promise<Uint8Array> {
-  const loaded = (await import('exceljs')) as unknown as {
-    Workbook?: new () => {
-      addWorksheet: (name: string) => ExcelSheet
-      xlsx: { writeBuffer: () => Promise<ArrayBuffer> }
-    }
-    default?: {
-      Workbook: new () => {
-        addWorksheet: (name: string) => ExcelSheet
-        xlsx: { writeBuffer: () => Promise<ArrayBuffer> }
-      }
-    }
-  }
-  const Workbook = loaded.Workbook ?? loaded.default?.Workbook
-  if (!Workbook) throw new Error('The Excel writer did not load')
-
-  const workbook = new Workbook()
-  const sheet = workbook.addWorksheet(input.label.slice(0, 31))
-  sheet.columns = [
-    { width: 16 },
-    { width: 14 },
-    { width: 42 },
-    { width: 22 },
-    { width: 16 },
-    { width: 28 },
-    { width: 16 },
-  ]
-
-  const lines = companyHeader(input.org)
-  let row = 1
-  for (const [index, line] of lines.entries()) {
-    sheet.mergeCells(row, 1, row, 7)
-    const cell = sheet.getCell(row, 1)
-    cell.value = line
-    cell.alignment = { horizontal: 'center' }
-    cell.font = index === 0 ? { bold: true, size: 16 } : { size: 11 }
-    row += 1
-  }
-  row += 1
-  sheet.mergeCells(row, 1, row, 7)
-  sheet.getCell(row, 1).value = input.label
-  sheet.getCell(row, 1).alignment = { horizontal: 'center' }
-  sheet.getCell(row, 1).font = { bold: true, size: 14 }
-  row += 1
-  sheet.mergeCells(row, 1, row, 7)
-  sheet.getCell(row, 1).value = `${formatDate(input.from)} to ${formatDate(input.to)}`
-  sheet.getCell(row, 1).alignment = { horizontal: 'center' }
-  row += 1
-  if (input.income && input.expenses && input.net) {
-    sheet.mergeCells(row, 1, row, 7)
-    sheet.getCell(row, 1).value = `Income ${input.income}    Expenses ${input.expenses}    Net income ${input.net}`
-    sheet.getCell(row, 1).alignment = { horizontal: 'center' }
-    sheet.getCell(row, 1).font = { bold: true }
-    row += 1
-  }
-  row += 1
-
-  const head = sheet.getRow(row)
-  writeCells(head, ['Entry', 'Date', 'Description', 'Source', 'Document', 'Customer / vendor', 'Amount'])
-  head.font = { bold: true }
-  const headerRow = row
-  row += 1
-
-  for (const journal of input.rows) {
-    const line = sheet.getRow(row)
-    writeCells(line, [
+  const { renderListXlsx } = await import('@/server/reports/list-xlsx')
+  const summary =
+    input.income && input.expenses && input.net
+      ? `Income ${input.income} · Expenses ${input.expenses} · Net ${input.net}`
+      : undefined
+  const range = `${formatDate(input.from)} to ${formatDate(input.to)}`
+  return renderListXlsx({
+    org: input.org,
+    title: input.label,
+    subtitle: summary ? `${range}  ·  ${summary}` : range,
+    currency: input.currency,
+    sheetName: input.label.slice(0, 31),
+    columns: [
+      { header: 'Entry', width: 16, kind: 'text' },
+      { header: 'Date', width: 14, kind: 'text' },
+      { header: 'Description', width: 42, kind: 'text' },
+      { header: 'Source', width: 22, kind: 'text' },
+      { header: 'Document', width: 16, kind: 'text' },
+      { header: 'Customer / vendor', width: 28, kind: 'text' },
+      { header: 'Amount', width: 14, kind: 'money' },
+    ],
+    rows: input.rows.map((journal) => [
       journal.journalNumber,
       formatTransactionDate(toCalendarDate(journal.date), journal.postedAt, input.timeZone || 'UTC'),
       journal.memo ?? '',
       JOURNAL_SOURCE_LABELS[journal.sourceType as JournalSourceType] ?? journal.sourceType,
       journal.source.number ?? '',
       journal.source.partyName ?? '',
-      Number(journal.total),
-    ])
-    line.getCell(7).numFmt = '#,##0.00'
-    row += 1
-  }
-
-  sheet.views = [{ state: 'frozen', ySplit: headerRow }]
-  sheet.autoFilter = { from: { row: headerRow, column: 1 }, to: { row: Math.max(headerRow, row - 1), column: 7 } }
-
-  const buffer = await workbook.xlsx.writeBuffer()
-  return new Uint8Array(buffer)
-}
-
-function writeCells(line: { getCell: (col: number) => { value?: string | number; numFmt: string } }, values: (string | number)[]) {
-  values.forEach((value, index) => {
-    line.getCell(index + 1).value = value
+      journal.total,
+    ]),
   })
 }
 
 function clip(value: string, length: number) {
   return value.length > length ? `${value.slice(0, length - 3)}...` : value
-}
-
-type ExcelSheet = {
-  columns: { width: number }[]
-  mergeCells: (fromRow: number, fromCol: number, toRow: number, toCol: number) => void
-  getCell: (row: number, col: number) => { value: string; alignment: { horizontal: string }; font: { bold?: boolean; size?: number } }
-  getRow: (row: number) => { font: { bold?: boolean }; getCell: (col: number) => { value?: string | number; numFmt: string } }
-  views: { state: string; ySplit: number }[]
-  autoFilter: { from: { row: number; column: number }; to: { row: number; column: number } }
 }

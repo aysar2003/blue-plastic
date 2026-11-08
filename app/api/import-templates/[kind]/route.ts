@@ -4,7 +4,6 @@ import { sampleRows, templateFor } from '@/lib/import-template'
 import { requireOrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
 import * as accountService from '@/server/services/account.service'
-import { csvResponse } from '@/server/reports/csv'
 import { buildImportTemplate } from '@/server/services/template-workbook'
 import * as storeService from '@/server/services/store.service'
 import * as taxService from '@/server/services/tax.service'
@@ -35,15 +34,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
     const ctx = await requireOrgContext(spec.permission)
     const url = new URL(request.url)
     const sample = url.searchParams.get('sample') === '1'
-    const csv = url.searchParams.get('format') === 'csv'
     const key = kind as keyof typeof KINDS
     const columns = templateFor(key)
     const examples = sample ? sampleRows(key) : []
-
-    if (csv) {
-      const rows = [columns.map((column) => column.header), ...examples]
-      return csvResponse(`${spec.file}-${sample ? 'sample' : 'template'}.csv`, rows)
-    }
 
     const [terms, accounts, stores] = await Promise.all([
       taxService.listPaymentTerms(ctx),

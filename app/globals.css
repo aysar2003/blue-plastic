@@ -2763,6 +2763,47 @@ a.report-drill-link:hover {
   background: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
+/* QuickBooks-style “you were here” after Back from a drilled transaction. */
+tr[data-list-return='true'] {
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+tr[data-list-return='true'] > :is(td, th):first-child,
+tr[data-list-return='true'] > :is(td, th):last-child {
+  position: relative;
+}
+
+tr[data-list-return='true'] > :is(td, th):first-child::before,
+tr[data-list-return='true'] > :is(td, th):last-child::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  z-index: 3;
+  pointer-events: none;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+
+tr[data-list-return='true'] > :is(td, th):first-child::before {
+  left: 2px;
+  border-left: 7px solid var(--foreground);
+}
+
+tr[data-list-return='true'] > :is(td, th):last-child::after {
+  right: 2px;
+  border-right: 7px solid var(--foreground);
+}
+
+@media print {
+  tr[data-list-return='true'] > :is(td, th):first-child::before,
+  tr[data-list-return='true'] > :is(td, th):last-child::after {
+    content: none;
+  }
+}
+
 /* ---------------------------------------------------------------------------
  * Report styles (Settings → Appearance). Applied via html[data-report-style].
  * Density (Standard / Compact / Plain) still comes from data-template.

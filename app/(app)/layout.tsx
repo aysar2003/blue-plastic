@@ -1,10 +1,12 @@
 import { redirect } from 'next/navigation'
 
 import { AppShell } from '@/components/layout/app-shell'
+import { OnboardingGate } from '@/components/onboarding/onboarding-gate'
 import { withDatabasePage } from '@/lib/page-guard'
 import { getOrgContext } from '@/server/auth/context'
 import { listSwitchableCompanies } from '@/server/services/backup-import.service'
 import { canViewGroupReports } from '@/server/services/company-group.service'
+import * as onboardingService from '@/server/services/onboarding.service'
 import { RentBanner } from './rent-banner'
 import { balanceAlertsSlot, calendarAlertsSlot, stockAlertsSlot } from './shell-alerts'
 
@@ -20,9 +22,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
     const canSwitch = ctx.isSystemOwner || ctx.canConnect
     // Light switcher list only — File size estimates stay on /databases.
-    const [showCompanyReports, databases] = await Promise.all([
+    const [showCompanyReports, databases, onboarding] = await Promise.all([
       canViewGroupReports(ctx),
       canSwitch ? listSwitchableCompanies(ctx) : Promise.resolve([]),
+      onboardingService.getState(ctx),
     ])
 
     // Month P&L chart lives on /reports only (see reports/page.tsx). Loading it
@@ -36,6 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         showCompanyReports={showCompanyReports}
         databases={databases}
       >
+        <OnboardingGate needed={onboarding.needsWizard} />
         <RentBanner />
         {children}
       </AppShell>

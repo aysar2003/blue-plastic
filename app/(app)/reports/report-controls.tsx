@@ -17,7 +17,7 @@ export type ControlSet = {
   mode: 'range' | 'asOf'
   basis?: boolean
   comparison?: boolean
-  /** Report key for the CSV endpoint. Omitted where export makes no sense. */
+  /** Report key for the Excel endpoint. Omitted where export makes no sense. */
   exportAs?: string
   /**
    * Offer closed months / quarters / years as a period shortcut.
@@ -278,7 +278,7 @@ export function ReportControls({
 
       {exportHref ? (
         <a href={exportHref} className={buttonVariants({ variant: 'ghost' })} download>
-          <DownloadIcon /> CSV
+          <DownloadIcon /> Excel
         </a>
       ) : null}
 

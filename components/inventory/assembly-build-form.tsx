@@ -46,6 +46,7 @@ export function AssemblyBuildForm({
   currency,
   documentNumber,
   initialItemId,
+  initialQuantity,
 }: {
   assemblies: AssemblyOption[]
   stores: StoreOption[]
@@ -53,6 +54,7 @@ export function AssemblyBuildForm({
   currency: string
   documentNumber: string
   initialItemId?: string
+  initialQuantity?: string
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveAssemblyBuildForm, idleState)
@@ -62,7 +64,9 @@ export function AssemblyBuildForm({
     initialItemId && assemblies.some((row) => row.id === initialItemId) ? initialItemId : '',
   )
   const [storeId, setStoreId] = useState(stores.find((store) => store.isOffice)?.id ?? stores[0]?.id ?? '')
-  const [quantity, setQuantity] = useState('1')
+  const [quantity, setQuantity] = useState(
+    initialQuantity && Number(initialQuantity) > 0 ? initialQuantity : '1',
+  )
   const [memo, setMemo] = useState('')
   const handled = useRef(false)
   const afterSave = useRef<'close' | 'new'>('close')

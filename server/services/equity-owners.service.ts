@@ -5,6 +5,7 @@ import type { Workbook as ExcelWorkbook } from 'exceljs'
 import { parseCsv, parseTable, pick, type CsvRow } from '@/lib/csv'
 import { today } from '@/lib/date'
 import { OWNERS_EQUITY_HEADERS, type OwnersEquityImportLine } from '@/lib/equity-owners-sheet'
+import { applyPrintChrome, paintCompanyBand, XLSX_LOOK } from '@/server/reports/list-xlsx'
 import { Decimal, ZERO, parseMoneyInput, toMoneyString } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import { postJournal } from '@/server/accounting/posting'
@@ -108,29 +109,54 @@ export async function buildOwnersEquityWorkbook(ctx: OrgContext): Promise<Uint8A
   if (!Workbook) throw new Error('The Excel writer did not load')
 
   const workbook = new Workbook()
-  const sheet = workbook.addWorksheet('Owners equity')
+  workbook.creator = 'SOM ERP'
+  const sheet = workbook.addWorksheet('Owners equity', {
+    properties: { defaultRowHeight: 18 },
+    views: [{ showGridLines: false }],
+  })
   const guide = workbook.addWorksheet('How to fill')
 
-  const header = sheet.getRow(1)
-  OWNERS_EQUITY_HEADERS.forEach((title, index) => {
+  let rowIndex = paintCompanyBand(sheet, ctx.organization, OWNERS_EQUITY_HEADERS.length)
+  const title = sheet.getCell(rowIndex, 1)
+  title.value = 'Owners equity'
+  title.font = { name: XLSX_LOOK.font, bold: true, size: 14, color: { argb: XLSX_LOOK.ink } }
+  sheet.mergeCells(rowIndex, 1, rowIndex, OWNERS_EQUITY_HEADERS.length)
+  rowIndex += 2
+
+  const header = sheet.getRow(rowIndex)
+  OWNERS_EQUITY_HEADERS.forEach((titleText, index) => {
     const cell = header.getCell(index + 1)
-    cell.value = title
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, name: 'Calibri', size: 11 }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B4F6C' } }
+    cell.value = titleText
+    cell.font = { bold: true, color: { argb: XLSX_LOOK.white }, name: XLSX_LOOK.font, size: 10 }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLSX_LOOK.brand } }
+    cell.alignment = { vertical: 'middle', indent: 1 }
   })
-  header.height = 22
+  header.height = 24
+  const headerRow = rowIndex
+  rowIndex += 1
 
   snap.owners.forEach((row, index) => {
-    const excelRow = sheet.getRow(index + 2)
+    const excelRow = sheet.getRow(headerRow + 1 + index)
     excelRow.getCell(1).value = row.accountId
+    excelRow.getCell(1).numFmt = '@'
     excelRow.getCell(2).value = row.code
+    excelRow.getCell(2).numFmt = '@'
     excelRow.getCell(3).value = row.name
     excelRow.getCell(4).value = "Owner's equity"
     excelRow.getCell(5).value = Number(row.balance)
-    excelRow.getCell(5).numFmt = '#,##0.00'
+    excelRow.getCell(5).numFmt = '#,##0.00;[Red]-#,##0.00'
     excelRow.getCell(6).value = ''
     excelRow.getCell(7).value = ''
-    excelRow.getCell(7).numFmt = '#,##0.00'
+    excelRow.getCell(7).numFmt = '#,##0.00;[Red]-#,##0.00'
+    if (index % 2 === 1) {
+      for (let c = 1; c <= OWNERS_EQUITY_HEADERS.length; c++) {
+        excelRow.getCell(c).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: XLSX_LOOK.stripe },
+        }
+      }
+    }
   })
 
   sheet.getColumn(1).width = 26
@@ -141,14 +167,20 @@ export async function buildOwnersEquityWorkbook(ctx: OrgContext): Promise<Uint8A
   sheet.getColumn(5).width = 14
   sheet.getColumn(6).width = 12
   sheet.getColumn(7).width = 18
-  sheet.views = [{ state: 'frozen', ySplit: 1 }]
+  sheet.views = [{ state: 'frozen', ySplit: headerRow, showGridLines: false }]
   sheet.autoFilter = {
-    from: { row: 1, column: 1 },
-    to: { row: 1, column: OWNERS_EQUITY_HEADERS.length },
+    from: { row: headerRow, column: 1 },
+    to: { row: Math.max(headerRow, headerRow + snap.owners.length), column: OWNERS_EQUITY_HEADERS.length },
   }
+  applyPrintChrome(sheet, {
+    companyName: ctx.organization.name,
+    title: "Owners' equity",
+    headerRowIndex: headerRow,
+    colCount: OWNERS_EQUITY_HEADERS.length,
+  })
 
   guide.getCell(1, 1).value = 'How to distribute owners equity'
-  guide.getCell(1, 1).font = { bold: true, size: 16, color: { argb: 'FF0B4F6C' } }
+  guide.getCell(1, 1).font = { bold: true, size: 16, color: { argb: XLSX_LOOK.brand }, name: XLSX_LOOK.font }
   guide.mergeCells(1, 1, 1, 3)
   guide.getCell(3, 1).value = `Retained earnings available now: ${snap.retainedEarnings.balance} (${snap.retainedEarnings.code} ${snap.retainedEarnings.name})`
   guide.getCell(3, 1).font = { bold: true }

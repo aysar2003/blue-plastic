@@ -69,6 +69,12 @@ export const ERP_READY_LOOPS: readonly ReadyLoop[] = [
     apps: ['settings'],
     ready: true,
   },
+  {
+    id: 'institutions',
+    title: 'Institutions (industry packs → vertical-ready; onboarding wizard)',
+    apps: ['settings', 'pos', 'hospitality', 'inventory'],
+    ready: true,
+  },
 ] as const
 
 export type ErpLayerStatus = 'complete' | 'lite' | 'missing'
@@ -141,7 +147,7 @@ export const ERP_LAYERS: readonly ErpLayer[] = [
     title: 'HR / Payroll',
     status: 'complete',
     nextPhase: null,
-    note: 'Operational payroll + statutory CSV/JSON export (Phase 27).',
+    note: 'Operational payroll + statutory Excel/JSON export (Phase 27).',
   },
   {
     id: 'L8',

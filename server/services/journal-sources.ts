@@ -83,6 +83,7 @@ export async function resolveSources(
   const openingIds = idsFor(['OPENING_BALANCE'])
   const posCashMoveIds = idsFor(['POS_CASH_MOVE'])
   const posSessionCloseIds = idsFor(['POS_SESSION_CLOSE'])
+  const posTipIds = idsFor(['POS_TIP'])
 
   const [
     salesDocuments,
@@ -99,6 +100,7 @@ export async function resolveSources(
     openingVendors,
     posCashMoves,
     posSessionCloses,
+    posTips,
   ] = await Promise.all([
     salesIds.length
       ? db.salesDocument.findMany({
@@ -197,6 +199,18 @@ export async function resolveSources(
           select: { id: true, register: { select: { name: true } } },
         })
       : [],
+    // Tip journals point at the POS order id.
+    posTipIds.length
+      ? db.posOrder.findMany({
+          where: { orgId, id: { in: posTipIds } },
+          select: {
+            id: true,
+            tipAmount: true,
+            register: { select: { name: true } },
+            salesDocument: { select: { id: true, number: true } },
+          },
+        })
+      : [],
   ])
 
   for (const document of salesDocuments) {
@@ -264,7 +278,7 @@ export async function resolveSources(
   for (const adjustment of adjustments) {
     resolved.set(key('INVENTORY_ADJUSTMENT', adjustment.id), {
       number: adjustment.number,
-      href: '/inventory#adjustments',
+      href: `/inventory/adjustments/${adjustment.id}`,
       partyName: null,
       partyHref: null,
     })
@@ -293,6 +307,15 @@ export async function resolveSources(
       number: 'Close',
       href: '/pos/sessions',
       partyName: session.register.name,
+      partyHref: null,
+    })
+  }
+
+  for (const tip of posTips) {
+    resolved.set(key('POS_TIP', tip.id), {
+      number: tip.salesDocument.number,
+      href: `/sales/sales-receipts/${tip.salesDocument.id}`,
+      partyName: tip.register.name,
       partyHref: null,
     })
   }

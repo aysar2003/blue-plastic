@@ -43,6 +43,8 @@ export const salesLineSchema = z.object({
   /** Phase 24: lot / serial for tracked inventory lines. */
   lotNumber: optionalText(80),
   serialNumber: optionalText(80),
+  /** Pharmacy: lot expiry (validated against ItemLot on post). */
+  lotExpiryDate: optionalDate,
   /** A purchase line marked billable to this customer, pulled onto the invoice. */
   sourcePurchaseLineId: optionalId,
 })
@@ -53,6 +55,22 @@ export const salesDocumentSchema = z.object({
   date: calendarDate,
   paymentTermId: optionalId,
   expiryDate: optionalDate,
+  /** Pharmacy Rx reference (text). */
+  prescriptionRef: optionalText(120),
+  /** Construction: retention held on this invoice. */
+  retentionAmount: moneyString.optional().nullable(),
+  /** Construction: cumulative progress % this bill reaches. */
+  progressPercent: z
+    .union([
+      z.literal(''),
+      calculatedDecimal(/^\d{1,3}(\.\d{1,4})?$/, 'Enter a percent').refine(
+        (v) => Number(v) <= 100,
+        'At most 100%',
+      ),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
   reference: optionalText(60),
   /** IN/ — GRN / internal refs (QuickBooks template field). */
   inRef: optionalText(120),

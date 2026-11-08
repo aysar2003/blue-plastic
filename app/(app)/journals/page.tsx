@@ -144,6 +144,7 @@ export default async function JournalsPage({
                 <ClickableRow
                   key={journal.id}
                   href={openHref}
+                  rowId={journal.id}
                   title={openTitle}
                 >
                   <TableCell>

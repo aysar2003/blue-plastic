@@ -17,7 +17,7 @@ export async function GET() {
   try {
     const ctx = await requireOrgContext('inventory:adjust')
     const rows = await stockCountSheetRows(ctx)
-    const bytes = await buildStockCountWorkbook(rows)
+    const bytes = await buildStockCountWorkbook(rows, ctx.organization)
     return new NextResponse(Buffer.from(bytes), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

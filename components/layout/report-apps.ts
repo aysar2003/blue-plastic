@@ -64,7 +64,7 @@ export const REPORT_SECTIONS: LauncherSection[] = [
         icon: 'clipboard',
         accent: '#0E7490',
         wash: '#CFFAFE',
-        blurb: 'Scheduled bundles · CSV',
+        blurb: 'Scheduled bundles · Excel',
       },
       {
         key: 'dashboards',

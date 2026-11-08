@@ -38,9 +38,11 @@ import type {
   PosRegisterInput,
   PosRegisterTransferInput,
 } from '@/lib/validation/pos'
+import { splitPosTender } from '@/lib/erp/pos-tip'
 import {
   buildPosCashMoveJournal,
   buildPosSessionCloseJournal,
+  buildPosTipJournal,
 } from '@/server/accounting/builders/pos'
 import { seedChartOfAccounts, systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { postJournal } from '@/server/accounting/posting'
@@ -735,6 +737,9 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
         type: true,
         unitOfMeasure: true,
         salesPrice: true,
+        trackLots: true,
+        trackSerials: true,
+        pharmacyControlled: true,
         category: { select: { name: true } },
       },
       orderBy: [{ category: { name: 'asc' } }, { name: 'asc' }],
@@ -782,6 +787,9 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
       category: item.category?.name ?? null,
       unitOfMeasure: item.unitOfMeasure,
       price: item.salesPrice?.toString() ?? '0',
+      trackLots: item.trackLots || item.pharmacyControlled,
+      trackSerials: Boolean(item.trackSerials),
+      pharmacyControlled: item.pharmacyControlled,
       /** Null for services and non-stock items: no warning for those. */
       onHand:
         item.type === 'INVENTORY'
@@ -889,6 +897,8 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
     // Always explicit, so the stock movement and the item history show the
     // store (the office when the register says "Office default").
     storeId: storeOf(line),
+    lotNumber: line.lotNumber ?? null,
+    serialNumber: line.serialNumber ?? null,
   }))
 
   const priced = await salesService.quoteLines(ctx, lines)
@@ -898,21 +908,32 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
   for (const payment of input.payments) {
     paymentTotal = paymentTotal.plus(new Decimal(payment.amount))
   }
+  const tipAmount = new Decimal(input.tipAmount ?? '0')
+  if (tipAmount.isNegative()) throw validation('Tip cannot be negative.')
+
   const shortfall = priced.total.minus(paymentTotal)
   let discountValue: string | null = null
-  let dueForTender = priced.total
-  if (shortfall.greaterThan(0.009)) {
+  let saleDue = priced.total
+  if (shortfall.greaterThan(0.009) && tipAmount.isZero()) {
     if (shortfall.greaterThan(POS_SHORTFALL_DISCOUNT_MAX + 0.009)) {
       throw validation(
         `Payment is short by ${toMoneyString(shortfall, 2)} (max discount ${POS_SHORTFALL_DISCOUNT_MAX.toFixed(2)}).`,
       )
     }
     discountValue = shortfall.toFixed(2)
-    dueForTender = paymentTotal
+    saleDue = paymentTotal
   }
 
+  const tipSplit = splitPosTender({
+    saleDue,
+    tipAmount,
+    tenderTotal: paymentTotal,
+  })
+  if (!tipSplit.ok) throw validation(tipSplit.message)
+
+  // Resolve tender against sale+tip so change is only true overpayment.
   const resolved = resolvePosTender({
-    due: dueForTender.toString(),
+    due: saleDue.plus(tipSplit.tip).toString(),
     methods: register.paymentMethods.map((method) => ({
       id: method.id,
       name: method.name,
@@ -925,7 +946,28 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
   })
   if (!resolved.ok) throw validation(resolved.message)
 
-  const resolvedPayments: salesService.PosCheckoutMeta['payments'] = resolved.tender.tenders.map((tender) => {
+  // Sales journal must only debit sale amount — peel tip from tenders (last first).
+  let tipRemaining = tipSplit.tip
+  const peeledTenders = resolved.tender.tenders
+    .slice()
+    .reverse()
+    .map((tender) => {
+      let amount = new Decimal(tender.amount)
+      if (tipRemaining.greaterThan(0) && amount.greaterThan(0)) {
+        const take = Decimal.min(amount, tipRemaining)
+        amount = amount.minus(take)
+        tipRemaining = tipRemaining.minus(take)
+      }
+      return { ...tender, amount: amount.toFixed(4) }
+    })
+    .reverse()
+    .filter((tender) => new Decimal(tender.amount).greaterThan(0))
+
+  if (tipRemaining.greaterThan(0.00005)) {
+    throw validation('Could not allocate tip against tender methods.')
+  }
+
+  const resolvedPayments: salesService.PosCheckoutMeta['payments'] = peeledTenders.map((tender) => {
     const method = methodById.get(tender.paymentMethodId)
     if (!method) throw validation('One of the payment methods is not allowed on this register.')
     return {
@@ -940,13 +982,15 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
   if (resolved.tender.changeMethodId && !changeMethod) {
     throw validation('Change cannot be returned from that account.')
   }
-  const change = changeMethod
-    ? {
-        paymentMethodId: changeMethod.id,
-        ledgerAccountId: changeMethod.ledgerAccountId,
-        amount: new Decimal(resolved.tender.change).toFixed(4),
-      }
-    : null
+  const changeAmount = new Decimal(resolved.tender.change)
+  const change =
+    changeMethod && changeAmount.greaterThan(0)
+      ? {
+          paymentMethodId: changeMethod.id,
+          ledgerAccountId: changeMethod.ledgerAccountId,
+          amount: changeAmount.toFixed(4),
+        }
+      : null
 
   if (input.estimateId) {
     await assertOpenEstimate(ctx, input.estimateId)
@@ -969,6 +1013,7 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
       discountKind: discountValue ? 'amount' : 'percent',
       discountValue,
       customerMessage: input.note ?? undefined,
+      prescriptionRef: input.prescriptionRef ?? undefined,
     },
     {
       pos: {
@@ -977,6 +1022,8 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
         payments: resolvedPayments,
         change,
         depositLedgerAccountId: tillAccountId,
+        tipAmount: tipSplit.tip.toFixed(4),
+        diningTableId: input.diningTableId ?? null,
       },
     },
   )
@@ -985,12 +1032,112 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
     await consumeEstimate(ctx, input.estimateId, document.id)
   }
 
+  const posOrder = await db.posOrder.findUnique({
+    where: { salesDocumentId: document.id },
+    select: { id: true },
+  })
+
+  if (posOrder && !tipSplit.tip.isZero()) {
+    await postPosTipJournal(ctx, {
+      orderId: posOrder.id,
+      registerName: register.name,
+      tipAmount: tipSplit.tip,
+      tenderAccountId: tillAccountId ?? resolvedPayments[0]?.ledgerAccountId,
+      date: receiptDate,
+    })
+  }
+
+  if (posOrder) {
+    await openKitchenFromSale(ctx, {
+      posOrderId: posOrder.id,
+      diningTableId: input.diningTableId ?? null,
+      lines: priced.lines.map((line) => ({
+        name: line.source.description?.trim() || 'Item',
+        qty: Number(line.quantity.toString()),
+      })),
+    })
+  }
+
+  if (input.diningTableId) {
+    await db.diningTable.updateMany({
+      where: { id: input.diningTableId, orgId: ctx.orgId },
+      data: { status: 'OPEN' },
+    })
+  }
+
   const finalTotal = discountValue ? paymentTotal : priced.total
   return {
     id: document.id,
     number: document.number,
     total: toMoneyString(finalTotal, 2),
+    tip: tipSplit.tip.toFixed(2),
   }
+}
+
+async function postPosTipJournal(
+  ctx: OrgContext,
+  input: {
+    orderId: string
+    registerName: string
+    tipAmount: Decimal
+    tenderAccountId: string | null | undefined
+    date: string
+  },
+) {
+  if (!input.tenderAccountId) {
+    throw precondition('Cannot post tip without a tender account.')
+  }
+  await db.$transaction(async (tx) => {
+    await seedChartOfAccounts(tx, ctx.orgId)
+    const tipLiabilityId = await systemAccountId(tx, ctx.orgId, 'TIP_LIABILITY')
+    const draft = buildPosTipJournal({
+      date: input.date,
+      orderId: input.orderId,
+      tenderAccountId: input.tenderAccountId!,
+      tipLiabilityAccountId: tipLiabilityId,
+      amount: input.tipAmount,
+      registerName: input.registerName,
+    })
+    if (!draft) return
+    const journal = await postJournal(tx, ctx, draft)
+    await tx.posOrder.update({
+      where: { id: input.orderId },
+      data: { tipJournalId: journal.id },
+    })
+  })
+}
+
+async function openKitchenFromSale(
+  ctx: OrgContext,
+  input: {
+    posOrderId: string
+    diningTableId: string | null
+    lines: { name: string; qty: number }[]
+  },
+) {
+  const kitchenLines = input.lines.filter((line) => line.qty > 0)
+  if (kitchenLines.length === 0) return
+
+  let tableLabel: string | null = null
+  if (input.diningTableId) {
+    const table = await db.diningTable.findFirst({
+      where: { id: input.diningTableId, orgId: ctx.orgId },
+      select: { code: true, name: true },
+    })
+    tableLabel = table ? `${table.code} · ${table.name}` : null
+  }
+
+  await db.kitchenTicket.create({
+    data: {
+      orgId: ctx.orgId,
+      tableLabel,
+      covers: 1,
+      status: 'OPEN',
+      lines: kitchenLines,
+      diningTableId: input.diningTableId,
+      posOrderId: input.posOrderId,
+    },
+  })
 }
 
 /** Save the till cart as an open quotation — customer can pay later. */
@@ -1013,6 +1160,8 @@ export async function createQuotation(ctx: OrgContext, input: PosCreateQuotation
     quantity: line.quantity,
     unitPrice: line.unitPrice ?? '',
     storeId: storeOf(line),
+    lotNumber: line.lotNumber ?? null,
+    serialNumber: line.serialNumber ?? null,
   }))
 
   const document = await salesService.create(ctx, 'QUOTATION', {
@@ -1411,6 +1560,8 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
               unitPrice: true,
               storeId: true,
               description: true,
+              lotNumber: true,
+              serialNumber: true,
             },
             orderBy: { lineNumber: 'asc' },
           },
@@ -1459,6 +1610,8 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
     unitPrice: line.unitPrice.toString(),
     storeId: line.storeId ?? register.storeId,
     description: line.description ?? undefined,
+    lotNumber: line.lotNumber ?? undefined,
+    serialNumber: line.serialNumber ?? undefined,
   }))
 
   const receiptDate = today(ctx.organization.timeZone)

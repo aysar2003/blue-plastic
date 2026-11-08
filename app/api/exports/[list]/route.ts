@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server'
 import type { JournalSourceType } from '@prisma/client'
 
 import { JOURNAL_SOURCE_LABELS } from '@/lib/accounting-labels'
-import { letterheadLines } from '@/lib/letterhead'
 import { toCalendarDate, today } from '@/lib/date'
 import { presetRange, readDatePreset } from '@/lib/list-filters'
 import { parsePackIds, sortPackDocuments } from '@/lib/document-pack'
@@ -11,7 +10,12 @@ import { bySlug } from '@/lib/sales-types'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { requireOrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
-import { csvResponse, type CsvCell } from '@/server/reports/csv'
+import type { CsvCell } from '@/server/reports/csv'
+import {
+  renderListXlsx,
+  xlsxResponse,
+  type ListXlsxColumn,
+} from '@/server/reports/list-xlsx'
 import * as accountService from '@/server/services/account.service'
 import * as billPaymentService from '@/server/services/bill-payment.service'
 import * as contactService from '@/server/services/contact.service'
@@ -24,18 +28,32 @@ import * as salesService from '@/server/services/sales.service'
 export const dynamic = 'force-dynamic'
 
 /**
- * A list, as a file.
+ * A list, as an Excel workbook.
  *
- * The export takes **every row the filter matches**, not the page on screen —
- * so it asks for a page size big enough to cover the list rather than reusing
- * the screen's pagination. Exporting page 2 of 7 without saying so is the kind
- * of quiet wrongness that ends up in somebody's board pack.
- *
- * It is CSV rather than `.xlsx` because Excel opens it directly, with amounts as
- * numbers rather than text — see `server/reports/csv.ts` for why the file is
- * shaped the way it is.
+ * Exports every row the filter matches (not just the on-screen page). The file
+ * carries the company letterhead, a clear title, and a formatted table so phones
+ * stay text and amounts stay numbers when opened in Excel.
  */
 const ALL = { page: 1, pageSize: 5000, dir: 'asc' as const }
+
+async function workbook(
+  ctx: Awaited<ReturnType<typeof requireOrgContext>>,
+  title: string,
+  filename: string,
+  columns: ListXlsxColumn[],
+  bodyRows: CsvCell[][],
+) {
+  const bytes = await renderListXlsx({
+    org: ctx.organization,
+    title,
+    currency: ctx.organization.baseCurrency,
+    exportedAt: today(ctx.organization.timeZone),
+    sheetName: title,
+    columns,
+    rows: bodyRows,
+  })
+  return xlsxResponse(filename, bytes)
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ list: string }> }) {
   try {
@@ -50,19 +68,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
     const dir = url.searchParams.get('dir') === 'desc' ? ('desc' as const) : ('asc' as const)
 
     const ctx = await requireOrgContext('report:read')
-    const currency = ctx.organization.baseCurrency
     const datePreset = readDatePreset(url.searchParams.get('date') ?? undefined)
     const range = presetRange(datePreset, today(ctx.organization.timeZone))
     const sourceRaw = url.searchParams.get('source') ?? undefined
     const sourceType =
       sourceRaw && sourceRaw in JOURNAL_SOURCE_LABELS ? (sourceRaw as JournalSourceType) : undefined
     const span = { from: range?.from, to: range?.to }
-    const heading = (title: string): CsvCell[][] => [
-      ...letterheadLines(ctx.organization).map((line) => [line]),
-      [title],
-      [`Currency: ${currency}`],
-      [],
-    ]
 
     // --- Sales and purchase documents, keyed by their URL slug ---------------
     const ids = parsePackIds(url.searchParams.get('ids'))
@@ -77,13 +88,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
         dir: picked ? 'asc' : dir,
         ...(picked ? {} : span),
       })
-      // Pack export: same oldest-first order as Print / pack PDF.
       const listed = picked ? sortPackDocuments(page.rows) : page.rows
-      const rows: CsvCell[][] = heading(salesConfig.plural)
-      rows.push(['Number', 'Date', 'Due', 'Customer', 'Reference', 'Status', 'Total', 'Outstanding', 'Deposit to'])
-      for (const row of listed) {
+      const columns: ListXlsxColumn[] = [
+        { header: 'Number', width: 14, kind: 'text' },
+        { header: 'Date', width: 12, kind: 'date' },
+        { header: 'Due', width: 12, kind: 'date' },
+        { header: 'Customer', width: 28, kind: 'text' },
+        { header: 'Reference', width: 16, kind: 'text' },
+        { header: 'Status', width: 12, kind: 'text' },
+        { header: 'Total', width: 14, kind: 'money' },
+        { header: 'Outstanding', width: 14, kind: 'money' },
+        { header: 'Deposit to', width: 22, kind: 'text' },
+      ]
+      const body: CsvCell[][] = listed.map((row) => {
         const account = row.depositAccount
-        rows.push([
+        return [
           row.number,
           toCalendarDate(row.date),
           row.dueDate ? toCalendarDate(row.dueDate) : '',
@@ -93,9 +112,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
           row.total,
           row.balance,
           account ? `${account.code} ${account.name}` : '',
-        ])
-      }
-      return csvResponse(`${salesConfig.slug}.csv`, rows)
+        ]
+      })
+      return workbook(ctx, salesConfig.plural, `${salesConfig.slug}.xlsx`, columns, body)
     }
 
     const purchaseConfig = purchaseBySlug(list)
@@ -110,121 +129,133 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
         ...(picked ? {} : span),
       })
       const listed = picked ? sortPackDocuments(page.rows) : page.rows
-      const rows: CsvCell[][] = heading(purchaseConfig.plural)
-      rows.push(['Number', 'Date', 'Due', 'Vendor', 'Their reference', 'Status', 'Total', 'Owing'])
-      for (const row of listed) {
-        rows.push([
-          row.number,
-          toCalendarDate(row.date),
-          row.dueDate ? toCalendarDate(row.dueDate) : '',
-          row.vendor?.displayName ?? '—',
-          row.reference ?? '',
-          row.status,
-          row.total,
-          row.balance,
-        ])
-      }
-      return csvResponse(`${purchaseConfig.slug}.csv`, rows)
+      const columns: ListXlsxColumn[] = [
+        { header: 'Number', width: 14, kind: 'text' },
+        { header: 'Date', width: 12, kind: 'date' },
+        { header: 'Due', width: 12, kind: 'date' },
+        { header: 'Vendor', width: 28, kind: 'text' },
+        { header: 'Their reference', width: 16, kind: 'text' },
+        { header: 'Status', width: 12, kind: 'text' },
+        { header: 'Total', width: 14, kind: 'money' },
+        { header: 'Owing', width: 14, kind: 'money' },
+      ]
+      const body: CsvCell[][] = listed.map((row) => [
+        row.number,
+        toCalendarDate(row.date),
+        row.dueDate ? toCalendarDate(row.dueDate) : '',
+        row.vendor?.displayName ?? '—',
+        row.reference ?? '',
+        row.status,
+        row.total,
+        row.balance,
+      ])
+      return workbook(ctx, purchaseConfig.plural, `${purchaseConfig.slug}.xlsx`, columns, body)
     }
 
     switch (list) {
       case 'journals': {
         const page = await journalService.list(ctx, { ...ALL, q }, { sort, dir, sourceType, ...span })
-        const rows: CsvCell[][] = heading('Journal entries')
-        rows.push([
-          'Entry',
-          'Date',
-          'Description',
-          'Source',
-          'Document',
-          'Customer / vendor',
-          'Status',
-          'Amount',
+        const columns: ListXlsxColumn[] = [
+          { header: 'Entry', width: 12, kind: 'text' },
+          { header: 'Date', width: 12, kind: 'date' },
+          { header: 'Description', width: 36, kind: 'text' },
+          { header: 'Source', width: 16, kind: 'text' },
+          { header: 'Document', width: 14, kind: 'text' },
+          { header: 'Customer / vendor', width: 24, kind: 'text' },
+          { header: 'Status', width: 12, kind: 'text' },
+          { header: 'Amount', width: 14, kind: 'money' },
+        ]
+        const body: CsvCell[][] = page.rows.map((row) => [
+          row.journalNumber,
+          toCalendarDate(row.date),
+          row.memo ?? '',
+          row.sourceType,
+          row.source.number ?? '',
+          row.source.partyName ?? '',
+          row.status,
+          row.total,
         ])
-        for (const row of page.rows) {
-          rows.push([
-            row.journalNumber,
-            toCalendarDate(row.date),
-            row.memo ?? '',
-            row.sourceType,
-            row.source.number ?? '',
-            row.source.partyName ?? '',
-            row.status,
-            row.total,
-          ])
-        }
-        return csvResponse('journal-entries.csv', rows)
+        return workbook(ctx, 'Journal entries', 'journal-entries.xlsx', columns, body)
       }
 
       case 'payments': {
         const page = await paymentService.list(ctx, { ...ALL, q }, { sort, dir, ...span })
-        const rows: CsvCell[][] = heading('Customer payments')
-        rows.push(['Number', 'Date', 'Customer', 'Method', 'Status', 'Amount', 'Unapplied'])
-        for (const row of page.rows) {
-          rows.push([
-            row.number,
-            toCalendarDate(row.date),
-            row.customer.displayName,
-            row.method,
-            row.status,
-            row.amount,
-            row.unapplied,
-          ])
-        }
-        return csvResponse('customer-payments.csv', rows)
+        const columns: ListXlsxColumn[] = [
+          { header: 'Number', width: 14, kind: 'text' },
+          { header: 'Date', width: 12, kind: 'date' },
+          { header: 'Customer', width: 28, kind: 'text' },
+          { header: 'Method', width: 14, kind: 'text' },
+          { header: 'Status', width: 12, kind: 'text' },
+          { header: 'Amount', width: 14, kind: 'money' },
+          { header: 'Unapplied', width: 14, kind: 'money' },
+        ]
+        const body: CsvCell[][] = page.rows.map((row) => [
+          row.number,
+          toCalendarDate(row.date),
+          row.customer.displayName,
+          row.method,
+          row.status,
+          row.amount,
+          row.unapplied,
+        ])
+        return workbook(ctx, 'Customer payments', 'customer-payments.xlsx', columns, body)
       }
 
       case 'bill-payments': {
         const page = await billPaymentService.list(ctx, { ...ALL, q }, { sort, dir, ...span })
-        const rows: CsvCell[][] = heading('Bill payments')
-        rows.push(['Number', 'Date', 'Vendor', 'Method', 'Status', 'Amount'])
-        for (const row of page.rows) {
-          rows.push([
-            row.number,
-            toCalendarDate(row.date),
-            row.vendor?.displayName ?? '—',
-            row.method,
-            row.status,
-            row.amount,
-          ])
-        }
-        return csvResponse('bill-payments.csv', rows)
+        const columns: ListXlsxColumn[] = [
+          { header: 'Number', width: 14, kind: 'text' },
+          { header: 'Date', width: 12, kind: 'date' },
+          { header: 'Vendor', width: 28, kind: 'text' },
+          { header: 'Method', width: 14, kind: 'text' },
+          { header: 'Status', width: 12, kind: 'text' },
+          { header: 'Amount', width: 14, kind: 'money' },
+        ]
+        const body: CsvCell[][] = page.rows.map((row) => [
+          row.number,
+          toCalendarDate(row.date),
+          row.vendor?.displayName ?? '—',
+          row.method,
+          row.status,
+          row.amount,
+        ])
+        return workbook(ctx, 'Bill payments', 'bill-payments.xlsx', columns, body)
       }
 
       case 'customers':
       case 'vendors': {
-        // The whole list, in the same columns an import reads back — including a
-        // file that started life as a QuickBooks export.
         const everything = { ...ALL, pageSize: 20000, q }
         const asOf = today(ctx.organization.timeZone)
         if (list === 'customers') {
-          const page = await contactService.listCustomers(ctx, everything, { includeInactive: archived, sort, dir })
-          const rows: CsvCell[][] = [
-            [
-              'Display name',
-              'Company name',
-              'First name',
-              'Last name',
-              'Email',
-              'Phone',
-              'Mobile',
-              'Street',
-              'City',
-              'State',
-              'Postal code',
-              'Country',
-              'Payment terms',
-              'Tax registration number',
-              'Credit limit',
-              'Open balance',
-              'Opening balance date',
-              'Notes',
-              'Active',
-            ],
+          const page = await contactService.listCustomers(ctx, everything, {
+            includeInactive: archived,
+            sort,
+            dir,
+          })
+          const columns: ListXlsxColumn[] = [
+            { header: 'Display name', width: 28, kind: 'text' },
+            { header: 'Company name', width: 28, kind: 'text' },
+            { header: 'First name', width: 14, kind: 'text' },
+            { header: 'Last name', width: 14, kind: 'text' },
+            { header: 'Email', width: 28, kind: 'text' },
+            { header: 'Phone', width: 16, kind: 'text' },
+            { header: 'Mobile', width: 16, kind: 'text' },
+            { header: 'Street', width: 28, kind: 'text' },
+            { header: 'City', width: 16, kind: 'text' },
+            { header: 'State', width: 14, kind: 'text' },
+            { header: 'Postal code', width: 12, kind: 'text' },
+            { header: 'Country', width: 10, kind: 'text' },
+            { header: 'Payment terms', width: 16, kind: 'text' },
+            { header: 'Tax registration', width: 16, kind: 'text' },
+            { header: 'Credit limit', width: 12, kind: 'money' },
+            { header: 'Open balance', width: 14, kind: 'money' },
+            { header: 'Opening balance date', width: 14, kind: 'date' },
+            { header: 'Notes', width: 28, kind: 'text' },
+            { header: 'Active', width: 10, kind: 'text' },
           ]
-          for (const row of page.rows) {
+          const body: CsvCell[][] = page.rows.map((row) => {
             const balance = Number(row.balance) === 0 ? '' : row.balance
-            rows.push([
+            return [
               row.displayName,
               row.companyName ?? '',
               row.firstName ?? '',
@@ -244,9 +275,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
               balance ? asOf : '',
               row.notes ?? '',
               row.isActive ? 'Yes' : 'No',
-            ])
-          }
-          return csvResponse('customers.csv', rows)
+            ]
+          })
+          return workbook(ctx, 'Customers', 'customers.xlsx', columns, body)
         }
 
         const owing =
@@ -257,31 +288,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
           dir,
           ids: owing,
         })
-        const rows: CsvCell[][] = [
-          [
-            'Display name',
-            'Company name',
-            'First name',
-            'Last name',
-            'Email',
-            'Phone',
-            'Mobile',
-            'Street',
-            'City',
-            'State',
-            'Postal code',
-            'Country',
-            'Payment terms',
-            'Tax registration number',
-            'Open balance',
-            'Opening balance date',
-            'Notes',
-            'Active',
-          ],
+        const columns: ListXlsxColumn[] = [
+          { header: 'Display name', width: 28, kind: 'text' },
+          { header: 'Company name', width: 28, kind: 'text' },
+          { header: 'First name', width: 14, kind: 'text' },
+          { header: 'Last name', width: 14, kind: 'text' },
+          { header: 'Email', width: 28, kind: 'text' },
+          { header: 'Phone', width: 16, kind: 'text' },
+          { header: 'Mobile', width: 16, kind: 'text' },
+          { header: 'Street', width: 28, kind: 'text' },
+          { header: 'City', width: 16, kind: 'text' },
+          { header: 'State', width: 14, kind: 'text' },
+          { header: 'Postal code', width: 12, kind: 'text' },
+          { header: 'Country', width: 10, kind: 'text' },
+          { header: 'Payment terms', width: 16, kind: 'text' },
+          { header: 'Tax registration', width: 16, kind: 'text' },
+          { header: 'Open balance', width: 14, kind: 'money' },
+          { header: 'Opening balance date', width: 14, kind: 'date' },
+          { header: 'Notes', width: 28, kind: 'text' },
+          { header: 'Active', width: 10, kind: 'text' },
         ]
-        for (const row of page.rows) {
+        const body: CsvCell[][] = page.rows.map((row) => {
           const balance = Number(row.balance) === 0 ? '' : row.balance
-          rows.push([
+          return [
             row.displayName,
             row.companyName ?? '',
             row.firstName ?? '',
@@ -300,9 +329,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
             balance ? asOf : '',
             row.notes ?? '',
             row.isActive ? 'Yes' : 'No',
-          ])
-        }
-        return csvResponse('vendors.csv', rows)
+          ]
+        })
+        return workbook(ctx, 'Vendors', 'vendors.xlsx', columns, body)
       }
 
       case 'items': {
@@ -314,28 +343,26 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
         const asOf = today(ctx.organization.timeZone)
         const typeLabel = (value: string) =>
           value === 'SERVICE' ? 'Service' : value === 'INVENTORY' ? 'Inventory' : 'Non-inventory'
-        const rows: CsvCell[][] = [
-          [
-            'Product/Service Name',
-            'SKU',
-            'Type',
-            'Sales Description',
-            'Sales Price',
-            'Taxable',
-            'Income Account',
-            'Purchase Description',
-            'Purchase Cost',
-            'Expense Account',
-            'Quantity on hand',
-            'Reorder Point',
-            'Inventory Asset Account',
-            'Quantity as-of date',
-            'Active',
-          ],
+        const columns: ListXlsxColumn[] = [
+          { header: 'Product/Service Name', width: 28, kind: 'text' },
+          { header: 'SKU', width: 14, kind: 'text' },
+          { header: 'Type', width: 14, kind: 'text' },
+          { header: 'Sales Description', width: 32, kind: 'text' },
+          { header: 'Sales Price', width: 12, kind: 'money' },
+          { header: 'Taxable', width: 10, kind: 'text' },
+          { header: 'Income Account', width: 22, kind: 'text' },
+          { header: 'Purchase Description', width: 28, kind: 'text' },
+          { header: 'Purchase Cost', width: 12, kind: 'money' },
+          { header: 'Expense Account', width: 22, kind: 'text' },
+          { header: 'Quantity on hand', width: 12, kind: 'number' },
+          { header: 'Reorder Point', width: 12, kind: 'number' },
+          { header: 'Inventory Asset Account', width: 22, kind: 'text' },
+          { header: 'Quantity as-of date', width: 14, kind: 'date' },
+          { header: 'Active', width: 10, kind: 'text' },
         ]
-        for (const row of page.rows) {
+        const body: CsvCell[][] = page.rows.map((row) => {
           const onHand = row.onHand && Number(row.onHand) !== 0 ? row.onHand : ''
-          rows.push([
+          return [
             row.name,
             row.sku ?? '',
             typeLabel(row.type),
@@ -351,26 +378,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
             row.inventoryAccount?.name ?? '',
             onHand ? asOf : '',
             row.isActive ? 'Yes' : 'No',
-          ])
-        }
-        return csvResponse('products-and-services.csv', rows)
+          ]
+        })
+        return workbook(ctx, 'Products & services', 'products-and-services.xlsx', columns, body)
       }
 
       case 'accounts': {
         const accounts = await accountService.list(ctx, { q, includeInactive: archived })
-        const rows: CsvCell[][] = heading('Chart of accounts')
-        rows.push(['Number', 'Name', 'Type', 'Detail type', 'Balance', 'Active'])
-        for (const account of accounts) {
-          rows.push([
-            account.code,
-            account.name,
-            account.type,
-            account.subtype,
-            account.hasChildren ? '' : account.balance,
-            account.isActive ? 'yes' : 'no',
-          ])
-        }
-        return csvResponse('chart-of-accounts.csv', rows)
+        const columns: ListXlsxColumn[] = [
+          { header: 'Number', width: 12, kind: 'text' },
+          { header: 'Name', width: 28, kind: 'text' },
+          { header: 'Type', width: 14, kind: 'text' },
+          { header: 'Detail type', width: 18, kind: 'text' },
+          { header: 'Balance', width: 14, kind: 'money' },
+          { header: 'Active', width: 10, kind: 'text' },
+        ]
+        const body: CsvCell[][] = accounts.map((account) => [
+          account.code,
+          account.name,
+          account.type,
+          account.subtype,
+          account.hasChildren ? '' : account.balance,
+          account.isActive ? 'Yes' : 'No',
+        ])
+        return workbook(ctx, 'Chart of accounts', 'chart-of-accounts.xlsx', columns, body)
       }
 
       default:

@@ -89,3 +89,29 @@ export function buildPosSessionCloseJournal(input: {
     lines,
   }
 }
+
+/** Tip held for staff: Dr till/tender, Cr tip liability (not revenue). */
+export function buildPosTipJournal(input: {
+  date: CalendarDate
+  orderId: string
+  tenderAccountId: string
+  tipLiabilityAccountId: string
+  amount: Decimal.Value
+  registerName: string
+}): DraftJournal | null {
+  const amount = new Decimal(input.amount)
+  if (amount.isZero() || amount.isNegative()) return null
+
+  const label = `POS tip · ${input.registerName}`
+  return {
+    date: input.date,
+    memo: label,
+    sourceType: 'POS_TIP',
+    sourceId: input.orderId,
+    idempotencyKey: `pos-tip:${input.orderId}`,
+    lines: [
+      { accountId: input.tenderAccountId, debit: amount, description: label },
+      { accountId: input.tipLiabilityAccountId, credit: amount, description: label },
+    ],
+  }
+}

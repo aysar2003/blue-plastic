@@ -135,6 +135,20 @@ export const SYSTEM_ACCOUNT_ROLES: SystemAccountRole[] = [
     types: ['REVENUE'],
     subtypes: ['OTHER_INCOME', 'INCOME'],
   },
+  {
+    key: 'TIP_LIABILITY',
+    label: 'Tips payable',
+    used: 'Tips collected at POS and held for staff payout. Not revenue.',
+    types: ['LIABILITY'],
+    subtypes: ['OTHER_CURRENT_LIABILITY'],
+  },
+  {
+    key: 'RETENTION_RECEIVABLE',
+    label: 'Contract retention receivable',
+    used: 'Progress bill retention held by the customer until released to AR.',
+    types: ['ASSET'],
+    subtypes: ['OTHER_CURRENT_ASSET', 'OTHER_ASSET'],
+  },
 ]
 
 export type SystemAccountBinding = {

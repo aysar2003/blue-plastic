@@ -97,6 +97,30 @@ describe('invoice', () => {
   })
 })
 
+describe('invoice with construction retention', () => {
+  const journal = buildInvoiceJournal({
+    ...base,
+    retention: { accountId: 'acct-retention', amount: new Decimal('30') },
+  })
+
+  it('keeps AR at the net invoice total and adds retention receivable', () => {
+    expect(journal.lines.find((l) => l.accountId === 'acct-ar')?.debit?.toString()).toBe('290')
+    expect(journal.lines.find((l) => l.accountId === 'acct-retention')?.debit?.toString()).toBe(
+      '30',
+    )
+  })
+
+  it('credits extra income for the held slice and still balances', () => {
+    const retentionIncome = journal.lines.filter(
+      (l) => l.accountId === 'acct-sales' && l.credit && String(l.credit) === '30',
+    )
+    expect(retentionIncome.length).toBe(1)
+    const { debit, credit } = totals(journal.lines)
+    expect(debit.toString()).toBe(credit.toString())
+    expect(debit.toString()).toBe('320')
+  })
+})
+
 describe('invoice with a discount item', () => {
   const pricedWithDiscount = priceDocument(
     [

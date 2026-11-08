@@ -32,6 +32,12 @@ const REQUIRED_PAGES = [
   'app/(app)/employees/training/page.tsx',
   'app/(app)/settings/(work)/marketplace/page.tsx',
   'app/(app)/sign/[id]/certificate/page.tsx',
+  'app/(app)/help/coverage/page.tsx',
+  'app/(app)/pos/tables/page.tsx',
+  'app/(app)/pos/night-audit/page.tsx',
+  'app/(app)/hospitality/page.tsx',
+  'app/(app)/hospitality/rooms/page.tsx',
+  'app/(app)/hospitality/stays/page.tsx',
 ]
 
 describe('ERP depth readiness (general)', () => {
@@ -51,7 +57,7 @@ describe('ERP depth readiness (general)', () => {
   })
 
   it('keeps the operating loops named for operators', () => {
-    expect(ERP_READY_LOOPS).toHaveLength(9)
+    expect(ERP_READY_LOOPS).toHaveLength(10)
   })
 
   it('tracks world-ERP layers L0–L9 after Phase 22', () => {

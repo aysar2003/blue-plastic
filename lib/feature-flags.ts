@@ -325,7 +325,15 @@ export const INVENTORY_HUB_KIND: Partial<Record<string, InventoryDocumentKind>> 
   stock: 'products',
   adjust: 'adjustments',
   builds: 'adjustments',
+  'work-orders': 'adjustments',
   stores: 'transfers',
+}
+
+/** Inventory hub tiles that open a sibling app — hide when that module is off. */
+export const INVENTORY_HUB_MODULE: Partial<Record<string, ModuleFlag>> = {
+  barcodes: 'barcodes',
+  stores: 'stores',
+  reports: 'reports',
 }
 
 function allModules(on: boolean): Record<ModuleFlag, boolean> {
@@ -376,6 +384,10 @@ export const DOCUMENT_KIND_FORM_KEY_LIST: readonly string[] = [
  */
 export const MODULE_PATH_PREFIXES: readonly { prefix: string; module: ModuleFlag }[] = [
   { prefix: '/pos', module: 'pos' },
+  { prefix: '/hospitality', module: 'sales' },
+  { prefix: '/education', module: 'sales' },
+  { prefix: '/hospital', module: 'sales' },
+  { prefix: '/ngo', module: 'customers' },
   { prefix: '/sales', module: 'sales' },
   { prefix: '/projects', module: 'projects' },
   { prefix: '/customers', module: 'customers' },

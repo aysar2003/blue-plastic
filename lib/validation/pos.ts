@@ -33,6 +33,20 @@ const posLine = z.object({
     .union([cuid, z.literal('')])
     .transform((v) => (v === '' ? undefined : v))
     .optional(),
+  /** Pharmacy / lot-tracked items. */
+  lotNumber: z
+    .string()
+    .trim()
+    .max(80)
+    .optional()
+    .transform((v) => (v === '' || v === undefined ? undefined : v)),
+  /** Serial-tracked inventory. */
+  serialNumber: z
+    .string()
+    .trim()
+    .max(80)
+    .optional()
+    .transform((v) => (v === '' || v === undefined ? undefined : v)),
 })
 
 const posPayment = z.object({
@@ -57,6 +71,14 @@ export const posCheckoutSchema = z.object({
   changeMethodId: optionalMethodId,
   /** When set, this open quotation is closed and linked after the sale posts. */
   estimateId: cuid.optional(),
+  /** Tip for staff (held in tips payable). Default none. */
+  tipAmount: moneyString.optional().default('0'),
+  diningTableId: z
+    .union([cuid, z.literal('')])
+    .transform((v) => (v === '' ? undefined : v))
+    .optional(),
+  /** Pharmacy Rx reference (optional text). */
+  prescriptionRef: optionalText(120),
 })
 
 export const posCreateQuotationSchema = z.object({

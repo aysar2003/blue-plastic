@@ -86,6 +86,7 @@ export function ReceiveForm({
   const [quantities, setQuantities] = useState<Record<string, string>>({})
   const [lotByLine, setLotByLine] = useState<Record<string, string>>({})
   const [serialByLine, setSerialByLine] = useState<Record<string, string>>({})
+  const [lotExpiryByLine, setLotExpiryByLine] = useState<Record<string, string>>({})
   const handled = useRef(false)
   const showStores = stores.length > 0
   const showLotSerial = lines.some((line) => line.trackLots || line.trackSerials)
@@ -134,6 +135,7 @@ export function ReceiveForm({
         storeId: showStores ? (storeByLine[line.lineId] ?? '') : '',
         lotNumber: line.trackLots ? (lotByLine[line.lineId] ?? '') : '',
         serialNumber: line.trackSerials ? (serialByLine[line.lineId] ?? '') : '',
+        lotExpiryDate: line.trackLots ? (lotExpiryByLine[line.lineId] ?? '') : '',
       }))
       .filter((line) => line.quantity !== '' && Number(line.quantity) > 0),
   })
@@ -318,18 +320,32 @@ export function ReceiveForm({
                         {line.isTracked && !done && (line.trackLots || line.trackSerials) ? (
                           <div className="flex flex-col gap-1">
                             {line.trackLots ? (
-                              <Input
-                                aria-label={`Lot for ${line.itemName ?? line.description ?? 'line'}`}
-                                className="h-8 text-xs"
-                                placeholder="Lot"
-                                value={lotByLine[line.lineId] ?? ''}
-                                onChange={(event) =>
-                                  setLotByLine((current) => ({
-                                    ...current,
-                                    [line.lineId]: event.target.value,
-                                  }))
-                                }
-                              />
+                              <>
+                                <Input
+                                  aria-label={`Lot for ${line.itemName ?? line.description ?? 'line'}`}
+                                  className="h-8 text-xs"
+                                  placeholder="Lot"
+                                  value={lotByLine[line.lineId] ?? ''}
+                                  onChange={(event) =>
+                                    setLotByLine((current) => ({
+                                      ...current,
+                                      [line.lineId]: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <Input
+                                  type="date"
+                                  aria-label={`Expiry for ${line.itemName ?? line.description ?? 'line'}`}
+                                  className="h-8 text-xs"
+                                  value={lotExpiryByLine[line.lineId] ?? ''}
+                                  onChange={(event) =>
+                                    setLotExpiryByLine((current) => ({
+                                      ...current,
+                                      [line.lineId]: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </>
                             ) : null}
                             {line.trackSerials ? (
                               <Input

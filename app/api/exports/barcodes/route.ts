@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
-import type { Workbook as ExcelWorkbook } from 'exceljs'
 
+import { today } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
+import { renderListXlsx, xlsxResponse } from '@/server/reports/list-xlsx'
 import * as barcodeService from '@/server/services/barcode.service'
 
 export const dynamic = 'force-dynamic'
@@ -12,36 +13,22 @@ export async function GET() {
   try {
     const ctx = await requireOrgContext('item:read')
     const rows = await barcodeService.rowsForExport(ctx)
-    const loaded = (await import('exceljs')) as unknown as {
-      Workbook?: new () => ExcelWorkbook
-      default?: { Workbook: new () => ExcelWorkbook }
-    }
-    const Workbook = loaded.Workbook ?? loaded.default?.Workbook
-    if (!Workbook) throw new Error('The Excel writer did not load')
-
-    const workbook = new Workbook()
-    workbook.creator = 'SOM ERP'
-    const sheet = workbook.addWorksheet('Barcodes', {
-      views: [{ state: 'frozen', ySplit: 1 }],
+    const bytes = await renderListXlsx({
+      org: ctx.organization,
+      title: 'Barcodes',
+      currency: ctx.organization.baseCurrency,
+      exportedAt: today(ctx.organization.timeZone),
+      sheetName: 'Barcodes',
+      columns: [
+        { header: 'Product/Service Name', width: 36, kind: 'text' },
+        { header: 'SKU', width: 16, kind: 'text' },
+        { header: 'Barcode', width: 18, kind: 'text' },
+        { header: 'Type', width: 16, kind: 'text' },
+        { header: 'Active', width: 10, kind: 'text' },
+      ],
+      rows: rows.map((row) => [row.name, row.sku, row.barcode, row.type, row.active]),
     })
-    sheet.columns = [
-      { header: 'Product/Service Name', key: 'name', width: 36 },
-      { header: 'SKU', key: 'sku', width: 16 },
-      { header: 'Barcode', key: 'barcode', width: 18 },
-      { header: 'Type', key: 'type', width: 16 },
-      { header: 'Active', key: 'active', width: 10 },
-    ]
-    for (const row of rows) sheet.addRow(row)
-    sheet.getRow(1).font = { bold: true }
-
-    const buffer = await workbook.xlsx.writeBuffer()
-    return new NextResponse(Buffer.from(buffer), {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': 'attachment; filename="barcodes.xlsx"',
-        'Cache-Control': 'no-store',
-      },
-    })
+    return xlsxResponse('barcodes.xlsx', bytes)
   } catch (error) {
     if (isAppError(error)) {
       return NextResponse.json(

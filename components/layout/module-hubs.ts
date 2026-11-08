@@ -1,6 +1,8 @@
 import {
   INVENTORY_HUB_KIND,
+  INVENTORY_HUB_MODULE,
   isDocumentKindEnabled,
+  isModuleEnabled,
   PURCHASE_HUB_KIND,
   type OrgFeatureFlags,
 } from '@/lib/feature-flags'
@@ -551,6 +553,36 @@ export const INVENTORY_HUB_APPS: HubApp[] = [
     blurb: 'Lots and serials on hand',
   },
   {
+    key: 'expiry',
+    label: 'Lot expiry',
+    href: '/inventory/expiry',
+    icon: 'clock',
+    permission: 'inventory:read',
+    accent: '#BE123C',
+    wash: '#FFE4E6',
+    blurb: 'Near and past expiry',
+  },
+  {
+    key: 'routing',
+    label: 'Routings',
+    href: '/inventory/routing',
+    icon: 'sliders',
+    permission: 'inventory:read',
+    accent: '#0369A1',
+    wash: '#E0F2FE',
+    blurb: 'Capacity-lite steps',
+  },
+  {
+    key: 'asn',
+    label: 'ASN',
+    href: '/inventory/asn',
+    icon: 'transfer',
+    permission: 'inventory:read',
+    accent: '#1D4ED8',
+    wash: '#DBEAFE',
+    blurb: 'Expected inbound',
+  },
+  {
     key: 'stores',
     label: 'Store',
     href: '/stores',
@@ -649,6 +681,15 @@ export const INVENTORY_REPORT_APPS: HubApp[] = [
     accent: '#BE123C',
     wash: '#FFE4E6',
     blurb: 'Below the point',
+  },
+  {
+    key: 'lot-expiry',
+    label: 'Lot expiry',
+    href: '/inventory/expiry',
+    icon: 'clock',
+    accent: '#9F1239',
+    wash: '#FFE4E6',
+    blurb: 'Pharmacy shelf life',
   },
   {
     key: 'inventory-cost-change',
@@ -1209,6 +1250,16 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     blurb: 'Name, logo, address, currency',
   },
   {
+    key: 'setup',
+    label: 'Setup',
+    href: '/settings/setup',
+    icon: 'sliders',
+    permission: 'org:read',
+    accent: '#0F766E',
+    wash: '#CCFBF1',
+    blurb: 'Institution checklist and onboarding',
+  },
+  {
     key: 'billing',
     label: 'Billing',
     href: '/billing',
@@ -1353,7 +1404,7 @@ export const SETTINGS_HUB_SECTIONS: { label: string; blurb: string; keys: string
   {
     label: 'Company',
     blurb: 'Identity, which apps this company uses, look and paper.',
-    keys: ['organization', 'billing', 'features', 'templates', 'appearance'],
+    keys: ['organization', 'setup', 'billing', 'features', 'templates', 'appearance'],
   },
   {
     label: 'Accounting setup',
@@ -1381,6 +1432,15 @@ export const HELP_HUB_APPS: HubApp[] = [
     accent: '#0F766E',
     wash: '#CCFBF1',
     blurb: 'The order of work',
+  },
+  {
+    key: 'coverage',
+    label: 'Coverage',
+    href: '/help/coverage',
+    icon: 'building',
+    accent: '#0B4F6C',
+    wash: '#E0F2FE',
+    blurb: 'Institutions and books — what is ready',
   },
   {
     key: 'guide-so',
@@ -1436,6 +1496,8 @@ export function visibleHubApps(
     if (features && family === 'inventory') {
       const kind = INVENTORY_HUB_KIND[app.key]
       if (kind && !isDocumentKindEnabled(features, 'inventory', kind)) return false
+      const moduleKey = INVENTORY_HUB_MODULE[app.key]
+      if (moduleKey && !isModuleEnabled(features, moduleKey)) return false
     }
     return true
   })

@@ -49,12 +49,6 @@ export function ImportTemplatesPanel() {
                   Excel
                 </a>
               </Button>
-              <Button asChild variant="outline" size="sm">
-                <a href={`/api/import-templates/${sheet.kind}?format=csv`} download>
-                  <Download className="size-3.5" />
-                  CSV
-                </a>
-              </Button>
               <Button asChild variant="ghost" size="sm">
                 <a href={`/api/import-templates/${sheet.kind}?sample=1`} download>
                   Sample

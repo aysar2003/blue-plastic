@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { ModuleFlag } from '@/lib/feature-flags'
+import { INDUSTRY_PACKS, modulesFromPack } from '@/lib/packs'
 
-import { updateCompanyLimits } from './actions'
+import { installIndustryPack, updateCompanyLimits } from './actions'
 import {
   CompanyAppsPicker,
   hasAnyModuleOn,
@@ -46,6 +47,34 @@ export function DatabaseLimitsPanel({
   const [modules, setModules] = useState<Record<ModuleFlag, boolean>>(() => ({
     ...company.modules,
   }))
+  const [packId, setPackId] = useState('')
+  const [seedChart, setSeedChart] = useState(true)
+
+  function applyPack() {
+    if (!packId) {
+      toast.error('Choose an industry pack first.')
+      return
+    }
+    startTransition(async () => {
+      const result = await installIndustryPack({
+        orgId: company.id,
+        packId,
+        seedChart,
+      })
+      if (!result.ok) {
+        toast.error(result.error.message)
+        return
+      }
+      const pack = INDUSTRY_PACKS.find((row) => row.id === packId)
+      if (pack) setModules(modulesFromPack(pack))
+      const note =
+        result.data.verticalStatus === 'planned'
+          ? ' Module preset applied — vertical features still planned.'
+          : ''
+      toast.success(`Pack “${result.data.packLabel}” installed.${note}`)
+      router.refresh()
+    })
+  }
 
   function save() {
     if (!hasAnyModuleOn(modules)) {
@@ -149,6 +178,43 @@ export function DatabaseLimitsPanel({
             placeholder="e.g. Plan monthly · invoice 104"
             onChange={(event) => setRentNote(event.target.value)}
           />
+        </div>
+
+        <div className="space-y-2 rounded-lg border border-border bg-background px-3 py-3">
+          <Label htmlFor="industry-pack">Industry / institution pack</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Applies the recommended apps for that business type (replaces grants). Vertical packs
+            marked planned still get a safe module preset.
+          </p>
+          <select
+            id="industry-pack"
+            value={packId}
+            disabled={pending}
+            onChange={(event) => setPackId(event.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+          >
+            <option value="">Select a pack…</option>
+            {INDUSTRY_PACKS.map((pack) => (
+              <option key={pack.id} value={pack.id}>
+                {pack.label}
+                {pack.verticalStatus === 'planned' ? ' (preset · vertical planned)' : ''}
+              </option>
+            ))}
+          </select>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              className="size-3.5 rounded border-input"
+              checked={seedChart}
+              disabled={pending}
+              onChange={(event) => setSeedChart(event.target.checked)}
+            />
+            Seed chart of accounts if missing accounts
+          </label>
+          <Button type="button" variant="secondary" size="sm" disabled={pending || !packId} onClick={applyPack}>
+            {pending ? <Loader2Icon className="animate-spin" /> : null}
+            Install pack
+          </Button>
         </div>
 
         <CompanyAppsPicker

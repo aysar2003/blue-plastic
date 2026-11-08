@@ -48,10 +48,10 @@ export default async function VatReturnPage({
         actions={
           <>
             <Link
-              href={`/api/reports/vat-return?${qs}&format=csv`}
+              href={`/api/reports/vat-return?${qs}`}
               className={buttonVariants({ size: 'sm' })}
             >
-              Download CSV
+              Download Excel
             </Link>
             <Link
               href={`/api/reports/vat-return?${qs}&format=json`}

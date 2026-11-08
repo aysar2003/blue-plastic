@@ -76,6 +76,8 @@ export async function createCompany(ctx: OrgContext, input: CreateCompanyInput) 
         rentExpiresAt: trialEnds,
         rentNote: 'Free trial',
         featureFlags: featureFlagsWithModules(modules) as unknown as Prisma.InputJsonValue,
+        // Databases create already chose apps — do not force the wizard.
+        onboardingCompletedAt: new Date(),
       },
       select: { id: true, name: true, baseCurrency: true, parentOrgId: true },
     })

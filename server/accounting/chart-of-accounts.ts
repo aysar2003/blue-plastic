@@ -90,7 +90,24 @@ export const DEFAULT_CHART: SeedAccount[] = [
     description: 'Tax collected on sales, owed to the tax authority.',
   },
   { code: '2300', name: 'Accrued Liabilities', type: 'LIABILITY', subtype: 'OTHER_CURRENT_LIABILITY' },
+  {
+    code: '2310',
+    name: 'Tips Payable',
+    type: 'LIABILITY',
+    subtype: 'OTHER_CURRENT_LIABILITY',
+    systemKey: 'TIP_LIABILITY',
+    description: 'Tips collected at the till, owed to staff — not sales revenue.',
+  },
   { code: '2500', name: 'Long-Term Loans', type: 'LIABILITY', subtype: 'LONG_TERM_LIABILITY' },
+  {
+    code: '1350',
+    name: 'Contract Retention Receivable',
+    type: 'ASSET',
+    subtype: 'OTHER_CURRENT_ASSET',
+    systemKey: 'RETENTION_RECEIVABLE',
+    description:
+      'Progress billing retention held by the customer until release — not yet due in AR.',
+  },
 
   // --- Equity -------------------------------------------------------------
   { code: '3000', name: "Owner's Capital", type: 'EQUITY', subtype: 'OWNERS_EQUITY' },
