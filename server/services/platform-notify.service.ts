@@ -103,12 +103,14 @@ export async function sendAuthEmailOtp(to: string, code: string): Promise<void> 
     return
   }
 
-  const send = smtp.transport.sendMail({ from: smtp.from, to, subject, text })
-  const timeout = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('Auth SMTP timed out after 8s.')), 8_000)
-  })
   try {
-    await Promise.race([send, timeout])
+    // Gmail App Password often needs 10–20s from cold; 8s was aborting delivery.
+    await Promise.race([
+      smtp.transport.sendMail({ from: smtp.from, to, subject, text }),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Auth SMTP timed out after 25s.')), 25_000)
+      }),
+    ])
     if (env.NODE_ENV !== 'production') {
       console.info(`[auth-otp] sent via ${smtp.source} → ${to}`)
     }

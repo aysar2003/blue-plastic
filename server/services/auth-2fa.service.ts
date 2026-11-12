@@ -109,14 +109,16 @@ export async function beginLoginOtp(userId: string): Promise<{ challengeId: stri
   const challenge = await createChallenge(userId, 'LOGIN_OTP', code)
 
   if (forceEmailOtp) {
-    // Do not block the sign-in UI on SMTP latency — challenge already exists.
-    // Dev always logs the code inside sendAuthEmailOtp; email is best-effort.
-    void sendAuthEmailOtp(user.email, code).catch((error) => {
+    // Await delivery so the code is in the inbox before the OTP screen.
+    // Challenge already exists — login still works from the dev console log if mail fails.
+    try {
+      await sendAuthEmailOtp(user.email, code)
+    } catch (error) {
       console.error('Login OTP email failed', error)
       if (env.NODE_ENV !== 'production') {
         console.info(`[auth-otp] fallback ${user.email} → ${code}`)
       }
-    })
+    }
   }
 
   return { challengeId: challenge.id }
