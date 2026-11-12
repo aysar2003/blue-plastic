@@ -37,14 +37,22 @@ export default async function PeriodMonthPage({
         title={label}
         description={`${formatDate(from)} — ${formatDate(to)}. The entries posted in this month, and the reports for the same dates.`}
         actions={
-          canExport ? (
+          <div className="flex flex-wrap gap-2">
             <Link
-              href={`/api/periods/${period.id}/close-pack`}
-              className={buttonVariants({ size: 'sm', variant: 'secondary' })}
+              href={`/reports/group-close?asOf=${from}`}
+              className={buttonVariants({ size: 'sm', variant: 'outline' })}
             >
-              Download close pack
+              Group close
             </Link>
-          ) : null
+            {canExport ? (
+              <Link
+                href={`/api/periods/${period.id}/close-pack`}
+                className={buttonVariants({ size: 'sm', variant: 'secondary' })}
+              >
+                Download close pack
+              </Link>
+            ) : null}
+          </div>
         }
       />
       <MonthPanel

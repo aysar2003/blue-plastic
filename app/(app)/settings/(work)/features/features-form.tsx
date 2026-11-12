@@ -14,15 +14,19 @@ import {
 import { idleState } from '@/components/forms/action-state'
 import { Button } from '@/components/ui/button'
 import {
+  ACCOUNTING_DOCUMENT_KINDS,
   CREATOR_BRAND_NAME,
+  CUSTOMERS_DOCUMENT_KINDS,
   DOCUMENT_KIND_LABELS,
   documentKindFormKey,
+  EMPLOYEES_DOCUMENT_KINDS,
   INVENTORY_DOCUMENT_KINDS,
   MODULE_FLAG_LABELS,
   MODULE_FLAGS,
   MODULE_FORM_KEYS,
   PURCHASE_DOCUMENT_KINDS,
   SALES_DOCUMENT_KINDS,
+  STORES_DOCUMENT_KINDS,
   type ModuleFlag,
   type OrgFeatureFlags,
 } from '@/lib/feature-flags'
@@ -234,6 +238,19 @@ const APP_NESTED: Partial<
   ),
   customers: (flags) => (
     <>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Work areas
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {CUSTOMERS_DOCUMENT_KINDS.map((kind) => (
+          <SwitchRow
+            key={kind}
+            name={documentKindFormKey('customers', kind)}
+            label={DOCUMENT_KIND_LABELS.customers[kind]}
+            defaultChecked={flags.documentKinds.customers[kind]}
+          />
+        ))}
+      </div>
       <SwitchRow
         name="allowCustomerDelete"
         label="Delete / merge customers"
@@ -324,6 +341,25 @@ const APP_NESTED: Partial<
   ),
   accounting: (flags) => (
     <>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Work areas
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {ACCOUNTING_DOCUMENT_KINDS.map((kind) => (
+          <SwitchRow
+            key={kind}
+            name={documentKindFormKey('accounting', kind)}
+            label={DOCUMENT_KIND_LABELS.accounting[kind]}
+            defaultChecked={flags.documentKinds.accounting[kind]}
+          />
+        ))}
+      </div>
+      <SwitchRow
+        name="enableTax"
+        label="Sales & purchase tax"
+        hint="When off, tax codes and tax on lines stay hidden. Same control as Settings → Tax."
+        defaultChecked={flags.enableTax}
+      />
       <SwitchRow
         name="allowAccountDelete"
         label="Delete / merge chart accounts"
@@ -338,11 +374,51 @@ const APP_NESTED: Partial<
     </>
   ),
   employees: (flags) => (
+    <>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Work areas
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {EMPLOYEES_DOCUMENT_KINDS.map((kind) => (
+          <SwitchRow
+            key={kind}
+            name={documentKindFormKey('employees', kind)}
+            label={DOCUMENT_KIND_LABELS.employees[kind]}
+            defaultChecked={flags.documentKinds.employees[kind]}
+          />
+        ))}
+      </div>
+      <SwitchRow
+        name="payrollStandard"
+        label="Standard payroll"
+        hint="Gross wages, deduction liabilities, salary structures, payslip PDF, loans, and end of service. Off keeps the simple net-to-bank payroll."
+        defaultChecked={flags.payrollStandard}
+      />
+    </>
+  ),
+  stores: (flags) => (
+    <>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Work areas
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {STORES_DOCUMENT_KINDS.map((kind) => (
+          <SwitchRow
+            key={kind}
+            name={documentKindFormKey('stores', kind)}
+            label={DOCUMENT_KIND_LABELS.stores[kind]}
+            defaultChecked={flags.documentKinds.stores[kind]}
+          />
+        ))}
+      </div>
+    </>
+  ),
+  periods: (flags) => (
     <SwitchRow
-      name="payrollStandard"
-      label="Standard payroll"
-      hint="Gross wages, deduction liabilities, salary structures, payslip PDF, loans, and end of service. Off keeps the simple net-to-bank payroll."
-      defaultChecked={flags.payrollStandard}
+      name="closeHardGates"
+      label="Hard gates on period close"
+      hint="Elevate selected close checklist warnings (bank recon, match hold, open pick waves) to blocked until fixed."
+      defaultChecked={flags.closeHardGates}
     />
   ),
   journals: (flags) => (

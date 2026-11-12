@@ -38,16 +38,28 @@ export const payrollReportSchema = z.object({
   to: calendarDate,
 })
 
-export const structureRuleSchema = z.object({
-  structureId: cuid,
-  code: requiredText('Code', 40),
-  name: requiredText('Name', 80),
-  kind: z.enum(['EARNING', 'DEDUCTION', 'EMPLOYER']),
-  calc: z.enum(['BASE', 'FIXED', 'PERCENT']),
-  amount: moneyString,
-  expenseAccountId: optionalId,
-  liabilityAccountId: optionalId,
+const salarySlabSchema = z.object({
+  upTo: z.union([moneyString, z.null()]),
+  rate: moneyString,
 })
+
+export const structureRuleSchema = z
+  .object({
+    structureId: cuid,
+    code: requiredText('Code', 40),
+    name: requiredText('Name', 80),
+    kind: z.enum(['EARNING', 'DEDUCTION', 'EMPLOYER']),
+    calc: z.enum(['BASE', 'FIXED', 'PERCENT', 'SLABS']),
+    amount: moneyString.optional().default('0'),
+    slabs: z.array(salarySlabSchema).max(20).optional().nullable(),
+    expenseAccountId: optionalId,
+    liabilityAccountId: optionalId,
+  })
+  .superRefine((value, ctx) => {
+    if (value.calc === 'SLABS' && (!value.slabs || value.slabs.length === 0)) {
+      ctx.addIssue({ code: 'custom', path: ['slabs'], message: 'Add at least one tax bracket' })
+    }
+  })
 
 export const structureCreateSchema = z.object({
   name: requiredText('Name', 80),
@@ -58,8 +70,14 @@ export const structureRuleUpdateSchema = z.object({
   id: cuid,
   name: optionalText(80),
   amount: moneyString.optional(),
+  slabs: z.array(salarySlabSchema).max(20).optional().nullable(),
   expenseAccountId: optionalId,
   liabilityAccountId: optionalId,
+})
+
+export const payrollAddEmployeesSchema = z.object({
+  id: cuid,
+  employeeIds: z.array(cuid).min(1).max(200),
 })
 
 export const payrollSettleSchema = z.object({

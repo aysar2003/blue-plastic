@@ -159,3 +159,77 @@ export async function grantBudgetReport(ctx: OrgContext, budgetId?: string) {
 
   return rows
 }
+
+/**
+ * Fund balance sheet lite: net of posted journal lines tagged to each class
+ * (assets / liabilities / equity / income / expense / COGS), single currency.
+ */
+export async function fundBalanceSheet(ctx: OrgContext) {
+  const funds = await db.trackingCategory.findMany({
+    where: { orgId: ctx.orgId, isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  })
+
+  const rows = []
+  for (const fund of funds) {
+    const lines = await db.journalLine.findMany({
+      where: {
+        orgId: ctx.orgId,
+        trackingCategoryId: fund.id,
+        journal: { status: 'POSTED' },
+      },
+      select: {
+        debit: true,
+        credit: true,
+        account: { select: { type: true } },
+      },
+      take: 50_000,
+    })
+
+    let assets = new Decimal(0)
+    let liabilities = new Decimal(0)
+    let equity = new Decimal(0)
+    let income = new Decimal(0)
+    let expense = new Decimal(0)
+
+    for (const line of lines) {
+      const net = new Decimal(line.debit.toString()).minus(line.credit.toString())
+      switch (line.account.type) {
+        case 'ASSET':
+          assets = assets.plus(net)
+          break
+        case 'LIABILITY':
+          liabilities = liabilities.plus(net.negated())
+          break
+        case 'EQUITY':
+          equity = equity.plus(net.negated())
+          break
+        case 'REVENUE':
+          income = income.plus(net.negated())
+          break
+        case 'EXPENSE':
+        case 'COGS':
+          expense = expense.plus(net)
+          break
+        default:
+          break
+      }
+    }
+
+    const netIncome = income.minus(expense)
+    rows.push({
+      fundId: fund.id,
+      fundName: fund.name,
+      assets: assets.toFixed(2),
+      liabilities: liabilities.toFixed(2),
+      equity: equity.toFixed(2),
+      income: income.toFixed(2),
+      expense: expense.toFixed(2),
+      netIncome: netIncome.toFixed(2),
+      equityPlusNet: equity.plus(netIncome).toFixed(2),
+    })
+  }
+
+  return rows
+}

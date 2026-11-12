@@ -48,3 +48,19 @@ export async function cancelVisitAction(formData: FormData) {
   revalidatePath(PATH)
   redirect(`${PATH}/visits`)
 }
+
+export async function stampClaimsExportAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  const format = String(formData.get('format') ?? 'json') === 'csv' ? 'csv' : 'json'
+  const includeExported = formData.get('includeExported') === '1'
+  await hospital.exportClaims(ctx, {
+    format,
+    status: 'CLOSED',
+    includeExported,
+    stamp: true,
+  })
+  revalidatePath(PATH)
+  redirect(
+    `${PATH}/claims?format=${format}${includeExported ? '&includeExported=1' : ''}`,
+  )
+}

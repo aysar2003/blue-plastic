@@ -24,11 +24,11 @@ import type { PickerOption } from '@/components/forms/entity-picker'
 import {
   RECURRING_FREQUENCIES,
   RECURRING_FREQUENCY_LABELS,
+  RECURRING_PURCHASE_TYPES,
   RECURRING_TYPE_LABELS,
-  RECURRING_TYPES,
 } from '@/lib/validation/recurring'
 
-type DocType = (typeof RECURRING_TYPES)[number]
+type DocType = (typeof RECURRING_PURCHASE_TYPES)[number]
 type Frequency = (typeof RECURRING_FREQUENCIES)[number]
 
 type JournalLine = {
@@ -121,7 +121,7 @@ export function RecurringForm({
   }, [state, mode, router])
 
   const allowedTypes = useMemo(() => {
-    return RECURRING_TYPES.filter((t) => (t === 'JOURNAL' ? canJournal : canPurchase))
+    return RECURRING_PURCHASE_TYPES.filter((t) => (t === 'JOURNAL' ? canJournal : canPurchase))
   }, [canJournal, canPurchase])
 
   const e = state.fieldErrors

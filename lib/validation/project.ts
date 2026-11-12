@@ -28,6 +28,11 @@ export const projectSchema = z.object({
   status: z.enum(PROJECT_STATUSES).default('DRAFT'),
   startDate: optionalDate,
   endDate: optionalDate,
+  storeId: z
+    .union([cuid, z.literal('')])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
 })
 
 export type ProjectInput = z.infer<typeof projectSchema>

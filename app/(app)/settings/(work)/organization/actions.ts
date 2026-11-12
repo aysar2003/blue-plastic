@@ -165,6 +165,8 @@ export async function updateFeatureFlagsForm(
     'enableDocumentApprovals',
     'creditLimitWarn',
     'payrollStandard',
+    'closeHardGates',
+    'enableTax',
     ...MODULE_FORM_KEY_LIST,
     ...DOCUMENT_KIND_FORM_KEY_LIST,
   ] as const

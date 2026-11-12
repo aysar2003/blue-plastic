@@ -77,7 +77,8 @@ export const organizationFeaturesSchema = z.object({
   enableDocumentApprovals: boolFlag.default(false),
   creditLimitWarn: boolFlag.default(false),
   payrollStandard: boolFlag.default(true),
-  enableTax: boolFlag.optional(),
+  closeHardGates: boolFlag.default(false),
+  enableTax: boolFlag.default(true),
   ...moduleFeatureFields,
   ...documentKindFeatureFields,
 })

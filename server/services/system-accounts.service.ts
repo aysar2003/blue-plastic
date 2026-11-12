@@ -149,6 +149,13 @@ export const SYSTEM_ACCOUNT_ROLES: SystemAccountRole[] = [
     types: ['ASSET'],
     subtypes: ['OTHER_CURRENT_ASSET', 'OTHER_ASSET'],
   },
+  {
+    key: 'UNEARNED_REVENUE',
+    label: 'Unearned revenue',
+    used: 'Subscription and rental invoices deferred until the service period is earned.',
+    types: ['LIABILITY'],
+    subtypes: ['OTHER_CURRENT_LIABILITY'],
+  },
 ]
 
 export type SystemAccountBinding = {

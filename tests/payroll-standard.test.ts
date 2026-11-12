@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
+import { money } from '@/lib/money'
 import {
+  amountFromSlabs,
   applyAdvances,
   applyOvertimeOverride,
   buildPayrollJournal,
   buildPayrollSettlementJournal,
   buildStandardLines,
+  countWorkdaysInRange,
   endOfServiceAmount,
+  payOvertimeHours,
   paymentSummaryByMethod,
   periodsOverlap,
   slipTotals,
@@ -284,5 +288,118 @@ describe('standard payroll math', () => {
     expect(summary[0]?.net.toFixed(2)).toBe('150.00')
     const withOt = applyOvertimeOverride(buildStandardLines(month).lines, '75')
     expect(withOt.find((row) => row.code === 'OT')?.amount.toFixed(2)).toBe('75.00')
+  })
+
+  it('taxes progressive slabs on basic', () => {
+    expect(
+      amountFromSlabs(money(1000), [
+        { upTo: '500', rate: '0' },
+        { upTo: '1000', rate: '10' },
+        { upTo: null, rate: '20' },
+      ]).toFixed(2),
+    ).toBe('50.00')
+    const built = buildStandardLines({
+      ...month,
+      rules: [
+        {
+          code: 'BASIC',
+          name: 'Basic',
+          kind: 'EARNING',
+          calc: 'BASE',
+          amount: '0',
+          expenseAccountId: 'exp',
+          liabilityAccountId: null,
+          sortOrder: 0,
+        },
+        {
+          code: 'TAX',
+          name: 'Income tax',
+          kind: 'DEDUCTION',
+          calc: 'SLABS',
+          amount: '0',
+          slabs: [
+            { upTo: '500', rate: '0' },
+            { upTo: '1000', rate: '10' },
+            { upTo: null, rate: '20' },
+          ],
+          expenseAccountId: null,
+          liabilityAccountId: 'tax',
+          sortOrder: 10,
+        },
+      ],
+    })
+    const totals = slipTotals(built.lines)
+    expect(totals.gross.toFixed(2)).toBe('1000.00')
+    expect(totals.deductions.toFixed(2)).toBe('50.00')
+    expect(totals.net.toFixed(2)).toBe('950.00')
+  })
+
+  it('prorates a mid-period leaver on a new run', () => {
+    const built = buildStandardLines({
+      ...month,
+      leftAt: '2026-10-15',
+    })
+    expect(built.skip).toBeNull()
+    expect(built.lines.find((row) => row.code === 'SALARY')?.label).toContain('15/31')
+    expect(Number(built.lines.find((row) => row.code === 'SALARY')?.amount.toFixed(2))).toBeCloseTo(
+      (1000 * 15) / 31,
+      1,
+    )
+  })
+
+  it('tags journal lines with a department tracking category', () => {
+    const journal = buildPayrollJournal({
+      payMode: 'IMMEDIATE',
+      payFromAccountId: 'bank',
+      liabilityAccountId: 'tax',
+      slips: [
+        {
+          name: 'Amina',
+          department: 'Sales',
+          trackingCategoryId: 'track-sales',
+          expenseAccountId: 'exp',
+          payableAccountId: null,
+          payAccountId: null,
+          payMethod: 'BANK',
+          lines: [
+            {
+              code: 'SALARY',
+              label: 'Monthly salary',
+              amount: '1000',
+              kind: 'EARNING',
+              affectsNet: true,
+              expenseAccountId: null,
+              liabilityAccountId: null,
+            },
+          ],
+        },
+      ],
+    })
+    expect(journal.error).toBeNull()
+    expect(journal.lines.every((row) => row.trackingCategoryId === 'track-sales')).toBe(true)
+  })
+
+  it('splits overtime across 1.5x and 2x bands', () => {
+    const ot = payOvertimeHours(money(10), money(6), 1, [
+      { afterHours: '8', multiplier: '1.5' },
+      { afterHours: '12', multiplier: '2' },
+    ])
+    // 4h × 1.5 × 10 + 2h × 2 × 10 = 60 + 40 = 100
+    expect(ot.amount.toFixed(2)).toBe('100.00')
+    const hourly = buildStandardLines({
+      ...month,
+      wageType: 'HOURLY',
+      wageAmount: '10',
+      workedDays: 1,
+      workedHours: '14',
+      overtimeAfterHoursPerDay: '8',
+      overtimeMultiplier: '1.5',
+      overtimeRules: [{ afterHours: '12', multiplier: '2' }],
+    })
+    expect(hourly.lines.find((row) => row.code === 'OT')?.amount.toFixed(2)).toBe('100.00')
+  })
+
+  it('counts Mon–Sat workdays in October 2026', () => {
+    expect(countWorkdaysInRange('2026-10-01', '2026-10-31', [1, 2, 3, 4, 5, 6])).toBe(27)
   })
 })

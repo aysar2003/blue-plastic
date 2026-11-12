@@ -16,8 +16,13 @@ import * as asn from '@/server/services/asn.service'
 
 export const metadata: Metadata = { title: 'ASN' }
 
-export default async function InventoryAsnPage() {
+export default async function InventoryAsnPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
   const ctx = await requireOrgContext('inventory:read')
+  const query = await searchParams
   const [shipments, vendors, items, orders] = await Promise.all([
     asn.listAsn(ctx),
     db.vendor.findMany({
@@ -39,6 +44,7 @@ export default async function InventoryAsnPage() {
       take: 100,
     }),
   ])
+  const errorMessage = query.error?.trim() || null
 
   return (
     <>
@@ -51,6 +57,12 @@ export default async function InventoryAsnPage() {
           </Link>
         }
       />
+
+      {errorMessage ? (
+        <Card className="mb-4 border-destructive/40 bg-destructive/5">
+          <CardContent className="p-3 text-sm text-destructive">{errorMessage}</CardContent>
+        </Card>
+      ) : null}
 
       <Card className="mb-6">
         <CardContent className="p-4">
@@ -84,6 +96,14 @@ export default async function InventoryAsnPage() {
             <label className="text-sm">
               Expected
               <Input name="expectedAt" type="date" className="mt-1" />
+            </label>
+            <label className="text-sm">
+              Dock
+              <Input name="dockName" className="mt-1" placeholder="Bay A" />
+            </label>
+            <label className="text-sm">
+              Dock time
+              <Input name="dockAt" type="datetime-local" className="mt-1" />
             </label>
             <label className="text-sm">
               Item

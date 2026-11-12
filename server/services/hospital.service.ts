@@ -230,12 +230,20 @@ export async function cancelVisit(ctx: OrgContext, visitId: string) {
 
 export async function exportClaims(
   ctx: OrgContext,
-  options: { format: 'csv' | 'json'; status?: PatientVisitStatus } = { format: 'json' },
+  options: {
+    format: 'csv' | 'json'
+    status?: PatientVisitStatus
+    /** Include visits already stamped as exported. */
+    includeExported?: boolean
+    /** Stamp visits in this export with claimsExportedAt. */
+    stamp?: boolean
+  } = { format: 'json' },
 ) {
   const visits = await db.patientVisit.findMany({
     where: {
       orgId: ctx.orgId,
       status: options.status ?? 'CLOSED',
+      ...(options.includeExported ? {} : { claimsExportedAt: null }),
     },
     include: {
       customer: { select: { displayName: true } },
@@ -268,6 +276,13 @@ export async function exportClaims(
     }
   }
 
+  if (options.stamp && visits.length > 0) {
+    await db.patientVisit.updateMany({
+      where: { orgId: ctx.orgId, id: { in: visits.map((visit) => visit.id) } },
+      data: { claimsExportedAt: new Date() },
+    })
+  }
+
   if (options.format === 'csv') {
     return { format: 'csv' as const, body: claimsToCsv(rows), rows }
   }
@@ -286,4 +301,85 @@ export async function hubStats(ctx: OrgContext) {
     db.patientVisit.count({ where: { orgId: ctx.orgId, status: 'CLOSED' } }),
   ])
   return { open, closed }
+}
+
+/** Open AR for closed patient visits that still have invoice balance. */
+export async function patientArSummary(ctx: OrgContext) {
+  const visits = await db.patientVisit.findMany({
+    where: {
+      orgId: ctx.orgId,
+      status: 'CLOSED',
+      salesDocumentId: { not: null },
+      salesDocument: { status: { in: ['OPEN', 'PARTIAL'] }, deletedAt: null },
+    },
+    select: {
+      id: true,
+      customer: { select: { id: true, displayName: true } },
+      salesDocument: { select: { id: true, number: true } },
+      trackingCategory: { select: { name: true } },
+    },
+    take: 500,
+  })
+
+  const docIds = visits
+    .map((row) => row.salesDocument?.id)
+    .filter((id): id is string => Boolean(id))
+  const balances = await salesService.outstandingBalances(db, docIds, ctx.orgId)
+
+  return visits
+    .map((visit) => {
+      const docId = visit.salesDocument?.id
+      const balance = docId ? balances.get(docId) ?? new Decimal(0) : new Decimal(0)
+      return {
+        visitId: visit.id,
+        patientId: visit.customer.id,
+        patientName: visit.customer.displayName,
+        department: visit.trackingCategory?.name ?? null,
+        invoiceNumber: visit.salesDocument?.number ?? null,
+        outstanding: balance.toFixed(2),
+      }
+    })
+    .filter((row) => Number(row.outstanding) > 0)
+    .sort((a, b) => a.patientName.localeCompare(b.patientName))
+}
+
+/** Closed visit charge totals grouped by department (class). */
+export async function servicesByDepartment(ctx: OrgContext) {
+  const visits = await db.patientVisit.findMany({
+    where: { orgId: ctx.orgId, status: 'CLOSED' },
+    select: {
+      trackingCategory: { select: { id: true, name: true } },
+      charges: { select: { amount: true, billCode: true } },
+    },
+    take: 1000,
+  })
+
+  const byDept = new Map<
+    string,
+    { departmentId: string | null; department: string; chargeCount: number; amount: Decimal }
+  >()
+
+  for (const visit of visits) {
+    const key = visit.trackingCategory?.id ?? '__none__'
+    const existing = byDept.get(key) ?? {
+      departmentId: visit.trackingCategory?.id ?? null,
+      department: visit.trackingCategory?.name ?? 'Unassigned',
+      chargeCount: 0,
+      amount: new Decimal(0),
+    }
+    for (const charge of visit.charges) {
+      existing.chargeCount += 1
+      existing.amount = existing.amount.plus(charge.amount.toString())
+    }
+    byDept.set(key, existing)
+  }
+
+  return [...byDept.values()]
+    .map((row) => ({
+      departmentId: row.departmentId,
+      department: row.department,
+      chargeCount: row.chargeCount,
+      amount: row.amount.toFixed(2),
+    }))
+    .sort((a, b) => a.department.localeCompare(b.department))
 }

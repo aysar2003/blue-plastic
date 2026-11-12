@@ -6,7 +6,10 @@ export type PayMethod = 'CASH' | 'BANK' | 'MOBILE'
 export type PayMode = 'IMMEDIATE' | 'ACCRUE'
 export type WageType = 'MONTHLY' | 'DAILY' | 'HOURLY'
 export type RuleKind = 'EARNING' | 'DEDUCTION' | 'EMPLOYER'
-export type RuleCalc = 'BASE' | 'FIXED' | 'PERCENT'
+export type RuleCalc = 'BASE' | 'FIXED' | 'PERCENT' | 'SLABS'
+
+/** Progressive bracket: tax the slice from the previous upTo up to this upTo at `rate` %. */
+export type SalarySlab = { upTo: string | null; rate: string }
 
 export type StandardLine = {
   code: string
@@ -26,9 +29,59 @@ export type SalaryRuleInput = {
   kind: RuleKind
   calc: RuleCalc
   amount: string
+  slabs?: SalarySlab[] | null
   expenseAccountId: string | null
   liabilityAccountId: string | null
   sortOrder: number
+}
+
+export function parseSlabs(raw: unknown): SalarySlab[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  const out: SalarySlab[] = []
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue
+    const record = row as { upTo?: unknown; rate?: unknown }
+    const rate =
+      record.rate == null || record.rate === ''
+        ? null
+        : typeof record.rate === 'number'
+          ? String(record.rate)
+          : String(record.rate).trim()
+    if (rate == null || !Number.isFinite(Number(rate))) continue
+    let upTo: string | null = null
+    if (record.upTo != null && record.upTo !== '' && record.upTo !== '*') {
+      upTo =
+        typeof record.upTo === 'number' ? String(record.upTo) : String(record.upTo).trim()
+      if (!Number.isFinite(Number(upTo))) continue
+    }
+    out.push({ upTo, rate })
+  }
+  return out.length ? out : null
+}
+
+/** Marginal progressive amount on `base` using ordered brackets. */
+export function amountFromSlabs(base: Money, slabs: SalarySlab[]): Money {
+  if (base.lte(0) || slabs.length === 0) return money(0)
+  const sorted = [...slabs].sort((a, b) => {
+    if (a.upTo == null) return 1
+    if (b.upTo == null) return -1
+    return money(a.upTo).cmp(money(b.upTo))
+  })
+  let remaining = base
+  let prevCap = money(0)
+  let total = money(0)
+  for (const bracket of sorted) {
+    if (remaining.lte(0)) break
+    const cap = bracket.upTo == null ? null : money(bracket.upTo)
+    const width = cap == null ? remaining : Decimal.max(cap.minus(prevCap), money(0))
+    const slice = Decimal.min(remaining, width)
+    if (slice.gt(0)) {
+      total = total.plus(slice.times(money(bracket.rate)).div(100))
+      remaining = remaining.minus(slice)
+    }
+    if (cap != null) prevCap = Decimal.max(prevCap, cap)
+  }
+  return total
 }
 
 const MANUAL_CODES = new Set(['BONUS', 'DEDUCTION'])
@@ -60,6 +113,115 @@ export function workingDaysInPeriod(periodDays: number, workDaysPerWeek: number)
   return Math.max(1, Math.round((periodDays * perWeek) / 7))
 }
 
+/** Default Mon–Fri / Mon–Sat / all from workDaysPerWeek. */
+export function defaultWorkWeekdays(workDaysPerWeek: number): number[] {
+  const n = Math.min(7, Math.max(1, workDaysPerWeek))
+  if (n >= 7) return [0, 1, 2, 3, 4, 5, 6]
+  if (n <= 5) return [1, 2, 3, 4, 5]
+  return [1, 2, 3, 4, 5, 6]
+}
+
+export function parseWorkWeekdays(raw: unknown, workDaysPerWeek: number): number[] {
+  if (Array.isArray(raw) && raw.length > 0) {
+    const days = [
+      ...new Set(
+        raw
+          .map((value) => Number(value))
+          .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6),
+      ),
+    ].sort((a, b) => a - b)
+    if (days.length) return days
+  }
+  return defaultWorkWeekdays(workDaysPerWeek)
+}
+
+/** Count calendar dates in [from, to] whose weekday is in `weekdays` (UTC date). */
+export function countWorkdaysInRange(from: string, to: string, weekdays: number[]): number {
+  const start = Date.parse(`${from}T00:00:00Z`)
+  const end = Date.parse(`${to}T00:00:00Z`)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0
+  const set = new Set(weekdays)
+  let count = 0
+  for (let t = start; t <= end; t += 86_400_000) {
+    if (set.has(new Date(t).getUTCDay())) count += 1
+  }
+  return Math.max(count, 1)
+}
+
+export type OvertimeTier = { afterHours: string; multiplier: string }
+
+export function parseOvertimeRules(raw: unknown): OvertimeTier[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  const out: OvertimeTier[] = []
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue
+    const record = row as { afterHours?: unknown; multiplier?: unknown }
+    const after =
+      record.afterHours == null || record.afterHours === ''
+        ? null
+        : String(record.afterHours).trim()
+    const mult =
+      record.multiplier == null || record.multiplier === ''
+        ? null
+        : String(record.multiplier).trim()
+    if (after == null || mult == null) continue
+    if (!Number.isFinite(Number(after)) || !Number.isFinite(Number(mult))) continue
+    out.push({ afterHours: after, multiplier: mult })
+  }
+  return out.length ? out : null
+}
+
+export function resolveOvertimeTiers(input: {
+  overtimeAfterHoursPerDay: string
+  overtimeMultiplier: string
+  overtimeRules?: OvertimeTier[] | null
+}): OvertimeTier[] {
+  const extra = input.overtimeRules?.length ? input.overtimeRules : []
+  const first: OvertimeTier = {
+    afterHours: input.overtimeAfterHoursPerDay,
+    multiplier: input.overtimeMultiplier,
+  }
+  const merged = [first, ...extra.filter((row) => Number(row.afterHours) > Number(first.afterHours))]
+  return merged.sort((a, b) => money(a.afterHours).cmp(money(b.afterHours)))
+}
+
+/** Split OT hours across progressive after-hour bands (QBO-style 1.5x then 2x). */
+export function payOvertimeHours(
+  hourRate: Money,
+  otHours: Money,
+  workedDays: number,
+  tiers: OvertimeTier[],
+): { amount: Money; label: string } {
+  if (otHours.lte(0) || tiers.length === 0 || hourRate.lte(0)) {
+    return { amount: money(0), label: '' }
+  }
+  const days = Math.max(workedDays, 1)
+  let remaining = otHours
+  let amount = money(0)
+  const parts: string[] = []
+  for (let i = 0; i < tiers.length; i++) {
+    if (remaining.lte(0)) break
+    const mult = money(tiers[i]!.multiplier)
+    const after = money(tiers[i]!.afterHours)
+    const next = i + 1 < tiers.length ? money(tiers[i + 1]!.afterHours) : null
+    const band =
+      next == null ? remaining : Decimal.min(remaining, Decimal.max(next.minus(after).times(days), money(0)))
+    if (band.lte(0)) continue
+    amount = amount.plus(hourRate.times(mult).times(band))
+    parts.push(`${band.toFixed(2)}h ×${mult.toFixed(2)}`)
+    remaining = remaining.minus(band)
+  }
+  if (remaining.gt(0)) {
+    const mult = money(tiers[tiers.length - 1]!.multiplier)
+    amount = amount.plus(hourRate.times(mult).times(remaining))
+    parts.push(`${remaining.toFixed(2)}h ×${mult.toFixed(2)}`)
+  }
+  return {
+    amount,
+    label: parts.length === 1 ? `Overtime × ${parts[0]}` : `Overtime (${parts.join(', ')})`,
+  }
+}
+
 export function employmentWindow(
   periodStart: string,
   periodEnd: string,
@@ -87,8 +249,7 @@ function wageLines(input: {
   periodDays: number
   workingDays: number
   hoursPerDay: Money
-  otAfter: Money
-  otMult: Money
+  otTiers: OvertimeTier[]
   workedDays: number
   workedHours: Money
   unpaidDays: Money
@@ -96,6 +257,7 @@ function wageLines(input: {
 }): { base: Money; lines: StandardLine[] } {
   const lines: StandardLine[] = []
   const expense = input.expenseAccountId
+  const firstAfter = money(input.otTiers[0]?.afterHours ?? '8')
 
   if (input.wageType === 'DAILY') {
     const days = Math.max(0, input.workedDays - Number(input.unpaidDays.toFixed(0)))
@@ -118,11 +280,11 @@ function wageLines(input: {
   if (input.wageType === 'HOURLY') {
     const unpaidHours = input.hoursPerDay.times(input.unpaidDays)
     const payableHours = Decimal.max(input.workedHours.minus(unpaidHours), money(0))
-    const regularCap = input.otAfter.times(Math.max(input.workedDays, 1))
+    const regularCap = firstAfter.times(Math.max(input.workedDays, 1))
     const regularHours = Decimal.min(payableHours, regularCap)
     const otHours = Decimal.max(payableHours.minus(regularHours), money(0))
     const regularPay = input.wage.times(regularHours)
-    const otPay = input.wage.times(input.otMult).times(otHours)
+    const ot = payOvertimeHours(input.wage, otHours, input.workedDays, input.otTiers)
     lines.push(
       line({
         code: 'HOURS',
@@ -135,12 +297,12 @@ function wageLines(input: {
         liabilityAccountId: null,
       }),
     )
-    if (otPay.gt(0)) {
+    if (ot.amount.gt(0)) {
       lines.push(
         line({
           code: 'OT',
-          label: `Overtime × ${otHours.toFixed(2)} h (×${input.otMult.toFixed(2)})`,
-          amount: otPay,
+          label: ot.label,
+          amount: ot.amount,
           kind: 'EARNING',
           affectsNet: true,
           sortOrder: 1,
@@ -149,7 +311,7 @@ function wageLines(input: {
         }),
       )
     }
-    return { base: regularPay.plus(otPay), lines }
+    return { base: regularPay.plus(ot.amount), lines }
   }
 
   const base = input.wage.times(input.fraction)
@@ -187,17 +349,17 @@ function wageLines(input: {
   }
 
   const overlapWorking = Math.max(1, Math.round(input.workingDays * Number(input.fraction.toFixed(6))))
-  const expected = input.otAfter.times(overlapWorking)
+  const expected = firstAfter.times(overlapWorking)
   const otHours = Decimal.max(input.workedHours.minus(expected), money(0))
   if (input.workedHours.gt(0) && otHours.gt(0) && input.hoursPerDay.gt(0)) {
     const hourRate = input.wage.div(money(input.workingDays).times(input.hoursPerDay))
-    const otPay = hourRate.times(input.otMult).times(otHours)
-    if (otPay.gt(0)) {
+    const ot = payOvertimeHours(hourRate, otHours, overlapWorking, input.otTiers)
+    if (ot.amount.gt(0)) {
       lines.push(
         line({
           code: 'OT',
-          label: `Overtime × ${otHours.toFixed(2)} h (×${input.otMult.toFixed(2)})`,
-          amount: otPay,
+          label: ot.label,
+          amount: ot.amount,
           kind: 'EARNING',
           affectsNet: true,
           sortOrder: 2,
@@ -220,11 +382,15 @@ export function buildStandardLines(input: {
   leftAt: string | null
   hoursPerDay: string
   workDaysPerWeek: number
+  workWeekdays?: number[] | null
   overtimeAfterHoursPerDay: string
   overtimeMultiplier: string
+  overtimeRules?: OvertimeTier[] | null
   workedDays: number
   workedHours: string
   unpaidLeaveDays: string
+  /** When attendance has days in period, prefer that for monthly OT baseline. */
+  attendanceWorkingDays?: number | null
   expenseAccountId: string | null
   rules: SalaryRuleInput[]
 }): { skip: string | null; lines: StandardLine[] } {
@@ -236,8 +402,18 @@ export function buildStandardLines(input: {
 
   const periodDays = window.periodDays
   const fraction = money(window.overlapDays).div(periodDays)
-  const workingDays = workingDaysInPeriod(periodDays, input.workDaysPerWeek)
+  const weekdays = parseWorkWeekdays(input.workWeekdays, input.workDaysPerWeek)
+  const calendarWorking = countWorkdaysInRange(window.start, window.end, weekdays)
+  const workingDays =
+    input.attendanceWorkingDays != null && input.attendanceWorkingDays > 0
+      ? input.attendanceWorkingDays
+      : calendarWorking
   const wage = money(input.wageAmount)
+  const otTiers = resolveOvertimeTiers({
+    overtimeAfterHoursPerDay: input.overtimeAfterHoursPerDay,
+    overtimeMultiplier: input.overtimeMultiplier,
+    overtimeRules: input.overtimeRules,
+  })
   const built = wageLines({
     wageType: input.wageType,
     wage,
@@ -246,8 +422,7 @@ export function buildStandardLines(input: {
     periodDays,
     workingDays,
     hoursPerDay: money(input.hoursPerDay),
-    otAfter: money(input.overtimeAfterHoursPerDay),
-    otMult: money(input.overtimeMultiplier),
+    otTiers,
     workedDays: input.workedDays,
     workedHours: money(input.workedHours),
     unpaidDays: money(input.unpaidLeaveDays),
@@ -265,7 +440,9 @@ export function buildStandardLines(input: {
     let amount = money(0)
     if (rule.calc === 'BASE') amount = built.base
     else if (rule.calc === 'FIXED') amount = money(rule.amount).times(rule.kind === 'DEDUCTION' ? 1 : fraction)
-    else amount = built.base.times(money(rule.amount)).div(100)
+    else if (rule.calc === 'SLABS') {
+      amount = rule.slabs?.length ? amountFromSlabs(built.base, rule.slabs) : money(0)
+    } else amount = built.base.times(money(rule.amount)).div(100)
     if (amount.lte(0)) continue
     const employer = rule.kind === 'EMPLOYER'
     lines.push(
@@ -346,6 +523,7 @@ export type JournalDraftLine = {
   debit: Money
   credit: Money
   description: string
+  trackingCategoryId: string | null
 }
 
 export function buildPayrollJournal(input: {
@@ -355,6 +533,7 @@ export function buildPayrollJournal(input: {
   slips: {
     name: string
     department: string | null
+    trackingCategoryId?: string | null
     expenseAccountId: string | null
     payableAccountId: string | null
     payAccountId: string | null
@@ -371,21 +550,29 @@ export function buildPayrollJournal(input: {
   }[]
 }): { error: string | null; lines: JournalDraftLine[] } {
   const bucket = new Map<string, JournalDraftLine>()
-  const add = (accountId: string | null, debit: Money, credit: Money, description: string) => {
+  const add = (
+    accountId: string | null,
+    debit: Money,
+    credit: Money,
+    description: string,
+    trackingCategoryId: string | null = null,
+  ) => {
     if (!accountId || (debit.lte(0) && credit.lte(0))) return false
-    const key = `${accountId}|${debit.gt(0) ? 'D' : 'C'}|${description}`
+    const track = trackingCategoryId ?? ''
+    const key = `${accountId}|${debit.gt(0) ? 'D' : 'C'}|${description}|${track}`
     const existing = bucket.get(key)
     if (existing) {
       existing.debit = existing.debit.plus(debit)
       existing.credit = existing.credit.plus(credit)
     } else {
-      bucket.set(key, { accountId, debit, credit, description })
+      bucket.set(key, { accountId, debit, credit, description, trackingCategoryId })
     }
     return true
   }
 
   for (const slip of input.slips) {
     const dept = slip.department ? ` · ${slip.department}` : ''
+    const track = slip.trackingCategoryId ?? null
     const expenseFallback = slip.expenseAccountId
     const liabilityFallback = input.liabilityAccountId || slip.payableAccountId
     let net = money(0)
@@ -394,7 +581,7 @@ export function buildPayrollJournal(input: {
       if (amount.lte(0)) continue
       if (row.code === 'UNPAID_LEAVE') {
         const account = row.expenseAccountId || expenseFallback
-        if (!add(account, money(0), amount, `Payroll unpaid leave${dept}`)) {
+        if (!add(account, money(0), amount, `Payroll unpaid leave${dept}`, track)) {
           return { error: `Set a wage expense account for ${slip.name}.`, lines: [] }
         }
         net = net.minus(amount)
@@ -403,23 +590,23 @@ export function buildPayrollJournal(input: {
       if (!row.affectsNet) {
         const expense = row.expenseAccountId || expenseFallback
         const liability = row.liabilityAccountId || liabilityFallback
-        if (!add(expense, amount, money(0), `Payroll employer cost${dept}`)) {
+        if (!add(expense, amount, money(0), `Payroll employer cost${dept}`, track)) {
           return { error: `Set a wage expense account for ${slip.name}.`, lines: [] }
         }
-        if (!add(liability, money(0), amount, `Payroll employer liability · ${row.label}`)) {
+        if (!add(liability, money(0), amount, `Payroll employer liability · ${row.label}`, track)) {
           return { error: `Choose a deduction liability account for ${row.label}.`, lines: [] }
         }
         continue
       }
       if (row.kind === 'EARNING') {
         const account = row.expenseAccountId || expenseFallback
-        if (!add(account, amount, money(0), `Payroll wages${dept}`)) {
+        if (!add(account, amount, money(0), `Payroll wages${dept}`, track)) {
           return { error: `Set a wage expense account for ${slip.name}.`, lines: [] }
         }
         net = net.plus(amount)
       } else {
         const account = row.liabilityAccountId || liabilityFallback
-        if (!add(account, money(0), amount, `Payroll deduction · ${row.label}`)) {
+        if (!add(account, money(0), amount, `Payroll deduction · ${row.label}`, track)) {
           return { error: `Choose a deduction liability account for ${row.label}.`, lines: [] }
         }
         net = net.minus(amount)
@@ -433,7 +620,7 @@ export function buildPayrollJournal(input: {
         : slip.payAccountId || input.payFromAccountId
     const creditLabel =
       input.payMode === 'ACCRUE' ? `Payroll payable · ${slip.name}` : `Payroll pay · ${slip.payMethod} · ${slip.name}${dept}`
-    if (!add(creditAccount, money(0), net, creditLabel)) {
+    if (!add(creditAccount, money(0), net, creditLabel, track)) {
       return {
         error:
           input.payMode === 'ACCRUE'
@@ -463,6 +650,7 @@ export function buildPayrollSettlementJournal(input: {
   slips: {
     name: string
     department: string | null
+    trackingCategoryId?: string | null
     payableAccountId: string | null
     payAccountId: string | null
     payMethod: PayMethod
@@ -470,15 +658,22 @@ export function buildPayrollSettlementJournal(input: {
   }[]
 }): { error: string | null; lines: JournalDraftLine[] } {
   const bucket = new Map<string, JournalDraftLine>()
-  const add = (accountId: string | null, debit: Money, credit: Money, description: string) => {
+  const add = (
+    accountId: string | null,
+    debit: Money,
+    credit: Money,
+    description: string,
+    trackingCategoryId: string | null = null,
+  ) => {
     if (!accountId || (debit.lte(0) && credit.lte(0))) return false
-    const key = `${accountId}|${debit.gt(0) ? 'D' : 'C'}|${description}`
+    const track = trackingCategoryId ?? ''
+    const key = `${accountId}|${debit.gt(0) ? 'D' : 'C'}|${description}|${track}`
     const existing = bucket.get(key)
     if (existing) {
       existing.debit = existing.debit.plus(debit)
       existing.credit = existing.credit.plus(credit)
     } else {
-      bucket.set(key, { accountId, debit, credit, description })
+      bucket.set(key, { accountId, debit, credit, description, trackingCategoryId })
     }
     return true
   }
@@ -489,13 +684,14 @@ export function buildPayrollSettlementJournal(input: {
     const payable = slip.payableAccountId || input.liabilityAccountId
     const pay = slip.payAccountId || input.payFromAccountId
     const dept = slip.department ? ` · ${slip.department}` : ''
-    if (!add(payable, net, money(0), `Pay wages payable · ${slip.name}`)) {
+    const track = slip.trackingCategoryId ?? null
+    if (!add(payable, net, money(0), `Pay wages payable · ${slip.name}`, track)) {
       return {
         error: `Set a payable account for ${slip.name}, or a liability account on the run.`,
         lines: [],
       }
     }
-    if (!add(pay, money(0), net, `Settle payroll · ${slip.payMethod} · ${slip.name}${dept}`)) {
+    if (!add(pay, money(0), net, `Settle payroll · ${slip.payMethod} · ${slip.name}${dept}`, track)) {
       return {
         error: `Choose the bank, cash, or mobile account to pay ${slip.name}.`,
         lines: [],

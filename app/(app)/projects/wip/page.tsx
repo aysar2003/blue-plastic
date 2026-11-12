@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { billRetainerAction, billWipAction } from '@/app/(app)/projects/wip/actions'
+import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -47,6 +48,12 @@ export default async function ProjectWipPage() {
       />
 
       <h2 className="mb-2 text-sm font-semibold">Unbilled WIP</h2>
+      {projects.length === 0 ? (
+        <EmptyState
+          title="No project WIP"
+          description="Create a project and log billable time, then bill unbilled hours into an invoice here."
+        />
+      ) : (
       <Table className="mb-8">
         <TableHeader>
           <TableRow>
@@ -92,6 +99,13 @@ export default async function ProjectWipPage() {
                           </option>
                         ))}
                       </NativeSelect>
+                      <Input
+                        name="writeUpDownPercent"
+                        defaultValue="0"
+                        title="Write-up / write-down %"
+                        className="h-8 w-16 text-xs"
+                        placeholder="%"
+                      />
                       <button type="submit" className={buttonVariants({ size: 'sm' })}>
                         Bill WIP
                       </button>
@@ -124,8 +138,15 @@ export default async function ProjectWipPage() {
           ))}
         </TableBody>
       </Table>
+      )}
 
-      <h2 className="mb-2 text-sm font-semibold">Utilization</h2>
+      <h2 className="mb-2 mt-8 text-sm font-semibold">Utilization</h2>
+      {utilization.length === 0 ? (
+        <EmptyState
+          title="No utilization yet"
+          description="Log timesheets against projects to see billable hours versus available capacity."
+        />
+      ) : (
       <Table>
         <TableHeader>
           <TableRow>
@@ -146,6 +167,7 @@ export default async function ProjectWipPage() {
           ))}
         </TableBody>
       </Table>
+      )}
     </>
   )
 }

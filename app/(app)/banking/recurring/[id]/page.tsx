@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 
 import { BooksTabs } from '@/components/accounts/books-tabs'
 import { RecurringRowActions } from '@/components/banking/recurring-actions'
@@ -32,6 +32,11 @@ export default async function RecurringDetailPage({
   } catch (error) {
     if (isAppError(error) && error.code === 'NOT_FOUND') notFound()
     throw error
+  }
+
+  // AR invoice schedules live under Sales → Subscriptions, not Banking.
+  if (row.type === 'INVOICE') {
+    redirect(`/sales/subscriptions/${row.id}`)
   }
 
   const canJournal = ctx.permissions.has('journal:post')

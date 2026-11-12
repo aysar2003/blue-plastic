@@ -8,7 +8,7 @@ import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import * as hotel from '@/server/services/hotel.service'
 
-import { addCharge, checkInGuest, checkOutGuest } from '../actions'
+import { addCharge, checkInGuest, checkOutGuest, postNightlyCharges } from '../actions'
 
 export const metadata: Metadata = { title: 'Stays' }
 
@@ -37,8 +37,20 @@ export default async function HospitalityStaysPage() {
     <div className="mx-auto max-w-4xl space-y-8 px-4 py-8">
       <PageHeader
         title="Stays"
-        description="Check in a guest, add folio charges, check out to a sales invoice."
+        description="Check in a guest, add folio charges, post nightly room rates, check out to a sales invoice."
       />
+
+      {canEdit ? (
+        <form action={postNightlyCharges} className="flex flex-wrap items-end gap-3 rounded-lg border p-4">
+          <div className="space-y-1">
+            <Label htmlFor="nightOf">Post nightly rates for</Label>
+            <Input id="nightOf" name="nightOf" type="date" />
+          </div>
+          <Button type="submit" variant="secondary">
+            Post room nights
+          </Button>
+        </form>
+      ) : null}
 
       {canEdit ? (
         <form action={checkInGuest} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-3">

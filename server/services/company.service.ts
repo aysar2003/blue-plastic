@@ -4,15 +4,20 @@ import type { Prisma } from '@prisma/client'
 
 import { companyLimitStatus } from '@/lib/company-limits'
 import { MAX_SUB_COMPANIES } from '@/lib/company-group'
+import { normalizeOwnershipPercent } from '@/lib/erp/consolidation-ownership'
 import {
   featureFlagsWithModules,
+  grantModuleOnFlags,
+  MODULE_FLAG_LABELS,
   modulesFromFormValues,
   parseFeatureFlags,
+  type ModuleFlag,
 } from '@/lib/feature-flags'
 import type {
   AttachSubCompanyInput,
   CreateCompanyInput,
   DeleteCompanyInput,
+  GrantModuleToAllInput,
   UpdateCompanyLimitsInput,
 } from '@/lib/validation/company'
 import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
@@ -200,10 +205,12 @@ export async function attachSubCompany(ctx: OrgContext, input: AttachSubCompanyI
     )
   }
 
+  const ownershipPercent = normalizeOwnershipPercent(input.ownershipPercent)
+
   await db.$transaction(async (tx) => {
     await tx.organization.update({
       where: { id: org.id },
-      data: { parentOrgId: parent.id },
+      data: { parentOrgId: parent.id, ownershipPercent },
     })
 
     const mainAdmins = await tx.membership.findMany({
@@ -236,12 +243,63 @@ export async function attachSubCompany(ctx: OrgContext, input: AttachSubCompanyI
         entity: 'Organization',
         entityId: org.id,
         action: 'UPDATE',
-        after: { parentOrgId: parent.id, parentName: parent.name, attachedAsSub: true },
+        after: {
+          parentOrgId: parent.id,
+          parentName: parent.name,
+          attachedAsSub: true,
+          ownershipPercent: ownershipPercent.toFixed(4),
+        },
       },
     })
   })
 
-  return { orgId: org.id, name: org.name, parentOrgId: parent.id, parentName: parent.name }
+  return {
+    orgId: org.id,
+    name: org.name,
+    parentOrgId: parent.id,
+    parentName: parent.name,
+    ownershipPercent: ownershipPercent.toFixed(4),
+  }
+}
+
+/** Set parent ownership % of a sub-company (group main admin or system owner). */
+export async function setSubOwnershipPercent(
+  ctx: OrgContext,
+  input: { orgId: string; ownershipPercent: string },
+) {
+  const org = await db.organization.findUnique({
+    where: { id: input.orgId },
+    select: { id: true, name: true, parentOrgId: true },
+  })
+  if (!org) throw notFound('Company')
+  if (!org.parentOrgId) {
+    throw validation('Ownership percent applies only to sub-companies.')
+  }
+
+  if (!ctx.isSystemOwner) {
+    if (ctx.role !== 'OWNER' && ctx.role !== 'ADMIN') {
+      throw forbidden('Group admin required.')
+    }
+    const mainMembership = await db.membership.findUnique({
+      where: { orgId_userId: { orgId: org.parentOrgId, userId: ctx.userId } },
+      select: { role: true, status: true },
+    })
+    const ok =
+      mainMembership?.status === 'ACTIVE' &&
+      (mainMembership.role === 'OWNER' || mainMembership.role === 'ADMIN')
+    if (!ok) throw forbidden('Only a main-company admin can set ownership.')
+  }
+
+  const ownershipPercent = normalizeOwnershipPercent(input.ownershipPercent)
+  await db.organization.update({
+    where: { id: org.id },
+    data: { ownershipPercent },
+  })
+  return {
+    orgId: org.id,
+    name: org.name,
+    ownershipPercent: ownershipPercent.toFixed(4),
+  }
 }
 
 /**
@@ -371,6 +429,55 @@ export async function updateCompanyLimits(ctx: OrgContext, input: UpdateCompanyL
     ...status,
     activeUsers: updated._count.memberships,
     modules: parseFeatureFlags(updated.featureFlags).modules,
+  }
+}
+
+/**
+ * Grant one catalog app to every company that does not already have it.
+ * System owner only. Turns the module on for those companies.
+ */
+export async function grantModuleToAllCompanies(
+  ctx: OrgContext,
+  input: GrantModuleToAllInput,
+) {
+  if (!ctx.isSystemOwner) {
+    throw forbidden('Only the system owner can grant an app to all companies.')
+  }
+
+  const moduleFlag = input.module as ModuleFlag
+  const label = MODULE_FLAG_LABELS[moduleFlag]?.label ?? moduleFlag
+
+  const organizations = await db.organization.findMany({
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true, featureFlags: true },
+  })
+
+  const updated: { orgId: string; name: string }[] = []
+  const skipped: { orgId: string; name: string }[] = []
+
+  for (const org of organizations) {
+    const current = parseFeatureFlags(org.featureFlags)
+    const next = grantModuleOnFlags(current, moduleFlag)
+    if (!next.changed) {
+      skipped.push({ orgId: org.id, name: org.name })
+      continue
+    }
+    await db.organization.update({
+      where: { id: org.id },
+      data: { featureFlags: next.flags as unknown as Prisma.InputJsonValue },
+      select: { id: true },
+    })
+    updated.push({ orgId: org.id, name: org.name })
+  }
+
+  return {
+    module: moduleFlag,
+    label,
+    companyTotal: organizations.length,
+    updatedCount: updated.length,
+    skippedCount: skipped.length,
+    updated,
+    skipped,
   }
 }
 

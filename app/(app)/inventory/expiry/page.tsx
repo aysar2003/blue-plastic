@@ -7,8 +7,11 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
 import { requireOrgContext } from '@/server/auth/context'
 import * as itemLotService from '@/server/services/item-lot.service'
+
+import { disposeLotAction } from './actions'
 
 export const metadata: Metadata = { title: 'Lot expiry' }
 
@@ -20,10 +23,12 @@ export default async function InventoryExpiryPage({
   const ctx = await requireOrgContext('inventory:read')
   const query = await searchParams
   const withinDays = Math.min(Math.max(Number(query.days) || 90, 1), 730)
-  const [lots, controlled] = await Promise.all([
+  const [lots, controlled, controlledMoves] = await Promise.all([
     itemLotService.listExpiringLots(ctx, { withinDays }),
     itemLotService.listControlledItems(ctx),
+    itemLotService.listControlledMovements(ctx, 80),
   ])
+  const canDispose = ctx.permissions.has('inventory:adjust')
 
   return (
     <>
@@ -73,6 +78,7 @@ export default async function InventoryExpiryPage({
                   <TableHead>Expiry</TableHead>
                   <TableHead className="text-right">Days</TableHead>
                   <TableHead>Status</TableHead>
+                  {canDispose ? <TableHead className="text-right">Dispose</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -103,6 +109,18 @@ export default async function InventoryExpiryPage({
                         <span className="text-muted-foreground">OK</span>
                       )}
                     </TableCell>
+                    {canDispose ? (
+                      <TableCell className="text-right">
+                        {lot.expired ? (
+                          <form action={disposeLotAction}>
+                            <input type="hidden" name="lotId" value={lot.id} />
+                            <Button type="submit" size="sm" variant="outline">
+                              Write off
+                            </Button>
+                          </form>
+                        ) : null}
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>
@@ -142,6 +160,62 @@ export default async function InventoryExpiryPage({
                     </TableCell>
                     <TableCell className="text-muted-foreground">{item.sku ?? '—'}</TableCell>
                     <TableCell>{item.trackLots ? 'Tracked' : '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <PageHeader
+        title="Controlled movements"
+        description="Recent stock in/out for pharmacy-controlled products (receive and dispense audit)."
+        className="mb-2 mt-8"
+      />
+      {controlledMoves.length === 0 ? (
+        <EmptyState
+          title="No controlled movements yet"
+          description="Receive or dispense a pharmacy-controlled item with a lot to see the trail here."
+        />
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Lot</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead>Journal</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {controlledMoves.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="tabular text-muted-foreground">{row.date}</TableCell>
+                    <TableCell>
+                      <Link href={`/inventory/${row.itemId}`} className="font-medium hover:underline">
+                        {row.itemName}
+                      </Link>
+                      {row.sku ? (
+                        <span className="ml-2 text-xs text-muted-foreground">{row.sku}</span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="tabular">{row.lotNumber ?? '—'}</TableCell>
+                    <TableCell>{row.type}</TableCell>
+                    <TableCell className="text-right tabular">{row.quantity}</TableCell>
+                    <TableCell>
+                      {row.journalId && row.journalNumber ? (
+                        <Link href={`/journals/${row.journalId}`} className="hover:underline">
+                          {row.journalNumber}
+                        </Link>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

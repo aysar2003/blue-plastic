@@ -255,3 +255,68 @@ export async function jobCostReport(ctx: OrgContext, projectId: string) {
     contractRemaining: contract.minus(billed).toFixed(2),
   }
 }
+
+/** Job cost vs contract for open projects (progress hub). */
+export async function listJobCostSummaries(ctx: OrgContext) {
+  const projects = await db.project.findMany({
+    where: { orgId: ctx.orgId, status: { in: ['DRAFT', 'ACTIVE', 'ON_HOLD'] } },
+    select: {
+      id: true,
+      name: true,
+      number: true,
+      contractValue: true,
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 50,
+  })
+  if (projects.length === 0) return []
+
+  const projectIds = projects.map((row) => row.id)
+  const [sales, purchases] = await Promise.all([
+    db.salesDocument.groupBy({
+      by: ['projectId'],
+      where: {
+        orgId: ctx.orgId,
+        projectId: { in: projectIds },
+        deletedAt: null,
+        status: { not: 'VOID' },
+        type: { in: ['INVOICE', 'SALES_RECEIPT'] },
+      },
+      _sum: { total: true },
+    }),
+    db.purchaseDocument.groupBy({
+      by: ['projectId'],
+      where: {
+        orgId: ctx.orgId,
+        projectId: { in: projectIds },
+        deletedAt: null,
+        status: { not: 'VOID' },
+        type: { in: ['BILL', 'EXPENSE'] },
+      },
+      _sum: { total: true },
+    }),
+  ])
+
+  const billedBy = new Map(
+    sales.map((row) => [row.projectId, new Decimal(row._sum.total?.toString() ?? '0')]),
+  )
+  const costBy = new Map(
+    purchases.map((row) => [row.projectId, new Decimal(row._sum.total?.toString() ?? '0')]),
+  )
+
+  return projects.map((project) => {
+    const billed = billedBy.get(project.id) ?? new Decimal(0)
+    const costs = costBy.get(project.id) ?? new Decimal(0)
+    const contract = new Decimal(project.contractValue?.toString() ?? '0')
+    return {
+      projectId: project.id,
+      number: project.number,
+      name: project.name,
+      contract: contract.toFixed(2),
+      billed: billed.toFixed(2),
+      costs: costs.toFixed(2),
+      margin: billed.minus(costs).toFixed(2),
+      remaining: contract.minus(billed).toFixed(2),
+    }
+  })
+}

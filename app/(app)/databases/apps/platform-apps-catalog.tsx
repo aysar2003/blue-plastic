@@ -10,6 +10,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { ModuleFlag } from '@/lib/feature-flags'
 import {
   APP_CATALOG_CATEGORIES,
   type AppCatalogCategoryId,
@@ -18,6 +19,7 @@ import {
 import { cn } from '@/lib/utils'
 
 import { PendingAppRequests, type PendingAppRequestRow } from '../pending-app-requests'
+import { GrantModuleButton } from './grant-module-button'
 
 type CompanyGrant = {
   id: string
@@ -26,10 +28,13 @@ type CompanyGrant = {
   grantedCount: number
 }
 
+type MissingCompany = { id: string; name: string }
+
 export function PlatformAppsCatalog({
   apps,
   grantCounts,
   companyTotal,
+  missingByModule,
   companies,
   pendingRequests,
   timeZone,
@@ -37,6 +42,7 @@ export function PlatformAppsCatalog({
   apps: PlatformCatalogApp[]
   grantCounts: Record<string, number>
   companyTotal: number
+  missingByModule: Record<ModuleFlag, MissingCompany[]>
   companies: CompanyGrant[]
   pendingRequests: PendingAppRequestRow[]
   timeZone: string
@@ -182,8 +188,11 @@ export function PlatformAppsCatalog({
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {filtered.map((app) => {
                   const granted = grantCounts[app.key] ?? 0
+                  const missing = missingByModule[app.key] ?? []
                   const coverage =
                     companyTotal === 0 ? 0 : Math.round((granted / companyTotal) * 100)
+                  const missingPreview = missing.slice(0, 3)
+                  const extraMissing = Math.max(0, missing.length - missingPreview.length)
                   return (
                     <article
                       key={app.key}
@@ -212,20 +221,42 @@ export function PlatformAppsCatalog({
                         </div>
                       </div>
 
-                      <div className="mt-auto space-y-1.5">
-                        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                          <span>
-                            <span className="font-medium text-foreground">{granted}</span> of{' '}
-                            {companyTotal} companies
-                          </span>
-                          <span className="tabular-nums">{coverage}%</span>
+                      <div className="mt-auto space-y-2">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                            <span>
+                              <span className="font-medium text-foreground">{granted}</span> of{' '}
+                              {companyTotal} companies
+                            </span>
+                            <span className="tabular-nums">{coverage}%</span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-indigo-500/80 transition-[width]"
+                              style={{ width: `${coverage}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-indigo-500/80 transition-[width]"
-                            style={{ width: `${coverage}%` }}
-                          />
-                        </div>
+
+                        {missing.length > 0 ? (
+                          <div className="space-y-2">
+                            <p className="text-[11px] leading-snug text-muted-foreground">
+                              Missing:{' '}
+                              <span className="text-foreground">
+                                {missingPreview.map((row) => row.name).join(', ')}
+                                {extraMissing > 0 ? ` +${extraMissing} more` : ''}
+                              </span>
+                            </p>
+                            <GrantModuleButton
+                              module={app.key}
+                              label={app.label}
+                              missingCount={missing.length}
+                              optIn={app.optIn}
+                            />
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground">Granted to every company.</p>
+                        )}
                       </div>
                     </article>
                   )

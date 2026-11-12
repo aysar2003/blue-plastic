@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 
+import { clientIpFromHeaders } from '@/lib/rate-limit'
 import { isAppError } from '@/server/errors'
+import { assertRateLimitAsync } from '@/server/rate-limit'
 import * as deviceService from '@/server/services/attendance-device.service'
 
 export const runtime = 'nodejs'
@@ -22,10 +24,28 @@ function bearerToken(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const ip = clientIpFromHeaders(request.headers)
+    try {
+      await assertRateLimitAsync(`attendance-punch:${ip}`, {
+        max: 120,
+        windowMs: 15 * 60 * 1000,
+        message: 'Too many punch attempts from this network. Try again later.',
+      })
+    } catch (error) {
+      if (error instanceof Error && (error as Error & { code?: string }).code === 'RATE_LIMITED') {
+        return NextResponse.json({ error: error.message }, { status: 429 })
+      }
+      throw error
+    }
+
     const token = bearerToken(request)
     if (!token) {
       return NextResponse.json({ error: 'Missing device token.' }, { status: 401 })
     }
+    if (token.length < 16 || token.length > 200) {
+      return NextResponse.json({ error: 'Invalid device token.' }, { status: 401 })
+    }
+
     const body = (await request.json().catch(() => ({}))) as Body
     if (!body.externalUserId || !body.punchedAt) {
       return NextResponse.json(

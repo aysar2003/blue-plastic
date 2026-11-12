@@ -34,6 +34,18 @@ export type OnboardingState = {
   }[]
 }
 
+/** Layout-only: does this user still need the onboarding wizard? */
+export async function needsWizard(ctx: OrgContext): Promise<boolean> {
+  const canRun = can(ctx.role, 'org:update') || ctx.isSystemOwner
+  if (!canRun) return false
+  const org = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: { onboardingCompletedAt: true },
+  })
+  if (!org) throw notFound('Organisation')
+  return org.onboardingCompletedAt == null
+}
+
 export async function getState(ctx: OrgContext): Promise<OnboardingState> {
   const org = await db.organization.findUnique({
     where: { id: ctx.orgId },
@@ -80,9 +92,7 @@ export async function complete(
   }
   const pack = getPack(input.packId)
   if (!pack) throw validation('Unknown industry pack.')
-  if (pack.verticalStatus !== 'ready') {
-    throw validation('That institution pack is not vertical-ready yet.')
-  }
+  // Planned packs still install module presets; UI shows an honest maturity note.
 
   // Wizard is an explicit institution choice — OWNER/ADMIN may set grants to the pack.
   const mayReplace =

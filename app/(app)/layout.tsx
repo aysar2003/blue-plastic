@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 
 import { AppShell } from '@/components/layout/app-shell'
@@ -22,10 +23,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
     const canSwitch = ctx.isSystemOwner || ctx.canConnect
     // Light switcher list only — File size estimates stay on /databases.
-    const [showCompanyReports, databases, onboarding] = await Promise.all([
+    const [showCompanyReports, databases, needsWizard] = await Promise.all([
       canViewGroupReports(ctx),
       canSwitch ? listSwitchableCompanies(ctx) : Promise.resolve([]),
-      onboardingService.getState(ctx),
+      onboardingService.needsWizard(ctx),
     ])
 
     // Month P&L chart lives on /reports only (see reports/page.tsx). Loading it
@@ -39,8 +40,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         showCompanyReports={showCompanyReports}
         databases={databases}
       >
-        <OnboardingGate needed={onboarding.needsWizard} />
-        <RentBanner />
+        <OnboardingGate needed={needsWizard} />
+        <Suspense fallback={null}>
+          <RentBanner />
+        </Suspense>
         {children}
       </AppShell>
     )

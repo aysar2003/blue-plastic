@@ -126,9 +126,9 @@ export async function resolveBoard(ctx: OrgContext, id: string): Promise<{
       case 'reorder':
         return String(reorder.length)
       case 'pipeline':
-        return extras.pipelineAmount.toFixed(2)
+        return extras.pipelineAmount
       case 'unpaidAp':
-        return extras.unpaidAp.toFixed(2)
+        return extras.unpaidAp
       case 'followUps':
         return String(extras.followUps)
       default:

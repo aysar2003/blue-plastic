@@ -41,9 +41,20 @@ export default async function ReportsIndexPage() {
     <>
       <div className="mb-3 flex flex-wrap items-center justify-end gap-4 print:hidden">
         {showGroupReports ? (
-          <Link href="/reports/companies" className="mr-auto text-sm font-medium text-primary underline-offset-4 hover:underline">
-            {ctx.isSystemOwner ? 'All companies' : 'Company group'}
-          </Link>
+          <div className="mr-auto flex flex-wrap gap-x-4 gap-y-1">
+            <Link href="/reports/companies" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+              {ctx.isSystemOwner ? 'All companies' : 'Company group'}
+            </Link>
+            <Link href="/reports/group-close" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+              Group close
+            </Link>
+            <Link href="/reports/intercompany" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+              IC matches
+            </Link>
+            <Link href="/reports/consolidation" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+              Consolidation
+            </Link>
+          </div>
         ) : null}
         <GiveFeedback />
         <CreateReportMenu permissions={[...ctx.permissions]} />

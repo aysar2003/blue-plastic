@@ -50,6 +50,7 @@ export async function makeOrg(tx: Tx, options: { fiscalYearStartMonth?: number }
       addressLine1: true, addressLine2: true, city: true, region: true,
       postalCode: true, country: true, phone: true, email: true, website: true,
       brandMark: true, logoStorageKey: true, updatedAt: true,
+      accessRestricted: true, rentExpiresAt: true, maxUsers: true, rentNote: true,
     },
   })
 
@@ -82,6 +83,7 @@ export async function makeOrg(tx: Tx, options: { fiscalYearStartMonth?: number }
       permissions: permissionsFor('OWNER'),
       isSystemOwner: false,
       canConnect: false,
+      systemOwnerBreakGlass: false,
       portalCustomerId: null,
       features: DEFAULT_FEATURE_FLAGS,
       organization: {

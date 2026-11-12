@@ -37,6 +37,35 @@ export default async function HospitalityHubPage() {
           <Link href="/customers" className="underline underline-offset-4">
             Guests (customers)
           </Link>
+          <Link href="/pos" className="underline underline-offset-4">
+            POS / F&B
+          </Link>
+          <Link href="/pos/night-audit" className="underline underline-offset-4">
+            Night audit
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Restaurant tools</CardTitle>
+          <CardDescription>
+            Shared POS kitchen, tables, and night audit for hotel F&B or standalone restaurant packs.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-4 text-sm">
+          <Link href="/pos/tables" className="underline underline-offset-4">
+            Dining tables
+          </Link>
+          <Link href="/pos/kitchen" className="underline underline-offset-4">
+            Kitchen tickets
+          </Link>
+          <Link href="/pos/sessions" className="underline underline-offset-4">
+            Till sessions
+          </Link>
+          <Link href="/reports/packs" className="underline underline-offset-4">
+            Report packs
+          </Link>
         </CardContent>
       </Card>
     </div>

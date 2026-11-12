@@ -164,14 +164,16 @@ export async function checkIn(
       if (item) {
         const unitPrice = item.salesPrice?.toString() ?? '0'
         const amount = folioLineAmount(1, unitPrice)
+        const nightOf = today(ctx.organization.timeZone)
         await tx.folioLine.create({
           data: {
             folioId: folio.id,
             itemId: item.id,
-            description: `${room.roomType.name} · ${item.name}`,
+            description: `${room.roomType.name} · ${item.name} · ${nightOf}`,
             quantity: '1',
             unitPrice,
             amount,
+            serviceDate: new Date(`${nightOf}T00:00:00.000Z`),
           },
         })
       }
@@ -299,6 +301,74 @@ export async function listOpenStays(ctx: OrgContext) {
     },
     orderBy: { checkInAt: 'desc' },
   })
+}
+
+/**
+ * Post the room rate for a calendar night onto every open stay that does not
+ * already have a folio line for that serviceDate (idempotent).
+ */
+export async function postNightlyRoomCharges(
+  ctx: OrgContext,
+  nightOf?: string,
+): Promise<{ posted: number; skipped: number; nightOf: string }> {
+  const night = nightOf?.trim() || today(ctx.organization.timeZone)
+  const serviceDate = new Date(`${night}T00:00:00.000Z`)
+  if (Number.isNaN(serviceDate.getTime())) throw validation('Invalid night date.')
+
+  const stays = await db.stay.findMany({
+    where: { orgId: ctx.orgId, status: 'CHECKED_IN' },
+    include: {
+      folio: {
+        include: {
+          lines: { where: { serviceDate }, select: { id: true }, take: 1 },
+        },
+      },
+      room: {
+        include: {
+          roomType: {
+            include: {
+              baseRateItem: { select: { id: true, name: true, salesPrice: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  let posted = 0
+  let skipped = 0
+
+  for (const stay of stays) {
+    if (!stay.folio || stay.folio.status !== 'OPEN') {
+      skipped += 1
+      continue
+    }
+    if (stay.folio.lines.length > 0) {
+      skipped += 1
+      continue
+    }
+    const item = stay.room.roomType.baseRateItem
+    if (!item) {
+      skipped += 1
+      continue
+    }
+    const unitPrice = item.salesPrice?.toString() ?? '0'
+    const amount = folioLineAmount(1, unitPrice)
+    await db.folioLine.create({
+      data: {
+        folioId: stay.folio.id,
+        itemId: item.id,
+        description: `${stay.room.roomType.name} · ${item.name} · ${night}`,
+        quantity: '1',
+        unitPrice,
+        amount,
+        serviceDate,
+      },
+    })
+    posted += 1
+  }
+
+  return { posted, skipped, nightOf: night }
 }
 
 export function folioBalance(lines: { amount: Decimal | string }[]): string {

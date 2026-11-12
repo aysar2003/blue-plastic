@@ -1,5 +1,11 @@
 import 'server-only'
 
+import {
+  defaultWorkWeekdays,
+  parseOvertimeRules,
+  parseWorkWeekdays,
+  type OvertimeTier,
+} from '@/lib/payroll-standard'
 import { money } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -22,6 +28,8 @@ export async function get(ctx: OrgContext) {
         workDaysPerWeek: DEFAULTS.workDaysPerWeek,
         overtimeAfterHoursPerDay: money(DEFAULTS.overtimeAfterHoursPerDay),
         overtimeMultiplier: money(DEFAULTS.overtimeMultiplier),
+        overtimeRules: [{ afterHours: '12', multiplier: '2' }],
+        workWeekdays: defaultWorkWeekdays(DEFAULTS.workDaysPerWeek),
         timezoneNote: DEFAULTS.timezoneNote,
       },
     })
@@ -32,6 +40,8 @@ export async function get(ctx: OrgContext) {
     workDaysPerWeek: row.workDaysPerWeek,
     overtimeAfterHoursPerDay: row.overtimeAfterHoursPerDay.toFixed(4),
     overtimeMultiplier: row.overtimeMultiplier.toFixed(4),
+    overtimeRules: parseOvertimeRules(row.overtimeRules) ?? [],
+    workWeekdays: parseWorkWeekdays(row.workWeekdays, row.workDaysPerWeek),
     timezoneNote: row.timezoneNote,
   }
 }
@@ -43,10 +53,16 @@ export async function update(
     workDaysPerWeek: number
     overtimeAfterHoursPerDay: string
     overtimeMultiplier: string
+    overtimeRules?: OvertimeTier[] | null
+    workWeekdays?: number[] | null
     timezoneNote?: string | null
   },
 ) {
   const existing = await get(ctx)
+  const weekdays =
+    input.workWeekdays != null && input.workWeekdays.length > 0
+      ? parseWorkWeekdays(input.workWeekdays, input.workDaysPerWeek)
+      : defaultWorkWeekdays(input.workDaysPerWeek)
   const row = await db.hrSettings.update({
     where: { id: existing.id },
     data: {
@@ -54,6 +70,8 @@ export async function update(
       workDaysPerWeek: input.workDaysPerWeek,
       overtimeAfterHoursPerDay: money(input.overtimeAfterHoursPerDay),
       overtimeMultiplier: money(input.overtimeMultiplier),
+      overtimeRules: input.overtimeRules?.length ? input.overtimeRules : [],
+      workWeekdays: weekdays,
       timezoneNote: input.timezoneNote ?? null,
     },
   })
@@ -63,6 +81,8 @@ export async function update(
     workDaysPerWeek: row.workDaysPerWeek,
     overtimeAfterHoursPerDay: row.overtimeAfterHoursPerDay.toFixed(4),
     overtimeMultiplier: row.overtimeMultiplier.toFixed(4),
+    overtimeRules: parseOvertimeRules(row.overtimeRules) ?? [],
+    workWeekdays: parseWorkWeekdays(row.workWeekdays, row.workDaysPerWeek),
     timezoneNote: row.timezoneNote,
   }
 }

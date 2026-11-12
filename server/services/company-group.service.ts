@@ -1,5 +1,8 @@
 import 'server-only'
 
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
+
 import {
   applyGroupReportView,
   MAX_SUB_COMPANIES,
@@ -54,13 +57,22 @@ export async function groupReportScope(
   if (ctx.isSystemOwner) {
     const companies = await db.organization.findMany({
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, parentOrgId: true, baseCurrency: true },
+      select: {
+        id: true,
+        name: true,
+        parentOrgId: true,
+        baseCurrency: true,
+        ownershipPercent: true,
+      },
     })
     return {
       orgIds: 'all',
       rootOrgId: null,
       title: 'All companies',
-      companies,
+      companies: companies.map((row) => ({
+        ...row,
+        ownershipPercent: row.ownershipPercent.toFixed(4),
+      })),
     }
   }
 
@@ -86,7 +98,13 @@ export async function groupReportScope(
   const companies = await db.organization.findMany({
     where: { OR: [{ id: rootOrgId }, { parentOrgId: rootOrgId }] },
     orderBy: [{ parentOrgId: 'asc' }, { name: 'asc' }],
-    select: { id: true, name: true, parentOrgId: true, baseCurrency: true },
+    select: {
+      id: true,
+      name: true,
+      parentOrgId: true,
+      baseCurrency: true,
+      ownershipPercent: true,
+    },
   })
   // Main first, then subs by name.
   companies.sort((a, b) => {
@@ -100,19 +118,50 @@ export async function groupReportScope(
     orgIds: companies.map((row) => row.id),
     rootOrgId,
     title: main ? `${main.name} · group` : 'Company group',
-    companies,
+    companies: companies.map((row) => ({
+      id: row.id,
+      name: row.name,
+      parentOrgId: row.parentOrgId,
+      baseCurrency: row.baseCurrency,
+      ownershipPercent:
+        row.id === rootOrgId ? '100.0000' : row.ownershipPercent.toFixed(4),
+    })),
   }
 }
 
 /** Whether the shell / reports hub should offer the group companies report. */
-export async function canViewGroupReports(ctx: OrgContext): Promise<boolean> {
-  if (ctx.isSystemOwner) return true
-  if (ctx.role !== 'OWNER' && ctx.role !== 'ADMIN') return false
+export function canViewGroupReports(ctx: OrgContext): Promise<boolean> {
+  if (ctx.isSystemOwner) return Promise.resolve(true)
+  if (ctx.role !== 'OWNER' && ctx.role !== 'ADMIN') return Promise.resolve(false)
+  return cachedCanViewGroupReports(
+    ctx.userId,
+    ctx.orgId,
+    ctx.organization.parentOrgId,
+    ctx.role,
+  )
+}
 
-  const rootOrgId = await resolveGroupRootId(ctx.orgId, ctx.organization.parentOrgId)
+const cachedCanViewGroupReports = cache(
+  (userId: string, orgId: string, parentOrgId: string | null, role: string) =>
+    unstable_cache(
+      () => queryCanViewGroupReports(userId, orgId, parentOrgId, role),
+      ['group-reports-flag-v1', userId, orgId, parentOrgId ?? '', role],
+      { revalidate: 60 },
+    )(),
+)
+
+async function queryCanViewGroupReports(
+  userId: string,
+  orgId: string,
+  parentOrgId: string | null,
+  role: string,
+): Promise<boolean> {
+  if (role !== 'OWNER' && role !== 'ADMIN') return false
+
+  const rootOrgId = await resolveGroupRootId(orgId, parentOrgId)
   const [mainMembership, childCount] = await Promise.all([
     db.membership.findUnique({
-      where: { orgId_userId: { orgId: rootOrgId, userId: ctx.userId } },
+      where: { orgId_userId: { orgId: rootOrgId, userId } },
       select: { role: true, status: true },
     }),
     db.organization.count({ where: { parentOrgId: rootOrgId } }),

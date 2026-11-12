@@ -5,6 +5,7 @@ import type { Prisma, RecurringDocType, RecurringFrequency } from '@prisma/clien
 import { addDays, addMonths, today, toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
 import type { ManualJournalInput } from '@/lib/validation/accounting'
 import type { PurchaseDocumentInput } from '@/lib/validation/purchases'
+import type { SalesDocumentInput } from '@/lib/validation/sales'
 import {
   payloadFromForm,
   type RecurringTemplateFormInput,
@@ -17,9 +18,11 @@ import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { effectivePermissions } from '@/server/auth/permissions'
 import { db } from '@/server/db'
-import { notFound, precondition, validation } from '@/server/errors'
+import { notFound, precondition } from '@/server/errors'
+import * as deferredRevenue from '@/server/services/deferred-revenue.service'
 import * as journalService from '@/server/services/journal.service'
 import * as purchaseService from '@/server/services/purchase.service'
+import * as salesService from '@/server/services/sales.service'
 
 const LIST_SELECT = {
   id: true,
@@ -100,10 +103,16 @@ function present(row: {
   }
 }
 
-export async function list(ctx: OrgContext): Promise<RecurringListRow[]> {
+export async function list(
+  ctx: OrgContext,
+  options?: { types?: RecurringDocType[] },
+): Promise<RecurringListRow[]> {
   const asOf = today(ctx.organization.timeZone)
   const rows = await db.recurringTemplate.findMany({
-    where: { orgId: ctx.orgId },
+    where: {
+      orgId: ctx.orgId,
+      ...(options?.types?.length ? { type: { in: options.types } } : {}),
+    },
     select: LIST_SELECT,
     orderBy: [{ isActive: 'desc' }, { nextRunOn: 'asc' }, { name: 'asc' }],
   })
@@ -127,7 +136,15 @@ function assertCanCreate(ctx: OrgContext, type: RecurringDocType) {
     if (!ctx.permissions.has('journal:post')) {
       throw precondition('You need permission to post journals.')
     }
-  } else if (!ctx.permissions.has('bill:create')) {
+    return
+  }
+  if (type === 'INVOICE') {
+    if (!ctx.permissions.has('invoice:create')) {
+      throw precondition('You need permission to create invoices.')
+    }
+    return
+  }
+  if (!ctx.permissions.has('bill:create')) {
     throw precondition('You need permission to create bills and expenses.')
   }
 }
@@ -148,6 +165,9 @@ export async function create(ctx: OrgContext, input: RecurringTemplateFormInput)
         nextRunOn: toDate(input.nextRunOn),
         endOn: input.endOn ? toDate(input.endOn) : null,
         isActive: input.isActive,
+        deferRevenue: input.type === 'INVOICE' ? Boolean(input.deferRevenue) : false,
+        serviceMonths:
+          input.type === 'INVOICE' && input.deferRevenue ? input.serviceMonths : null,
         payload: payload as Prisma.InputJsonValue,
         createdById: ctx.userId,
       },
@@ -190,6 +210,9 @@ export async function update(ctx: OrgContext, id: string, input: RecurringTempla
         nextRunOn: toDate(input.nextRunOn),
         endOn: input.endOn ? toDate(input.endOn) : null,
         isActive: input.isActive,
+        deferRevenue: input.type === 'INVOICE' ? Boolean(input.deferRevenue) : false,
+        serviceMonths:
+          input.type === 'INVOICE' && input.deferRevenue ? input.serviceMonths : null,
         payload: payload as Prisma.InputJsonValue,
       },
       select: LIST_SELECT,
@@ -272,7 +295,7 @@ export async function createInstance(ctx: OrgContext, id: string) {
   const payload = row.payload as Record<string, unknown>
 
   let documentId: string
-  let documentKind: 'journal' | 'bill' | 'expense'
+  let documentKind: 'journal' | 'bill' | 'expense' | 'invoice'
   let href: string
   let number: string
 
@@ -283,6 +306,27 @@ export async function createInstance(ctx: OrgContext, id: string) {
     documentKind = 'journal'
     number = created.journalNumber
     href = `/journals/${created.id}`
+  } else if (row.type === 'INVOICE') {
+    const input = {
+      ...payload,
+      date: runOn,
+      saveAsDraft: false,
+      acknowledgeCreditLimit: true,
+    } as SalesDocumentInput
+    const created = await salesService.create(ctx, 'INVOICE', input)
+    documentId = created.id
+    documentKind = 'invoice'
+    number = created.number
+    href = `/sales/invoices/${created.id}`
+
+    if (row.deferRevenue && row.serviceMonths && row.serviceMonths > 0) {
+      await deferredRevenue.deferPostedInvoice(ctx, {
+        salesDocumentId: created.id,
+        recurringTemplateId: row.id,
+        serviceMonths: row.serviceMonths,
+        runOn,
+      })
+    }
   } else {
     const input = {
       ...payload,
@@ -362,7 +406,14 @@ export async function createDue(ctx: OrgContext): Promise<CreateDueResult> {
         skipped.push({ id: row.id, message: 'No permission to post journals.' })
         continue
       }
-      if (row.type !== 'JOURNAL' && !ctx.permissions.has('bill:create')) {
+      if (row.type === 'INVOICE' && !ctx.permissions.has('invoice:create')) {
+        skipped.push({ id: row.id, message: 'No permission to create invoices.' })
+        continue
+      }
+      if (
+        (row.type === 'BILL' || row.type === 'EXPENSE') &&
+        !ctx.permissions.has('bill:create')
+      ) {
         skipped.push({ id: row.id, message: 'No permission to create bills.' })
         continue
       }
@@ -373,6 +424,13 @@ export async function createDue(ctx: OrgContext): Promise<CreateDueResult> {
         message: error instanceof Error ? error.message : 'Could not create.',
       })
     }
+  }
+
+  // Also recognize deferred revenue that is due (subscriptions earning).
+  try {
+    await deferredRevenue.recognizeDue(ctx, asOf)
+  } catch {
+    // Recognition failures should not block invoice schedules.
   }
 
   return { created, skipped, asOf, dueCount: due.length }
@@ -432,6 +490,10 @@ export async function createDueForAllOrganizations(): Promise<{
             brandMark: true,
             logoStorageKey: true,
             updatedAt: true,
+            accessRestricted: true,
+            rentExpiresAt: true,
+            maxUsers: true,
+            rentNote: true,
           },
         },
       },
@@ -451,6 +513,7 @@ export async function createDueForAllOrganizations(): Promise<{
       portalCustomerId: null,
       isSystemOwner: false,
       canConnect: false,
+      systemOwnerBreakGlass: false,
     }
 
     const result = await createDue(ctx)

@@ -29,6 +29,8 @@ const DETAIL_SELECT = {
   ...LIST_SELECT,
   description: true,
   createdById: true,
+  storeId: true,
+  store: { select: { id: true, name: true } },
   customer: {
     select: {
       id: true,
@@ -227,6 +229,38 @@ async function requireCustomer(tx: Tx, ctx: OrgContext, customerId: string) {
   return customer
 }
 
+async function resolveSiteStoreId(
+  tx: Tx,
+  ctx: OrgContext,
+  storeId: string | null | undefined,
+): Promise<string | null> {
+  if (!storeId) return null
+  const store = await tx.store.findFirst({
+    where: { id: storeId, orgId: ctx.orgId, isActive: true },
+    select: { id: true },
+  })
+  if (!store) throw notFound('Site store')
+  return store.id
+}
+
+/** Link a construction job to a site store for issues / transfers. */
+export async function setSiteStore(
+  ctx: OrgContext,
+  input: { projectId: string; storeId: string | null },
+) {
+  const project = await db.project.findFirst({
+    where: { id: input.projectId, orgId: ctx.orgId },
+    select: { id: true },
+  })
+  if (!project) throw notFound('Project')
+  const storeId = await db.$transaction((tx) => resolveSiteStoreId(tx, ctx, input.storeId))
+  return db.project.update({
+    where: { id: project.id },
+    data: { storeId },
+    select: { id: true, storeId: true },
+  })
+}
+
 export async function create(ctx: OrgContext, input: ProjectInput) {
   const meta = await requestMeta()
   return db.$transaction(async (tx) => {
@@ -238,6 +272,7 @@ export async function create(ctx: OrgContext, input: ProjectInput) {
     })
     if (clash) throw numberTaken()
 
+    const storeId = await resolveSiteStoreId(tx, ctx, input.storeId)
     const project = await tx.project.create({
       data: {
         orgId: ctx.orgId,
@@ -249,6 +284,7 @@ export async function create(ctx: OrgContext, input: ProjectInput) {
         status: input.status,
         startDate: input.startDate ? toDate(input.startDate) : null,
         endDate: input.endDate ? toDate(input.endDate) : null,
+        storeId,
         createdById: ctx.userId,
       },
       select: { id: true, number: true, name: true },
@@ -287,6 +323,7 @@ export async function update(ctx: OrgContext, id: string, input: ProjectInput) {
     })
     if (clash) throw numberTaken()
 
+    const storeId = await resolveSiteStoreId(tx, ctx, input.storeId)
     const project = await tx.project.update({
       where: { id },
       data: {
@@ -298,6 +335,7 @@ export async function update(ctx: OrgContext, id: string, input: ProjectInput) {
         status: input.status,
         startDate: input.startDate ? toDate(input.startDate) : null,
         endDate: input.endDate ? toDate(input.endDate) : null,
+        storeId,
       },
       select: { id: true, number: true, name: true },
     })

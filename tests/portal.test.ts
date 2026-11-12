@@ -15,6 +15,7 @@ function staffCtx(overrides: Partial<OrgContext> = {}): OrgContext {
     permissions: permissionsFor('ADMIN'),
     isSystemOwner: false,
     canConnect: false,
+    systemOwnerBreakGlass: false,
     portalCustomerId: null,
     features: DEFAULT_FEATURE_FLAGS,
     organization: {
@@ -39,6 +40,10 @@ function staffCtx(overrides: Partial<OrgContext> = {}): OrgContext {
       brandMark: null,
       hasLogo: false,
       updatedAt: new Date(),
+      accessRestricted: false,
+      rentExpiresAt: null,
+      maxUsers: null,
+      rentNote: null,
     },
     user: { id: 'user_staff', name: 'Staff', email: 'staff@test.invalid', image: null },
     ...overrides,

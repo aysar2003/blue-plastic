@@ -11,6 +11,7 @@ export async function billWipAction(formData: FormData) {
   const result = await wip.billWipFromTime(ctx, {
     projectId: String(formData.get('projectId') ?? ''),
     itemId: String(formData.get('itemId') ?? ''),
+    writeUpDownPercent: String(formData.get('writeUpDownPercent') ?? '0'),
   })
   revalidatePath('/projects/wip')
   redirect(`/sales/invoices/${result.invoiceId}`)

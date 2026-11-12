@@ -28,7 +28,8 @@ export type Trail = {
 
 /**
  * The people behind a set of records, read from the audit log.
- * One query covers a whole page of rows.
+ * First poster + latest change only (two DISTINCT ON queries) — list screens
+ * never need the full history payload.
  */
 export async function trailsFor(ctx: OrgContext, entityIds: string[]): Promise<Map<string, Trail>> {
   const ids = [...new Set(entityIds.filter(Boolean))]
@@ -36,30 +37,57 @@ export async function trailsFor(ctx: OrgContext, entityIds: string[]): Promise<M
   for (const id of ids) map.set(id, { entered: null, changed: null })
   if (ids.length === 0) return map
 
-  const rows = await db.auditLog.findMany({
-    where: {
-      orgId: ctx.orgId,
-      entityId: { in: ids },
-      action: { in: [...TRAIL_ACTIONS] },
-    },
-    select: {
-      entityId: true,
-      action: true,
-      at: true,
-      actor: { select: { name: true } },
-    },
-    orderBy: { at: 'asc' },
-  })
+  const actions = [...TRAIL_ACTIONS]
+  const [firstRows, lastRows] = await Promise.all([
+    db.$queryRaw<
+      { entityId: string; action: string; at: Date; name: string | null }[]
+    >`
+      SELECT DISTINCT ON (a."entityId")
+             a."entityId" AS "entityId",
+             a.action::text AS action,
+             a.at AS at,
+             u.name AS name
+        FROM audit_logs a
+        LEFT JOIN users u ON u.id = a."actorId"
+       WHERE a."orgId" = ${ctx.orgId}
+         AND a."entityId" = ANY(${ids})
+         AND a.action::text = ANY(${actions})
+       ORDER BY a."entityId", a.at ASC
+    `,
+    db.$queryRaw<
+      { entityId: string; action: string; at: Date; name: string | null }[]
+    >`
+      SELECT DISTINCT ON (a."entityId")
+             a."entityId" AS "entityId",
+             a.action::text AS action,
+             a.at AS at,
+             u.name AS name
+        FROM audit_logs a
+        LEFT JOIN users u ON u.id = a."actorId"
+       WHERE a."orgId" = ${ctx.orgId}
+         AND a."entityId" = ANY(${ids})
+         AND a.action::text = ANY(${actions})
+       ORDER BY a."entityId", a.at DESC
+    `,
+  ])
 
-  for (const row of rows) {
-    const event: TrailEvent = {
-      name: row.actor?.name ?? 'System',
+  for (const row of firstRows) {
+    const current = map.get(row.entityId) ?? { entered: null, changed: null }
+    current.entered = {
+      name: row.name ?? 'System',
       action: row.action,
       at: row.at,
     }
+    map.set(row.entityId, current)
+  }
+
+  for (const row of lastRows) {
     const current = map.get(row.entityId) ?? { entered: null, changed: null }
-    if (!current.entered) current.entered = event
-    current.changed = event
+    current.changed = {
+      name: row.name ?? 'System',
+      action: row.action,
+      at: row.at,
+    }
     map.set(row.entityId, current)
   }
 

@@ -65,6 +65,16 @@ export const SALES_HUB_APPS: SalesHubApp[] = [
     blurb: 'Customer owes you',
   },
   {
+    key: 'subscriptions',
+    label: 'Subscriptions',
+    href: '/sales/subscriptions',
+    icon: 'clock',
+    permission: 'invoice:read',
+    accent: '#4338CA',
+    wash: '#E0E7FF',
+    blurb: 'Recurring invoices & deferred revenue',
+  },
+  {
     key: 'sales-receipts',
     label: 'Sales receipts',
     href: '/sales/sales-receipts',

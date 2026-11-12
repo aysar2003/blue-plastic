@@ -74,3 +74,13 @@ export async function checkOutGuest(formData: FormData) {
   revalidatePath(PATH)
   redirect(`/sales/invoices/${result.invoiceId}`)
 }
+
+export async function postNightlyCharges(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await hotel.postNightlyRoomCharges(
+    ctx,
+    String(formData.get('nightOf') ?? '') || undefined,
+  )
+  revalidatePath(PATH)
+  redirect(`${PATH}/stays`)
+}

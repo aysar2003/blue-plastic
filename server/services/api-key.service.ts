@@ -176,6 +176,10 @@ export async function authenticateApiKey(plainToken: string) {
           brandMark: true,
           logoStorageKey: true,
           updatedAt: true,
+          accessRestricted: true,
+          rentExpiresAt: true,
+          maxUsers: true,
+          rentNote: true,
         },
       },
       createdBy: {

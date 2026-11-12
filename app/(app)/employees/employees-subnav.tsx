@@ -26,6 +26,7 @@ const TABS = [
   { href: '/employees/leave', label: 'Leave', permission: 'hr:leave' },
   { href: '/employees/attendance', label: 'Attendance', permission: 'hr:attendance' },
   { href: '/employees/payroll', label: 'Payroll', permission: 'hr:payroll' },
+  { href: '/employees/payroll/mine', label: 'My payslips', permission: 'mine' as const },
   { href: '/employees/settings', label: 'Settings', permission: 'hr:read' },
   { href: '/employees/budget', label: 'Budget', permission: 'hr:read' },
   { href: '/employees/policies', label: 'Policies', permission: 'hr:read' },
@@ -38,10 +39,19 @@ function isDirectoryPath(pathname: string) {
   return /^\/employees\/[^/]+$/.test(pathname)
 }
 
-export function EmployeesSubnav({ permissions }: { permissions: string[] }) {
+export function EmployeesSubnav({
+  permissions,
+  showMine = false,
+}: {
+  permissions: string[]
+  showMine?: boolean
+}) {
   const pathname = usePathname()
   const allowed = new Set(permissions)
-  const visible = TABS.filter((tab) => allowed.has(tab.permission) || allowed.has('hr:read'))
+  const visible = TABS.filter((tab) => {
+    if (tab.permission === 'mine') return showMine || allowed.has('hr:payroll')
+    return allowed.has(tab.permission) || allowed.has('hr:read')
+  })
 
   return (
     <nav className="mb-4 flex gap-0.5 overflow-x-auto border-b border-border pb-2" aria-label="Employees sections">
@@ -49,7 +59,11 @@ export function EmployeesSubnav({ permissions }: { permissions: string[] }) {
         const on =
           'exact' in tab && tab.exact
             ? isDirectoryPath(pathname)
-            : pathname === tab.href || pathname.startsWith(`${tab.href}/`)
+            : tab.href === '/employees/payroll'
+              ? pathname === '/employees/payroll' ||
+                (pathname.startsWith('/employees/payroll/') &&
+                  !pathname.startsWith('/employees/payroll/mine'))
+              : pathname === tab.href || pathname.startsWith(`${tab.href}/`)
         return (
           <Link
             key={tab.href}

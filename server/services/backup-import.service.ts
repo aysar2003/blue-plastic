@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { createHash } from 'crypto'
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
 
 import {
   companiesFromParsed,
@@ -244,8 +246,31 @@ export type SwitchableCompany = {
  * Skips estimateCompanyBytes / owner lookups so every navigation stays fast.
  * Use listUserDatabases on /databases when File size and meta are needed.
  */
-export async function listSwitchableCompanies(ctx: OrgContext): Promise<SwitchableCompany[]> {
-  if (ctx.isSystemOwner) {
+export function listSwitchableCompanies(ctx: OrgContext): Promise<SwitchableCompany[]> {
+  return cachedSwitchableCompanies(
+    ctx.userId,
+    ctx.orgId,
+    ctx.isSystemOwner,
+    ctx.canConnect,
+  )
+}
+
+const cachedSwitchableCompanies = cache(
+  (userId: string, orgId: string, isSystemOwner: boolean, canConnect: boolean) =>
+    unstable_cache(
+      () => querySwitchableCompanies(userId, orgId, isSystemOwner, canConnect),
+      ['switchable-companies-v1', userId, orgId, String(isSystemOwner), String(canConnect)],
+      { revalidate: 60 },
+    )(),
+)
+
+async function querySwitchableCompanies(
+  userId: string,
+  orgId: string,
+  isSystemOwner: boolean,
+  canConnect: boolean,
+): Promise<SwitchableCompany[]> {
+  if (isSystemOwner) {
     const organizations = await db.organization.findMany({
       orderBy: [{ updatedAt: 'desc' }, { name: 'asc' }],
       select: { id: true, name: true },
@@ -253,15 +278,15 @@ export async function listSwitchableCompanies(ctx: OrgContext): Promise<Switchab
     return organizations.map((organization) => ({
       id: organization.id,
       name: organization.name,
-      isCurrent: organization.id === ctx.orgId,
+      isCurrent: organization.id === orgId,
     }))
   }
 
   const rows = await db.membership.findMany({
     where: {
-      userId: ctx.userId,
+      userId,
       status: 'ACTIVE',
-      ...(ctx.canConnect ? {} : { orgId: ctx.orgId }),
+      ...(canConnect ? {} : { orgId }),
     },
     orderBy: { organization: { updatedAt: 'desc' } },
     select: {
@@ -272,7 +297,7 @@ export async function listSwitchableCompanies(ctx: OrgContext): Promise<Switchab
   return rows.map((row) => ({
     id: row.organization.id,
     name: row.organization.name,
-    isCurrent: row.organization.id === ctx.orgId,
+    isCurrent: row.organization.id === orgId,
   }))
 }
 

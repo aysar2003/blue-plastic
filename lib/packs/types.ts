@@ -57,6 +57,10 @@ export type IndustryPack = {
     sales: Partial<DocumentKindsFlags['sales']>
     purchases: Partial<DocumentKindsFlags['purchases']>
     inventory: Partial<DocumentKindsFlags['inventory']>
+    accounting: Partial<DocumentKindsFlags['accounting']>
+    employees: Partial<DocumentKindsFlags['employees']>
+    customers: Partial<DocumentKindsFlags['customers']>
+    stores: Partial<DocumentKindsFlags['stores']>
   }>
   behavioral?: Partial<
     Pick<

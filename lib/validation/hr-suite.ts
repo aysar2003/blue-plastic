@@ -5,11 +5,24 @@ import { cuid, moneyString, optionalText, requiredText } from '@/lib/validation/
 export const DEVICE_KINDS = ['GENERIC_HTTP', 'ZKTECO', 'ANVIZ', 'OTHER'] as const
 export const PUNCH_KINDS = ['IN', 'OUT', 'UNKNOWN'] as const
 
+const overtimeTierSchema = z
+  .array(
+    z.object({
+      afterHours: moneyString,
+      multiplier: moneyString,
+    }),
+  )
+  .max(5)
+  .optional()
+  .nullable()
+
 export const hrSettingsUpdateSchema = z.object({
   hoursPerDay: moneyString,
   workDaysPerWeek: z.coerce.number().int().min(1).max(7),
   overtimeAfterHoursPerDay: moneyString,
   overtimeMultiplier: moneyString,
+  overtimeRules: overtimeTierSchema,
+  workWeekdays: z.array(z.coerce.number().int().min(0).max(6)).max(7).optional().nullable(),
   timezoneNote: optionalText(80),
 })
 

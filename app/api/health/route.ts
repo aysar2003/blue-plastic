@@ -3,19 +3,33 @@ import { db } from '@/server/db'
 
 export const dynamic = 'force-dynamic'
 
+function authorizedDetail(request: Request): boolean {
+  const secret = process.env.CRON_SECRET?.trim()
+  if (!secret) return false
+  const header = request.headers.get('authorization') ?? ''
+  const bearer = /^Bearer\s+(.+)$/i.exec(header.trim())?.[1]?.trim()
+  const alt = request.headers.get('x-cron-secret')?.trim()
+  return bearer === secret || alt === secret
+}
+
 /**
- * Runtime check that does not require a session. The body names the kind of
- * database failure and never the connection string.
+ * Liveness probe. Public body stays generic so attackers learn nothing about
+ * the database. Detailed status requires CRON_SECRET (same as other ops routes).
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const detail = authorizedDetail(request)
   try {
     await db.$queryRaw`SELECT 1`
-    return Response.json({ ok: true, database: 'up' })
+    if (detail) return Response.json({ ok: true, database: 'up' })
+    return Response.json({ ok: true })
   } catch (error) {
-    const problem = databaseProblem(error) ?? 'unknown'
-    return Response.json(
-      { ok: false, database: 'down', problem, message: databaseProblemText(problem) },
-      { status: 503 },
-    )
+    if (detail) {
+      const problem = databaseProblem(error) ?? 'unknown'
+      return Response.json(
+        { ok: false, database: 'down', problem, message: databaseProblemText(problem) },
+        { status: 503 },
+      )
+    }
+    return Response.json({ ok: false }, { status: 503 })
   }
 }

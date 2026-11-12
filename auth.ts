@@ -4,12 +4,12 @@ import { PrismaAdapter } from '@auth/prisma-adapter'
 import { z } from 'zod'
 
 import { authConfig } from '@/auth.config'
+import { assertSignInRateLimit } from '@/lib/auth-rate-limit'
 import { homeCompanyId, sessionCompanyId } from '@/lib/company-access'
-import { env } from '@/lib/env'
-import { openLoginTicket } from '@/lib/login-ticket'
 import { parseLoginIdentifier } from '@/lib/phone'
 import { db } from '@/server/db'
 import { loadCompanyAccess } from '@/server/auth/company-access'
+import { consumeLoginTicket } from '@/server/auth/login-ticket-store'
 import { fakeVerify, verifyPassword } from '@/server/auth/password'
 import { recordEvent } from '@/server/audit'
 import { userNeedsTwoFactor } from '@/server/services/auth-2fa.service'
@@ -80,7 +80,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(raw) {
         const ticketParsed = ticketCredentialsSchema.safeParse(raw)
         if (ticketParsed.success && ticketParsed.data.loginTicket && !ticketParsed.data.password) {
-          const ticket = openLoginTicket(ticketParsed.data.loginTicket, env.AUTH_SECRET)
+          try {
+            await assertSignInRateLimit(`ticket:${ticketParsed.data.loginTicket.slice(0, 24)}`)
+          } catch {
+            return null
+          }
+          const ticket = await consumeLoginTicket(ticketParsed.data.loginTicket)
           if (!ticket) return null
           return sessionUserFromId(ticket.userId)
         }
@@ -90,7 +95,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // Prefer a post-2FA ticket when both are present.
         if (parsed.data.loginTicket) {
-          const ticket = openLoginTicket(parsed.data.loginTicket, env.AUTH_SECRET)
+          try {
+            await assertSignInRateLimit(`ticket:${parsed.data.loginTicket.slice(0, 24)}`)
+          } catch {
+            return null
+          }
+          const ticket = await consumeLoginTicket(parsed.data.loginTicket)
           if (!ticket) return null
           return sessionUserFromId(ticket.userId)
         }
@@ -98,6 +108,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const identifier = parseLoginIdentifier(parsed.data.email)
         if (!identifier) {
           await fakeVerify()
+          return null
+        }
+
+        try {
+          await assertSignInRateLimit(identifier.value)
+        } catch {
           return null
         }
 
@@ -110,6 +126,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             image: true,
             passwordHash: true,
             homeOrgId: true,
+            isSystemOwner: true,
             totpEnabledAt: true,
             otp2faEnabledAt: true,
             memberships: {
@@ -141,7 +158,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null
         }
 
-        // Password alone must not create a session when 2FA is on.
+        // Password alone must not create a session when 2FA is on (system owners always).
         if (userNeedsTwoFactor(user)) return null
 
         const homeId = homeCompanyId(user.homeOrgId, user.memberships)
@@ -208,9 +225,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               select: { id: true },
             })
             if (org) {
+              const previousOrgId = typeof token.orgId === 'string' ? token.orgId : null
               token.orgId = org.id
               token.role = 'OWNER'
               token.membershipVersion = 0
+              // Break-glass: system owner entered a company with no membership row.
+              await recordEvent({
+                orgId: org.id,
+                actorId: access.id,
+                entity: 'Organization',
+                entityId: org.id,
+                action: 'BREAK_GLASS',
+                after: {
+                  reason: 'system_owner_no_membership',
+                  roleAssumed: 'OWNER',
+                  previousOrgId,
+                },
+              })
             }
           }
         }

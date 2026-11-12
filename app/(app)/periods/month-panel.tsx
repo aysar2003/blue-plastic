@@ -30,6 +30,9 @@ const REPORTS = [
   { href: '/reports/sales-by-customer', label: 'Sales by customer' },
   { href: '/reports/expenses-by-category', label: 'Expenses' },
   { href: '/reports/inventory-cost-change', label: 'Inventory cost' },
+  { href: '/reports/group-close', label: 'Group close checklist' },
+  { href: '/reports/intercompany', label: 'Intercompany matches' },
+  { href: '/reports/consolidation', label: 'Group consolidation' },
 ]
 
 export function monthLabel(periodNumber: number, start: Date) {

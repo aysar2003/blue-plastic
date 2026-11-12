@@ -56,6 +56,7 @@ export async function requireApiKeyContext(
     },
     isSystemOwner: false,
     canConnect: false,
+    systemOwnerBreakGlass: false,
     portalCustomerId: null,
   }
 }

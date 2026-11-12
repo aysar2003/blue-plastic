@@ -22,6 +22,7 @@ export function PortaledFloatingPanel({
   anchorRef,
   onClose,
   align = 'start',
+  placement = 'bottom',
   className,
   children,
 }: {
@@ -29,6 +30,8 @@ export function PortaledFloatingPanel({
   anchorRef: React.RefObject<HTMLElement | null>
   onClose?: () => void
   align?: 'start' | 'end'
+  /** Bottom under the trigger, or to its right (side app rail). */
+  placement?: 'bottom' | 'right'
   className?: string
   children: React.ReactNode
 }) {
@@ -39,12 +42,21 @@ export function PortaledFloatingPanel({
     const rect = anchorRef.current?.getBoundingClientRect()
     if (!rect) return
     const panelWidth = panelRef.current?.offsetWidth || Math.max(rect.width, 176)
-    const left =
-      align === 'end'
-        ? Math.min(Math.max(8, rect.right - panelWidth), window.innerWidth - panelWidth - 8)
-        : Math.min(Math.max(8, rect.left), window.innerWidth - panelWidth - 8)
+    const panelHeight = panelRef.current?.offsetHeight || 240
+    let left: number
+    let top: number
+    if (placement === 'right') {
+      left = Math.min(rect.right + 8, window.innerWidth - panelWidth - 8)
+      top = Math.min(Math.max(8, rect.top), window.innerHeight - panelHeight - 8)
+    } else {
+      left =
+        align === 'end'
+          ? Math.min(Math.max(8, rect.right - panelWidth), window.innerWidth - panelWidth - 8)
+          : Math.min(Math.max(8, rect.left), window.innerWidth - panelWidth - 8)
+      top = rect.bottom + 4
+    }
     const next = {
-      top: rect.bottom + 4,
+      top,
       left,
       zIndex: floatingPanelZIndex(),
     }
@@ -53,7 +65,7 @@ export function PortaledFloatingPanel({
         ? prev
         : next,
     )
-  }, [align, anchorRef])
+  }, [align, anchorRef, placement])
 
   React.useEffect(() => {
     if (!open) return

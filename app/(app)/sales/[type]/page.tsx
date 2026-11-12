@@ -133,27 +133,58 @@ export default async function SalesListPage({
   const range = presetRange(datePreset, today(ctx.organization.timeZone))
   const sort = readSort(search, SORTABLE, { sort: 'date', dir: 'desc' })
 
-  const loadLists = () =>
-    Promise.all([
-      salesService.list(ctx, config.type, query, {
-        status,
-        customerId,
-        ...sort,
-        from: range?.from,
-        to: range?.to,
-      }),
-      config.type === 'SALES_RECEIPT' ? salesService.receiptHome(ctx) : Promise.resolve(null),
-      config.type === 'INVOICE' ? salesService.invoiceHome(ctx) : Promise.resolve(null),
-      isProposal(config.type)
-        ? salesService.estimateHome(ctx, config.type as 'ESTIMATE' | 'QUOTATION')
-        : Promise.resolve(null),
-      isSalesOrder(config.type) ? salesService.salesOrderHome(ctx) : Promise.resolve(null),
-      salesService.customerChoices(ctx),
+  const listOptions = {
+    status,
+    customerId,
+    ...sort,
+    from: range?.from,
+    to: range?.to,
+    takeMax: salesService.SALES_REGISTER_TAKE,
+  }
+  const loadLists = async () => {
+    const listPromise = salesService.list(ctx, config.type, query, listOptions)
+    const receiptHomeP =
+      config.type === 'SALES_RECEIPT' ? salesService.receiptHome(ctx) : Promise.resolve(null)
+    const invoiceHomeP =
+      config.type === 'INVOICE' ? salesService.invoiceHome(ctx) : Promise.resolve(null)
+    const estimateHomeP = isProposal(config.type)
+      ? salesService.estimateHome(ctx, config.type as 'ESTIMATE' | 'QUOTATION')
+      : Promise.resolve(null)
+    const orderHomeP = isSalesOrder(config.type)
+      ? salesService.salesOrderHome(ctx)
+      : Promise.resolve(null)
+    const choicesP = salesService.customerChoices(ctx)
+    const depositAccountsP =
       (isSalesOrder(config.type) || isProposal(config.type)) &&
       ctx.permissions.has('invoice:create')
         ? loadDepositAccounts(ctx)
-        : Promise.resolve([]),
-    ])
+        : Promise.resolve([])
+
+    const pageResult = await listPromise
+    const [receiptHome, invoiceHome, estimateHome, orderHome, choices, depositAccounts, trails] =
+      await Promise.all([
+        receiptHomeP,
+        invoiceHomeP,
+        estimateHomeP,
+        orderHomeP,
+        choicesP,
+        depositAccountsP,
+        trailsFor(
+          ctx,
+          pageResult.rows.map((row) => row.id),
+        ),
+      ])
+    return {
+      page: pageResult,
+      receiptHome,
+      invoiceHome,
+      estimateHome,
+      orderHome,
+      choices,
+      depositAccounts,
+      trails,
+    }
+  }
   let page: Awaited<ReturnType<typeof salesService.list>>
   let receiptHome: Awaited<ReturnType<typeof salesService.receiptHome>> | null
   let invoiceHome: Awaited<ReturnType<typeof salesService.invoiceHome>> | null
@@ -161,14 +192,16 @@ export default async function SalesListPage({
   let orderHome: Awaited<ReturnType<typeof salesService.salesOrderHome>> | null
   let choices: Awaited<ReturnType<typeof salesService.customerChoices>>
   let depositAccounts: Awaited<ReturnType<typeof loadDepositAccounts>>
+  let trails: Awaited<ReturnType<typeof trailsFor>>
   try {
-    ;[page, receiptHome, invoiceHome, estimateHome, orderHome, choices, depositAccounts] = await loadLists()
+    ;({ page, receiptHome, invoiceHome, estimateHome, orderHome, choices, depositAccounts, trails } =
+      await loadLists())
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error
     await new Promise((resolve) => setTimeout(resolve, 600))
-    ;[page, receiptHome, invoiceHome, estimateHome, orderHome, choices, depositAccounts] = await loadLists()
+    ;({ page, receiptHome, invoiceHome, estimateHome, orderHome, choices, depositAccounts, trails } =
+      await loadLists())
   }
-  const trails = await trailsFor(ctx, page.rows.map((row) => row.id))
   const currency = ctx.organization.baseCurrency
   const timeZone = ctx.organization.timeZone
   const now = today(timeZone)
@@ -236,6 +269,13 @@ export default async function SalesListPage({
       ) : (
         <PageHeader title={config.plural} description={config.effect} actions={newButton} />
       )}
+
+      {page.total > page.rows.length ? (
+        <p className="mx-auto w-full px-[clamp(0.75rem,2vw,2.5rem)] pb-2 text-sm text-muted-foreground">
+          Showing the first {page.rows.length.toLocaleString()} of {page.total.toLocaleString()}{' '}
+          {config.plural.toLowerCase()}. Narrow the date or search to find the rest.
+        </p>
+      ) : null}
 
       {invoiceHome ? (
         <InvoiceRegister

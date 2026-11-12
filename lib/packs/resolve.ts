@@ -28,6 +28,10 @@ function mergeDocumentKinds(pack: IndustryPack): OrgFeatureFlags['documentKinds'
     sales: { ...base.sales, ...pack.documentKinds.sales },
     purchases: { ...base.purchases, ...pack.documentKinds.purchases },
     inventory: { ...base.inventory, ...pack.documentKinds.inventory },
+    accounting: { ...base.accounting, ...pack.documentKinds.accounting },
+    employees: { ...base.employees, ...pack.documentKinds.employees },
+    customers: { ...base.customers, ...pack.documentKinds.customers },
+    stores: { ...base.stores, ...pack.documentKinds.stores },
   })
 }
 

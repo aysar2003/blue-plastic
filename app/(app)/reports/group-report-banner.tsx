@@ -49,6 +49,24 @@ export function GroupReportBanner({
         >
           Combined P&amp;L
         </Link>
+        <Link
+          href="/reports/consolidation"
+          className="font-medium text-primary underline-offset-4 hover:underline"
+        >
+          Consolidation + NCI
+        </Link>
+        <Link
+          href="/reports/group-close"
+          className="font-medium text-primary underline-offset-4 hover:underline"
+        >
+          Group close
+        </Link>
+        <Link
+          href="/reports/intercompany"
+          className="font-medium text-primary underline-offset-4 hover:underline"
+        >
+          IC matches
+        </Link>
       </div>
     </div>
   )

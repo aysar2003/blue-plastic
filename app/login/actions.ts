@@ -6,16 +6,15 @@ import { cookies } from 'next/headers'
 import { signIn } from '@/auth'
 import { env } from '@/lib/env'
 import {
-  LOGIN_TICKET_TTL_MS,
   PREAUTH_COOKIE,
   PREAUTH_TTL_MS,
   openPreAuth,
-  sealLoginTicket,
   sealPreAuth,
 } from '@/lib/login-ticket'
 import { WRONG_DOOR } from '@/lib/login-paths'
 import { signInSchema, twoFactorCodeSchema } from '@/lib/validation/auth'
 import { beginLoginOtp, verifyLoginSecondFactor } from '@/server/services/auth-2fa.service'
+import { issueLoginTicket } from '@/server/auth/login-ticket-store'
 import { verifyCredentials, type VerifiedAudience } from '@/server/auth/verify-credentials'
 
 export type DoorSignInState = {
@@ -98,10 +97,15 @@ async function doorSignIn(
     }
   }
 
+  const ticket = await issueLoginTicket({
+    userId: verified.userId,
+    audience: expected,
+  })
+
   try {
+    // Ticket skips a second bcrypt after verifyCredentials already succeeded.
     await signIn('credentials', {
-      email: parsed.data.email,
-      password: parsed.data.password,
+      loginTicket: ticket,
       redirectTo: REDIRECT[expected],
     })
     return {}
@@ -159,14 +163,10 @@ export async function completeTwoFactorAction(
     return { needsTwoFactor: true, error: message, twoFactorHint: 'either' }
   }
 
-  const ticket = sealLoginTicket(
-    {
-      userId: preauth.userId,
-      audience: preauth.audience,
-      exp: Date.now() + LOGIN_TICKET_TTL_MS,
-    },
-    env.AUTH_SECRET,
-  )
+  const ticket = await issueLoginTicket({
+    userId: preauth.userId,
+    audience: preauth.audience,
+  })
 
   jar.delete(PREAUTH_COOKIE)
 

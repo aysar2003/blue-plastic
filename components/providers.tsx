@@ -21,7 +21,7 @@ import { THEME_IDS } from '@/lib/themes'
  */
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider>
+    <SessionProvider refetchOnWindowFocus={false}>
       <ThemeProvider
         attribute="class"
         defaultTheme="som"

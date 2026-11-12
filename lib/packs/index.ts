@@ -13,6 +13,12 @@ export {
   packHasAnyModule,
 } from './resolve'
 export {
+  recommendPackFromAnswers,
+  defaultOnboardingAnswers,
+  type OnboardingAnswers,
+  type PackRecommendation,
+} from './recommend'
+export {
   institutionCoverage,
   coverageSummary,
   accountingCoverageBullets,

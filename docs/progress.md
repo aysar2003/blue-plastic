@@ -40,6 +40,10 @@
 | P2–P5 institution verticals | ✅ Complete | 2026-11-08 · pharmacy, school/university, hospital billing, NGO/services/construction/mfg/distribution |
 | P6 Coverage gate + P7 Wizard | ✅ Complete | 2026-11-08 · [detail](./phases/phase-p6-p7-onboarding.md) · all packs ready · `/onboarding` · Settings Setup · migration `20261108120000_phase_p6_p7_onboarding` |
 | P8–P11 Vertical lite → full | ✅ Complete | 2026-11-08 · [detail](./phases/phase-p8-p11-vertical-full.md) · ASN receive, WIP bill, retention GL, work-center capacity · migration `20261108130000_phase_p8_p11_vertical_full` |
+| Platform polish + vertical deepen | ✅ Complete | 2026-11-10 · [detail](./phases/phase-platform-polish-deepen.md) · Apps Grant-to-all · pharmacy/education/hospital/NGO/WIP/progress/ASN/routing/hospitality deepen |
+| Lite vertical close Pass 1 | ✅ Complete | 2026-11-11 · [detail](./phases/phase-lite-close-pass1.md) · tip payout, nightly folio, lot disposal, term batch bill, claim stamp, fund BS, WIP write-up/down, site store, weekday capacity, ASN dock, price lists/promos · migration `20261111120000_phase_lite_close_pass1` |
+| 35 — Multi-entity & IC harden | ✅ Complete | 2026-11-11 · [detail](./phases/phase-35-multi-entity.md) · ownership %, IntercompanyMatch, group close checklist, consol NCI · migration `20261111140000_phase35_multi_entity` |
+| 36 — Subscriptions & recurring revenue | ✅ Complete | 2026-11-11 · [detail](./phases/phase-36-subscriptions.md) · AR INVOICE schedules, Unearned Revenue, deferred recognition · migration `20261111220000_phase36_subscriptions` |
 
 Phases advance only on explicit instruction from the owner.
 

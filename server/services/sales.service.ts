@@ -118,6 +118,37 @@ const DOCUMENT_SELECT = {
   convertedFrom: { select: { id: true, number: true, type: true } },
 } satisfies Prisma.SalesDocumentSelect
 
+/** Register list columns only — keeps /sales/* lists off the fat document select. */
+const LIST_DOCUMENT_SELECT = {
+  id: true,
+  type: true,
+  number: true,
+  date: true,
+  dueDate: true,
+  expiryDate: true,
+  createdAt: true,
+  promisedDate: true,
+  excludeFromOverdue: true,
+  status: true,
+  reference: true,
+  total: true,
+  createdById: true,
+  customer: {
+    select: {
+      id: true,
+      displayName: true,
+      balanceDate: true,
+      agreementDate: true,
+      balanceTime: true,
+    },
+  },
+  depositAccount: { select: { id: true, code: true, name: true } },
+  convertedTo: { select: { id: true, number: true, type: true } },
+} satisfies Prisma.SalesDocumentSelect
+
+/** Default working-set cap for sales registers (page still filters last3 by default). */
+export const SALES_REGISTER_TAKE = 500
+
 /* --- Reading -------------------------------------------------------------- */
 
 /** Orderings the list screen offers. Sorting happens here, over every row. */
@@ -142,6 +173,8 @@ export async function list(
     dir?: 'asc' | 'desc'
     from?: CalendarDate
     to?: CalendarDate
+    /** Cap rows returned for UI registers without changing total count. */
+    takeMax?: number
   } = {},
 ) {
   const selected = options.ids?.filter(Boolean) ?? []
@@ -223,33 +256,37 @@ export async function list(
       : {}),
   }
 
+  const pageSlice = paginate(query)
+  const take = options.takeMax != null ? Math.min(pageSlice.take, options.takeMax) : pageSlice.take
+
   const [rows, total] = await Promise.all([
     db.salesDocument.findMany({
       where,
-      // The applied count comes back with the row so a list can say what
-      // deleting one would release without a second query per row.
-      select: {
-        ...DOCUMENT_SELECT,
-        _count: { select: { applications: true, creditsApplied: true } },
-      },
+      select: LIST_DOCUMENT_SELECT,
       orderBy:
         (options.sort ? SALES_ORDER[options.sort]?.(options.dir ?? 'asc') : undefined) ??
         [{ date: 'desc' }, { number: 'desc' }],
-      ...paginate(query),
+      skip: pageSlice.skip,
+      take,
     }),
     db.salesDocument.count({ where }),
   ])
 
-  const balances = await outstandingBalances(db, rows.map((row) => row.id))
+  const balances = await outstandingBalances(
+    db,
+    rows.map((row) => row.id),
+    ctx.orgId,
+  )
 
   return paged(
     rows.map((row) => ({
       ...serialise(row),
       balance: toMoneyString(balances.get(row.id) ?? new Decimal(row.total.toString()), 2),
-      appliedCount: row._count.applications + row._count.creditsApplied,
+      appliedCount: 0,
+      truncated: total > take,
     })),
     total,
-    query,
+    { ...query, pageSize: take },
   )
 }
 
@@ -258,10 +295,21 @@ export async function list(
  * not-due split that same balance, so they add back to unpaid. Paid is money
  * already settled. Drafts have not been sent.
  */
-export async function invoiceHome(ctx: OrgContext) {
+export function invoiceHome(ctx: OrgContext) {
   const clock = overdueClock(ctx.organization.timeZone)
-  const asOf = toDate(clock.asOf)
-  const nowTime = clock.nowTime
+  return cachedInvoiceHome(ctx.orgId, clock.asOf, clock.nowTime)
+}
+
+const cachedInvoiceHome = cache((orgId: string, asOfIso: string, nowTime: string) =>
+  unstable_cache(
+    () => queryInvoiceHome(orgId, asOfIso, nowTime),
+    ['invoice-home-v2', orgId, asOfIso, nowTime],
+    { revalidate: 60 },
+  )(),
+)
+
+async function queryInvoiceHome(orgId: string, asOfIso: string, nowTime: string) {
+  const asOf = toDate(asOfIso)
   // One aggregate. Loading every invoice into the app held a connection long
   // enough for the pooler to drop it, and the invoices page then showed a blank error.
   const [row] = await db.$queryRaw<
@@ -316,9 +364,10 @@ export async function invoiceHome(ctx: OrgContext) {
     LEFT JOIN (
       SELECT "invoiceId", SUM(amount) AS applied
         FROM sales_applications
+       WHERE "orgId" = ${orgId}
        GROUP BY "invoiceId"
     ) a ON a."invoiceId" = d.id
-    WHERE d."orgId" = ${ctx.orgId}
+    WHERE d."orgId" = ${orgId}
       AND d.type = 'INVOICE'
       AND d."deletedAt" IS NULL
       AND d.status <> 'VOID'
@@ -511,13 +560,22 @@ export async function receiptHome(ctx: OrgContext) {
 }
 
 /** Names for the customer filter on a sales list. */
-export async function customerChoices(ctx: OrgContext) {
-  return db.customer.findMany({
-    where: { orgId: ctx.orgId, isActive: true },
-    select: { id: true, displayName: true },
-    orderBy: { displayName: 'asc' },
-  })
+export function customerChoices(ctx: OrgContext) {
+  return cachedCustomerChoices(ctx.orgId)
 }
+
+const cachedCustomerChoices = cache((orgId: string) =>
+  unstable_cache(
+    () =>
+      db.customer.findMany({
+        where: { orgId, isActive: true },
+        select: { id: true, displayName: true },
+        orderBy: { displayName: 'asc' },
+      }),
+    ['customer-choices-v1', orgId],
+    { revalidate: 60 },
+  )(),
+)
 
 /** The document before and after this one, in date then number order. A new form sits after the last. */
 export async function neighbors(ctx: OrgContext, type: SalesDocumentType, currentId: string | null) {
@@ -790,16 +848,31 @@ export async function getMany(ctx: OrgContext, ids: string[]): Promise<SalesDocu
 export async function outstandingBalances(
   client: Tx | typeof db,
   documentIds: string[],
+  orgId?: string,
 ): Promise<Map<string, Decimal>> {
   if (documentIds.length === 0) return new Map()
 
-  const rows = await client.$queryRaw<{ id: string; total: string; applied: string }[]>`
-    SELECT d.id,
-           d.total AS total,
-           COALESCE((SELECT SUM(a.amount) FROM sales_applications a WHERE a."invoiceId" = d.id), 0) AS applied
-      FROM sales_documents d
-     WHERE d.id = ANY(${documentIds})
-  `
+  const rows = orgId
+    ? await client.$queryRaw<{ id: string; total: string; applied: string }[]>`
+        SELECT d.id,
+               d.total::text AS total,
+               COALESCE(SUM(a.amount), 0)::text AS applied
+          FROM sales_documents d
+          LEFT JOIN sales_applications a
+            ON a."invoiceId" = d.id AND a."orgId" = d."orgId"
+         WHERE d."orgId" = ${orgId}
+           AND d.id = ANY(${documentIds})
+         GROUP BY d.id, d.total
+      `
+    : await client.$queryRaw<{ id: string; total: string; applied: string }[]>`
+        SELECT d.id,
+               d.total::text AS total,
+               COALESCE(SUM(a.amount), 0)::text AS applied
+          FROM sales_documents d
+          LEFT JOIN sales_applications a ON a."invoiceId" = d.id
+         WHERE d.id = ANY(${documentIds})
+         GROUP BY d.id, d.total
+      `
 
   return new Map(rows.map((row) => [row.id, new Decimal(row.total).minus(row.applied)]))
 }
@@ -2809,16 +2882,53 @@ async function resolveLines(
     : []
 
   const byId = new Map(items.map((item) => [item.id, item]))
-  // Blank unit price follows the customer's price level: wholesale when that
-  // price is set, otherwise the retail sales price.
-  const priceLevel = options?.customerId
-    ? (
-        await tx.customer.findFirst({
-          where: { id: options.customerId, orgId: ctx.orgId },
-          select: { priceLevel: true },
+  // Blank unit price: named price list → wholesale/retail level → item sales price,
+  // then optional active % promotion.
+  const customerPricing = options?.customerId
+    ? await tx.customer.findFirst({
+        where: { id: options.customerId, orgId: ctx.orgId },
+        select: { priceLevel: true, priceListId: true },
+      })
+    : null
+  const priceLevel = customerPricing?.priceLevel ?? 'RETAIL'
+  const listPrices = new Map<string, string>()
+  if (customerPricing?.priceListId && itemIds.length > 0) {
+    const rows = await tx.priceListItem.findMany({
+      where: {
+        priceListId: customerPricing.priceListId,
+        itemId: { in: itemIds },
+      },
+      select: { itemId: true, unitPrice: true },
+    })
+    for (const row of rows) {
+      listPrices.set(row.itemId, row.unitPrice.toString())
+    }
+  }
+  const asOf = today(ctx.organization.timeZone)
+  const asOfDate = toDate(asOf)
+  const promos =
+    itemIds.length > 0
+      ? await tx.itemPromotion.findMany({
+          where: {
+            orgId: ctx.orgId,
+            isActive: true,
+            startsOn: { lte: asOfDate },
+            endsOn: { gte: asOfDate },
+            OR: [{ itemId: { in: itemIds } }, { itemId: null }],
+          },
+          select: { itemId: true, percentOff: true },
         })
-      )?.priceLevel ?? 'RETAIL'
-    : 'RETAIL'
+      : []
+  const promoFor = (itemId: string | null | undefined): number => {
+    if (!itemId) return 0
+    let best = 0
+    for (const promo of promos) {
+      if (promo.itemId && promo.itemId !== itemId) continue
+      const pct = Number(promo.percentOff.toString())
+      if (pct > best) best = pct
+    }
+    return best
+  }
   const purchaseLineIds = [
     ...new Set(lines.map((line) => line.sourcePurchaseLineId).filter((id): id is string => Boolean(id))),
   ]
@@ -2907,12 +3017,19 @@ async function resolveLines(
       description:
         line.description ?? item?.salesDescription ?? item?.description ?? item?.name ?? null,
       quantity: line.quantity,
-      unitPrice:
-        line.unitPrice !== ''
-          ? line.unitPrice
-          : priceLevel === 'WHOLESALE' && item?.wholesalePrice != null
+      unitPrice: (() => {
+        if (line.unitPrice !== '') return line.unitPrice
+        let base =
+          (item?.id && listPrices.get(item.id)) ||
+          (priceLevel === 'WHOLESALE' && item?.wholesalePrice != null
             ? item.wholesalePrice.toString()
-            : (item?.salesPrice?.toString() ?? '0'),
+            : (item?.salesPrice?.toString() ?? '0'))
+        const pct = promoFor(item?.id ?? null)
+        if (pct > 0) {
+          base = new Decimal(base).times(new Decimal(1).minus(new Decimal(pct).div(100))).toFixed(4)
+        }
+        return base
+      })(),
       discountPercent: line.discountPercent ?? null,
       taxCodeId: ctx.features.enableTax && !isPayment && !isSubtotal
         ? (line.taxCodeId ?? item?.salesTaxCodeId ?? null)

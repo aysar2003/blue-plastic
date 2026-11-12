@@ -10,6 +10,7 @@ import {
   roomStatusAfterCheckOut,
 } from '@/lib/erp/hotel'
 import { splitPosTender } from '@/lib/erp/pos-tip'
+import { getPack } from '@/lib/packs'
 import { buildPosTipJournal } from '@/server/accounting/builders/pos'
 import { Decimal } from '@/lib/money'
 
@@ -87,5 +88,13 @@ describe('POS tip journal', () => {
     const credit = draft!.lines.reduce((s, l) => s.plus(l.credit ?? 0), new Decimal(0))
     expect(debit.eq(credit)).toBe(true)
     expect(debit.toFixed(2)).toBe('3.50')
+  })
+})
+
+describe('hospitality packs', () => {
+  it('exposes night audit and occupancy checklist links', () => {
+    expect(getPack('restaurant')?.setupChecklist.some((row) => row.id === 'audit')).toBe(true)
+    expect(getPack('hotel')?.setupChecklist.some((row) => row.id === 'stays')).toBe(true)
+    expect(getPack('retail')?.setupChecklist.some((row) => row.id === 'reports')).toBe(true)
   })
 })

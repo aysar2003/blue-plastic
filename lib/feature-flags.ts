@@ -224,21 +224,80 @@ export const PURCHASE_DOCUMENT_KINDS = [
 export type PurchaseDocumentKind = (typeof PURCHASE_DOCUMENT_KINDS)[number]
 
 /** Inventory work areas a company can hide under Apps & features. */
-export const INVENTORY_DOCUMENT_KINDS = ['products', 'adjustments', 'transfers'] as const
+export const INVENTORY_DOCUMENT_KINDS = [
+  'products',
+  'stock',
+  'lots',
+  'expiry',
+  'routing',
+  'asn',
+  'adjustments',
+  'builds',
+  'work-orders',
+  'mrp',
+  'bins',
+  'transfers',
+] as const
 export type InventoryDocumentKind = (typeof INVENTORY_DOCUMENT_KINDS)[number]
 
-export type DocumentKindFamily = 'sales' | 'purchases' | 'inventory'
+/** Accounting hub work areas. */
+export const ACCOUNTING_DOCUMENT_KINDS = [
+  'budgets',
+  'fixed-assets',
+  'equity',
+  'fx-hedges',
+  'fx-revaluation',
+] as const
+export type AccountingDocumentKind = (typeof ACCOUNTING_DOCUMENT_KINDS)[number]
+
+/** Employees / HR work areas. */
+export const EMPLOYEES_DOCUMENT_KINDS = [
+  'directory',
+  'leave',
+  'attendance',
+  'recruitment',
+  'training',
+  'contracts',
+  'payroll',
+  'policies',
+] as const
+export type EmployeesDocumentKind = (typeof EMPLOYEES_DOCUMENT_KINDS)[number]
+
+/** Customers CRM extras. */
+export const CUSTOMERS_DOCUMENT_KINDS = ['pipeline', 'tickets'] as const
+export type CustomersDocumentKind = (typeof CUSTOMERS_DOCUMENT_KINDS)[number]
+
+/** Store-specific work areas. */
+export const STORES_DOCUMENT_KINDS = ['tickets'] as const
+export type StoresDocumentKind = (typeof STORES_DOCUMENT_KINDS)[number]
+
+export type DocumentKindFamily =
+  | 'sales'
+  | 'purchases'
+  | 'inventory'
+  | 'accounting'
+  | 'employees'
+  | 'customers'
+  | 'stores'
 
 export type DocumentKindsFlags = {
   sales: Record<SalesDocumentKind, boolean>
   purchases: Record<PurchaseDocumentKind, boolean>
   inventory: Record<InventoryDocumentKind, boolean>
+  accounting: Record<AccountingDocumentKind, boolean>
+  employees: Record<EmployeesDocumentKind, boolean>
+  customers: Record<CustomersDocumentKind, boolean>
+  stores: Record<StoresDocumentKind, boolean>
 }
 
 export const DOCUMENT_KIND_LABELS: {
   sales: Record<SalesDocumentKind, string>
   purchases: Record<PurchaseDocumentKind, string>
   inventory: Record<InventoryDocumentKind, string>
+  accounting: Record<AccountingDocumentKind, string>
+  employees: Record<EmployeesDocumentKind, string>
+  customers: Record<CustomersDocumentKind, string>
+  stores: Record<StoresDocumentKind, string>
 } = {
   sales: {
     INVOICE: 'Invoices',
@@ -261,8 +320,41 @@ export const DOCUMENT_KIND_LABELS: {
   },
   inventory: {
     products: 'Products & categories',
-    adjustments: 'Stock adjustments & builds',
+    stock: 'Stock on hand',
+    lots: 'Stock by lot / serial',
+    expiry: 'Lot expiry',
+    routing: 'Routings',
+    asn: 'ASN (expected inbound)',
+    adjustments: 'Stock adjustments',
+    builds: 'Build assemblies',
+    'work-orders': 'Work orders',
+    mrp: 'Materials plan (MRP)',
+    bins: 'Bins & picks',
     transfers: 'Store transfers',
+  },
+  accounting: {
+    budgets: 'Budgets',
+    'fixed-assets': 'Fixed assets',
+    equity: 'Equity',
+    'fx-hedges': 'FX hedges',
+    'fx-revaluation': 'FX revaluation',
+  },
+  employees: {
+    directory: 'People directory',
+    leave: 'Leave',
+    attendance: 'Attendance',
+    recruitment: 'Recruitment',
+    training: 'Training',
+    contracts: 'Contracts',
+    payroll: 'Payroll',
+    policies: 'Policies',
+  },
+  customers: {
+    pipeline: 'CRM pipeline',
+    tickets: 'Support tickets',
+  },
+  stores: {
+    tickets: 'Store pick tickets',
   },
 }
 
@@ -287,11 +379,43 @@ function allInventoryKinds(on: boolean): Record<InventoryDocumentKind, boolean> 
   >
 }
 
+function allAccountingKinds(on: boolean): Record<AccountingDocumentKind, boolean> {
+  return Object.fromEntries(ACCOUNTING_DOCUMENT_KINDS.map((key) => [key, on])) as Record<
+    AccountingDocumentKind,
+    boolean
+  >
+}
+
+function allEmployeesKinds(on: boolean): Record<EmployeesDocumentKind, boolean> {
+  return Object.fromEntries(EMPLOYEES_DOCUMENT_KINDS.map((key) => [key, on])) as Record<
+    EmployeesDocumentKind,
+    boolean
+  >
+}
+
+function allCustomersKinds(on: boolean): Record<CustomersDocumentKind, boolean> {
+  return Object.fromEntries(CUSTOMERS_DOCUMENT_KINDS.map((key) => [key, on])) as Record<
+    CustomersDocumentKind,
+    boolean
+  >
+}
+
+function allStoresKinds(on: boolean): Record<StoresDocumentKind, boolean> {
+  return Object.fromEntries(STORES_DOCUMENT_KINDS.map((key) => [key, on])) as Record<
+    StoresDocumentKind,
+    boolean
+  >
+}
+
 export function defaultDocumentKinds(): DocumentKindsFlags {
   return {
     sales: allSalesKinds(true),
     purchases: allPurchaseKinds(true),
     inventory: allInventoryKinds(true),
+    accounting: allAccountingKinds(true),
+    employees: allEmployeesKinds(true),
+    customers: allCustomersKinds(true),
+    stores: allStoresKinds(true),
   }
 }
 
@@ -322,10 +446,16 @@ export const PURCHASE_HUB_KIND: Partial<Record<string, PurchaseDocumentKind>> = 
 export const INVENTORY_HUB_KIND: Partial<Record<string, InventoryDocumentKind>> = {
   items: 'products',
   categories: 'products',
-  stock: 'products',
+  stock: 'stock',
+  lots: 'lots',
+  expiry: 'expiry',
+  routing: 'routing',
+  asn: 'asn',
   adjust: 'adjustments',
-  builds: 'adjustments',
-  'work-orders': 'adjustments',
+  builds: 'builds',
+  'work-orders': 'work-orders',
+  mrp: 'mrp',
+  bins: 'bins',
   stores: 'transfers',
 }
 
@@ -334,6 +464,38 @@ export const INVENTORY_HUB_MODULE: Partial<Record<string, ModuleFlag>> = {
   barcodes: 'barcodes',
   stores: 'stores',
   reports: 'reports',
+}
+
+/** Accounting hub tile → accounting kind. */
+export const ACCOUNTING_HUB_KIND: Partial<Record<string, AccountingDocumentKind>> = {
+  budgets: 'budgets',
+  'fixed-assets': 'fixed-assets',
+  equity: 'equity',
+  'fx-hedges': 'fx-hedges',
+  'fx-revaluation': 'fx-revaluation',
+}
+
+/** Employees menu / hub key → employees kind. */
+export const EMPLOYEES_HUB_KIND: Partial<Record<string, EmployeesDocumentKind>> = {
+  directory: 'directory',
+  leave: 'leave',
+  attendance: 'attendance',
+  recruitment: 'recruitment',
+  training: 'training',
+  contracts: 'contracts',
+  payroll: 'payroll',
+  policies: 'policies',
+}
+
+/** Customers menu key → customers kind. */
+export const CUSTOMERS_HUB_KIND: Partial<Record<string, CustomersDocumentKind>> = {
+  pipeline: 'pipeline',
+  tickets: 'tickets',
+}
+
+/** Stores menu key → stores kind. */
+export const STORES_HUB_KIND: Partial<Record<string, StoresDocumentKind>> = {
+  tickets: 'tickets',
 }
 
 function allModules(on: boolean): Record<ModuleFlag, boolean> {
@@ -376,6 +538,10 @@ export const DOCUMENT_KIND_FORM_KEY_LIST: readonly string[] = [
   ...SALES_DOCUMENT_KINDS.map((kind) => documentKindFormKey('sales', kind)),
   ...PURCHASE_DOCUMENT_KINDS.map((kind) => documentKindFormKey('purchases', kind)),
   ...INVENTORY_DOCUMENT_KINDS.map((kind) => documentKindFormKey('inventory', kind)),
+  ...ACCOUNTING_DOCUMENT_KINDS.map((kind) => documentKindFormKey('accounting', kind)),
+  ...EMPLOYEES_DOCUMENT_KINDS.map((kind) => documentKindFormKey('employees', kind)),
+  ...CUSTOMERS_DOCUMENT_KINDS.map((kind) => documentKindFormKey('customers', kind)),
+  ...STORES_DOCUMENT_KINDS.map((kind) => documentKindFormKey('stores', kind)),
 ]
 
 /**
@@ -582,10 +748,30 @@ export function parseDocumentKinds(raw: unknown): DocumentKindsFlags {
   const base = defaultDocumentKinds()
   if (!raw || typeof raw !== 'object') return base
   const data = raw as Record<string, unknown>
+  const inventory = parseKindMap(data.inventory, INVENTORY_DOCUMENT_KINDS, base.inventory)
+  // Older saves only had products/adjustments/transfers — inherit OFF onto split kinds.
+  if (data.inventory && typeof data.inventory === 'object') {
+    const inv = data.inventory as Record<string, unknown>
+    if (inv.products === false) {
+      if (typeof inv.stock !== 'boolean') inventory.stock = false
+      if (typeof inv.lots !== 'boolean') inventory.lots = false
+      if (typeof inv.expiry !== 'boolean') inventory.expiry = false
+    }
+    if (inv.adjustments === false) {
+      if (typeof inv.builds !== 'boolean') inventory.builds = false
+      if (typeof inv['work-orders'] !== 'boolean') inventory['work-orders'] = false
+      if (typeof inv.mrp !== 'boolean') inventory.mrp = false
+      if (typeof inv.routing !== 'boolean') inventory.routing = false
+    }
+  }
   return {
     sales: parseKindMap(data.sales, SALES_DOCUMENT_KINDS, base.sales),
     purchases: parseKindMap(data.purchases, PURCHASE_DOCUMENT_KINDS, base.purchases),
-    inventory: parseKindMap(data.inventory, INVENTORY_DOCUMENT_KINDS, base.inventory),
+    inventory,
+    accounting: parseKindMap(data.accounting, ACCOUNTING_DOCUMENT_KINDS, base.accounting),
+    employees: parseKindMap(data.employees, EMPLOYEES_DOCUMENT_KINDS, base.employees),
+    customers: parseKindMap(data.customers, CUSTOMERS_DOCUMENT_KINDS, base.customers),
+    stores: parseKindMap(data.stores, STORES_DOCUMENT_KINDS, base.stores),
   }
 }
 
@@ -600,22 +786,36 @@ export function isDocumentKindEnabled(
   return map[kind] !== false
 }
 
+function kindOnFromForm(values: Record<string, unknown>, family: DocumentKindFamily, kind: string) {
+  const raw = values[documentKindFormKey(family, kind)]
+  return raw === true || raw === 'true' || raw === 'on'
+}
+
 /** Read document kinds from features form checkboxes. */
 export function documentKindsFromFormValues(
   values: Record<string, unknown>,
 ): DocumentKindsFlags {
   const kinds = defaultDocumentKinds()
   for (const kind of SALES_DOCUMENT_KINDS) {
-    const raw = values[documentKindFormKey('sales', kind)]
-    kinds.sales[kind] = raw === true || raw === 'true' || raw === 'on'
+    kinds.sales[kind] = kindOnFromForm(values, 'sales', kind)
   }
   for (const kind of PURCHASE_DOCUMENT_KINDS) {
-    const raw = values[documentKindFormKey('purchases', kind)]
-    kinds.purchases[kind] = raw === true || raw === 'true' || raw === 'on'
+    kinds.purchases[kind] = kindOnFromForm(values, 'purchases', kind)
   }
   for (const kind of INVENTORY_DOCUMENT_KINDS) {
-    const raw = values[documentKindFormKey('inventory', kind)]
-    kinds.inventory[kind] = raw === true || raw === 'true' || raw === 'on'
+    kinds.inventory[kind] = kindOnFromForm(values, 'inventory', kind)
+  }
+  for (const kind of ACCOUNTING_DOCUMENT_KINDS) {
+    kinds.accounting[kind] = kindOnFromForm(values, 'accounting', kind)
+  }
+  for (const kind of EMPLOYEES_DOCUMENT_KINDS) {
+    kinds.employees[kind] = kindOnFromForm(values, 'employees', kind)
+  }
+  for (const kind of CUSTOMERS_DOCUMENT_KINDS) {
+    kinds.customers[kind] = kindOnFromForm(values, 'customers', kind)
+  }
+  for (const kind of STORES_DOCUMENT_KINDS) {
+    kinds.stores[kind] = kindOnFromForm(values, 'stores', kind)
   }
   return kinds
 }
@@ -672,15 +872,86 @@ export function documentKindForPath(
   if (path === '/items' || path.startsWith('/items/')) {
     return { family: 'inventory', kind: 'products' }
   }
-  if (
-    path.startsWith('/inventory/adjustments') ||
-    path.startsWith('/inventory/builds') ||
-    path.startsWith('/inventory/work-orders')
-  ) {
+  if (path.startsWith('/inventory/stock')) {
+    return { family: 'inventory', kind: 'stock' }
+  }
+  if (path.startsWith('/inventory/lots')) {
+    return { family: 'inventory', kind: 'lots' }
+  }
+  if (path.startsWith('/inventory/expiry')) {
+    return { family: 'inventory', kind: 'expiry' }
+  }
+  if (path.startsWith('/inventory/routing')) {
+    return { family: 'inventory', kind: 'routing' }
+  }
+  if (path.startsWith('/inventory/asn')) {
+    return { family: 'inventory', kind: 'asn' }
+  }
+  if (path.startsWith('/inventory/adjustments')) {
     return { family: 'inventory', kind: 'adjustments' }
+  }
+  if (path.startsWith('/inventory/builds')) {
+    return { family: 'inventory', kind: 'builds' }
+  }
+  if (path.startsWith('/inventory/work-orders')) {
+    return { family: 'inventory', kind: 'work-orders' }
+  }
+  if (path.startsWith('/inventory/mrp')) {
+    return { family: 'inventory', kind: 'mrp' }
+  }
+  if (path.startsWith('/inventory/bins')) {
+    return { family: 'inventory', kind: 'bins' }
   }
   if (path.startsWith('/stores/transfer') || path === '/stores/transfer') {
     return { family: 'inventory', kind: 'transfers' }
+  }
+  if (path.startsWith('/stores/tickets')) {
+    return { family: 'stores', kind: 'tickets' }
+  }
+  if (path.startsWith('/accounting/budgets')) {
+    return { family: 'accounting', kind: 'budgets' }
+  }
+  if (path.startsWith('/accounting/fixed-assets')) {
+    return { family: 'accounting', kind: 'fixed-assets' }
+  }
+  if (path.startsWith('/accounting/equity') || path.startsWith('/accounting/equity-contribution')) {
+    return { family: 'accounting', kind: 'equity' }
+  }
+  if (path.startsWith('/accounting/hedges')) {
+    return { family: 'accounting', kind: 'fx-hedges' }
+  }
+  if (path.startsWith('/accounting/fx-revaluation')) {
+    return { family: 'accounting', kind: 'fx-revaluation' }
+  }
+  if (path.startsWith('/customers/pipeline')) {
+    return { family: 'customers', kind: 'pipeline' }
+  }
+  if (path.startsWith('/customers/tickets')) {
+    return { family: 'customers', kind: 'tickets' }
+  }
+  if (path === '/employees' || path.startsWith('/employees/directory')) {
+    return { family: 'employees', kind: 'directory' }
+  }
+  if (path.startsWith('/employees/leave')) {
+    return { family: 'employees', kind: 'leave' }
+  }
+  if (path.startsWith('/employees/attendance')) {
+    return { family: 'employees', kind: 'attendance' }
+  }
+  if (path.startsWith('/employees/recruitment')) {
+    return { family: 'employees', kind: 'recruitment' }
+  }
+  if (path.startsWith('/employees/training')) {
+    return { family: 'employees', kind: 'training' }
+  }
+  if (path.startsWith('/employees/contracts')) {
+    return { family: 'employees', kind: 'contracts' }
+  }
+  if (path.startsWith('/employees/payroll') || path.startsWith('/employees/payslips')) {
+    return { family: 'employees', kind: 'payroll' }
+  }
+  if (path.startsWith('/employees/policies') || path.startsWith('/employees/guide')) {
+    return { family: 'employees', kind: 'policies' }
   }
   return null
 }
@@ -723,6 +994,27 @@ export function featureFlagsWithModules(
     ...structuredClone(DEFAULT_FEATURE_FLAGS),
     grantedModules: { ...next },
     modules: { ...next },
+  }
+}
+
+/**
+ * Grant one app on a company: both `grantedModules` and `modules` turn on.
+ * Idempotent when already granted and enabled.
+ */
+export function grantModuleOnFlags(
+  flags: OrgFeatureFlags,
+  module: ModuleFlag,
+): { flags: OrgFeatureFlags; changed: boolean } {
+  if (flags.grantedModules[module] && flags.modules[module]) {
+    return { flags, changed: false }
+  }
+  return {
+    changed: true,
+    flags: {
+      ...flags,
+      grantedModules: { ...flags.grantedModules, [module]: true },
+      modules: { ...flags.modules, [module]: true },
+    },
   }
 }
 

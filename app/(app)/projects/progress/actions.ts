@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 
 import { requireOrgContext } from '@/server/auth/context'
 import * as construction from '@/server/services/construction.service'
+import * as projectService from '@/server/services/project.service'
 
 export async function saveContractAction(formData: FormData) {
   const ctx = await requireOrgContext('invoice:create')
@@ -32,6 +33,16 @@ export async function billProgressAction(formData: FormData) {
 export async function releaseRetentionAction(formData: FormData) {
   const ctx = await requireOrgContext('invoice:create')
   await construction.releaseRetention(ctx, String(formData.get('invoiceId') ?? ''))
+  revalidatePath('/projects/progress')
+  redirect('/projects/progress')
+}
+
+export async function setSiteStoreAction(formData: FormData) {
+  const ctx = await requireOrgContext('project:update')
+  await projectService.setSiteStore(ctx, {
+    projectId: String(formData.get('projectId') ?? ''),
+    storeId: String(formData.get('storeId') || '') || null,
+  })
   revalidatePath('/projects/progress')
   redirect('/projects/progress')
 }

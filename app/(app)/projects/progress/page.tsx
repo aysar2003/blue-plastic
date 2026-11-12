@@ -5,6 +5,7 @@ import {
   billProgressAction,
   releaseRetentionAction,
   saveContractAction,
+  setSiteStoreAction,
 } from '@/app/(app)/projects/progress/actions'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
@@ -16,12 +17,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
+import * as construction from '@/server/services/construction.service'
 
 export const metadata: Metadata = { title: 'Progress billing' }
 
 export default async function ProjectProgressPage() {
   const ctx = await requireOrgContext('invoice:create')
-  const [projects, items, retentionInvoices] = await Promise.all([
+  const [projects, items, stores, retentionInvoices, jobCosts] = await Promise.all([
     db.project.findMany({
       where: { orgId: ctx.orgId, status: { in: ['DRAFT', 'ACTIVE', 'ON_HOLD'] } },
       select: {
@@ -32,6 +34,7 @@ export default async function ProjectProgressPage() {
         retentionPercent: true,
         billedPercent: true,
         retainerAmount: true,
+        storeId: true,
       },
       orderBy: { updatedAt: 'desc' },
       take: 100,
@@ -41,6 +44,11 @@ export default async function ProjectProgressPage() {
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
       take: 500,
+    }),
+    db.store.findMany({
+      where: { orgId: ctx.orgId, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
     }),
     db.salesDocument.findMany({
       where: {
@@ -60,6 +68,7 @@ export default async function ProjectProgressPage() {
       orderBy: { date: 'desc' },
       take: 50,
     }),
+    construction.listJobCostSummaries(ctx),
   ])
   const currency = ctx.organization.baseCurrency
 
@@ -125,6 +134,28 @@ export default async function ProjectProgressPage() {
                   </button>
                 </form>
 
+                <form action={setSiteStoreAction} className="flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="projectId" value={project.id} />
+                  <label className="text-xs">
+                    Site store
+                    <NativeSelect
+                      name="storeId"
+                      className="mt-1"
+                      defaultValue={project.storeId ?? ''}
+                    >
+                      <option value="">None</option>
+                      {stores.map((store) => (
+                        <option key={store.id} value={store.id}>
+                          {store.name}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </label>
+                  <button type="submit" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+                    Link store
+                  </button>
+                </form>
+
                 <form action={billProgressAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="projectId" value={project.id} />
                   <label className="text-xs">
@@ -185,9 +216,14 @@ export default async function ProjectProgressPage() {
         </Table>
       </div>
 
-      {retentionInvoices.length > 0 ? (
-        <div className="mt-8">
-          <h2 className="mb-2 text-sm font-semibold">Open retention (release into AR)</h2>
+      <div className="mt-8">
+        <h2 className="mb-2 text-sm font-semibold">Open retention (release into AR)</h2>
+        {retentionInvoices.length === 0 ? (
+          <EmptyState
+            title="No retention held"
+            description="Bill progress with a retention % to hold amount on the retention receivable, then release here."
+          />
+        ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -225,8 +261,57 @@ export default async function ProjectProgressPage() {
               ))}
             </TableBody>
           </Table>
-        </div>
-      ) : null}
+        )}
+      </div>
+
+      <div className="mt-8">
+        <h2 className="mb-2 text-sm font-semibold">Job cost vs contract</h2>
+        {jobCosts.length === 0 ? (
+          <EmptyState
+            title="No job costs yet"
+            description="Post project invoices and bills to compare billed revenue, costs, and contract remaining."
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Project</TableHead>
+                <TableHead className="text-right">Contract</TableHead>
+                <TableHead className="text-right">Billed</TableHead>
+                <TableHead className="text-right">Costs</TableHead>
+                <TableHead className="text-right">Margin</TableHead>
+                <TableHead className="text-right">Remaining</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {jobCosts.map((row) => (
+                <TableRow key={row.projectId}>
+                  <TableCell>
+                    <Link href={`/projects/${row.projectId}`} className="hover:underline">
+                      {row.number} · {row.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-right tabular">
+                    {formatMoney(row.contract, currency)}
+                  </TableCell>
+                  <TableCell className="text-right tabular">
+                    {formatMoney(row.billed, currency)}
+                  </TableCell>
+                  <TableCell className="text-right tabular">
+                    {formatMoney(row.costs, currency)}
+                  </TableCell>
+                  <TableCell className="text-right tabular">
+                    {formatMoney(row.margin, currency)}
+                  </TableCell>
+                  <TableCell className="text-right tabular">
+                    {formatMoney(row.remaining, currency)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
     </>
   )
 }

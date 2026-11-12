@@ -1,4 +1,9 @@
-import type { OrgFeatureFlags } from '@/lib/feature-flags'
+import {
+  CUSTOMERS_HUB_KIND,
+  STORES_HUB_KIND,
+  isDocumentKindEnabled,
+  type OrgFeatureFlags,
+} from '@/lib/feature-flags'
 import type { Permission } from '@/server/auth/permissions'
 import {
   ACCOUNTING_HUB_APPS,
@@ -164,6 +169,7 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
   stores: [
     { label: 'Office · stores', href: '/stores', permission: 'inventory:read' },
     { label: 'Stock on hand', href: '/inventory/stock', permission: 'inventory:read' },
+    { label: 'Pick tickets', href: '/stores/tickets', permission: 'inventory:read' },
   ],
   approvals: [
     { label: 'Pending', href: '/approvals', permission: 'invoice:approve' },
@@ -202,28 +208,42 @@ export function menuForApp(
   }
 
   // Hub lists already carry permissions; reuse the same filter.
-  if (
-    appKey === 'projects' ||
-    appKey === 'banking' ||
-    appKey === 'accounting' ||
-    appKey === 'settings' ||
-    appKey === 'help'
-  ) {
+  if (appKey === 'accounting') {
+    return fromHub(visibleHubApps(ACCOUNTING_HUB_APPS, permissions, features, 'accounting'))
+  }
+  if (appKey === 'projects' || appKey === 'banking' || appKey === 'settings' || appKey === 'help') {
     const hubs =
       appKey === 'projects'
         ? PROJECT_HUB_APPS
         : appKey === 'banking'
           ? BANKING_HUB_APPS
-          : appKey === 'accounting'
-            ? ACCOUNTING_HUB_APPS
-            : appKey === 'settings'
-              ? SETTINGS_HUB_APPS
-              : HELP_HUB_APPS
+          : appKey === 'settings'
+            ? SETTINGS_HUB_APPS
+            : HELP_HUB_APPS
     return fromHub(visibleHubApps(hubs, permissions))
   }
 
   return items.filter((item) => {
     if (item.permission && !allowed.has(item.permission)) return false
+    if (features && appKey === 'customers') {
+      if (item.href?.includes('/pipeline') && !isDocumentKindEnabled(features, 'customers', 'pipeline')) {
+        return false
+      }
+      if (
+        item.href?.includes('/tickets') &&
+        !isDocumentKindEnabled(features, 'customers', CUSTOMERS_HUB_KIND.tickets ?? 'tickets')
+      ) {
+        return false
+      }
+    }
+    if (features && appKey === 'stores') {
+      if (
+        item.href?.includes('/stores/tickets') &&
+        !isDocumentKindEnabled(features, 'stores', STORES_HUB_KIND.tickets ?? 'tickets')
+      ) {
+        return false
+      }
+    }
     return true
   })
 }

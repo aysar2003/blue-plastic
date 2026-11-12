@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
+  addEmployeesToPayrollRun,
   addPayslipAdjustment,
   deletePayrollRun,
   emailPayslip,
@@ -33,6 +34,7 @@ type Slip = {
   id: string
   number?: string | null
   included?: boolean
+  employeeId?: string
   employeeName: string
   department: string | null
   payMethod?: string
@@ -49,10 +51,12 @@ type Slip = {
 }
 
 type Account = { id: string; label: string }
+type Person = { id: string; name: string; department: string | null }
 
 export function PayrollDetail({
   run,
   accounts,
+  addablePeople = [],
   canManage,
   standard = false,
 }: {
@@ -73,6 +77,7 @@ export function PayrollDetail({
     payslips: Slip[]
   }
   accounts: Account[]
+  addablePeople?: Person[]
   canManage: boolean
   standard?: boolean
 }) {
@@ -90,6 +95,8 @@ export function PayrollDetail({
   const [daysOverride, setDaysOverride] = useState('')
   const [hoursOverride, setHoursOverride] = useState('')
   const [otOverride, setOtOverride] = useState('')
+  const [addingPeople, setAddingPeople] = useState(false)
+  const [pickedIds, setPickedIds] = useState<string[]>([])
 
   const totalNet = run.payslips.reduce((sum, s) => sum + (s.included === false ? 0 : Number(s.net)), 0)
   const draft = run.status === 'DRAFT'
@@ -97,6 +104,22 @@ export function PayrollDetail({
   const posted = run.status === 'POSTED'
   const accruedUnpaid = posted && run.payMode === 'ACCRUE' && !run.settlementJournalId
   const settled = Boolean(run.settlementJournalId)
+
+  function addPeople() {
+    if (pickedIds.length === 0) return
+    startBusy(async () => {
+      const result = await addEmployeesToPayrollRun({ id: run.id, employeeIds: pickedIds })
+      if (!result.ok) {
+        toast.error(result.error?.message ?? 'Could not add employees')
+        return
+      }
+      for (const warning of result.data.warnings ?? []) toast.message(warning)
+      toast.success('Employees added')
+      setPickedIds([])
+      setAddingPeople(false)
+      router.refresh()
+    })
+  }
 
   function post() {
     startBusy(async () => {
@@ -424,6 +447,59 @@ export function PayrollDetail({
         </section>
       ) : null}
 
+      {canManage && standard && draft && addablePeople.length > 0 ? (
+        <section className="rounded-lg border border-border p-4 text-sm">
+          {!addingPeople ? (
+            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setAddingPeople(true)}>
+              Add employees
+            </Button>
+          ) : (
+            <div className="grid gap-3">
+              <p className="font-medium">Add to this draft</p>
+              <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border p-2">
+                {addablePeople.map((person) => (
+                  <label key={person.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={pickedIds.includes(person.id)}
+                      disabled={busy}
+                      onChange={(e) =>
+                        setPickedIds((prev) =>
+                          e.target.checked ? [...prev, person.id] : prev.filter((id) => id !== person.id),
+                        )
+                      }
+                    />
+                    <span>
+                      {person.name}
+                      {person.department ? (
+                        <span className="text-muted-foreground"> · {person.department}</span>
+                      ) : null}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" disabled={busy || pickedIds.length === 0} onClick={addPeople}>
+                  {busy ? 'Adding…' : `Add (${pickedIds.length})`}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    setAddingPeople(false)
+                    setPickedIds([])
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </section>
+      ) : null}
+
       {canManage && draft && adjusting ? (
         <section className="grid gap-3 rounded-lg border border-primary/30 bg-muted/20 p-4 sm:grid-cols-4">
           <Field label="Type">
@@ -541,8 +617,23 @@ export function PayrollDetail({
                     <a
                       className="text-primary hover:underline"
                       href={`/api/payroll/payslips/${slip.id}/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
                     >
                       PDF
+                    </a>
+                    <a
+                      className="text-primary hover:underline"
+                      href={`/api/payroll/payslips/${slip.id}/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        const win = window.open(`/api/payroll/payslips/${slip.id}/pdf`, '_blank')
+                        if (win) win.addEventListener('load', () => win.print())
+                      }}
+                    >
+                      Print
                     </a>
                     {canManage ? (
                       <button
@@ -550,6 +641,7 @@ export function PayrollDetail({
                         className="text-primary hover:underline"
                         disabled={busy}
                         onClick={() => sendEmail(slip.id)}
+                        title="Requires work email on the employee card"
                       >
                         Email
                       </button>

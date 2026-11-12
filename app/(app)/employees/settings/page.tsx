@@ -16,7 +16,7 @@ export default async function HrSettingsPage() {
     <>
       <PageHeader
         title="Settings"
-        description="Hours/day, work week, and overtime — used by hourly payroll and leave hour conversion."
+        description="Work weekdays, OT bands (1.5x / 2x), and hours — used by payroll and leave."
       />
       <HrSettingsForm settings={settings} canEdit={ctx.permissions.has('hr:update')} />
       <p className="mt-6 text-sm text-muted-foreground">

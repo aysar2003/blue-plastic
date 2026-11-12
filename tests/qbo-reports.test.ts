@@ -128,6 +128,7 @@ suite('QuickBooks-style lists follow the documents', () => {
           addressLine1: true, addressLine2: true, city: true, region: true,
           postalCode: true, country: true, phone: true, email: true, website: true,
           brandMark: true, logoStorageKey: true, updatedAt: true,
+          accessRestricted: true, rentExpiresAt: true, maxUsers: true, rentNote: true,
         },
       })
       const user = await db.user.findFirst({ select: { id: true, name: true, email: true, image: true } })
@@ -141,6 +142,7 @@ suite('QuickBooks-style lists follow the documents', () => {
         permissions: permissionsFor('OWNER'),
         isSystemOwner: true,
         canConnect: true,
+        systemOwnerBreakGlass: false,
         portalCustomerId: null,
         features: DEFAULT_FEATURE_FLAGS,
         organization: { ...orgFields, hasLogo: Boolean(logoStorageKey) },

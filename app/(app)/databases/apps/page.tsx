@@ -52,11 +52,21 @@ export default async function PlatformAppsPage() {
     for (const key of company.granted) grantCounts[key] += 1
   }
 
+  const missingByModule = Object.fromEntries(
+    MODULE_FLAGS.map((key) => [
+      key,
+      companies
+        .filter((company) => !company.granted.includes(key))
+        .map((company) => ({ id: company.id, name: company.name })),
+    ]),
+  ) as Record<ModuleFlag, { id: string; name: string }[]>
+
   return (
     <PlatformAppsCatalog
       apps={platformCatalogApps()}
       grantCounts={grantCounts}
       companyTotal={companies.length}
+      missingByModule={missingByModule}
       companies={companies.map(({ id, name, grantedLabels, grantedCount }) => ({
         id,
         name,

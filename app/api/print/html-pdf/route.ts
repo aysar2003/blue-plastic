@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { requireOrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
 import { launchPdfBrowser } from '@/server/reports/launch-chrome'
+import { lockPdfPageToOffline } from '@/server/reports/pdf-network-lock'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -10,6 +11,7 @@ export const maxDuration = 60
 /**
  * Turn a self-contained HTML snapshot of the print pack into a PDF with the
  * same layout as the browser paper (Chrome / Edge headless).
+ * Network is locked offline so client HTML cannot SSRF or exfiltrate.
  */
 export async function POST(request: Request) {
   try {
@@ -33,7 +35,8 @@ export async function POST(request: Request) {
     const browser = await launchPdfBrowser()
     try {
       const page = await browser.newPage()
-      await page.setContent(html, { waitUntil: 'load', timeout: 45_000 })
+      await lockPdfPageToOffline(page)
+      await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 45_000 })
       const bytes = await page.pdf({
         printBackground: true,
         preferCSSPageSize: true,

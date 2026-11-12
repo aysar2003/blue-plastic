@@ -22,6 +22,7 @@ import { binCodeValid, canStartPick } from '@/lib/erp/wms-pick'
 import {
   canCancelSignRequest,
   canSignRequest,
+  isSignRequestExpired,
   publicSignPath,
 } from '@/lib/erp/sign-workflow'
 import { aggregateSurvey, canSubmitSurvey, parseQuestions } from '@/lib/erp/survey-results'
@@ -109,6 +110,31 @@ describe('sign workflow', () => {
     expect(canSignRequest('SIGNED')).toBe(false)
     expect(canCancelSignRequest('DRAFT')).toBe(true)
     expect(publicSignPath('abc')).toBe('/sign-request/abc')
+  })
+
+  it('expires public links from expiresAt or createdAt + TTL', () => {
+    const now = new Date('2026-01-20T00:00:00Z')
+    expect(
+      isSignRequestExpired({
+        expiresAt: new Date('2026-01-19T00:00:00Z'),
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        now,
+      }),
+    ).toBe(true)
+    expect(
+      isSignRequestExpired({
+        expiresAt: new Date('2026-01-21T00:00:00Z'),
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        now,
+      }),
+    ).toBe(false)
+    expect(
+      isSignRequestExpired({
+        expiresAt: null,
+        createdAt: new Date('2025-12-01T00:00:00Z'),
+        now,
+      }),
+    ).toBe(true)
   })
 })
 

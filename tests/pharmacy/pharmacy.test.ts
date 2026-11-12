@@ -51,10 +51,11 @@ describe('pharmacy lot helpers', () => {
 })
 
 describe('pharmacy pack', () => {
-  it('is vertical-ready with expiry checklist', () => {
+  it('is vertical-ready with expiry checklist and controlled movement scope', () => {
     const pack = getPack('pharmacy')
     expect(pack?.verticalStatus).toBe('ready')
     expect(pack?.setupChecklist.some((row) => row.id === 'expiry')).toBe(true)
     expect(pack?.inScope.some((line) => /expiry/i.test(line))).toBe(true)
+    expect(pack?.inScope.some((line) => /controlled lot movement/i.test(line))).toBe(true)
   })
 })

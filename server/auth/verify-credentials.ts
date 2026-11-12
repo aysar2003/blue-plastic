@@ -37,7 +37,7 @@ export async function verifyCredentials(
   }
 
   try {
-    assertSignInRateLimit(parsed.value)
+    await assertSignInRateLimit(parsed.value)
   } catch (error) {
     if (error instanceof Error && (error as Error & { code?: string }).code === 'RATE_LIMITED') {
       throw new AppError('RATE_LIMITED', error.message)
@@ -72,7 +72,7 @@ export async function verifyCredentials(
     return null
   }
 
-  clearSignInRateLimit(parsed.value)
+  await clearSignInRateLimit(parsed.value)
 
   const homeId = homeCompanyId(user.homeOrgId, user.memberships)
   const membership = homeId
@@ -95,7 +95,8 @@ export async function verifyCredentials(
     audience,
     role,
     needsTwoFactor: userNeedsTwoFactor(user),
-    otp2faEnabled: Boolean(user.otp2faEnabledAt),
+    // System owners always receive an email OTP even when otp2fa is not toggled on.
+    otp2faEnabled: Boolean(user.otp2faEnabledAt) || user.isSystemOwner,
     totpEnabled: Boolean(user.totpEnabledAt),
   }
 }

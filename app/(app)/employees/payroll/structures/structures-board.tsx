@@ -14,6 +14,8 @@ import {
   updateStructureRule,
 } from '../actions'
 
+type Slab = { upTo: string | null; rate: string }
+
 type Rule = {
   id: string
   code: string
@@ -21,10 +23,29 @@ type Rule = {
   kind: string
   calc: string
   amount: string
+  slabs?: Slab[] | null
 }
 
 type Structure = { id: string; name: string; rules: Rule[] }
 type Account = { id: string; label: string }
+
+function slabsToText(slabs: Slab[] | null | undefined) {
+  if (!slabs?.length) return ''
+  return slabs.map((row) => `${row.upTo ?? '*'}:${row.rate}`).join('\n')
+}
+
+function textToSlabs(text: string): Slab[] {
+  return text
+    .split(/[\n,;]+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [upRaw, rateRaw] = line.split(':').map((part) => part.trim())
+      const upTo = !upRaw || upRaw === '*' ? null : upRaw
+      return { upTo, rate: rateRaw || '0' }
+    })
+    .filter((row) => Number.isFinite(Number(row.rate)))
+}
 
 export function StructuresBoard({
   structures,
@@ -43,11 +64,13 @@ export function StructuresBoard({
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
   const [kind, setKind] = useState<'EARNING' | 'DEDUCTION' | 'EMPLOYER'>('EARNING')
-  const [calc, setCalc] = useState<'BASE' | 'FIXED' | 'PERCENT'>('FIXED')
+  const [calc, setCalc] = useState<'BASE' | 'FIXED' | 'PERCENT' | 'SLABS'>('FIXED')
   const [amount, setAmount] = useState('0')
+  const [slabsText, setSlabsText] = useState('500:0\n1000:10\n*:20')
   const [expenseAccountId, setExpenseAccountId] = useState('')
   const [liabilityAccountId, setLiabilityAccountId] = useState('')
   const [editAmount, setEditAmount] = useState<Record<string, string>>({})
+  const [editSlabs, setEditSlabs] = useState<Record<string, string>>({})
 
   function create() {
     startBusy(async () => {
@@ -76,6 +99,7 @@ export function StructuresBoard({
         kind,
         calc,
         amount: amount.trim() || '0',
+        slabs: calc === 'SLABS' ? textToSlabs(slabsText) : null,
         expenseAccountId: expenseAccountId || null,
         liabilityAccountId: liabilityAccountId || null,
       })
@@ -102,15 +126,28 @@ export function StructuresBoard({
   }
 
   function saveAmount(rule: Rule) {
-    const next = (editAmount[rule.id] ?? rule.amount).trim()
     startBusy(async () => {
-      const result = await updateStructureRule({ id: rule.id, amount: next || '0' })
+      const result =
+        rule.calc === 'SLABS'
+          ? await updateStructureRule({
+              id: rule.id,
+              slabs: textToSlabs(editSlabs[rule.id] ?? slabsToText(rule.slabs)),
+            })
+          : await updateStructureRule({
+              id: rule.id,
+              amount: (editAmount[rule.id] ?? rule.amount).trim() || '0',
+            })
       if (!result.ok) {
         toast.error(result.error?.message ?? 'Could not update')
         return
       }
       toast.success('Saved')
       setEditAmount((prev) => {
+        const copy = { ...prev }
+        delete copy[rule.id]
+        return copy
+      })
+      setEditSlabs((prev) => {
         const copy = { ...prev }
         delete copy[rule.id]
         return copy
@@ -153,8 +190,8 @@ export function StructuresBoard({
         ) : null}
       </div>
       <p className="text-sm text-muted-foreground">
-        Assign {structure.name} on the employee card. Basic uses the wage. Set Housing, Transport, or
-        Income tax (%) here. Percent is of basic.
+        Assign {structure.name} on the employee card. Basic uses the wage. Percent and slabs are of
+        basic. Slabs use lines like <code>500:0</code>, <code>1000:10</code>, <code>*:20</code>.
       </p>
       <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-left text-sm">
@@ -170,13 +207,32 @@ export function StructuresBoard({
           </thead>
           <tbody>
             {structure.rules.map((rule) => (
-              <tr key={rule.id} className="border-b border-border last:border-0">
+              <tr key={rule.id} className="border-b border-border last:border-0 align-top">
                 <td className="px-3 py-2">{rule.code}</td>
                 <td className="px-3 py-2">{rule.name}</td>
                 <td className="px-3 py-2">{rule.kind}</td>
                 <td className="px-3 py-2">{rule.calc}</td>
                 <td className="px-3 py-2">
-                  {canManage && rule.calc !== 'BASE' ? (
+                  {canManage && rule.calc === 'SLABS' ? (
+                    <div className="flex flex-col gap-2">
+                      <textarea
+                        className="min-h-[4.5rem] w-48 rounded-md border border-input bg-transparent px-2 py-1 font-mono text-xs"
+                        value={editSlabs[rule.id] ?? slabsToText(rule.slabs)}
+                        onChange={(e) =>
+                          setEditSlabs((prev) => ({ ...prev, [rule.id]: e.target.value }))
+                        }
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => saveAmount(rule)}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  ) : canManage && rule.calc !== 'BASE' ? (
                     <div className="flex items-center gap-2">
                       <Input
                         className="h-8 w-24"
@@ -195,6 +251,10 @@ export function StructuresBoard({
                         Save
                       </Button>
                     </div>
+                  ) : rule.calc === 'SLABS' ? (
+                    <span className="font-mono text-xs whitespace-pre-wrap">
+                      {slabsToText(rule.slabs) || '—'}
+                    </span>
                   ) : (
                     Number(rule.amount).toFixed(2)
                   )}
@@ -244,11 +304,24 @@ export function StructuresBoard({
             >
               <option value="FIXED">Fixed amount</option>
               <option value="PERCENT">Percent of basic</option>
+              <option value="SLABS">Tax slabs</option>
             </select>
           </Field>
-          <Field label={calc === 'PERCENT' ? 'Percent' : 'Amount'}>
-            <Input value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </Field>
+          {calc === 'SLABS' ? (
+            <div className="sm:col-span-2">
+              <Field label="Brackets (upTo:rate per line)">
+                <textarea
+                  className="min-h-[5rem] w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
+                  value={slabsText}
+                  onChange={(e) => setSlabsText(e.target.value)}
+                />
+              </Field>
+            </div>
+          ) : (
+            <Field label={calc === 'PERCENT' ? 'Percent' : 'Amount'}>
+              <Input value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </Field>
+          )}
           <Field label="Expense account">
             <AccountSelect accounts={accounts} value={expenseAccountId} onChange={setExpenseAccountId} />
           </Field>

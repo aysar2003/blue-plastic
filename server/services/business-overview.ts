@@ -38,6 +38,54 @@ export function businessOverview(ctx: OrgContext, requestedMonth?: string) {
   return cachedOverview(ctx.orgId, ctx.organization.timeZone, ctx.organization.baseCurrency, month)
 }
 
+/**
+ * Home KPI cards only need this month's net profit and open AR.
+ * Avoids the full overview (prior P&L, banks, cash months, daily sales).
+ */
+export function homeKpis(ctx: OrgContext, requestedMonth?: string) {
+  assertPermission(ctx, 'report:overview')
+  const now = today(ctx.organization.timeZone)
+  const month = overviewMonth(requestedMonth, now).slice(0, 7)
+  return cachedHomeKpis(ctx.orgId, ctx.organization.timeZone, month)
+}
+
+const cachedHomeKpis = cache((orgId: string, timeZone: string, month: string) =>
+  unstable_cache(
+    () => queryHomeKpis(orgId, timeZone, month),
+    ['home-kpis-v1', orgId, timeZone, month],
+    { revalidate: 60 },
+  )(),
+)
+
+async function queryHomeKpis(orgId: string, timeZone: string, month: string) {
+  const now = today(timeZone)
+  const monthStart = overviewMonth(month, now)
+  const monthEnd = endOfMonth(monthStart)
+
+  const [pnl, invoiceRow] = await Promise.all([
+    profitAndLoss(orgId, { from: monthStart, to: monthEnd, basis: 'accrual' }),
+    db.$queryRaw<{ unpaid: string }[]>`
+      SELECT COALESCE(SUM(d.total - COALESCE(a.applied, 0)), 0)::text AS unpaid
+        FROM sales_documents d
+        LEFT JOIN (
+          SELECT "invoiceId", SUM(amount) AS applied
+            FROM sales_applications
+           WHERE "orgId" = ${orgId}
+           GROUP BY "invoiceId"
+        ) a ON a."invoiceId" = d.id
+       WHERE d."orgId" = ${orgId}
+         AND d.type = 'INVOICE'
+         AND d.status IN ('OPEN', 'PARTIAL')
+         AND d."deletedAt" IS NULL
+    `,
+  ])
+
+  return {
+    profitNet: toMoneyString(pnl.netIncome, 2),
+    openAr: toMoneyString(invoiceRow[0]?.unpaid ?? '0', 2),
+  }
+}
+
 const cachedOverview = cache((orgId: string, timeZone: string, currency: string, month: string) =>
   unstable_cache(
     () => queryBusinessOverview(orgId, timeZone, currency, month),
@@ -98,6 +146,7 @@ async function queryBusinessOverview(orgId: string, timeZone: string, _currency:
           LEFT JOIN (
             SELECT "invoiceId", SUM(amount) AS applied
               FROM sales_applications
+             WHERE "orgId" = ${ctx.orgId}
              GROUP BY "invoiceId"
           ) a ON a."invoiceId" = d.id
          WHERE d."orgId" = ${ctx.orgId}

@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { Prisma } from '@prisma/client'
+
 import { Decimal } from '@/lib/money'
 import { routingMinutes } from '@/lib/erp/verticals-p5'
 import type { OrgContext } from '@/server/auth/context'
@@ -14,6 +16,29 @@ export async function listWorkCenters(ctx: OrgContext) {
   })
 }
 
+function normalizeWeekdayCapacity(
+  values: string[] | number[] | null | undefined,
+): { byDay: number[] | null; weekly: Decimal } {
+  if (!values || values.length === 0) {
+    return { byDay: null, weekly: new Decimal(2400) }
+  }
+  if (values.length !== 7) {
+    throw validation('Weekday capacity needs seven values (Mon–Sun minutes).')
+  }
+  const byDay = values.map((value) => {
+    const n = Number(value)
+    if (!Number.isFinite(n) || n < 0) {
+      throw validation('Weekday minutes must be zero or more.')
+    }
+    return Math.round(n * 10000) / 10000
+  })
+  const weekly = byDay.reduce((sum, n) => sum.plus(n), new Decimal(0))
+  if (weekly.lessThanOrEqualTo(0)) {
+    throw validation('Weekly capacity must be more than zero minutes.')
+  }
+  return { byDay, weekly }
+}
+
 export async function upsertWorkCenter(
   ctx: OrgContext,
   input: {
@@ -21,11 +46,19 @@ export async function upsertWorkCenter(
     name: string
     storeId?: string | null
     capacityMinutesPerWeek?: string
+    /** Mon–Sun minutes. When set, becomes capacityByWeekday and weekly total. */
+    capacityByWeekday?: string[] | number[] | null
   },
 ) {
   const name = input.name.trim()
   if (!name) throw validation('Work center name is required.')
-  const capacity = new Decimal(input.capacityMinutesPerWeek || '2400')
+
+  const weekday = input.capacityByWeekday
+    ? normalizeWeekdayCapacity(input.capacityByWeekday)
+    : null
+  const capacity = weekday
+    ? weekday.weekly
+    : new Decimal(input.capacityMinutesPerWeek || '2400')
   if (capacity.lessThanOrEqualTo(0)) {
     throw validation('Weekly capacity must be more than zero minutes.')
   }
@@ -37,6 +70,10 @@ export async function upsertWorkCenter(
     })
     if (!store) throw notFound('Store')
   }
+
+  const weekdayJson: Prisma.InputJsonValue | undefined = weekday?.byDay
+    ? (weekday.byDay as Prisma.InputJsonValue)
+    : undefined
 
   if (input.id) {
     const existing = await db.workCenter.findFirst({
@@ -50,6 +87,11 @@ export async function upsertWorkCenter(
         name,
         storeId: input.storeId || null,
         capacityMinutesPerWeek: capacity,
+        ...(weekdayJson !== undefined
+          ? { capacityByWeekday: weekdayJson }
+          : input.capacityByWeekday === null
+            ? { capacityByWeekday: Prisma.DbNull }
+            : {}),
       },
     })
   }
@@ -61,6 +103,7 @@ export async function upsertWorkCenter(
         name,
         storeId: input.storeId || null,
         capacityMinutesPerWeek: capacity,
+        ...(weekdayJson !== undefined ? { capacityByWeekday: weekdayJson } : {}),
       },
     })
   } catch {
@@ -158,6 +201,7 @@ export async function capacityReport(ctx: OrgContext) {
         id: true,
         name: true,
         capacityMinutesPerWeek: true,
+        capacityByWeekday: true,
         store: { select: { name: true } },
       },
       orderBy: { name: 'asc' },
@@ -203,11 +247,15 @@ export async function capacityReport(ctx: OrgContext) {
     const demand = demandByCenter.get(center.id) ?? 0
     const load =
       capacity > 0 ? Math.round((demand / capacity) * 1000) / 10 : demand > 0 ? 999 : 0
+    const byDay = Array.isArray(center.capacityByWeekday)
+      ? (center.capacityByWeekday as number[])
+      : null
     return {
       id: center.id,
       name: center.name,
       storeName: center.store?.name ?? null,
       capacityMinutes: capacity.toFixed(2),
+      capacityByWeekday: byDay,
       demandMinutes: demand.toFixed(2),
       loadPercent: load,
       overloaded: demand > capacity + 0.0001,

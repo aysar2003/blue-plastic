@@ -111,7 +111,7 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 /** Bump when `prisma generate` adds models the cached client does not know. */
-const PRISMA_SCHEMA = 'approval-workflow-approvers'
+const PRISMA_SCHEMA = 'rate-limit-buckets'
 
 const getClient = (): PrismaClient => {
   if (globalForPrisma.prismaSchema !== PRISMA_SCHEMA) {

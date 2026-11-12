@@ -32,11 +32,16 @@ export async function saveRoutingAction(formData: FormData) {
 
 export async function saveWorkCenterAction(formData: FormData) {
   const ctx = await requireOrgContext('inventory:adjust')
+  const weekdayRaw = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) =>
+    String(formData.get(`cap_${day}`) ?? ''),
+  )
+  const hasWeekday = weekdayRaw.some((value) => value.trim() !== '')
   await routing.upsertWorkCenter(ctx, {
     id: String(formData.get('id') || '') || undefined,
     name: String(formData.get('name') ?? ''),
     storeId: String(formData.get('storeId') || '') || null,
     capacityMinutesPerWeek: String(formData.get('capacityMinutesPerWeek') ?? '2400'),
+    capacityByWeekday: hasWeekday ? weekdayRaw.map((value) => value || '0') : undefined,
   })
   revalidatePath('/inventory/routing')
   redirect('/inventory/routing')

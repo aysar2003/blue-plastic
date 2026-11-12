@@ -50,10 +50,12 @@ describe('hospital billing helpers', () => {
 })
 
 describe('hospital_admin pack', () => {
-  it('is vertical-ready with visits checklist', () => {
+  it('is vertical-ready with visits checklist and patient AR scope', () => {
     const pack = getPack('hospital_admin')
     expect(pack?.verticalStatus).toBe('ready')
     expect(pack?.outOfScope.some((line) => /EMR/i.test(line))).toBe(true)
     expect(pack?.setupChecklist.some((row) => row.id === 'visits')).toBe(true)
+    expect(pack?.inScope.some((line) => /patient AR/i.test(line))).toBe(true)
+    expect(pack?.inScope.some((line) => /services by department/i.test(line))).toBe(true)
   })
 })

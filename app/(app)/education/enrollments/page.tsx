@@ -3,9 +3,11 @@ import Link from 'next/link'
 
 import {
   billEnrollmentAction,
+  billTermEnrollmentsAction,
   enrollAndBill,
   withdrawEnrollmentAction,
 } from '@/app/(app)/education/actions'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { Badge } from '@/components/ui/badge'
@@ -85,6 +87,15 @@ export default async function EducationEnrollmentsPage({
               {summary.term.name}: {summary.counts.active} active · {summary.counts.withdrawn}{' '}
               withdrawn · fees invoiced {formatMoney(summary.feesInvoiced, currency)}
             </p>
+          ) : null}
+
+          {query.termId ? (
+            <form action={billTermEnrollmentsAction} className="flex flex-wrap items-center gap-2">
+              <input type="hidden" name="termId" value={query.termId} />
+              <Button type="submit" variant="secondary" size="sm">
+                Bill all unbilled for this term
+              </Button>
+            </form>
           ) : null}
 
           <form action={enrollAndBill} className="grid gap-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-3">

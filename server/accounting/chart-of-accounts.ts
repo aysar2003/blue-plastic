@@ -98,6 +98,15 @@ export const DEFAULT_CHART: SeedAccount[] = [
     systemKey: 'TIP_LIABILITY',
     description: 'Tips collected at the till, owed to staff — not sales revenue.',
   },
+  {
+    code: '2320',
+    name: 'Unearned Revenue',
+    type: 'LIABILITY',
+    subtype: 'OTHER_CURRENT_LIABILITY',
+    systemKey: 'UNEARNED_REVENUE',
+    description:
+      'Customer payments/invoices for service periods not yet delivered — subscriptions, rentals, memberships.',
+  },
   { code: '2500', name: 'Long-Term Loans', type: 'LIABILITY', subtype: 'LONG_TERM_LIABILITY' },
   {
     code: '1350',

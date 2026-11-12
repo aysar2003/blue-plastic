@@ -4,25 +4,18 @@ import { companyLimitStatus } from '@/lib/company-limits'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { getOrgContext } from '@/server/auth/context'
-import { db } from '@/server/db'
 
 /** Soft notice when trial is ending or rent has ended — points to /billing. */
 export async function RentBanner() {
   const ctx = await getOrgContext()
   if (!ctx || ctx.role === 'CUSTOMER') return null
 
-  const org = await db.organization.findUnique({
-    where: { id: ctx.orgId },
-    select: {
-      accessRestricted: true,
-      rentExpiresAt: true,
-      maxUsers: true,
-      rentNote: true,
-    },
+  const status = companyLimitStatus({
+    accessRestricted: ctx.organization.accessRestricted,
+    rentExpiresAt: ctx.organization.rentExpiresAt,
+    maxUsers: ctx.organization.maxUsers,
+    rentNote: ctx.organization.rentNote,
   })
-  if (!org) return null
-
-  const status = companyLimitStatus(org)
   if (status.accessRestricted) return null
 
   if (status.rentExpired) {

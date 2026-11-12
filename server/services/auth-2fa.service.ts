@@ -60,7 +60,10 @@ export async function getTwoFactorStatus(userId: string): Promise<TwoFactorStatu
 export function userNeedsTwoFactor(user: {
   totpEnabledAt: Date | null
   otp2faEnabledAt: Date | null
+  isSystemOwner?: boolean
 }): boolean {
+  // Platform owners always complete a second factor (email OTP at minimum).
+  if (user.isSystemOwner) return true
   return Boolean(user.totpEnabledAt || user.otp2faEnabledAt)
 }
 
@@ -91,10 +94,11 @@ async function createChallenge(userId: string, purpose: string, code: string) {
 export async function beginLoginOtp(userId: string): Promise<{ challengeId: string }> {
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { email: true, otp2faEnabledAt: true, totpEnabledAt: true },
+    select: { email: true, otp2faEnabledAt: true, totpEnabledAt: true, isSystemOwner: true },
   })
   if (!user) throw notFound('User')
-  if (!user.otp2faEnabledAt && !user.totpEnabledAt) {
+  const forceEmailOtp = user.isSystemOwner || Boolean(user.otp2faEnabledAt)
+  if (!forceEmailOtp && !user.totpEnabledAt) {
     throw precondition('Two-factor authentication is not enabled.')
   }
 
@@ -104,8 +108,15 @@ export async function beginLoginOtp(userId: string): Promise<{ challengeId: stri
   const code = randomOtp()
   const challenge = await createChallenge(userId, 'LOGIN_OTP', code)
 
-  if (user.otp2faEnabledAt) {
-    await sendAuthEmailOtp(user.email, code)
+  if (forceEmailOtp) {
+    // Do not block the sign-in UI on SMTP latency — challenge already exists.
+    // Dev always logs the code inside sendAuthEmailOtp; email is best-effort.
+    void sendAuthEmailOtp(user.email, code).catch((error) => {
+      console.error('Login OTP email failed', error)
+      if (env.NODE_ENV !== 'production') {
+        console.info(`[auth-otp] fallback ${user.email} → ${code}`)
+      }
+    })
   }
 
   return { challengeId: challenge.id }
@@ -122,6 +133,7 @@ export async function verifyLoginSecondFactor(input: {
       totpEnabledAt: true,
       totpSecretSealed: true,
       otp2faEnabledAt: true,
+      isSystemOwner: true,
     },
   })
   if (!user) throw notFound('User')
@@ -149,7 +161,8 @@ export async function verifyLoginSecondFactor(input: {
     if (secret && verifyTotp(secret, code)) ok = true
   }
 
-  if (!ok && user.otp2faEnabledAt && codesMatch(challenge.codeHash, pepperHash(code))) {
+  const emailOtpAllowed = user.otp2faEnabledAt || user.isSystemOwner
+  if (!ok && emailOtpAllowed && codesMatch(challenge.codeHash, pepperHash(code))) {
     ok = true
   }
 

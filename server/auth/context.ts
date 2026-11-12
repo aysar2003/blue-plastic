@@ -49,6 +49,10 @@ export type OrgContext = {
     brandMark: string | null
     hasLogo: boolean
     updatedAt: Date
+    accessRestricted: boolean
+    rentExpiresAt: Date | null
+    maxUsers: number | null
+    rentNote: string | null
   }
   user: {
     id: string
@@ -60,6 +64,11 @@ export type OrgContext = {
   isSystemOwner: boolean
   /** May use Connect to open another company. True for the system owner too. */
   canConnect: boolean
+  /**
+   * True when the system owner is acting in a company without a membership row
+   * (assumed OWNER). Prefer joining as a real member when possible.
+   */
+  systemOwnerBreakGlass?: boolean
   /**
    * When role is CUSTOMER, the customer master this login is linked to.
    * Null for staff, or for a CUSTOMER membership missing its portal link.
@@ -98,6 +107,10 @@ const ORGANIZATION_SELECT = {
   brandMark: true,
   logoStorageKey: true,
   updatedAt: true,
+  accessRestricted: true,
+  rentExpiresAt: true,
+  maxUsers: true,
+  rentNote: true,
 } as const
 
 export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
@@ -135,11 +148,14 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
 
   // Revoked, suspended, or holding a token issued before a role change (ADR-0007).
   // A person who cannot switch is placed in their home company even when the
-  // token still names another one, so that version belongs to a different row
-  // and is not compared.
+  // token still names another one — that home membership's version is not the
+  // JWT's version (which still names the previous org), so we only compare when
+  // the JWT already points at this same org. Permissions always come from DB.
   if (membership && membership.status === 'ACTIVE') {
     const sameOrg = orgId === session.user.orgId
     if (sameOrg && membership.version !== session.user.membershipVersion) return null
+    // JWT role claim can lag a same-org role change that also bumps version;
+    // version mismatch above already signs them out. When versions match, trust DB role.
 
     const { featureFlags, logoStorageKey, ...organization } = membership.organization
     let portalCustomerId: string | null = null
@@ -162,12 +178,14 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
       },
       user: membership.user,
       portalCustomerId,
+      systemOwnerBreakGlass: false,
       ...flags,
     }
   }
 
   // The system owner may open a company they have not been added to. They
-  // enter it as owner; the books stay that company's own.
+  // enter it as owner; the books stay that company's own. Switch path audits
+  // BREAK_GLASS once in auth.ts jwt update.
   if (!access.isSystemOwner) return null
 
   const organization = await db.organization.findUnique({
@@ -194,6 +212,7 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
       image: access.image,
     },
     portalCustomerId: null,
+    systemOwnerBreakGlass: true,
     ...flags,
   }
 })

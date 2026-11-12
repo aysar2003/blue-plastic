@@ -2,9 +2,12 @@ import 'server-only'
 
 import { Decimal } from '@/lib/money'
 import { today } from '@/lib/date'
+import { buildPosTipPayoutJournal } from '@/server/accounting/builders/pos'
+import { seedChartOfAccounts, systemAccountId } from '@/server/accounting/chart-of-accounts'
+import { postJournal } from '@/server/accounting/posting'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
-import { conflict, notFound, validation } from '@/server/errors'
+import { conflict, notFound, precondition, validation } from '@/server/errors'
 
 function dayBounds(businessDate: string, timeZone: string) {
   // businessDate is YYYY-MM-DD in org calendar; use UTC day window for POS timestamps.
@@ -127,6 +130,64 @@ export async function getRun(ctx: OrgContext, id: string) {
   })
   if (!run) throw notFound('Night audit')
   return run
+}
+
+/**
+ * Pay out tips accrued for a closed night audit: Dr Tips Payable, Cr bank/cash.
+ * Amount defaults to the audit tip total when omitted.
+ */
+export async function payoutTips(
+  ctx: OrgContext,
+  input: { nightAuditId: string; bankAccountId: string; amount?: string },
+) {
+  const run = await db.nightAuditRun.findFirst({
+    where: { id: input.nightAuditId, orgId: ctx.orgId },
+  })
+  if (!run) throw notFound('Night audit')
+  if (run.status !== 'CLOSED') throw precondition('Close the night audit before paying out tips.')
+  if (run.tipPayoutJournalId) throw conflict('Tips for this night audit were already paid out.')
+
+  const summary = run.summary as { tipsTotal?: string }
+  const amount = new Decimal(input.amount?.trim() || summary.tipsTotal || '0')
+  if (amount.lessThanOrEqualTo(0)) {
+    throw validation('No tips to pay out for that night.')
+  }
+
+  const bank = await db.ledgerAccount.findFirst({
+    where: {
+      id: input.bankAccountId,
+      orgId: ctx.orgId,
+      isActive: true,
+      type: 'ASSET',
+    },
+    select: { id: true },
+  })
+  if (!bank) throw notFound('Bank / cash account')
+
+  const businessDate = run.businessDate.toISOString().slice(0, 10)
+
+  return db.$transaction(async (tx) => {
+    await seedChartOfAccounts(tx, ctx.orgId)
+    const tipLiabilityId = await systemAccountId(tx, ctx.orgId, 'TIP_LIABILITY')
+    const draft = buildPosTipPayoutJournal({
+      date: businessDate,
+      nightAuditId: run.id,
+      bankAccountId: bank.id,
+      tipLiabilityAccountId: tipLiabilityId,
+      amount,
+      businessDate,
+    })
+    if (!draft) throw validation('No tips to pay out for that night.')
+
+    const journal = await postJournal(tx, ctx, draft)
+    return tx.nightAuditRun.update({
+      where: { id: run.id },
+      data: {
+        tipPayoutJournalId: journal.id,
+        tipPayoutAt: new Date(),
+      },
+    })
+  })
 }
 
 export function defaultBusinessDate(timeZone: string): string {

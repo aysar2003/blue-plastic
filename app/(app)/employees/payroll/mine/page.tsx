@@ -44,15 +44,31 @@ export default async function MyPayslipsPage() {
                 <tr key={slip.id} className="border-b border-border last:border-0">
                   <td className="px-3 py-2">{slip.number ?? '—'}</td>
                   <td className="px-3 py-2">
-                    <Link href={`/employees/payroll/${slip.runId}`} className="text-primary hover:underline">
+                    <Link
+                      href={`/employees/payroll/mine/${slip.id}`}
+                      className="text-primary hover:underline"
+                    >
                       {slip.periodStart} → {slip.periodEnd}
                     </Link>
                   </td>
                   <td className="px-3 py-2">{slip.status}</td>
                   <td className="px-3 py-2">{slip.net}</td>
                   <td className="px-3 py-2 text-right">
-                    <a className="text-primary hover:underline" href={`/api/payroll/payslips/${slip.id}/pdf`}>
+                    <a
+                      className="text-primary hover:underline"
+                      href={`/api/payroll/payslips/${slip.id}/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       PDF
+                    </a>
+                    <a
+                      className="ml-2 text-primary hover:underline"
+                      href={`/api/payroll/payslips/${slip.id}/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Print
                     </a>
                   </td>
                 </tr>

@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
+import { stampClaimsExportAction } from '@/app/(app)/hospital/actions'
 import { PageHeader } from '@/components/data/page-header'
-import { buttonVariants } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { requireOrgContext } from '@/server/auth/context'
@@ -13,12 +14,19 @@ export const metadata: Metadata = { title: 'Claims export' }
 export default async function HospitalClaimsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ format?: string }>
+  searchParams: Promise<{ format?: string; includeExported?: string }>
 }) {
   const ctx = await requireOrgContext('invoice:read')
   const query = await searchParams
   const format = query.format === 'csv' ? 'csv' : 'json'
-  const exported = await hospital.exportClaims(ctx, { format, status: 'CLOSED' })
+  const includeExported = query.includeExported === '1'
+  const canStamp = ctx.permissions.has('invoice:create')
+  const exported = await hospital.exportClaims(ctx, {
+    format,
+    status: 'CLOSED',
+    includeExported,
+    stamp: false,
+  })
 
   return (
     <>
@@ -37,10 +45,16 @@ export default async function HospitalClaimsPage({
               JSON
             </Link>
             <Link
-              href="/hospital/claims?format=csv"
+              href={`/hospital/claims?format=csv${includeExported ? '&includeExported=1' : ''}`}
               className={buttonVariants({ variant: format === 'csv' ? 'default' : 'outline', size: 'sm' })}
             >
               CSV
+            </Link>
+            <Link
+              href={`/hospital/claims?format=${format}&includeExported=1`}
+              className={buttonVariants({ variant: includeExported ? 'default' : 'outline', size: 'sm' })}
+            >
+              Include already exported
             </Link>
           </div>
         }
@@ -52,8 +66,20 @@ export default async function HospitalClaimsPage({
           <CardDescription>
             {exported.rows.length} charge line{exported.rows.length === 1 ? '' : 's'} · format{' '}
             {exported.format.toUpperCase()}
+            {includeExported ? ' · including previously stamped' : ' · unexported only'}
           </CardDescription>
         </CardHeader>
+        {canStamp ? (
+          <CardContent className="border-b pb-4">
+            <form action={stampClaimsExportAction} className="flex flex-wrap gap-2">
+              <input type="hidden" name="format" value={format} />
+              {includeExported ? <input type="hidden" name="includeExported" value="1" /> : null}
+              <Button type="submit" size="sm" variant="secondary">
+                Export and stamp as exported
+              </Button>
+            </form>
+          </CardContent>
+        ) : null}
         <CardContent>
           <pre className="max-h-80 overflow-auto rounded-md border bg-muted/30 p-3 text-xs">
             {exported.body}

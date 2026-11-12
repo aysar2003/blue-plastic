@@ -132,6 +132,8 @@ describe('feature flags', () => {
     expect(parseFeatureFlags(null).documentKinds.sales.INVOICE).toBe(true)
     expect(parseFeatureFlags(null).documentKinds.purchases.BILL).toBe(true)
     expect(parseFeatureFlags(null).documentKinds.inventory.products).toBe(true)
+    expect(parseFeatureFlags(null).documentKinds.inventory.lots).toBe(true)
+    expect(parseFeatureFlags(null).documentKinds.accounting.budgets).toBe(true)
     const flags = parseFeatureFlags({
       documentKinds: {
         sales: { ESTIMATE: false, INVOICE: true },
@@ -144,6 +146,8 @@ describe('feature flags', () => {
     expect(isDocumentKindEnabled(flags, 'sales', 'QUOTATION')).toBe(true)
     expect(isDocumentKindEnabled(flags, 'purchases', 'BILL')).toBe(false)
     expect(isDocumentKindEnabled(flags, 'inventory', 'adjustments')).toBe(false)
+    expect(isDocumentKindEnabled(flags, 'inventory', 'builds')).toBe(false)
+    expect(isDocumentKindEnabled(flags, 'inventory', 'work-orders')).toBe(false)
     expect(isDocumentKindEnabled(flags, 'inventory', 'products')).toBe(true)
   })
 
@@ -160,18 +164,41 @@ describe('feature flags', () => {
       family: 'inventory',
       kind: 'adjustments',
     })
+    expect(documentKindForPath('/inventory/lots')).toEqual({
+      family: 'inventory',
+      kind: 'lots',
+    })
+    expect(documentKindForPath('/inventory/mrp')).toEqual({
+      family: 'inventory',
+      kind: 'mrp',
+    })
+    expect(documentKindForPath('/inventory/bins')).toEqual({
+      family: 'inventory',
+      kind: 'bins',
+    })
+    expect(documentKindForPath('/accounting/budgets')).toEqual({
+      family: 'accounting',
+      kind: 'budgets',
+    })
+    expect(documentKindForPath('/stores/tickets')).toEqual({
+      family: 'stores',
+      kind: 'tickets',
+    })
     expect(documentKindForPath('/sales')).toBeNull()
     expect(documentKindFormKey('sales', 'INVOICE')).toBe('kindSales_INVOICE')
+    expect(documentKindFormKey('inventory', 'work-orders')).toBe('kindInventory_work-orders')
     const fromForm = documentKindsFromFormValues({
       kindSales_INVOICE: 'true',
       kindSales_ESTIMATE: 'false',
       kindPurchases_BILL: 'on',
       kindInventory_products: 'true',
       kindInventory_adjustments: false,
+      kindInventory_lots: 'true',
     })
     expect(fromForm.sales.INVOICE).toBe(true)
     expect(fromForm.sales.ESTIMATE).toBe(false)
     expect(fromForm.purchases.BILL).toBe(true)
     expect(fromForm.inventory.adjustments).toBe(false)
+    expect(fromForm.inventory.lots).toBe(true)
   })
 })

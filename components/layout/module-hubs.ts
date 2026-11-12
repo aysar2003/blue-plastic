@@ -1,4 +1,5 @@
 import {
+  ACCOUNTING_HUB_KIND,
   INVENTORY_HUB_KIND,
   INVENTORY_HUB_MODULE,
   isDocumentKindEnabled,
@@ -1484,7 +1485,7 @@ export function visibleHubApps(
   apps: HubApp[],
   permissions: ReadonlySet<string> | Iterable<string>,
   features?: OrgFeatureFlags,
-  family?: 'purchases' | 'inventory',
+  family?: 'purchases' | 'inventory' | 'accounting',
 ): HubApp[] {
   const allowed = permissions instanceof Set ? permissions : new Set(permissions)
   return apps.filter((app) => {
@@ -1498,6 +1499,10 @@ export function visibleHubApps(
       if (kind && !isDocumentKindEnabled(features, 'inventory', kind)) return false
       const moduleKey = INVENTORY_HUB_MODULE[app.key]
       if (moduleKey && !isModuleEnabled(features, moduleKey)) return false
+    }
+    if (features && family === 'accounting') {
+      const kind = ACCOUNTING_HUB_KIND[app.key]
+      if (kind && !isDocumentKindEnabled(features, 'accounting', kind)) return false
     }
     return true
   })

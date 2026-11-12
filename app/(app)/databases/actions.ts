@@ -6,6 +6,7 @@ import {
   attachSubCompanySchema,
   createCompanySchema,
   deleteCompanySchema,
+  grantModuleToAllSchema,
   switchCompanySchema,
   updateCompanyLimitsSchema,
 } from '@/lib/validation/company'
@@ -88,6 +89,18 @@ export const installIndustryPack = action
       seedChart: input.seedChart,
       replaceGrants: true,
     })
+    revalidatePath('/databases')
+    revalidatePath('/databases/apps')
+    revalidatePath('/settings/features')
+    revalidatePath('/', 'layout')
+    return result
+  })
+
+/** Grant one catalog app to every company missing it (system owner). */
+export const grantModuleToAll = action
+  .input(grantModuleToAllSchema)
+  .handler(async (ctx, input) => {
+    const result = await companyService.grantModuleToAllCompanies(ctx, input)
     revalidatePath('/databases')
     revalidatePath('/databases/apps')
     revalidatePath('/settings/features')

@@ -52,12 +52,12 @@ export function listStockAlerts(ctx: OrgContext): Promise<StockAlertSummary> {
   return cachedStockAlerts(ctx.orgId)
 }
 
-/** At most this many rows are listed; `total` still counts every product. */
-const STOCK_ALERT_LIST_LIMIT = 200
+/** Bell UI only shows 12; `total` still counts every product. */
+const STOCK_ALERT_LIST_LIMIT = 12
 
 // The key carries a version: entries cached under the old key held a bare array.
 const cachedStockAlerts = cache((orgId: string) =>
-  unstable_cache(() => queryStockAlerts(orgId), ['stock-alerts-v4', orgId], { revalidate: 60 })(),
+  unstable_cache(() => queryStockAlerts(orgId), ['stock-alerts-v5', orgId], { revalidate: 60 })(),
 )
 
 async function queryStockAlerts(orgId: string): Promise<StockAlertSummary> {

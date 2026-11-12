@@ -2,6 +2,7 @@ import 'server-only'
 
 import { randomUUID } from 'node:crypto'
 
+import { Prisma } from '@prisma/client'
 import { Decimal } from 'decimal.js'
 
 import { toCalendarDate, today, toDate, type CalendarDate } from '@/lib/date'
@@ -14,12 +15,16 @@ import {
   buildStandardLines,
   endOfServiceAmount,
   isManualPayslipCode,
+  parseSlabs,
   paymentSummaryByMethod,
   periodsOverlap,
   slipTotals,
   type PayMethod,
   type PayMode,
+  type RuleCalc,
+  type RuleKind,
   type SalaryRuleInput,
+  type SalarySlab,
   type StandardLine,
   type WageType,
 } from '@/lib/payroll-standard'
@@ -35,12 +40,60 @@ import { sendOrgMail } from '@/server/services/mail.service'
 import { renderPayslipPdf } from '@/server/reports/payslip-pdf'
 import { deleteJournals, restoreJournals } from '@/server/accounting/deletion'
 
-const STANDARD_RULES: { code: string; name: string; kind: 'EARNING' | 'DEDUCTION' | 'EMPLOYER'; calc: 'BASE' | 'FIXED' | 'PERCENT'; sortOrder: number }[] = [
+const STANDARD_RULES: {
+  code: string
+  name: string
+  kind: RuleKind
+  calc: RuleCalc
+  sortOrder: number
+}[] = [
   { code: 'BASIC', name: 'Basic', kind: 'EARNING', calc: 'BASE', sortOrder: 0 },
   { code: 'HOUSING', name: 'Housing', kind: 'EARNING', calc: 'FIXED', sortOrder: 1 },
   { code: 'TRANSPORT', name: 'Transport', kind: 'EARNING', calc: 'FIXED', sortOrder: 2 },
   { code: 'TAX', name: 'Income tax', kind: 'DEDUCTION', calc: 'PERCENT', sortOrder: 10 },
 ]
+
+function ruleToInput(rule: {
+  code: string
+  name: string
+  kind: RuleKind
+  calc: RuleCalc
+  amount: Decimal | string
+  slabs?: unknown
+  expenseAccountId: string | null
+  liabilityAccountId: string | null
+  sortOrder: number
+}): SalaryRuleInput {
+  return {
+    code: rule.code,
+    name: rule.name,
+    kind: rule.kind,
+    calc: rule.calc,
+    amount: typeof rule.amount === 'string' ? rule.amount : rule.amount.toString(),
+    slabs: parseSlabs(rule.slabs),
+    expenseAccountId: rule.expenseAccountId,
+    liabilityAccountId: rule.liabilityAccountId,
+    sortOrder: rule.sortOrder,
+  }
+}
+
+async function departmentTrackingMap(orgId: string): Promise<Map<string, string>> {
+  const rows = await db.trackingCategory.findMany({
+    where: { orgId, isActive: true },
+    select: { id: true, name: true },
+  })
+  const map = new Map<string, string>()
+  for (const row of rows) map.set(row.name.trim().toLowerCase(), row.id)
+  return map
+}
+
+function trackingForDepartment(
+  map: Map<string, string>,
+  department: string | null | undefined,
+): string | null {
+  if (!department?.trim()) return null
+  return map.get(department.trim().toLowerCase()) ?? null
+}
 
 export async function ensureStandardStructure(ctx: OrgContext) {
   const existing = await db.salaryStructure.findFirst({
@@ -106,16 +159,28 @@ export async function createStructure(
   })
   if (clash) throw precondition(`A structure named “${name}” already exists.`)
 
-  let rules = STANDARD_RULES.map((rule) => ({
+  let rules: {
+    orgId: string
+    code: string
+    name: string
+    kind: RuleKind
+    calc: RuleCalc
+    amount: Decimal
+    slabs?: SalarySlab[] | null
+    sortOrder: number
+    expenseAccountId: string | null
+    liabilityAccountId: string | null
+  }[] = STANDARD_RULES.map((rule) => ({
     orgId: ctx.orgId,
     code: rule.code,
     name: rule.name,
     kind: rule.kind,
     calc: rule.calc,
     amount: money(0),
+    slabs: null,
     sortOrder: rule.sortOrder,
-    expenseAccountId: null as string | null,
-    liabilityAccountId: null as string | null,
+    expenseAccountId: null,
+    liabilityAccountId: null,
   }))
   if (input.cloneFromId) {
     const source = await db.salaryStructure.findFirst({
@@ -130,6 +195,7 @@ export async function createStructure(
       kind: rule.kind,
       calc: rule.calc,
       amount: money(rule.amount),
+      slabs: parseSlabs(rule.slabs),
       sortOrder: rule.sortOrder,
       expenseAccountId: rule.expenseAccountId,
       liabilityAccountId: rule.liabilityAccountId,
@@ -140,7 +206,23 @@ export async function createStructure(
     data: {
       orgId: ctx.orgId,
       name,
-      rules: { create: rules },
+      rules: {
+        create: rules.map((rule) => ({
+          orgId: rule.orgId,
+          code: rule.code,
+          name: rule.name,
+          kind: rule.kind,
+          calc: rule.calc,
+          amount: rule.amount,
+          slabs:
+            rule.slabs === null || rule.slabs === undefined
+              ? Prisma.JsonNull
+              : (rule.slabs as Prisma.InputJsonValue),
+          sortOrder: rule.sortOrder,
+          expenseAccountId: rule.expenseAccountId,
+          liabilityAccountId: rule.liabilityAccountId,
+        })),
+      },
     },
     select: { id: true },
   })
@@ -152,6 +234,7 @@ export async function updateStructureRule(
   input: {
     id: string
     amount?: string
+    slabs?: SalarySlab[] | null
     expenseAccountId?: string | null
     liabilityAccountId?: string | null
     name?: string | null
@@ -165,16 +248,23 @@ export async function updateStructureRule(
   if (rule.calc === 'BASE' && input.amount != null) {
     throw precondition('Basic uses the employee wage — set the wage on the employee card.')
   }
+  const data: Prisma.SalaryRuleUncheckedUpdateInput = {
+    ...(input.name != null && input.name !== '' ? { name: input.name.trim() } : {}),
+    ...(input.amount != null ? { amount: money(input.amount) } : {}),
+    ...(input.slabs !== undefined
+      ? {
+          slabs:
+            input.slabs === null ? Prisma.JsonNull : (input.slabs as Prisma.InputJsonValue),
+        }
+      : {}),
+    ...(input.expenseAccountId !== undefined ? { expenseAccountId: input.expenseAccountId } : {}),
+    ...(input.liabilityAccountId !== undefined
+      ? { liabilityAccountId: input.liabilityAccountId }
+      : {}),
+  }
   await db.salaryRule.update({
     where: { id: rule.id },
-    data: {
-      ...(input.name != null && input.name !== '' ? { name: input.name.trim() } : {}),
-      ...(input.amount != null ? { amount: money(input.amount) } : {}),
-      ...(input.expenseAccountId !== undefined ? { expenseAccountId: input.expenseAccountId } : {}),
-      ...(input.liabilityAccountId !== undefined
-        ? { liabilityAccountId: input.liabilityAccountId }
-        : {}),
-    },
+    data,
   })
 }
 
@@ -196,6 +286,7 @@ export async function listStructures(ctx: OrgContext) {
       kind: rule.kind,
       calc: rule.calc,
       amount: rule.amount.toFixed(4),
+      slabs: parseSlabs(rule.slabs),
       expenseAccountId: rule.expenseAccountId,
       liabilityAccountId: rule.liabilityAccountId,
     })),
@@ -208,9 +299,10 @@ export async function addStructureRule(
     structureId: string
     code: string
     name: string
-    kind: 'EARNING' | 'DEDUCTION' | 'EMPLOYER'
-    calc: 'BASE' | 'FIXED' | 'PERCENT'
+    kind: RuleKind
+    calc: RuleCalc
     amount: string
+    slabs?: SalarySlab[] | null
     expenseAccountId?: string | null
     liabilityAccountId?: string | null
   },
@@ -235,7 +327,11 @@ export async function addStructureRule(
       name: input.name.trim(),
       kind: input.kind,
       calc: input.calc,
-      amount: money(input.amount),
+      amount: money(input.amount || '0'),
+      slabs:
+        input.calc === 'SLABS' && input.slabs
+          ? (input.slabs as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
       expenseAccountId: input.expenseAccountId ?? null,
       liabilityAccountId: input.liabilityAccountId ?? null,
       sortOrder: (last?.sortOrder ?? 0) + 1,
@@ -473,7 +569,14 @@ async function composeSlip(
   },
   periodStart: CalendarDate,
   periodEnd: CalendarDate,
-  settings: { hoursPerDay: string; workDaysPerWeek: number; overtimeAfterHoursPerDay: string; overtimeMultiplier: string },
+  settings: {
+    hoursPerDay: string
+    workDaysPerWeek: number
+    workWeekdays?: number[]
+    overtimeAfterHoursPerDay: string
+    overtimeMultiplier: string
+    overtimeRules?: { afterHours: string; multiplier: string }[]
+  },
   rules: SalaryRuleInput[],
   contract: { wageType: WageType; wageAmount: Decimal } | null,
   overrides?: {
@@ -482,12 +585,13 @@ async function composeSlip(
     overtimeAmountOverride?: Decimal | null
   },
 ) {
+  // OPEN contract in period is the primary wage source when present.
   const wageType = contract?.wageType ?? emp.wageType
-  const wageAmount = contract && money(contract.wageAmount).gt(0) ? contract.wageAmount : emp.wageAmount
+  const wageAmount = contract ? contract.wageAmount : emp.wageAmount
   if (money(wageAmount).lte(0)) return { skip: 'No wage', lines: [] as StandardLine[] }
   const unpaid = await leaveService.unpaidLeaveDaysInPeriod(ctx, emp.id, periodStart, periodEnd)
   const attendance =
-    wageType === 'HOURLY'
+    wageType === 'HOURLY' || wageType === 'MONTHLY'
       ? await attendanceService.workedHoursInPeriod(ctx, emp.id, periodStart, periodEnd)
       : null
   const attendedDays =
@@ -509,11 +613,14 @@ async function composeSlip(
     leftAt: emp.leftAt ? toCalendarDate(emp.leftAt) : null,
     hoursPerDay: settings.hoursPerDay.toString(),
     workDaysPerWeek: settings.workDaysPerWeek,
+    workWeekdays: settings.workWeekdays,
     overtimeAfterHoursPerDay: settings.overtimeAfterHoursPerDay.toString(),
     overtimeMultiplier: settings.overtimeMultiplier.toString(),
+    overtimeRules: settings.overtimeRules,
     workedDays,
     workedHours,
     unpaidLeaveDays: unpaid.toString(),
+    attendanceWorkingDays: attendedDays > 0 ? attendedDays : null,
     expenseAccountId: emp.expenseAccountId,
     rules,
   })
@@ -577,12 +684,33 @@ export async function standardCreate(ctx: OrgContext, input: RunInput) {
     warnings.push('Another payroll run already covers part of these dates.')
   }
 
+  const periodStartDate = toDate(input.periodStart)
+  const periodEndDate = toDate(input.periodEnd)
   const employees = await db.employee.findMany({
     where: {
       orgId: ctx.orgId,
       active: true,
-      leftAt: null,
-      ...(input.employeeIds?.length ? { id: { in: input.employeeIds } } : { wageAmount: { gt: 0 } }),
+      AND: [
+        { OR: [{ leftAt: null }, { leftAt: { gte: periodStartDate } }] },
+        { OR: [{ hiredAt: null }, { hiredAt: { lte: periodEndDate } }] },
+      ],
+      ...(input.employeeIds?.length
+        ? { id: { in: input.employeeIds } }
+        : {
+            OR: [
+              { wageAmount: { gt: 0 } },
+              {
+                contracts: {
+                  some: {
+                    state: 'OPEN',
+                    wageAmount: { gt: 0 },
+                    dateStart: { lte: periodEndDate },
+                    OR: [{ dateEnd: null }, { dateEnd: { gte: periodStartDate } }],
+                  },
+                },
+              },
+            ],
+          }),
     },
     select: {
       id: true,
@@ -596,10 +724,7 @@ export async function standardCreate(ctx: OrgContext, input: RunInput) {
     },
   })
   if (employees.length === 0) {
-    throw precondition('No employees to pay. Set a wage, or pick people for an off-cycle run.')
-  }
-  if (employees.some((row) => row.leftAt)) {
-    throw precondition('A left employee cannot be included in a new payroll run.')
+    throw precondition('No employees to pay. Set a wage or open contract, or pick people for an off-cycle run.')
   }
 
   const settings = await hrSettingsService.get(ctx)
@@ -649,16 +774,7 @@ export async function standardCreate(ctx: OrgContext, input: RunInput) {
         input.periodStart,
         input.periodEnd,
         settings,
-        rules.map((rule) => ({
-          code: rule.code,
-          name: rule.name,
-          kind: rule.kind,
-          calc: rule.calc,
-          amount: rule.amount.toString(),
-          expenseAccountId: rule.expenseAccountId,
-          liabilityAccountId: rule.liabilityAccountId,
-          sortOrder: rule.sortOrder,
-        })),
+        rules.map((rule) => ruleToInput(rule)),
         contractByEmployee.get(emp.id) ?? null,
       )
       if (composed.skip || composed.lines.length === 0) {
@@ -685,6 +801,123 @@ export async function standardCreate(ctx: OrgContext, input: RunInput) {
       throw precondition(warnings[0] ?? 'No payslips were built for this period.')
     }
     return created
+  })
+
+  return { id: run.id, warnings }
+}
+
+/** Add people to an existing draft run (off-cycle top-up). */
+export async function addEmployeesToRun(ctx: OrgContext, runId: string, employeeIds: string[]) {
+  const ids = [...new Set(employeeIds)]
+  if (ids.length === 0) throw validation('Pick at least one employee.', { employeeIds: ['Required'] })
+
+  const run = await db.payrollRun.findFirst({
+    where: { id: runId, orgId: ctx.orgId },
+    include: { payslips: { select: { employeeId: true } } },
+  })
+  if (!run) throw notFound('Payroll run')
+  if (run.status !== 'DRAFT') throw precondition('Only a draft payroll can add employees.')
+
+  const already = new Set(run.payslips.map((row) => row.employeeId))
+  const freshIds = ids.filter((id) => !already.has(id))
+  if (freshIds.length === 0) {
+    throw precondition('Those employees are already on this run.')
+  }
+
+  const periodStart = toCalendarDate(run.periodStart)
+  const periodEnd = toCalendarDate(run.periodEnd)
+  const employees = await db.employee.findMany({
+    where: {
+      orgId: ctx.orgId,
+      active: true,
+      id: { in: freshIds },
+      AND: [
+        { OR: [{ leftAt: null }, { leftAt: { gte: run.periodStart } }] },
+        { OR: [{ hiredAt: null }, { hiredAt: { lte: run.periodEnd } }] },
+      ],
+    },
+    select: {
+      id: true,
+      name: true,
+      wageType: true,
+      wageAmount: true,
+      expenseAccountId: true,
+      hiredAt: true,
+      leftAt: true,
+      structureId: true,
+    },
+  })
+  if (employees.length === 0) {
+    throw precondition('No matching employees to add for this period.')
+  }
+
+  const settings = await hrSettingsService.get(ctx)
+  const contracts = await db.employeeContract.findMany({
+    where: {
+      orgId: ctx.orgId,
+      state: 'OPEN',
+      employeeId: { in: employees.map((row) => row.id) },
+      dateStart: { lte: run.periodEnd },
+      OR: [{ dateEnd: null }, { dateEnd: { gte: run.periodStart } }],
+    },
+    orderBy: { dateStart: 'desc' },
+  })
+  const contractByEmployee = new Map<string, (typeof contracts)[number]>()
+  for (const contract of contracts) {
+    if (!contractByEmployee.has(contract.employeeId)) contractByEmployee.set(contract.employeeId, contract)
+  }
+  const structureIds = [...new Set(employees.map((row) => row.structureId).filter(Boolean))] as string[]
+  const structures = structureIds.length
+    ? await db.salaryStructure.findMany({
+        where: { orgId: ctx.orgId, id: { in: structureIds }, active: true },
+        include: { rules: true },
+      })
+    : []
+  const rulesByStructure = new Map(structures.map((row) => [row.id, row.rules]))
+  const warnings: string[] = []
+
+  await db.$transaction(async (tx) => {
+    const numbers = await numberCursor(tx, ctx.orgId)
+    let added = 0
+    for (const emp of employees) {
+      const rules = (emp.structureId ? rulesByStructure.get(emp.structureId) : []) ?? []
+      const composed = await composeSlip(
+        ctx,
+        emp,
+        periodStart,
+        periodEnd,
+        settings,
+        rules.map((rule) => ruleToInput(rule)),
+        contractByEmployee.get(emp.id) ?? null,
+      )
+      if (composed.skip || composed.lines.length === 0) {
+        warnings.push(`${emp.name}: ${composed.skip ?? 'Nothing to pay'}`)
+        continue
+      }
+      const totals = slipTotals(composed.lines)
+      await tx.payslip.create({
+        data: {
+          orgId: ctx.orgId,
+          runId: run.id,
+          employeeId: emp.id,
+          number: numbers.next(),
+          gross: totals.gross,
+          deductions: totals.deductions,
+          employer: totals.employer,
+          net: totals.net,
+          lines: { create: persistLines(ctx.orgId, composed.lines) },
+        },
+      })
+      added += 1
+    }
+    if (added === 0) {
+      throw precondition(warnings[0] ?? 'No payslips were added.')
+    }
+    await tx.payrollRun.update({
+      where: { id: run.id },
+      data: { awaitingApproval: false },
+    })
+    await cancelPendingPayrollApproval(tx, ctx.orgId, run.id)
   })
 
   return { id: run.id, warnings }
@@ -728,16 +961,7 @@ export async function recomputeRun(ctx: OrgContext, id: string) {
         periodStart,
         periodEnd,
         settings,
-        rules.map((rule) => ({
-          code: rule.code,
-          name: rule.name,
-          kind: rule.kind,
-          calc: rule.calc,
-          amount: rule.amount.toString(),
-          expenseAccountId: rule.expenseAccountId,
-          liabilityAccountId: rule.liabilityAccountId,
-          sortOrder: rule.sortOrder,
-        })),
+        rules.map((rule) => ruleToInput(rule)),
         contract,
         {
           workedDaysOverride: slip.workedDaysOverride,
@@ -933,12 +1157,14 @@ export async function settlePayrollRun(
   if (run.payslips.length === 0) throw precondition('No payslips to pay.')
 
   const payFromId = opts.payFromAccountId || run.payFromAccountId
+  const trackingByDept = await departmentTrackingMap(ctx.orgId)
   const journal = buildPayrollSettlementJournal({
     payFromAccountId: payFromId,
     liabilityAccountId: run.liabilityAccountId,
     slips: run.payslips.map((slip) => ({
       name: slip.employee.name,
       department: slip.employee.department,
+      trackingCategoryId: trackingForDepartment(trackingByDept, slip.employee.department),
       payableAccountId: slip.employee.payableAccountId,
       payAccountId: slip.employee.payAccountId,
       payMethod: slip.employee.payMethod as PayMethod,
@@ -966,6 +1192,7 @@ export async function settlePayrollRun(
         debit: line.debit,
         credit: line.credit,
         description: line.description,
+        trackingCategoryId: line.trackingCategoryId,
       })),
     })
     await tx.payrollRun.update({
@@ -1037,6 +1264,7 @@ export async function standardPost(
   if (run.payslips.length === 0) throw precondition('No payslips to post.')
 
   const payFromId = opts.payFromAccountId || run.payFromAccountId
+  const trackingByDept = await departmentTrackingMap(ctx.orgId)
   const journal = buildPayrollJournal({
     payMode: run.payMode,
     payFromAccountId: payFromId,
@@ -1044,6 +1272,7 @@ export async function standardPost(
     slips: run.payslips.map((slip) => ({
       name: slip.employee.name,
       department: slip.employee.department,
+      trackingCategoryId: trackingForDepartment(trackingByDept, slip.employee.department),
       expenseAccountId: slip.employee.expenseAccountId,
       payableAccountId: slip.employee.payableAccountId,
       payAccountId: slip.employee.payAccountId,
@@ -1105,6 +1334,7 @@ export async function standardPost(
         debit: line.debit,
         credit: line.credit,
         description: line.description,
+        trackingCategoryId: line.trackingCategoryId,
       })),
     })
     await tx.payrollRun.update({
@@ -1206,6 +1436,44 @@ export async function myPayslips(ctx: OrgContext) {
       net: row.net.toFixed(2),
     })),
   }
+}
+
+/** Own payslip summary for the employee portal (no hr:payroll required). */
+export async function myPayslipDetail(ctx: OrgContext, payslipId: string) {
+  const { slip, ytdNet, ytdGross } = await loadPayslipPdf(ctx, payslipId)
+  if (slip.employee.userId !== ctx.userId && !ctx.permissions.has('hr:payroll') && !ctx.permissions.has('hr:read')) {
+    throw precondition('You can only open your own payslip.')
+  }
+  return {
+    id: slip.id,
+    number: slip.number,
+    employeeName: slip.employee.name,
+    department: slip.employee.department,
+    periodStart: toCalendarDate(slip.run.periodStart),
+    periodEnd: toCalendarDate(slip.run.periodEnd),
+    status: slip.run.status,
+    gross: slip.gross.toFixed(2),
+    deductions: slip.deductions.toFixed(2),
+    employer: slip.employer.toFixed(2),
+    net: slip.net.toFixed(2),
+    ytdGross: ytdGross.toFixed(2),
+    ytdNet: ytdNet.toFixed(2),
+    lines: slip.lines.map((line) => ({
+      id: line.id,
+      label: line.label,
+      amount: line.amount.toFixed(2),
+      kind: line.kind,
+      affectsNet: line.affectsNet,
+    })),
+  }
+}
+
+export async function linkedEmployeeId(ctx: OrgContext) {
+  const employee = await db.employee.findFirst({
+    where: { orgId: ctx.orgId, userId: ctx.userId },
+    select: { id: true },
+  })
+  return employee?.id ?? null
 }
 
 async function loadPayslipPdf(ctx: OrgContext, payslipId: string) {

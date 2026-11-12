@@ -16,6 +16,8 @@ export type GroupCompanyOption = {
   name: string
   parentOrgId: string | null
   baseCurrency: string
+  /** Parent ownership of this company; 100 for main / standalone. */
+  ownershipPercent?: string
 }
 
 /** Label for the No Company Open list and reports. */

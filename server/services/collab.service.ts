@@ -12,7 +12,9 @@ import {
   canCancelSignRequest,
   canDeclineSignRequest,
   canSignRequest,
+  isSignRequestExpired,
   publicSignPath,
+  SIGN_REQUEST_TTL_MS,
 } from '@/lib/erp/sign-workflow'
 import { toDate, type CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
@@ -69,8 +71,9 @@ export async function createSignRequest(
       message: input.message?.trim() || null,
       status: 'SENT',
       token: newSignToken(),
+      expiresAt: new Date(Date.now() + SIGN_REQUEST_TTL_MS),
     },
-    select: { id: true, title: true, token: true, status: true },
+    select: { id: true, title: true, token: true, status: true, expiresAt: true },
   })
 }
 
@@ -147,10 +150,15 @@ export async function getSignRequestByToken(token: string) {
       signerName: true,
       signerEmail: true,
       signedAt: true,
+      expiresAt: true,
+      createdAt: true,
       organization: { select: { name: true } },
     },
   })
   if (!row) throw notFound('Sign request')
+  if (isSignRequestExpired(row)) {
+    throw precondition('This signing link has expired. Ask the sender for a new one.')
+  }
   return row
 }
 
@@ -161,9 +169,12 @@ export async function signByToken(input: {
 }) {
   const row = await db.signRequest.findFirst({
     where: { token: input.token },
-    select: { id: true, status: true },
+    select: { id: true, status: true, expiresAt: true, createdAt: true },
   })
   if (!row) throw notFound('Sign request')
+  if (isSignRequestExpired(row)) {
+    throw precondition('This signing link has expired. Ask the sender for a new one.')
+  }
   if (!canSignRequest(row.status)) throw precondition('This request can no longer be signed.')
   if (!input.signatureData.trim()) throw validation('Type your name as the signature.')
   return db.signRequest.update({
@@ -181,9 +192,12 @@ export async function signByToken(input: {
 export async function declineByToken(input: { token: string; reason?: string | null }) {
   const row = await db.signRequest.findFirst({
     where: { token: input.token },
-    select: { id: true, status: true },
+    select: { id: true, status: true, expiresAt: true, createdAt: true },
   })
   if (!row) throw notFound('Sign request')
+  if (isSignRequestExpired(row)) {
+    throw precondition('This signing link has expired. Ask the sender for a new one.')
+  }
   if (!canDeclineSignRequest(row.status)) throw precondition('This request cannot be declined.')
   return db.signRequest.update({
     where: { id: row.id },

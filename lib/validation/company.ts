@@ -50,9 +50,24 @@ export type CreateCompanyInput = z.infer<typeof createCompanySchema>
 export const attachSubCompanySchema = z.object({
   orgId: z.string().min(1),
   parentOrgId: z.string().min(1),
+  ownershipPercent: z
+    .string()
+    .trim()
+    .regex(/^\d{1,3}(\.\d{1,4})?$/, 'Use a percent 0–100')
+    .optional(),
 })
 
 export type AttachSubCompanyInput = z.infer<typeof attachSubCompanySchema>
+
+export const setSubOwnershipSchema = z.object({
+  orgId: z.string().min(1),
+  ownershipPercent: z
+    .string()
+    .trim()
+    .regex(/^\d{1,3}(\.\d{1,4})?$/, 'Use a percent 0–100'),
+})
+
+export type SetSubOwnershipInput = z.infer<typeof setSubOwnershipSchema>
 
 export const switchCompanySchema = z.object({
   orgId: z.string().min(1),
@@ -123,3 +138,10 @@ export const updateCompanyLimitsSchema = z
   .superRefine(requireAtLeastOneApp)
 
 export type UpdateCompanyLimitsInput = z.infer<typeof updateCompanyLimitsSchema>
+
+/** System owner: grant one catalog app to every company missing it. */
+export const grantModuleToAllSchema = z.object({
+  module: z.enum(MODULE_FLAGS as unknown as [ModuleFlag, ...ModuleFlag[]]),
+})
+
+export type GrantModuleToAllInput = z.infer<typeof grantModuleToAllSchema>

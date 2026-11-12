@@ -46,9 +46,11 @@ describe('education helpers', () => {
 })
 
 describe('education packs', () => {
-  it('marks school and university vertical-ready', () => {
+  it('marks school and university vertical-ready with fees outstanding', () => {
     expect(getPack('school')?.verticalStatus).toBe('ready')
     expect(getPack('university')?.verticalStatus).toBe('ready')
     expect(getPack('school')?.setupChecklist.some((row) => row.id === 'enroll')).toBe(true)
+    expect(getPack('school')?.setupChecklist.some((row) => row.id === 'outstanding')).toBe(true)
+    expect(getPack('school')?.inScope.some((line) => /fees outstanding/i.test(line))).toBe(true)
   })
 })

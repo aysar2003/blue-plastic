@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { launchPdfBrowser } from '@/server/reports/launch-chrome'
+import { lockPdfPageToOrigin } from '@/server/reports/pdf-network-lock'
 
 const PAPER_SELECTOR =
   'article.merchant-invoice, article.invoice-sheet, section[data-print-paper], [data-print-root], [data-report-root]'
@@ -9,6 +10,7 @@ const PAPER_SELECTOR =
  * PDF of the on-screen print page (the paper you see when you open Print).
  * Uses the caller's session cookie so the sheet is the same document, template,
  * and columns as the browser, not the plain text PDF.
+ * Subresource fetches are limited to the page origin to reduce SSRF risk.
  */
 export async function renderAuthenticatedPagePdf(
   pageUrl: string,
@@ -18,9 +20,12 @@ export async function renderAuthenticatedPagePdf(
 
   let browser: Awaited<ReturnType<typeof launchPdfBrowser>> | null = null
   try {
+    const url = new URL(pageUrl)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+
     browser = await launchPdfBrowser()
     const page = await browser.newPage()
-    const url = new URL(pageUrl)
+    await lockPdfPageToOrigin(page, url.origin)
     const cookies = cookieHeader
       .split(';')
       .map((part) => part.trim())

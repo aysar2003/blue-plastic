@@ -28,6 +28,8 @@ export async function createAsn(
     number: string
     purchaseDocumentId?: string | null
     expectedAt?: string | null
+    dockName?: string | null
+    dockAt?: string | null
     notes?: string | null
     lines: { itemId?: string | null; description: string; quantity: string }[]
   },
@@ -74,6 +76,8 @@ export async function createAsn(
         number,
         purchaseDocumentId: input.purchaseDocumentId || null,
         expectedAt: input.expectedAt ? toDate(input.expectedAt) : null,
+        dockName: input.dockName?.trim() || null,
+        dockAt: input.dockAt?.trim() ? new Date(input.dockAt) : null,
         notes: input.notes?.trim() || null,
         lines: { create: lineRows },
       },
@@ -171,4 +175,26 @@ export async function receiveAsn(ctx: OrgContext, asnId: string) {
 /** @deprecated Prefer receiveAsn — kept for form name compatibility. */
 export async function markAsnReceived(ctx: OrgContext, asnId: string) {
   return receiveAsn(ctx, asnId)
+}
+
+/** Set or clear dock appointment on an expected ASN. */
+export async function scheduleDock(
+  ctx: OrgContext,
+  input: { asnId: string; dockName?: string | null; dockAt?: string | null },
+) {
+  const asn = await db.asnShipment.findFirst({
+    where: { id: input.asnId, orgId: ctx.orgId },
+    select: { id: true, status: true },
+  })
+  if (!asn) throw notFound('ASN')
+  if (asn.status !== 'EXPECTED') {
+    throw precondition('Only an expected ASN can get a dock appointment.')
+  }
+  return db.asnShipment.update({
+    where: { id: asn.id },
+    data: {
+      dockName: input.dockName?.trim() || null,
+      dockAt: input.dockAt?.trim() ? new Date(input.dockAt) : null,
+    },
+  })
 }

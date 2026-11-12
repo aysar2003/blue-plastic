@@ -91,6 +91,8 @@ enum AuditAction {
   LOGIN
   LOGIN_FAILED
   LOGOUT
+  /// System owner opened a company they are not a member of (assumed OWNER).
+  BREAK_GLASS
   POST
   REVERSE
   CLOSE_PERIOD
@@ -218,11 +220,13 @@ enum AppAccessRequestStatus {
   REJECTED
 }
 
-/// What a recurring template posts when its schedule comes due (Phase 11.2).
+/// What a recurring template posts when its schedule comes due (Phase 11.2 / 36).
 enum RecurringDocType {
   JOURNAL
   BILL
   EXPENSE
+  /// Customer invoice schedule (subscriptions / rentals / memberships).
+  INVOICE
 }
 
 enum RecurringFrequency {
@@ -317,6 +321,8 @@ enum SystemAccountKey {
   TIP_LIABILITY
   /// Construction progress retention held by the customer (asset until released).
   RETENTION_RECEIVABLE
+  /// Prepaid / unearned customer revenue (subscriptions, rentals) — Phase 36.
+  UNEARNED_REVENUE
 }
 
 /// How an item behaves. The distinction drives which accounts it must map to and
@@ -548,6 +554,8 @@ enum JournalSourceType {
   POS_SESSION_CLOSE
   /// Tip portion of a POS tender held for staff.
   POS_TIP
+  /// Clearing tip liability to bank / cash (night-audit payout).
+  POS_TIP_PAYOUT
   PAYROLL
   PAYROLL_SETTLEMENT
 }
@@ -630,6 +638,8 @@ model Organization {
   parentOrgId String?
   parent      Organization?  @relation("OrgGroup", fields: [parentOrgId], references: [id], onDelete: Restrict)
   children    Organization[] @relation("OrgGroup")
+  /// Parent ownership of this company (0–100). Used only when parentOrgId is set. Default 100 = wholly owned.
+  ownershipPercent Decimal @default(100) @db.Decimal(7, 4)
 
   /// When true, only the system owner may open this company (locked / restricted).
   accessRestricted Boolean @default(false)
@@ -735,6 +745,7 @@ model Organization {
   projectTimeEntries  ProjectTimeEntry[]
   appAccessRequests   AppAccessRequest[]
   recurringTemplates  RecurringTemplate[]
+  deferredRevenueSchedules DeferredRevenueSchedule[]
   companyAgreements   CompanyAgreement[]
   companyRentPayments CompanyRentPayment[]
   budgets             Budget[]
@@ -787,6 +798,9 @@ model Organization {
   workOrders           WorkOrder[]
   dashboards           Dashboard[]
   metricSnapshots      MetricSnapshot[]
+  priceLists           PriceList[]
+  itemPromotions       ItemPromotion[]
+  intercompanyMatchesAsRoot IntercompanyMatch[] @relation("IcMatchRoot")
 
   @@index([parentOrgId])
   @@map("organizations")
@@ -1072,6 +1086,7 @@ model User {
   appAccessReviews          AppAccessRequest[] @relation("AppAccessReviewedBy")
   recurringTemplatesCreated RecurringTemplate[] @relation("RecurringCreatedBy")
   authChallenges            AuthChallenge[]
+  loginTickets              LoginTicket[]
   discussMessagesAuthored   DiscussMessage[] @relation("DiscussMessageAuthor")
   crmActivitiesCreated      CrmActivity[]    @relation("CrmActivityCreatedBy")
   apiKeysCreated            ApiKey[]         @relation("ApiKeyCreatedBy")
@@ -1243,6 +1258,33 @@ model AuthChallenge {
 
   @@index([userId, purpose, expiresAt])
   @@map("auth_challenges")
+}
+
+/// One-time login tickets (post-password / post-2FA). Replay is rejected after consume.
+model LoginTicket {
+  /// Random id embedded in the sealed ticket payload.
+  jti        String    @id
+  userId     String
+  audience   String
+  expiresAt  DateTime  @db.Timestamptz(6)
+  consumedAt DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+  @@map("login_tickets")
+}
+
+/// Shared sliding-window counters (works across serverless replicas).
+model RateLimitBucket {
+  key     String   @id
+  count   Int      @default(0)
+  resetAt DateTime @db.Timestamptz(6)
+
+  @@index([resetAt])
+  @@map("rate_limit_buckets")
 }
 
 // ---------------------------------------------------------------------------
@@ -1590,6 +1632,8 @@ model Journal {
   reversalOf Journal? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedBy Journal? @relation("JournalReversal")
 
+  icMatchAsA IntercompanyMatch? @relation("IcMatchJournalA")
+  icMatchAsB IntercompanyMatch? @relation("IcMatchJournalB")
 
   @@unique([orgId, journalNumber])
   @@index([orgId, deletedAt])
@@ -1601,6 +1645,30 @@ model Journal {
   @@index([orgId, status])
   @@index([periodId])
   @@map("journals")
+}
+
+/// Phase 35: confirmed pair of intercompany journals across two orgs in a group.
+model IntercompanyMatch {
+  id         String @id @default(cuid())
+  /// Group root (main company) that owns this match for listing / close checklist.
+  rootOrgId  String
+  journalAId String @unique
+  journalBId String @unique
+  /// Absolute amount matched (base of journal A), informational.
+  amount     Decimal @db.Decimal(19, 4)
+  matchedAt  DateTime @default(now()) @db.Timestamptz(6)
+  matchedById String?
+  notes      String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  root     Organization @relation("IcMatchRoot", fields: [rootOrgId], references: [id], onDelete: Cascade)
+  journalA Journal      @relation("IcMatchJournalA", fields: [journalAId], references: [id], onDelete: Cascade)
+  journalB Journal      @relation("IcMatchJournalB", fields: [journalBId], references: [id], onDelete: Cascade)
+
+  @@index([rootOrgId, matchedAt(sort: Desc)])
+  @@map("intercompany_matches")
 }
 
 /// One side of one entry. A line is a debit or a credit, never both (R1).
@@ -1786,6 +1854,8 @@ model Customer {
 
   /// Retail uses the item sales price. Wholesale uses wholesale price when the item has one.
   priceLevel CustomerPriceLevel @default(RETAIL)
+  /// Named price list (Pass 1). When set, list prices override RETAIL/WHOLESALE defaults.
+  priceListId String?
 
   notes    String?
   /// Printed on the invoice as Sales person. The person who looks after this customer.
@@ -1806,6 +1876,7 @@ model Customer {
 
   organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
   paymentTerm  PaymentTerm?  @relation(fields: [paymentTermId], references: [id], onDelete: SetNull)
+  priceList    PriceList?    @relation(fields: [priceListId], references: [id], onDelete: SetNull)
   journalLines JournalLine[]
   documents    SalesDocument[]
   payments     CustomerPayment[]
@@ -1838,6 +1909,7 @@ model Customer {
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
   @@unique([id, orgId])
   @@index([orgId, isActive, displayName])
+  @@index([priceListId])
   @@map("customers")
 }
 
@@ -2087,6 +2159,8 @@ model Item {
   visitCharges     VisitCharge[]
   routingSteps     RoutingStep[]
   asnShipmentLines AsnShipmentLine[]
+  priceListItems   PriceListItem[]
+  promotions       ItemPromotion[]
 
   @@unique([orgId, name])
   @@unique([orgId, sku])
@@ -2106,6 +2180,9 @@ model ItemLot {
   itemId     String
   lotNumber  String
   expiryDate DateTime? @db.Date
+  /// When set, lot was written off (expired disposal).
+  disposedAt DateTime? @db.Timestamptz(6)
+  disposedQuantity Decimal? @db.Decimal(19, 4)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -2116,6 +2193,7 @@ model ItemLot {
   @@unique([orgId, itemId, lotNumber])
   @@index([orgId, expiryDate])
   @@index([itemId, expiryDate])
+  @@index([orgId, disposedAt])
   @@map("item_lots")
 }
 
@@ -2183,6 +2261,7 @@ model Store {
   pickTasks     PickTask[]
   putawayTasks  PutawayTask[]
   workCenters   WorkCenter[]
+  siteProjects  Project[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
@@ -2545,6 +2624,8 @@ model Project {
   billedPercent Decimal @default(0) @db.Decimal(7, 4)
   /// Professional services: retainer balance held (memo; billed via retainer invoices).
   retainerAmount Decimal? @db.Decimal(19, 4)
+  /// Construction site store — stock issued / transferred to the job.
+  storeId String?
 
   createdById String?
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
@@ -2553,6 +2634,7 @@ model Project {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
   createdBy    User?        @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  store        Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   salesDocuments    SalesDocument[]
   purchaseDocuments PurchaseDocument[]
@@ -2563,6 +2645,7 @@ model Project {
   @@unique([id, orgId])
   @@index([orgId, status, updatedAt(sort: Desc)])
   @@index([orgId, customerId, updatedAt(sort: Desc)])
+  @@index([storeId])
   @@map("projects")
 }
 
@@ -2656,7 +2739,7 @@ model AppAccessRequest {
   @@map("app_access_requests")
 }
 
-/// A memorised bill, expense, or journal that posts on a schedule (Phase 11.2).
+/// A memorised bill, expense, journal, or invoice that posts on a schedule (Phase 11.2 / 36).
 model RecurringTemplate {
   id    String @id @default(cuid())
   orgId String
@@ -2671,8 +2754,13 @@ model RecurringTemplate {
   endOn     DateTime? @db.Date
   isActive  Boolean   @default(true)
 
-  /// Create payload without `date` — ManualJournalInput or PurchaseDocumentInput shape.
+  /// Create payload without `date` — ManualJournalInput, PurchaseDocumentInput, or SalesDocumentInput shape.
   payload Json
+
+  /// Phase 36: after an INVOICE posts, move net to unearned and recognize over serviceMonths.
+  deferRevenue  Boolean @default(false)
+  /// Months to recognize deferred revenue (1–60). Null/0 = no deferral schedule.
+  serviceMonths Int?
 
   lastRunOn         DateTime? @db.Date
   lastDocumentId    String?
@@ -2684,10 +2772,44 @@ model RecurringTemplate {
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   createdBy    User?        @relation("RecurringCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  deferredSchedules DeferredRevenueSchedule[]
 
   @@index([orgId, isActive, nextRunOn])
+  @@index([orgId, type, isActive, nextRunOn])
   @@index([orgId, updatedAt(sort: Desc)])
   @@map("recurring_templates")
+}
+
+/// Phase 36: remaining unearned revenue from a deferred subscription invoice.
+model DeferredRevenueSchedule {
+  id     String @id @default(cuid())
+  orgId  String
+
+  recurringTemplateId String?
+  salesDocumentId     String
+
+  /// Net amount moved into unearned (excludes tax).
+  totalAmount       Decimal @db.Decimal(19, 4)
+  recognizedAmount  Decimal @default(0) @db.Decimal(19, 4)
+  serviceMonths     Int
+  serviceStartOn    DateTime @db.Date
+  nextRecognizeOn   DateTime @db.Date
+  isComplete        Boolean  @default(false)
+
+  /// Journal that moved income → unearned when the invoice posted.
+  deferralJournalId     String?
+  /// Last recognition journal.
+  lastRecognitionJournalId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  recurringTemplate RecurringTemplate? @relation(fields: [recurringTemplateId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, isComplete, nextRecognizeOn])
+  @@index([salesDocumentId])
+  @@map("deferred_revenue_schedules")
 }
 
 /// the ledger was told, and recomputing them later from prices that may since
@@ -4230,6 +4352,8 @@ enum SalaryCalc {
   BASE
   FIXED
   PERCENT
+  /// Progressive brackets on basic: [{ upTo, rate }, …] stored in SalaryRule.slabs.
+  SLABS
 }
 
 enum SalaryRuleKind {
@@ -4526,6 +4650,10 @@ model HrSettings {
   workDaysPerWeek          Int     @default(6)
   overtimeAfterHoursPerDay Decimal @default(8) @db.Decimal(19, 4)
   overtimeMultiplier       Decimal @default(1.5) @db.Decimal(19, 4)
+  /// Extra OT bands after the first: [{ "afterHours": "12", "multiplier": "2" }, …].
+  overtimeRules Json?
+  /// Weekdays that count as work (0=Sun … 6=Sat). Null → derived from workDaysPerWeek.
+  workWeekdays Json?
   /// Free-text note (e.g. Africa/Mogadishu) — display only.
   timezoneNote String?
 
@@ -4545,6 +4673,8 @@ model AttendanceDevice {
   active      Boolean              @default(true)
   /// Stable id the device sends (serial / terminal code).
   externalKey String
+  /// sha256 hex of ingest token — unique lookup before bcrypt verify.
+  tokenLookup String? @unique
   /// bcrypt of ingest token (shown once on create).
   tokenHash   String
   lastSeenAt  DateTime? @db.Timestamptz(6)
@@ -4801,8 +4931,10 @@ model SalaryRule {
   name String
   kind SalaryRuleKind
   calc SalaryCalc
-  /// Fixed amount, or a percent when calc is PERCENT. Ignored for BASE.
+  /// Fixed amount, or a percent when calc is PERCENT. Ignored for BASE and SLABS.
   amount Decimal @default(0) @db.Decimal(19, 4)
+  /// Progressive brackets when calc is SLABS: [{ "upTo": "500"|"null", "rate": "10" }, …].
+  slabs Json?
   expenseAccountId   String?
   liabilityAccountId String?
   sortOrder Int @default(0)
@@ -5446,6 +5578,8 @@ model SignRequest {
   title          String
   status         SignRequestStatus @default(DRAFT)
   token          String? @unique
+  /// Public link stops working after this instant (set on create/send).
+  expiresAt      DateTime? @db.Timestamptz(6)
   message        String?
   storageKey     String?
   originalName   String?
@@ -5712,6 +5846,9 @@ model NightAuditRun {
   closedAt     DateTime? @db.Timestamptz(6)
   closedById   String?
   memo         String?
+  /// Journal that cleared tip liability to bank/cash for this close.
+  tipPayoutJournalId String?
+  tipPayoutAt        DateTime? @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -5843,6 +5980,8 @@ model FolioLine {
   quantity    Decimal @db.Decimal(19, 4)
   unitPrice   Decimal @db.Decimal(19, 4)
   amount      Decimal @db.Decimal(19, 4)
+  /// Calendar night this room charge covers (nightly post). Null = ad-hoc charge.
+  serviceDate DateTime? @db.Date
   postedAt    DateTime? @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -5851,6 +5990,7 @@ model FolioLine {
   item  Item? @relation(fields: [itemId], references: [id], onDelete: SetNull)
 
   @@index([folioId])
+  @@index([folioId, serviceDate])
   @@map("folio_lines")
 }
 
@@ -5863,6 +6003,8 @@ model WorkCenter {
   storeId                 String?
   /// Planned available minutes per week (default 40h = 2400).
   capacityMinutesPerWeek  Decimal @default(2400) @db.Decimal(19, 4)
+  /// Optional Mon–Sun minutes (length 7). When set, weekly total should match capacityMinutesPerWeek.
+  capacityByWeekday       Json?
   isActive                Boolean @default(true)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -5915,6 +6057,10 @@ model AsnShipment {
   number             String
   status             AsnStatus @default(EXPECTED)
   expectedAt         DateTime? @db.Date
+  /// Dock / bay label for the appointment.
+  dockName           String?
+  /// Appointment time (local wall clock stored as timestamptz).
+  dockAt             DateTime? @db.Timestamptz(6)
   notes              String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -5927,6 +6073,7 @@ model AsnShipment {
 
   @@unique([orgId, number])
   @@index([orgId, status, expectedAt])
+  @@index([orgId, dockAt])
   @@index([vendorId])
   @@index([purchaseDocumentId])
   @@map("asn_shipments")
@@ -6356,6 +6503,8 @@ model PatientVisit {
   openedAt            DateTime           @default(now()) @db.Timestamptz(6)
   closedAt            DateTime?          @db.Timestamptz(6)
   salesDocumentId     String?            @unique
+  /// Last claims export stamp — skip already-exported visits on the next run unless forced.
+  claimsExportedAt    DateTime?          @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -6367,6 +6516,7 @@ model PatientVisit {
   charges          VisitCharge[]
 
   @@index([orgId, status, openedAt(sort: Desc)])
+  @@index([orgId, claimsExportedAt])
   @@index([customerId])
   @@index([trackingCategoryId])
   @@map("patient_visits")
@@ -6428,4 +6578,62 @@ model DonorPledge {
   @@index([trackingCategoryId])
   @@index([paymentId])
   @@map("donor_pledges")
+}
+
+/// Named retail / trade price list (Pass 1 — more than RETAIL/WHOLESALE).
+model PriceList {
+  id       String  @id @default(cuid())
+  orgId    String
+  name     String
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  items        PriceListItem[]
+  customers    Customer[]
+
+  @@unique([orgId, name])
+  @@index([orgId, isActive])
+  @@map("price_lists")
+}
+
+model PriceListItem {
+  id         String  @id @default(cuid())
+  priceListId String
+  itemId     String
+  unitPrice  Decimal @db.Decimal(19, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  item      Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([priceListId, itemId])
+  @@index([itemId])
+  @@map("price_list_items")
+}
+
+/// Simple % off promotion with a date window (Pass 1 — no loyalty).
+model ItemPromotion {
+  id         String   @id @default(cuid())
+  orgId      String
+  name       String
+  itemId     String?
+  percentOff Decimal  @db.Decimal(7, 4)
+  startsOn   DateTime @db.Date
+  endsOn     DateTime @db.Date
+  isActive   Boolean  @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  item         Item?        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, isActive, startsOn, endsOn])
+  @@index([itemId])
+  @@map("item_promotions")
 }

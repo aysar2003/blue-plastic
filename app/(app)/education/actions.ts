@@ -86,6 +86,13 @@ export async function billEnrollmentAction(formData: FormData) {
   redirect(`/sales/invoices/${result.invoiceId}`)
 }
 
+export async function billTermEnrollmentsAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await education.billTermEnrollments(ctx, String(formData.get('termId') ?? ''))
+  revalidatePath(PATH)
+  redirect(`${PATH}/enrollments?termId=${encodeURIComponent(String(formData.get('termId') ?? ''))}`)
+}
+
 export async function withdrawEnrollmentAction(formData: FormData) {
   const ctx = await requireOrgContext('invoice:create')
   await education.withdrawEnrollment(ctx, String(formData.get('enrollmentId') ?? ''))

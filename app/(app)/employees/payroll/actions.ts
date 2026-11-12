@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import {
   advanceCreateSchema,
   endOfServiceCreateSchema,
+  payrollAddEmployeesSchema,
   payrollPostSchema,
   payrollRunCreateSchema,
   payrollRunIdSchema,
@@ -101,6 +102,15 @@ export const setPayslipIncluded = action
     const runId = await standardPayroll.setIncluded(ctx, input.payslipId, input.included)
     revalidatePayroll(runId)
     return { id: runId }
+  })
+
+export const addEmployeesToPayrollRun = action
+  .requires('hr:payroll')
+  .input(payrollAddEmployeesSchema)
+  .handler(async (ctx, input) => {
+    const result = await standardPayroll.addEmployeesToRun(ctx, input.id, input.employeeIds)
+    revalidatePayroll(input.id)
+    return result
   })
 
 export const emailPayslip = action

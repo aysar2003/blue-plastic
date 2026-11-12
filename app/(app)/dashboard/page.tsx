@@ -30,11 +30,13 @@ export default async function DashboardPage() {
   const showKpis = ctx.permissions.has('report:overview')
   const monthKey = startOfMonth(today(ctx.organization.timeZone)).slice(0, 7)
 
-  const [bookmarks, reorder, overview, userPrefs, extras] = await Promise.all([
+  const [bookmarks, stockAlerts, kpis, userPrefs, extras] = await Promise.all([
     workspace.listBookmarks(ctx),
-    showReorder ? inventoryService.reorderReport(ctx) : Promise.resolve([]),
+    showReorder
+      ? inventoryService.listStockAlerts(ctx).catch(() => ({ total: 0, alerts: [] }))
+      : Promise.resolve({ total: 0, alerts: [] as Awaited<ReturnType<typeof inventoryService.listStockAlerts>>['alerts'] }),
     showKpis
-      ? businessOverview.businessOverview(ctx, monthKey).catch(() => null)
+      ? businessOverview.homeKpis(ctx, monthKey).catch(() => null)
       : Promise.resolve(null),
     db.user
       .findUnique({ where: { id: ctx.userId }, select: { dashboardPrefs: true } })
@@ -43,6 +45,7 @@ export default async function DashboardPage() {
   ])
   const kpiPins = resolvedKpiPins(parseDashboardPrefs(userPrefs?.dashboardPrefs))
   const pins = bookmarks.filter((item) => item.kind === 'pin')
+  const reorder = stockAlerts.alerts
 
   return (
     <>
@@ -59,12 +62,12 @@ export default async function DashboardPage() {
       ) : null}
       <HomeKpiCards
         currency={ctx.organization.baseCurrency}
-        profitMtd={overview?.profit.net ?? null}
-        openAr={overview?.invoices.unpaid ?? null}
-        reorderCount={showReorder ? reorder.length : null}
-        pipelineAmount={extras.pipelineAmount.toFixed(2)}
+        profitMtd={kpis?.profitNet ?? null}
+        openAr={kpis?.openAr ?? null}
+        reorderCount={showReorder ? stockAlerts.total : null}
+        pipelineAmount={extras.pipelineAmount}
         pipelineCount={extras.pipelineCount}
-        unpaidAp={extras.unpaidAp.toFixed(2)}
+        unpaidAp={extras.unpaidAp}
         followUps={extras.followUps}
         pinnedKeys={kpiPins}
       />
@@ -72,16 +75,16 @@ export default async function DashboardPage() {
         <div className="mx-auto w-full px-[clamp(0.75rem,2vw,2.5rem)] pt-6">
           <div className="rounded-lg border bg-card px-4 py-3">
             <Link href="/reports/inventory-reorder" className="text-sm font-medium hover:underline">
-              Store: products to reorder ({reorder.length})
+              {`Store: products to reorder (${stockAlerts.total})`}
             </Link>
             <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
               {reorder.slice(0, 5).map((item) => (
                 <li key={item.itemId}>
                   {item.name}
                   {' — '}
-                  {formatQty(item.quantity.toString(), item.unitOfMeasure)} on hand
+                  {formatQty(item.quantity, item.unitOfMeasure)} on hand
                   {item.reorderPoint
-                    ? ` · reorder at ${formatQty(item.reorderPoint.toString(), item.unitOfMeasure)}`
+                    ? ` · reorder at ${formatQty(item.reorderPoint, item.unitOfMeasure)}`
                     : ''}
                 </li>
               ))}

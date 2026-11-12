@@ -33,8 +33,8 @@ export async function captureToday(ctx: OrgContext) {
   const values: Record<SnapshotKey, string> = {
     profitMtd: overview?.profit.net ?? '0',
     openAr: overview?.invoices.unpaid ?? '0',
-    unpaidAp: extras.unpaidAp.toFixed(2),
-    pipeline: extras.pipelineAmount.toFixed(2),
+    unpaidAp: extras.unpaidAp,
+    pipeline: extras.pipelineAmount,
     reorder: String(reorder.length),
     followUps: String(extras.followUps),
     cashMovement: overview?.cashMonths.at(-1)?.amount ?? '0',

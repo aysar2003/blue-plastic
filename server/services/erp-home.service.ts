@@ -1,19 +1,30 @@
 import 'server-only'
 
-import { Decimal, ZERO } from '@/lib/money'
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
+
+import { toMoneyString } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 
 /** Extra home numbers for a full operating loop — CRM, AP, follow-ups. */
-export async function homeExtras(ctx: OrgContext) {
+export function homeExtras(ctx: OrgContext) {
+  return cachedHomeExtras(ctx.orgId)
+}
+
+const cachedHomeExtras = cache((orgId: string) =>
+  unstable_cache(() => queryHomeExtras(orgId), ['home-extras-v3', orgId], { revalidate: 60 })(),
+)
+
+async function queryHomeExtras(orgId: string) {
   const [pipeline, followUps, unpaid] = await Promise.all([
     db.crmOpportunity.aggregate({
-      where: { orgId: ctx.orgId, stage: { in: ['LEAD', 'QUALIFIED', 'PROPOSAL'] } },
+      where: { orgId, stage: { in: ['LEAD', 'QUALIFIED', 'PROPOSAL'] } },
       _sum: { amount: true },
       _count: true,
     }),
     db.crmActivity.count({
-      where: { orgId: ctx.orgId, doneAt: null },
+      where: { orgId, doneAt: null },
     }),
     db.$queryRaw<{ unpaid: string }[]>`
       SELECT COALESCE(SUM(d.total - COALESCE(a.applied, 0)), 0)::text AS unpaid
@@ -21,9 +32,10 @@ export async function homeExtras(ctx: OrgContext) {
         LEFT JOIN (
           SELECT "billId", SUM(amount) AS applied
             FROM purchase_applications
+           WHERE "orgId" = ${orgId}
            GROUP BY 1
         ) a ON a."billId" = d.id
-       WHERE d."orgId" = ${ctx.orgId}
+       WHERE d."orgId" = ${orgId}
          AND d.type = 'BILL'
          AND d.status IN ('OPEN', 'PARTIAL')
          AND d."deletedAt" IS NULL
@@ -32,17 +44,17 @@ export async function homeExtras(ctx: OrgContext) {
 
   return {
     pipelineCount: pipeline._count,
-    pipelineAmount: new Decimal(pipeline._sum.amount?.toString() ?? 0),
+    pipelineAmount: toMoneyString(pipeline._sum.amount?.toString() ?? '0', 2),
     followUps,
-    unpaidAp: new Decimal(unpaid[0]?.unpaid ?? 0),
+    unpaidAp: toMoneyString(unpaid[0]?.unpaid ?? '0', 2),
   }
 }
 
 export function extrasOrZero() {
   return {
     pipelineCount: 0,
-    pipelineAmount: ZERO,
+    pipelineAmount: '0.00',
     followUps: 0,
-    unpaidAp: ZERO,
+    unpaidAp: '0.00',
   }
 }

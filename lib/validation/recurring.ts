@@ -1,16 +1,18 @@
 import { z } from 'zod'
 
-import { calendarDate, cuid, optionalText, requiredText } from '@/lib/validation/common'
+import { calendarDate, cuid, moneyString, optionalText, requiredText } from '@/lib/validation/common'
 import { manualJournalSchema } from '@/lib/validation/accounting'
 import { purchaseDocumentSchema } from '@/lib/validation/purchases'
 
-export const RECURRING_TYPES = ['JOURNAL', 'BILL', 'EXPENSE'] as const
+export const RECURRING_TYPES = ['JOURNAL', 'BILL', 'EXPENSE', 'INVOICE'] as const
+export const RECURRING_PURCHASE_TYPES = ['JOURNAL', 'BILL', 'EXPENSE'] as const
 export const RECURRING_FREQUENCIES = ['WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY'] as const
 
 export const RECURRING_TYPE_LABELS: Record<(typeof RECURRING_TYPES)[number], string> = {
   JOURNAL: 'Journal entry',
   BILL: 'Bill',
   EXPENSE: 'Expense',
+  INVOICE: 'Invoice',
 }
 
 export const RECURRING_FREQUENCY_LABELS: Record<(typeof RECURRING_FREQUENCIES)[number], string> = {
@@ -22,6 +24,32 @@ export const RECURRING_FREQUENCY_LABELS: Record<(typeof RECURRING_FREQUENCIES)[n
 
 const journalPayloadSchema = manualJournalSchema.omit({ date: true, number: true })
 const purchasePayloadSchema = purchaseDocumentSchema.omit({ date: true, number: true, saveAsDraft: true })
+/** Standalone — salesDocumentSchema has refinements so .omit() cannot be used. */
+const salesPayloadSchema = z.object({
+  customerId: cuid,
+  memo: optionalText(1000).nullable().optional(),
+  acknowledgeCreditLimit: z.boolean().default(true),
+  discountKind: z.enum(['amount', 'percent']).default('percent'),
+  lines: z
+    .array(
+      z.object({
+        itemId: z
+          .union([cuid, z.literal('')])
+          .transform((v) => (v === '' ? null : v))
+          .nullable()
+          .optional(),
+        description: optionalText(1000).nullable().optional(),
+        quantity: z.string().trim().regex(/^\d+(\.\d{1,4})?$/).default('1'),
+        unitPrice: moneyString,
+      }),
+    )
+    .min(1),
+})
+
+const boolFromForm = z
+  .union([z.boolean(), z.literal('true'), z.literal('false'), z.literal('on'), z.literal('')])
+  .optional()
+  .transform((v) => v === true || v === 'true' || v === 'on')
 
 export const recurringTemplateSchema = z
   .object({
@@ -35,21 +63,23 @@ export const recurringTemplateSchema = z
       .transform((v) => (v === '' ? null : v))
       .nullable()
       .optional(),
-    isActive: z
-      .union([z.boolean(), z.literal('true'), z.literal('false'), z.literal('on'), z.literal('')])
+    isActive: boolFromForm.default(true),
+    deferRevenue: boolFromForm.default(false),
+    serviceMonths: z
+      .union([z.literal(''), z.coerce.number().int().min(1).max(60)])
       .optional()
-      .transform((v) => v === true || v === 'true' || v === 'on')
-      .default(true),
+      .transform((v) => (v === '' || v === undefined ? null : v)),
     // Shared form fields — validated per type in superRefine.
     memo: optionalText(1000),
     vendorId: z.string().trim().optional(),
     paymentAccountId: z.string().trim().optional(),
-    // Journal lines as parallel arrays from the form, or JSON string.
     journalLinesJson: z.string().optional(),
-    // Purchase: single expense line for the common rent/subscription case.
     expenseAccountId: z.string().trim().optional(),
     amount: z.string().trim().optional(),
     lineDescription: optionalText(1000),
+    // INVOICE
+    customerId: z.string().trim().optional(),
+    itemId: z.string().trim().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.endOn && data.endOn < data.nextRunOn) {
@@ -58,6 +88,15 @@ export const recurringTemplateSchema = z
         path: ['endOn'],
         message: 'End date must be on or after the next run date.',
       })
+    }
+    if (data.deferRevenue && data.type === 'INVOICE') {
+      if (!data.serviceMonths || data.serviceMonths < 1) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['serviceMonths'],
+          message: 'Enter service months (1–60) when deferring revenue.',
+        })
+      }
     }
     if (data.type === 'JOURNAL') {
       let lines: unknown
@@ -83,27 +122,36 @@ export const recurringTemplateSchema = z
           message: parsed.error.issues[0]?.message ?? 'Check the journal lines.',
         })
       }
-    } else {
-      if (!data.vendorId) {
-        ctx.addIssue({ code: 'custom', path: ['vendorId'], message: 'Choose a vendor.' })
-      }
-      if (!data.expenseAccountId) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['expenseAccountId'],
-          message: 'Choose the expense account.',
-        })
+      return
+    }
+    if (data.type === 'INVOICE') {
+      if (!data.customerId) {
+        ctx.addIssue({ code: 'custom', path: ['customerId'], message: 'Choose a customer.' })
       }
       if (!data.amount || !/^\d+(\.\d{1,4})?$/.test(data.amount) || Number(data.amount) <= 0) {
         ctx.addIssue({ code: 'custom', path: ['amount'], message: 'Enter an amount greater than zero.' })
       }
-      if (data.type === 'EXPENSE' && !data.paymentAccountId) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['paymentAccountId'],
-          message: 'Choose the account the money left.',
-        })
-      }
+      return
+    }
+    if (!data.vendorId) {
+      ctx.addIssue({ code: 'custom', path: ['vendorId'], message: 'Choose a vendor.' })
+    }
+    if (!data.expenseAccountId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['expenseAccountId'],
+        message: 'Choose the expense account.',
+      })
+    }
+    if (!data.amount || !/^\d+(\.\d{1,4})?$/.test(data.amount) || Number(data.amount) <= 0) {
+      ctx.addIssue({ code: 'custom', path: ['amount'], message: 'Enter an amount greater than zero.' })
+    }
+    if (data.type === 'EXPENSE' && !data.paymentAccountId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['paymentAccountId'],
+        message: 'Choose the account the money left.',
+      })
     }
   })
 
@@ -116,6 +164,22 @@ export function payloadFromForm(input: RecurringTemplateFormInput): Record<strin
       memo: input.memo ?? null,
       isAdjusting: false,
       lines,
+    })
+  }
+  if (input.type === 'INVOICE') {
+    return salesPayloadSchema.parse({
+      customerId: input.customerId,
+      memo: input.memo ?? null,
+      acknowledgeCreditLimit: true,
+      discountKind: 'percent',
+      lines: [
+        {
+          itemId: input.itemId || '',
+          description: input.lineDescription ?? input.name,
+          quantity: '1',
+          unitPrice: input.amount,
+        },
+      ],
     })
   }
   return purchasePayloadSchema.parse({

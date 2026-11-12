@@ -45,6 +45,7 @@ export async function createDevice(
   input: { name: string; kind?: AttendanceDeviceKind; externalKey: string; active?: boolean },
 ) {
   const plain = newToken()
+  const lookup = tokenLookup(plain)
   const tokenHash = await hashPassword(plain)
   const row = await db.attendanceDevice.create({
     data: {
@@ -53,6 +54,7 @@ export async function createDevice(
       kind: input.kind ?? 'GENERIC_HTTP',
       externalKey: input.externalKey,
       active: input.active ?? true,
+      tokenLookup: lookup,
       tokenHash,
     },
   })
@@ -63,7 +65,7 @@ export async function createDevice(
     externalKey: row.externalKey,
     /** Shown once — store securely on the device. */
     token: plain,
-    tokenHint: tokenLookup(plain).slice(0, 8),
+    tokenHint: lookup.slice(0, 8),
   }
 }
 
@@ -92,7 +94,10 @@ export async function rotateDeviceToken(ctx: OrgContext, id: string) {
   const plain = newToken()
   await db.attendanceDevice.update({
     where: { id },
-    data: { tokenHash: await hashPassword(plain) },
+    data: {
+      tokenLookup: tokenLookup(plain),
+      tokenHash: await hashPassword(plain),
+    },
   })
   return { id, token: plain }
 }
@@ -184,13 +189,26 @@ export async function listRecentPunches(ctx: OrgContext, opts: { deviceId?: stri
 }
 
 async function findDeviceByToken(token: string) {
-  const devices = await db.attendanceDevice.findMany({
-    where: { active: true },
+  const lookup = tokenLookup(token)
+  const byLookup = await db.attendanceDevice.findFirst({
+    where: { active: true, tokenLookup: lookup },
     select: { id: true, orgId: true, tokenHash: true, externalKey: true, name: true },
-    take: 500,
   })
-  for (const device of devices) {
-    if (await verifyPassword(token, device.tokenHash)) return device
+  if (byLookup && (await verifyPassword(token, byLookup.tokenHash))) return byLookup
+
+  // Legacy devices created before tokenLookup was stored — one-time bcrypt scan.
+  const legacy = await db.attendanceDevice.findMany({
+    where: { active: true, tokenLookup: null },
+    select: { id: true, orgId: true, tokenHash: true, externalKey: true, name: true },
+    take: 200,
+  })
+  for (const device of legacy) {
+    if (await verifyPassword(token, device.tokenHash)) {
+      await db.attendanceDevice
+        .update({ where: { id: device.id }, data: { tokenLookup: lookup } })
+        .catch(() => undefined)
+      return device
+    }
   }
   return null
 }

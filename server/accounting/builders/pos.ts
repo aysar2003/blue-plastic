@@ -115,3 +115,29 @@ export function buildPosTipJournal(input: {
     ],
   }
 }
+
+/** Clear tip liability to bank/cash after night audit: Dr tip liability, Cr bank. */
+export function buildPosTipPayoutJournal(input: {
+  date: CalendarDate
+  nightAuditId: string
+  bankAccountId: string
+  tipLiabilityAccountId: string
+  amount: Decimal.Value
+  businessDate: string
+}): DraftJournal | null {
+  const amount = new Decimal(input.amount)
+  if (amount.isZero() || amount.isNegative()) return null
+
+  const label = `Tip payout · ${input.businessDate}`
+  return {
+    date: input.date,
+    memo: label,
+    sourceType: 'POS_TIP_PAYOUT',
+    sourceId: input.nightAuditId,
+    idempotencyKey: `pos-tip-payout:${input.nightAuditId}`,
+    lines: [
+      { accountId: input.tipLiabilityAccountId, debit: amount, description: label },
+      { accountId: input.bankAccountId, credit: amount, description: label },
+    ],
+  }
+}

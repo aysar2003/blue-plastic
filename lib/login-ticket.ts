@@ -1,17 +1,21 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
-type TicketPayload = {
+export type TicketPayload = {
   userId: string
   /** Audience door that already passed the password check. */
   audience: 'staff' | 'company' | 'portal'
   exp: number
+  /** One-time id — must be persisted and consumed server-side. */
+  jti: string
 }
 
 /**
- * One-time-ish signed ticket issued only after password (+ optional 2FA) succeeds.
+ * Signed ticket issued only after password (+ optional 2FA) succeeds.
  * Authorize() accepts this instead of a raw password so 2FA cannot be bypassed.
+ * Each `jti` may be consumed once (see server/auth/login-ticket-store).
  */
 export function sealLoginTicket(payload: TicketPayload, secret: string): string {
+  if (!payload.jti?.trim()) throw new Error('login ticket requires jti')
   const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
   const sig = createHmac('sha256', secret).update(`login-ticket.v1.${body}`).digest('base64url')
   return `${body}.${sig}`
@@ -31,12 +35,17 @@ export function openLoginTicket(token: string, secret: string): TicketPayload | 
   try {
     const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as TicketPayload
     if (!parsed?.userId || !parsed.audience || typeof parsed.exp !== 'number') return null
+    if (!parsed.jti || typeof parsed.jti !== 'string') return null
     if (parsed.exp < Date.now()) return null
     if (!['staff', 'company', 'portal'].includes(parsed.audience)) return null
     return parsed
   } catch {
     return null
   }
+}
+
+export function newLoginTicketJti(): string {
+  return randomBytes(18).toString('base64url')
 }
 
 export const LOGIN_TICKET_TTL_MS = 5 * 60 * 1000

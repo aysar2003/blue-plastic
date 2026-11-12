@@ -19,15 +19,18 @@ export const authConfig = {
     maxAge: 60 * 60 * 12, // 12 hours
     updateAge: 60 * 60,
   },
+  // Required behind Vercel / reverse proxies. Prefer setting APP_URL / AUTH_URL
+  // in production so Auth.js has a canonical host; do not expose the app
+  // without a trusted proxy that rewrites Host.
   trustHost: true,
   providers: [], // supplied in auth.ts — credentials needs the database
   callbacks: {
     authorized({ auth, request }) {
       const { pathname } = request.nextUrl
 
-      // Route handlers enforce their own access and answer with a JSON error
-      // envelope. Redirecting them to an HTML sign-in page would hand their
-      // callers a document where they asked for data.
+      // APIs: never HTML-redirect. Public machine routes are allow-listed in
+      // `isPublicApiPath`; session APIs get JSON 401 from `proxy.ts` when anonymous.
+      // Handlers still enforce requireOrgContext / API-key / device / cron auth.
       if (pathname.startsWith('/api/')) return true
 
       // Public product + auth doors (no session). `/register` is self-serve company create.

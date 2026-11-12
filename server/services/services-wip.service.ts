@@ -134,7 +134,13 @@ export async function billRetainer(
 /** Invoice unbilled billable time on a project, then mark those entries invoiced. */
 export async function billWipFromTime(
   ctx: OrgContext,
-  input: { projectId: string; itemId: string; entryIds?: string[] },
+  input: {
+    projectId: string
+    itemId: string
+    entryIds?: string[]
+    /** Write-up (+) or write-down (−) percent applied to each line’s rate. */
+    writeUpDownPercent?: string | number
+  },
 ) {
   const project = await db.project.findFirst({
     where: { id: input.projectId, orgId: ctx.orgId },
@@ -170,19 +176,29 @@ export async function billWipFromTime(
     throw precondition('No unbilled billable time on this project.')
   }
 
+  const adjustPct = Number(input.writeUpDownPercent ?? 0)
+  if (!Number.isFinite(adjustPct) || adjustPct < -100 || adjustPct > 500) {
+    throw validation('Write-up / write-down percent must be between -100 and 500.')
+  }
+  const factor = new Decimal(1).plus(new Decimal(adjustPct).div(100))
+
   const lines = entries.map((entry) => {
     const hours = new Decimal(entry.hours.toString())
-    const rate = new Decimal(entry.billableRate?.toString() ?? '0')
+    const rate = new Decimal(entry.billableRate?.toString() ?? '0').times(factor)
     if (hours.lessThanOrEqualTo(0)) {
       throw validation('Time entries need hours greater than zero.')
     }
+    const note =
+      adjustPct !== 0
+        ? ` (${adjustPct > 0 ? '+' : ''}${adjustPct}% write-${adjustPct >= 0 ? 'up' : 'down'})`
+        : ''
     return {
       itemId: item.id,
       quantity: hours.toFixed(4),
       unitPrice: rate.toFixed(4),
       description:
-        entry.description?.trim() ||
-        `${item.name} · ${project.number} · ${entry.workDate.toISOString().slice(0, 10)}`,
+        (entry.description?.trim() ||
+          `${item.name} · ${project.number} · ${entry.workDate.toISOString().slice(0, 10)}`) + note,
       serviceDate: entry.workDate.toISOString().slice(0, 10),
     }
   })
@@ -208,5 +224,6 @@ export async function billWipFromTime(
     invoiceId: invoice.id,
     invoiceNumber: invoice.number,
     entryCount: entries.length,
+    writeUpDownPercent: adjustPct,
   }
 }

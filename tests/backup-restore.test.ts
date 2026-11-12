@@ -78,6 +78,10 @@ suite('company backup restore', () => {
           brandMark: true,
           logoStorageKey: true,
           updatedAt: true,
+          accessRestricted: true,
+          rentExpiresAt: true,
+          maxUsers: true,
+          rentNote: true,
         },
       })
       orgId = organization.id
@@ -114,6 +118,7 @@ suite('company backup restore', () => {
         permissions: permissionsFor('OWNER'),
         isSystemOwner: true,
         canConnect: true,
+        systemOwnerBreakGlass: false,
         portalCustomerId: null,
         features: DEFAULT_FEATURE_FLAGS,
         organization: { ...orgFields, hasLogo: Boolean(logoStorageKey) },
@@ -199,6 +204,10 @@ suite('company backup restore', () => {
         brandMark: true,
         logoStorageKey: true,
         updatedAt: true,
+        accessRestricted: true,
+        rentExpiresAt: true,
+        maxUsers: true,
+        rentNote: true,
       },
     })
     orgId = organization.id
@@ -221,6 +230,7 @@ suite('company backup restore', () => {
       permissions: permissionsFor('OWNER'),
       isSystemOwner: true,
       canConnect: true,
+      systemOwnerBreakGlass: false,
       portalCustomerId: null,
       features: DEFAULT_FEATURE_FLAGS,
       organization: { ...orgFields, hasLogo: Boolean(logoStorageKey) },

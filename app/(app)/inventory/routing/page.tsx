@@ -88,6 +88,12 @@ export default async function InventoryRoutingPage({
                 className="mt-1 w-28"
               />
             </label>
+            {(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const).map((day) => (
+              <label key={day} className="text-xs">
+                {day}
+                <Input name={`cap_${day}`} className="mt-1 w-16" placeholder="0" />
+              </label>
+            ))}
             <button type="submit" className={buttonVariants({ size: 'sm' })}>
               Add center
             </button>
@@ -100,9 +106,14 @@ export default async function InventoryRoutingPage({
         </CardContent>
       </Card>
 
-      {capacity.length > 0 ? (
-        <div className="mb-8">
-          <h2 className="mb-2 text-sm font-semibold">Capacity load (open WOs)</h2>
+      <div className="mb-8">
+        <h2 className="mb-2 text-sm font-semibold">Capacity load (open WOs)</h2>
+        {capacity.length === 0 ? (
+          <EmptyState
+            title="No capacity to report"
+            description="Add a work center with weekly minutes, then open work orders on routed assemblies to see load %."
+          />
+        ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -129,8 +140,8 @@ export default async function InventoryRoutingPage({
               ))}
             </TableBody>
           </Table>
-        </div>
-      ) : null}
+        )}
+      </div>
 
       {items.length === 0 ? (
         <EmptyState title="No products" description="Add an assembly or inventory item first." />

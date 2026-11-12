@@ -328,6 +328,55 @@ export async function billEnrollment(ctx: OrgContext, enrollmentId: string) {
   }
 }
 
+/** Bill every active, unbilled enrollment for a term (skips failures individually). */
+export async function billTermEnrollments(ctx: OrgContext, termId: string) {
+  const term = await db.academicTerm.findFirst({
+    where: { id: termId, orgId: ctx.orgId },
+    select: { id: true, name: true },
+  })
+  if (!term) throw notFound('Term')
+
+  const enrollments = await db.studentEnrollment.findMany({
+    where: {
+      orgId: ctx.orgId,
+      termId: term.id,
+      status: 'ENROLLED',
+      salesDocumentId: null,
+      feePlanId: { not: null },
+    },
+    select: { id: true },
+    take: 500,
+  })
+
+  const billed: { enrollmentId: string; invoiceId: string; invoiceNumber: string }[] = []
+  const errors: { enrollmentId: string; message: string }[] = []
+
+  for (const enrollment of enrollments) {
+    try {
+      const result = await billEnrollment(ctx, enrollment.id)
+      billed.push({
+        enrollmentId: result.enrollmentId,
+        invoiceId: result.invoiceId,
+        invoiceNumber: result.invoiceNumber,
+      })
+    } catch (error) {
+      errors.push({
+        enrollmentId: enrollment.id,
+        message: error instanceof Error ? error.message : 'Billing failed',
+      })
+    }
+  }
+
+  return {
+    termId: term.id,
+    termName: term.name,
+    attempted: enrollments.length,
+    billedCount: billed.length,
+    billed,
+    errors,
+  }
+}
+
 export async function withdrawEnrollment(ctx: OrgContext, enrollmentId: string) {
   const enrollment = await db.studentEnrollment.findFirst({
     where: { id: enrollmentId, orgId: ctx.orgId },
@@ -388,4 +437,68 @@ export async function hubStats(ctx: OrgContext) {
     terms,
     activeEnrollments: enrollments.length,
   }
+}
+
+/** Fees outstanding grouped by academic term (open invoice balances). */
+export async function feesOutstandingByTerm(ctx: OrgContext) {
+  const enrollments = await db.studentEnrollment.findMany({
+    where: {
+      orgId: ctx.orgId,
+      salesDocumentId: { not: null },
+      salesDocument: { status: { in: ['OPEN', 'PARTIAL'] }, deletedAt: null },
+    },
+    select: {
+      term: { select: { id: true, name: true } },
+      salesDocument: { select: { id: true, total: true, number: true } },
+      customer: { select: { displayName: true } },
+    },
+    take: 2000,
+  })
+
+  const docIds = [
+    ...new Set(
+      enrollments
+        .map((row) => row.salesDocument?.id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ]
+  const balances = await salesService.outstandingBalances(db, docIds, ctx.orgId)
+
+  const byTerm = new Map<
+    string,
+    {
+      termId: string
+      termName: string
+      invoiceCount: number
+      outstanding: Decimal
+      enrollmentCount: number
+    }
+  >()
+
+  for (const row of enrollments) {
+    if (!row.salesDocument || !row.term) continue
+    const balance = balances.get(row.salesDocument.id) ?? new Decimal(0)
+    if (balance.lte(0)) continue
+    const existing = byTerm.get(row.term.id) ?? {
+      termId: row.term.id,
+      termName: row.term.name,
+      invoiceCount: 0,
+      outstanding: new Decimal(0),
+      enrollmentCount: 0,
+    }
+    existing.invoiceCount += 1
+    existing.enrollmentCount += 1
+    existing.outstanding = existing.outstanding.plus(balance)
+    byTerm.set(row.term.id, existing)
+  }
+
+  return [...byTerm.values()]
+    .map((row) => ({
+      termId: row.termId,
+      termName: row.termName,
+      invoiceCount: row.invoiceCount,
+      enrollmentCount: row.enrollmentCount,
+      outstanding: row.outstanding.toFixed(2),
+    }))
+    .sort((a, b) => a.termName.localeCompare(b.termName))
 }

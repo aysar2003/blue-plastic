@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: 'Accounting' }
  */
 export default async function AccountingHubPage() {
   const ctx = await requireOrgContext('account:read')
-  const apps = visibleHubApps(ACCOUNTING_HUB_APPS, ctx.permissions)
+  const apps = visibleHubApps(ACCOUNTING_HUB_APPS, ctx.permissions, ctx.features, 'accounting')
   const currency = ctx.organization.baseCurrency
   const now = today(ctx.organization.timeZone)
   const month = resolvePeriod('this-month', now, ctx.organization.fiscalYearStartMonth)

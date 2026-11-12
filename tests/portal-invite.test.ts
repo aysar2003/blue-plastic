@@ -112,6 +112,10 @@ live('portal invite dual-mode (live db)', () => {
         brandMark: true,
         logoStorageKey: true,
         updatedAt: true,
+        accessRestricted: true,
+        rentExpiresAt: true,
+        maxUsers: true,
+        rentNote: true,
       },
     })
     cleanup.orgId = organization.id
@@ -143,6 +147,7 @@ live('portal invite dual-mode (live db)', () => {
       permissions: permissionsFor('OWNER'),
       isSystemOwner: false,
       canConnect: false,
+      systemOwnerBreakGlass: false,
       portalCustomerId: null,
       features: { ...DEFAULT_FEATURE_FLAGS, enableCustomerPortal: true },
       organization: { ...orgFields, hasLogo: Boolean(logoStorageKey) },
