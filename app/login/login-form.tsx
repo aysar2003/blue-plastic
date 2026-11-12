@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useEffect, useState, useTransition } from 'react'
 
 import { Field, fieldProps } from '@/components/forms/field'
 import { FormError } from '@/components/forms/form-error'
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import {
   cancelTwoFactorAction,
   completeTwoFactorAction,
+  resendTwoFactorOtpAction,
   type DoorSignInState,
 } from './actions'
 
@@ -21,10 +22,19 @@ function twoFactorLabel(hint?: DoorSignInState['twoFactorHint']) {
   return 'Verification code'
 }
 
-function twoFactorHintText(hint?: DoorSignInState['twoFactorHint']) {
+function twoFactorHintText(
+  hint?: DoorSignInState['twoFactorHint'],
+  emailHint?: string,
+) {
   if (hint === 'totp') return 'Open your authenticator app and enter the 6-digit code.'
-  if (hint === 'otp') return 'We sent a 6-digit code to your email.'
-  return 'Enter the 6-digit code from your authenticator app or email.'
+  if (hint === 'otp') {
+    return emailHint
+      ? `We sent a 6-digit code to ${emailHint}.`
+      : 'We sent a 6-digit code to your email.'
+  }
+  return emailHint
+    ? `Enter the 6-digit code from your authenticator app or ${emailHint}.`
+    : 'Enter the 6-digit code from your authenticator app or email.'
 }
 
 export function LoginForm({
@@ -44,11 +54,20 @@ export function LoginForm({
   const [codeState, codeAction] = useActionState(completeTwoFactorAction, initialState)
   const [step, setStep] = useState<'password' | 'twoFactor'>('password')
   const [hint, setHint] = useState<DoorSignInState['twoFactorHint']>()
+  const [emailHint, setEmailHint] = useState<string | undefined>()
+  const [info, setInfo] = useState<string | undefined>()
+  const [resendError, setResendError] = useState<string | undefined>()
+  const [cooldown, setCooldown] = useState(0)
+  const [resending, startResend] = useTransition()
 
   useEffect(() => {
     if (passwordState.needsTwoFactor) {
       setStep('twoFactor')
       setHint(passwordState.twoFactorHint)
+      setEmailHint(passwordState.emailHint)
+      setInfo(undefined)
+      setResendError(undefined)
+      setCooldown(passwordState.resendAfterSeconds ?? 0)
     }
   }, [passwordState])
 
@@ -56,20 +75,55 @@ export function LoginForm({
     if (codeState.needsTwoFactor) {
       setStep('twoFactor')
       if (codeState.twoFactorHint) setHint(codeState.twoFactorHint)
+      if (codeState.emailHint) setEmailHint(codeState.emailHint)
     }
   }, [codeState])
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const id = window.setInterval(() => {
+      setCooldown((s) => (s <= 1 ? 0 : s - 1))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [cooldown])
 
   async function onCancel() {
     await cancelTwoFactorAction()
     setStep('password')
     setHint(undefined)
+    setEmailHint(undefined)
+    setInfo(undefined)
+    setResendError(undefined)
+    setCooldown(0)
   }
+
+  function onResend() {
+    if (cooldown > 0 || resending) return
+    startResend(async () => {
+      setResendError(undefined)
+      setInfo(undefined)
+      const result = await resendTwoFactorOtpAction()
+      if (result.error && !result.needsTwoFactor) {
+        setResendError(result.error)
+        setStep('password')
+        return
+      }
+      if (result.emailHint) setEmailHint(result.emailHint)
+      if (result.twoFactorHint) setHint(result.twoFactorHint)
+      if (result.resendAfterSeconds != null) setCooldown(result.resendAfterSeconds)
+      if (result.info) setInfo(result.info)
+      if (result.error) setResendError(result.error)
+    })
+  }
+
+  const canResendEmail = hint === 'otp' || hint === 'either'
 
   if (step === 'twoFactor') {
     return (
       <form action={codeAction} className="space-y-4">
-        <FormError message={codeState.error} />
-        <p className="text-sm text-muted-foreground">{twoFactorHintText(hint)}</p>
+        <FormError message={codeState.error ?? resendError} />
+        {info ? <p className="text-sm text-emerald-600 dark:text-emerald-400">{info}</p> : null}
+        <p className="text-sm text-muted-foreground">{twoFactorHintText(hint, emailHint)}</p>
 
         <Field name="code" label={twoFactorLabel(hint)} required error={codeState.fieldErrors?.code}>
           <Input
@@ -87,6 +141,22 @@ export function LoginForm({
         <SubmitButton className={`w-full ${labelClassName ?? ''}`} pendingLabel="Checking…">
           Continue
         </SubmitButton>
+
+        {canResendEmail ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={cooldown > 0 || resending}
+            onClick={onResend}
+          >
+            {resending
+              ? 'Sending…'
+              : cooldown > 0
+                ? `Resend code in ${cooldown}s`
+                : 'Resend code'}
+          </Button>
+        ) : null}
 
         <Button type="button" variant="ghost" className="w-full" onClick={() => void onCancel()}>
           Back

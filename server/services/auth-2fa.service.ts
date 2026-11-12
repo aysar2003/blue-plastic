@@ -13,7 +13,8 @@ import { verifyPassword } from '@/server/auth/password'
 import { sendAuthEmailOtp } from '@/server/services/platform-notify.service'
 
 const OTP_TTL_MS = 10 * 60 * 1000
-const RESEND_COOLDOWN_MS = 60 * 1000
+export const LOGIN_OTP_RESEND_COOLDOWN_MS = 60 * 1000
+const RESEND_COOLDOWN_MS = LOGIN_OTP_RESEND_COOLDOWN_MS
 const MAX_ATTEMPTS = 5
 
 export type TwoFactorStatus = {
@@ -78,7 +79,11 @@ async function createChallenge(userId: string, purpose: string, code: string) {
     select: { id: true, createdAt: true },
   })
   if (recent) {
-    throw precondition('Wait a minute before requesting another code.')
+    const waitSec = Math.max(
+      1,
+      Math.ceil((recent.createdAt.getTime() + RESEND_COOLDOWN_MS - Date.now()) / 1000),
+    )
+    throw precondition(`Wait ${waitSec}s before requesting another code.`)
   }
 
   return db.authChallenge.create({
@@ -89,6 +94,25 @@ async function createChallenge(userId: string, purpose: string, code: string) {
       expiresAt: new Date(Date.now() + OTP_TTL_MS),
     },
   })
+}
+
+/** Seconds until a new LOGIN_OTP may be issued (0 = can send now). */
+export async function loginOtpResendWaitSeconds(userId: string): Promise<number> {
+  const recent = await db.authChallenge.findFirst({
+    where: {
+      userId,
+      purpose: 'LOGIN_OTP',
+      consumedAt: null,
+      createdAt: { gt: new Date(Date.now() - RESEND_COOLDOWN_MS) },
+    },
+    select: { createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  })
+  if (!recent) return 0
+  return Math.max(
+    0,
+    Math.ceil((recent.createdAt.getTime() + RESEND_COOLDOWN_MS - Date.now()) / 1000),
+  )
 }
 
 export async function beginLoginOtp(userId: string): Promise<{ challengeId: string }> {
