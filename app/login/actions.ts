@@ -13,6 +13,9 @@ import {
 } from '@/lib/login-ticket'
 import { WRONG_DOOR } from '@/lib/login-paths'
 import { signInSchema, twoFactorCodeSchema } from '@/lib/validation/auth'
+import { issueLoginTicket } from '@/server/auth/login-ticket-store'
+import { verifyCredentials, type VerifiedAudience } from '@/server/auth/verify-credentials'
+import { db } from '@/server/db'
 import {
   beginLoginOtp,
   LOGIN_OTP_RESEND_COOLDOWN_MS,
@@ -28,8 +31,18 @@ function maskEmail(email: string): string {
   const head = local.slice(0, 1)
   return `${head}***@${domain}`
 }
-import { issueLoginTicket } from '@/server/auth/login-ticket-store'
-import { verifyCredentials, type VerifiedAudience } from '@/server/auth/verify-credentials'
+
+function hintFromFlags(flags: {
+  totpEnabledAt: Date | null
+  otp2faEnabledAt: Date | null
+  isSystemOwner: boolean
+} | null): DoorSignInState['twoFactorHint'] {
+  const otpOn = Boolean(flags?.otp2faEnabledAt) || Boolean(flags?.isSystemOwner)
+  const totpOn = Boolean(flags?.totpEnabledAt)
+  if (totpOn && otpOn) return 'either'
+  if (totpOn) return 'totp'
+  return 'otp'
+}
 
 export type DoorSignInState = {
   error?: string
@@ -178,6 +191,12 @@ export async function completeTwoFactorAction(
     return { error: 'Sign-in expired. Enter your email or mobile and password again.' }
   }
 
+  const userFlags = await db.user.findUnique({
+    where: { id: preauth.userId },
+    select: { totpEnabledAt: true, otp2faEnabledAt: true, isSystemOwner: true },
+  })
+  const twoFactorHint = hintFromFlags(userFlags)
+
   try {
     await verifyLoginSecondFactor({
       userId: preauth.userId,
@@ -186,7 +205,13 @@ export async function completeTwoFactorAction(
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'That code is not correct.'
-    return { needsTwoFactor: true, error: message, twoFactorHint: 'either' }
+    return {
+      needsTwoFactor: true,
+      error: message,
+      twoFactorHint,
+      emailHint: twoFactorHint === 'totp' ? undefined : maskEmail(preauth.email),
+      resendAfterSeconds: await loginOtpResendWaitSeconds(preauth.userId),
+    }
   }
 
   const ticket = await issueLoginTicket({
