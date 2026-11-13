@@ -39,21 +39,29 @@ export function SystemAccountRow({
         <p className="text-sm font-medium">{binding.role.label}</p>
         <p className="mt-0.5 text-sm text-muted-foreground">{binding.role.used}</p>
         {binding.account ? (
-          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-            <AccountTypeIcon type={binding.account.type} size="sm" />
-            <span>
-              Currently <span className="tabular">{binding.account.code}</span> {binding.account.name}
-              {hasHistory ? (
-                <>
-                  {' · '}
-                  <span className="tabular">{binding.entries}</span>{' '}
-                  {binding.entries === 1 ? 'entry' : 'entries'} posted
-                </>
-              ) : (
-                ' · nothing posted yet'
-              )}
-            </span>
-          </p>
+          <>
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <AccountTypeIcon type={binding.account.type} size="sm" />
+              <span>
+                Currently <span className="tabular">{binding.account.code}</span> {binding.account.name}
+                {hasHistory ? (
+                  <>
+                    {' · '}
+                    <span className="tabular">{binding.entries}</span>{' '}
+                    {binding.entries === 1 ? 'entry' : 'entries'} posted
+                  </>
+                ) : (
+                  ' · nothing posted yet'
+                )}
+              </span>
+            </p>
+            {binding.account.isHeading ? (
+              <p className="mt-1 text-xs text-destructive">
+                This account has sub-accounts, so nothing can post here. Pick a leaf account below and
+                save — until then inventory sales will fail with a grouping-heading error.
+              </p>
+            ) : null}
+          </>
         ) : (
           <p className="mt-1 text-xs text-destructive">
             Not set. The system cannot post anything that needs this role.

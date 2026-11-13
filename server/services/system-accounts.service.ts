@@ -166,6 +166,8 @@ export type SystemAccountBinding = {
     name: string
     type: AccountType
     isActive: boolean
+    /** True when sub-accounts were nested under this binding — nothing can post here. */
+    isHeading: boolean
   } | null
   /** Postings already sitting in the bound account. */
   entries: number
@@ -207,6 +209,7 @@ export async function list(ctx: OrgContext): Promise<SystemAccountBinding[]> {
             name: account.name,
             type: account.type,
             isActive: account.isActive,
+            isHeading: account._count.children > 0,
           }
         : null,
       entries: account?._count.journalLines ?? 0,

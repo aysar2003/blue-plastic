@@ -464,7 +464,9 @@ async function assertAccountsPostable(tx: Tx, ctx: OrgContext, lines: RoundedLin
     }
     if (account._count.children > 0) {
       throw validation(
-        `Account ${account.code} ${account.name} is a grouping heading. Post to one of its sub-accounts.`,
+        account.systemKey
+          ? `Account ${account.code} ${account.name} is a grouping heading, but it is still bound as a system account (${account.systemKey.replaceAll('_', ' ').toLowerCase()}). Open Settings → Default accounts and rebind that role to one of its sub-accounts (or create a detail account such as 5010 and bind there).`
+          : `Account ${account.code} ${account.name} is a grouping heading. Post to one of its sub-accounts.`,
       )
     }
   }
