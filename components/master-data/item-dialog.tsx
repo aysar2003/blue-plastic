@@ -211,13 +211,22 @@ export function ItemDialog({
     () => accountOptions(accounts, { prefer: ['OPERATING_EXPENSE', 'OTHER_EXPENSE'], preferTypes: ['EXPENSE'] }),
     [accounts],
   )
-  const cogsSystem = useMemo(
+  const cogs = useMemo(
     () =>
-      accounts.find((account) => account.systemKey === 'COGS') ??
-      accounts.find((account) => account.subtype === 'COST_OF_GOODS_SOLD') ??
-      null,
+      accountOptions(accounts, {
+        prefer: ['COST_OF_GOODS_SOLD'],
+        preferTypes: ['COGS'],
+      }),
     [accounts],
   )
+  const defaultCogsAccountId = useMemo(() => {
+    const stock = item ? isStockTracked(item.type ?? 'INVENTORY') : true
+    const mapped = stock ? item?.cogsAccountId : (item?.expenseAccountId ?? item?.cogsAccountId)
+    if (mapped && accounts.some((account) => account.id === mapped)) return mapped
+    const systemLeaf = accounts.find((account) => account.systemKey === 'COGS')
+    if (systemLeaf) return systemLeaf.id
+    return accounts.find((account) => account.type === 'COGS')?.id ?? ''
+  }, [accounts, item])
   const inventory = useMemo(
     () => accountOptions(accounts, { prefer: ['INVENTORY', 'OTHER_CURRENT_ASSET'], preferTypes: ['ASSET'] }),
     [accounts],
@@ -235,6 +244,7 @@ export function ItemDialog({
 
   const [incomeAccountId, setIncomeAccountId] = useState(item?.incomeAccountId ?? '')
   const [expenseAccountId, setExpenseAccountId] = useState(item?.expenseAccountId ?? '')
+  const [cogsAccountId, setCogsAccountId] = useState(defaultCogsAccountId)
   const [depositAccountId, setDepositAccountId] = useState(
     item?.depositAccountId ?? undeposited?.id ?? '',
   )
@@ -895,26 +905,24 @@ export function ItemDialog({
                     label="Cost of goods sold"
                     hint={
                       stock
-                        ? 'A sale posts this item’s average cost here, in the same journal as the sales price.'
-                        : 'Buying this product posts the cost here. It is not an expense.'
+                        ? 'A sale posts this item’s average cost here. Main/heading accounts are for grouping only — pick a sub-account.'
+                        : 'Buying this product posts the cost here. Main/heading accounts are for grouping only — pick a sub-account.'
                     }
+                    required
                     error={e?.cogsAccountId ?? e?.expenseAccountId}
                   >
-                    <input
-                      type="hidden"
-                      name={stock ? 'cogsAccountId' : 'expenseAccountId'}
-                      value={cogsSystem?.id ?? ''}
-                    />
-                    <Input
+                    <AccountPicker
                       id={stock ? 'cogsAccountId' : 'expenseAccountId'}
-                      readOnly
-                      tabIndex={-1}
-                      value={
-                        cogsSystem
-                          ? `${cogsSystem.code} — ${cogsSystem.name}`
-                          : 'Cost of Goods Sold is not on the chart'
-                      }
-                      className="text-muted-foreground"
+                      name={stock ? 'cogsAccountId' : 'expenseAccountId'}
+                      options={cogs}
+                      value={(stock ? cogsAccountId : expenseAccountId || cogsAccountId) || null}
+                      onChange={(next) => {
+                        const id = next ?? ''
+                        setCogsAccountId(id)
+                        if (!stock) setExpenseAccountId(id)
+                      }}
+                      required
+                      error={e?.cogsAccountId ?? e?.expenseAccountId}
                     />
                   </Field>
                 </div>

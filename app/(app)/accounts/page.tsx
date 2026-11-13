@@ -43,7 +43,7 @@ export default async function AccountsPage({
 
   // Load the whole chart, then filter in memory so a matching sub-account still
   // brings its parent (and children) — hierarchy never drops mid-tree.
-  const accounts = await accountService.list(ctx, { includeInactive: showArchived })
+  const accounts = await accountService.list(ctx, { includeInactive: showArchived, originalChart: true })
 
   const canCreate = ctx.permissions.has('account:create')
   const canEdit = ctx.permissions.has('account:update')

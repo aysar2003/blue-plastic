@@ -13,7 +13,11 @@ import { posPostedAccounts } from '@/lib/pos-register-posting'
 import { byType as salesByType } from '@/lib/sales-types'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { InvoiceFromSourceInput, SalesDocumentInput } from '@/lib/validation/sales'
-import { seedChartOfAccounts, systemAccountId } from '@/server/accounting/chart-of-accounts'
+import {
+  resolvePostableCogsAccountId,
+  seedChartOfAccounts,
+  systemAccountId,
+} from '@/server/accounting/chart-of-accounts'
 import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
 import { positionOf, recordMovement, restoreMovementsFor, reverseMovementsFor } from '@/server/accounting/inventory'
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
@@ -1511,6 +1515,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
                       name: true,
                       type: true,
                       inventoryAccountId: true,
+                      cogsAccountId: true,
                     },
                   },
                 },
@@ -1671,10 +1676,9 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
   const movesStockIn = document.type === 'CREDIT_MEMO'
 
   if (movesStockOut || movesStockIn) {
-    // Every product sale uses the system Cost of Goods Sold account, at the
-    // stock ledger's own cost. A per-item expense account would bury the margin
-    // in operating expenses.
-    const systemCogsAccountId = await systemAccountId(tx, ctx.orgId, 'COGS')
+    // Cost posts to each item's Cost of Goods Sold account (QuickBooks-style).
+    // Headings resolve to a single leaf when unambiguous; otherwise the cashier
+    // must map the product to a postable sub-account.
     const cogs = new Map<string, { cogsAccountId: string; inventoryAccountId: string; amount: Decimal }>()
     const storeAccounts = await storeService.accountsFor(
       tx,
@@ -1699,6 +1703,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
       itemName: string
       itemType: string
       inventoryAccountId: string
+      cogsAccountId: string | null
       quantity: Decimal
       storeId: string | null
       lotNumber: string | null
@@ -1719,6 +1724,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
           itemName: item.name,
           itemType: item.type,
           inventoryAccountId: item.inventoryAccountId,
+          cogsAccountId: item.cogsAccountId,
           quantity: lineQty,
           storeId: line.storeId,
           lotNumber: line.lotNumber ?? null,
@@ -1739,6 +1745,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
           itemName: member.name,
           itemType: member.type,
           inventoryAccountId: member.inventoryAccountId,
+          cogsAccountId: member.cogsAccountId,
           quantity: lineQty.times(new Decimal(row.quantity.toString())),
           storeId: line.storeId,
           // Kit members inherit the parent line's lot/serial when present.
@@ -1796,13 +1803,14 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
         })
       }
 
-      const key = `${systemCogsAccountId}|${inventoryAccountId}`
+      const cogsAccountId = await resolvePostableCogsAccountId(tx, ctx.orgId, issue.cogsAccountId)
+      const key = `${cogsAccountId}|${inventoryAccountId}`
       const existing = cogs.get(key)
       const amount = movement.value.abs()
       if (existing) existing.amount = existing.amount.plus(amount)
       else
         cogs.set(key, {
-          cogsAccountId: systemCogsAccountId,
+          cogsAccountId,
           inventoryAccountId,
           amount,
         })

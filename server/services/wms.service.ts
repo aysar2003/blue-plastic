@@ -20,6 +20,7 @@ import {
   canStartPick,
   type PickStatus,
 } from '@/lib/erp/wms-pick'
+import { resolvePostableCogsAccountId } from '@/server/accounting/chart-of-accounts'
 import { positionOf, recordMovement } from '@/server/accounting/inventory'
 import { postJournal, type DraftLine } from '@/server/accounting/posting'
 import type { OrgContext } from '@/server/auth/context'
@@ -551,10 +552,11 @@ export async function completePickInTx(tx: Tx, ctx: OrgContext, id: string) {
     }
   }
 
-  if (!row.item.inventoryAccountId || !row.item.cogsAccountId) {
-    throw precondition(`"${row.item.name}" needs inventory and COGS accounts to pick.`)
+  if (!row.item.inventoryAccountId) {
+    throw precondition(`"${row.item.name}" needs an inventory account to pick.`)
   }
 
+  const cogsAccountId = await resolvePostableCogsAccountId(tx, ctx.orgId, row.item.cogsAccountId)
   const date = today(ctx.organization.timeZone)
   const storeAccounts = await storeService.accountsFor(tx, ctx.orgId, [row.storeId])
   const inventoryAccountId = storeAccounts.get(row.storeId) || row.item.inventoryAccountId
@@ -585,7 +587,7 @@ export async function completePickInTx(tx: Tx, ctx: OrgContext, id: string) {
   if (absValue.greaterThan(ZERO)) {
     const lines: DraftLine[] = [
       {
-        accountId: row.item.cogsAccountId,
+        accountId: cogsAccountId,
         debit: absValue,
         description: `Pick · ${row.item.name}`,
       },

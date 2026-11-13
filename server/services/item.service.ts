@@ -11,7 +11,7 @@ import {
 import { Decimal, parseMoneyInput, ZERO } from '@/lib/money'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { ItemInput } from '@/lib/validation/master-data'
-import { systemAccountId } from '@/server/accounting/chart-of-accounts'
+import { resolvePostableCogsAccountId, systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { positionOf, positionsOf, recordMovement } from '@/server/accounting/inventory'
 import { deletionStamp } from '@/server/accounting/deletion'
 import { postJournal } from '@/server/accounting/posting'
@@ -913,9 +913,9 @@ export async function deleteCategory(ctx: OrgContext, id: string) {
 }
 
 /**
- * Products and tracked stock do not pick an expense account.
- * Their cost posts to the system Cost of Goods Sold account — sales price on
- * one side, that account's cost on the other.
+ * Products and tracked stock map to a postable Cost of Goods Sold account
+ * (QuickBooks-style). A main/heading account is never stored — only a leaf.
+ * When the form leaves COGS blank, the system default (or its single leaf) is used.
  */
 async function assignProductCostAccount(ctx: OrgContext, input: ItemInput): Promise<ItemInput> {
   if (skipsIncomeAccount(input.type)) {
@@ -938,23 +938,29 @@ async function assignProductCostAccount(ctx: OrgContext, input: ItemInput): Prom
     return { ...input, inventoryAccountId: null, cogsAccountId: null, expenseAccountId: null }
   }
 
-  const account = await db.ledgerAccount.findUnique({
-    where: { orgId_systemKey: { orgId: ctx.orgId, systemKey: 'COGS' } },
-    select: { id: true },
-  })
-  if (!account) {
-    throw validation('There is no Cost of Goods Sold account on the chart, so a product cannot be saved.', {
-      cogsAccountId: ['Set up the Cost of Goods Sold account'],
-    })
+  const preferred = isStockTracked(input.type)
+    ? (input.cogsAccountId ?? null)
+    : (input.expenseAccountId ?? input.cogsAccountId ?? null)
+
+  let cogsLeafId: string
+  try {
+    cogsLeafId = await resolvePostableCogsAccountId(db, ctx.orgId, preferred)
+  } catch (error) {
+    if (!preferred) {
+      throw validation('There is no Cost of Goods Sold account on the chart, so a product cannot be saved.', {
+        cogsAccountId: ['Set up a postable Cost of Goods Sold account'],
+      })
+    }
+    throw error
   }
 
   if (isStockTracked(input.type)) {
-    return { ...input, cogsAccountId: account.id, expenseAccountId: null }
+    return { ...input, cogsAccountId: cogsLeafId, expenseAccountId: null }
   }
 
   return {
     ...input,
-    expenseAccountId: account.id,
+    expenseAccountId: cogsLeafId,
     cogsAccountId: null,
     inventoryAccountId: null,
   }
@@ -1161,7 +1167,16 @@ async function assertAccountsSuitable(ctx: OrgContext, input: ItemInput) {
 
   const accounts = await db.ledgerAccount.findMany({
     where: { id: { in: ids }, orgId: ctx.orgId },
-    select: { id: true, name: true, type: true, subtype: true, systemKey: true, isActive: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      type: true,
+      subtype: true,
+      systemKey: true,
+      isActive: true,
+      _count: { select: { children: true } },
+    },
   })
   const byId = new Map(accounts.map((a) => [a.id, a]))
 
@@ -1170,6 +1185,18 @@ async function assertAccountsSuitable(ctx: OrgContext, input: ItemInput) {
     if (!account) throw notFound('Account')
     if (!account.isActive) {
       throw validation(`"${account.name}" is archived and cannot be used for posting.`)
+    }
+    if (account._count.children > 0) {
+      throw validation(
+        `Account ${account.code} ${account.name} is a grouping heading. Post to one of its sub-accounts.`,
+        {
+          ...(id === input.incomeAccountId ? { incomeAccountId: ['Choose a sub-account'] } : {}),
+          ...(id === input.expenseAccountId ? { expenseAccountId: ['Choose a sub-account'] } : {}),
+          ...(id === input.inventoryAccountId ? { inventoryAccountId: ['Choose a sub-account'] } : {}),
+          ...(id === input.cogsAccountId ? { cogsAccountId: ['Choose a Cost of Goods Sold sub-account'] } : {}),
+          ...(id === input.depositAccountId ? { depositAccountId: ['Choose a sub-account'] } : {}),
+        },
+      )
     }
   }
 

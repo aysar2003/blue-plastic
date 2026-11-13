@@ -384,7 +384,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
       }
 
       case 'accounts': {
-        const accounts = await accountService.list(ctx, { q, includeInactive: archived })
+        const accounts = await accountService.list(ctx, { q, includeInactive: archived, originalChart: true })
         const columns: ListXlsxColumn[] = [
           { header: 'Number', width: 12, kind: 'text' },
           { header: 'Name', width: 28, kind: 'text' },

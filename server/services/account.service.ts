@@ -14,7 +14,11 @@ import { linkColonParents, planColonHierarchyRepairs } from '@/lib/chart-tree'
 import { rollupParentBalances } from '@/lib/pos-till-ledger'
 import type { AccountCreateInput, AccountUpdateInput } from '@/lib/validation/accounting'
 import { balancesAsOf } from '@/server/accounting/balances'
-import { seedChartOfAccounts, systemAccountId } from '@/server/accounting/chart-of-accounts'
+import {
+  listedOnOriginalChart,
+  seedChartOfAccounts,
+  systemAccountId,
+} from '@/server/accounting/chart-of-accounts'
 import { OFFICE_NAME, seedDefaultOffice } from '@/server/accounting/default-office'
 import { seedPaymentTerms } from '@/server/services/tax.service'
 import { postJournal } from '@/server/accounting/posting'
@@ -54,7 +58,7 @@ export type AccountRow = Prisma.LedgerAccountGetPayload<{ select: typeof ACCOUNT
  */
 export async function list(
   ctx: OrgContext,
-  options: { includeInactive?: boolean; q?: string } = {},
+  options: { includeInactive?: boolean; q?: string; originalChart?: boolean } = {},
 ): Promise<AccountRow[]> {
   const accounts = await db.ledgerAccount.findMany({
     where: {
@@ -69,7 +73,7 @@ export async function list(
           }
         : {}),
     },
-    select: ACCOUNT_SELECT,
+    select: { ...ACCOUNT_SELECT, createdAt: true },
     orderBy: [{ type: 'asc' }, { code: 'asc' }],
   })
 
@@ -78,13 +82,14 @@ export async function list(
   // Imported QBO charts often use "Parent:Child" names without parentId. Persist
   // those links (and short child names) once so the tree stays clear forever.
   const linked = await persistColonHierarchy(ctx.orgId, chartAccounts)
+  const visible = options.originalChart ? linked.filter((account) => listedOnOriginalChart(account)) : linked
   const childCount = new Map<string, number>()
-  for (const account of linked) {
+  for (const account of visible) {
     if (account.parentId) childCount.set(account.parentId, (childCount.get(account.parentId) ?? 0) + 1)
   }
 
-  const byId = new Map(linked.map((account) => [account.id, account]))
-  const depthOf = (account: (typeof linked)[number]): number => {
+  const byId = new Map(visible.map((account) => [account.id, account]))
+  const depthOf = (account: (typeof visible)[number]): number => {
     let depth = 0
     let current = account.parentId
     while (current && depth < 8) {
@@ -94,13 +99,13 @@ export async function list(
     return depth
   }
 
-  const withBalances = linked.map((account) => ({
+  const withBalances = visible.map((account) => ({
     ...account,
     balance: new Decimal(balances.get(account.id)?.natural ?? 0),
   }))
   const rolled = rollupParentBalances(withBalances)
 
-  return withBalances.map((account) => ({
+  return withBalances.map(({ createdAt: _createdAt, ...account }) => ({
     ...account,
     balance: toMoneyString(rolled.get(account.id) ?? account.balance ?? ZERO, 2),
     hasChildren: (childCount.get(account.id) ?? 0) > 0,

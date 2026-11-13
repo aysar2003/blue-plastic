@@ -22,7 +22,7 @@ import {
   type PurchaseDocumentInput,
   type ReceiveOrderInput,
 } from '@/lib/validation/purchases'
-import { systemAccountId } from '@/server/accounting/chart-of-accounts'
+import { resolvePostableCogsAccountId, systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { CLEAR_DELETION, restoreSoftDeletedDocument, softDeleteDocument } from '@/server/accounting/deletion'
 import { postJournal, reverseJournal } from '@/server/accounting/posting'
 import { priceDocument, type DraftSalesLine } from '@/server/accounting/sales-pricing'
@@ -1239,7 +1239,9 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
   )
 
   const needsCogs = document.lines.some((line) => line.item?.type === 'NON_INVENTORY')
-  const systemCogsAccountId = needsCogs ? await systemAccountId(tx, ctx.orgId, 'COGS') : null
+  const systemCogsAccountId = needsCogs
+    ? await resolvePostableCogsAccountId(tx, ctx.orgId, null)
+    : null
 
   const priced = priceDocument(
     document.lines.map((line) => {
@@ -2726,7 +2728,9 @@ async function resolveLines(
 
   const byId = new Map(items.map((item) => [item.id, item]))
   const sellsGoods = items.some((item) => item.type === 'NON_INVENTORY')
-  const systemCogsAccountId = sellsGoods ? await systemAccountId(tx, ctx.orgId, 'COGS') : null
+  const systemCogsAccountId = sellsGoods
+    ? await resolvePostableCogsAccountId(tx, ctx.orgId, null)
+    : null
   const storeIds = [...new Set(lines.map((line) => line.storeId).filter((id): id is string => Boolean(id)))]
   const knownStores = storeIds.length
     ? new Set(
