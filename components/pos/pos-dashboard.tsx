@@ -157,22 +157,16 @@ export function PosDashboard({
                           setPinError(null)
                           setContinuingId(register.id)
                         }}
-                        className={cn(
-                          buttonVariants({ size: 'sm' }),
-                          'text-white shadow-sm hover:opacity-95',
-                        )}
-                        style={{ background: ODOO.purple }}
+                        className={cn(buttonVariants({ size: 'sm' }), 'shadow-sm hover:opacity-95')}
+                        style={{ background: ODOO.cta, color: '#fff' }}
                       >
                         Continue Selling
                       </button>
                     ) : (
                       <Link
                         href={`/pos/${register.id}`}
-                        className={cn(
-                          buttonVariants({ size: 'sm' }),
-                          'text-white shadow-sm hover:opacity-95',
-                        )}
-                        style={{ background: ODOO.purple }}
+                        className={cn(buttonVariants({ size: 'sm' }), 'shadow-sm hover:opacity-95')}
+                        style={{ background: ODOO.cta, color: '#fff' }}
                       >
                         Continue Selling
                       </Link>
@@ -190,11 +184,8 @@ export function PosDashboard({
                       setPinError(null)
                       setOpeningId(register.id)
                     }}
-                    className={cn(
-                      buttonVariants({ size: 'sm' }),
-                      'text-white shadow-sm hover:opacity-95',
-                    )}
-                    style={{ background: ODOO.purple }}
+                    className={cn(buttonVariants({ size: 'sm' }), 'shadow-sm hover:opacity-95')}
+                    style={{ background: ODOO.cta, color: '#fff' }}
                   >
                     Open Register
                   </button>

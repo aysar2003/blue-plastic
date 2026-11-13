@@ -68,8 +68,8 @@ export function CashierPinPrompt({
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: ODOO.purple }}
+          className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
+          style={{ background: ODOO.cta, color: '#fff' }}
         >
           {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
           {submitLabel}

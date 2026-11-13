@@ -1627,8 +1627,8 @@ export function PosTerminal(props: {
               <div className="flex flex-wrap justify-center gap-2">
                 <Link
                   href="/items"
-                  className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
-                  style={{ background: ODOO.purple }}
+                  className="rounded-lg px-4 py-2 text-sm font-semibold"
+                  style={{ background: ODOO.cta, color: '#fff' }}
                 >
                   Create Product
                 </Link>
@@ -1988,8 +1988,8 @@ export function PosTerminal(props: {
               type="button"
               disabled={pending}
               onClick={submitCashMove}
-              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white"
-              style={{ background: ODOO.purple }}
+              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold"
+              style={{ background: ODOO.cta, color: '#fff' }}
             >
               {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
               Confirm
@@ -2045,7 +2045,7 @@ export function PosTerminal(props: {
                 <button
                   type="button"
                   className="w-full rounded-lg px-3 py-2 text-left text-sm hover:opacity-90"
-                  style={{ background: customerId === customer.id ? `${ODOO.purple}44` : chip }}
+                  style={{ background: customerId === customer.id ? `${ODOO.cta}44` : chip }}
                   onClick={() => {
                     setCustomerId(customer.id)
                     setCustomerQuery('')
@@ -2087,8 +2087,8 @@ export function PosTerminal(props: {
           </label>
           <button
             type="button"
-            className="mt-3 rounded-lg px-4 py-2 text-sm font-semibold text-white"
-            style={{ background: ODOO.purple }}
+            className="mt-3 rounded-lg px-4 py-2 text-sm font-semibold"
+            style={{ background: ODOO.cta, color: '#fff' }}
             onClick={() => setMenu(null)}
           >
             Done
@@ -2174,8 +2174,8 @@ export function PosTerminal(props: {
               type="button"
               disabled={pending}
               onClick={saveQuotation}
-              className="mb-4 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-              style={{ background: ODOO.purple }}
+              className="mb-4 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+              style={{ background: ODOO.cta, color: '#fff' }}
             >
               {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
               Save current cart as quotation
@@ -2316,8 +2316,8 @@ export function PosTerminal(props: {
                   type="button"
                   disabled={pending}
                   onClick={submitRefund}
-                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white"
-                  style={{ background: ODOO.purple }}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold"
+                  style={{ background: ODOO.cta, color: '#fff' }}
                 >
                   {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
                   Validate refund

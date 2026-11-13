@@ -128,8 +128,8 @@ export function PosPaymentForm(props: {
           type="button"
           onClick={props.onValidate}
           disabled={props.pending || !props.canValidate || Boolean(props.error)}
-          className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
-          style={{ background: ODOO.purple }}
+          className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-40"
+          style={{ background: ODOO.cta, color: '#fff' }}
         >
           {props.pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
           Validate

@@ -98,8 +98,8 @@ export function SessionOpenForm({
           type="button"
           disabled={pending}
           onClick={submit}
-          className="mt-4 text-white hover:opacity-95"
-          style={{ background: ODOO.purple }}
+          className="mt-4 hover:opacity-95"
+          style={{ background: ODOO.cta, color: '#fff' }}
         >
           {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
           Open register

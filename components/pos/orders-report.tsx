@@ -198,8 +198,8 @@ export function PosOrdersReport({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="submit"
-            className="inline-flex h-10 items-center rounded-md px-4 text-sm font-semibold text-white"
-            style={{ background: ODOO.purple }}
+            className="inline-flex h-10 items-center rounded-md px-4 text-sm font-semibold"
+            style={{ background: ODOO.cta, color: '#fff' }}
           >
             Apply
           </button>

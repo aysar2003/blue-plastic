@@ -205,8 +205,8 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
               <button
                 type="submit"
                 disabled={methodPending}
-                className="rounded-md px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:opacity-50"
-                style={{ background: ODOO.purple }}
+                className="rounded-md px-4 py-2 text-sm font-semibold sm:col-span-2 disabled:opacity-50"
+                style={{ background: ODOO.cta, color: '#fff' }}
               >
                 {methodPending ? 'Saving…' : 'Save changes'}
               </button>
@@ -270,8 +270,8 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
             <button
               type="submit"
               disabled={methodPending}
-              className="rounded-md px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:opacity-50"
-              style={{ background: ODOO.purple }}
+              className="rounded-md px-4 py-2 text-sm font-semibold sm:col-span-2 disabled:opacity-50"
+              style={{ background: ODOO.cta, color: '#fff' }}
             >
               Add payment method
             </button>
