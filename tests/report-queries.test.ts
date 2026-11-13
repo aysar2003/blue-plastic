@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest'
 
-import { balancesAsOf, generalLedger, trialBalance } from '@/server/accounting/balances'
+import { balancesAsOf, generalLedger, generalLedgerBook, trialBalance } from '@/server/accounting/balances'
 import { db } from '@/server/db'
 
 /**
@@ -63,6 +63,32 @@ suite('report SQL executes against the real database', () => {
       )
     }
   })
+
+  it('builds every account ledger in one pass and matches the account register', async () => {
+    const org = await db.organization.findFirst({ select: { id: true } })
+    if (!org) return
+
+    const range = { from: '2026-01-01' as const, to: '2026-11-13' as const }
+    const started = Date.now()
+    const book = await generalLedgerBook(org.id, range)
+    const elapsed = Date.now() - started
+
+    expect(Array.isArray(book)).toBe(true)
+    // Two queries, not one round trip per account. A minute here means the N+1 is back.
+    expect(elapsed).toBeLessThan(20_000)
+
+    const sample = book.filter((section) => section.entries.length > 0).slice(0, 3)
+    for (const section of sample) {
+      const ledger = await generalLedger(org.id, section.id, range, { limit: 500 })
+      expect(ledger.opening.toString()).toBe(section.opening.toString())
+      expect(ledger.closing.toString()).toBe(section.closing.toString())
+      expect(ledger.entries.map((entry) => entry.lineId)).toEqual(section.entries.map((entry) => entry.lineId))
+      if (ledger.entries.length > 0) {
+        expect(ledger.entries[0].balance.toString()).toBe(section.entries[0].balance.toString())
+        expect(ledger.entries.at(-1)?.balance.toString()).toBe(section.entries.at(-1)?.balance.toString())
+      }
+    }
+  }, 60_000)
 
   it('returns an empty result rather than throwing for an unknown account', async () => {
     const org = await db.organization.findFirst({ select: { id: true } })

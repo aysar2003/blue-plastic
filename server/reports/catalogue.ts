@@ -10,7 +10,7 @@ import { Decimal, toMoneyString, ZERO } from '@/lib/money'
 import { formatQty } from '@/lib/quantity'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
-import { generalLedger } from '@/server/accounting/balances'
+import { generalLedgerBook } from '@/server/accounting/balances'
 import { resolveSources, sourceFor } from '@/server/services/journal-sources'
 import { valuation } from '@/server/accounting/inventory'
 import type { Tx } from '@/server/db'
@@ -1242,19 +1242,12 @@ const generalLedgerReport: TableReport = {
   group: 'For my accountant',
   mode: 'range',
   async build({ ctx, range }) {
-    const accounts = await db.ledgerAccount.findMany({
-      where: { orgId: ctx.orgId },
-      select: { id: true, code: true, name: true },
-      orderBy: { code: 'asc' },
-    })
+    const book = await generalLedgerBook(ctx.orgId, range, { limit: 500 })
 
     const rows: ReportRow[] = []
     const pending: { row: ReportRow; sourceType: string; sourceId: string | null; journalId: string }[] = []
 
-    for (const account of accounts) {
-      const ledger = await generalLedger(ctx.orgId, account.id, range, { limit: 500 })
-      if (ledger.entries.length === 0 && ledger.opening.isZero()) continue
-
+    for (const account of book) {
       rows.push({
         emphasis: true,
         href: `/reports/transaction-detail?account=${account.id}&period=custom&from=${range.from}&to=${range.to}`,
@@ -1268,11 +1261,11 @@ const generalLedgerReport: TableReport = {
           description: 'Opening balance',
           debit: null,
           credit: null,
-          balance: money(ledger.opening),
+          balance: money(account.opening),
         },
       })
 
-      for (const entry of ledger.entries) {
+      for (const entry of account.entries) {
         const sourceLabel = JOURNAL_SOURCE_LABELS[entry.sourceType as keyof typeof JOURNAL_SOURCE_LABELS] ?? entry.sourceType
         const parts = postedLineParts({
           sourceLabel,
@@ -1316,7 +1309,7 @@ const generalLedgerReport: TableReport = {
           description: `Closing balance — ${account.code} ${account.name}`,
           debit: null,
           credit: null,
-          balance: money(ledger.closing),
+          balance: money(account.closing),
         },
       })
     }
