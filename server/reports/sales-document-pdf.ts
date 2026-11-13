@@ -382,10 +382,12 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   }
   if (!input.hideAccountBalance) {
     if (input.amountApplied && Number(input.amountApplied) > 0) {
-      totals.push(merchantPdfTotalBand('Paid amount', money(input.amountApplied), accent))
+      totals.push(
+        merchantPdfTotalBand('Amount paid', `−${money(input.amountApplied)}`, accent),
+      )
     }
     if (input.balance != null && input.balance !== '') {
-      totals.push(merchantPdfTotalBand('Balance', money(input.balance), accent))
+      totals.push(merchantPdfTotalBand('Balance due', money(input.balance), accent))
     }
   }
   // Keep Subtotal → Grand total / Balance on one page (no orphaned last band).
@@ -863,6 +865,7 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   })
 
   rows.push({ size: 6, height: 10, runs: [] })
+  // Standard stack: Subtotal → (tax) → Total → Amount paid → Balance due.
   rows.push({
     size: 9,
     height: 13,
@@ -872,24 +875,17 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
       { text: money(input.subtotal), x: TRADE_COL.amount, align: 'right', color: ink },
     ],
   })
-  const middleLabel = purchase
-    ? input.documentType === 'PURCHASE_ORDER'
-      ? 'Bill payment'
-      : 'Taxes'
-    : 'Payment'
-  const middleValue =
-    purchase && input.documentType !== 'PURCHASE_ORDER'
-      ? money(input.taxTotal)
-      : money(input.amountApplied || '0')
-  rows.push({
-    size: 9,
-    height: 13,
-    keepId: 'trade-totals',
-    runs: [
-      { text: middleLabel, x: 430, color: ink },
-      { text: middleValue, x: TRADE_COL.amount, align: 'right', color: ink },
-    ],
-  })
+  if (purchase && input.documentType !== 'PURCHASE_ORDER') {
+    rows.push({
+      size: 9,
+      height: 13,
+      keepId: 'trade-totals',
+      runs: [
+        { text: 'Taxes', x: 430, color: ink },
+        { text: money(input.taxTotal), x: TRADE_COL.amount, align: 'right', color: ink },
+      ],
+    })
+  }
   rows.push({
     size: 10,
     height: 16,
@@ -900,6 +896,41 @@ function tradeDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
       { text: money(input.total), x: TRADE_COL.amount, align: 'right', bold: true, color: ink },
     ],
   })
+  if (!purchase || input.documentType === 'PURCHASE_ORDER') {
+    const paid = Number(input.amountApplied || 0)
+    if (paid > 0.004) {
+      const paidLabel = input.documentType === 'PURCHASE_ORDER' ? 'Bill payment' : 'Amount paid'
+      rows.push({
+        size: 9,
+        height: 13,
+        keepId: 'trade-totals',
+        runs: [
+          { text: paidLabel, x: 430, color: ink },
+          {
+            text: `−${money(input.amountApplied || '0')}`,
+            x: TRADE_COL.amount,
+            align: 'right',
+            color: ink,
+          },
+        ],
+      })
+    }
+    rows.push({
+      size: 10,
+      height: 14,
+      keepId: 'trade-totals',
+      runs: [
+        { text: 'Balance due', x: 430, bold: true, color: ink },
+        {
+          text: money(input.balance ?? input.total),
+          x: TRADE_COL.amount,
+          align: 'right',
+          bold: true,
+          color: ink,
+        },
+      ],
+    })
+  }
   return rows
 }
 

@@ -12,11 +12,15 @@ export const ITEM_FIXED_COLUMN_IDS = [
   'cogsExpense',
   'store',
   'onHand',
+  'qtyOnPo',
+  'qtyOnSo',
+  'availQty',
   'price',
   'stockValue',
   'cost',
   'purchaseDescription',
   'reorderPoint',
+  'preferredSupplier',
   'unitOfMeasure',
 ] as const
 
@@ -40,11 +44,15 @@ export const ITEM_COLUMN_LABELS: Record<ItemFixedColumnId, string> = {
   cogsExpense: 'COGS or expense',
   store: 'Store',
   onHand: 'On hand',
+  qtyOnPo: 'Qty on PO',
+  qtyOnSo: 'Qty on SO',
+  availQty: 'Avail Qty',
   price: 'Price',
   stockValue: 'Stock value',
   cost: 'Cost',
   purchaseDescription: 'Purchase description',
   reorderPoint: 'Reorder point',
+  preferredSupplier: 'Preferred supplier',
   unitOfMeasure: 'Unit of measure',
 }
 
@@ -59,7 +67,7 @@ export function isStoreColumnId(id: ItemColumnId): id is `store:${string}` {
   return id.startsWith('store:')
 }
 
-/** Table order: core columns, per-store qty, amounts, then optional fields. */
+/** Table order: core columns, open-order qty, per-store qty, amounts, then optional fields. */
 export function buildItemTableColumns(stores: { id: string; name: string }[]): ItemColumnDef[] {
   const core: ItemFixedColumnId[] = [
     'name',
@@ -69,6 +77,9 @@ export function buildItemTableColumns(stores: { id: string; name: string }[]): I
     'cogsExpense',
     'store',
     'onHand',
+    'qtyOnPo',
+    'qtyOnSo',
+    'availQty',
   ]
   const afterStores: ItemFixedColumnId[] = ['price', 'stockValue', 'cost']
   const optional: ItemFixedColumnId[] = [
@@ -78,6 +89,7 @@ export function buildItemTableColumns(stores: { id: string; name: string }[]): I
     'salesDescription',
     'purchaseDescription',
     'reorderPoint',
+    'preferredSupplier',
     'unitOfMeasure',
   ]
 

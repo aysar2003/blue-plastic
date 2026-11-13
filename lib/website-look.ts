@@ -18,7 +18,7 @@ export const WEBSITE_LOOKS: WebsiteLookOption[] = [
   {
     id: 'system',
     label: 'Match system',
-    blurb: 'Landing and login use the same colours as Appearance → System look (SOM ERP, Odoo, QuickBooks, …).',
+    blurb: 'Landing and login use the same colours as Appearance → System look (SOM ERP, SOM Dark, Odoo, AI, …).',
     swatches: ['#070b14', '#22d3ee', '#0b1220'],
   },
   {

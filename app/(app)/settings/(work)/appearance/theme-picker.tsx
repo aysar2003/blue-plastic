@@ -22,7 +22,13 @@ export function ThemePicker() {
     () => false,
   )
 
-  const current = (mounted ? (theme ?? 'som') : 'som') as ThemeId
+  const current = (
+    mounted
+      ? theme === 'quick' || theme === 'quick-dark'
+        ? 'som'
+        : (theme ?? 'som')
+      : 'som'
+  ) as ThemeId
 
   const pick = (id: ThemeId) => {
     setTheme(id)

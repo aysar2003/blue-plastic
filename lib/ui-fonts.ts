@@ -23,7 +23,7 @@ export const FONT_SIZES: FontOption<FontSizeId>[] = [
 ]
 
 export const FONT_STYLES: FontOption<FontStyleId>[] = [
-  { id: 'default', label: 'Theme default', blurb: 'Follows QuickBooks / Odoo / Hero ERP.' },
+  { id: 'default', label: 'Theme default', blurb: 'Follows Odoo / SOM ERP fonts for the desk.' },
   { id: 'geist', label: 'Geist', blurb: 'Clean modern sans used by Hero ERP.' },
   { id: 'inter', label: 'Inter', blurb: 'Odoo-style UI typeface.' },
   { id: 'source-sans', label: 'Source Sans', blurb: 'QuickBooks-style report typeface.' },

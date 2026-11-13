@@ -110,7 +110,7 @@ export default async function RecurringPage() {
                     <TableCell>{RECURRING_TYPE_LABELS[row.type]}</TableCell>
                     <TableCell className="text-muted-foreground">{schedule}</TableCell>
                     <TableCell>
-                      <span className={cn(row.due && 'font-medium text-amber-800')}>
+                      <span className={cn(row.due && 'font-medium text-warning')}>
                         {formatDate(row.nextRunOn)}
                         {row.due ? ' · due' : ''}
                       </span>

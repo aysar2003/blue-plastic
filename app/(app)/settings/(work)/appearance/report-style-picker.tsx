@@ -37,6 +37,8 @@ export function ReportStylePicker() {
             <span
               className="block overflow-hidden rounded-md border border-black/5"
               style={{
+                /* Paper preview stays dark-on-light even when System look is Ink/Dark. */
+                color: '#1f2937',
                 fontFamily:
                   option.id === 'quickbooks'
                     ? 'var(--font-quickbooks), Arial, sans-serif'
@@ -53,20 +55,27 @@ export function ReportStylePicker() {
                 Account
                 <span className="ml-auto tabular">Amount</span>
               </span>
-              <span className="flex h-6 items-center px-2 text-[0.65rem]" style={{ background: option.swatches[0] }}>
+              <span
+                className="flex h-6 items-center px-2 text-[0.65rem]"
+                style={{ background: option.swatches[0], color: '#1f2937' }}
+              >
                 <span
                   className="mr-1.5 size-1.5 shrink-0 rounded-full"
                   style={{ background: option.swatches[2] }}
                 />
                 Cash
-                <span className="ml-auto tabular text-muted-foreground">1,200.00</span>
+                <span className="ml-auto tabular" style={{ color: '#4b5563' }}>
+                  1,200.00
+                </span>
               </span>
               <span
                 className="flex h-6 items-center px-2 text-[0.65rem]"
-                style={{ background: option.swatches[1] }}
+                style={{ background: option.swatches[1], color: '#1f2937' }}
               >
                 Bank
-                <span className="ml-auto tabular text-muted-foreground">4,500.00</span>
+                <span className="ml-auto tabular" style={{ color: '#4b5563' }}>
+                  4,500.00
+                </span>
               </span>
             </span>
             <span className="mt-3 flex items-center justify-between gap-2">

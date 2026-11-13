@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { GiveFeedback } from '@/components/data/give-feedback'
-import { AppLauncher } from '@/components/layout/app-launcher'
 import { reportSectionsFor } from '@/components/layout/report-apps'
+import { StandardReportSections } from '@/components/reports/standard-report-sections'
 import { CreateReportMenu } from '@/components/reports/create-report-menu'
 import { FavouriteReports } from '@/components/reports/favourite-reports'
 import { ReportCentreTabs } from '@/components/reports/report-centre-tabs'
@@ -25,8 +25,8 @@ import { canViewGroupReports } from '@/server/services/company-group.service'
 export const metadata: Metadata = { title: 'Reports' }
 
 /**
- * Every report, grouped by the question it answers, drawn as the same tiles
- * Sales uses for its own reports.
+ * Every report, in the standard order: favourites, then each catalogue
+ * section as a list that opens the report.
  */
 export default async function ReportsIndexPage() {
   const ctx = await requireOrgContext('report:read')
@@ -61,60 +61,54 @@ export default async function ReportsIndexPage() {
       </div>
       <ReportCentreTabs active="standard" />
       <FavouriteReports reports={withoutBusinessOverview(STANDARD_FAVOURITES, ctx.permissions)} />
-    <AppLauncher
-      eyebrow={ctx.organization.name}
-      title="Reports"
-      subtitle="Grouped the way QuickBooks Online groups them. Every figure is read from the ledger."
-      sections={reportSectionsFor(ctx.permissions, { enableTax: ctx.features.enableTax })}
-      searchable
-      banner={
-        <div>
-          <FigureChart
-            caption={`This month · ${formatDate(month.from)} to ${formatDate(month.to)}`}
-            currency={ctx.organization.baseCurrency}
-            bars={[
-              {
-                label: 'Income',
-                value: picture.income,
-                color: INCOME_COLOR,
-                href: '/reports/profit-loss?period=this-month',
-              },
-              {
-                label: 'Expenses',
-                value: picture.expenses,
-                color: EXPENSE_COLOR,
-                href: '/reports/profit-loss?period=this-month',
-              },
-              {
-                label: 'Net income',
-                value: picture.net,
-                color: NET_COLOR,
-                href: '/reports/profit-loss/detail?period=this-month',
-              },
-            ]}
-          />
-          <p className="mt-3 text-center text-sm">
-            {showOverview ? (
-              <>
-                <Link
-                  href="/reports/business-overview"
-                  className="font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  Business overview
-                </Link>
-                <span className="text-muted-foreground"> · </span>
-              </>
-            ) : null}
-            <Link
-              href="/reports/profit-loss?period=this-month&compare=prior-period"
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              Open the full profit and loss, compared with the previous period
-            </Link>
-          </p>
-        </div>
-      }
-    />
+      <div className="mb-8">
+        <FigureChart
+          caption={`This month · ${formatDate(month.from)} to ${formatDate(month.to)}`}
+          currency={ctx.organization.baseCurrency}
+          bars={[
+            {
+              label: 'Income',
+              value: picture.income,
+              color: INCOME_COLOR,
+              href: '/reports/profit-loss?period=this-month',
+            },
+            {
+              label: 'Expenses',
+              value: picture.expenses,
+              color: EXPENSE_COLOR,
+              href: '/reports/profit-loss?period=this-month',
+            },
+            {
+              label: 'Net income',
+              value: picture.net,
+              color: NET_COLOR,
+              href: '/reports/profit-loss/detail?period=this-month',
+            },
+          ]}
+        />
+        <p className="mt-3 text-center text-sm">
+          {showOverview ? (
+            <>
+              <Link
+                href="/reports/business-overview"
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Business overview
+              </Link>
+              <span className="text-muted-foreground"> · </span>
+            </>
+          ) : null}
+          <Link
+            href="/reports/profit-loss?period=this-month&compare=prior-period"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Open the full profit and loss, compared with the previous period
+          </Link>
+        </p>
+      </div>
+      <StandardReportSections
+        sections={reportSectionsFor(ctx.permissions, { enableTax: ctx.features.enableTax })}
+      />
     </>
   )
 }

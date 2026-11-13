@@ -73,15 +73,19 @@ export function CompanySwitcher({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-8 max-w-[12rem] gap-1 px-2 text-xs font-medium"
+          className="h-8 shrink-0 gap-1 px-2 text-xs font-medium"
           aria-label="Switch company"
+          title={current?.name ?? 'Company'}
         >
           <Building2Icon className="size-3.5 shrink-0 opacity-70" />
-          <span className="truncate">{current?.name ?? 'Company'}</span>
+          <span className="whitespace-nowrap">{current?.name ?? 'Company'}</span>
           <ChevronsUpDownIcon className="size-3 shrink-0 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
+      <DropdownMenuContent
+        align="start"
+        className="max-h-[min(70vh,28rem,var(--radix-dropdown-menu-content-available-height))] w-max min-w-64 max-w-[24rem] overflow-y-auto"
+      >
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
           Your companies
         </DropdownMenuLabel>
@@ -92,7 +96,7 @@ export function CompanySwitcher({
             onSelect={() => open(company.id)}
             className="gap-2"
           >
-            <span className="min-w-0 flex-1 truncate">{company.name}</span>
+            <span className="min-w-0 flex-1 whitespace-normal">{company.name}</span>
             {company.isCurrent && !onDatabases ? (
               <CheckIcon className="size-3.5 text-primary" />
             ) : null}

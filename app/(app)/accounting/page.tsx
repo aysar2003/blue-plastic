@@ -69,11 +69,11 @@ export default async function AccountingHubPage() {
         },
       ]}
       banner={
-        <p className="text-center text-sm text-slate-600">
+        <p className="text-center text-sm text-muted-foreground">
           <Link href={pnlHref} className="font-medium text-primary underline-offset-4 hover:underline">
             Open the full profit and loss
           </Link>
-          <span className="mx-2 text-slate-300">·</span>
+          <span className="mx-2 text-border">·</span>
           <Link
             href="/reports/balance-sheet"
             className="font-medium text-primary underline-offset-4 hover:underline"

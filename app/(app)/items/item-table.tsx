@@ -60,8 +60,13 @@ export type ItemRow = ItemValues & {
   cogsAccount: { code: string; name: string } | null
   store: { id: string; name: string } | null
   category: { name: string } | null
+  preferredVendor?: { id: string; displayName: string } | null
+  preferredVendorId?: string | null
   /** Stock, for tracked items. Null for services and non-inventory goods. */
   onHand?: string | null
+  qtyOnPo?: string | null
+  qtyOnSo?: string | null
+  availQty?: string | null
   /** Quantity in each store. The columns add up to on hand. */
   storeQty?: Record<string, string>
   stockValue?: string | null
@@ -80,6 +85,7 @@ export function ItemTable({
   taxCodes,
   categories,
   stores = [],
+  vendors = [],
   catalogItems = [],
   storeColumns = [],
   currency,
@@ -97,6 +103,7 @@ export function ItemTable({
   taxCodes: SimpleOption[]
   categories: SimpleOption[]
   stores?: SimpleOption[]
+  vendors?: SimpleOption[]
   catalogItems?: { id: string; label: string; type?: string }[]
   /** One calculated column per store. Existing columns stay as they are. */
   storeColumns?: { id: string; name: string }[]
@@ -166,6 +173,9 @@ export function ItemTable({
       col.id === 'price' ||
       col.id === 'cost' ||
       col.id === 'onHand' ||
+      col.id === 'qtyOnPo' ||
+      col.id === 'qtyOnSo' ||
+      col.id === 'availQty' ||
       col.id === 'stockValue' ||
       col.id === 'reorderPoint'
     const moneyFirst =
@@ -174,6 +184,16 @@ export function ItemTable({
       col.id === 'onHand' ||
       col.id === 'stockValue' ||
       col.id === 'reorderPoint'
+    const qtyOnly =
+      col.id === 'qtyOnPo' || col.id === 'qtyOnSo' || col.id === 'availQty'
+
+    if (qtyOnly) {
+      return (
+        <TableHead key={col.id} className="numeric min-w-28 bg-[var(--band)]">
+          {col.label}
+        </TableHead>
+      )
+    }
 
     return (
       <SortableHeader
@@ -186,7 +206,8 @@ export function ItemTable({
         className={cn(
           'bg-[var(--band)]',
           col.id === 'name' && 'min-w-56',
-          (col.id === 'sku' || col.id === 'category' || col.id === 'type') && 'min-w-32',
+          (col.id === 'sku' || col.id === 'category' || col.id === 'type' || col.id === 'preferredSupplier') &&
+            'min-w-32',
           (col.id === 'incomeAccount' ||
             col.id === 'inventoryAccount' ||
             col.id === 'cogsExpense' ||
@@ -298,7 +319,7 @@ export function ItemTable({
       case 'onHand':
         return (
           <TableCell key={col.id} className="numeric tabular">
-            {row.type === 'INVENTORY' ? (
+            {row.type === 'INVENTORY' || row.type === 'INVENTORY_ASSEMBLY' ? (
               <>
                 <Link
                   href={`/inventory/${row.id}`}
@@ -314,6 +335,51 @@ export function ItemTable({
               </>
             ) : (
               <span className="text-muted-foreground">—</span>
+            )}
+          </TableCell>
+        )
+      case 'qtyOnPo':
+        return (
+          <TableCell key={col.id} className="numeric tabular">
+            {row.type === 'INVENTORY' || row.type === 'INVENTORY_ASSEMBLY' ? (
+              row.qtyOnPo ?? '0.00'
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </TableCell>
+        )
+      case 'qtyOnSo':
+        return (
+          <TableCell key={col.id} className="numeric tabular">
+            {row.type === 'INVENTORY' || row.type === 'INVENTORY_ASSEMBLY' ? (
+              row.qtyOnSo ?? '0.00'
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </TableCell>
+        )
+      case 'availQty':
+        return (
+          <TableCell key={col.id} className="numeric tabular font-medium">
+            {row.type === 'INVENTORY' || row.type === 'INVENTORY_ASSEMBLY' ? (
+              row.availQty ?? '0.00'
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </TableCell>
+        )
+      case 'preferredSupplier':
+        return (
+          <TableCell key={col.id} className="text-sm">
+            {row.preferredVendor ? (
+              <Link
+                href={`/vendors/${row.preferredVendor.id}`}
+                className="underline-offset-4 hover:underline"
+              >
+                {row.preferredVendor.displayName}
+              </Link>
+            ) : (
+              '—'
             )}
           </TableCell>
         )
@@ -531,6 +597,7 @@ export function ItemTable({
           taxCodes={taxCodes}
           categories={categories}
           stores={stores}
+          vendors={vendors}
           catalogItems={catalogItems}
           currency={currency}
           recorded={editing.recorded}

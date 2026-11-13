@@ -17,6 +17,7 @@ import { readStoredPaperMetaHidden, withPaperMetaHidden } from '@/lib/paper-meta
 import {
   downloadPdfFile,
   printWithInk,
+  readStoredPrintInk,
   rememberPrintInk,
   withPrintInk,
   type PrintInk,
@@ -104,7 +105,8 @@ export function PdfInkMenu({
   const [busy, setBusy] = useState(false)
 
   const run = async () => {
-    const ink: PrintInk = 'color'
+    // Use the ink already on screen (Color / Black & White) so PDF matches Print.
+    const ink = readStoredPrintInk()
     rememberPrintInk(ink)
     const name = filename || 'document.pdf'
     // Print pages: PDF must match the on-screen paper (Trade / Merchant sheet).

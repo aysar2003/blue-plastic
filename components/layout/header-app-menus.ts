@@ -5,6 +5,7 @@ import {
   type OrgFeatureFlags,
 } from '@/lib/feature-flags'
 import type { Permission } from '@/server/auth/permissions'
+import type { LauncherIcon } from './launcher-apps'
 import {
   ACCOUNTING_HUB_APPS,
   BANKING_HUB_APPS,
@@ -26,12 +27,16 @@ import { SALES_HUB_APPS, salesAppsForPermissions, type SalesHubApp } from './sal
  * Centre (and each module’s Reports hub) — not as a long list on every menu.
  *
  * Reports uses expandable `children` groups (QuickBooks Desktop Report menu).
+ * Hub rows carry the same icon mark used on the app home tiles when available.
  */
 export type HeaderMenuItem = {
   label: string
   href?: string
   blurb?: string
   permission?: Permission
+  icon?: LauncherIcon
+  accent?: string
+  wash?: string
   children?: HeaderMenuItem[]
 }
 
@@ -72,13 +77,30 @@ function reportsMenuFromCatalogue(permissions: ReadonlySet<string>): HeaderMenuI
         label: app.label,
         href: app.href,
         blurb: app.blurb,
+        icon: app.icon,
+        accent: app.accent,
+        wash: app.wash,
       })),
     } satisfies HeaderMenuItem
   })
 
   return [
-    { label: 'All reports', href: '/reports', permission: 'report:read' },
-    { label: 'Memorized Reports', href: '/reports/custom', permission: 'report:read' },
+    {
+      label: 'All reports',
+      href: '/reports',
+      permission: 'report:read',
+      icon: 'trending',
+      accent: '#0F766E',
+      wash: '#CCFBF1',
+    },
+    {
+      label: 'Memorized Reports',
+      href: '/reports/custom',
+      permission: 'report:read',
+      icon: 'notebook',
+      accent: '#4338CA',
+      wash: '#E0E7FF',
+    },
     ...groups,
   ]
 }
@@ -89,96 +111,115 @@ function fromHub(apps: HubApp[] | SalesHubApp[] | ProjectHubApp[]): HeaderMenuIt
     href: app.href,
     blurb: app.blurb,
     permission: app.permission,
+    icon: app.icon,
+    accent: app.accent,
+    wash: app.wash,
   }))
+}
+
+/** Static rows that are not hub tiles — still reuse launcher icon names when one fits. */
+function row(
+  label: string,
+  href: string,
+  icon: LauncherIcon,
+  permission?: Permission,
+  accent = '#64748b',
+  wash = '#f1f5f9',
+): HeaderMenuItem {
+  return { label, href, permission, icon, accent, wash }
 }
 
 const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
   pos: [
-    { label: 'Dashboard', href: '/pos', permission: 'pos:read' },
-    { label: 'Orders', href: '/pos/orders', permission: 'pos:read' },
-    { label: 'Kitchen', href: '/pos/kitchen', permission: 'pos:read' },
-    { label: 'Tables', href: '/pos/tables', permission: 'pos:read' },
-    { label: 'Night audit', href: '/pos/night-audit', permission: 'pos:read' },
-    { label: 'Quotations', href: '/pos/quotations', permission: 'invoice:read' },
-    { label: 'Sessions', href: '/pos/sessions', permission: 'pos:read' },
-    { label: 'Configuration', href: '/pos/settings', permission: 'pos:manage' },
-    { label: 'Estimates (Sales)', href: '/sales/estimates', permission: 'invoice:read' },
-    { label: 'Quotations (Sales)', href: '/sales/quotations', permission: 'invoice:read' },
-    { label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read' },
-    { label: 'Transfer to bank', href: '/banking/transfers/new', permission: 'bank:transact' },
-    { label: 'Reports', href: '/reports', permission: 'report:read' },
+    row('Dashboard', '/pos', 'monitor', 'pos:read', '#0891b2', '#cffafe'),
+    row('Orders', '/pos/orders', 'receipt', 'pos:read', '#0F766E', '#CCFBF1'),
+    row('Kitchen', '/pos/kitchen', 'clipboard', 'pos:read', '#C2410C', '#FFEDD5'),
+    row('Tables', '/pos/tables', 'clipboard', 'pos:read', '#0369A1', '#E0F2FE'),
+    row('Night audit', '/pos/night-audit', 'clock', 'pos:read', '#7C3AED', '#EDE9FE'),
+    row('Quotations', '/pos/quotations', 'notebook', 'invoice:read', '#0891b2', '#ecfeff'),
+    row('Sessions', '/pos/sessions', 'clock', 'pos:read', '#4338CA', '#E0E7FF'),
+    row('Configuration', '/pos/settings', 'settings', 'pos:manage'),
+    row('Estimates (Sales)', '/sales/estimates', 'book', 'invoice:read', '#22d3ee', '#cffafe'),
+    row('Quotations (Sales)', '/sales/quotations', 'notebook', 'invoice:read', '#0891b2', '#ecfeff'),
+    row('Sales receipts', '/sales/sales-receipts', 'receipt', 'invoice:read', '#0F766E', '#CCFBF1'),
+    row('Transfer to bank', '/banking/transfers/new', 'transfer', 'bank:transact', '#0369A1', '#E0F2FE'),
+    row('Reports', '/reports', 'trending', 'report:read', '#0F766E', '#CCFBF1'),
   ],
   sales: [
     ...fromHub(SALES_HUB_APPS),
-    { label: 'Hotel / hospitality', href: '/hospitality', permission: 'invoice:read' },
+    row('Hotel / hospitality', '/hospitality', 'building', 'invoice:read', '#0369A1', '#E0F2FE'),
   ],
   projects: fromHub(PROJECT_HUB_APPS),
   purchases: fromHub(PURCHASE_HUB_APPS),
   banking: fromHub(BANKING_HUB_APPS),
   inventory: fromHub(INVENTORY_HUB_APPS),
   barcodes: [
-    { label: 'Barcode desk', href: '/barcodes', permission: 'item:read' },
-    { label: 'Print labels', href: '/barcodes/print', permission: 'item:read' },
-    { label: 'Excel export', href: '/api/exports/barcodes', permission: 'item:read' },
-    { label: 'Products', href: '/items', permission: 'item:read' },
+    row('Barcode desk', '/barcodes', 'barcode', 'item:read', '#B45309', '#FEF3C7'),
+    row('Print labels', '/barcodes/print', 'file', 'item:read', '#0369A1', '#E0F2FE'),
+    row('Excel export', '/api/exports/barcodes', 'scroll', 'item:read'),
+    row('Products', '/items', 'package', 'item:read', '#0F766E', '#CCFBF1'),
   ],
   accounting: fromHub(ACCOUNTING_HUB_APPS),
   settings: fromHub(SETTINGS_HUB_APPS),
   help: fromHub(HELP_HUB_APPS),
   customers: [
-    { label: 'All customers', href: '/customers', permission: 'customer:read' },
-    { label: 'Pipeline', href: '/customers/pipeline', permission: 'customer:read' },
-    { label: 'Tickets', href: '/customers/tickets', permission: 'customer:read' },
-    { label: 'Portal users', href: '/customers/portal-users', permission: 'customer:read' },
-    { label: 'Reports', href: '/sales/reports', permission: 'report:read' },
+    row('All customers', '/customers', 'users', 'customer:read', '#0369A1', '#E0F2FE'),
+    row('Pipeline', '/customers/pipeline', 'trending', 'customer:read', '#0F766E', '#CCFBF1'),
+    row('Tickets', '/customers/tickets', 'clipboard', 'customer:read', '#C2410C', '#FFEDD5'),
+    row('Portal users', '/customers/portal-users', 'users', 'customer:read', '#4338CA', '#E0E7FF'),
+    row('Reports', '/sales/reports', 'trending', 'report:read', '#0F766E', '#CCFBF1'),
   ],
   vendors: [
-    { label: 'All vendors', href: '/vendors', permission: 'vendor:read' },
-    { label: 'Delivery', href: '/purchases/delivery', permission: 'bill:read' },
-    { label: 'Reports', href: '/purchases/reports', permission: 'report:read' },
+    row('All vendors', '/vendors', 'building', 'vendor:read', '#B45309', '#FEF3C7'),
+    row('Delivery', '/purchases/delivery', 'package', 'bill:read', '#0F766E', '#CCFBF1'),
+    row('Reports', '/purchases/reports', 'trending', 'report:read', '#0F766E', '#CCFBF1'),
   ],
   payments: [
-    { label: 'All payments', href: '/payments', permission: 'payment:read' },
-    { label: 'Receive payment', href: '/payments/new', permission: 'payment:create' },
-    { label: 'Reports', href: '/payments/reports', permission: 'report:read' },
+    row('All payments', '/payments', 'hand-coins', 'payment:read', '#0F766E', '#CCFBF1'),
+    row('Receive payment', '/payments/new', 'banknote', 'payment:create', '#0369A1', '#E0F2FE'),
+    row('Reports', '/payments/reports', 'trending', 'report:read', '#0F766E', '#CCFBF1'),
   ],
   'bill-payments': [
-    { label: 'All bill payments', href: '/bill-payments', permission: 'expense:read' },
-    { label: 'Pay a bill', href: '/bill-payments/new', permission: 'expense:create' },
-    { label: 'Reports', href: '/bill-payments/reports', permission: 'report:read' },
+    row('All bill payments', '/bill-payments', 'banknote', 'expense:read', '#B45309', '#FEF3C7'),
+    row('Pay a bill', '/bill-payments/new', 'hand-coins', 'expense:create', '#C2410C', '#FFEDD5'),
+    row('Reports', '/bill-payments/reports', 'trending', 'report:read', '#0F766E', '#CCFBF1'),
   ],
   journals: [
-    { label: 'All journals', href: '/journals', permission: 'journal:read' },
-    { label: 'New entry', href: '/journals/new', permission: 'journal:create' },
-    { label: 'Reports', href: '/accounting/reports', permission: 'report:read' },
+    row('All journals', '/journals', 'notebook', 'journal:read', '#4338CA', '#E0E7FF'),
+    row('New entry', '/journals/new', 'book', 'journal:create', '#0F766E', '#CCFBF1'),
+    row('Reports', '/accounting/reports', 'trending', 'report:read', '#0F766E', '#CCFBF1'),
   ],
   periods: [
-    { label: 'Periods', href: '/periods', permission: 'period:read' },
-    { label: 'Reports', href: '/accounting/reports', permission: 'report:read' },
+    row('Periods', '/periods', 'calendar', 'period:read', '#0369A1', '#E0F2FE'),
+    row('Reports', '/accounting/reports', 'trending', 'report:read', '#0F766E', '#CCFBF1'),
   ],
-  calendar: [
-    { label: 'Month view', href: '/calendar', permission: 'calendar:read' },
-  ],
+  calendar: [row('Month view', '/calendar', 'calendar', 'calendar:read', '#0369A1', '#E0F2FE')],
   databases: [
-    { label: 'All databases', href: '/databases', permission: 'org:update' },
-    { label: 'Apps', href: '/databases/apps', permission: 'org:update' },
-    { label: 'System users', href: '/databases/users', permission: 'org:update' },
-    { label: 'Create company', href: '/databases?create=1', permission: 'org:update' },
-    { label: 'Import backup', href: '/databases?import=1', permission: 'org:update' },
+    row('All databases', '/databases', 'database', 'org:update', '#0F766E', '#CCFBF1'),
+    row('Apps', '/databases/apps', 'sliders', 'org:update', '#0369A1', '#E0F2FE'),
+    row('System users', '/databases/users', 'users', 'org:update', '#4338CA', '#E0E7FF'),
+    row('Create company', '/databases?create=1', 'building', 'org:update', '#0F766E', '#CCFBF1'),
+    row('Import backup', '/databases?import=1', 'package', 'org:update', '#B45309', '#FEF3C7'),
   ],
   stores: [
-    { label: 'Office · stores', href: '/stores', permission: 'inventory:read' },
-    { label: 'Stock on hand', href: '/inventory/stock', permission: 'inventory:read' },
-    { label: 'Pick tickets', href: '/stores/tickets', permission: 'inventory:read' },
+    row('Office · stores', '/stores', 'building', 'inventory:read', '#0369A1', '#E0F2FE'),
+    row('Stock on hand', '/inventory/stock', 'package', 'inventory:read', '#0F766E', '#CCFBF1'),
+    row('Pick tickets', '/stores/tickets', 'clipboard', 'inventory:read', '#C2410C', '#FFEDD5'),
   ],
   approvals: [
-    { label: 'Pending', href: '/approvals', permission: 'invoice:approve' },
-    { label: 'All approved', href: '/approvals/approved', permission: 'invoice:approve' },
-    { label: 'Workflows', href: '/approvals/workflows', permission: 'org:update' },
-    { label: 'Reports', href: '/approvals/reports', permission: 'report:read' },
+    row('Pending', '/approvals', 'clipboard', 'invoice:approve', '#C2410C', '#FFEDD5'),
+    row('All approved', '/approvals/approved', 'scale', 'invoice:approve', '#0F766E', '#CCFBF1'),
+    row('Workflows', '/approvals/workflows', 'sliders', 'org:update'),
+    row('Reports', '/approvals/reports', 'trending', 'report:read', '#0F766E', '#CCFBF1'),
   ],
   /** Built dynamically in menuForApp — QBD-style expandable categories. */
   reports: [],
+  analytics: [
+    row('Analytics board', '/analytics', 'trending', 'report:overview', '#0F766E', '#CCFBF1'),
+    row('Business overview', '/reports/business-overview', 'trending', 'report:overview', '#0369A1', '#E0F2FE'),
+    row('AI brief (JSON)', '/api/analytics/brief', 'file', 'report:overview', '#4338CA', '#E0E7FF'),
+    row('All reports', '/reports', 'trending', 'report:read', '#BE123C', '#FFE4E6'),
+  ],
 }
 
 /** Children for one top Apps chip, filtered by what the user may open. */

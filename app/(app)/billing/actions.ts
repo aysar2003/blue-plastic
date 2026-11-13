@@ -63,6 +63,7 @@ export const reviewRentPayment = action
   .handler(async (ctx, input) => {
     const result = await platformBilling.reviewRentPayment(ctx, input)
     revalidatePath('/databases')
+    revalidatePath('/databases/billing')
     revalidatePath('/billing')
     revalidatePath('/', 'layout')
     return result

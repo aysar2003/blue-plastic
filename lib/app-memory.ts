@@ -52,14 +52,17 @@ function samePathOrBelow(pathname: string, prefix: string) {
  */
 const STAY_INSIDE = new Set(['periods'])
 
-/** The app whose own path this is, by longest prefix. Home is not an app. */
+/** The app whose own path this is, by longest prefix. An app's own door wins a tie with another app's extra path. Home is not an app. */
 export function appForPath(pathname: string, roots: AppRoot[]): string | null {
-  let best: { key: string; length: number } | null = null
+  let best: { key: string; length: number; own: boolean } | null = null
   for (const root of roots) {
-    for (const prefix of [root.href, ...(root.also ?? [])]) {
-      if (samePathOrBelow(pathname, prefix) && (!best || prefix.length > best.length)) {
-        best = { key: root.key, length: prefix.length }
-      }
+    const prefixes = [root.href, ...(root.also ?? [])]
+    for (const prefix of prefixes) {
+      if (!samePathOrBelow(pathname, prefix)) continue
+      const own = prefix === root.href.split(/[?#]/)[0]
+      const longer = !best || prefix.length > best.length
+      const sameDoor = !!best && prefix.length === best.length && own && !best.own
+      if (longer || sameDoor) best = { key: root.key, length: prefix.length, own }
     }
   }
   return best?.key ?? null

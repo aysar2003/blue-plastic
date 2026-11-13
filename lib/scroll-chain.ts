@@ -16,6 +16,10 @@ export function installScrollChain(signal?: AbortSignal): void {
     if (event.ctrlKey || event.defaultPrevented) return
     if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return
 
+    // The side rail keeps the wheel. Leftover delta must not move the page
+    // behind it, even when the list is already at its end.
+    if (scrollSideRailOnly(event)) return
+
     const chain = scrollersUnderPointer(event.clientX, event.clientY)
     if (chain.length === 0) return
 
@@ -50,6 +54,44 @@ export function installScrollChain(signal?: AbortSignal): void {
   }
 
   document.addEventListener('wheel', onWheel, { passive: false, capture: true, signal })
+}
+
+/**
+ * Side rail and the menu opened from it keep the wheel.
+ * Reaching the end does not move the page underneath.
+ */
+function scrollSideRailOnly(event: WheelEvent): boolean {
+  const top = document.elementFromPoint(event.clientX, event.clientY)
+  const boundary = top?.closest('#app-side-rail, [data-scroll-isolate]')
+  if (!(boundary instanceof HTMLElement)) return false
+
+  event.preventDefault()
+  const scroller = scrollerIn(boundary, top!)
+  if (!scroller) return true
+
+  const max = scroller.scrollHeight - scroller.clientHeight
+  if (max <= 0) return true
+
+  let remaining = event.deltaY
+  if (event.deltaMode === 1) remaining *= 16
+  if (event.deltaMode === 2) remaining *= scroller.clientHeight
+  scroller.scrollTop = clamp(scroller.scrollTop + remaining, 0, max)
+  return true
+}
+
+function scrollerIn(boundary: HTMLElement, from: Element): HTMLElement | null {
+  let node: Element | null = from
+  while (node) {
+    if (node instanceof HTMLElement && isOverflowScroller(node)) return node
+    if (node === boundary) break
+    node = node.parentElement
+  }
+  const marked = boundary.querySelector('[data-side-scroll]')
+  if (marked instanceof HTMLElement) return marked
+  for (const el of boundary.querySelectorAll('*')) {
+    if (el instanceof HTMLElement && isOverflowScroller(el)) return el
+  }
+  return null
 }
 
 function clamp(value: number, min: number, max: number) {

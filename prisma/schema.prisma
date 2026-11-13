@@ -2022,6 +2022,7 @@ model Vendor {
   asnShipments          AsnShipment[]
   /// Reverse of Customer.linkedVendorId — same party as a customer.
   linkedCustomer        Customer? @relation("CustomerVendorLink")
+  preferredItems        Item[]
 
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
@@ -2093,6 +2094,9 @@ model Item {
   cogsAccountId      String?
   reorderPoint       Decimal? @db.Decimal(19, 4)
 
+  /// Usual vendor for reorders. Optional; shown on the products list.
+  preferredVendorId String?
+
   /// Phase 24: receive/issue must name a lot (batch) when true.
   trackLots Boolean @default(false)
   /// Phase 24: each unit needs a unique serial on receive/issue when true.
@@ -2134,6 +2138,7 @@ model Item {
   cogsAccount      LedgerAccount? @relation("ItemCogs", fields: [cogsAccountId], references: [id], onDelete: Restrict)
   depositAccount   LedgerAccount? @relation("ItemDeposit", fields: [depositAccountId], references: [id], onDelete: Restrict)
   store            Store?         @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  preferredVendor  Vendor?        @relation(fields: [preferredVendorId], references: [id], onDelete: SetNull)
   salesTaxCode     TaxCode?       @relation("ItemSalesTax", fields: [salesTaxCodeId], references: [id], onDelete: SetNull)
   purchaseTaxCode  TaxCode?       @relation("ItemPurchaseTax", fields: [purchaseTaxCodeId], references: [id], onDelete: SetNull)
   salesLines       SalesDocumentLine[]
@@ -2169,6 +2174,7 @@ model Item {
   @@index([orgId, type])
   @@index([orgId, deletedAt])
   @@index([orgId, storeId])
+  @@index([orgId, preferredVendorId])
   @@index([orgId, pharmacyControlled])
   @@map("items")
 }

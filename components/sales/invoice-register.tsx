@@ -298,7 +298,7 @@ export function InvoiceRegister({
                 </TableCell>
                 <TableCell>
                   {row.overdue ? (
-                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[#c2410c]">
+                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-warning">
                       <ClockIcon className="size-3.5" aria-hidden />
                       {row.statusText}
                     </span>

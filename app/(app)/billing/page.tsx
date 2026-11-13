@@ -17,11 +17,11 @@ export default async function BillingPage() {
     ctx.isSystemOwner || ctx.role === 'OWNER' || ctx.role === 'ADMIN'
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
         <p className="text-sm text-muted-foreground">
-          Platform rent for this company on SOM ERP — trial, plans, and payment proof.
+          Subscription, plans, and payment history for this company.
         </p>
       </div>
       <BillingClient

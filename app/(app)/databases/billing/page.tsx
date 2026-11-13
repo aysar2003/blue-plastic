@@ -12,21 +12,21 @@ export default async function PlatformBillingPage() {
   const ctx = await requireOrgContext('org:update')
   if (!ctx.isSystemOwner) redirect('/databases')
 
-  const [plans, settings] = await Promise.all([
+  const [plans, settings, pendingPayments] = await Promise.all([
     platformBilling.listAllPlans(ctx),
     platformBilling.getBillingSettings(),
+    platformBilling.listPendingRentPayments(ctx),
   ])
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Platform billing</h1>
         <p className="text-sm text-muted-foreground">
-          Rent plans and pay-to numbers for SOM ERP. Companies pay from Billing, then you confirm
-          under Databases.
+          Plans, payment methods, and payments waiting for confirmation.
         </p>
       </div>
-      <PlatformBillingAdmin plans={plans} settings={settings} />
+      <PlatformBillingAdmin plans={plans} settings={settings} pendingPayments={pendingPayments} />
     </div>
   )
 }

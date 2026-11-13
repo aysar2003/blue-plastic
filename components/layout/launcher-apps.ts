@@ -50,6 +50,12 @@ export type LauncherApp = {
   wash: string
   /** One-line purpose shown under the tile label on wider screens. */
   blurb?: string
+  /**
+   * Parent hub this destination already lives in (e.g. bill-payments → purchases).
+   * Nested apps stay in Settings / feature flags, but are not separate Home or
+   * Apps-bar tiles — open the parent app instead.
+   */
+  nestedIn?: string
 }
 
 export const LAUNCHER_APPS: LauncherApp[] = [
@@ -60,7 +66,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     icon: 'monitor',
     glyph: 'pos',
     permission: 'pos:read',
-    accent: '#22d3ee',
+    accent: '#0e7490',
     wash: '#cffafe',
     blurb: 'Sell at the till',
   },
@@ -96,6 +102,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     accent: '#0369A1',
     wash: '#E0F2FE',
     blurb: 'Who you sell to',
+    nestedIn: 'sales',
   },
   {
     key: 'purchases',
@@ -118,6 +125,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     accent: '#B45309',
     wash: '#FEF3C7',
     blurb: 'Who you buy from',
+    nestedIn: 'purchases',
   },
   {
     key: 'banking',
@@ -140,6 +148,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     accent: '#0E7490',
     wash: '#CFFAFE',
     blurb: 'Money received',
+    nestedIn: 'sales',
   },
   {
     key: 'inventory',
@@ -162,6 +171,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     accent: '#B45309',
     wash: '#FEF3C7',
     blurb: 'Generate and print labels',
+    nestedIn: 'inventory',
   },
   {
     key: 'stores',
@@ -173,6 +183,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     accent: '#0F766E',
     wash: '#CCFBF1',
     blurb: 'Quantity by warehouse',
+    nestedIn: 'inventory',
   },
   {
     key: 'approvals',
@@ -206,6 +217,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     accent: '#334155',
     wash: '#F1F5F9',
     blurb: 'Manual entries',
+    nestedIn: 'accounting',
   },
   {
     key: 'reports',
@@ -219,6 +231,17 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     blurb: 'The figures',
   },
   {
+    key: 'analytics',
+    label: 'Analytics',
+    href: '/analytics',
+    icon: 'trending',
+    glyph: 'analytics',
+    permission: 'report:overview',
+    accent: '#0F766E',
+    wash: '#CCFBF1',
+    blurb: 'Charts, candles, analysis',
+  },
+  {
     key: 'bill-payments',
     label: 'Bill payments',
     href: '/bill-payments',
@@ -228,6 +251,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     accent: '#A16207',
     wash: '#FEF9C3',
     blurb: 'Money paid out',
+    nestedIn: 'purchases',
   },
   {
     key: 'periods',
@@ -239,6 +263,7 @@ export const LAUNCHER_APPS: LauncherApp[] = [
     accent: '#475569',
     wash: '#E2E8F0',
     blurb: 'Close the books',
+    nestedIn: 'accounting',
   },
   {
     key: 'calendar',
@@ -386,13 +411,143 @@ export const LAUNCHER_APPS: LauncherApp[] = [
 
 /** Paths that belong to an app whose own door uses a different prefix. */
 export const APP_ALSO: Record<string, string[]> = {
-  inventory: ['/items'],
+  sales: ['/customers', '/payments'],
+  purchases: ['/bill-payments', '/vendors'],
+  inventory: ['/items', '/barcodes', '/stores'],
   barcodes: ['/barcodes/print'],
-  accounting: ['/accounts'],
+  accounting: ['/accounts', '/journals', '/periods'],
   databases: ['/settings/backup'],
 }
 
-export function appsForPermissions(permissions: ReadonlySet<string> | Iterable<string>): LauncherApp[] {
+/**
+ * Home-launcher folders (Odoo-style). Click a folder to enter; apps inside stay
+ * apps — Bill payments under Purchases & Stock, Banking under Finance, etc.
+ */
+export type LauncherFolderDef = {
+  id: string
+  label: string
+  blurb: string
+  appKeys: readonly string[]
+}
+
+/**
+ * Related apps sit next to each other on the flat home grid (Odoo order),
+ * without folder tiles. Productivity first, then sell / buy / books / people.
+ */
+export const LAUNCHER_FOLDERS: LauncherFolderDef[] = [
+  {
+    id: 'productivity',
+    label: 'Productivity',
+    blurb: 'Day-to-day work',
+    appKeys: ['discuss', 'calendar', 'appointments', 'todos', 'knowledge', 'documents', 'sign', 'surveys'],
+  },
+  {
+    id: 'sales',
+    label: 'Sales',
+    blurb: 'Sell and get paid',
+    appKeys: ['sales', 'pos', 'projects', 'customers', 'payments'],
+  },
+  {
+    id: 'purchases-stock',
+    label: 'Purchases & Stock',
+    blurb: 'Buy and hold',
+    appKeys: ['purchases', 'vendors', 'inventory', 'barcodes', 'stores', 'bill-payments'],
+  },
+  {
+    id: 'finance',
+    label: 'Finance',
+    blurb: 'Books and money',
+    appKeys: ['accounting', 'banking', 'journals', 'periods', 'reports', 'analytics', 'approvals'],
+  },
+  {
+    id: 'people',
+    label: 'People',
+    blurb: 'Staff and schedules',
+    appKeys: ['employees', 'planning'],
+  },
+  {
+    id: 'platform',
+    label: 'Platform',
+    blurb: 'Company and setup',
+    appKeys: ['databases', 'settings', 'help'],
+  },
+]
+
+/** Flat home order: related apps together, then any leftovers. */
+export function orderHomeApps<T extends { key: string }>(apps: readonly T[]): T[] {
+  const byKey = new Map(apps.map((app) => [app.key, app]))
+  const ordered: T[] = []
+  const seen = new Set<string>()
+  for (const folder of LAUNCHER_FOLDERS) {
+    for (const key of folder.appKeys) {
+      const app = byKey.get(key)
+      if (!app || seen.has(key)) continue
+      ordered.push(app)
+      seen.add(key)
+    }
+  }
+  for (const app of apps) {
+    if (seen.has(app.key)) continue
+    ordered.push(app)
+    seen.add(app.key)
+  }
+  return ordered
+}
+
+export type LauncherFolder = {
+  id: string
+  label: string
+  blurb: string
+  apps: LauncherApp[]
+}
+
+/**
+ * Group visible apps into folders. A folder with only one app is promoted to
+ * the top level so users are not forced through an extra click. Apps that are
+ * not listed in any folder stay loose at the top.
+ */
+export function groupLauncherApps(apps: readonly LauncherApp[]): {
+  folders: LauncherFolder[]
+  loose: LauncherApp[]
+} {
+  const byKey = new Map(apps.map((app) => [app.key, app]))
+  const placed = new Set<string>()
+  const folders: LauncherFolder[] = []
+  const loose: LauncherApp[] = []
+
+  for (const folder of LAUNCHER_FOLDERS) {
+    const inside = folder.appKeys
+      .map((key) => byKey.get(key))
+      .filter((app): app is LauncherApp => Boolean(app))
+    for (const app of inside) placed.add(app.key)
+    if (inside.length >= 2) {
+      folders.push({
+        id: folder.id,
+        label: folder.label,
+        blurb: folder.blurb,
+        apps: inside,
+      })
+    } else if (inside.length === 1) {
+      loose.push(inside[0]!)
+    }
+  }
+
+  for (const app of apps) {
+    if (!placed.has(app.key)) loose.push(app)
+  }
+
+  return { folders, loose }
+}
+
+export function appsForPermissions(
+  permissions: ReadonlySet<string> | Iterable<string>,
+  opts?: { includeNested?: boolean },
+): LauncherApp[] {
   const allowed = permissions instanceof Set ? permissions : new Set(permissions)
-  return LAUNCHER_APPS.filter((app) => !app.permission || allowed.has(app.permission))
+  const includeNested = opts?.includeNested === true
+  return LAUNCHER_APPS.filter((app) => {
+    if (app.permission && !allowed.has(app.permission)) return false
+    if (!includeNested && app.nestedIn) return false
+    return true
+  })
 }

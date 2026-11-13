@@ -116,7 +116,7 @@ export function FontAppearancePicker() {
         <div>
           <h3 className="text-sm font-semibold text-foreground">Font style</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Typeface for the whole system. Theme default keeps QuickBooks / Odoo / Hero ERP fonts.
+            Typeface for the whole system. Theme default keeps Odoo / SOM ERP fonts.
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

@@ -39,8 +39,13 @@ export async function GET(
 
     const config = purchaseByType(document.type)
     const origin = new URL(request.url).origin
+    // Same URL the user prints — ink + paper cookie so PDF matches the screen.
+    const printUrl = new URL(`${origin}/purchases/${config.slug}/${id}/print`)
+    printUrl.searchParams.set('ink', ink)
+    const paper = new URL(request.url).searchParams.get('paper')
+    if (paper === 'trade' || paper === 'merchant') printUrl.searchParams.set('paper', paper)
     const screen = await renderAuthenticatedPagePdf(
-      `${origin}/purchases/${config.slug}/${id}/print`,
+      printUrl.toString(),
       request.headers.get('cookie') ?? '',
     )
     if (screen && screen.length > 500) {

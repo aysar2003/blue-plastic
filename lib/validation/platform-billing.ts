@@ -5,6 +5,7 @@ import {
   MODULE_FORM_KEYS,
   type ModuleFlag,
 } from '@/lib/feature-flags'
+import { money } from '@/lib/money'
 
 const boolFlag = z
   .union([z.boolean(), z.literal('true'), z.literal('false'), z.literal('on'), z.literal('off')])
@@ -45,6 +46,18 @@ export const submitRentPaymentSchema = z.object({
 })
 
 export type SubmitRentPaymentInput = z.infer<typeof submitRentPaymentSchema>
+
+/** True when the paid amount is exactly the plan price. */
+export function rentAmountMatchesPlan(paid: number | string, planPrice: number | string): boolean {
+  try {
+    const amount = money(paid)
+    const price = money(planPrice)
+    if (amount.lte(0) || price.lte(0)) return false
+    return amount.eq(price)
+  } catch {
+    return false
+  }
+}
 
 export const reviewRentPaymentSchema = z.object({
   id: z.string().min(1),

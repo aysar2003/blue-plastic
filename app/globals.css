@@ -1,11 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *, .ink *, .som *, .odoo-dark *, .quick-dark *));
+@custom-variant dark (&:is(.som-dark *, .dark *, .ink *, .odoo-dark *, .quick-dark *));
 
 /*
- * Login doors keep their own light/dark tokens. Without this, html.som (and
- * other night themes) paint inputs and labels with the books palette.
+ * Login doors keep their own light/dark tokens. Without this, night themes
+ * paint inputs and labels with the books palette.
  */
 .login-light {
   color-scheme: light;
@@ -103,7 +103,6 @@
  * Odoo brand (https://www.odoo.com/page/brand-assets):
  * Primary plum #714B67 · Secondary teal #017E84 · Gray #8F8F8F
  */
-:root,
 /* Live Odoo Enterprise (emaar-building) — light shell, plum CTAs, teal links. */
 html.odoo {
   --radius: 0.375rem;
@@ -126,7 +125,8 @@ html.odoo {
   --destructive-foreground: #ffffff;
   --success: #017e84;
   --success-foreground: #f0fdfa;
-  --warning: #b45309;
+  /* #b41309 ≈ 5.2:1 on white — overdue KPIs stay above 4.5:1. */
+  --warning: #b41309;
   --warning-foreground: #fffbeb;
   --border: #dee2e6;
   --input: #ced4da;
@@ -281,7 +281,7 @@ html.ocean {
   --destructive-foreground: #fff7f8;
   --success: #0f766e;
   --success-foreground: #f0fdfa;
-  --warning: #b45309;
+  --warning: #b41309;
   --warning-foreground: #fffbeb;
   --border: #b7d0e0;
   --input: #a9c6d8;
@@ -311,6 +311,8 @@ html.lagoon {
   --muted-foreground: #1f4a45;
   --accent: #b7e4dc;
   --accent-foreground: #0f766e;
+  --warning: #b41309;
+  --warning-foreground: #fffbeb;
   --border: #a7d5cc;
   --input: #93c7bd;
   --ring: #0f766e;
@@ -339,6 +341,8 @@ html.forest {
   --muted-foreground: #1f4230;
   --accent: #b7e4c7;
   --accent-foreground: #166534;
+  --warning: #b41309;
+  --warning-foreground: #fffbeb;
   --border: #a3d4b5;
   --input: #8bc4a1;
   --ring: #166534;
@@ -367,6 +371,8 @@ html.amber {
   --muted-foreground: #5c3a18;
   --accent: #f0d4a4;
   --accent-foreground: #b45309;
+  --warning: #b41309;
+  --warning-foreground: #fffbeb;
   --border: #e4c48a;
   --input: #d7b36e;
   --ring: #b45309;
@@ -395,6 +401,8 @@ html.violet {
   --muted-foreground: #3d2f55;
   --accent: #ddd0f5;
   --accent-foreground: #6d28d9;
+  --warning: #b41309;
+  --warning-foreground: #fffbeb;
   --border: #cbb6ea;
   --input: #b89adf;
   --ring: #6d28d9;
@@ -423,6 +431,8 @@ html.rose {
   --muted-foreground: #5c2f3c;
   --accent: #f4c2ce;
   --accent-foreground: #be123c;
+  --warning: #b41309;
+  --warning-foreground: #fffbeb;
   --border: #e7a8b8;
   --input: #da90a4;
   --ring: #be123c;
@@ -451,6 +461,8 @@ html.indigo {
   --muted-foreground: #2e2c52;
   --accent: #c7d0f4;
   --accent-foreground: #3730a3;
+  --warning: #b41309;
+  --warning-foreground: #fffbeb;
   --border: #b4bde6;
   --input: #9aa6dc;
   --ring: #3730a3;
@@ -479,6 +491,8 @@ html.sand {
   --muted-foreground: #5c3a28;
   --accent: #e6cbb0;
   --accent-foreground: #9a3412;
+  --warning: #b41309;
+  --warning-foreground: #fffbeb;
   --border: #d7b89a;
   --input: #c9a484;
   --ring: #9a3412;
@@ -493,10 +507,96 @@ html.sand {
 }
 
 /*
- * SOM ERP — product night desk (login / marketing cyan on navy).
- * Same palette as Appearance → Website look → Product website.
+ * AI — cool mist desk with electric blue actions (not purple).
  */
+html.ai {
+  --radius: 0.5rem;
+  --background: #e8eef6;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #1d4ed8;
+  --primary-foreground: #ffffff;
+  --secondary: #dbe4f0;
+  --secondary-foreground: #0f172a;
+  --muted: #dbe4f0;
+  --muted-foreground: #334155;
+  --accent: #dbeafe;
+  --accent-foreground: #1e40af;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --success: #0284c7;
+  --success-foreground: #ffffff;
+  --warning: #b41309;
+  --warning-foreground: #fffbeb;
+  --border: #c5d0e0;
+  --input: #b8c5d6;
+  --ring: #1d4ed8;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-accent: #dbeafe;
+  --sidebar-accent-foreground: #1e40af;
+  --sidebar-border: #c5d0e0;
+  --glow: rgba(29, 78, 216, 0.22);
+  --stripe: #e8eef6;
+  --band: #dbe4f0;
+  --chart-income: #1d4ed8;
+  --chart-expense: #dc2626;
+  --chart-net: #0284c7;
+}
+
+
+
+/*
+ * SOM ERP — normal day desk (cyan brand on soft paper).
+ */
+:root,
 html.som {
+  --radius: 0.5rem;
+  --background: #f4f8fb;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #0e7490;
+  --primary-foreground: #ffffff;
+  --secondary: #e8eef4;
+  --secondary-foreground: #0f172a;
+  --muted: #e8eef4;
+  /* #334155 on paper ≈ 8:1 — secondary labels stay readable for elders. */
+  --muted-foreground: #334155;
+  --accent: #cffafe;
+  --accent-foreground: #0e7490;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --success: #0e7490;
+  --success-foreground: #ffffff;
+  /* #b41309 ≈ 5.2:1 on white — overdue KPIs stay ≥4.5:1. */
+  --warning: #b41309;
+  --warning-foreground: #fffbeb;
+  --border: #c5d4e0;
+  --input: #c5d4e0;
+  --ring: #0e7490;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-accent: #cffafe;
+  --sidebar-accent-foreground: #0e7490;
+  --sidebar-border: #c5d4e0;
+  --glow: rgba(14, 116, 144, 0.22);
+  --stripe: #e8eef4;
+  --band: #dbe7f0;
+  --chart-income: #0e7490;
+  --chart-expense: #dc2626;
+  --chart-net: #0891b2;
+}
+
+/*
+ * SOM Dark — classic product night desk (login / marketing cyan on navy).
+ */
+html.som-dark {
   --radius: 0.5rem;
   --background: #070b14;
   --foreground: #e2e8f0;
@@ -815,8 +915,8 @@ html.odoo .app-surface,
 html.odoo .sales-surface,
 html.odoo-dark .app-surface,
 html.odoo-dark .sales-surface {
-  /* Live Odoo: system stack / Inter, 14px body, 6px radius. */
-  --radius: 0.375rem;
+  /* Live Odoo: system stack / Inter, 14px body, 4px radius. */
+  --radius: 0.25rem;
   font-family:
     var(--font-odoo),
     -apple-system,
@@ -829,6 +929,7 @@ html.odoo-dark .sales-surface {
     Arial,
     sans-serif;
   font-size: 0.875rem;
+  line-height: 1.5;
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
 }
@@ -882,12 +983,12 @@ html[data-font-style='system'] .sales-surface {
     sans-serif;
 }
 
+html.som-dark .app-surface,
+html.som-dark .sales-surface,
 html.dark .app-surface,
 html.dark .sales-surface,
 html.ink .app-surface,
 html.ink .sales-surface,
-html.som .app-surface,
-html.som .sales-surface,
 html.odoo-dark .app-surface,
 html.odoo-dark .sales-surface,
 html.quick-dark .app-surface,
@@ -897,11 +998,30 @@ html.quick-dark .sales-surface,
   color-scheme: dark;
 }
 
-html.som .app-atmosphere {
+html.som .app-atmosphere,
+html.som-dark .app-atmosphere {
   display: none !important;
 }
 
 html.som .shell-topbar {
+  background: #ffffff !important;
+  border-bottom: 1px solid #c5d4e0 !important;
+  color: #0f172a;
+  backdrop-filter: none;
+  min-height: 46px;
+}
+
+html.som .shell-topbar .shell-brand-label,
+html.som .shell-topbar .shell-brand-mark {
+  color: #0f172a;
+}
+
+html.som .shell-topbar .shell-brand-mark {
+  background: #0e7490 !important;
+  color: #ffffff !important;
+}
+
+html.som-dark .shell-topbar {
   background: #0b1220 !important;
   border-bottom: 1px solid rgb(255 255 255 / 10%) !important;
   color: #e2e8f0;
@@ -909,12 +1029,12 @@ html.som .shell-topbar {
   min-height: 46px;
 }
 
-html.som .shell-topbar .shell-brand-label,
-html.som .shell-topbar .shell-brand-mark {
+html.som-dark .shell-topbar .shell-brand-label,
+html.som-dark .shell-topbar .shell-brand-mark {
   color: #f8fafc;
 }
 
-html.som .shell-topbar .shell-brand-mark {
+html.som-dark .shell-topbar .shell-brand-mark {
   background: #22d3ee !important;
   color: #070b14 !important;
 }
@@ -965,7 +1085,7 @@ html.odoo .shell-topbar .shell-brand-mark {
 
 html.odoo-dark .shell-topbar .shell-brand-label,
 html.odoo-dark .shell-topbar .shell-brand-mark {
-  color: #f3f3f3 !important;
+  color: #c8c8c8 !important;
 }
 
 html.quick .shell-topbar .shell-brand-label,
@@ -982,7 +1102,7 @@ html.odoo .shell-topbar .shell-brand-mark {
 }
 
 html.odoo-dark .shell-topbar .shell-brand-mark {
-  background: #5c3d55 !important;
+  background: #714b67 !important;
   color: #ffffff !important;
   box-shadow: none;
 }
@@ -992,6 +1112,28 @@ html.quick-dark .shell-topbar .shell-brand-mark {
   background: #248a18 !important;
   color: #ffffff !important;
   box-shadow: none;
+}
+
+html.som .shell-topbar {
+  --foreground: #0f172a;
+  --muted-foreground: #334155;
+  --border: #c5d4e0;
+  --input: #c5d4e0;
+  --accent: #e8eef4;
+  --accent-foreground: #0f172a;
+  --card: #ffffff;
+}
+
+html.som-dark .shell-topbar,
+html.dark .shell-topbar,
+html.ink .shell-topbar {
+  --foreground: #e2e8f0;
+  --muted-foreground: #cbd5e1;
+  --border: rgb(255 255 255 / 12%);
+  --input: rgb(255 255 255 / 14%);
+  --accent: rgb(255 255 255 / 8%);
+  --accent-foreground: #f8fafc;
+  --card: #0d1524;
 }
 
 html.odoo .shell-topbar {
@@ -1014,6 +1156,12 @@ html.odoo-dark .shell-topbar {
   --card: #2a2a2e;
 }
 
+/* Plum primary is too dark for active module tabs on the night desk.
+ * Do not match text-primary-foreground (hero CTAs on plum bars). */
+html.odoo-dark :is(.shell-tabs, .app-surface) a.text-primary:not([class*='text-primary-foreground']) {
+  color: #c9a9c0 !important;
+}
+
 html.quick .shell-topbar,
 html.quick-dark .shell-topbar {
   --foreground: #ffffff;
@@ -1025,26 +1173,57 @@ html.quick-dark .shell-topbar {
   --card: #248a18;
 }
 
-html.odoo .shell-topbar button,
-html.odoo .shell-topbar a {
-  color: #212529;
+/* Ghost / plain chrome controls — not filled CTAs (Create = bg-primary). */
+html.odoo .shell-topbar :is(button, a):not(.bg-primary) {
+  color: #212529 !important;
 }
 
-html.odoo .shell-topbar button:hover,
-html.odoo .shell-topbar a:hover {
-  background: #e7ebed;
-  color: #212529;
+html.odoo .shell-topbar :is(button, a):not(.bg-primary):hover {
+  background: #e7ebed !important;
+  color: #212529 !important;
 }
 
-html.odoo-dark .shell-topbar button,
-html.odoo-dark .shell-topbar a {
-  color: #f3f3f3;
+html.odoo .shell-topbar :is(button, a).bg-primary {
+  color: #ffffff !important;
 }
 
-html.odoo-dark .shell-topbar button:hover,
-html.odoo-dark .shell-topbar a:hover {
-  background: #3a3a40;
-  color: #f3f3f3;
+html.odoo .shell-topbar :is(button, a).bg-primary:hover {
+  background-color: #5c3d55 !important;
+  color: #ffffff !important;
+}
+
+html.odoo .shell-topbar .text-muted-foreground {
+  color: #495057 !important;
+}
+
+html.odoo .shell-topbar .shell-brand-label {
+  color: #212529 !important;
+}
+
+html.odoo-dark .shell-topbar :is(button, a):not(.bg-primary) {
+  color: #c8c8c8 !important;
+}
+
+html.odoo-dark .shell-topbar :is(button, a):not(.bg-primary):hover {
+  background: #303030 !important;
+  color: #c8c8c8 !important;
+}
+
+html.odoo-dark .shell-topbar :is(button, a).bg-primary {
+  color: #ffffff !important;
+}
+
+html.odoo-dark .shell-topbar :is(button, a).bg-primary:hover {
+  background-color: #5c3d55 !important;
+  color: #ffffff !important;
+}
+
+html.odoo-dark .shell-topbar .text-muted-foreground {
+  color: #8b8b8b !important;
+}
+
+html.odoo-dark .shell-topbar .shell-brand-label {
+  color: #c8c8c8 !important;
 }
 
 html.quick .shell-topbar button,
@@ -1073,9 +1252,9 @@ html.odoo .shell-topbar input::placeholder {
 }
 
 html.odoo-dark .shell-topbar input {
-  background: rgb(0 0 0 / 18%);
-  border-color: rgb(243 243 243 / 18%);
-  color: #f3f3f3;
+  background: #181818;
+  border-color: #303030;
+  color: #c8c8c8;
 }
 
 html.quick .shell-topbar input,
@@ -1096,7 +1275,12 @@ html.odoo .shell-topbar kbd {
   color: #495057 !important;
 }
 
-html.odoo-dark .shell-topbar kbd,
+html.odoo-dark .shell-topbar kbd {
+  background: #303030 !important;
+  border-color: #4a4a4a !important;
+  color: #c8c8c8 !important;
+}
+
 html.quick .shell-topbar kbd,
 html.quick-dark .shell-topbar kbd {
   background: rgb(0 0 0 / 22%) !important;
@@ -1110,7 +1294,7 @@ html.odoo .shell-topbar [data-slot='avatar-fallback'] {
 }
 
 html.odoo-dark .shell-topbar [data-slot='avatar-fallback'] {
-  background: #5c3d55 !important;
+  background: #714b67 !important;
   color: #ffffff !important;
 }
 
@@ -1122,23 +1306,55 @@ html.quick-dark .shell-topbar [data-slot='avatar-fallback'] {
 
 html.odoo .shell-apps {
   background: #ffffff !important;
-  border-bottom-color: #dee2e6 !important;
+  border-bottom: 1px solid #dee2e6 !important;
 }
 
 html.quick .shell-apps {
-  /* QBO control strip under the green bar. */
+  /* QBO control strip under the green bar — room for colorful app tiles. */
   background: #f4f5f8 !important;
-  border-bottom-color: #d5d8dc !important;
+  border-bottom: 1px solid #d5d8dc !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7);
 }
 
 html.odoo-dark .shell-apps {
-  background: #2a2a2e !important;
-  border-bottom-color: rgb(243 243 243 / 12%) !important;
+  background: #1f1f1f !important;
+  border-bottom: 1px solid #303030 !important;
 }
 
 html.quick-dark .shell-apps {
   background: #242a24 !important;
   border-bottom-color: rgb(232 245 233 / 12%) !important;
+}
+
+/* Top apps strip: clearer hover / active chips across brand skins. */
+.shell-apps [data-app-nav][data-variant='top'] > .relative > button:hover,
+.shell-apps [data-app-nav][data-variant='top'] a:hover,
+.shell-apps [data-app-nav][data-variant='top'] button:hover {
+  background: rgb(255 255 255 / 0.92);
+}
+
+html.quick .shell-apps [data-app-nav][data-variant='top'] > .relative > button:hover,
+html.quick .shell-apps [data-app-nav][data-variant='top'] a:hover,
+html.quick .shell-apps [data-app-nav][data-variant='top'] button:hover {
+  background: #ffffff;
+}
+
+html.odoo .shell-apps [data-app-nav][data-variant='top'] > .relative > button:hover,
+html.odoo .shell-apps [data-app-nav][data-variant='top'] a:hover,
+html.odoo .shell-apps [data-app-nav][data-variant='top'] button:hover {
+  background: #e9ecef;
+}
+
+html.odoo-dark .shell-apps [data-app-nav][data-variant='top'] > .relative > button:hover,
+html.odoo-dark .shell-apps [data-app-nav][data-variant='top'] a:hover,
+html.odoo-dark .shell-apps [data-app-nav][data-variant='top'] button:hover {
+  background: #303030;
+}
+
+html.quick-dark .shell-apps [data-app-nav][data-variant='top'] > .relative > button:hover,
+html.quick-dark .shell-apps [data-app-nav][data-variant='top'] a:hover,
+html.quick-dark .shell-apps [data-app-nav][data-variant='top'] button:hover {
+  background: rgb(255 255 255 / 0.08);
 }
 
 /*
@@ -1179,8 +1395,8 @@ html:not(.odoo):not(.odoo-dark):not(.quick):not(.quick-dark) .shell-topbar [data
 
 /* Dark brand tabs sit on the page ground — muted / active must stay readable. */
 html.odoo-dark .shell-tabs {
-  --muted-foreground: #c2c2c7;
-  --primary: #c9a9c0;
+  --muted-foreground: #8b8b8b;
+  --primary: #00c7c7;
 }
 
 html.quick-dark .shell-tabs {
@@ -1189,11 +1405,17 @@ html.quick-dark .shell-tabs {
 }
 
 html.odoo .app-surface [data-slot='card'],
-html.odoo .sales-surface [data-slot='card'],
+html.odoo .sales-surface [data-slot='card'] {
+  border-radius: 0.25rem;
+  border-color: #dee2e6;
+  box-shadow: none;
+}
+
 html.odoo-dark .app-surface [data-slot='card'],
 html.odoo-dark .sales-surface [data-slot='card'] {
-  border-radius: 8px;
-  border-color: #dee2e6;
+  border-radius: 0.25rem;
+  border-color: #303030;
+  background: #1f1f1f;
   box-shadow: none;
 }
 
@@ -1250,10 +1472,12 @@ html.odoo-dark .sales-surface button[data-slot='button'] {
   font-weight: 500;
 }
 
-/* Primary CTA hover matches live Odoo (#624159). */
+/* Primary CTA hover matches live Odoo (darken plum ~10%). */
 html.odoo .app-surface button[data-slot='button'].bg-primary:hover,
-html.odoo .sales-surface button[data-slot='button'].bg-primary:hover {
-  background-color: #624159 !important;
+html.odoo .sales-surface button[data-slot='button'].bg-primary:hover,
+html.odoo-dark .app-surface button[data-slot='button'].bg-primary:hover,
+html.odoo-dark .sales-surface button[data-slot='button'].bg-primary:hover {
+  background-color: #5c3d55 !important;
 }
 
 html.quick .app-surface button[data-slot='button'],
@@ -1302,15 +1526,28 @@ html.odoo .sales-surface [data-slot='table'] tbody td {
   border-bottom-color: #dee2e6;
 }
 
-/* Text links only — leave plum primary buttons / filled anchors alone. */
-html.odoo .app-surface a:not([class*='bg-']):not([data-slot='button']),
-html.odoo .sales-surface a:not([class*='bg-']):not([data-slot='button']) {
+/*
+ * Page body links only — leave shell brand / chrome, filled CTAs, and white
+ * text on plum heroes alone (text-primary-foreground / .bg-primary children).
+ */
+html.odoo :is(.app-surface, .sales-surface) main
+  a:not([class*='bg-']):not([data-slot='button']):not([class*='text-primary-foreground']) {
   color: #017e84;
 }
 
-html.odoo .app-surface a:not([class*='bg-']):not([data-slot='button']):hover,
-html.odoo .sales-surface a:not([class*='bg-']):not([data-slot='button']):hover {
+html.odoo :is(.app-surface, .sales-surface) main
+  a:not([class*='bg-']):not([data-slot='button']):not([class*='text-primary-foreground']):hover {
   color: #01585c;
+}
+
+html.odoo :is(.app-surface, .sales-surface) main .bg-primary a:not([class*='bg-']):not([data-slot='button']),
+html.odoo-dark :is(.app-surface, .sales-surface) main .bg-primary a:not([class*='bg-']):not([data-slot='button']) {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+html.odoo :is(.app-surface, .sales-surface) main .bg-primary a:not([class*='bg-']):not([data-slot='button']):hover,
+html.odoo-dark :is(.app-surface, .sales-surface) main .bg-primary a:not([class*='bg-']):not([data-slot='button']):hover {
+  color: #ffffff;
 }
 
 html.quick .app-surface [data-slot='input'],
@@ -1335,8 +1572,8 @@ html.odoo .shell-tabs {
 }
 
 html.odoo-dark .shell-tabs {
-  background: #2a2a2e;
-  border-bottom-color: rgb(243 243 243 / 12%);
+  background: #1f1f1f;
+  border-bottom-color: #303030;
 }
 
 html.quick .shell-tabs {
@@ -1374,10 +1611,48 @@ html.odoo .shell-tabs :is(a, button)[aria-current='page'] {
 
 html.odoo-dark .shell-apps :is(a, button)[aria-current='page'],
 html.odoo-dark .shell-tabs :is(a, button)[aria-current='page'] {
-  background: color-mix(in srgb, #017e84 22%, transparent) !important;
-  color: #c9a9c0 !important;
+  background: #303030 !important;
+  color: #c8c8c8 !important;
   font-weight: 500;
-  box-shadow: inset 0 -2px 0 #017e84;
+  box-shadow: inset 0 -2px 0 #00c7c7;
+}
+
+/*
+ * Plum #714B67 on dark sheets fails contrast (~2.3:1). Keep filled primary
+ * buttons white-on-plum; lighten text-primary / outline links for dark mode.
+ * Exclude text-primary-foreground so plum-hero CTAs stay light-on-plum.
+ */
+html.odoo-dark :is(.app-surface, .sales-surface, .shell-tabs, .shell-apps) :is(
+  .text-primary,
+  a.text-primary,
+  button.text-primary
+):not(.bg-primary):not([class*='text-primary-foreground']) {
+  color: #c9a9c0 !important;
+}
+
+html.odoo-dark :is(.app-surface, .sales-surface) .bg-primary :is(
+  .text-primary-foreground,
+  [class*='text-primary-foreground']
+) {
+  color: #ffffff !important;
+}
+
+html.odoo-dark :is(.app-surface, .sales-surface) :is(
+  .border-primary,
+  [class*='border-primary']
+):not(.bg-primary) {
+  border-color: #c9a9c0 !important;
+}
+
+/* Page body links only — do not recolor shell brand / chrome / plum-hero anchors. */
+html.odoo-dark :is(.app-surface, .sales-surface) main
+  a:not([class*='bg-']):not([data-slot='button']):not([class*='text-primary-foreground']) {
+  color: #00c7c7;
+}
+
+html.odoo-dark :is(.app-surface, .sales-surface) main
+  a:not([class*='bg-']):not([data-slot='button']):not([class*='text-primary-foreground']):hover {
+  color: #5fdcdc;
 }
 
 html.quick .shell-apps :is(a, button)[aria-current='page'],
@@ -1445,9 +1720,12 @@ html.odoo-dark [class*='hover:bg-[#248a18]']:hover {
   background-color: #5c3d55 !important;
 }
 
-html.odoo [class*='text-[#2ca01c]'],
-html.odoo-dark [class*='text-[#2ca01c]'] {
+html.odoo [class*='text-[#2ca01c]'] {
   color: #017e84 !important;
+}
+
+html.odoo-dark [class*='text-[#2ca01c]'] {
+  color: #00c7c7 !important;
 }
 
 html.odoo [class*='accent-[#2ca01c]'],
@@ -1607,27 +1885,61 @@ html.odoo .app-glyph-tile {
 }
 
 /*
- * Legacy QB green / orange accents: bump contrast on colour shells and night
- * skins. Quick keeps the authentic #2CA01C brand green.
+ * Every System look except Odoo: leftover QB greens / Odoo plum paint this
+ * theme’s primary so Ocean / Lagoon / Forest / night desks follow Appearance
+ * the same way SOM does. Odoo keeps plum buttons + teal links above.
  */
-html:not(.som):not(.odoo):not(.odoo-dark):not(.quick):not(.quick-dark) [class*='bg-[#2ca01c]'] {
-  background-color: #187a12 !important;
+html:not(.odoo):not(.odoo-dark) [class*='bg-[#2ca01c]'],
+html:not(.odoo):not(.odoo-dark) [class*='hover:bg-[#248a18]'],
+html:not(.odoo):not(.odoo-dark) [class*='bg-[#714B67]'],
+html:not(.odoo):not(.odoo-dark) [class*='bg-[#714b67]'],
+html:not(.odoo):not(.odoo-dark) [class*='bg-[#5c3d55]'],
+html:not(.odoo):not(.odoo-dark) [class*='bg-[#624159]'] {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
 }
 
-html:not(.som):not(.odoo):not(.odoo-dark):not(.quick):not(.quick-dark) [class*='hover:bg-[#248a18]']:hover {
-  background-color: #14640f !important;
+html:not(.odoo):not(.odoo-dark) [class*='hover:bg-[#248a18]']:hover {
+  background-color: color-mix(in srgb, var(--primary) 82%, white) !important;
 }
 
-html:not(.som):not(.dark):not(.ink):not(.odoo-dark):not(.quick-dark) [class*='text-[#d4652f]'] {
-  color: #9a3412 !important;
+html:not(.odoo):not(.odoo-dark) [class*='text-[#2ca01c]'],
+html:not(.odoo):not(.odoo-dark) [class*='text-[#0b4f6c]'],
+html:not(.odoo):not(.odoo-dark) [class*='text-[#0369a1]'],
+html:not(.odoo):not(.odoo-dark) [class*='text-[#0e7490]'],
+html:not(.odoo):not(.odoo-dark) [class*='text-[#017e84]'],
+html:not(.odoo):not(.odoo-dark) [class*='text-[#714B67]'],
+html:not(.odoo):not(.odoo-dark) [class*='text-[#714b67]'],
+html:not(.odoo):not(.odoo-dark) [class*='text-[#3F2C38]'],
+html:not(.odoo):not(.odoo-dark) [class*='text-[#3f2c38]'] {
+  color: var(--primary) !important;
 }
 
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) [class*='text-[#d4652f]'] {
+html:not(.odoo):not(.odoo-dark) [class*='border-[#2ca01c]'],
+html:not(.odoo):not(.odoo-dark) [class*='border-[#714B67]'],
+html:not(.odoo):not(.odoo-dark) [class*='border-[#714b67]'] {
+  border-color: var(--primary) !important;
+}
+
+html:not(.odoo):not(.odoo-dark) [class*='accent-[#2ca01c]'] {
+  accent-color: var(--primary);
+}
+
+html:not(.som-dark):not(.dark):not(.ink):not(.odoo-dark):not(.quick-dark) [class*='text-[#d4652f]'],
+html:not(.som-dark):not(.dark):not(.ink):not(.odoo-dark):not(.quick-dark) [class*='text-[#c2410c]'] {
+  /* Align leftover overdue hexes with the ≥4.5:1 warning token. */
+  color: #b41309 !important;
+}
+
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) [class*='text-[#d4652f]'],
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) [class*='text-[#c2410c]'] {
+  /* Burnt orange on night cards is unreadable — lift to amber. */
   color: #fb923c !important;
 }
 
 /* Quick light keeps the familiar overdue orange. */
-html.quick [class*='text-[#d4652f]'] {
+html.quick [class*='text-[#d4652f]'],
+html.quick [class*='text-[#c2410c]'] {
   color: #d4652f !important;
 }
 
@@ -1704,82 +2016,56 @@ html.quick [class*='text-[#d4652f]'] {
   color: #9a3412;
 }
 
-html.dark .app-surface [data-slot='card'][data-tone='stock'],
-html.dark .sales-surface [data-slot='card'][data-tone='stock'],
-.dark .app-surface [data-slot='card'][data-tone='stock'],
-.dark .sales-surface [data-slot='card'][data-tone='stock'] {
+/*
+ * Night desks (SOM Dark / Dark / Odoo Dark / Quick Dark) — invert paper tones
+ * so pastel fills do not flash on navy/plum grounds.
+ */
+html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='stock'] {
   background: #134e4a;
   border-color: #0f766e;
   color: #ccfbf1;
 }
-html.dark .app-surface [data-slot='card'][data-tone='zero'],
-html.dark .sales-surface [data-slot='card'][data-tone='zero'],
-.dark .app-surface [data-slot='card'][data-tone='zero'],
-.dark .sales-surface [data-slot='card'][data-tone='zero'] {
+html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='zero'] {
   background: #1e293b;
   border-color: #334155;
   color: #e2e8f0;
 }
-html.dark .app-surface [data-slot='card'][data-tone='danger'],
-html.dark .sales-surface [data-slot='card'][data-tone='danger'],
-.dark .app-surface [data-slot='card'][data-tone='danger'],
-.dark .sales-surface [data-slot='card'][data-tone='danger'] {
+html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='danger'] {
   background: #7c2d12;
   border-color: #c2410c;
   color: #ffedd5;
 }
-html.dark .app-surface [data-slot='card'][data-tone='warning'],
-html.dark .sales-surface [data-slot='card'][data-tone='warning'],
-.dark .app-surface [data-slot='card'][data-tone='warning'],
-.dark .sales-surface [data-slot='card'][data-tone='warning'] {
+html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='warning'] {
   background: #78350f;
   border-color: #b45309;
   color: #fef3c7;
 }
-html.dark .app-surface [data-slot='card'][data-tone='money'],
-html.dark .sales-surface [data-slot='card'][data-tone='money'],
-.dark .app-surface [data-slot='card'][data-tone='money'],
-.dark .sales-surface [data-slot='card'][data-tone='money'] {
+html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='money'] {
   background: #1e3a8a;
   border-color: #3b82f6;
   color: #dbeafe;
 }
-html.dark .app-surface [data-slot='card'][data-tone='ledger'],
-html.dark .sales-surface [data-slot='card'][data-tone='ledger'],
-.dark .app-surface [data-slot='card'][data-tone='ledger'],
-.dark .sales-surface [data-slot='card'][data-tone='ledger'] {
+html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='ledger'] {
   background: #312e81;
   border-color: #6366f1;
   color: #e0e7ff;
 }
-html.dark .app-surface [data-slot='card'][data-tone='success'],
-html.dark .sales-surface [data-slot='card'][data-tone='success'],
-.dark .app-surface [data-slot='card'][data-tone='success'],
-.dark .sales-surface [data-slot='card'][data-tone='success'] {
+html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='success'] {
   background: #14532d;
   border-color: #22c55e;
   color: #dcfce7;
 }
-html.dark .app-surface [data-slot='card'][data-tone='info'],
-html.dark .sales-surface [data-slot='card'][data-tone='info'],
-.dark .app-surface [data-slot='card'][data-tone='info'],
-.dark .sales-surface [data-slot='card'][data-tone='info'] {
+html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='info'] {
   background: #0c4a6e;
   border-color: #0ea5e9;
   color: #e0f2fe;
 }
-html.dark .app-surface [data-slot='card'][data-tone='sales'],
-html.dark .sales-surface [data-slot='card'][data-tone='sales'],
-.dark .app-surface [data-slot='card'][data-tone='sales'],
-.dark .sales-surface [data-slot='card'][data-tone='sales'] {
+html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='sales'] {
   background: #1e3a8a;
   border-color: #60a5fa;
   color: #dbeafe;
 }
-html.dark .app-surface [data-slot='card'][data-tone='purchase'],
-html.dark .sales-surface [data-slot='card'][data-tone='purchase'],
-.dark .app-surface [data-slot='card'][data-tone='purchase'],
-.dark .sales-surface [data-slot='card'][data-tone='purchase'] {
+html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='purchase'] {
   background: #7c2d12;
   border-color: #ea580c;
   color: #ffedd5;
@@ -1978,24 +2264,24 @@ option {
 /*
  * Legacy hard-coded light stripes break under night themes: ink is light, so
  * numbers vanish on white / #c5dff3 rows. Remap those classes to tokens on
- * every dark skin — SOM ERP (website look), Dark, Ink, Odoo Dark, Quick Dark.
+ * every dark skin — Dark, Ink, Odoo Dark, Quick Dark.
  */
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='c5dff3'], [class*='b3d0ec'], [class*='e7f3fb']) {
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='c5dff3'], [class*='b3d0ec'], [class*='e7f3fb']) {
   background-color: var(--stripe) !important;
   color: var(--foreground) !important;
 }
 
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='d5dde6'], [class*='c8d3df']) {
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='d5dde6'], [class*='c8d3df']) {
   background-color: var(--band) !important;
   color: var(--foreground) !important;
 }
 
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [class*='b7e1a1'] {
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [class*='b7e1a1'] {
   background-color: color-mix(in srgb, var(--primary) 28%, var(--card)) !important;
   color: var(--foreground) !important;
 }
 
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-slot='dialog-content']) :is([class*='bg-white'], [class*='bg-sky-50'], [class*='bg-slate-50'], [class*='bg-gray-50']):not(.merchant-invoice):not(.invoice-sheet) {
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-slot='dialog-content']) :is([class*='bg-white'], [class*='bg-sky-50'], [class*='bg-slate-50'], [class*='bg-gray-50']):not(.merchant-invoice):not(.invoice-sheet) {
   background-color: var(--card) !important;
   color: var(--foreground) !important;
 }
@@ -2005,12 +2291,12 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-sur
  * not lighten type on invoices, delivery notes, or statement invoice pages.
  * Without this, Print / Save as PDF shows pale text on white (unreadable).
  */
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) {
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) {
   background-color: #ffffff !important;
   color: #1f2933 !important;
 }
 
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
   .text-\[\#5C6B7A\],
   .text-\[\#5c6b7a\],
   .text-\[\#3d4c5c\],
@@ -2019,7 +2305,7 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-sur
   color: #5c6b7a !important;
 }
 
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
   .text-\[\#1f1f23\],
   .text-\[\#1f2933\],
   .text-\[\#1B3A4B\],
@@ -2032,7 +2318,7 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-sur
  * Light “paper” hovers (QB blue / slate / pastel kind tints) wash out light ink
  * on night themes. Dialogs and menus portal outside .app-surface.
  */
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
@@ -2067,7 +2353,7 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
  * Accent hovers from light skins are near-white. On night desks that erase the
  * row ink — force the band and let muted cells follow the row.
  */
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
@@ -2083,7 +2369,7 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
  * hover:text-* never reaches date/status cells. On any hovered or selected
  * interactive row, muted ink must follow the row.
  */
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
@@ -2096,7 +2382,7 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
   [aria-current='true'],
   [aria-current='page']
 ) .text-muted-foreground,
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
@@ -2107,7 +2393,7 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
 }
 
 /* Selected accent fills (combobox / tabs) — same muted-child lock. */
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
@@ -2121,7 +2407,7 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(
  * Paper-tint arbitrary fills stay light on night themes and erase light ink.
  * Match the hex fragment so we do not trip CSS attribute-selector parsing on `#`.
  */
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is(
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is(
   [class*='f4f8fb'],
   [class*='e7edf2'],
   [class*='fbfcfd'],
@@ -2135,16 +2421,63 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-sur
   color: var(--foreground) !important;
 }
 
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is(.text-slate-500, .text-slate-600, .text-slate-700, .text-slate-800, .text-slate-900, .text-slate-950, .text-gray-500, .text-gray-600, .text-gray-700, .text-gray-800, .text-gray-900, .text-black, .text-\[\#141418\], .text-\[\#26262d\], .text-\[\#4a4a54\], .text-\[\#3F2C38\], .text-\[\#714B67\], .text-\[\#714b67\]) {
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content'],
+  [data-slot='popover-content'],
+  [data-slot='dropdown-menu-content']
+) :is(
+  .text-slate-500,
+  .text-slate-600,
+  .text-slate-700,
+  .text-slate-800,
+  .text-slate-900,
+  .text-slate-950,
+  .text-gray-500,
+  .text-gray-600,
+  .text-gray-700,
+  .text-gray-800,
+  .text-gray-900,
+  .text-zinc-500,
+  .text-zinc-600,
+  .text-zinc-700,
+  .text-zinc-800,
+  .text-zinc-900,
+  .text-neutral-500,
+  .text-neutral-600,
+  .text-neutral-700,
+  .text-neutral-800,
+  .text-neutral-900,
+  .text-black,
+  .text-\[\#141418\],
+  .text-\[\#26262d\],
+  .text-\[\#4a4a54\],
+  .text-\[\#3F2C38\],
+  .text-\[\#714B67\],
+  .text-\[\#714b67\]
+) {
   color: var(--foreground) !important;
 }
 
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is(.text-slate-400, .text-gray-400) {
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content'],
+  [data-slot='popover-content'],
+  [data-slot='dropdown-menu-content']
+) :is(.text-slate-400, .text-gray-400, .text-zinc-400, .text-neutral-400) {
   color: var(--muted-foreground) !important;
 }
 
 /* Soft labels that were tuned for paper stay readable on night fills. */
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) .text-muted-foreground {
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content'],
+  [data-slot='popover-content'],
+  [data-slot='dropdown-menu-content']
+) .text-muted-foreground {
   color: var(--muted-foreground) !important;
 }
 
@@ -2152,7 +2485,11 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-sur
  * Hard-coded print-sheet greys (#5C6B7A, #3d4c5c) vanish on night desks.
  * Remap to theme ink when those hexes appear as Tailwind arbitrary colours.
  */
-html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is(
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is(
   .text-\[\#5C6B7A\],
   .text-\[\#5c6b7a\],
   .text-\[\#3d4c5c\],
@@ -2164,15 +2501,116 @@ html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-sur
 }
 
 /*
+ * System-wide amber / orange status chips that were painted for paper desks.
+ * Without dark: companions they vanish on night themes — lift ink and soften fills.
+ * Attribute match covers opacity modifiers (bg-amber-50/60).
+ */
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is(
+  .text-amber-600,
+  .text-amber-700,
+  .text-amber-800,
+  .text-amber-900,
+  .text-amber-950,
+  .text-orange-600,
+  .text-orange-700,
+  .text-orange-800,
+  .text-orange-900,
+  .text-orange-950
+) {
+  color: #fbbf24 !important;
+}
+
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is([class*='bg-amber-50'], [class*='bg-amber-100'], [class*='bg-orange-50'], [class*='bg-orange-100']) {
+  background-color: color-mix(in srgb, #fbbf24 16%, var(--card)) !important;
+}
+
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is(
+  [class*='border-amber-200'],
+  [class*='border-amber-300'],
+  [class*='border-orange-200'],
+  [class*='border-orange-300']
+) {
+  border-color: color-mix(in srgb, #fbbf24 45%, var(--border)) !important;
+}
+
+/* Rose / red paper chips (voided, risk) — same night lift. */
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is(.text-rose-700, .text-rose-800, .text-rose-900, .text-red-700, .text-red-800, .text-red-900) {
+  color: #fda4af !important;
+}
+
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is([class*='bg-rose-50'], [class*='bg-red-50'], [class*='bg-rose-100'], [class*='bg-red-100']) {
+  background-color: color-mix(in srgb, #fb7185 14%, var(--card)) !important;
+}
+
+/* Emerald success chips painted for paper — lift on night desks. */
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is(.text-emerald-700, .text-emerald-800, .text-emerald-900) {
+  color: #6ee7b7 !important;
+}
+
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is([class*='bg-emerald-50'], [class*='bg-emerald-100']) {
+  background-color: color-mix(in srgb, #34d399 14%, var(--card)) !important;
+}
+
+/* Sky / stone account-type chips. */
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is(.text-sky-700, .text-sky-800, .text-sky-900, .text-stone-700, .text-stone-800, .text-stone-900) {
+  color: var(--foreground) !important;
+}
+
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is([class*='bg-sky-100'], [class*='bg-stone-200'], [class*='bg-stone-100']) {
+  background-color: color-mix(in srgb, var(--muted-foreground) 18%, var(--card)) !important;
+}
+
+/* Warning token text (Overdue KPIs / status) follows theme --warning on every desk. */
+html :is(.app-surface, .sales-surface, [data-slot='dialog-content']) .text-warning {
+  color: var(--warning) !important;
+}
+
+/*
  * Labels that must stay on-brand use primary, never a fixed plum.
  * Match `.text-primary` only — `text-primary-foreground` also contains that
  * substring, and painting it cyan made New item / Search ink vanish on cyan CTAs.
  */
-html.som :is(.app-surface, .sales-surface) :is(label.text-primary, .text-primary) {
+html:is(.som, .som-dark) :is(.app-surface, .sales-surface) :is(label.text-primary, .text-primary) {
   color: var(--primary) !important;
 }
 
-html.som :is(.app-surface, .sales-surface) :is(
+html:is(.som, .som-dark) :is(.app-surface, .sales-surface) :is(
   .text-primary-foreground,
   [data-slot='button'].bg-primary,
   button.bg-primary,
@@ -2181,60 +2619,27 @@ html.som :is(.app-surface, .sales-surface) :is(
   color: var(--primary-foreground) !important;
 }
 
-/* SOM ERP website look — remap leftover QuickBooks greens / Odoo plum to cyan. */
-html.som [class*='bg-[#2ca01c]'],
-html.som [class*='hover:bg-[#248a18]'],
-html.som [class*='bg-[#714B67]'],
-html.som [class*='bg-[#714b67]'],
-html.som [class*='bg-[#5c3d55]'],
-html.som [class*='bg-[#624159]'] {
-  background-color: var(--primary) !important;
-  color: var(--primary-foreground) !important;
-}
-
-html.som [class*='hover:bg-[#248a18]']:hover {
-  background-color: color-mix(in srgb, var(--primary) 82%, white) !important;
-}
-
-html.som [class*='text-[#2ca01c]'],
-html.som [class*='text-[#0b4f6c]'],
-html.som [class*='text-[#0369a1]'],
-html.som [class*='text-[#0e7490]'],
-html.som [class*='text-[#017e84]'],
-html.som [class*='text-[#714B67]'],
-html.som [class*='text-[#714b67]'],
-html.som [class*='text-[#3F2C38]'],
-html.som [class*='text-[#3f2c38]'] {
-  color: var(--primary) !important;
-}
-
-html.som [class*='border-[#2ca01c]'],
-html.som [class*='border-[#714B67]'],
-html.som [class*='border-[#714b67]'] {
-  border-color: var(--primary) !important;
-}
-
-html.som .figure-chart,
-html.som figure.rounded-xl[class*='e4ebf2'] {
+/* SOM chart cards — theme sheet (QB green remap lives with all non-Odoo looks above). */
+html:is(.som, .som-dark) .figure-chart,
+html:is(.som, .som-dark) figure.rounded-xl[class*='e4ebf2'] {
   background: var(--card) !important;
   color: var(--foreground);
   --tw-ring-color: color-mix(in srgb, var(--border) 80%, transparent);
 }
 
-html.som .figure-chart figcaption,
-html.som .figure-chart text {
+html:is(.som, .som-dark) .figure-chart figcaption,
+html:is(.som, .som-dark) .figure-chart text {
   fill: var(--foreground);
   color: var(--foreground);
 }
 
 /*
- * Sales list heroes (Invoices / Estimates / Orders): on SOM the primary CTA cyan
- * is too bright as a full-bleed band with dark ink. Deepen the band and flip to
- * bright type so it matches the website navy + cyan look.
+ * Sales list heroes (Invoices / Estimates / Orders): solid primary band with
+ * bright type so the cyan CTA stays readable on the light desk.
  */
 html.som :is(.app-surface, .sales-surface) section > div.bg-primary {
-  background: color-mix(in srgb, var(--primary) 22%, #070b14) !important;
-  color: #ffffff !important;
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
 }
 
 html.som :is(.app-surface, .sales-surface) section > div.bg-primary :is(h1, p) {
@@ -2242,10 +2647,32 @@ html.som :is(.app-surface, .sales-surface) section > div.bg-primary :is(h1, p) {
 }
 
 html.som :is(.app-surface, .sales-surface) section > div.bg-primary h1 {
-  color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
 }
 
 html.som :is(.app-surface, .sales-surface) section > div.bg-primary a.bg-card {
+  background: #ffffff !important;
+  color: var(--primary) !important;
+}
+
+/*
+ * SOM Dark sales heroes: deepen the cyan band onto navy so bright type matches
+ * the classic website night desk.
+ */
+html.som-dark :is(.app-surface, .sales-surface) section > div.bg-primary {
+  background: color-mix(in srgb, var(--primary) 22%, #070b14) !important;
+  color: #ffffff !important;
+}
+
+html.som-dark :is(.app-surface, .sales-surface) section > div.bg-primary :is(h1, p) {
+  color: inherit !important;
+}
+
+html.som-dark :is(.app-surface, .sales-surface) section > div.bg-primary h1 {
+  color: var(--primary) !important;
+}
+
+html.som-dark :is(.app-surface, .sales-surface) section > div.bg-primary a.bg-card {
   background: var(--primary) !important;
   color: var(--primary-foreground) !important;
 }
@@ -2264,6 +2691,17 @@ html.som :is(.app-surface, .sales-surface) section > div.bg-primary a.bg-card {
     0 10px 22px -10px rgb(15 23 42 / 0.45);
 }
 
+/* Apps home: flat icon grid on the normal page surface (no dark stage). */
+.odoo-home-menu .odoo-home-tile,
+.odoo-home-menu .app-glyph-tile.odoo-home-tile {
+  border-radius: 0.75rem;
+}
+
+.odoo-folder-panel {
+  max-height: min(80vh, 36rem);
+  overflow: auto;
+}
+
 .group:hover .app-glyph-tile {
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.09),
@@ -2271,7 +2709,7 @@ html.som :is(.app-surface, .sales-surface) section > div.bg-primary a.bg-card {
     0 18px 30px -12px rgb(15 23 42 / 0.5);
 }
 
-html.som .app-glyph-tile,
+html.som-dark .app-glyph-tile,
 html.dark .app-glyph-tile,
 html.ink .app-glyph-tile,
 html.odoo-dark .app-glyph-tile,
@@ -2410,12 +2848,12 @@ a.report-drill-link:hover {
    * Night themes remap bg-white / grey text with !important. Those selectors
    * outrank a plain .merchant-invoice print rule — lock paper ink again here.
    */
-  html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) {
+  html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) {
     background-color: #ffffff !important;
     color: #1f2933 !important;
   }
 
-  html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) :is(
+  html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) :is(
     .text-\[\#5C6B7A\],
     .text-\[\#5c6b7a\],
     .text-\[\#3d4c5c\],
@@ -2428,7 +2866,7 @@ a.report-drill-link:hover {
     color: #1f2933 !important;
   }
 
-  html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) :is(
+  html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) :is(
     .text-\[\#5C6B7A\],
     .text-\[\#5c6b7a\],
     .text-\[\#3d4c5c\],
@@ -2437,7 +2875,7 @@ a.report-drill-link:hover {
     color: #5c6b7a !important;
   }
 
-  html:is(.som, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) .text-white {
+  html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) .text-white {
     color: #ffffff !important;
   }
 
@@ -3236,12 +3674,18 @@ html.odoo-dark [data-report-root] table > thead th {
 
 html.odoo [data-report-root] table > tbody > tr.ledger-head td,
 html.odoo [data-report-root] table > tbody > tr[class*='bg-muted'] td,
-html.odoo [data-report-root] table > tbody > tr.pointer-events-none td,
+html.odoo [data-report-root] table > tbody > tr.pointer-events-none td {
+  background: #dee2e6 !important;
+  color: #495057 !important;
+  font-weight: 700;
+  border-left: none;
+}
+
 html.odoo-dark [data-report-root] table > tbody > tr.ledger-head td,
 html.odoo-dark [data-report-root] table > tbody > tr[class*='bg-muted'] td,
 html.odoo-dark [data-report-root] table > tbody > tr.pointer-events-none td {
-  background: #dee2e6 !important;
-  color: #495057 !important;
+  background: #303030 !important;
+  color: #c8c8c8 !important;
   font-weight: 700;
   border-left: none;
 }
@@ -3251,15 +3695,23 @@ html.odoo [data-report-root][data-template='standard'] table > tbody > tr:nth-ch
   background-color: #ffffff;
 }
 
-html.odoo [data-report-root] :is(table, [data-slot='table']) a:not([class*='bg-']):not([data-slot='button']),
-html.odoo-dark [data-report-root] :is(table, [data-slot='table']) a:not([class*='bg-']):not([data-slot='button']) {
+html.odoo [data-report-root] :is(table, [data-slot='table']) a:not([class*='bg-']):not([data-slot='button']) {
   color: #017e84;
 }
 
-html.odoo .ledger-head,
-html.odoo-dark .ledger-head {
+html.odoo-dark [data-report-root] :is(table, [data-slot='table']) a:not([class*='bg-']):not([data-slot='button']) {
+  color: #00c7c7;
+}
+
+html.odoo .ledger-head {
   background: #dee2e6 !important;
   color: #495057 !important;
+  font-weight: 700;
+}
+
+html.odoo-dark .ledger-head {
+  background: #303030 !important;
+  color: #c8c8c8 !important;
   font-weight: 700;
 }
 
@@ -3272,6 +3724,17 @@ html.odoo .ledger-row-alt {
 html.odoo .ledger-row:hover,
 html.odoo .ledger-row-alt:hover {
   background: #f8f9fa !important;
+}
+
+html.odoo-dark .ledger-row,
+html.odoo-dark .ledger-row-alt {
+  background: #1f1f1f !important;
+  color: #c8c8c8;
+}
+
+html.odoo-dark .ledger-row:hover,
+html.odoo-dark .ledger-row-alt:hover {
+  background: #303030 !important;
 }
 
 /* List / COA / invoices control strip — live Odoo grey desk. */
@@ -3305,12 +3768,12 @@ html[data-report-style='odoo'] [data-report-root] .text-muted-foreground.numeric
   color: #6c757d !important;
 }
 
-html.som[data-report-style='odoo'] [data-report-root] .text-muted-foreground.numeric {
+html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] .text-muted-foreground.numeric {
   color: var(--muted-foreground) !important;
 }
 
 /* SOM + Odoo layout: keep Odoo fonts/density, but paper ink follows website colours. */
-html.som[data-report-style='odoo'] [data-report-root] {
+html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] {
   --report-head-bg: var(--band);
   --report-head-fg: var(--foreground);
   --report-section-bg: var(--band);
@@ -3321,27 +3784,27 @@ html.som[data-report-style='odoo'] [data-report-root] {
   --report-accent: var(--primary);
 }
 
-html.som[data-report-style='odoo'] [data-report-root] :is(table, [data-slot='table']) {
+html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] :is(table, [data-slot='table']) {
   color: var(--foreground);
   background-color: var(--card);
 }
 
-html.som[data-report-style='odoo'] [data-report-root] table > tbody > tr.pointer-events-none td,
-html.som[data-report-style='odoo'] [data-report-root] table > tbody > tr[class*='bg-muted'] td,
-html.som[data-report-style='odoo'] [data-report-root] table > tbody > tr.ledger-head td {
+html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] table > tbody > tr[class*='bg-muted'] td,
+html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] table > tbody > tr.ledger-head td {
   background: var(--band) !important;
   color: var(--foreground) !important;
 }
 
-html.som[data-report-style='odoo'] [data-report-root] table > tbody > tr:not(.pointer-events-none):not([class*='bg-muted']):not(.ledger-head) td {
+html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] table > tbody > tr:not(.pointer-events-none):not([class*='bg-muted']):not(.ledger-head) td {
   color: var(--foreground);
 }
 
-html.som[data-report-style='odoo'] [data-report-root] :is(table, [data-slot='table']) a:not([class*='bg-']):not([data-slot='button']) {
+html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] :is(table, [data-slot='table']) a:not([class*='bg-']):not([data-slot='button']) {
   color: var(--primary);
 }
 
-html.som[data-report-style='odoo'] .report-sheet-header {
+html:is(.som, .som-dark)[data-report-style='odoo'] .report-sheet-header {
   --rsh-band: #070b14;
   --rsh-accent: #22d3ee;
   --rsh-fg: #ffffff;
@@ -3350,13 +3813,13 @@ html.som[data-report-style='odoo'] .report-sheet-header {
   color: var(--rsh-fg);
 }
 
-html.som[data-report-style='odoo'] .report-sheet-header__title {
+html:is(.som, .som-dark)[data-report-style='odoo'] .report-sheet-header__title {
   color: #22d3ee;
 }
 
-html.som[data-report-style='odoo'] .report-sheet-header__company,
-html.som[data-report-style='odoo'] .report-sheet-header__contact,
-html.som[data-report-style='odoo'] .report-sheet-header__subtitle {
+html:is(.som, .som-dark)[data-report-style='odoo'] .report-sheet-header__company,
+html:is(.som, .som-dark)[data-report-style='odoo'] .report-sheet-header__contact,
+html:is(.som, .som-dark)[data-report-style='odoo'] .report-sheet-header__subtitle {
   color: #ffffff;
 }
 
@@ -3393,4 +3856,49 @@ html[data-font-style='system'] [data-report-root] {
     Arial,
     sans-serif;
   font-family: var(--report-font);
+}
+
+/* Analytics board — light entrance motion for KPIs and chart marks. */
+@keyframes analytics-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes analytics-bar-rise {
+  from {
+    opacity: 0;
+    transform: scaleY(0.35);
+    transform-origin: center bottom;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.analytics-fade-in {
+  animation: analytics-fade-in 0.45s ease-out both;
+}
+.analytics-bar-rise {
+  animation: analytics-bar-rise 0.4s ease-out both;
+}
+/* KPI cards stay visible even if motion is interrupted mid-paint. */
+.analytics-board .analytics-fade-in,
+.analytics-board .analytics-bar-rise {
+  animation-fill-mode: both;
+}
+@supports (animation-timeline: auto) {
+  .analytics-board .analytics-fade-in {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .analytics-fade-in,
+  .analytics-bar-rise {
+    animation: none;
+  }
 }

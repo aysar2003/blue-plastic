@@ -35,6 +35,8 @@ article.merchant-invoice,
 article.invoice-sheet {
   margin: 0 !important;
   min-height: 0 !important;
+  max-width: none !important;
+  width: 100% !important;
   box-shadow: none !important;
 }
 .break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }

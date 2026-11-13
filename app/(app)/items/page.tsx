@@ -36,6 +36,7 @@ const SORTABLE = [
   'salesDescription',
   'purchaseDescription',
   'reorderPoint',
+  'preferredSupplier',
   'unitOfMeasure',
   'store',
   'incomeAccount',
@@ -91,7 +92,7 @@ export default async function ItemsPage({
     dir: sort.dir,
   }
 
-  const [page, units, accounts, taxCodes, categories, shelf, catalogItems] = await Promise.all([
+  const [page, units, accounts, taxCodes, categories, shelf, catalogItems, vendors] = await Promise.all([
     itemService.list(ctx, query, { type, unit, categoryId, includeInactive, ...sort }),
     itemService.listUnits(ctx),
     accountService.selectableAccounts(ctx),
@@ -99,6 +100,7 @@ export default async function ItemsPage({
     itemService.listCategories(ctx),
     storeService.quantities(ctx),
     itemService.listCatalog(ctx),
+    itemService.listPreferredVendors(ctx),
   ])
 
   const editId = typeof params.edit === 'string' ? params.edit : undefined
@@ -122,6 +124,7 @@ export default async function ItemsPage({
     label: store.name,
     isOffice: store.isOffice,
   }))
+  const vendorOptions = vendors
 
   const newButton = canCreate ? (
     <NewItemButton
@@ -129,6 +132,7 @@ export default async function ItemsPage({
       taxCodes={taxOptions}
       categories={categoryOptions}
       stores={storeOptions}
+      vendors={vendorOptions}
       catalogItems={catalogItems}
       currency={ctx.organization.baseCurrency}
       today={today(ctx.organization.timeZone)}
@@ -238,6 +242,7 @@ export default async function ItemsPage({
               taxCodes={taxOptions}
               categories={categoryOptions}
               stores={storeOptions}
+              vendors={vendorOptions}
               catalogItems={catalogItems}
               currency={ctx.organization.baseCurrency}
               canEdit={ctx.permissions.has('item:update')}
@@ -249,7 +254,16 @@ export default async function ItemsPage({
               startEditingId={editId}
               extraEdit={
                 extraEdit
-                  ? { ...extraEdit, onHand: null, stockValue: null, averageCost: null, belowReorder: false }
+                  ? {
+                      ...extraEdit,
+                      onHand: null,
+                      qtyOnPo: null,
+                      qtyOnSo: null,
+                      availQty: null,
+                      stockValue: null,
+                      averageCost: null,
+                      belowReorder: false,
+                    }
                   : null
               }
             />

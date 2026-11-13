@@ -139,7 +139,7 @@ export default async function SalesSubscriptionsPage() {
                         {row.name}
                       </Link>
                       {row.due ? (
-                        <span className="ml-2 text-xs text-amber-700">Due</span>
+                        <span className="ml-2 text-xs text-warning">Due</span>
                       ) : null}
                     </TableCell>
                     <TableCell>{schedule}</TableCell>

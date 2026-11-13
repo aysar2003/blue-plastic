@@ -257,6 +257,14 @@ function cluster(rows: StatementSection['rows']) {
   return groups
 }
 
+type StatementSubtotal = {
+  label: string
+  amount: Decimal
+  comparison?: Decimal
+  emphasis?: boolean
+  href?: string
+}
+
 function SectionRows({
   section,
   currency,
@@ -272,8 +280,24 @@ function SectionRows({
   showPercent?: boolean
   hasComparison: boolean
   columns: number
-  subtotals: { label: string; amount: Decimal; comparison?: Decimal; emphasis?: boolean; href?: string }[]
+  subtotals: StatementSubtotal[]
 }) {
+  const subtotalRows = (
+    <SubtotalRows
+      subtotals={subtotals}
+      currency={currency}
+      hasComparison={hasComparison}
+      showPercent={showPercent}
+    />
+  )
+
+  // An empty band still has to hand its calculated lines to the next section
+  // (gross profit, net income). A band with neither accounts nor a total is omitted.
+  if (section.rows.length === 0) {
+    if (subtotals.length === 0) return null
+    return subtotalRows
+  }
+
   return (
     <>
       <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -282,14 +306,7 @@ function SectionRows({
         </TableCell>
       </TableRow>
 
-      {section.rows.length === 0 ? (
-        <TableRow>
-          <TableCell colSpan={columns} className="py-3 pl-6 text-sm text-muted-foreground">
-            Nothing in this section.
-          </TableCell>
-        </TableRow>
-      ) : (
-        cluster(section.rows).map((group) => {
+      {cluster(section.rows).map((group) => {
           const nameById = new Map(section.rows.map((row) => [row.accountId, row.name]))
           const lines = group.rows.map((row) => {
             const depth = row.depth ?? 0
@@ -394,15 +411,20 @@ function SectionRows({
             </ClickableRow>
             )
           })
+          const total = group.rows.reduce((sum, row) => sum.plus(row.amount), new Decimal(0))
           return group.title ? (
-            <RowGroup key={group.key} title={group.title} columns={columns}>
+            <RowGroup
+              key={group.key}
+              title={group.title}
+              columns={columns}
+              total={formatMoney(total, currency)}
+            >
               {lines}
             </RowGroup>
           ) : (
             <Fragment key={group.key}>{lines}</Fragment>
           )
-        })
-      )}
+        })}
 
       <TableRow className="border-t">
         <TableCell className="pl-6 font-medium">Total {section.label.toLowerCase()}</TableCell>
@@ -422,6 +444,24 @@ function SectionRows({
         {showPercent ? <TableCell /> : null}
       </TableRow>
 
+      {subtotalRows}
+    </>
+  )
+}
+
+function SubtotalRows({
+  subtotals,
+  currency,
+  hasComparison,
+  showPercent,
+}: {
+  subtotals: StatementSubtotal[]
+  currency: string
+  hasComparison: boolean
+  showPercent?: boolean
+}) {
+  return (
+    <>
       {subtotals.map((subtotal) => {
         const cell = (children: ReactNode, className: string) =>
           subtotal.href ? (

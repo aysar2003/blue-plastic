@@ -47,6 +47,7 @@ export type AppGlyphName =
   | 'barcodes'
   | 'projects'
   | 'approvals'
+  | 'analytics'
 
 const GLYPHS: Record<AppGlyphName, ReactNode> = {
   // A till: plum body, teal screen, a yellow ticket coming out of the top.
@@ -339,6 +340,17 @@ const GLYPHS: Record<AppGlyphName, ReactNode> = {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </>
+  ),
+  // Dashboard: teal frame, rising bars, amber accent candle.
+  analytics: (
+    <>
+      <rect x="6" y="8" width="36" height="32" rx="5" fill={C.teal} />
+      <rect x="11" y="28" width="5" height="7" rx="1.5" fill={C.paper} opacity="0.9" />
+      <rect x="18" y="22" width="5" height="13" rx="1.5" fill={C.amber} />
+      <rect x="25" y="16" width="5" height="19" rx="1.5" fill={C.paper} opacity="0.9" />
+      <rect x="32" y="12" width="5" height="23" rx="1.5" fill={C.orange} />
+      <path d="M12 18h8" stroke={C.paper} strokeWidth="2" strokeLinecap="round" opacity="0.7" />
     </>
   ),
 }

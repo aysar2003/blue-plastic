@@ -124,7 +124,7 @@ export function PosDashboard({
         </div>
       ) : null}
 
-      {transferNote ? <p className="mb-4 text-sm text-emerald-700">{transferNote}</p> : null}
+      {transferNote ? <p className="mb-4 text-sm text-emerald-700 dark:text-emerald-300">{transferNote}</p> : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {registers.map((register) => (

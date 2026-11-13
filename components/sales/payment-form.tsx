@@ -353,7 +353,7 @@ export function PaymentForm({
                       <td className="tabular px-3 py-2 text-muted-foreground">
                         {invoice.dueDate ? formatDate(toCalendarDate(new Date(invoice.dueDate))) : '—'}
                         {invoice.overdue ? (
-                          <span className="ml-2 text-[0.7rem] font-semibold uppercase tracking-wide text-[#c2410c]">
+                          <span className="ml-2 text-[0.7rem] font-semibold uppercase tracking-wide text-warning">
                             Overdue
                           </span>
                         ) : null}

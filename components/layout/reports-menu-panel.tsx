@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ChevronRightIcon } from 'lucide-react'
+import { ChevronRightIcon, LayoutGridIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import type { HeaderMenuItem } from './header-app-menus'
+import { LAUNCHER_ICONS } from './launcher-icon-map'
 
 /**
  * QuickBooks Desktop–style Report menu: categories expand to show the reports
@@ -14,9 +15,12 @@ import type { HeaderMenuItem } from './header-app-menus'
 export function ReportsMenuPanel({
   items,
   onDone,
+  withIcons = false,
 }: {
   items: HeaderMenuItem[]
   onDone: () => void
+  /** Side rail / QBO-style rows with the catalogue tile icons. */
+  withIcons?: boolean
 }) {
   const [openLabel, setOpenLabel] = useState<string | null>(null)
 
@@ -24,22 +28,26 @@ export function ReportsMenuPanel({
   const groups = items.filter((item) => (item.children?.length ?? 0) > 0)
 
   return (
-    <ul className="max-h-[min(75vh,36rem)] w-[18rem] overflow-y-auto bg-popover py-1.5 text-popover-foreground">
+    <ul className="w-[18rem] bg-popover py-1.5 text-popover-foreground">
       {top.map((item) => (
         <li key={`top-${item.href}-${item.label}`}>
-          <Link
-            href={item.href!}
-            role="menuitem"
-            onClick={onDone}
-            className="block px-3 py-1.5 hover:bg-muted"
-          >
-            <span className="block text-xs font-semibold text-foreground">{item.label}</span>
-            {item.blurb ? (
-              <span className="block text-[0.65rem] leading-snug text-muted-foreground">
-                {item.blurb}
-              </span>
-            ) : null}
-          </Link>
+          {withIcons ? (
+            <ReportIconLink item={item} onDone={onDone} />
+          ) : (
+            <Link
+              href={item.href!}
+              role="menuitem"
+              onClick={onDone}
+              className="block px-3 py-1.5 hover:bg-muted"
+            >
+              <span className="block text-xs font-semibold text-foreground">{item.label}</span>
+              {item.blurb ? (
+                <span className="block text-[0.65rem] leading-snug text-muted-foreground">
+                  {item.blurb}
+                </span>
+              ) : null}
+            </Link>
+          )}
         </li>
       ))}
 
@@ -78,14 +86,20 @@ export function ReportsMenuPanel({
               <ul className="border-l border-border/80 pb-1 ml-3 mr-1">
                 {group.children!.map((child) => (
                   <li key={`${group.label}-${child.href}-${child.label}`}>
-                    <Link
-                      href={child.href!}
-                      role="menuitem"
-                      onClick={onDone}
-                      className="block px-3 py-1 hover:bg-muted"
-                    >
-                      <span className="block text-xs font-medium text-foreground">{child.label}</span>
-                    </Link>
+                    {withIcons ? (
+                      <ReportIconLink item={child} onDone={onDone} dense />
+                    ) : (
+                      <Link
+                        href={child.href!}
+                        role="menuitem"
+                        onClick={onDone}
+                        className="block px-3 py-1 hover:bg-muted"
+                      >
+                        <span className="block text-xs font-medium text-foreground">
+                          {child.label}
+                        </span>
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -94,5 +108,37 @@ export function ReportsMenuPanel({
         )
       })}
     </ul>
+  )
+}
+
+function ReportIconLink({
+  item,
+  onDone,
+  dense = false,
+}: {
+  item: HeaderMenuItem
+  onDone: () => void
+  dense?: boolean
+}) {
+  const Icon = item.icon ? LAUNCHER_ICONS[item.icon] : LayoutGridIcon
+  return (
+    <Link
+      href={item.href!}
+      role="menuitem"
+      onClick={onDone}
+      className={cn('flex items-center gap-2.5 px-3 hover:bg-muted', dense ? 'py-1' : 'py-1.5')}
+    >
+      <span
+        className="grid size-6 shrink-0 place-items-center rounded-md"
+        style={
+          item.wash && item.accent
+            ? { backgroundColor: item.wash, color: item.accent }
+            : undefined
+        }
+      >
+        <Icon className="size-3.5" strokeWidth={2} aria-hidden />
+      </span>
+      <span className="min-w-0 truncate text-xs font-semibold text-foreground">{item.label}</span>
+    </Link>
   )
 }

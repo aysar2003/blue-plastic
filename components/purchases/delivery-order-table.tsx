@@ -66,7 +66,7 @@ export function DeliveryOrderTable({
             <TableCell
               className={cn(
                 'numeric tabular font-medium',
-                row.bucket !== 'delivered' ? 'text-amber-800' : 'text-muted-foreground',
+                row.bucket !== 'delivered' ? 'text-warning' : 'text-muted-foreground',
               )}
             >
               {row.outstandingQty}

@@ -29,14 +29,18 @@ const VENDOR_WORDS = {
 
 /**
  * Vendor-facing bill, expense, credit, or purchase order on the same paper as
- * a sales invoice. Print from the browser; PDF is the matching download route.
+ * a sales invoice. Screen, Print, PDF, and Email all use this sheet.
  */
 export default async function PrintPurchasePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ type: string; id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { type, id } = await params
+  const query = await searchParams
+  const paperParam = typeof query.paper === 'string' ? query.paper : null
   const config = purchaseBySlug(type)
   if (!config) notFound()
 
@@ -44,7 +48,7 @@ export default async function PrintPurchasePage({
   const [rows, organization, template] = await Promise.all([
     purchaseService.getMany(ctx, [id]),
     organizationService.get(ctx),
-    organizationService.getPrintTemplate(ctx),
+    organizationService.getPrintTemplate(ctx, paperParam),
   ])
   const document = rows[0]
   if (!document || document.type !== config.type) notFound()
@@ -80,17 +84,21 @@ export default async function PrintPurchasePage({
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')}`
 
+  // Same paper on screen, Print, PDF, and Email — template already applies
+  // Settings + the Merchant/Trade cookie (query wins when present).
+  const paperStyle = template.paperStyle
+
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto w-full max-w-3xl print:max-w-none">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <DocumentActions
           paper={config.singular.toLowerCase()}
           backHref={`/purchases/${config.slug}/${id}`}
-          pdfHref={`/api/purchases/${id}/pdf?paper=trade`}
+          pdfHref={`/api/purchases/${id}/pdf?paper=${paperStyle}`}
           excelHref={`/api/purchases/${id}/xlsx`}
           filename={filename}
           pdfMatchesPrint
-          paperStyle="trade"
+          paperStyle={paperStyle}
           defaultTo={vendor.email ?? ''}
           defaultSubject={documentEmailSubject(
             config.singular,
@@ -106,7 +114,7 @@ export default async function PrintPurchasePage({
       <MerchantInvoice
         document={document}
         organization={organization}
-        template={{ ...template, paperStyle: 'trade' }}
+        template={template}
         config={config}
         baseCurrency={ctx.organization.baseCurrency}
         words={VENDOR_WORDS}

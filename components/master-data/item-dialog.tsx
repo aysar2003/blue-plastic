@@ -64,6 +64,7 @@ export type ItemValues = {
   reorderPoint?: string | null
   categoryId?: string | null
   storeId?: string | null
+  preferredVendorId?: string | null
   trackLots?: boolean
   pharmacyControlled?: boolean
   trackSerials?: boolean
@@ -83,6 +84,7 @@ export function NewItemButton(props: {
   taxCodes: SimpleOption[]
   categories: SimpleOption[]
   stores?: (SimpleOption & { isOffice?: boolean })[]
+  vendors?: SimpleOption[]
   catalogItems?: CatalogItem[]
   currency: string
   today?: string
@@ -105,6 +107,7 @@ export function ItemDialog({
   taxCodes,
   categories,
   stores = [],
+  vendors = [],
   catalogItems = [],
   currency,
   today,
@@ -119,6 +122,7 @@ export function ItemDialog({
   taxCodes: SimpleOption[]
   categories: SimpleOption[]
   stores?: (SimpleOption & { isOffice?: boolean })[]
+  vendors?: SimpleOption[]
   catalogItems?: CatalogItem[]
   currency: string
   /** Default date for opening stock. */
@@ -969,6 +973,24 @@ export function ItemDialog({
                           className="tabular"
                           defaultValue={item?.reorderPoint ?? ''}
                         />
+                      </Field>
+                      <Field
+                        name="preferredVendorId"
+                        label="Preferred supplier"
+                        hint="Usual vendor when you reorder this item."
+                        error={e?.preferredVendorId}
+                      >
+                        <NativeSelect
+                          {...fieldProps('preferredVendorId', e?.preferredVendorId)}
+                          defaultValue={item?.preferredVendorId ?? ''}
+                        >
+                          <option value="">— none —</option>
+                          {vendors.map((vendor) => (
+                            <option key={vendor.id} value={vendor.id}>
+                              {vendor.label}
+                            </option>
+                          ))}
+                        </NativeSelect>
                       </Field>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">

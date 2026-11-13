@@ -53,3 +53,4 @@ next-env.d.ts
 # local backup / seed scratch files
 .tmp*
 .tmp-*/
+/tmp/

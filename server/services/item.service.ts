@@ -25,7 +25,7 @@ const ITEM_SELECT = {
   unitOfMeasure: true,
   salesDescription: true, salesPrice: true, wholesalePrice: true, incomeAccountId: true, isTaxable: true, salesTaxCodeId: true,
   purchaseDescription: true, purchaseCost: true, expenseAccountId: true, purchaseTaxCodeId: true,
-  inventoryAccountId: true, cogsAccountId: true, reorderPoint: true, storeId: true,
+  inventoryAccountId: true, cogsAccountId: true, reorderPoint: true, storeId: true, preferredVendorId: true,
   trackLots: true, trackSerials: true, pharmacyControlled: true,
   isActive: true, availableInPos: true,
   printGroupItems: true, itemPaymentMethod: true, depositAccountId: true,
@@ -36,6 +36,7 @@ const ITEM_SELECT = {
   cogsAccount: { select: { id: true, code: true, name: true } },
   depositAccount: { select: { id: true, code: true, name: true } },
   store: { select: { id: true, name: true } },
+  preferredVendor: { select: { id: true, displayName: true } },
   salesTaxCode: { select: { id: true, name: true } },
   purchaseTaxCode: { select: { id: true, name: true } },
   bomChildren: {
@@ -81,6 +82,7 @@ const ITEM_ORDER: Record<string, (dir: 'asc' | 'desc') => Prisma.ItemOrderByWith
   reorderPoint: (dir) => [{ reorderPoint: dir }, { name: 'asc' }],
   unitOfMeasure: (dir) => [{ unitOfMeasure: dir }, { name: 'asc' }],
   store: (dir) => [{ store: { name: dir } }, { name: 'asc' }],
+  preferredSupplier: (dir) => [{ preferredVendor: { displayName: dir } }, { name: 'asc' }],
   incomeAccount: (dir) => [{ incomeAccount: { code: dir } }, { name: 'asc' }],
   inventoryAccount: (dir) => [{ inventoryAccount: { code: dir } }, { name: 'asc' }],
   cogsExpense: (dir) => [{ cogsAccount: { code: dir } }, { expenseAccount: { code: dir } }, { name: 'asc' }],
@@ -88,6 +90,16 @@ const ITEM_ORDER: Record<string, (dir: 'asc' | 'desc') => Prisma.ItemOrderByWith
 
 /** Sort keys that need stock figures first (then page). */
 const STOCK_SORTS = new Set(['onHand', 'stockValue'])
+
+/** Active vendors for the preferred-supplier picker on an item. */
+export async function listPreferredVendors(ctx: OrgContext) {
+  const rows = await db.vendor.findMany({
+    where: { orgId: ctx.orgId, isActive: true },
+    select: { id: true, displayName: true },
+    orderBy: { displayName: 'asc' },
+  })
+  return rows.map((row) => ({ id: row.id, label: row.displayName }))
+}
 
 /** Distinct unit labels already saved on items, for the products filter. */
 export async function listUnits(ctx: OrgContext): Promise<string[]> {
@@ -189,9 +201,13 @@ export async function list(
       ctx,
       rows.map((row) => row.id),
     )
+    const openQtys = await openOrderQuantities(
+      ctx,
+      rows.filter((row) => isStockTracked(row.type)).map((row) => row.id),
+    )
     return paged(
       rows.map((row) => ({
-        ...attachStock(row, pagePositions.get(row.id)),
+        ...attachStock(row, pagePositions.get(row.id), openQtys.get(row.id)),
         typeEditable: !locked.has(row.id),
       })),
       total,
@@ -211,17 +227,18 @@ export async function list(
   // is on hand and what it is worth, so nobody has to hold two screens in their
   // head to answer "have we got any?".
   const trackedIds = rows.filter((row) => isStockTracked(row.type)).map((row) => row.id)
-  const [positions, locked] = await Promise.all([
+  const [positions, locked, openQtys] = await Promise.all([
     positionsOf(db as unknown as Tx, ctx.orgId, trackedIds),
     typeLockedItemIds(
       ctx,
       rows.map((row) => row.id),
     ),
+    openOrderQuantities(ctx, trackedIds),
   ])
 
   return paged(
     rows.map((row) => ({
-      ...attachStock(row, positions.get(row.id)),
+      ...attachStock(row, positions.get(row.id), openQtys.get(row.id)),
       typeEditable: !locked.has(row.id),
     })),
     total,
@@ -231,7 +248,7 @@ export async function list(
 
 function attachStock<
   T extends {
-    type: string
+    type: Parameters<typeof isStockTracked>[0]
     reorderPoint: unknown
     salesPrice: unknown
     wholesalePrice: unknown
@@ -242,17 +259,95 @@ function attachStock<
   position:
     | { quantity: Decimal; value: Decimal; averageCost: Decimal }
     | undefined,
+  openQty?: { qtyOnPo: Decimal; qtyOnSo: Decimal },
 ) {
+  const tracked = isStockTracked(row.type)
+  const qtyOnPo = openQty?.qtyOnPo ?? ZERO
+  const qtyOnSo = openQty?.qtyOnSo ?? ZERO
+  const onHandQty = position?.quantity ?? ZERO
+
   return {
     ...serialise(row),
     onHand: position ? position.quantity.toFixed(2) : null,
     stockValue: position ? position.value.toFixed(2) : null,
     averageCost: position ? position.averageCost.toFixed(4) : null,
+    qtyOnPo: tracked ? qtyOnPo.toFixed(2) : null,
+    qtyOnSo: tracked ? qtyOnSo.toFixed(2) : null,
+    availQty: tracked ? onHandQty.minus(qtyOnSo).toFixed(2) : null,
     belowReorder:
       position && row.reorderPoint
         ? position.quantity.lessThanOrEqualTo(String(row.reorderPoint))
         : false,
   }
+}
+
+/**
+ * Outstanding quantities still open on purchase / sales orders for the items
+ * on this page. Qty on PO is still to receive; Qty on SO is still to invoice.
+ */
+export async function openOrderQuantities(
+  ctx: OrgContext,
+  itemIds: string[],
+  options: { client?: Tx } = {},
+): Promise<Map<string, { qtyOnPo: Decimal; qtyOnSo: Decimal }>> {
+  const client = options.client ?? (db as unknown as Tx)
+  const byItem = new Map<string, { qtyOnPo: Decimal; qtyOnSo: Decimal }>()
+  if (itemIds.length === 0) return byItem
+
+  for (const id of itemIds) {
+    byItem.set(id, { qtyOnPo: ZERO, qtyOnSo: ZERO })
+  }
+
+  const [poLines, soLines] = await Promise.all([
+    client.purchaseDocumentLine.findMany({
+      where: {
+        orgId: ctx.orgId,
+        itemId: { in: itemIds },
+        document: {
+          type: 'PURCHASE_ORDER',
+          status: { in: ['OPEN', 'PARTIAL', 'PENDING_APPROVAL'] },
+          deletedAt: null,
+        },
+      },
+      select: { itemId: true, quantity: true, quantityReceived: true },
+    }),
+    client.salesDocumentLine.findMany({
+      where: {
+        orgId: ctx.orgId,
+        itemId: { in: itemIds },
+        document: {
+          type: 'SALES_ORDER',
+          status: { in: ['OPEN', 'PARTIAL', 'PENDING_APPROVAL', 'ACCEPTED'] },
+          deletedAt: null,
+        },
+      },
+      select: { itemId: true, quantity: true, quantityInvoiced: true },
+    }),
+  ])
+
+  for (const line of poLines) {
+    if (!line.itemId) continue
+    const bucket = byItem.get(line.itemId)
+    if (!bucket) continue
+    const left = Decimal.max(
+      new Decimal(line.quantity.toString()).minus(line.quantityReceived.toString()),
+      ZERO,
+    )
+    bucket.qtyOnPo = bucket.qtyOnPo.plus(left)
+  }
+
+  for (const line of soLines) {
+    if (!line.itemId) continue
+    const bucket = byItem.get(line.itemId)
+    if (!bucket) continue
+    const left = Decimal.max(
+      new Decimal(line.quantity.toString()).minus(line.quantityInvoiced.toString()),
+      ZERO,
+    )
+    bucket.qtyOnSo = bucket.qtyOnSo.plus(left)
+  }
+
+  return byItem
 }
 
 export async function get(ctx: OrgContext, id: string) {
@@ -307,6 +402,7 @@ export async function create(ctx: OrgContext, input: ItemInput) {
   }
   await assertNameAndSkuFree(ctx, input.name, input.sku ?? null, input.barcode ?? null)
   await assertAccountsSuitable(ctx, input)
+  await assertPreferredVendor(ctx, input)
   const meta = await requestMeta()
 
   return db.$transaction(async (tx) => {
@@ -380,6 +476,7 @@ export async function update(ctx: OrgContext, input: ItemInput & { id: string })
 
   await assertNameAndSkuFree(ctx, input.name, input.sku ?? null, input.barcode ?? null, input.id)
   await assertAccountsSuitable(ctx, input)
+  await assertPreferredVendor(ctx, input)
 
   // Type may change only while the item has never appeared on a document or in
   // the stock/journal ledgers. Once it has, every past line would be reclassified.
@@ -829,6 +926,7 @@ async function assignProductCostAccount(ctx: OrgContext, input: ItemInput): Prom
       inventoryAccountId: null,
       cogsAccountId: null,
       storeId: null,
+      preferredVendorId: null,
     }
   }
 
@@ -885,6 +983,7 @@ function toData(input: ItemInput) {
     cogsAccountId: input.cogsAccountId ?? null,
     reorderPoint: input.reorderPoint ?? null,
     storeId: isStockTracked(input.type) ? (input.storeId ?? null) : null,
+    preferredVendorId: isStockTracked(input.type) ? (input.preferredVendorId ?? null) : null,
     trackLots: isStockTracked(input.type)
       ? Boolean(input.trackLots) || Boolean(input.pharmacyControlled)
       : false,
@@ -983,6 +1082,17 @@ async function accountForStore(ctx: OrgContext, input: ItemInput, itemId?: strin
     if (moved > 0) return input
   }
   return { ...input, inventoryAccountId: store.inventoryAccountId }
+}
+
+async function assertPreferredVendor(ctx: OrgContext, input: ItemInput) {
+  if (!isStockTracked(input.type) || !input.preferredVendorId) return
+  const vendor = await db.vendor.findFirst({
+    where: { id: input.preferredVendorId, orgId: ctx.orgId, isActive: true },
+    select: { id: true },
+  })
+  if (!vendor) {
+    throw validation('Choose an active vendor.', { preferredVendorId: ['Vendor not found'] })
+  }
 }
 
 async function assertNameAndSkuFree(

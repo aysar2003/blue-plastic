@@ -13,7 +13,8 @@ type Anchor = {
 }
 
 /**
- * A fixed panel portaled to `document.body`, anchored under a trigger.
+ * A fixed panel portaled to `document.body`, anchored under a trigger
+ * (or to its right when `placement="right"`).
  * Use for menus and column pickers that would otherwise clip under
  * `overflow-hidden` ancestors or paint beneath open dialogs.
  */
@@ -23,6 +24,7 @@ export function PortaledFloatingPanel({
   onClose,
   align = 'start',
   placement = 'bottom',
+  scrollIsolate = false,
   className,
   children,
 }: {
@@ -32,6 +34,8 @@ export function PortaledFloatingPanel({
   align?: 'start' | 'end'
   /** Bottom under the trigger, or to its right (side app rail). */
   placement?: 'bottom' | 'right'
+  /** Wheel stays in this panel and does not move the page behind it. */
+  scrollIsolate?: boolean
   className?: string
   children: React.ReactNode
 }) {
@@ -41,19 +45,26 @@ export function PortaledFloatingPanel({
   const place = React.useCallback(() => {
     const rect = anchorRef.current?.getBoundingClientRect()
     if (!rect) return
+    const margin = 8
     const panelWidth = panelRef.current?.offsetWidth || Math.max(rect.width, 176)
-    const panelHeight = panelRef.current?.offsetHeight || 240
+    const rawHeight = panelRef.current?.scrollHeight || panelRef.current?.offsetHeight || 240
+    const availableH = Math.max(120, window.innerHeight - margin * 2)
+    const panelHeight = Math.min(rawHeight, availableH)
     let left: number
     let top: number
     if (placement === 'right') {
-      left = Math.min(rect.right + 8, window.innerWidth - panelWidth - 8)
-      top = Math.min(Math.max(8, rect.top), window.innerHeight - panelHeight - 8)
+      left = Math.min(Math.max(margin, rect.right + 8), window.innerWidth - panelWidth - margin)
+      top = Math.min(Math.max(margin, rect.top), window.innerHeight - panelHeight - margin)
     } else {
       left =
         align === 'end'
-          ? Math.min(Math.max(8, rect.right - panelWidth), window.innerWidth - panelWidth - 8)
-          : Math.min(Math.max(8, rect.left), window.innerWidth - panelWidth - 8)
-      top = rect.bottom + 4
+          ? Math.min(Math.max(margin, rect.right - panelWidth), window.innerWidth - panelWidth - margin)
+          : Math.min(Math.max(margin, rect.left), window.innerWidth - panelWidth - margin)
+      const spaceBelow = window.innerHeight - rect.bottom - margin
+      top =
+        rawHeight > spaceBelow && rect.top - margin > spaceBelow
+          ? Math.max(margin, rect.top - panelHeight - 4)
+          : rect.bottom + 4
     }
     const next = {
       top,
@@ -84,11 +95,23 @@ export function PortaledFloatingPanel({
     }
 
     place()
+    let observer: ResizeObserver | null = null
+    const watch = () => {
+      place()
+      if (typeof ResizeObserver === 'undefined') return
+      observer?.disconnect()
+      observer = new ResizeObserver(() => place())
+      if (anchorRef.current) observer.observe(anchorRef.current)
+      if (panelRef.current) observer.observe(panelRef.current)
+    }
+    const frame = requestAnimationFrame(watch)
     document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKey)
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', place)
     return () => {
+      cancelAnimationFrame(frame)
+      observer?.disconnect()
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKey)
       window.removeEventListener('scroll', onScroll, true)
@@ -102,11 +125,14 @@ export function PortaledFloatingPanel({
     <div
       ref={panelRef}
       data-slot="portaled-floating-panel"
+      data-scroll-isolate={scrollIsolate ? '' : undefined}
       style={{
         position: 'fixed',
         top: anchor.top,
         left: anchor.left,
         zIndex: anchor.zIndex,
+        maxHeight: 'calc(100vh - 1rem)',
+        overflowY: 'auto',
       }}
       className={cn(className)}
     >

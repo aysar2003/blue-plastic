@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { isSelfServeApprovalRequired } from '@/lib/self-serve'
 import {
   extendRentExpiry,
+  rentAmountMatchesPlan,
   reviewRentPaymentSchema,
   submitRentPaymentSchema,
 } from '@/lib/validation/platform-billing'
@@ -36,6 +37,13 @@ describe('submitRentPaymentSchema', () => {
       reference: 'TXN-12345',
     })
     expect(ok.success).toBe(true)
+  })
+
+  it('matches the plan price and rejects a different amount', () => {
+    expect(rentAmountMatchesPlan('30', '30.0000')).toBe(true)
+    expect(rentAmountMatchesPlan(30, '30')).toBe(true)
+    expect(rentAmountMatchesPlan('29.99', '30')).toBe(false)
+    expect(rentAmountMatchesPlan('0', '30')).toBe(false)
   })
 
   it('rejects a short reference', () => {

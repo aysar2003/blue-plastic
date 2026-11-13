@@ -53,8 +53,8 @@ export function StockAlerts({ alerts, total }: { alerts: StockAlert[]; total: nu
                     <span
                       className={
                         alert.kind === 'out'
-                          ? 'text-xs font-medium text-[#9f1239]'
-                          : 'text-xs text-[#C2410C]'
+                          ? 'text-xs font-medium text-destructive'
+                          : 'text-xs text-warning'
                       }
                     >
                       {alert.kind === 'out'

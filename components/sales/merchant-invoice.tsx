@@ -434,9 +434,13 @@ export function MerchantInvoice({
               {hideAccountBalance ? null : (
                 <>
                   {credit.greaterThan('0.004') ? (
-                    <Total label="Paid amount" value={money(document.amountApplied)} accent={accent} />
+                    <Total
+                      label="Amount paid"
+                      value={`−${money(document.amountApplied)}`}
+                      accent={accent}
+                    />
                   ) : null}
-                  <Total label="Balance" value={money(document.balance)} accent={accent} strong />
+                  <Total label="Balance due" value={money(document.balance)} accent={accent} strong />
                 </>
               )}
             </>
@@ -618,27 +622,22 @@ function TradePaper({
       </table>
 
       <div className="flex break-inside-avoid justify-end py-6">
+        {/*
+          Standard accounting stack (QB / Xero / Odoo):
+          Subtotal → (tax) → Total → Amount paid → Balance due.
+          Payments never sit above Total — they reduce what is still owed.
+        */}
         <dl className="w-48 space-y-1 text-[12px]">
           <div className="flex justify-between gap-3">
             <dt>Subtotal</dt>
             <dd className="tabular">{money(document.subtotal)}</dd>
           </div>
-          {config.type === 'PURCHASE_ORDER' ? (
-            <div className="flex justify-between gap-3">
-              <dt>Bill payment</dt>
-              <dd className="tabular">{money(document.amountApplied || 0)}</dd>
-            </div>
-          ) : purchase ? (
+          {purchase && config.type !== 'PURCHASE_ORDER' ? (
             <div className="flex justify-between gap-3">
               <dt>Taxes</dt>
               <dd className="tabular">{money(document.taxTotal)}</dd>
             </div>
-          ) : runningQuoteTotal ? null : (
-            <div className="flex justify-between gap-3">
-              <dt>Payment</dt>
-              <dd className="tabular">{money(document.amountApplied || 0)}</dd>
-            </div>
-          )}
+          ) : null}
           {runningQuoteTotal ? (
             <>
               <div className="flex justify-between gap-3">
@@ -655,10 +654,26 @@ function TradePaper({
               </div>
             </>
           ) : (
-            <div className="flex justify-between gap-3 border-t border-[#1f2933] pt-1 font-semibold">
-              <dt>Total</dt>
-              <dd className="tabular">{money(document.total)}</dd>
-            </div>
+            <>
+              <div className="flex justify-between gap-3 border-t border-[#1f2933] pt-1 font-semibold">
+                <dt>Total</dt>
+                <dd className="tabular">{money(document.total)}</dd>
+              </div>
+              {!purchase || config.type === 'PURCHASE_ORDER' ? (
+                <>
+                  {Number(document.amountApplied || 0) > 0.004 ? (
+                    <div className="flex justify-between gap-3">
+                      <dt>{config.type === 'PURCHASE_ORDER' ? 'Bill payment' : 'Amount paid'}</dt>
+                      <dd className="tabular">−{money(document.amountApplied)}</dd>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between gap-3 font-semibold">
+                    <dt>Balance due</dt>
+                    <dd className="tabular">{money(document.balance)}</dd>
+                  </div>
+                </>
+              ) : null}
+            </>
           )}
         </dl>
       </div>

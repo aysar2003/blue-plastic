@@ -50,7 +50,6 @@ export function parseReportStyle(raw: string | null | undefined): ReportStyleId 
  * steal the website navy+cyan after the desk already matches the site.
  */
 export function reportStyleForTheme(themeId: string | undefined | null): ReportStyleId {
-  if (themeId === 'quick' || themeId === 'quick-dark') return 'quickbooks'
   if (themeId === 'odoo' || themeId === 'odoo-dark') return 'odoo'
   return 'herobooks'
 }

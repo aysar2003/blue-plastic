@@ -94,11 +94,21 @@ export default async function ProfitAndLossPage({
     report.sections.find((section) => section.key === key)?.comparisonTotal ?? ZERO
   const comparedGross = sectionAmount('income').minus(sectionAmount('cogs'))
   const comparedOperating = comparedGross.minus(sectionAmount('expenses'))
-  const comparedNet = comparedOperating.plus(sectionAmount('otherIncome')).minus(sectionAmount('otherExpense'))
+  const comparedOther = sectionAmount('otherIncome').minus(sectionAmount('otherExpense'))
+  const comparedNet = comparedOperating.plus(comparedOther)
+  const otherNet = report.sections
+    .find((section) => section.key === 'otherIncome')
+    ?.total.minus(report.sections.find((section) => section.key === 'otherExpense')?.total ?? ZERO) ?? ZERO
   const line = (label: string, amount: Decimal, comparison: Decimal, emphasis = false) =>
     compared
       ? { label, amount, comparison, emphasis, href: detailHref }
       : { label, amount, emphasis, href: detailHref }
+  const closingLines = [
+    ...(otherNet.isZero() && comparedOther.isZero()
+      ? []
+      : [line('Net other income', otherNet, comparedOther)]),
+    line('Net income', report.netIncome, comparedNet, true),
+  ]
 
   return (
     <>
@@ -194,8 +204,8 @@ export default async function ProfitAndLossPage({
             linkParams={linkParams}
             subtotals={{
               cogs: [line('Gross profit', report.grossProfit, comparedGross)],
-              expenses: [line('Operating profit', report.operatingProfit, comparedOperating)],
-              otherExpense: [line('Net income', report.netIncome, comparedNet, true)],
+              expenses: [line('Net operating income', report.operatingProfit, comparedOperating)],
+              otherExpense: closingLines,
             }}
           />
 

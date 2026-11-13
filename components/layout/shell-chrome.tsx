@@ -11,8 +11,7 @@ import {
   moduleForPath,
   type OrgFeatureFlags,
 } from '@/lib/feature-flags'
-import { HeaderApps } from './app-launcher'
-import { ActiveAppLink, AppsBarToggle, useAppsBarHidden } from './apps-bar'
+import { SideAppsRail } from './side-apps-rail'
 import { AppMemoryProvider } from './app-memory'
 import { AccountantNav } from './accountant-nav'
 import { CompanySwitcher, type CompanyOption } from './company-switcher'
@@ -140,7 +139,6 @@ export function ShellChrome({
 }: ShellChromeProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const { hidden: appsHidden, toggle: toggleAppsBar } = useAppsBarHidden()
   const current = moduleFor(pathname)
 
   // Soft client guard: URLs for switched-off apps / document kinds bounce home.
@@ -164,17 +162,22 @@ export function ShellChrome({
   const isPosTill = isPosLiveTill(pathname)
   // POS owns its chrome and needs a full-bleed ground (no side padding / atmosphere gaps).
   const fullBleed = isHub || isPos
-  // Accounting keeps its side list; Sales (and similar) get a tab strip so
-  // Estimates / Invoices stay one click away.
+  // Accounting keeps its side list; other modules lift their sections into a
+  // header tab strip (Bill payments under Purchases, etc.) so Home stays lean.
   const showAccountantNav = current?.key === 'accounting' && !pathname.endsWith('/print')
   const showModuleTabs =
     Boolean(current?.tabs?.length) &&
-    current?.key === 'sales' &&
+    current?.key !== 'accounting' &&
     !pathname.endsWith('/print')
   const isPrint = pathname.endsWith('/print')
   const working = !isPrint
   // Print pages still need a way back. Hide Back only on the live till.
   const showBack = pathname !== '/dashboard' && !isPosTill
+  // Apps home is the launcher itself — no apps chrome.
+  // Inside an app: system apps stay in the sidebar; the header only shows
+  // this app’s sections (Bills, Vendors, …) — not every module chip.
+  const appsChrome = working && !isHome && !isPosTill
+  const sideApps = appsChrome
 
   const companyMark = resolveBrandMark(brandMark, orgName)
   const logoSrc = orgLogoUrl(hasLogo, logoVersion)
@@ -192,14 +195,22 @@ export function ShellChrome({
       <NavigationProgress />
       {isPos ? null : <AppAtmosphere />}
 
+      {sideApps ? (
+        <SideAppsRail
+          permissions={permissions}
+          hiddenApps={hiddenApps}
+          features={features}
+        />
+      ) : null}
+
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         {/*
-          The three header bars stack above the page and above each other, top
-          bar highest, so a menu opened from any of them is never covered by
-          the bar below it or by the page's own sticky bars (the POS
-          Products / Reporting / Configuration bar is sticky z-20). Page
-          content stays at z-20 or below; full-screen overlays (POS payment,
-          register lock) sit higher still and keep covering everything.
+          Top bar (z-40) above the side apps rail (z-30) above module tabs
+          (z-25), so a menu opened from any of them is never covered by the
+          strip below it or by the page's own sticky bars (POS Products /
+          Reporting / Configuration is sticky z-20). Page content stays at
+          z-20 or below; full-screen overlays (POS payment, register lock)
+          sit higher still and keep covering everything.
         */}
         <header className="shell-topbar relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card/80 px-4 backdrop-blur-md sm:px-6">
           <Link
@@ -237,14 +248,6 @@ export function ShellChrome({
 
           <div className="ml-auto flex items-center gap-1.5">
             {working ? (
-              <ActiveAppLink
-                permissions={permissions}
-                hiddenApps={hiddenApps}
-                barHidden={appsHidden}
-              />
-            ) : null}
-            {working ? <AppsBarToggle hidden={appsHidden} onToggle={toggleAppsBar} /> : null}
-            {working ? (
               <QuickCreate
                 permissions={permissions}
                 currency={baseCurrency}
@@ -280,22 +283,6 @@ export function ShellChrome({
           </div>
         </header>
 
-        {working ? (
-          <div
-            id="app-icon-bar"
-            hidden={appsHidden}
-            className="shell-apps relative z-30 border-b border-border/70 bg-card/85 px-4 py-1.5 print:hidden sm:px-6"
-          >
-            {appsHidden ? null : (
-              <HeaderApps
-                permissions={permissions}
-                hidden={hiddenApps}
-                features={features}
-              />
-            )}
-          </div>
-        ) : null}
-
         {showAccountantNav ? (
           <div className="shell-tabs relative z-[25] border-b border-primary/15 bg-card/80 print:hidden">
             <AccountantNav permissions={permissions} currency={baseCurrency} />
@@ -304,7 +291,12 @@ export function ShellChrome({
 
         {showModuleTabs && current?.tabs ? (
           <div className="shell-tabs relative z-[25] border-b border-border/70 bg-card/90 print:hidden">
-            <ModuleTabs tabs={current.tabs} permissions={permissions} />
+            <ModuleTabs
+              appLabel={current.label}
+              appHref={current.href}
+              tabs={current.tabs}
+              permissions={permissions}
+            />
           </div>
         ) : null}
 

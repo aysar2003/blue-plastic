@@ -11,11 +11,17 @@ import { RENT_METHOD_LABELS } from '@/lib/platform-billing-labels'
 import { formatMoney } from '@/lib/money'
 import type { PendingRentPaymentRow } from '@/server/services/platform-billing.service'
 
-export function PendingRentPayments({ payments }: { payments: PendingRentPaymentRow[] }) {
+export function PendingRentPayments({
+  payments,
+  showWhenEmpty = false,
+}: {
+  payments: PendingRentPaymentRow[]
+  showWhenEmpty?: boolean
+}) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
-  if (payments.length === 0) return null
+  if (payments.length === 0 && !showWhenEmpty) return null
 
   const confirm = (id: string) => {
     startTransition(async () => {
@@ -50,6 +56,9 @@ export function PendingRentPayments({ payments }: { payments: PendingRentPayment
           if the reference does not match.
         </p>
       </div>
+      {payments.length === 0 ? (
+        <p className="px-4 py-4 text-sm text-muted-foreground">No payments waiting for review.</p>
+      ) : (
       <ul className="divide-y divide-border">
         {payments.map((row) => (
           <li
@@ -93,6 +102,7 @@ export function PendingRentPayments({ payments }: { payments: PendingRentPayment
           </li>
         ))}
       </ul>
+      )}
     </section>
   )
 }

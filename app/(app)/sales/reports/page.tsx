@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
-import { AppLauncher } from '@/components/layout/app-launcher'
 import { SALES_REPORT_APPS } from '@/components/layout/sales-apps'
+import { ModuleReportList } from '@/components/reports/module-report-list'
 import { requireOrgContext } from '@/server/auth/context'
 
 export const metadata: Metadata = { title: 'Sales reports' }
@@ -14,12 +14,11 @@ export default async function SalesReportsHubPage() {
   await requireOrgContext('report:read')
 
   return (
-    <AppLauncher
+    <ModuleReportList
       eyebrow="Sales"
       title="Sales reports"
       subtitle="Who buys, what sells, and who still owes."
       apps={SALES_REPORT_APPS}
-      searchable
     />
   )
 }

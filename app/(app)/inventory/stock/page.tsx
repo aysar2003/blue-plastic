@@ -140,14 +140,14 @@ export default async function InventoryPage({
           ) : null}
 
           {outOfStock.length > 0 || atLimit.length > 0 ? (
-            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-[#fff1f2] px-4 py-3 text-sm ring-1 ring-[#fecdd3]">
-              <AlertTriangleIcon className="size-4 shrink-0 text-[#9f1239]" />
+            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-destructive/10 px-4 py-3 text-sm ring-1 ring-destructive/30">
+              <AlertTriangleIcon className="size-4 shrink-0 text-destructive" />
               <p className="min-w-0 flex-1">
                 {outOfStock.length > 0 ? (
-                  <span className="font-medium text-[#9f1239]">{outOfStock.length} out of stock. </span>
+                  <span className="font-medium text-destructive">{outOfStock.length} out of stock. </span>
                 ) : null}
                 {atLimit.length > 0 ? (
-                  <span className="font-medium text-[#C2410C]">
+                  <span className="font-medium text-warning">
                     {atLimit.length} reached the reorder limit and can be ordered.
                   </span>
                 ) : null}

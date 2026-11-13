@@ -18,7 +18,7 @@ import type {
   UpdateBillingSettingsInput,
   UpsertPlatformPlanInput,
 } from '@/lib/validation/platform-billing'
-import { extendRentExpiry } from '@/lib/validation/platform-billing'
+import { extendRentExpiry, rentAmountMatchesPlan } from '@/lib/validation/platform-billing'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { conflict, forbidden, notFound, validation } from '@/server/errors'
@@ -101,29 +101,25 @@ export async function upsertPlan(ctx: OrgContext, input: UpsertPlatformPlanInput
     price: new Decimal(input.price),
     currency: input.currency,
     maxUsers: input.maxUsers,
-    modules: modules as unknown as Prisma.InputJsonValue | undefined,
     active: input.active,
     sortOrder: input.sortOrder,
   }
+  // No module fields on the form means "leave the plan's apps as they are".
+  const modulesData =
+    modules === null ? {} : { modules: modules as unknown as Prisma.InputJsonValue }
 
   if (input.id) {
     const existing = await db.platformPlan.findUnique({ where: { id: input.id }, select: { id: true } })
     if (!existing) throw notFound('Plan')
     const row = await db.platformPlan.update({
       where: { id: input.id },
-      data: {
-        ...data,
-        modules: modules === null ? Prisma.JsonNull : (modules as unknown as Prisma.InputJsonValue),
-      },
+      data: { ...data, ...modulesData },
     })
     return serializePlan(row)
   }
 
   const row = await db.platformPlan.create({
-    data: {
-      ...data,
-      modules: modules === null ? undefined : (modules as unknown as Prisma.InputJsonValue),
-    },
+    data: { ...data, ...modulesData },
   })
   return serializePlan(row)
 }
@@ -300,6 +296,12 @@ export async function submitRentPayment(
     where: { id: input.planId, active: true },
   })
   if (!plan) throw notFound('Plan')
+
+  if (!rentAmountMatchesPlan(input.amount, plan.price.toString())) {
+    throw validation('The amount must match the plan price.', {
+      amount: ['Pay the plan price. The amount cannot be changed.'],
+    })
+  }
 
   const modules =
     plan.modules == null ? null : parseModulesSelection(plan.modules)

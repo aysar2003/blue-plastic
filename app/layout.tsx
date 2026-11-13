@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next"
+import Script from "next/script"
 import { Geist, Geist_Mono, Inter, Source_Sans_3 } from "next/font/google"
 
 import { Providers } from "@/components/providers"
@@ -52,11 +53,10 @@ export default function RootLayout({
           Cursor tools can use refs again afterward.
         */}
         {process.env.NODE_ENV === 'development' ? (
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `(function(){try{var o=new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var m=ms[i];if(m.type==="attributes"&&m.attributeName==="data-cursor-ref"&&m.target&&m.target.nodeType===1){m.target.removeAttribute("data-cursor-ref")}else if(m.type==="childList"){m.addedNodes.forEach(function(n){if(n.nodeType!==1)return;if(n.hasAttribute&&n.hasAttribute("data-cursor-ref"))n.removeAttribute("data-cursor-ref");if(n.querySelectorAll)n.querySelectorAll("[data-cursor-ref]").forEach(function(el){el.removeAttribute("data-cursor-ref")})})}}});o.observe(document.documentElement,{attributes:true,childList:true,subtree:true,attributeFilter:["data-cursor-ref"]});function stop(){try{o.disconnect()}catch(e){}}setTimeout(stop,1500)}catch(e){}})();`,
-            }}
-          />
+          <Script
+            id="strip-cursor-ref"
+            strategy="beforeInteractive"
+          >{`(function(){try{var o=new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var m=ms[i];if(m.type==="attributes"&&m.attributeName==="data-cursor-ref"&&m.target&&m.target.nodeType===1){m.target.removeAttribute("data-cursor-ref")}else if(m.type==="childList"){m.addedNodes.forEach(function(n){if(n.nodeType!==1)return;if(n.hasAttribute&&n.hasAttribute("data-cursor-ref"))n.removeAttribute("data-cursor-ref");if(n.querySelectorAll)n.querySelectorAll("[data-cursor-ref]").forEach(function(el){el.removeAttribute("data-cursor-ref")})})}}});o.observe(document.documentElement,{attributes:true,childList:true,subtree:true,attributeFilter:["data-cursor-ref"]});function stop(){try{o.disconnect()}catch(e){}}setTimeout(stop,1500)}catch(e){}})();`}</Script>
         ) : null}
         <Providers>
           <Analytics />

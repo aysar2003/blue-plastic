@@ -14,11 +14,10 @@ export default function AppearancePage() {
         <div>
           <h2 className="text-base font-semibold">System look</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pick <strong className="font-medium text-foreground">SOM ERP</strong> (navy + cyan, same as
-            the login page), <strong className="font-medium text-foreground">QuickBooks</strong>, or{' '}
-            <strong className="font-medium text-foreground">Odoo</strong> for the whole system — home,
-            Sales, Purchases, Banking, Inventory, POS, Journals, Reports, Settings. Saved in this
-            browser.
+            Default is <strong className="font-medium text-foreground">SOM ERP</strong> (light paper +
+            cyan). Pick <strong className="font-medium text-foreground">SOM Dark</strong> for the navy
+            night desk, or <strong className="font-medium text-foreground">Odoo</strong> / a colour
+            shell (including AI) for the whole system. Saved in this browser.
           </p>
         </div>
         <ThemePicker />
@@ -54,9 +53,9 @@ export default function AppearancePage() {
           <h2 className="text-base font-semibold">Report paper only</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Override just the report sheet (row bands, section headers) without changing the rest of
-            the system. QuickBooks / Odoo themes set a matching paper; change it here if you want a
-            different sheet look. Font size and style above still apply unless you leave style on
-            Theme default.
+            the system. Odoo themes set a matching paper; change it here if you want a different
+            sheet look. Font size and style above still apply unless you leave style on Theme
+            default.
           </p>
         </div>
         <ReportStylePicker />

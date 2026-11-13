@@ -236,6 +236,7 @@ export const itemSchema = z
     cogsAccountId: optionalId,
     reorderPoint: optionalMoney,
     storeId: optionalId,
+    preferredVendorId: optionalId,
     trackLots: z
       .union([z.boolean(), z.enum(['true', 'false', 'on', 'off', ''])])
       .optional()

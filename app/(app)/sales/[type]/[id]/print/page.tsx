@@ -22,15 +22,18 @@ export const metadata = { title: 'Print' }
  * The customer-facing document, in the sales sheet style: the business name
  * at the top right, a navy line table, and the totals stacked beneath it.
  *
- * Printed by the browser. Saving as PDF is the same dialog, so the layout
- * stays in CSS.
+ * Screen, Print, PDF, and Email all use this same sheet (Merchant/Trade + ink).
  */
 export default async function PrintDocumentPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ type: string; id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { type, id } = await params
+  const query = await searchParams
+  const paperParam = typeof query.paper === 'string' ? query.paper : null
   const config = bySlug(type)
   if (!config) notFound()
 
@@ -38,7 +41,7 @@ export default async function PrintDocumentPage({
   const [document, organization, template] = await Promise.all([
     salesService.get(ctx, id).catch(() => null),
     organizationService.get(ctx),
-    organizationService.getPrintTemplate(ctx),
+    organizationService.getPrintTemplate(ctx, paperParam),
   ])
   if (!document || document.type !== config.type) notFound()
 
@@ -76,17 +79,21 @@ export default async function PrintDocumentPage({
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')}`
 
+  // Same paper on screen, Print, PDF, and Email — template already applies
+  // Settings + the Merchant/Trade cookie (query wins when present).
+  const paperStyle = template.paperStyle
+
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto w-full max-w-3xl print:max-w-none">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <PrintButton
           paper={config.singular.toLowerCase()}
           backHref={`/sales/${config.slug}/${id}`}
-          pdfHref={`/api/sales/${id}/pdf?paper=${document.type === 'QUOTATION' ? 'merchant' : 'trade'}`}
+          pdfHref={`/api/sales/${id}/pdf?paper=${paperStyle}`}
           excelHref={`/api/sales/${id}/xlsx`}
           filename={filename}
           pdfMatchesPrint
-          paperStyle={document.type === 'QUOTATION' ? 'merchant' : 'trade'}
+          paperStyle={paperStyle}
           defaultTo={customer.email ?? ''}
           defaultSubject={documentEmailSubject(
             config.singular,
@@ -102,7 +109,7 @@ export default async function PrintDocumentPage({
       <MerchantInvoice
         document={document}
         organization={organization}
-        template={{ ...template, paperStyle: document.type === 'QUOTATION' ? 'merchant' : 'trade' }}
+        template={template}
         config={config}
         baseCurrency={ctx.organization.baseCurrency}
         approval={approval}
