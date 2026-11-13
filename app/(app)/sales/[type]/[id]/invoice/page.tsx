@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
 import { InvoiceFromSourceForm } from '@/components/sales/invoice-from-source-form'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -38,7 +39,7 @@ export default async function InvoiceFromSourcePage({
   const blocked = source.status === 'VOID' || source.status === 'DECLINED' || source.status === 'DRAFT'
 
   return (
-    <>
+    <SalesPaperFrame>
       <PageHeader
         title={`Create invoice · ${source.number}`}
         className="mb-2 pb-2"
@@ -98,6 +99,6 @@ export default async function InvoiceFromSourcePage({
           />
         </>
       )}
-    </>
+    </SalesPaperFrame>
   )
 }

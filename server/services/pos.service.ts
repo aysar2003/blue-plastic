@@ -863,6 +863,24 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
   await requireCashierUnlock(ctx, input.registerId)
   const register = await registerForTerminal(ctx, input.registerId)
 
+  if (input.clientSaleId) {
+    const existing = await db.posOrder.findFirst({
+      where: { orgId: ctx.orgId, clientSaleId: input.clientSaleId },
+      select: {
+        tipAmount: true,
+        salesDocument: { select: { id: true, number: true, total: true } },
+      },
+    })
+    if (existing?.salesDocument) {
+      return {
+        id: existing.salesDocument.id,
+        number: existing.salesDocument.number,
+        total: toMoneyString(existing.salesDocument.total, 2),
+        tip: toMoneyString(existing.tipAmount, 2),
+      }
+    }
+  }
+
   const session = await db.posSession.findFirst({
     where: {
       id: input.sessionId,
@@ -1024,6 +1042,7 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
         depositLedgerAccountId: tillAccountId,
         tipAmount: tipSplit.tip.toFixed(4),
         diningTableId: input.diningTableId ?? null,
+        clientSaleId: input.clientSaleId ?? null,
       },
     },
   )

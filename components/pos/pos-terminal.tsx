@@ -9,6 +9,8 @@ import {
   BanknoteIcon,
   BanIcon,
   BarcodeIcon,
+  CloudOffIcon,
+  DownloadIcon,
   FileTextIcon,
   KeyRoundIcon,
   LayoutGridIcon,
@@ -26,6 +28,7 @@ import {
   Trash2Icon,
   Undo2Icon,
   UploadIcon,
+  WifiIcon,
   XIcon,
 } from 'lucide-react'
 
@@ -83,6 +86,20 @@ import {
   settlePosPayments,
 } from '@/lib/pos-payment'
 import { fullScreenOverlayZIndex } from '@/lib/dialog-stack'
+import {
+  countPendingSales,
+  enqueuePendingSale,
+  newClientSaleId,
+  probePosOnline,
+  savePosSnapshot,
+  subscribeBrowserOnline,
+  syncPendingPosSales,
+} from '@/lib/pos-offline'
+import {
+  promptPosInstall,
+  registerPosServiceWorker,
+  watchPosInstallPrompt,
+} from '@/lib/pos-offline/install'
 import { POS_SHORTFALL_DISCOUNT_MAX } from '@/lib/pos-shortfall'
 import { resolveUnit } from '@/lib/quantity'
 import { formatStockQty, negativeStockWarning } from '@/lib/store-stock'
@@ -219,6 +236,7 @@ export function PosTerminal(props: {
   stores?: { id: string; name: string }[]
   customers: Customer[]
   currency: string
+  orgId: string
   orgName: string
   /**
    * Method Payment fills with the amount due. Computed when the till loads,
@@ -267,8 +285,15 @@ export function PosTerminal(props: {
   const [closingCash, setClosingCash] = usePropState(props.cashSummary.expectedCash)
   const [pending, startTransition] = useTransition()
   const [tillView, setTillView] = useState<'sell' | 'orders'>('sell')
+  // Assume online until the client mount probe runs — avoids SSR/test flash and
+  // keeps the first paint usable right after opening the till on the network.
+  const [browserOnline, setBrowserOnline] = useState(true)
+  const [serverOnline, setServerOnline] = useState(true)
+  const [pendingSyncCount, setPendingSyncCount] = useState(0)
+  const syncingRef = useRef(false)
   const ready = useClientReady()
   const locked = useRegisterLocked(props.register.id)
+  const tillOnline = browserOnline && serverOnline
 
   useEffect(() => {
     bookRef.current = book
@@ -278,6 +303,106 @@ export function PosTerminal(props: {
     if (!book || storedFor !== ticketKey) return
     savePosOrderBook(window.localStorage, props.cashierUserId, props.session.id, book)
   }, [book, storedFor, ticketKey, props.cashierUserId, props.session.id])
+
+  useEffect(() => {
+    void savePosSnapshot({
+      orgId: props.orgId,
+      registerId: props.register.id,
+      sessionId: props.session.id,
+      currency: props.currency,
+      orgName: props.orgName,
+      registerName: props.register.name,
+      paymentMethods: props.register.paymentMethods,
+      products: props.products,
+      customers: props.customers,
+      stockStoreId: props.stockStoreId ?? null,
+      stockStoreName: props.stockStoreName ?? null,
+      stores: props.stores ?? [],
+    }).catch(() => {
+      // Private mode / blocked storage — till still works online.
+    })
+  }, [
+    props.orgId,
+    props.register.id,
+    props.register.name,
+    props.register.paymentMethods,
+    props.session.id,
+    props.currency,
+    props.orgName,
+    props.products,
+    props.customers,
+    props.stockStoreId,
+    props.stockStoreName,
+    props.stores,
+  ])
+
+  useEffect(() => {
+    watchPosInstallPrompt()
+    registerPosServiceWorker()
+    return subscribeBrowserOnline((online) => {
+      setBrowserOnline(online)
+    })
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    async function refreshPending() {
+      try {
+        const count = await countPendingSales(props.register.id)
+        if (!cancelled) setPendingSyncCount(count)
+      } catch {
+        if (!cancelled) setPendingSyncCount(0)
+      }
+    }
+    async function refreshReachability() {
+      const ok = await probePosOnline()
+      if (!cancelled) setServerOnline(ok)
+      return ok
+    }
+    async function flushQueue() {
+      if (syncingRef.current) return
+      const reachable = await refreshReachability()
+      if (!reachable) {
+        await refreshPending()
+        return
+      }
+      syncingRef.current = true
+      try {
+        const result = await syncPendingPosSales(posCheckout, {
+          registerId: props.register.id,
+          ensureOnline: false,
+        })
+        if (!cancelled && result.synced > 0) {
+          setToast(
+            result.remaining > 0
+              ? `Synced ${result.synced} sale(s) · ${result.remaining} still waiting`
+              : `Synced ${result.synced} offline sale(s)`,
+          )
+          router.refresh()
+        }
+      } catch {
+        // IndexedDB / network — leave queue for the next attempt.
+      } finally {
+        syncingRef.current = false
+        await refreshPending()
+      }
+    }
+    void refreshPending()
+    void flushQueue()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void flushQueue()
+    }
+    const onOnline = () => {
+      void flushQueue()
+    }
+    window.addEventListener('online', onOnline)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      cancelled = true
+      window.removeEventListener('online', onOnline)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [props.register.id, router])
 
   function commitBook(recipe: (current: PosOrderBook) => PosOrderBook) {
     const base = bookRef.current ?? book ?? createPosOrderBook()
@@ -719,6 +844,43 @@ export function PosTerminal(props: {
     setError(null)
   }
 
+  async function runOfflineSync(manual: boolean) {
+    if (syncingRef.current) return
+    const reachable = await probePosOnline()
+    setServerOnline(reachable)
+    if (!reachable) {
+      if (manual) setToast('Still offline — sales stay queued on this device.')
+      return
+    }
+    syncingRef.current = true
+    try {
+      const result = await syncPendingPosSales(posCheckout, {
+        registerId: props.register.id,
+        ensureOnline: false,
+      })
+      setPendingSyncCount(result.remaining)
+      if (result.synced > 0) {
+        setToast(
+          result.remaining > 0
+            ? `Synced ${result.synced} sale(s) · ${result.remaining} still waiting`
+            : `Synced ${result.synced} offline sale(s)`,
+        )
+        router.refresh()
+      } else if (manual && result.remaining === 0) {
+        setToast('Nothing to sync')
+      } else if (manual && result.errors[0]) {
+        setToast(result.errors[0])
+      }
+    } finally {
+      syncingRef.current = false
+      try {
+        setPendingSyncCount(await countPendingSales(props.register.id))
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   function completeSale() {
     if (!canValidatePayment) {
       setError(
@@ -740,7 +902,45 @@ export function PosTerminal(props: {
     if (!selling || selling.cart.length === 0) return
     const lines = cartLinesPayload()
     const estimateId = loadedEstimateId ?? undefined
+    const totalLabel = formatMoney(subtotal, props.currency)
     startTransition(async () => {
+      // Browser flag decides offline queue; health probe only drives the banner/sync.
+      const browserSaysOnline = typeof navigator === 'undefined' || navigator.onLine
+      setBrowserOnline(browserSaysOnline)
+
+      if (!browserSaysOnline) {
+        if (estimateId) {
+          setError('Quotations need a connection. Remove the quote link or reconnect to finish.')
+          return
+        }
+        try {
+          const clientSaleId = newClientSaleId()
+          await enqueuePendingSale({
+            registerId: props.register.id,
+            sessionId: props.session.id,
+            customerId: selling.customerId ?? undefined,
+            note: selling.note || null,
+            prescriptionRef: prescriptionRef.trim() || undefined,
+            lines,
+            payments,
+            estimateId: undefined,
+            clientSaleId,
+            totalLabel,
+            ...(changeAtSale > 0.004 ? { changeMethodId } : {}),
+          })
+          leavePayment()
+          commitBook((current) => settlePosOrder(current, selling.id))
+          setLoadedEstimateId(null)
+          setPrescriptionRef('')
+          setLastReceiptId(null)
+          setPendingSyncCount((count) => count + 1)
+          setToast(`Saved offline · ${totalLabel} — will sync when online`)
+        } catch (error) {
+          setError(error instanceof Error ? error.message : 'Could not save the sale offline.')
+        }
+        return
+      }
+
       // The signed-in user is whoever the server action sees. The sale is
       // posted on this open session, the same way a single-cart checkout was.
       const result = await posCheckout({
@@ -755,7 +955,40 @@ export function PosTerminal(props: {
         ...(changeAtSale > 0.004 ? { changeMethodId } : {}),
       })
       if (!result.ok) {
-        setError(result.error.message)
+        // Network drop mid-sale: queue locally when IndexedDB is available.
+        const message = result.error.message || 'Checkout failed'
+        const looksNetwork =
+          /fetch|network|failed to fetch|load failed|offline|connection/i.test(message)
+        if (looksNetwork && !estimateId) {
+          try {
+            const clientSaleId = newClientSaleId()
+            await enqueuePendingSale({
+              registerId: props.register.id,
+              sessionId: props.session.id,
+              customerId: selling.customerId ?? undefined,
+              note: selling.note || null,
+              prescriptionRef: prescriptionRef.trim() || undefined,
+              lines,
+              payments,
+              estimateId: undefined,
+              clientSaleId,
+              totalLabel,
+              ...(changeAtSale > 0.004 ? { changeMethodId } : {}),
+            })
+            leavePayment()
+            commitBook((current) => settlePosOrder(current, selling.id))
+            setLoadedEstimateId(null)
+            setPrescriptionRef('')
+            setLastReceiptId(null)
+            setServerOnline(false)
+            setPendingSyncCount((count) => count + 1)
+            setToast(`Saved offline · ${totalLabel} — will sync when online`)
+            return
+          } catch {
+            // Fall through to surface the original error.
+          }
+        }
+        setError(message)
         return
       }
       leavePayment()
@@ -765,6 +998,7 @@ export function PosTerminal(props: {
       setLastReceiptId(result.data.id)
       setToast(`Receipt ${result.data.number} · ${formatMoney(result.data.total, props.currency)}`)
       openReceiptPrint(result.data.id, { autoprint: true, change: changeAtSale })
+      void runOfflineSync(false)
       router.refresh()
     })
   }
@@ -1061,11 +1295,12 @@ export function PosTerminal(props: {
           {props.tillBalance ? (
             <button
               type="button"
+              disabled={!tillOnline}
               onClick={() => {
                 setError(null)
                 setMenu('transfer')
               }}
-              className="hidden shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold sm:inline"
+              className="hidden shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold sm:inline disabled:opacity-40"
               style={{ background: `${ODOO.teal}22`, color: dark ? '#9fe0e3' : ODOO.tealDark }}
             >
               Till {props.tillBalance.balance}
@@ -1082,6 +1317,38 @@ export function PosTerminal(props: {
           </button>
         </div>
       </header>
+
+      {!tillOnline || pendingSyncCount > 0 ? (
+        <div
+          className="mx-3 mt-2 flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-sm"
+          style={{
+            background: !tillOnline ? `${ODOO.danger}18` : `${ODOO.teal}22`,
+            color: !tillOnline ? (dark ? '#fca5a5' : ODOO.danger) : dark ? '#9fe0e3' : ODOO.tealDark,
+          }}
+        >
+          {!tillOnline ? <CloudOffIcon className="size-4 shrink-0" /> : <WifiIcon className="size-4 shrink-0" />}
+          <span className="min-w-0 flex-1">
+            {!tillOnline
+              ? pendingSyncCount > 0
+                ? `Offline · ${pendingSyncCount} sale(s) waiting to sync`
+                : 'Offline · sales stay on this device until you reconnect'
+              : `${pendingSyncCount} sale(s) waiting to sync`}
+          </span>
+          {tillOnline && pendingSyncCount > 0 ? (
+            <button
+              type="button"
+              className="underline"
+              onClick={() => {
+                startTransition(async () => {
+                  await runOfflineSync(true)
+                })
+              }}
+            >
+              Sync now
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {toast ? (
         <div
@@ -1454,6 +1721,7 @@ export function PosTerminal(props: {
             <ActionTile
               label="Refund"
               icon={<Undo2Icon className="size-6" />}
+              disabled={!tillOnline}
               onClick={openRefund}
               dark={dark}
             />
@@ -1461,6 +1729,7 @@ export function PosTerminal(props: {
               <ActionTile
                 label="Save Quotation"
                 icon={<FileTextIcon className="size-6" />}
+                disabled={!tillOnline}
                 onClick={saveQuotation}
                 dark={dark}
               />
@@ -1469,6 +1738,7 @@ export function PosTerminal(props: {
               <ActionTile
                 label="Open Quotations"
                 icon={<Link2Icon className="size-6" />}
+                disabled={!tillOnline}
                 onClick={() => {
                   setError(null)
                   setMenu('quotes')
@@ -1515,8 +1785,40 @@ export function PosTerminal(props: {
               dark={dark}
             />
             <ActionTile
+              label="Install App"
+              icon={<DownloadIcon className="size-6" />}
+              onClick={() => {
+                startTransition(async () => {
+                  const outcome = await promptPosInstall()
+                  setMenu(null)
+                  if (outcome === 'accepted') {
+                    setToast('SOM ERP POS installed')
+                    return
+                  }
+                  if (outcome === 'dismissed') return
+                  setToast(
+                    'Use the browser menu → Install app / Apps → Install this site (Chrome or Edge).',
+                  )
+                })
+              }}
+              dark={dark}
+            />
+            <ActionTile
+              label={pendingSyncCount > 0 ? `Sync now (${pendingSyncCount})` : 'Sync now'}
+              icon={<UploadIcon className="size-6" />}
+              disabled={!tillOnline}
+              onClick={() => {
+                setMenu(null)
+                startTransition(async () => {
+                  await runOfflineSync(true)
+                })
+              }}
+              dark={dark}
+            />
+            <ActionTile
               label="Transfer out"
               icon={<ArrowRightLeftIcon className="size-6" />}
+              disabled={!tillOnline}
               onClick={() => {
                 setError(null)
                 setMenu('transfer')
@@ -1526,6 +1828,7 @@ export function PosTerminal(props: {
             <ActionTile
               label="Cash In/Out"
               icon={<BanknoteIcon className="size-6" />}
+              disabled={!tillOnline}
               onClick={() => {
                 setCashKind('OUT')
                 setMenu('cash')
@@ -1535,12 +1838,14 @@ export function PosTerminal(props: {
             <ActionTile
               label="Refund"
               icon={<Undo2Icon className="size-6" />}
+              disabled={!tillOnline}
               onClick={openRefund}
               dark={dark}
             />
             <ActionTile
               label="Reload Data"
               icon={<RefreshCwIcon className="size-6" />}
+              disabled={!tillOnline}
               onClick={() => {
                 router.refresh()
                 setMenu(null)
@@ -1551,6 +1856,7 @@ export function PosTerminal(props: {
             <ActionTile
               label="Create Product"
               icon={<PlusIcon className="size-6" />}
+              disabled={!tillOnline}
               onClick={() => {
                 setMenu(null)
                 router.push('/items')
@@ -1560,12 +1866,14 @@ export function PosTerminal(props: {
             <ActionTile
               label="Backend"
               icon={<ArrowLeftIcon className="size-6" />}
+              disabled={!tillOnline}
               onClick={() => router.push('/pos')}
               dark={dark}
             />
             <ActionTile
               label="Close Register"
               icon={<KeyRoundIcon className="size-6" />}
+              disabled={!tillOnline}
               onClick={() => setMenu('close')}
               dark={dark}
               danger
@@ -1580,6 +1888,12 @@ export function PosTerminal(props: {
               dark={dark}
             />
           </div>
+          {!tillOnline ? (
+            <p className="mt-3 text-xs opacity-70">
+              Offline: sell with till payment methods. Close, cash moves, refunds, and reload need a
+              connection.
+            </p>
+          ) : null}
         </Modal>
       ) : null}
 
@@ -2104,21 +2418,25 @@ function ActionTile({
   onClick,
   dark,
   danger,
+  disabled,
 }: {
   label: string
   icon: React.ReactNode
   onClick: () => void
   dark: boolean
   danger?: boolean
+  disabled?: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex aspect-square flex-col items-center justify-center gap-2 rounded-xl p-3 text-center text-sm font-medium"
+      disabled={disabled}
+      title={disabled ? 'Needs an internet connection' : undefined}
+      className="flex aspect-square flex-col items-center justify-center gap-2 rounded-xl p-3 text-center text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
       style={{
-        background: danger ? ODOO.danger : dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-        color: danger ? '#fff' : undefined,
+        background: danger && !disabled ? ODOO.danger : dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+        color: danger && !disabled ? '#fff' : undefined,
       }}
     >
       {icon}

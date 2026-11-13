@@ -5,9 +5,17 @@ import { unstable_cache } from 'next/cache'
 
 import { Decimal, ZERO } from '@/lib/money'
 import { foldStoreQuantities, type StockByStore, type StoreChoice } from '@/lib/store-stock'
+import {
+  generatedOfficeWording,
+  OFFICE_NAME,
+  officeWhere,
+  officeWordingChanged,
+  seedDefaultOffice,
+} from '@/server/accounting/default-office'
+import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
-import { conflict, notFound } from '@/server/errors'
+import { conflict, notFound, precondition } from '@/server/errors'
 import * as accountService from '@/server/services/account.service'
 import { valuation } from '@/server/accounting/inventory'
 
@@ -76,10 +84,9 @@ export async function create(ctx: OrgContext, input: string | StoreDetailsInput)
   const account = await accountService.create(ctx, {
     code: String(number),
     name: trimmed,
-    description: `Inventory held at ${trimmed}. Listed with Inventory Asset.`,
+    description: 'Stock on hand, at weighted-average cost.',
     type: 'ASSET',
     subtype: 'INVENTORY',
-    detailType: 'Store',
   })
 
   return db.store.create({
@@ -145,29 +152,230 @@ export async function update(ctx: OrgContext, id: string, input: StoreDetailsInp
 
 async function findOffice(ctx: OrgContext): Promise<StoreColumn | null> {
   const named = await db.store.findFirst({
-    where: { orgId: ctx.orgId, OR: [{ isOffice: true }, { name: 'Xafiiska' }] },
-    select: { id: true, name: true, isOffice: true, isActive: true },
+    where: { orgId: ctx.orgId, isActive: true, ...officeWhere() },
+    select: {
+      id: true,
+      name: true,
+      isOffice: true,
+      inventoryAccountId: true,
+      account: { select: { id: true, name: true, description: true, detailType: true } },
+    },
   })
   if (!named) return null
-  if (!named.isOffice || !named.isActive) {
-    await db.store.update({ where: { id: named.id }, data: { isOffice: true, isActive: true } })
+  if (!named.isOffice) {
+    await db.store.update({ where: { id: named.id }, data: { isOffice: true } })
+  }
+  if (named.account.name === OFFICE_NAME) {
+    const wording = generatedOfficeWording(named.account)
+    if (officeWordingChanged(wording)) {
+      await db.ledgerAccount.update({ where: { id: named.account.id }, data: wording })
+    }
   }
   return { id: named.id, name: named.name, isOffice: true }
 }
 
-/** The office store. Created once, with an inventory account and no opening balance. */
-export async function ensureOffice(ctx: OrgContext): Promise<StoreColumn> {
+/** The office, when this company still uses that default. Null after it is removed. */
+export async function ensureOffice(ctx: OrgContext): Promise<StoreColumn | null> {
   const found = await findOffice(ctx)
   if (found) return found
+  const removed = await db.store.findFirst({
+    where: { orgId: ctx.orgId, isActive: false, ...officeWhere() },
+    select: { id: true },
+  })
+  if (removed) return null
   try {
-    const created = await create(ctx, 'Xafiiska')
-    await db.store.update({ where: { id: created.id }, data: { isOffice: true } })
-    return { id: created.id, name: created.name, isOffice: true }
+    await db.$transaction((tx) => seedDefaultOffice(tx, ctx.orgId))
   } catch (error) {
     const again = await findOffice(ctx)
     if (again) return again
+    const gone = await db.store.findFirst({
+      where: { orgId: ctx.orgId, isActive: false, ...officeWhere() },
+      select: { id: true },
+    })
+    if (gone) return null
     throw error
   }
+  return findOffice(ctx)
+}
+
+export type OfficeDefault = {
+  state: 'active' | 'removed' | 'missing'
+  storeId: string | null
+  account: { id: string; code: string; name: string } | null
+  canRemove: boolean
+  blockReason: string | null
+}
+
+async function officeUsage(tx: Tx, orgId: string, storeId: string, accountId: string) {
+  const [movements, sales, purchases, items, registers, journals, tickets, transfers] = await Promise.all([
+    tx.inventoryTransaction.count({ where: { orgId, storeId } }),
+    tx.salesDocumentLine.count({ where: { storeId } }),
+    tx.purchaseDocumentLine.count({ where: { storeId } }),
+    tx.item.count({ where: { orgId, storeId, deletedAt: null } }),
+    tx.posRegister.count({ where: { orgId, storeId } }),
+    tx.journalLine.count({ where: { orgId, accountId } }),
+    tx.storeTicket.count({ where: { orgId, OR: [{ storeId }, { toStoreId: storeId }] } }),
+    tx.storeTransfer.count({ where: { orgId, OR: [{ fromStoreId: storeId }, { toStoreId: storeId }] } }),
+  ])
+  const parts: string[] = []
+  if (movements > 0) parts.push('stock')
+  if (sales > 0) parts.push('sales')
+  if (purchases > 0) parts.push('purchases')
+  if (items > 0) parts.push('items')
+  if (registers > 0) parts.push('tills')
+  if (journals > 0) parts.push('account entries')
+  if (tickets > 0) parts.push('tickets')
+  if (transfers > 0) parts.push('transfers')
+  if (parts.length === 0) return null
+  return `Xafiiska already has ${parts.join(', ')}. Move those off it before removing the default.`
+}
+
+/** What Settings → Default accounts shows for the Xafiiska default. */
+export async function officeDefault(ctx: OrgContext): Promise<OfficeDefault> {
+  const store = await db.store.findFirst({
+    where: { orgId: ctx.orgId, ...officeWhere() },
+    select: {
+      id: true,
+      isActive: true,
+      account: { select: { id: true, code: true, name: true, description: true, detailType: true } },
+    },
+    orderBy: [{ isActive: 'desc' }, { isOffice: 'desc' }],
+  })
+  if (!store) {
+    return { state: 'missing', storeId: null, account: null, canRemove: false, blockReason: null }
+  }
+  if (store.account.name === OFFICE_NAME) {
+    const wording = generatedOfficeWording(store.account)
+    if (officeWordingChanged(wording)) {
+      await db.ledgerAccount.update({ where: { id: store.account.id }, data: wording })
+    }
+  }
+  const account = { id: store.account.id, code: store.account.code, name: store.account.name }
+  if (!store.isActive) {
+    return {
+      state: 'removed',
+      storeId: store.id,
+      account,
+      canRemove: false,
+      blockReason: null,
+    }
+  }
+  const blockReason = await officeUsage(db as unknown as Tx, ctx.orgId, store.id, store.account.id)
+  return {
+    state: 'active',
+    storeId: store.id,
+    account,
+    canRemove: blockReason == null,
+    blockReason,
+  }
+}
+
+/** Take Xafiiska off a company that has not used it yet. It stays off. */
+export async function removeOfficeDefault(ctx: OrgContext) {
+  const meta = await requestMeta()
+  return db.$transaction((tx) => removeOfficeDefaultInTx(tx, ctx, meta))
+}
+
+export async function removeOfficeDefaultInTx(
+  tx: Tx,
+  ctx: OrgContext,
+  meta: { ip?: string | null; userAgent?: string | null } = {},
+) {
+  const store = await tx.store.findFirst({
+    where: { orgId: ctx.orgId, isActive: true, ...officeWhere() },
+    select: {
+      id: true,
+      name: true,
+      account: { select: { id: true, code: true, name: true } },
+    },
+  })
+  if (!store) {
+    const gone = await tx.store.findFirst({
+      where: { orgId: ctx.orgId, isActive: false, ...officeWhere() },
+      select: { id: true },
+    })
+    if (gone) throw conflict('Xafiiska is already removed.')
+    throw notFound('Xafiiska')
+  }
+  const blockReason = await officeUsage(tx, ctx.orgId, store.id, store.account.id)
+  if (blockReason) throw precondition(blockReason)
+
+  await tx.store.update({
+    where: { id: store.id },
+    data: { isActive: false, isOffice: true },
+  })
+  await tx.ledgerAccount.update({
+    where: { id: store.account.id },
+    data: { isActive: false },
+  })
+  await writeAudit(
+    tx,
+    ctx,
+    {
+      entity: 'Store',
+      entityId: store.id,
+      action: 'ARCHIVE',
+      before: { name: store.name, isActive: true, account: store.account },
+      after: { name: OFFICE_NAME, isActive: false, removedDefault: true },
+    },
+    meta,
+  )
+  return { removed: true as const }
+}
+
+/** Put the Xafiiska default back, or create it when this company never had one. */
+export async function restoreOfficeDefault(ctx: OrgContext) {
+  const meta = await requestMeta()
+  return db.$transaction((tx) => restoreOfficeDefaultInTx(tx, ctx, meta))
+}
+
+export async function restoreOfficeDefaultInTx(
+  tx: Tx,
+  ctx: OrgContext,
+  meta: { ip?: string | null; userAgent?: string | null } = {},
+) {
+  const removed = await tx.store.findFirst({
+    where: { orgId: ctx.orgId, isActive: false, ...officeWhere() },
+    select: { id: true, inventoryAccountId: true, name: true },
+  })
+  if (removed) {
+    await tx.store.update({
+      where: { id: removed.id },
+      data: { isActive: true, isOffice: true },
+    })
+    await tx.ledgerAccount.update({
+      where: { id: removed.inventoryAccountId },
+      data: { isActive: true },
+    })
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Store',
+        entityId: removed.id,
+        action: 'RESTORE',
+        before: { name: removed.name, isActive: false },
+        after: { name: removed.name, isActive: true, isOffice: true },
+      },
+      meta,
+    )
+    return { id: removed.id, restored: true as const }
+  }
+
+  const created = await seedDefaultOffice(tx, ctx.orgId)
+  if (!created) throw conflict('Xafiiska is already the default.')
+  await writeAudit(
+    tx,
+    ctx,
+    {
+      entity: 'Store',
+      entityId: created.id,
+      action: 'CREATE',
+      after: { name: OFFICE_NAME, isOffice: true },
+    },
+    meta,
+  )
+  return { id: created.id, restored: false as const }
 }
 
 export async function columns(ctx: OrgContext): Promise<StoreColumn[]> {

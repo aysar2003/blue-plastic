@@ -134,7 +134,7 @@ export async function renderMultiSheetXlsx(input: {
 }
 
 function uniqueSheetName(raw: string, used: Set<string>): string {
-  let base = (raw.trim() || 'Sheet').slice(0, 31)
+  const base = (raw.trim() || 'Sheet').slice(0, 31)
   if (!used.has(base)) {
     used.add(base)
     return base

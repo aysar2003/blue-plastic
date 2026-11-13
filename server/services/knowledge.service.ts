@@ -438,11 +438,11 @@ export async function listMembers(ctx: OrgContext) {
 export async function create(ctx: OrgContext, input: KnowledgeInput) {
   const template = input.templateKey ? knowledgeTemplate(input.templateKey) : null
   let scope: KnowledgeScope = input.scope ?? 'WORKSPACE'
-  let parentId: string | null = input.parentId ?? null
+  const parentId: string | null = input.parentId ?? null
   let ownerId: string | null = scope === 'WORKSPACE' ? null : ctx.userId
-  let title = template?.title ?? input.title
-  let body = template?.body ?? input.body
-  let icon = input.icon ?? template?.icon ?? null
+  const title = template?.title ?? input.title
+  const body = template?.body ?? input.body
+  const icon = input.icon ?? template?.icon ?? null
 
   if (parentId) {
     const parent = await requireArticle(ctx, parentId)

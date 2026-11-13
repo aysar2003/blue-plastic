@@ -38,8 +38,6 @@ import * as hrSettingsService from '@/server/services/hr-settings.service'
 import * as leaveService from '@/server/services/leave.service'
 import { sendOrgMail } from '@/server/services/mail.service'
 import { renderPayslipPdf } from '@/server/reports/payslip-pdf'
-import { deleteJournals, restoreJournals } from '@/server/accounting/deletion'
-
 const STANDARD_RULES: {
   code: string
   name: string

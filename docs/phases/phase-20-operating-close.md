@@ -18,4 +18,6 @@ Closes the last SME operating gaps after Phase 19: backup **restore** of people/
 
 ## Still not this product
 
-FX hedging, restaurant IoT POS, app marketplace, WMS robotics, DocuSign/Slack clones, lots/serials costing, offline POS, Playwright suite.
+FX hedging, restaurant IoT POS, app marketplace, WMS robotics, DocuSign/Slack clones, lots/serials costing, Playwright suite.
+
+Offline POS (IndexedDB queue + PWA install) shipped after this phase — see `lib/pos-offline/` and till menu Sync / Install App.

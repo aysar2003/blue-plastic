@@ -2437,6 +2437,8 @@ model PosOrder {
   registerId      String
   sessionId       String?
   salesDocumentId String @unique
+  /// Client-generated id for offline queue sync — retries must not double-post.
+  clientSaleId    String?
 
   /// Money handed back. Zero on sales rung up before change was recorded, and on exact tenders.
   changeAmount            Decimal @default(0) @db.Decimal(19, 4)
@@ -2464,6 +2466,7 @@ model PosOrder {
   payments      PosOrderPayment[]
   kitchenTickets KitchenTicket[]
 
+  @@unique([orgId, clientSaleId])
   @@index([orgId, registerId, createdAt(sort: Desc)])
   @@index([sessionId, createdAt(sort: Desc)])
   @@index([changePaymentMethodId])

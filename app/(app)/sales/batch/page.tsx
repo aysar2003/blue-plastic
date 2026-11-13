@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 
 import { PageHeader } from '@/components/data/page-header'
 import { BatchInvoiceForm } from '@/components/sales/batch-invoice-form'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { today } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -37,12 +38,12 @@ export default async function BatchInvoicesPage() {
   ])
 
   return (
-    <>
+    <SalesPaperFrame>
       <PageHeader
         title="Invoice a batch"
         description="The same date, item, and price, written as a separate invoice for each customer you tick. One customer’s credit limit does not stop the others."
       />
       <BatchInvoiceForm customers={customers} items={items} taxCodes={taxCodes} today={today()} />
-    </>
+    </SalesPaperFrame>
   )
 }

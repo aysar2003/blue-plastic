@@ -9,7 +9,7 @@ import {
 } from '@/lib/erp/wms-bin'
 import { positionOf, recordMovement } from '@/server/accounting/inventory'
 import type { Tx } from '@/server/db'
-import { CODE, inRolledBackTransaction, makeOrg, type Fixture } from './ledger-helpers'
+import { CODE, inRolledBackTransaction, makeOrg } from './ledger-helpers'
 
 const suite = process.env.DATABASE_URL ? describe : describe.skip
 

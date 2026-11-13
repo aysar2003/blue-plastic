@@ -18,6 +18,8 @@ import type { OrgContext } from '@/server/auth/context'
 import { hashPassword } from '@/server/auth/password'
 import { db } from '@/server/db'
 import { conflict, forbidden, notFound } from '@/server/errors'
+import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
+import { seedDefaultOffice } from '@/server/accounting/default-office'
 import { createDefaultSequences } from '@/server/sequences'
 import { needsSetup } from '@/server/services/setup.service'
 
@@ -105,6 +107,8 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
       })
 
       await createDefaultSequences(tx, organization.id)
+      await seedChartOfAccounts(tx, organization.id)
+      await seedDefaultOffice(tx, organization.id)
 
       await tx.auditLog.create({
         data: {
@@ -202,6 +206,8 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
     })
 
     await createDefaultSequences(tx, organization.id)
+    await seedChartOfAccounts(tx, organization.id)
+    await seedDefaultOffice(tx, organization.id)
 
     await tx.auditLog.create({
       data: {
@@ -363,6 +369,8 @@ export async function reviewSignupRequest(
     })
 
     await createDefaultSequences(tx, organization.id)
+    await seedChartOfAccounts(tx, organization.id)
+    await seedDefaultOffice(tx, organization.id)
 
     await tx.companySignupRequest.update({
       where: { id: request.id },

@@ -38,6 +38,7 @@ function render() {
       products: [{ id: 'a4', name: 'A4', sku: null, category: null, price: '6', onHand: '10' }],
       customers: [],
       currency: 'USD',
+      orgId: 'org-1',
       orgName: 'Test Org',
     }),
   )

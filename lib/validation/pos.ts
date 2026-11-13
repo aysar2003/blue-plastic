@@ -59,6 +59,14 @@ const optionalMethodId = z
   .transform((value) => (value === '' ? undefined : value))
   .optional()
 
+/** Offline queue id — UUID or cuid-like; must be stable across sync retries. */
+const clientSaleId = z
+  .string()
+  .trim()
+  .min(8, 'Offline sale id is too short')
+  .max(64, 'Offline sale id is too long')
+  .optional()
+
 export const posCheckoutSchema = z.object({
   registerId: cuid,
   sessionId: cuid,
@@ -79,6 +87,8 @@ export const posCheckoutSchema = z.object({
     .optional(),
   /** Pharmacy Rx reference (optional text). */
   prescriptionRef: optionalText(120),
+  /** When set (offline sync), a matching PosOrder is returned instead of posting twice. */
+  clientSaleId,
 })
 
 export const posCreateQuotationSchema = z.object({

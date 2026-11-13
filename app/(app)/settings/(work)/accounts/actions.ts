@@ -22,6 +22,11 @@ const assignSchema = z.object({
     'INVENTORY_SHRINKAGE',
     'UNCATEGORISED_INCOME',
     'UNCATEGORISED_EXPENSE',
+    'POS_CASH_SHORT',
+    'POS_CASH_OVER',
+    'TIP_LIABILITY',
+    'RETENTION_RECEIVABLE',
+    'UNEARNED_REVENUE',
   ]),
   accountId: cuid,
 })

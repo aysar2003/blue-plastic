@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { PageHeader } from '@/components/data/page-header'
 import { BillForm } from '@/components/purchases/bill-form'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { toCalendarDate, today } from '@/lib/date'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -41,8 +42,7 @@ export default async function EditPurchasePage({
   if (document.type !== config.type) notFound()
 
   return (
-    <>
-
+    <SalesPaperFrame>
       <PageHeader
         title={`Edit ${config.singular.toLowerCase()} ${document.number}`}
         className="mb-2 pb-2"
@@ -97,6 +97,6 @@ export default async function EditPurchasePage({
         formCustomization={formCustomization}
       />
       <ApprovalTrailPanel entityType="PURCHASE_DOCUMENT" entityId={document.id} />
-    </>
+    </SalesPaperFrame>
   )
 }

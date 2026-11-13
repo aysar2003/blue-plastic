@@ -61,6 +61,8 @@ export type PosCheckoutMeta = {
   /** Tip held for staff (separate POS_TIP journal). */
   tipAmount?: string
   diningTableId?: string | null
+  /** Offline queue id — unique per org when set. */
+  clientSaleId?: string | null
 }
 
 async function salesDiscountAccountId(tx: Tx, orgId: string) {
@@ -1050,6 +1052,7 @@ async function createWithin(
           registerId: options.pos.registerId,
           sessionId: options.pos.sessionId,
           salesDocumentId: document.id,
+          clientSaleId: options.pos.clientSaleId ?? null,
           changeAmount: options.pos.change?.amount ?? '0',
           changePaymentMethodId: options.pos.change?.paymentMethodId ?? null,
           changeLedgerAccountId: options.pos.change?.ledgerAccountId ?? null,

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
 import { ReceiveForm } from '@/components/purchases/receive-form'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -43,8 +44,7 @@ export default async function ReceiveOrderPage({
   if (!order) notFound()
 
   return (
-    <>
-
+    <SalesPaperFrame>
       <PageHeader
         title={`Receive items · ${order.number}`}
         className="mb-2 pb-2"
@@ -103,6 +103,6 @@ export default async function ReceiveOrderPage({
           />
         </>
       )}
-    </>
+    </SalesPaperFrame>
   )
 }

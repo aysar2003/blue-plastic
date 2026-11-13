@@ -6,6 +6,7 @@ import { PencilIcon } from 'lucide-react'
 import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { DeleteButton } from '@/components/data/delete-record'
 import { PageHeader } from '@/components/data/page-header'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { RowActions } from '@/components/data/row-actions'
 import { DocumentActions } from '@/components/print/document-actions'
@@ -39,7 +40,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
   const paymentListReport = `/reports/payments-received?period=all-dates`
 
   return (
-    <>
+    <SalesPaperFrame>
       <PageHeader
         className="print:hidden"
         title={`Payment ${payment.number}`}
@@ -244,7 +245,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
       ) : null}
 
       <ApprovalTrailPanel entityType="CUSTOMER_PAYMENT" entityId={payment.id} />
-    </>
+    </SalesPaperFrame>
   )
 }
 

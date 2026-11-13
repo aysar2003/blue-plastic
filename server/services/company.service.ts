@@ -21,6 +21,7 @@ import type {
   UpdateCompanyLimitsInput,
 } from '@/lib/validation/company'
 import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
+import { seedDefaultOffice } from '@/server/accounting/default-office'
 import type { OrgContext } from '@/server/auth/context'
 import { wipeCompanyBooks } from '@/server/company-wipe'
 import { db } from '@/server/db'
@@ -140,6 +141,7 @@ export async function createCompany(ctx: OrgContext, input: CreateCompanyInput) 
     if (input.seedChart) {
       await seedChartOfAccounts(tx, organization.id)
     }
+    await seedDefaultOffice(tx, organization.id)
 
     await tx.auditLog.create({
       data: {

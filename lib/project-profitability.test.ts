@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import { Decimal } from '@/lib/money'
 import {
   addLaborCost,
   addPurchaseCost,

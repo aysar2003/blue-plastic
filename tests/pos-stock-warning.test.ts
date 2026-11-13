@@ -40,6 +40,7 @@ function render(products: { id: string; name: string; onHand: string | null }[])
       stockStoreName: 'Xafiiska',
       customers: [],
       currency: 'USD',
+      orgId: 'org-1',
       orgName: 'Test Org',
     }),
   )
@@ -69,8 +70,9 @@ describe('POS stock warning (product tiles)', () => {
   })
 
   it('highlights a product tile on hover and keyboard focus with the till teal', () => {
-    const html = render([{ id: 'a4', name: 'A4', onHand: '100.0000' }])
-    const tile = html.slice(html.lastIndexOf('<button', html.indexOf('A4')), html.indexOf('A4'))
+    const html = render([{ id: 'a4', name: 'Widget Alpha', onHand: '100.0000' }])
+    const nameAt = html.indexOf('Widget Alpha')
+    const tile = html.slice(html.lastIndexOf('<button', nameAt), nameAt)
     expect(tile).toContain('cursor-pointer')
     expect(tile).toContain('[&amp;:hover]:border-[color:var(--product-hover-border)]')
     expect(tile).toContain('[&amp;:hover]:bg-[var(--product-hover-bg)]')

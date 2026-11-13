@@ -12,6 +12,16 @@ Isticmaal cutubkan kaliya marka **Point of Sale** furan yahay Settings → Apps 
 
 Lacag ka soo / u baxda drawer-ka (petty cash, bank drop) waa inay marto POS cash-move si session iyo ledger isu waafaqaan.
 
+### Iib offline
+
+1. Fur register-ka **adigoo online ah** marka hore (session + PIN) si alaabta iyo qiimuhu ugu soo degto browser-kan.
+2. Ikhtiyaari: menu → **Install App** si aad desktop icon uga furto till-ka (Chrome / Edge).
+3. Haddii internet-ku go’o, sii wad iibka hababka till-ka. Iibyadu waxay ku jiraan kombiyuutarkan ilaa la sync-gareeyo.
+4. Marka online noqoto, till-ku si toos ah ayuu u sync-gareeyaa, ama **Sync now**. **Reload Data** waa online oo keliya si catalogue-ka loo cusbooneysiiyo.
+5. Ha tirtirin site data / cache ilaa pending-sale badge-ku yahay eber. Queue-ga offline ma u gudbo kombiyuutar kale.
+
+Close session, cash in/out, refunds, quotations, iyo create product waxay u baahan yihiin internet.
+
 ### Haddii POS xiran yahay
 
 Iibku weli wuxuu ka shaqeeyaa Sales (invoices iyo receipts). Ha u sameynin iib till ah journals gacanta ah illaa xisaabiyuhu ku amro.

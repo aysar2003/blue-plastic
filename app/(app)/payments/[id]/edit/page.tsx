@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { PageHeader } from '@/components/data/page-header'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { PaymentForm } from '@/components/sales/payment-form'
 import { toCalendarDate, today } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
@@ -24,7 +25,7 @@ export default async function EditPaymentPage({ params }: { params: Promise<{ id
   if (payment.status === 'VOID') notFound()
 
   return (
-    <>
+    <SalesPaperFrame>
       <PageHeader title={`Edit payment ${payment.number}`} className="mb-2 pb-2" />
 
       <PaymentForm
@@ -58,6 +59,6 @@ export default async function EditPaymentPage({ params }: { params: Promise<{ id
         }}
       />
       <ApprovalTrailPanel entityType="CUSTOMER_PAYMENT" entityId={payment.id} />
-    </>
+    </SalesPaperFrame>
   )
 }

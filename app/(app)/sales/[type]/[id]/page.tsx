@@ -9,6 +9,7 @@ import { DocumentHistory } from '@/components/data/document-history'
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { ConvertSalesDocumentActions } from '@/components/sales/document-actions'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { DeleteButton } from '@/components/data/delete-record'
 import { DocumentActions } from '@/components/print/document-actions'
 import { Badge } from '@/components/ui/badge'
@@ -118,8 +119,7 @@ export default async function SalesDocumentPage({
     .replace(/[^a-z0-9]+/g, '-')}`
 
   return (
-    <>
-
+    <SalesPaperFrame type={config.type}>
       <PageHeader
         title={`${config.singular} ${document.number}`}
         description={document.customer.displayName}
@@ -361,7 +361,7 @@ export default async function SalesDocumentPage({
 
       <ApprovalTrailPanel entityType="SALES_DOCUMENT" entityId={document.id} />
       <DocumentHistory events={history} timeZone={ctx.organization.timeZone} />
-    </>
+    </SalesPaperFrame>
   )
 }
 

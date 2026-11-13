@@ -374,9 +374,12 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
       where: { orgId: ctx.orgId, isActive: true },
       select: { id: true, isOffice: true },
     })
-    const officeId = stores.find((store) => store.isOffice)?.id ?? office.id
+    const officeId = stores.find((store) => store.isOffice)?.id ?? office?.id ?? null
     const storeId = input.storeId ?? officeId
-    if (!stores.some((store) => store.id === storeId)) throw notFound('Store')
+    if (!storeId || !stores.some((store) => store.id === storeId)) {
+      throw validation('Choose a place for this stock. Xafiiska is not the default on this company.')
+    }
+    const foldOfficeId = officeId ?? storeId
 
     const shelfGroups = await tx.inventoryTransaction.groupBy({
       by: ['itemId', 'storeId'],
@@ -389,7 +392,7 @@ export async function createAdjustment(ctx: OrgContext, input: InventoryAdjustme
         storeId: row.storeId,
         quantity: row._sum.quantity?.toString() ?? '0',
       })),
-      officeId,
+      foldOfficeId,
     )
 
     const number = await assignDocumentNumber(tx, ctx.orgId, 'INVENTORY_ADJUSTMENT', input.number)

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
 import { DocumentForm } from '@/components/sales/document-form'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { today } from '@/lib/date'
 import { bySlug } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -68,8 +69,7 @@ export default async function NewSalesDocumentPage({
     : undefined
 
   return (
-    <>
-
+    <SalesPaperFrame type={config.type}>
       <PageHeader title={`New ${config.singular.toLowerCase()}`} className="mb-2 pb-2" />
 
       <DocumentForm
@@ -100,6 +100,6 @@ export default async function NewSalesDocumentPage({
         openSources={openSources}
         formCustomization={formCustomization}
       />
-    </>
+    </SalesPaperFrame>
   )
 }

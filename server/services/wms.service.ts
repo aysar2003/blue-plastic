@@ -215,8 +215,8 @@ export async function createPick(
     binId = bin.id
   }
 
-  let sourceType = input.sourceType?.trim() || null
-  let sourceId = input.sourceId?.trim() || null
+  const sourceType = input.sourceType?.trim() || null
+  const sourceId = input.sourceId?.trim() || null
   if (sourceType || sourceId) {
     if (sourceType !== 'SALES_ORDER' && sourceType !== 'DELIVERY_NOTE') {
       throw validation('Pick source must be a sales order or delivery note.')

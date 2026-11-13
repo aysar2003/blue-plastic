@@ -97,6 +97,7 @@ export default async function PosRegisterPage({ params }: Props) {
       stores={catalog.stores}
       customers={customers}
       currency={currency}
+      orgId={ctx.orgId}
       orgName={ctx.organization.name}
       usualPaymentMethodId={preferredPaymentMethodId(register.paymentMethods, useCounts)}
     />

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 
 import { PageHeader } from '@/components/data/page-header'
 import { BillPaymentForm } from '@/components/purchases/bill-payment-form'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { today } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -27,8 +28,7 @@ export default async function NewBillPaymentPage({
   const initialVendorId = vendors.some((vendor) => vendor.id === requestedVendor) ? requestedVendor : undefined
 
   return (
-    <>
-
+    <SalesPaperFrame>
       <PageHeader title="Pay bills" className="mb-2 pb-2" />
 
       <BillPaymentForm
@@ -40,6 +40,6 @@ export default async function NewBillPaymentPage({
         initialVendorId={initialVendorId}
         documentNumber={documentNumber}
       />
-    </>
+    </SalesPaperFrame>
   )
 }

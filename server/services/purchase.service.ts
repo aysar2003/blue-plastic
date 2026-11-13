@@ -1397,20 +1397,6 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
   return journal
 }
 
-type MatchCandidate = {
-  id: string
-  number: string
-  convertedFromId: string | null
-  matchVarianceApproved: boolean
-  lines: {
-    itemId: string | null
-    description: string | null
-    quantity: Prisma.Decimal
-    unitPrice: Prisma.Decimal
-    item: { name: true } | { id: string; name: string; type: string; inventoryAccountId: string | null } | null
-  }[]
-}
-
 /**
  * Phase 23: if this bill disagrees with its PO / received qty, park it on
  * MATCH_HOLD instead of posting. Returns true when held.

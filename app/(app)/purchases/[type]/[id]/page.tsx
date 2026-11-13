@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { PackageIcon, PencilIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { DeleteButton } from '@/components/data/delete-record'
 import { DocumentActions } from '@/components/print/document-actions'
@@ -91,8 +92,7 @@ export default async function PurchaseDocumentPage({
     document.status !== 'DRAFT'
 
   return (
-    <>
-
+    <SalesPaperFrame>
       <PageHeader
         className="print:hidden"
         title={`${config.singular} ${document.number}`}
@@ -433,7 +433,7 @@ export default async function PurchaseDocumentPage({
 
       <ApprovalTrailPanel entityType="PURCHASE_DOCUMENT" entityId={document.id} />
       <DocumentHistory events={history} timeZone={ctx.organization.timeZone} />
-    </>
+    </SalesPaperFrame>
   )
 }
 

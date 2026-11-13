@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 
 import { PageHeader } from '@/components/data/page-header'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { PaymentForm } from '@/components/sales/payment-form'
 import { today } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
@@ -28,8 +29,7 @@ export default async function NewPaymentPage({
     : undefined
 
   return (
-    <>
-
+    <SalesPaperFrame>
       <PageHeader title="Receive payment" className="mb-2 pb-2" />
 
       <PaymentForm
@@ -41,6 +41,6 @@ export default async function NewPaymentPage({
         initialCustomerId={initialCustomerId}
         documentNumber={documentNumber}
       />
-    </>
+    </SalesPaperFrame>
   )
 }

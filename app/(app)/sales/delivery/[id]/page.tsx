@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { DeliveryNoteEditForm } from '@/app/(app)/sales/delivery/note-edit-form'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
@@ -34,7 +35,7 @@ export default async function DeliveryNotePage({ params }: { params: Promise<{ i
       : `/sales/invoices/${note.salesDocumentId}`
 
   return (
-    <>
+    <SalesPaperFrame>
       <PageHeader
         title={`Delivery note ${note.number}`}
         description={`${note.customerName} · ${formatDate(note.date)} · issued ${formatDateTime(new Date(note.issuedAt), ctx.organization.timeZone)}`}
@@ -125,6 +126,6 @@ export default async function DeliveryNotePage({ params }: { params: Promise<{ i
           )}
         </div>
       </div>
-    </>
+    </SalesPaperFrame>
   )
 }

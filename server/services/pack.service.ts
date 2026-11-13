@@ -5,6 +5,7 @@ import type { Prisma } from '@prisma/client'
 import { getPack, resolveFeatureFlagsFromPack, type PackInstallOptions } from '@/lib/packs'
 import { parseFeatureFlags } from '@/lib/feature-flags'
 import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
+import { seedDefaultOffice } from '@/server/accounting/default-office'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -70,6 +71,7 @@ export async function installPack(
       const result = await seedChartOfAccounts(tx, ctx.orgId)
       chartSeeded = result.created > 0
     }
+    await seedDefaultOffice(tx, ctx.orgId)
 
     await writeAudit(
       tx,

@@ -11,7 +11,7 @@ import {
   profitOf,
   type ProjectProfitSlice,
 } from '@/lib/project-profitability'
-import { Decimal, ZERO } from '@/lib/money'
+import { Decimal } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 

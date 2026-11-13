@@ -1007,9 +1007,7 @@ export function DocumentForm({
       onSubmit={() => {
         if (payloadInput.current) payloadInput.current.value = payloadFor(saveAsDraft.current)
       }}
-      className={
-        config.type === 'SALES_RECEIPT' ? 'mx-auto w-full max-w-5xl space-y-2' : 'space-y-2'
-      }
+      className="space-y-2"
     >
       <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor(false)} />
 

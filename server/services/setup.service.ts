@@ -4,6 +4,8 @@ import type { SetupInput } from '@/lib/validation/auth'
 import { hashPassword } from '@/server/auth/password'
 import { db } from '@/server/db'
 import { conflict } from '@/server/errors'
+import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
+import { seedDefaultOffice } from '@/server/accounting/default-office'
 import { createDefaultSequences } from '@/server/sequences'
 
 /**
@@ -67,6 +69,8 @@ export async function runSetup(input: SetupInput) {
     })
 
     await createDefaultSequences(tx, organization.id)
+    await seedChartOfAccounts(tx, organization.id)
+    await seedDefaultOffice(tx, organization.id)
 
     await tx.auditLog.create({
       data: {

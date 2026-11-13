@@ -3,7 +3,7 @@ import 'server-only'
 import type { EquityEventKind } from '@prisma/client'
 
 import { today, toDate, type CalendarDate } from '@/lib/date'
-import { Decimal, money } from '@/lib/money'
+import { Decimal } from '@/lib/money'
 import { postJournal } from '@/server/accounting/posting'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'

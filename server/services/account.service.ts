@@ -2,6 +2,11 @@ import 'server-only'
 import type { AccountType, Prisma } from '@prisma/client'
 
 import { isDebitNormalType } from '@/lib/accounting-labels'
+import {
+  ACCOUNT_NAME_CANNOT_STAND_ALONE,
+  accountNameClashAction,
+  type AccountNameParty,
+} from '@/lib/account-name'
 import type { AccountChoice } from '@/lib/account-options'
 import { Decimal, ZERO, toMoneyString } from '@/lib/money'
 import { today } from '@/lib/date'
@@ -10,6 +15,7 @@ import { rollupParentBalances } from '@/lib/pos-till-ledger'
 import type { AccountCreateInput, AccountUpdateInput } from '@/lib/validation/accounting'
 import { balancesAsOf } from '@/server/accounting/balances'
 import { seedChartOfAccounts, systemAccountId } from '@/server/accounting/chart-of-accounts'
+import { OFFICE_NAME, seedDefaultOffice } from '@/server/accounting/default-office'
 import { seedPaymentTerms } from '@/server/services/tax.service'
 import { postJournal } from '@/server/accounting/posting'
 import { requestMeta, writeAudit } from '@/server/audit'
@@ -67,10 +73,11 @@ export async function list(
     orderBy: [{ type: 'asc' }, { code: 'asc' }],
   })
 
+  const chartAccounts = accounts.filter((account) => account.isSystem || account.name !== OFFICE_NAME)
   const balances = await balancesAsOf(ctx.orgId, today(ctx.organization.timeZone))
   // Imported QBO charts often use "Parent:Child" names without parentId. Persist
   // those links (and short child names) once so the tree stays clear forever.
-  const linked = await persistColonHierarchy(ctx.orgId, accounts)
+  const linked = await persistColonHierarchy(ctx.orgId, chartAccounts)
   const childCount = new Map<string, number>()
   for (const account of linked) {
     if (account.parentId) childCount.set(account.parentId, (childCount.get(account.parentId) ?? 0) + 1)
@@ -123,6 +130,7 @@ export async function installDefaultChart(ctx: OrgContext) {
 
   return db.$transaction(async (tx) => {
     const result = await seedChartOfAccounts(tx, ctx.orgId)
+    await seedDefaultOffice(tx, ctx.orgId)
     // The standard terms come with the standard chart: nobody should have to
     // type "Net 30" before they can raise their first invoice.
     await seedPaymentTerms(tx, ctx.orgId)
@@ -156,6 +164,7 @@ export async function create(ctx: OrgContext, input: AccountCreateInput) {
     })
   }
 
+  await assertAccountNameAvailable(ctx, input.name)
   await assertParentIsUsable(ctx, input.parentId ?? null, input.type)
 
   return db.$transaction(async (tx) => {
@@ -235,6 +244,23 @@ export async function update(ctx: OrgContext, input: AccountUpdateInput) {
       })
     }
   }
+
+  const nameChanged =
+    before.name.localeCompare(input.name, undefined, { sensitivity: 'accent' }) !== 0
+  await assertAccountNameAvailable(
+    ctx,
+    input.name,
+    {
+      id: before.id,
+      type: before.type,
+      isSystem: before.isSystem,
+      systemKey: before.systemKey,
+    },
+    // A name that did not change only blocks when this account can be merged
+    // into the one that already has it. The account that cannot be merged
+    // (a system account, a different type) can still be edited.
+    { unchanged: !nameChanged },
+  )
 
   if (input.parentId !== before.parentId) {
     await assertParentIsUsable(ctx, input.parentId ?? null, before.type, input.id)
@@ -388,6 +414,88 @@ export async function postableAccounts(ctx: OrgContext) {
       ...account,
       parentName: account.parentId ? (byId.get(account.parentId)?.name ?? null) : null,
     }))
+}
+
+/**
+ * Account names are unique on the chart. Giving an account a name that already
+ * exists either offers to merge into that account, or refuses the name when
+ * the two cannot be merged.
+ */
+async function assertAccountNameAvailable(
+  ctx: OrgContext,
+  name: string,
+  self?: AccountNameParty,
+  options?: { unchanged?: boolean },
+) {
+  const existing = await db.ledgerAccount.findFirst({
+    where: {
+      orgId: ctx.orgId,
+      name: { equals: name, mode: 'insensitive' },
+      ...(self ? { NOT: { id: self.id } } : {}),
+    },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      type: true,
+      parentId: true,
+      isSystem: true,
+      systemKey: true,
+      isActive: true,
+    },
+  })
+  if (!existing) return
+
+  const mergingIntoDescendant = self
+    ? await accountSitsUnder(ctx.orgId, existing.parentId, self.id)
+    : false
+  const action = accountNameClashAction(
+    self ?? null,
+    {
+      id: existing.id,
+      type: existing.type,
+      isSystem: existing.isSystem,
+      systemKey: existing.systemKey,
+    },
+    mergingIntoDescendant,
+  )
+
+  if (options?.unchanged && action !== 'merge') return
+
+  const label = `${existing.code} ${existing.name}${existing.isActive ? '' : ' (inactive)'}`
+  if (action === 'merge') {
+    throw conflict(
+      `Another account is already called "${existing.name}". Merge into that one, or pick a different name.`,
+      {
+        clashId: [existing.id],
+        clashName: [label],
+        merge: ['true'],
+      },
+    )
+  }
+
+  throw validation(
+    `Another account is already called "${existing.name}" (${existing.code}). ${ACCOUNT_NAME_CANNOT_STAND_ALONE}`,
+    { name: [`Already used by ${label}. ${ACCOUNT_NAME_CANNOT_STAND_ALONE}`] },
+  )
+}
+
+/** True when `startParentId` walks up to `ancestorId`. */
+async function accountSitsUnder(orgId: string, startParentId: string | null, ancestorId: string) {
+  let parentId = startParentId
+  const seen = new Set<string>()
+  while (parentId) {
+    if (parentId === ancestorId) return true
+    if (seen.has(parentId)) return false
+    seen.add(parentId)
+    const parent = await db.ledgerAccount.findFirst({
+      where: { id: parentId, orgId },
+      select: { parentId: true },
+    })
+    if (!parent) return false
+    parentId = parent.parentId
+  }
+  return false
 }
 
 async function assertParentIsUsable(

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { PageHeader } from '@/components/data/page-header'
 import { DocumentForm } from '@/components/sales/document-form'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { toCalendarDate, today } from '@/lib/date'
 import { bySlug } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -55,8 +56,7 @@ export default async function EditSalesDocumentPage({
   if (document.type !== config.type) notFound()
 
   return (
-    <>
-
+    <SalesPaperFrame type={config.type}>
       <PageHeader
         title={`Edit ${config.singular.toLowerCase()} ${document.number}`}
         className="mb-2 pb-2"
@@ -118,6 +118,6 @@ export default async function EditSalesDocumentPage({
         formCustomization={formCustomization}
       />
       <ApprovalTrailPanel entityType="SALES_DOCUMENT" entityId={document.id} />
-    </>
+    </SalesPaperFrame>
   )
 }

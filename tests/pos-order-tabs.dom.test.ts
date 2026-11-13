@@ -47,6 +47,7 @@ const props = {
   ],
   customers: [{ id: 'cust-1', displayName: 'Amina' }],
   currency: 'USD',
+  orgId: 'org-1',
   orgName: 'Test Org',
 }
 
@@ -100,6 +101,20 @@ beforeEach(() => {
   checkoutCalls.length = 0
   localStorage.clear()
   window.open = () => null
+  // Till probes /api/health on mount; keep tests offline-store free and fast.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/health')) {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response('not found', { status: 404 })
+    }),
+  )
 })
 
 afterEach(async () => {
@@ -111,6 +126,7 @@ afterEach(async () => {
   host?.remove()
   root = null
   host = null
+  vi.unstubAllGlobals()
 })
 
 describe('POS till tabs', () => {

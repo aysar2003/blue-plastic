@@ -1,6 +1,9 @@
 /**
  * Product chrome tokens (POS, print sheets, PDF letterheads).
  * Aligned with the SOM ERP website: navy ground, cyan accent.
+ *
+ * `purple` is navy chrome only — never a button fill on dark cards (same as
+ * --card in night themes). Solid CTAs use `cta` / `teal` with white type.
  */
 export const ODOO = {
   purple: '#0b1220',
@@ -9,6 +12,8 @@ export const ODOO = {
   /** Solid CTAs — deep enough for white type; bright cyan stays on CSS --primary. */
   teal: '#0e7490',
   tealDark: '#155e75',
+  /** Alias of teal — use for every POS primary action button. */
+  cta: '#0e7490',
   ink: '#e2e8f0',
   surface: '#0d1524',
   surfaceRaised: '#141c2c',

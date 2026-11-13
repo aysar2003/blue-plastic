@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
 import { BillForm } from '@/components/purchases/bill-form'
+import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { today } from '@/lib/date'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { requireOrgContext } from '@/server/auth/context'
@@ -56,7 +57,7 @@ export default async function NewPurchasePage({
     : undefined
 
   return (
-    <>
+    <SalesPaperFrame>
       <PageHeader title={`New ${config.singular.toLowerCase()}`} className="mb-2 pb-2" />
 
       <BillForm
@@ -85,6 +86,6 @@ export default async function NewPurchasePage({
         stock={shelf.byItem}
         formCustomization={formCustomization}
       />
-    </>
+    </SalesPaperFrame>
   )
 }

@@ -243,7 +243,6 @@ async function rollupDay(orgId: string, employeeId: string, day: Date) {
   } else if (ins.length && outs.length) {
     // Pair sequential IN/OUT
     let i = 0
-    let o = 0
     while (i < punches.length) {
       const a = punches[i]!
       if (a.kind === 'OUT') {
@@ -254,7 +253,6 @@ async function rollupDay(orgId: string, employeeId: string, day: Date) {
       if (b && b.punchedAt > a.punchedAt) {
         workedHours = workedHours.plus(money((b.punchedAt.getTime() - a.punchedAt.getTime()) / 3_600_000))
         i = punches.indexOf(b) + 1
-        o += 1
       } else {
         i += 1
       }

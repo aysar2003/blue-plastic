@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 
 import { AccountTypeIcon } from '@/components/accounts/account-type-icon'
 import { idleState } from '@/components/forms/action-state'
+import { MergeIntoDialog } from '@/components/master-data/merge-into-dialog'
 import { Field, fieldProps } from '@/components/forms/field'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
@@ -100,6 +101,7 @@ function AccountDialog({
   )
   const [openingBalanceDate, setOpeningBalanceDate] = useState(today ?? '')
   const [type, setType] = useState<AccountType>(account?.type ?? 'EXPENSE')
+  const [mergeOpen, setMergeOpen] = useState(false)
   const handled = useRef(false)
 
   useEffect(() => {
@@ -120,6 +122,7 @@ function AccountDialog({
   const e = state.fieldErrors
 
   return (
+    <>
     <Dialog open onOpenChange={(next) => { if (!next) onClose() }}>
       <DialogContent size="md">
         <DialogHeader>
@@ -135,6 +138,16 @@ function AccountDialog({
 
         <form action={formAction} className="space-y-4">
           <FormStatus state={state} />
+          {mode === 'edit' && account?.id && state.mergeClash ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">
+                Merge this account into “{state.mergeClash.name}”?
+              </span>
+              <Button type="button" size="sm" onClick={() => setMergeOpen(true)}>
+                Merge…
+              </Button>
+            </div>
+          ) : null}
           {account ? <input type="hidden" name="id" value={account.id} /> : null}
 
           <div className="grid gap-4 sm:grid-cols-[9rem_1fr]">
@@ -257,5 +270,17 @@ function AccountDialog({
         </form>
       </DialogContent>
     </Dialog>
+    {mergeOpen && mode === 'edit' && account?.id && state.mergeClash ? (
+      <MergeIntoDialog
+        open
+        onClose={() => setMergeOpen(false)}
+        onMerged={onClose}
+        kind="account"
+        absorbId={account.id}
+        absorbLabel={`${account.code} ${account.name}`}
+        preferredKeepId={state.mergeClash.id}
+      />
+    ) : null}
+    </>
   )
 }
