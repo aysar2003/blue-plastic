@@ -20,9 +20,10 @@ import {
   ACCOUNT_SUBTYPE_LABELS,
   ACCOUNT_TYPE_LABELS,
   ACCOUNT_TYPE_ORDER,
+  LOCKED_ACCOUNT_SUBTYPES,
   SUBTYPES_BY_TYPE,
 } from '@/lib/accounting-labels'
-import type { AccountType } from '@prisma/client'
+import type { AccountSubtype, AccountType } from '@prisma/client'
 import { createAccountForm, updateAccountForm } from './actions'
 
 export type AccountFormValues = {
@@ -32,6 +33,7 @@ export type AccountFormValues = {
   description: string | null
   detailType: string | null
   type: AccountType
+  subtype: AccountSubtype
   parentId: string | null
   isSystem: boolean
 }
@@ -133,7 +135,7 @@ function AccountDialog({
         <p className="mt-1 mb-4 text-sm text-muted-foreground">
           {mode === 'create'
             ? 'Account numbers order the chart: 1000s assets, 2000s liabilities, 3000s equity, 4000s income, 5000s cost of sales, 6000s expenses.'
-            : 'Type and subtype are fixed once an account exists — changing them would reclassify every figure already posted to it.'}
+            : 'Type stays fixed so past figures keep their statement place. Detail type can change among compatible kinds of the same type.'}
         </p>
 
         <form action={formAction} className="space-y-4">
@@ -197,12 +199,14 @@ function AccountDialog({
                 </NativeSelect>
               </Field>
             </div>
+          ) : account ? (
+            <EditClassificationFields account={account} error={e?.subtype} />
           ) : null}
 
           <Field
             name="parentId"
             label="Sub-account of (main account)"
-            hint="Optional. Choose a Main account to nest this one under it — like QuickBooks. The Main account becomes a heading (balance = sum of its Subs) and no longer accepts postings."
+            hint="Optional. Nest this account under a Main for reports. Main and Sub both accept postings; a Total line on reports adds Main + Subs."
             error={e?.parentId}
           >
             <NativeSelect
@@ -282,5 +286,60 @@ function AccountDialog({
       />
     ) : null}
     </>
+  )
+}
+
+function EditClassificationFields({
+  account,
+  error,
+}: {
+  account: AccountFormValues
+  error?: string[]
+}) {
+  const subtypeLocked =
+    account.isSystem || LOCKED_ACCOUNT_SUBTYPES.has(account.subtype)
+  const subtypeOptions = subtypeLocked
+    ? [account.subtype]
+    : SUBTYPES_BY_TYPE[account.type].filter(
+        (value) => value === account.subtype || !LOCKED_ACCOUNT_SUBTYPES.has(value),
+      )
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Field name="type" label="Type" hint="Fixed once the account exists.">
+        <div className="flex items-center gap-2">
+          <AccountTypeIcon type={account.type} size="sm" />
+          <Input value={ACCOUNT_TYPE_LABELS[account.type]} readOnly disabled className="flex-1" />
+        </div>
+      </Field>
+
+      <Field
+        name="subtype"
+        label="Detail type"
+        required
+        error={error}
+        hint={
+          subtypeLocked
+            ? account.isSystem
+              ? 'System accounts keep a fixed detail type.'
+              : 'Bank, credit card, receivable, payable, inventory, and undeposited-funds accounts keep their detail type.'
+            : 'Change among compatible detail types of this account type.'
+        }
+      >
+        <NativeSelect
+          {...fieldProps('subtype', error, true)}
+          defaultValue={account.subtype}
+          disabled={subtypeLocked}
+          required
+        >
+          {subtypeOptions.map((value) => (
+            <option key={value} value={value}>
+              {ACCOUNT_SUBTYPE_LABELS[value]}
+            </option>
+          ))}
+        </NativeSelect>
+        {subtypeLocked ? <input type="hidden" name="subtype" value={account.subtype} /> : null}
+      </Field>
+    </div>
   )
 }

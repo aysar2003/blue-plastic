@@ -1,7 +1,12 @@
 import 'server-only'
 import type { AccountType, Prisma } from '@prisma/client'
 
-import { isDebitNormalType } from '@/lib/accounting-labels'
+import {
+  ACCOUNT_SUBTYPE_LABELS,
+  LOCKED_ACCOUNT_SUBTYPES,
+  SUBTYPES_BY_TYPE,
+  isDebitNormalType,
+} from '@/lib/accounting-labels'
 import {
   ACCOUNT_NAME_CANNOT_STAND_ALONE,
   accountNameClashAction,
@@ -271,6 +276,25 @@ export async function update(ctx: OrgContext, input: AccountUpdateInput) {
     await assertParentIsUsable(ctx, input.parentId ?? null, before.type, input.id)
   }
 
+  if (input.subtype !== before.subtype) {
+    if (before.isSystem) {
+      throw precondition(
+        `${before.name} is a system account. Its detail type is fixed because the engine posts to it by name.`,
+      )
+    }
+    if (!SUBTYPES_BY_TYPE[before.type].includes(input.subtype)) {
+      throw validation(
+        `${ACCOUNT_SUBTYPE_LABELS[input.subtype]} is not a detail type of ${before.type}.`,
+        { subtype: ['Choose a detail type that belongs to this account type.'] },
+      )
+    }
+    if (LOCKED_ACCOUNT_SUBTYPES.has(before.subtype) || LOCKED_ACCOUNT_SUBTYPES.has(input.subtype)) {
+      throw precondition(
+        `Detail type cannot change between ${ACCOUNT_SUBTYPE_LABELS[before.subtype]} and ${ACCOUNT_SUBTYPE_LABELS[input.subtype]}. Bank, credit card, receivable, payable, inventory, and undeposited-funds accounts keep their detail type.`,
+      )
+    }
+  }
+
   return db.$transaction(async (tx) => {
     const after = await tx.ledgerAccount.update({
       where: { id: input.id },
@@ -278,6 +302,7 @@ export async function update(ctx: OrgContext, input: AccountUpdateInput) {
         code: input.code,
         name: input.name,
         description: input.description ?? null,
+        subtype: input.subtype,
         detailType: input.detailType ?? null,
         currencyCode: input.currencyCode ?? null,
         parentId: input.parentId ?? null,

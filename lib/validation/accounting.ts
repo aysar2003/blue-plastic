@@ -75,6 +75,8 @@ export const accountUpdateSchema = z.object({
   code: accountCode,
   name: requiredText('Account name', 120),
   description: optionalText(500),
+  /** Detail type within the account's fixed statement type (Asset, Expense, …). */
+  subtype: z.enum(ACCOUNT_SUBTYPES),
   parentId: optionalId,
   detailType: optionalText(80),
   currencyCode: z

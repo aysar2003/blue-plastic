@@ -20,7 +20,7 @@ import {
 } from '@/app/(app)/accounts/account-dialog'
 import { MergeIntoDialog } from '@/components/master-data/merge-into-dialog'
 
-type AccountRow = AccountFormValues & { isActive: boolean; subtype: AccountSubtype }
+type AccountRow = AccountFormValues & { isActive: boolean }
 
 const RECONCILABLE = new Set<AccountSubtype>(['BANK', 'CREDIT_CARD'])
 const MONEY = new Set<AccountSubtype>(['BANK', 'CREDIT_CARD', 'UNDEPOSITED_FUNDS'])

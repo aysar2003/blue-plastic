@@ -51,6 +51,20 @@ export const ACCOUNT_SUBTYPE_LABELS: Record<AccountSubtype, string> = {
   DEPRECIATION: 'Depreciation',
 }
 
+/**
+ * Detail types that drive banking, AR/AP, inventory, or deposit behaviour.
+ * On edit, accounts may not move into or out of these — only among free subtypes
+ * of the same statement type (e.g. Operating expense → Other expense).
+ */
+export const LOCKED_ACCOUNT_SUBTYPES = new Set<AccountSubtype>([
+  'BANK',
+  'CREDIT_CARD',
+  'ACCOUNTS_RECEIVABLE',
+  'ACCOUNTS_PAYABLE',
+  'INVENTORY',
+  'UNDEPOSITED_FUNDS',
+])
+
 /** Which subtypes belong to each statement type. Mirrors the database trigger. */
 export const SUBTYPES_BY_TYPE: Record<AccountType, AccountSubtype[]> = {
   ASSET: [
