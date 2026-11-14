@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { PackageIcon, PencilIcon } from 'lucide-react'
+import { CopyIcon, PackageIcon, PencilIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/data/page-header'
 import { SalesPaperFrame } from '@/components/sales/paper-width'
@@ -38,10 +38,14 @@ export const metadata: Metadata = { title: 'Document' }
 
 export default async function PurchaseDocumentPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ type: string; id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { type, id } = await params
+  const query = await searchParams
+  const openSend = query.send === '1' || query.send === 'true'
   const config = purchaseBySlug(type)
   if (!config) notFound()
 
@@ -113,6 +117,7 @@ export default async function PurchaseDocumentPage({
                 .replace(/[^a-z0-9]+/g, '-')}`}
               defaultTo={document.offsetCustomer?.email ?? document.vendor?.email ?? ''}
               canEmail={ctx.permissions.has('invoice:send')}
+              defaultEmailOpen={openSend && ctx.permissions.has('invoice:send')}
               defaultSubject={documentEmailSubject(
                 config.singular,
                 document.number,
@@ -138,7 +143,6 @@ export default async function PurchaseDocumentPage({
               })}
               whatsappPhone={document.offsetCustomer?.phone ?? document.vendor?.phone ?? null}
             />
-            {canEdit && config.type === 'RFQ' ? <RfqPriceUpload id={id} /> : null}
             {canConvert && (config.type === 'PURCHASE_REQUEST' || config.type === 'RFQ') ? (
               <ConvertPurchaseDocumentActions
                 id={id}
@@ -155,6 +159,15 @@ export default async function PurchaseDocumentPage({
                 className={buttonVariants({ size: 'sm' })}
               >
                 <PackageIcon /> Receive items
+              </Link>
+            ) : null}
+            {ctx.permissions.has('bill:create') && document.status !== 'VOID' ? (
+              <Link
+                href={`/purchases/${config.slug}/new?copy=${id}`}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                title={`Make a copy of this ${config.singular.toLowerCase()}`}
+              >
+                <CopyIcon /> Copy
               </Link>
             ) : null}
             {canEdit ? (
@@ -179,6 +192,8 @@ export default async function PurchaseDocumentPage({
 
       <RecordedBy trail={trail} timeZone={ctx.organization.timeZone} />
 
+      {canEdit && config.type === 'RFQ' ? <RfqPriceUpload id={id} /> : null}
+
       <DocumentAttachments
         target={{ kind: 'purchase', id }}
         files={papers}
@@ -187,7 +202,9 @@ export default async function PurchaseDocumentPage({
         hint={
           config.type === 'EXPENSE'
             ? 'Vendor receipt or photo · PDF or image · 4 MB or smaller'
-            : 'Vendor invoice, delivery note, or photo · PDF or image · 4 MB or smaller'
+            : config.type === 'RFQ'
+              ? 'PDF or photo only · for Excel prices use Vendor prices above'
+              : 'Vendor invoice, delivery note, or photo · PDF or image · 4 MB or smaller'
         }
       />
 

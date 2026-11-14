@@ -57,7 +57,11 @@ export function PageHeader({
           <p className="mt-0.5 max-w-3xl text-xs text-muted-foreground">{description}</p>
         ) : null}
       </div>
-      {actions ? <div className="flex shrink-0 items-center gap-1.5 print:hidden">{actions}</div> : null}
+      {actions ? (
+        <div className="flex max-w-full flex-wrap items-center justify-end gap-1.5 print:hidden">
+          {actions}
+        </div>
+      ) : null}
     </div>
   )
 }
