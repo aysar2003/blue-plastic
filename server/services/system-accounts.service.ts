@@ -156,6 +156,13 @@ export const SYSTEM_ACCOUNT_ROLES: SystemAccountRole[] = [
     types: ['LIABILITY'],
     subtypes: ['OTHER_CURRENT_LIABILITY'],
   },
+  {
+    key: 'RETENTION_PAYABLE',
+    label: 'Contract retention payable',
+    used: 'Vendor retention held on AP bills until released to accounts payable.',
+    types: ['LIABILITY'],
+    subtypes: ['OTHER_CURRENT_LIABILITY'],
+  },
 ]
 
 export type SystemAccountBinding = {
@@ -302,6 +309,10 @@ export async function assign(ctx: OrgContext, key: SystemAccountKey, accountId: 
     })
 
     if (previous?.id === account.id) return { id: account.id, changed: false }
+
+    // Ledger trigger protect_system_accounts blocks systemKey moves unless this
+    // session flag is on — Settings → Default accounts is the only writer.
+    await tx.$executeRawUnsafe(`SELECT set_config('app.allow_system_rebind', 'on', true)`)
 
     if (previous) {
       await tx.ledgerAccount.update({

@@ -86,9 +86,10 @@ export function toFormState(result: ActionResult<unknown>, successMessage: strin
   return {
     status: 'error',
     code: result.error.code,
-    // Field-level errors are shown against their fields; only show a banner for
-    // failures that belong to the form as a whole.
-    message: details ? undefined : result.error.message,
+    // Keep the server message even when fieldErrors exist. Some keys (e.g.
+    // cogsAccountId on a sales form) have no matching field, and stripping the
+    // message left a silent failure.
+    message: result.error.message,
     fieldErrors: details,
   }
 }

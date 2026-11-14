@@ -108,6 +108,14 @@ export const DEFAULT_CHART: SeedAccount[] = [
     description:
       'Customer payments/invoices for service periods not yet delivered — subscriptions, rentals, memberships.',
   },
+  {
+    code: '2330',
+    name: 'Contract Retention Payable',
+    type: 'LIABILITY',
+    subtype: 'OTHER_CURRENT_LIABILITY',
+    systemKey: 'RETENTION_PAYABLE',
+    description: 'Vendor retention held on subcontractor bills until release.',
+  },
   { code: '2500', name: 'Long-Term Loans', type: 'LIABILITY', subtype: 'LONG_TERM_LIABILITY' },
   {
     code: '1350',
@@ -236,34 +244,6 @@ export const DEFAULT_CHART: SeedAccount[] = [
       'Absorbs the cent a document can lose between its rounded lines and its rounded total.',
   },
 ]
-
-const ORIGINAL_NAMES = new Set(DEFAULT_CHART.map((account) => account.name))
-const ORIGINAL_KEYS = new Set(
-  DEFAULT_CHART.flatMap((account) => (account.systemKey ? [account.systemKey] : [])),
-)
-
-/**
- * Accounts a company already added for itself stay in the books, but they are not
- * part of the chart list. A new company starts from the original chart and anything
- * it adds after this moment is its own, so it stays on the list.
- */
-export const CHART_LIST_SINCE = new Date('2026-11-13T13:50:00.000Z')
-
-export function isOriginalChartAccount(account: {
-  name: string
-  systemKey: SystemAccountKey | null
-}): boolean {
-  return ORIGINAL_NAMES.has(account.name) || (account.systemKey != null && ORIGINAL_KEYS.has(account.systemKey))
-}
-
-export function listedOnOriginalChart(account: {
-  name: string
-  systemKey: SystemAccountKey | null
-  createdAt: Date
-}): boolean {
-  if (isOriginalChartAccount(account)) return true
-  return account.createdAt.getTime() >= CHART_LIST_SINCE.getTime()
-}
 
 /**
  * Install the default chart for an organisation that has none.
@@ -420,6 +400,29 @@ async function resolveCogsCandidate(
       { cogsAccountId: ['Add or choose a Cost of Goods Sold sub-account'] },
     )
   }
+
+  // QuickBooks imports often leave the system role on the heading while every
+  // product already points at one detail leaf (e.g. Merchandise). Prefer that.
+  const leafIds = leaves.map((leaf) => leaf.id)
+  const popular = await tx.item.groupBy({
+    by: ['cogsAccountId'],
+    where: {
+      orgId,
+      deletedAt: null,
+      type: { in: ['INVENTORY', 'INVENTORY_ASSEMBLY'] },
+      cogsAccountId: { in: leafIds },
+    },
+    _count: true,
+    orderBy: { _count: { cogsAccountId: 'desc' } },
+    take: 1,
+  })
+  const popularId = popular[0]?.cogsAccountId
+  if (popularId && leafIds.includes(popularId)) return popularId
+
+  const merchandise = leaves.find(
+    (leaf) => /merchandise/i.test(leaf.name) && !/\badj\b/i.test(leaf.name),
+  )
+  if (merchandise) return merchandise.id
 
   throw validation(
     `Account ${account.code} ${account.name} is a grouping heading with more than one sub-account. Map this product to a postable Cost of Goods Sold sub-account.`,

@@ -351,9 +351,12 @@ BEGIN
   END IF;
 
   IF OLD."systemKey" IS DISTINCT FROM NEW."systemKey" THEN
-    RAISE EXCEPTION
-      'The system role of account % (%) cannot be changed.', OLD.code, OLD.name
-      USING ERRCODE = 'check_violation';
+    -- Settings → Default accounts may rebind a role (session-local flag).
+    IF current_setting('app.allow_system_rebind', true) IS DISTINCT FROM 'on' THEN
+      RAISE EXCEPTION
+        'The system role of account % (%) cannot be changed.', OLD.code, OLD.name
+        USING ERRCODE = 'check_violation';
+    END IF;
   END IF;
 
   IF OLD."isSystem" AND NOT NEW."isActive" THEN

@@ -173,7 +173,7 @@ suite('QB-style COGS heading + detail', () => {
     })
   })
 
-  it('refuses a heading with more than one postable child', async () => {
+  it('refuses a heading with more than one postable child when none are in use', async () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)
       await tx.ledgerAccount.create({
@@ -204,6 +204,49 @@ suite('QB-style COGS heading + detail', () => {
         expect(String(error)).toMatch(/grouping heading/i)
         return true
       })
+    })
+  })
+
+  it('picks the leaf most inventory items already use under an ambiguous heading', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const fixture = await makeOrg(tx)
+      const leafA = await tx.ledgerAccount.create({
+        data: {
+          orgId: fixture.ctx.orgId,
+          code: '5010',
+          name: '2024 ADJ',
+          type: 'COGS',
+          subtype: 'COST_OF_GOODS_SOLD',
+          parentId: fixture.accounts['5000'],
+        },
+        select: { id: true },
+      })
+      const leafB = await tx.ledgerAccount.create({
+        data: {
+          orgId: fixture.ctx.orgId,
+          code: '5005',
+          name: 'Merchandise',
+          type: 'COGS',
+          subtype: 'COST_OF_GOODS_SOLD',
+          parentId: fixture.accounts['5000'],
+        },
+        select: { id: true },
+      })
+      await tx.item.create({
+        data: {
+          orgId: fixture.ctx.orgId,
+          name: 'Widget',
+          type: 'INVENTORY',
+          incomeAccountId: fixture.accounts[CODE.sales],
+          inventoryAccountId: fixture.accounts['1200'],
+          cogsAccountId: leafB.id,
+        },
+      })
+
+      await expect(
+        resolvePostableCogsAccountId(tx, fixture.ctx.orgId, fixture.accounts['5000']),
+      ).resolves.toBe(leafB.id)
+      expect(leafA.id).not.toBe(leafB.id)
     })
   })
 

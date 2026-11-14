@@ -13,8 +13,18 @@ import type { FormState } from './action-state'
  * `state.message` carries both. Saving an invoice announced "INV-0001 saved" in
  * red.
  */
+function errorBannerMessage(state: FormState): string | undefined {
+  if (state.message) return state.message
+  if (!state.fieldErrors) return undefined
+  for (const messages of Object.values(state.fieldErrors)) {
+    const first = messages.find((message) => message.trim() !== '')
+    if (first) return first
+  }
+  return undefined
+}
+
 export function FormStatus({ state }: { state: FormState }) {
-  if (state.status === 'error') return <FormError message={state.message} />
+  if (state.status === 'error') return <FormError message={errorBannerMessage(state)} />
 
   if (state.status === 'success' && state.message) {
     return (
