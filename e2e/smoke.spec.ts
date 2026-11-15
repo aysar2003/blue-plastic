@@ -11,8 +11,8 @@ test.describe('smoke', () => {
   test('staff login door loads', async ({ page }) => {
     const response = await page.goto('/login/staff')
     expect(response?.ok() ?? false).toBeTruthy()
-    await expect(page.getByLabel(/email or mobile/i)).toBeVisible()
-    await expect(page.getByLabel(/^password$/i)).toBeVisible()
+    await expect(page.getByRole('textbox', { name: /email or mobile/i })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: /^password$/i })).toBeVisible()
   })
 
   test('login → POS sell path', async ({ page }) => {
@@ -21,8 +21,8 @@ test.describe('smoke', () => {
     test.skip(!email || !password, 'Set E2E_EMAIL and E2E_PASSWORD to run the sell path')
 
     await page.goto('/login/staff')
-    await page.getByLabel(/email or mobile/i).fill(email!)
-    await page.getByLabel(/^password$/i).fill(password!)
+    await page.getByRole('textbox', { name: /email or mobile/i }).fill(email!)
+    await page.getByRole('textbox', { name: /^password$/i }).fill(password!)
     await page.getByRole('button', { name: /sign in|log in|continue/i }).first().click()
 
     // Land somewhere authenticated (dashboard, apps, or forced onboarding).
