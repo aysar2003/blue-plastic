@@ -68,6 +68,7 @@
 | 58 — Insurance policies | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-58-insurance.md) · policy CRUD · migration `20261114220000_phase51_60_wave_cd` |
 | 59 — Sign provider webhook | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-59-sign-provider.md) · externalId + settings · migration `20261114220000_phase51_60_wave_cd` |
 | 60 — Trusted extensions | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-60-trusted-extensions.md) · registry + capabilities gate |
+| Budget deep-complete | ✅ Complete | 2026-11-15 · [detail](./phases/phase-budget-deep.md) · monthly/class/approve/copy/CSV/BvA/BS/control · migration `20261115140000_budget_deep` |
 
 **LITE deepen pass (Wave A–D stubs → SME depth)** — 2026-11-15 · migration `20261115120000_lite_deepen` · phases 37–40, 51, 56–60 · `tests/lite-deepen.test.ts`.
 

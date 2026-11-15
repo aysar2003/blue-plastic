@@ -64,14 +64,6 @@ export default async function BudgetDetailPage({ params }: { params: Promise<{ i
   >()
   for (const line of budget.lines) {
     const key = `${line.accountId}|${line.trackingCategoryId ?? ''}`
-    const row =
-      grid.get(key) ??
-      ({
-        accountCode: line.account.code,
-        accountName: line.account.name,
-        className: line.trackingCategory?.name ?? null,
-        byMonth: new Map(),
-      } as const)
     const mutable = grid.get(key) ?? {
       accountCode: line.account.code,
       accountName: line.account.name,
@@ -80,7 +72,6 @@ export default async function BudgetDetailPage({ params }: { params: Promise<{ i
     }
     mutable.byMonth.set(line.month, { id: line.id, amount: line.amount.toString() })
     grid.set(key, mutable)
-    void row
   }
 
   const currency = ctx.organization.baseCurrency
@@ -133,7 +124,6 @@ export default async function BudgetDetailPage({ params }: { params: Promise<{ i
                   </th>
                 ))}
                 <th className="px-3 py-2 text-right font-medium">Total</th>
-                <th className="px-3 py-2 font-medium" />
               </tr>
             </thead>
             <tbody>
@@ -158,20 +148,11 @@ export default async function BudgetDetailPage({ params }: { params: Promise<{ i
                     <td className="px-3 py-2 text-right tabular-nums font-medium">
                       {formatMoney(total.toFixed(4), currency)}
                     </td>
-                    <td className="px-3 py-2">
-                      {canEdit && cells[0] ? (
-                        <RemoveLineButton lineId={cells.find((c) => c)?.id ?? ''} canEdit={canEdit} />
-                      ) : null}
-                    </td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
-          <p className="px-3 py-2 text-xs text-muted-foreground">
-            Remove deletes one month cell via the first filled month&apos;s line — use Spread / Collapse
-            for whole-row reshaping.
-          </p>
         </div>
       )}
 
