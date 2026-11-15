@@ -10,6 +10,31 @@ export const metadata: Metadata = { title: 'Hagitaan' }
 
 const FLOWS: { title: string; steps: { text: string; href?: string }[] }[] = [
   {
+    title: 'Go-live / nadiifin (kahor iib badan)',
+    steps: [
+      {
+        text: 'Chart: main/heading waa report; leaf/detail ayaa wax lagu qoraa. Ha ku qorin sale heading (tusaale 5000 haddii uu leeyahay sub-accounts).',
+        href: '/accounts',
+      },
+      {
+        text: 'Default accounts: COGS, AR, AP, Inventory, Undeposited Funds, POS over/short — dhammaan leaf. Hubi warning-ga grouping heading.',
+        href: '/settings/accounts',
+      },
+      {
+        text: 'Inventory products: Income + Inventory + COGS leaf (QuickBooks-style). POS: Available in POS + payment methods register-ka.',
+        href: '/items',
+      },
+      {
+        text: 'Smoke test: bill/receive stock → POS Validate → Close Register → P&L / Balance sheet.',
+        href: '/pos',
+      },
+      {
+        text: 'Haddii Validate diido: akhri fariinta → hagaaji mapping (heading ama default), ha “workaround” gelin.',
+        href: '/settings/accounts',
+      },
+    ],
+  },
+  {
     title: 'Dejinta',
     steps: [
       { text: 'Ku rakib chart of accounts, ka dibna magac-beddel / ku dar waxa ganacsigu isticmaalo.', href: '/accounts' },
@@ -18,6 +43,15 @@ const FLOWS: { title: string; steps: { text: string; href?: string }[] }[] = [
       { text: 'Geli tax agencies, rates iyo codes kahor wax canshuur leh.', href: '/settings/tax' },
       { text: 'Geli customers iyo vendors (iyo opening balances haddii loo baahdo).', href: '/customers' },
       { text: 'Geli products & services iyo accounts iib/iibsi.', href: '/items' },
+    ],
+  },
+  {
+    title: 'POS, maalin kasta',
+    steps: [
+      { text: 'Open register → iibi → Validate (online).', href: '/pos' },
+      { text: 'Cash in/out ama Transfer out marka loo baahdo.', href: '/pos' },
+      { text: 'Close Register dhamaadka shaqada (menu ☰ → Close Register). Offline ma xirmi karo.', href: '/pos' },
+      { text: 'Install App (PWA) till-ka gudihiisa haddii aad offline iibin rabto; sync marka net soo noqdo.', href: '/pos' },
     ],
   },
   {

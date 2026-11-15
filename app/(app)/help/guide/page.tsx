@@ -21,6 +21,31 @@ export const metadata: Metadata = { title: 'Help' }
 
 const FLOWS: { title: string; steps: { text: string; href?: string }[] }[] = [
   {
+    title: 'Go-live cleanup (before heavy selling)',
+    steps: [
+      {
+        text: 'Chart: headings are for reports only; post to leaf/detail accounts. Never post sales to a parent that has sub-accounts.',
+        href: '/accounts',
+      },
+      {
+        text: 'Default accounts: COGS, AR, AP, Inventory, Undeposited Funds, POS over/short must all be leaves. Fix any grouping-heading warning.',
+        href: '/settings/accounts',
+      },
+      {
+        text: 'Inventory items: Income + Inventory + COGS leaf (QuickBooks-style). Enable Available in POS and map till payment methods to postable banks/wallets.',
+        href: '/items',
+      },
+      {
+        text: 'Smoke test: bill/receive stock → POS Validate → Close Register → Profit & loss / Balance sheet.',
+        href: '/pos',
+      },
+      {
+        text: 'If Validate refuses: read the message, fix the mapping (heading or default account) — do not bypass the ledger.',
+        href: '/settings/accounts',
+      },
+    ],
+  },
+  {
     title: 'Setting up',
     steps: [
       { text: 'Install the chart of accounts, then rename or add what this business actually uses.', href: '/accounts' },
@@ -29,6 +54,15 @@ const FLOWS: { title: string; steps: { text: string; href?: string }[] }[] = [
       { text: 'Add tax agencies, rates and codes before entering anything taxable.', href: '/settings/tax' },
       { text: 'Enter customers and vendors, with their opening balances if the books are not new.', href: '/customers' },
       { text: 'Enter products and services, and the accounts each one is sold and bought into.', href: '/items' },
+    ],
+  },
+  {
+    title: 'POS, every day',
+    steps: [
+      { text: 'Open register → sell → Validate (online).', href: '/pos' },
+      { text: 'Cash in/out or Transfer out when needed.', href: '/pos' },
+      { text: 'Close Register at end of day (☰ → Close Register). Closing needs a connection.', href: '/pos' },
+      { text: 'Install the POS app (PWA) from the till menu for offline selling; sync when back online.', href: '/pos' },
     ],
   },
   {
