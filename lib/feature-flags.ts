@@ -135,6 +135,16 @@ const LEGACY_PARENT: Partial<Record<ModuleFlag, ModuleFlag>> = {
 /** Creator credit shown on shell and sign-in when enabled. */
 export const CREATOR_BRAND_NAME = 'Abdisalam Abdullahi Mohamed'
 
+/** International budget control: report-only, confirm-to-post, or hard refuse. */
+export type BudgetControlMode = 'off' | 'warn' | 'enforce'
+
+export const BUDGET_CONTROL_MODES: readonly BudgetControlMode[] = ['off', 'warn', 'enforce'] as const
+
+export function parseBudgetControlMode(value: unknown): BudgetControlMode | null {
+  if (value === 'off' || value === 'warn' || value === 'enforce') return value
+  return null
+}
+
 export type OrgFeatureFlags = {
   /** Show Delete on journals (list + detail) and allow journal:reverse delete path. */
   allowJournalDelete: boolean
@@ -184,10 +194,12 @@ export type OrgFeatureFlags = {
    */
   closeHardGates: boolean
   /**
-   * Budget deep: refuse bill/expense and EXPENSE/COGS journal posts that would
-   * exceed an APPROVED monthly budget cell. Off by default.
+   * International-style budget control against APPROVED monthly cells:
+   * - off — report only (default, like most SMEs)
+   * - warn — ask to confirm, then allow (QBO/Odoo-style)
+   * - enforce — hard refuse (grant / public-sector style)
    */
-  enforceBudgetControl: boolean
+  budgetControlMode: BudgetControlMode
   /**
    * Apps the ERP system owner granted this company (create / Limits / approve).
    * The company may turn granted apps off for its own screens, but cannot turn
@@ -527,7 +539,7 @@ export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   creditLimitWarn: false,
   payrollStandard: true,
   closeHardGates: false,
-  enforceBudgetControl: false,
+  budgetControlMode: 'off',
   /** Opt-in apps are granted so Apps & features can turn them on. */
   grantedModules: allModules(true),
   modules: defaultModules(),
@@ -677,8 +689,12 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
   if (typeof data.creditLimitWarn === 'boolean') base.creditLimitWarn = data.creditLimitWarn
   if (typeof data.payrollStandard === 'boolean') base.payrollStandard = data.payrollStandard
   if (typeof data.closeHardGates === 'boolean') base.closeHardGates = data.closeHardGates
-  if (typeof data.enforceBudgetControl === 'boolean') {
-    base.enforceBudgetControl = data.enforceBudgetControl
+  const mode = parseBudgetControlMode(data.budgetControlMode)
+  if (mode) {
+    base.budgetControlMode = mode
+  } else if (typeof data.enforceBudgetControl === 'boolean') {
+    // Legacy boolean → international modes (true was hard block).
+    base.budgetControlMode = data.enforceBudgetControl ? 'enforce' : 'off'
   }
 
   // Legacy single switch → both contact sides until the new keys are saved.

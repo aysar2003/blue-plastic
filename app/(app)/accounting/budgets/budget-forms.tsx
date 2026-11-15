@@ -98,13 +98,16 @@ export function BudgetToolbar({
   const [pending, start] = useTransition()
   void currency
 
-  function run(label: string, fn: () => Promise<unknown>) {
+  function run(_label: string, fn: () => Promise<unknown>) {
     setError(null)
     start(async () => {
       const result = await fn()
-      if (result && typeof result === 'object' && 'ok' in result && !(result as { ok: boolean }).ok) {
-        setError((result as { error: { message: string } }).error.message)
-        return
+      if (result && typeof result === 'object' && 'ok' in result) {
+        const actionResult = result as { ok: boolean; error?: { message: string } }
+        if (!actionResult.ok) {
+          setError(actionResult.error?.message ?? 'Request failed')
+          return
+        }
       }
       router.refresh()
     })

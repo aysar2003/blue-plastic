@@ -16,7 +16,8 @@ export const authConfig = {
   },
   session: {
     strategy: 'jwt',
-    maxAge: 60 * 60 * 12, // 12 hours
+    /** Absolute login lifetime — after this the cookie expires and middleware sends to /login. */
+    maxAge: 60 * 60 * 10, // 10 hours
     updateAge: 60 * 60,
   },
   // Required behind Vercel / reverse proxies. Prefer setting APP_URL / AUTH_URL

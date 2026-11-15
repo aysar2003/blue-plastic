@@ -355,6 +355,7 @@ export function BillForm({
   const router = useRouter()
   const [state, formAction] = useActionState(savePurchaseForm, idleState)
   const { acknowledge, formRef, beforeSubmit } = useDuplicatePrompt(state)
+  const [acknowledgeBudgetOverspend, setAcknowledgeBudgetOverspend] = useState(false)
   const isExpense = config.type === 'EXPENSE'
 
   const [number, setNumber] = usePropState(documentNumber)
@@ -703,6 +704,7 @@ export function BillForm({
       trackingCategoryId,
       saveAsDraft: draft,
       acknowledgeDuplicate: acknowledge.current,
+      acknowledgeBudgetOverspend,
       lines: (draft ? lines.filter((line) => lineNamed(line) || lineTouched(line)) : filled).map((line) => ({
         // A category line has no item and always a quantity of one; an item line
         // takes its account from the item, not from this form.
@@ -1501,6 +1503,21 @@ export function BillForm({
           <PlusIcon /> Add line
         </Button>
       </div>
+
+      {state.fieldErrors?.acknowledgeBudgetOverspend ? (
+        <label className="mb-4 flex items-start gap-2 rounded-md border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm">
+          <input
+            type="checkbox"
+            checked={acknowledgeBudgetOverspend}
+            onChange={(event) => setAcknowledgeBudgetOverspend(event.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            {state.fieldErrors.acknowledgeBudgetOverspend[0] ??
+              'This posting exceeds the approved budget. Tick to confirm and save again.'}
+          </span>
+        </label>
+      ) : null}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
         <Field name="memo" label="Memo" error={state.fieldErrors?.memo}>

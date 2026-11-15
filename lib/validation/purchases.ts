@@ -78,6 +78,8 @@ export const purchaseDocumentSchema = z.object({
    * to keep the bill. Missing means the warning still applies.
    */
   acknowledgeDuplicate: z.coerce.boolean().optional(),
+  /** Budget control warn mode: clerk confirmed overspend. */
+  acknowledgeBudgetOverspend: z.coerce.boolean().optional(),
   lines: z.array(purchaseLineSchema).min(1, 'Add at least one line').max(200),
 })
 

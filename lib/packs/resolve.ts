@@ -77,7 +77,7 @@ export function resolveFeatureFlagsFromPack(
     creditLimitWarn: behavioral.creditLimitWarn ?? prior.creditLimitWarn,
     payrollStandard: behavioral.payrollStandard ?? prior.payrollStandard,
     closeHardGates: behavioral.closeHardGates ?? prior.closeHardGates,
-    enforceBudgetControl: prior.enforceBudgetControl,
+    budgetControlMode: prior.budgetControlMode,
     grantedModules,
     modules,
     documentKinds: mergeDocumentKinds(pack),

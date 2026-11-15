@@ -13,7 +13,11 @@ Closes the eight gaps on Accounting → Budgets so a yearly plan can be prepared
 5. **CSV import** — `accountCode`, `month`, `amount`, optional `className` (dry-run then commit).
 6. **Monthly Budget vs Actual** — report columns per month (budget + actual) plus period totals; includes BS account types when budgeted.
 7. **Balance sheet / cash** — budgetable account types: REVENUE, COGS, EXPENSE, ASSET, LIABILITY, EQUITY.
-8. **Overspend control** — feature flag `enforceBudgetControl` (Apps & features → Accounting, default off). Blocks BILL/EXPENSE posts and EXPENSE/COGS journal lines against **APPROVED** monthly cells. Also UI: Collapse to first month / Spread evenly.
+8. **Overspend control (international)** — `budgetControlMode` on Apps & features → Accounting (**default `off`**):
+   - **off** — Budget vs Actual only (typical SME)
+   - **warn** — confirm checkbox on bill/expense, then allow (QBO/Odoo-style)
+   - **enforce** — hard refuse over **APPROVED** monthly cells (grant / public-sector)
+   Legacy `enforceBudgetControl` boolean still parses (true→enforce, false→off).
 
 ## Migration
 

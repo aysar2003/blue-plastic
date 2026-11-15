@@ -167,7 +167,6 @@ export async function updateFeatureFlagsForm(
     'creditLimitWarn',
     'payrollStandard',
     'closeHardGates',
-    'enforceBudgetControl',
     'enableTax',
     ...MODULE_FORM_KEY_LIST,
     ...DOCUMENT_KIND_FORM_KEY_LIST,
@@ -176,6 +175,9 @@ export async function updateFeatureFlagsForm(
   for (const key of keys) {
     values[key] = formData.get(key) === 'true' || formData.get(key) === 'on' ? 'true' : 'false'
   }
+  const budgetMode = String(formData.get('budgetControlMode') ?? 'off')
+  values.budgetControlMode =
+    budgetMode === 'warn' || budgetMode === 'enforce' || budgetMode === 'off' ? budgetMode : 'off'
   const result = await updateFeatureFlags(values)
   return toFormState(result, 'Configuration saved.')
 }

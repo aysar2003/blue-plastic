@@ -83,7 +83,7 @@ export const organizationFeaturesSchema = z.object({
   creditLimitWarn: boolFlag.default(false),
   payrollStandard: boolFlag.default(true),
   closeHardGates: boolFlag.default(false),
-  enforceBudgetControl: boolFlag.default(false),
+  budgetControlMode: z.enum(['off', 'warn', 'enforce']).default('off'),
   enableTax: boolFlag.default(true),
   ...moduleFeatureFields,
   ...documentKindFeatureFields,

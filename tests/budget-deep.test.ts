@@ -92,8 +92,12 @@ describe('budget-deep helpers', () => {
     expect(formatOverBudgetMessage(over)).toContain('6100')
   })
 
-  it('parses enforceBudgetControl feature flag', () => {
-    expect(parseFeatureFlags({}).enforceBudgetControl).toBe(false)
-    expect(parseFeatureFlags({ enforceBudgetControl: true }).enforceBudgetControl).toBe(true)
+  it('parses budgetControlMode (international: default off)', () => {
+    expect(parseFeatureFlags({}).budgetControlMode).toBe('off')
+    expect(parseFeatureFlags({ budgetControlMode: 'warn' }).budgetControlMode).toBe('warn')
+    expect(parseFeatureFlags({ budgetControlMode: 'enforce' }).budgetControlMode).toBe('enforce')
+    // Legacy boolean maps to off / enforce
+    expect(parseFeatureFlags({ enforceBudgetControl: false }).budgetControlMode).toBe('off')
+    expect(parseFeatureFlags({ enforceBudgetControl: true }).budgetControlMode).toBe('enforce')
   })
 })

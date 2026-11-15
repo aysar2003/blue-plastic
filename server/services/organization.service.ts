@@ -283,7 +283,7 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       creditLimitWarn: input.creditLimitWarn,
       payrollStandard: input.payrollStandard,
       closeHardGates: input.closeHardGates ?? previous.closeHardGates,
-      enforceBudgetControl: input.enforceBudgetControl ?? previous.enforceBudgetControl,
+      budgetControlMode: input.budgetControlMode ?? previous.budgetControlMode,
       grantedModules: previous.grantedModules,
       modules: modulesClampedToGrants(modulesFromFeaturesInput(input), previous.grantedModules),
       documentKinds: documentKindsFromFeaturesInput(input),

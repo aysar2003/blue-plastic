@@ -366,12 +366,24 @@ const APP_NESTED: Partial<
         hint="Unused accounts can be removed; linked accounts are merged."
         defaultChecked={flags.allowAccountDelete}
       />
-      <SwitchRow
-        name="enforceBudgetControl"
-        label="Enforce budget control"
-        hint="Refuse bills, expenses, and EXPENSE/COGS journals that would exceed an approved monthly budget. Off by default."
-        defaultChecked={flags.enforceBudgetControl}
-      />
+      <label className="flex flex-col gap-1.5 rounded-lg border border-border/80 bg-background/60 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <span className="min-w-0">
+          <span className="text-sm font-medium">Budget control</span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            International style vs approved monthly budgets. Off = report only; Warn = confirm then
+            post; Enforce = hard refuse.
+          </span>
+        </span>
+        <select
+          name="budgetControlMode"
+          defaultValue={flags.budgetControlMode}
+          className="h-9 w-full max-w-[11rem] rounded-md border border-input bg-background px-2 text-sm"
+        >
+          <option value="off">Off (report only)</option>
+          <option value="warn">Warn (confirm)</option>
+          <option value="enforce">Enforce (block)</option>
+        </select>
+      </label>
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         <DeepLink href="/settings/accounts">Chart of accounts</DeepLink>
         <DeepLink href="/settings/tax">Tax settings</DeepLink>

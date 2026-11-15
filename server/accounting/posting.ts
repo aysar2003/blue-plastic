@@ -52,6 +52,8 @@ export type DraftJournal = {
   currencyCode?: string | null
   /** Units of base currency per one unit of document currency. Default 1. */
   exchangeRate?: Decimal.Value | null
+  /** Budget control warn mode: clerk confirmed overspend. */
+  acknowledgeBudgetOverspend?: boolean
   lines: DraftLine[]
 }
 
@@ -173,8 +175,7 @@ export async function postJournal(
     )
   }
 
-  // 6b. Approved budget control (EXPENSE/COGS) when enforceBudgetControl is on.
-  // Skip drafts, reversals, and closing entries — those are corrections / period close.
+  // 6b. Approved budget control (off / warn / enforce). Skip drafts, reversals, closing.
   if (!draft.asDraft && !draft.reversalOfId && !draft.isClosingEntry) {
     const { assertWithinBudget } = await import('@/server/services/budget.service')
     const accountIds = [...new Set(rounded.map((line) => line.source.accountId))]
@@ -185,6 +186,7 @@ export async function postJournal(
     const byId = new Map(accounts.map((a) => [a.id, a]))
     await assertWithinBudget(ctx, {
       date: draft.date,
+      acknowledgeBudgetOverspend: draft.acknowledgeBudgetOverspend,
       lines: rounded.map((line) => {
         const account = byId.get(line.source.accountId)
         const debitNatural = ['REVENUE', 'EQUITY', 'LIABILITY'].includes(account?.type ?? '')

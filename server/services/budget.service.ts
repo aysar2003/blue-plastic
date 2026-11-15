@@ -529,13 +529,19 @@ export async function importCsv(
 
 /**
  * Assert EXPENSE/COGS proposed lines stay within APPROVED monthly budgets.
- * No-op when enforceBudgetControl is off.
+ * Modes: off (no-op), warn (confirm via acknowledgeBudgetOverspend), enforce (hard refuse).
+ * No APPROVED budget for the date → allow.
  */
 export async function assertWithinBudget(
   ctx: OrgContext,
-  input: { date: string; lines: BudgetControlLine[] },
+  input: {
+    date: string
+    lines: BudgetControlLine[]
+    acknowledgeBudgetOverspend?: boolean
+  },
 ) {
-  if (!ctx.features.enforceBudgetControl) return
+  const mode = ctx.features.budgetControlMode
+  if (mode === 'off') return
 
   const spendLines = input.lines.filter((l) =>
     (['COGS', 'EXPENSE'] as string[]).includes(l.accountType),
@@ -650,7 +656,18 @@ export async function assertWithinBudget(
   }
 
   const all = [...over, ...extra]
-  if (all.length > 0) throw precondition(formatOverBudgetMessage(all))
+  if (all.length === 0) return
+
+  const message = formatOverBudgetMessage(all)
+  if (mode === 'warn') {
+    if (input.acknowledgeBudgetOverspend) return
+    throw validation(message, {
+      acknowledgeBudgetOverspend: [
+        'This posting exceeds the approved budget. Confirm to post anyway, or save as a draft.',
+      ],
+    })
+  }
+  throw precondition(message)
 }
 
 export { spreadAmountAcrossMonths, monthsInRange }

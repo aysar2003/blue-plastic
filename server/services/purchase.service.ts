@@ -1012,7 +1012,9 @@ async function createWithin(
         levels: gate.levels,
       })
     } else if (!isDraft && PURCHASE_POSTS_A_JOURNAL[type]) {
-      await postDocument(tx, ctx, document.id)
+      await postDocument(tx, ctx, document.id, {
+        acknowledgeBudgetOverspend: input.acknowledgeBudgetOverspend,
+      })
     }
 
     await writeAudit(
@@ -1176,7 +1178,9 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
         levels: gate.levels,
       })
     } else if (!input.saveAsDraft && PURCHASE_POSTS_A_JOURNAL[existing.type]) {
-      await postDocument(tx, ctx, id)
+      await postDocument(tx, ctx, id, {
+        acknowledgeBudgetOverspend: input.acknowledgeBudgetOverspend,
+      })
     }
 
     await writeAudit(
@@ -1196,7 +1200,12 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
   })
 }
 
-export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
+export async function postDocument(
+  tx: Tx,
+  ctx: OrgContext,
+  id: string,
+  options?: { acknowledgeBudgetOverspend?: boolean },
+) {
   const document = await tx.purchaseDocument.findFirst({
     where: { id, orgId: ctx.orgId },
     select: {
@@ -1397,10 +1406,10 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     for (const line of draft.lines) line.trackingCategoryId = document.trackingCategoryId
   }
 
-  // Clearer UX: budget control before the ledger write (also enforced in postJournal).
+  // Clearer UX: budget control before the ledger write (also checked in postJournal).
   if (
     (document.type === 'BILL' || document.type === 'EXPENSE') &&
-    ctx.features.enforceBudgetControl
+    ctx.features.budgetControlMode !== 'off'
   ) {
     const { assertWithinBudget } = await import('@/server/services/budget.service')
     const accountIds = [...new Set(draft.lines.map((line) => line.accountId))]
@@ -1411,6 +1420,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     const byId = new Map(accounts.map((a) => [a.id, a]))
     await assertWithinBudget(ctx, {
       date: draft.date,
+      acknowledgeBudgetOverspend: options?.acknowledgeBudgetOverspend,
       lines: draft.lines.map((line) => {
         const account = byId.get(line.accountId)
         const debit = new Decimal(line.debit ?? 0)
@@ -1429,6 +1439,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     })
   }
 
+  draft.acknowledgeBudgetOverspend = options?.acknowledgeBudgetOverspend
   const journal = await postJournal(tx, ctx, draft)
 
   await tx.inventoryTransaction.updateMany({
