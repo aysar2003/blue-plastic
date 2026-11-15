@@ -140,7 +140,7 @@ export function PurchaseOrderTable({
                 aria-label="Select all"
                 checked={allOn}
                 onChange={() => setSelected(allOn ? [] : ids)}
-                className="size-3.5 accent-[#2ca01c]"
+                className="size-3.5 accent-primary"
               />
             </TableHead>
             {mainColumns.map((column) => (
@@ -199,7 +199,7 @@ export function PurchaseOrderTable({
                     aria-label={`Select ${row.number}`}
                     checked={selected.includes(row.id)}
                     onChange={() => toggleRow(row.id)}
-                    className="size-3.5 accent-[#2ca01c]"
+                    className="size-3.5 accent-primary"
                   />
                 </TableCell>
                 {mainColumns.map((column) => (

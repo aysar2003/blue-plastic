@@ -25,6 +25,11 @@ export const organizationUpdateSchema = z.object({
   email: z.union([email, z.literal('')]).transform((v) => (v === '' ? null : v)).nullable().optional(),
   website: optionalText(200),
   timeZone: requiredText('Time zone', 60),
+  localizationPackId: z
+    .union([z.enum(['so', 'ke', 'et', 'dj']), z.literal('')])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
 })
 
 export type OrganizationUpdateInput = z.infer<typeof organizationUpdateSchema>
@@ -78,6 +83,7 @@ export const organizationFeaturesSchema = z.object({
   creditLimitWarn: boolFlag.default(false),
   payrollStandard: boolFlag.default(true),
   closeHardGates: boolFlag.default(false),
+  enforceBudgetControl: boolFlag.default(false),
   enableTax: boolFlag.default(true),
   ...moduleFeatureFields,
   ...documentKindFeatureFields,
@@ -120,6 +126,8 @@ export type DocumentTemplateInput = z.infer<typeof documentTemplateSchema>
 
 const formVisibility = z.record(z.string().max(40), z.boolean())
 
+const formOrder = z.array(z.string().trim().min(1).max(40)).max(40).optional()
+
 export const formTemplateBodySchema = z.object({
   id: z.string().trim().min(1).max(40),
   name: z.string().trim().min(1).max(80),
@@ -127,6 +135,9 @@ export const formTemplateBodySchema = z.object({
   fields: formVisibility,
   columns: formVisibility,
   categoryColumns: formVisibility.optional(),
+  fieldOrder: formOrder,
+  columnOrder: formOrder,
+  categoryColumnOrder: formOrder,
 })
 
 export const upsertFormTemplateSchema = z.object({

@@ -107,7 +107,7 @@ export function RegisterLock({
   const shown = now ? clock(now) : { time: '—', date: '' }
 
   const unlock = (
-    <span className="flex flex-col items-center gap-3 text-[#1e1b2e]">
+    <span className="flex flex-col items-center gap-3 text-foreground">
       <ShoppingBasketIcon className="size-8" strokeWidth={1.75} />
       <span className="text-sm font-medium">Unlock Register</span>
     </span>
@@ -115,24 +115,19 @@ export function RegisterLock({
 
   return (
     <div
-      className="fixed inset-0 flex flex-col overflow-hidden bg-[#ece7f6] text-[#1c1730]"
+      className="fixed inset-0 flex flex-col overflow-hidden bg-background text-foreground"
       style={{ zIndex: fullScreenOverlayZIndex(80) }}
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'linear-gradient(115deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 32%), linear-gradient(295deg, rgba(196,184,230,0.55) 0%, rgba(255,255,255,0) 42%), linear-gradient(180deg, #f7f4fc 0%, #e4dff2 100%)',
-        }}
-      />
       <header className="relative flex items-start justify-between px-8 pt-8">
         <div>
           <p className="text-3xl font-light tracking-tight tabular-nums">{shown.time}</p>
-          <p className="mt-1 text-sm text-[#3c3558]">{shown.date}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{shown.date}</p>
         </div>
         <p className="text-lg font-semibold tracking-[0.18em]">{orgName.toUpperCase()}</p>
-        <Link href="/settings/organization" className="flex items-center gap-2 text-sm text-[#5b4d86] hover:underline">
+        <Link
+          href="/settings/organization"
+          className="flex items-center gap-2 text-sm text-primary hover:underline"
+        >
           <CameraIcon className="size-4" />
           Your logo
         </Link>
@@ -143,14 +138,14 @@ export function RegisterLock({
           <button
             type="button"
             onClick={onUnlock}
-            className="grid size-40 place-items-center rounded-2xl bg-white shadow-[0_18px_50px_-24px_rgba(40,20,80,0.45)]"
+            className="grid size-40 place-items-center rounded-2xl border border-border bg-card shadow-sm"
           >
             {unlock}
           </button>
         ) : (
           <Link
             href={unlockHref ?? '/pos'}
-            className="grid size-40 place-items-center rounded-2xl bg-white shadow-[0_18px_50px_-24px_rgba(40,20,80,0.45)]"
+            className="grid size-40 place-items-center rounded-2xl border border-border bg-card shadow-sm"
           >
             {unlock}
           </Link>
@@ -160,7 +155,7 @@ export function RegisterLock({
       <footer className="relative flex justify-center pb-10">
         <Link
           href={backendHref}
-          className="rounded-md bg-[#1e2433] px-5 py-2 text-sm font-medium text-white hover:bg-[#121722]"
+          className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           Backend
         </Link>

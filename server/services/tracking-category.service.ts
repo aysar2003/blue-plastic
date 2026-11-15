@@ -9,8 +9,44 @@ import { conflict, notFound, validation } from '@/server/errors'
 export async function list(ctx: OrgContext, options: { includeInactive?: boolean } = {}) {
   return db.trackingCategory.findMany({
     where: { orgId: ctx.orgId, ...(options.includeInactive ? {} : { isActive: true }) },
-    select: { id: true, name: true, isActive: true },
+    select: { id: true, name: true, isActive: true, restrictSpending: true },
     orderBy: { name: 'asc' },
+  })
+}
+
+export async function orgHasRestrictedSpending(tx: Tx, orgId: string): Promise<boolean> {
+  const row = await tx.trackingCategory.findFirst({
+    where: { orgId, isActive: true, restrictSpending: true },
+    select: { id: true },
+  })
+  return Boolean(row)
+}
+
+export async function setRestrictSpending(ctx: OrgContext, id: string, restrictSpending: boolean) {
+  const meta = await requestMeta()
+  const current = await db.trackingCategory.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: { id: true, name: true },
+  })
+  if (!current) throw notFound('Class')
+  return db.$transaction(async (tx) => {
+    const row = await tx.trackingCategory.update({
+      where: { id: current.id },
+      data: { restrictSpending },
+      select: { id: true, name: true, restrictSpending: true },
+    })
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'TrackingCategory',
+        entityId: row.id,
+        action: 'UPDATE',
+        after: { restrictSpending },
+      },
+      meta,
+    )
+    return row
   })
 }
 
@@ -42,10 +78,12 @@ export async function create(ctx: OrgContext, input: TrackingCategoryInput) {
   })
   if (existing) throw conflict(`A class called "${name}" already exists.`)
 
+  const restrictSpending = input.restrictSpending === true
+
   return db.$transaction(async (tx) => {
     const row = await tx.trackingCategory.create({
-      data: { orgId: ctx.orgId, name },
-      select: { id: true, name: true },
+      data: { orgId: ctx.orgId, name, restrictSpending },
+      select: { id: true, name: true, restrictSpending: true },
     })
     await writeAudit(tx, ctx, { entity: 'TrackingCategory', entityId: row.id, action: 'CREATE', after: { name } }, meta)
     return row
@@ -70,8 +108,11 @@ export async function update(ctx: OrgContext, input: TrackingCategoryInput & { i
   return db.$transaction(async (tx) => {
     const row = await tx.trackingCategory.update({
       where: { id: current.id },
-      data: { name },
-      select: { id: true, name: true },
+      data: {
+        name,
+        ...(input.restrictSpending !== undefined ? { restrictSpending: input.restrictSpending } : {}),
+      },
+      select: { id: true, name: true, restrictSpending: true },
     })
     await writeAudit(
       tx,

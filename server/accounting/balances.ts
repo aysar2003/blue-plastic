@@ -244,27 +244,10 @@ function readSplits(value: unknown): { code: string; name: string; amount: strin
   })
 }
 
-/** Self plus every descendant under `accountId` (breadth-first, capped). */
-async function accountFamilyIds(client: Tx | typeof db, orgId: string, accountId: string) {
-  const ids = [accountId]
-  let frontier = [accountId]
-  for (let depth = 0; depth < 8 && frontier.length > 0; depth += 1) {
-    const children = await client.ledgerAccount.findMany({
-      where: { orgId, parentId: { in: frontier } },
-      select: { id: true },
-    })
-    frontier = children.map((child) => child.id)
-    ids.push(...frontier)
-  }
-  return ids
-}
-
 /**
  * The general ledger for one account: every posted line, in date order, with a
- * running balance. This is the drill-down behind every figure on every report.
- *
- * When the account has sub-accounts (e.g. POS Banks → tills), lines on those
- * children are included so the parent report rolls the family together.
+ * running balance. Own lines only — Main and Sub stay separate on the register;
+ * family rollups live on statement group totals.
  */
 export async function generalLedger(
   orgId: string,
@@ -281,14 +264,12 @@ export async function generalLedger(
     return { opening: ZERO, entries: [], closing: ZERO, type: 'ASSET' }
   }
 
-  const familyIds = await accountFamilyIds(client, orgId, accountId)
-
   const [openingRow] = await client.$queryRaw<{ debit: string; credit: string }[]>`
     SELECT COALESCE(SUM(l.debit), 0) AS debit, COALESCE(SUM(l.credit), 0) AS credit
       FROM journal_lines l
       JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
      WHERE l."orgId" = ${orgId}
-       AND l."accountId" = ANY(${familyIds})
+       AND l."accountId" = ${accountId}
        AND l."journalDate" < ${toDate(range.from)}
   `
 
@@ -366,7 +347,7 @@ export async function generalLedger(
       LEFT JOIN customers cu ON cu.id = l."customerId"
       LEFT JOIN vendors   ve ON ve.id = l."vendorId"
      WHERE l."orgId" = ${orgId}
-       AND l."accountId" = ANY(${familyIds})
+       AND l."accountId" = ${accountId}
        AND l."journalDate" >= ${toDate(range.from)}
        AND l."journalDate" <= ${toDate(range.to)}
      ORDER BY j.date ASC, j."journalNumber" ASC, l."lineNumber" ASC
@@ -434,14 +415,6 @@ export type LedgerBookSection = {
   entries: LedgerBookLine[]
 }
 
-type BookAccount = {
-  id: string
-  code: string
-  name: string
-  type: AccountType
-  parentId: string | null
-}
-
 type BookLine = {
   lineId: string
   accountId: string
@@ -462,42 +435,6 @@ type BookLine = {
   lineNumber: number
 }
 
-/**
- * Self plus descendants, breadth-first, eight levels deep — the same family
- * `generalLedger` walks, computed here from the chart instead of one query per hop.
- */
-function accountFamilies(accounts: BookAccount[]): Map<string, string[]> {
-  const children = new Map<string, string[]>()
-  const ids = new Set(accounts.map((account) => account.id))
-  for (const account of accounts) {
-    if (!account.parentId || !ids.has(account.parentId)) continue
-    const list = children.get(account.parentId)
-    if (list) list.push(account.id)
-    else children.set(account.parentId, [account.id])
-  }
-
-  const families = new Map<string, string[]>()
-  for (const account of accounts) {
-    const family = [account.id]
-    const seen = new Set(family)
-    let frontier = family
-    for (let depth = 0; depth < 8 && frontier.length > 0; depth += 1) {
-      const next: string[] = []
-      for (const id of frontier) {
-        for (const child of children.get(id) ?? []) {
-          if (seen.has(child)) continue
-          seen.add(child)
-          next.push(child)
-        }
-      }
-      frontier = next
-      family.push(...next)
-    }
-    families.set(account.id, family)
-  }
-  return families
-}
-
 function asDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value)
 }
@@ -512,11 +449,8 @@ function compareBookLines(a: BookLine, b: BookLine): number {
 /**
  * Every account’s general ledger for a report, in two queries.
  *
- * Calling `generalLedger` once per account is a round trip (and three
- * per-line lookups) for each row of the chart. On a hosted database that is
- * minutes even for an empty month, because the opening balance still runs.
- * A parent section still includes its sub-accounts, and still stops at
- * `limit` lines — the same register the one-account ledger shows.
+ * Own lines only per account (Main and Sub stay separate). Family rollups are
+ * statement group totals, not register merges.
  */
 export async function generalLedgerBook(
   orgId: string,
@@ -603,25 +537,14 @@ export async function generalLedgerBook(
     if (list) list.push(line)
     else linesByAccount.set(line.accountId, [line])
   }
-  const families = accountFamilies(accounts)
 
   const sections: LedgerBookSection[] = []
   for (const account of accounts) {
-    const family = families.get(account.id) ?? [account.id]
-    let debit = ZERO
-    let credit = ZERO
-    const familyLines: BookLine[] = []
-    for (const id of family) {
-      const opening = openingByAccount.get(id)
-      if (opening) {
-        debit = debit.plus(opening.debit)
-        credit = credit.plus(opening.credit)
-      }
-      const own = linesByAccount.get(id)
-      if (own) familyLines.push(...own)
-    }
-    familyLines.sort(compareBookLines)
-    const shown = familyLines.slice(0, limit)
+    const openingRow = openingByAccount.get(account.id)
+    const debit = openingRow ? new Decimal(openingRow.debit) : ZERO
+    const credit = openingRow ? new Decimal(openingRow.credit) : ZERO
+    const ownLines = [...(linesByAccount.get(account.id) ?? [])].sort(compareBookLines)
+    const shown = ownLines.slice(0, limit)
     const opening = naturalBalance(account.type, debit, credit)
     if (shown.length === 0 && opening.isZero()) continue
 

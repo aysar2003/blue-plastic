@@ -56,9 +56,9 @@ export function SystemAccountRow({
               </span>
             </p>
             {binding.account.isHeading ? (
-              <p className="mt-1 text-xs text-destructive">
-                This account has sub-accounts, so nothing can post here. Pick a leaf account below and
-                save — until then inventory sales will fail with a grouping-heading error.
+              <p className="mt-1 text-xs text-muted-foreground">
+                This account has sub-accounts. Postings can land here or on a Sub — reports show each
+                separately plus a group total.
               </p>
             ) : null}
           </>

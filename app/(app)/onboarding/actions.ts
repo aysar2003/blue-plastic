@@ -9,6 +9,10 @@ import {
 } from '@/lib/validation/onboarding'
 import { action } from '@/server/action'
 import * as onboardingService from '@/server/services/onboarding.service'
+import * as organizationService from '@/server/services/organization.service'
+import * as setupHealService from '@/server/services/setup-heal.service'
+import * as taxService from '@/server/services/tax.service'
+import { z } from 'zod'
 
 export const completeOnboarding = action
   .input(completeOnboardingSchema)
@@ -47,3 +51,64 @@ export const toggleSetupChecklistItem = action
     revalidatePath('/onboarding')
     return result
   })
+
+export const applyRetailShopProfile = action.handler(async (ctx) => {
+  const result = await onboardingService.applyRetailShopProfile(ctx)
+  revalidatePath('/settings/setup')
+  revalidatePath('/settings/features')
+  revalidatePath('/onboarding')
+  revalidatePath('/help/coverage')
+  revalidatePath('/', 'layout')
+  return result
+})
+
+export const ensureLocalizationFromCountry = action.handler(async (ctx) => {
+  const result = await onboardingService.ensureLocalizationFromCountry(ctx)
+  revalidatePath('/settings/setup')
+  revalidatePath('/settings/organization')
+  revalidatePath('/', 'layout')
+  return result
+})
+
+export const seedLocalizationTax = action
+  .input(z.object({ enableTax: z.boolean().optional() }).optional())
+  .handler(async (ctx, input) => {
+    if (input?.enableTax) {
+      await organizationService.updateEnableTax(ctx, true)
+    }
+    const result = await taxService.seedLocalizationTax(ctx)
+    revalidatePath('/settings/setup')
+    revalidatePath('/settings/tax')
+    revalidatePath('/', 'layout')
+    return result
+  })
+
+export const healMissingItemSkus = action.handler(async (ctx) => {
+  const result = await setupHealService.healMissingItemSkus(ctx)
+  revalidatePath('/settings/setup')
+  revalidatePath('/items')
+  return result
+})
+
+export const healMissingReorderPoints = action.handler(async (ctx) => {
+  const result = await setupHealService.healMissingReorderPoints(ctx)
+  revalidatePath('/settings/setup')
+  revalidatePath('/items')
+  revalidatePath('/inventory/replenish')
+  return result
+})
+
+export const healCustomerCountriesFromOrg = action.handler(async (ctx) => {
+  const result = await setupHealService.healCustomerCountriesFromOrg(ctx)
+  revalidatePath('/settings/setup')
+  revalidatePath('/customers')
+  return result
+})
+
+export const healOrgCountryFromPack = action.handler(async (ctx) => {
+  const result = await setupHealService.healOrgCountryFromPack(ctx)
+  revalidatePath('/settings/setup')
+  revalidatePath('/settings/organization')
+  revalidatePath('/', 'layout')
+  return result
+})

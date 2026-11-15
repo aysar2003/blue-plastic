@@ -1,8 +1,10 @@
 import 'server-only'
 
+import type { Prisma } from '@prisma/client'
 import { cookies } from 'next/headers'
 
 import { parseDocumentTemplate, type DocumentTemplate } from '@/lib/document-template'
+import { localizationPackIdForCountry } from '@/lib/localization/packs'
 import { applyPaperChoice, PAPER_CHOICE_COOKIE, parsePaperChoice } from '@/lib/paper-choice'
 import {
   parseOrgFormTemplates,
@@ -52,12 +54,57 @@ const PROFILE_SELECT = {
   email: true,
   website: true,
   timeZone: true,
+  localizationPackId: true,
   brandMark: true,
   logoStorageKey: true,
   logoContentType: true,
   createdAt: true,
   updatedAt: true,
 } as const
+
+const SIGN_PROVIDER_SELECT = {
+  signProvider: true,
+} as const
+
+const TRUSTED_EXTENSIONS_SELECT = {
+  trustedExtensions: true,
+} as const
+
+export async function getTrustedExtensions(ctx: OrgContext) {
+  const org = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: TRUSTED_EXTENSIONS_SELECT,
+  })
+  if (!org) throw notFound('Organisation')
+  return org.trustedExtensions
+}
+
+export async function getSignProvider(ctx: OrgContext) {
+  const org = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: SIGN_PROVIDER_SELECT,
+  })
+  if (!org) throw notFound('Organisation')
+  return org.signProvider
+}
+
+export async function updateSignProvider(ctx: OrgContext, signProvider: unknown) {
+  const meta = await requestMeta()
+  return db.$transaction(async (tx) => {
+    const after = await tx.organization.update({
+      where: { id: ctx.orgId },
+      data: { signProvider: signProvider as Prisma.InputJsonValue },
+      select: SIGN_PROVIDER_SELECT,
+    })
+    await writeAudit(
+      tx,
+      ctx,
+      { entity: 'Organization', entityId: ctx.orgId, action: 'UPDATE', before: null, after },
+      meta,
+    )
+    return after.signProvider
+  })
+}
 
 export async function get(ctx: OrgContext) {
   const org = await db.organization.findUnique({
@@ -78,9 +125,21 @@ export async function update(ctx: OrgContext, input: OrganizationUpdateInput) {
     })
     if (!before) throw notFound('Organisation')
 
+    // If country is set and the pack was left blank, pick SO/KE/ET/DJ automatically.
+    const nextPack =
+      input.localizationPackId !== undefined
+        ? input.localizationPackId
+        : before.localizationPackId
+    const nextCountry = input.country !== undefined ? input.country : before.country
+    const autoPack =
+      !nextPack && nextCountry ? localizationPackIdForCountry(nextCountry) : null
+
     const after = await tx.organization.update({
       where: { id: ctx.orgId },
-      data: input,
+      data: {
+        ...input,
+        ...(autoPack ? { localizationPackId: autoPack } : {}),
+      },
       select: PROFILE_SELECT,
     })
 
@@ -224,6 +283,7 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       creditLimitWarn: input.creditLimitWarn,
       payrollStandard: input.payrollStandard,
       closeHardGates: input.closeHardGates ?? previous.closeHardGates,
+      enforceBudgetControl: input.enforceBudgetControl ?? previous.enforceBudgetControl,
       grantedModules: previous.grantedModules,
       modules: modulesClampedToGrants(modulesFromFeaturesInput(input), previous.grantedModules),
       documentKinds: documentKindsFromFeaturesInput(input),

@@ -45,6 +45,8 @@ export function DocumentActions({
   paper = 'document',
   pdfHref,
   excelHref,
+  jsonExportHref,
+  jsonExportLabel = 'E-invoice',
   filename,
   printHref,
   backHref,
@@ -56,12 +58,17 @@ export function DocumentActions({
   pdfMatchesPrint = false,
   paperStyle = 'merchant',
   canEmail = true,
+  defaultEmailOpen = false,
+  emailOnly = false,
 }: {
   /** Shown in dialog copy — "statement", "delivery report", "invoice". */
   paper?: string
   pdfHref?: string
   /** Downloads a spreadsheet of the same rows. Omitted where Excel already lives elsewhere. */
   excelHref?: string
+  /** Statutory / e-invoice JSON export (posted documents). */
+  jsonExportHref?: string
+  jsonExportLabel?: string
   filename?: string
   /** Dedicated print page. When omitted, Print uses the current page. */
   printHref?: string
@@ -81,9 +88,16 @@ export function DocumentActions({
   paperStyle?: PaperStyle
   /** Requires `invoice:send`. Hide Email when the role cannot send. */
   canEmail?: boolean
+  /** Open the Email dialog on mount (e.g. after Save and send). */
+  defaultEmailOpen?: boolean
+  /** Form toolbar: show only Email (and WhatsApp if phone), hide Print/PDF chrome. */
+  emailOnly?: boolean
 }) {
-  const [emailOpen, setEmailOpen] = useState(false)
+  const [emailOpen, setEmailOpen] = useState(defaultEmailOpen && canEmail)
   const [waOpen, setWaOpen] = useState(false)
+  useEffect(() => {
+    if (defaultEmailOpen && canEmail) setEmailOpen(true)
+  }, [defaultEmailOpen, canEmail])
   const [to, setTo] = useState(defaultTo)
   const savedRecipient = defaultTo.trim()
   const [subject, setSubject] = useState(defaultSubject ?? '')
@@ -335,38 +349,47 @@ export function DocumentActions({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 print:hidden">
-      {backHref ? (
+      {!emailOnly && backHref ? (
         <Link href={backHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
           <ArrowLeftIcon /> Back
         </Link>
       ) : null}
 
-      <div className="flex items-center rounded-md border border-input p-0.5">
-        {(
-          [
-            ['merchant', 'Merchant'],
-            ['trade', 'Trade'],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => choosePaper(id)}
-            className={cn(
-              'rounded px-2 py-1 text-xs font-medium',
-              paperStyle === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <PrintInkMenu printHref={printHref} />
-      <PdfInkMenu pdfHref={pdfHref} filename={`${baseName}.pdf`} matchPrintPaper={pdfMatchesPrint} />
-      {excelHref ? (
-        <a href={excelHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          <FileSpreadsheetIcon /> Excel
-        </a>
+      {!emailOnly ? (
+        <>
+          <div className="flex items-center rounded-md border border-input p-0.5">
+            {(
+              [
+                ['merchant', 'Merchant'],
+                ['trade', 'Trade'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => choosePaper(id)}
+                className={cn(
+                  'rounded px-2 py-1 text-xs font-medium',
+                  paperStyle === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <PrintInkMenu printHref={printHref} />
+          <PdfInkMenu pdfHref={pdfHref} filename={`${baseName}.pdf`} matchPrintPaper={pdfMatchesPrint} />
+          {excelHref ? (
+            <a href={excelHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              <FileSpreadsheetIcon /> Excel
+            </a>
+          ) : null}
+          {jsonExportHref ? (
+            <a href={jsonExportHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              <FileTextIcon /> {jsonExportLabel}
+            </a>
+          ) : null}
+        </>
       ) : null}
 
       {canEmail ? (
@@ -378,7 +401,7 @@ export function DocumentActions({
         }}
       >
         <Button type="button" size="sm" variant="outline" onClick={() => setEmailOpen(true)}>
-          <MailIcon /> Email
+          <MailIcon /> {emailOnly ? 'Send' : 'Email'}
         </Button>
         <DialogContent>
           <DialogHeader>

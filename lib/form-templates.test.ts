@@ -10,7 +10,14 @@ import {
   upsertTemplateInOrg,
   type FormTemplate,
 } from '@/lib/form-templates'
-import { isColumnVisible, isFieldVisible } from '@/lib/form-field-catalog'
+import {
+  isColumnVisible,
+  isFieldVisible,
+  moveCatalogId,
+  orderedVisibleCatalog,
+  resolveCatalogOrder,
+  SALES_FORM_COLUMNS,
+} from '@/lib/form-field-catalog'
 
 describe('form templates', () => {
   it('seeds system default when org has no saved templates', () => {
@@ -89,5 +96,52 @@ describe('form templates', () => {
     expect(isFieldVisible(undefined, 'project')).toBe(true)
     expect(isColumnVisible({ store: false }, 'store')).toBe(false)
     expect(isColumnVisible({ store: false }, 'qty')).toBe(true)
+  })
+
+  it('round-trips columnOrder on upsert and parse', () => {
+    const family = formFamilyKey('sales', 'SALES_RECEIPT')
+    const custom: FormTemplate = {
+      id: 'tmpl-order',
+      name: 'Qty last',
+      layoutId: 'sheet',
+      fields: {},
+      columns: {},
+      columnOrder: ['item', 'description', 'rate', 'amount', 'qty', 'unit', 'store', 'tax'],
+    }
+    const next = upsertTemplateInOrg({ active: {}, templates: {} }, family, custom, true)
+    const resolved = resolveFormTemplates(next, family)
+    expect(resolved.active.columnOrder?.slice(0, 5)).toEqual([
+      'item',
+      'description',
+      'rate',
+      'amount',
+      'qty',
+    ])
+    const reparsed = parseOrgFormTemplates(next)
+    expect(resolveFormTemplates(reparsed, family).active.columnOrder?.[2]).toBe('rate')
+  })
+
+  it('resolveCatalogOrder merges saved order with new catalog ids', () => {
+    expect(resolveCatalogOrder(['a', 'b', 'c'], ['c', 'a'])).toEqual(['c', 'a', 'b'])
+    expect(resolveCatalogOrder(['a', 'b'], ['x', 'b'])).toEqual(['b', 'a'])
+  })
+
+  it('moveCatalogId reorders within the list', () => {
+    expect(moveCatalogId(['item', 'qty', 'rate', 'amount'], 'qty', 'amount')).toEqual([
+      'item',
+      'rate',
+      'amount',
+      'qty',
+    ])
+    expect(moveCatalogId(['a', 'b'], 'a', 'a')).toEqual(['a', 'b'])
+  })
+
+  it('orderedVisibleCatalog skips hidden columns and keeps order', () => {
+    const visible = orderedVisibleCatalog(
+      SALES_FORM_COLUMNS,
+      { description: false, store: false },
+      ['rate', 'item', 'qty', 'amount', 'description', 'unit', 'store', 'tax'],
+    )
+    expect(visible.map((row) => row.id)).toEqual(['rate', 'item', 'qty', 'amount', 'unit', 'tax'])
   })
 })

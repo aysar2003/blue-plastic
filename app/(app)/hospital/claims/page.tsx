@@ -14,17 +14,21 @@ export const metadata: Metadata = { title: 'Claims export' }
 export default async function HospitalClaimsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ format?: string; includeExported?: string }>
+  searchParams: Promise<{ format?: string; includeExported?: string; payer?: string; batch?: string }>
 }) {
   const ctx = await requireOrgContext('invoice:read')
   const query = await searchParams
   const format = query.format === 'csv' ? 'csv' : 'json'
   const includeExported = query.includeExported === '1'
+  const payerName = query.payer ?? ''
+  const exportBatchId = query.batch ?? ''
   const canStamp = ctx.permissions.has('invoice:create')
   const exported = await hospital.exportClaims(ctx, {
     format,
     status: 'CLOSED',
     includeExported,
+    payerName: payerName || undefined,
+    exportBatchId: exportBatchId || undefined,
     stamp: false,
   })
 
@@ -51,7 +55,7 @@ export default async function HospitalClaimsPage({
               CSV
             </Link>
             <Link
-              href={`/hospital/claims?format=${format}&includeExported=1`}
+              href={`/hospital/claims?format=${format}&includeExported=1${payerName ? `&payer=${encodeURIComponent(payerName)}` : ''}`}
               className={buttonVariants({ variant: includeExported ? 'default' : 'outline', size: 'sm' })}
             >
               Include already exported
@@ -60,6 +64,26 @@ export default async function HospitalClaimsPage({
         }
       />
 
+      <form className="mb-4 flex flex-wrap gap-2" method="get">
+        <input type="hidden" name="format" value={format} />
+        {includeExported ? <input type="hidden" name="includeExported" value="1" /> : null}
+        <input
+          name="payer"
+          defaultValue={payerName}
+          placeholder="Filter payer"
+          className="h-9 rounded-md border px-2 text-sm"
+        />
+        <input
+          name="batch"
+          defaultValue={exportBatchId}
+          placeholder="Export batch id"
+          className="h-9 rounded-md border px-2 text-sm"
+        />
+        <button type="submit" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+          Apply filters
+        </button>
+      </form>
+
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="text-base">Download payload</CardTitle>
@@ -67,6 +91,7 @@ export default async function HospitalClaimsPage({
             {exported.rows.length} charge line{exported.rows.length === 1 ? '' : 's'} · format{' '}
             {exported.format.toUpperCase()}
             {includeExported ? ' · including previously stamped' : ' · unexported only'}
+            {exported.exportBatchId ? ` · batch ${exported.exportBatchId}` : ''}
           </CardDescription>
         </CardHeader>
         {canStamp ? (

@@ -3,86 +3,104 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-import { isCalendarDate, toDate } from '@/lib/date'
-import { Decimal } from '@/lib/money'
-import { requireOrgContext } from '@/server/auth/context'
-import { db } from '@/server/db'
+import {
+  budgetCopySchema,
+  budgetCreateSchema,
+  budgetIdSchema,
+  budgetImportSchema,
+  budgetLineIdSchema,
+  budgetLineUpsertSchema,
+} from '@/lib/validation/budget'
+import { action } from '@/server/action'
+import * as budgetService from '@/server/services/budget.service'
 
-export async function createBudget(formData: FormData) {
-  const ctx = await requireOrgContext('report:read')
-  const name = String(formData.get('name') ?? '').trim()
-  const startDate = String(formData.get('startDate') ?? '')
-  const endDate = String(formData.get('endDate') ?? '')
-  const notes = String(formData.get('notes') ?? '').trim() || null
-
-  if (!name || !isCalendarDate(startDate) || !isCalendarDate(endDate) || startDate > endDate) {
-    throw new Error('Name and a valid date range are required.')
-  }
-
-  const budget = await db.budget.create({
-    data: {
-      orgId: ctx.orgId,
-      name,
-      startDate: toDate(startDate),
-      endDate: toDate(endDate),
-      notes,
-    },
-  })
-
+function revalidateBudget(id?: string) {
   revalidatePath('/accounting/budgets')
   revalidatePath('/reports/budget-vs-actual')
-  redirect(`/accounting/budgets/${budget.id}`)
+  if (id) revalidatePath(`/accounting/budgets/${id}`)
 }
 
-export async function upsertBudgetLine(formData: FormData) {
-  const ctx = await requireOrgContext('report:read')
-  const budgetId = String(formData.get('budgetId') ?? '')
-  const accountId = String(formData.get('accountId') ?? '')
-  const amountRaw = String(formData.get('amount') ?? '').trim()
-
-  if (!budgetId || !accountId || !amountRaw) {
-    throw new Error('Account and amount are required.')
-  }
-
-  const amount = new Decimal(amountRaw)
-  if (!amount.isFinite()) throw new Error('Amount must be a number.')
-
-  const budget = await db.budget.findFirst({
-    where: { id: budgetId, orgId: ctx.orgId },
-    select: { id: true },
-  })
-  if (!budget) throw new Error('Budget not found.')
-
-  const account = await db.ledgerAccount.findFirst({
-    where: { id: accountId, orgId: ctx.orgId, isActive: true },
-    select: { id: true },
-  })
-  if (!account) throw new Error('Account not found.')
-
-  await db.budgetLine.upsert({
-    where: { budgetId_accountId: { budgetId, accountId } },
-    create: {
-      orgId: ctx.orgId,
-      budgetId,
-      accountId,
-      amount: amount.toFixed(4),
-    },
-    update: { amount: amount.toFixed(4) },
+export const createBudget = action
+  .requires('report:read')
+  .input(budgetCreateSchema)
+  .handler(async (ctx, input) => {
+    const row = await budgetService.create(ctx, input)
+    revalidateBudget(row.id)
+    redirect(`/accounting/budgets/${row.id}`)
   })
 
-  revalidatePath(`/accounting/budgets/${budgetId}`)
-  revalidatePath('/reports/budget-vs-actual')
-}
-
-export async function deleteBudgetLine(formData: FormData) {
-  const ctx = await requireOrgContext('report:read')
-  const lineId = String(formData.get('lineId') ?? '')
-  const line = await db.budgetLine.findFirst({
-    where: { id: lineId, orgId: ctx.orgId },
-    select: { id: true, budgetId: true },
+export const upsertBudgetLine = action
+  .requires('report:read')
+  .input(budgetLineUpsertSchema)
+  .handler(async (ctx, input) => {
+    const row = await budgetService.upsertLine(ctx, {
+      ...input,
+      trackingCategoryId: input.trackingCategoryId || null,
+    })
+    revalidateBudget(input.budgetId)
+    return row
   })
-  if (!line) return
-  await db.budgetLine.delete({ where: { id: line.id } })
-  revalidatePath(`/accounting/budgets/${line.budgetId}`)
-  revalidatePath('/reports/budget-vs-actual')
-}
+
+export const deleteBudgetLine = action
+  .requires('report:read')
+  .input(budgetLineIdSchema)
+  .handler(async (ctx, input) => {
+    const row = await budgetService.deleteLine(ctx, input.lineId)
+    if (row) revalidateBudget(row.budgetId)
+    return row
+  })
+
+export const approveBudget = action
+  .requires('report:read')
+  .input(budgetIdSchema)
+  .handler(async (ctx, input) => {
+    const row = await budgetService.approve(ctx, input.id)
+    revalidateBudget(row.id)
+    return row
+  })
+
+export const reviseBudget = action
+  .requires('report:read')
+  .input(budgetIdSchema)
+  .handler(async (ctx, input) => {
+    const row = await budgetService.revise(ctx, input.id)
+    revalidateBudget(input.id)
+    revalidateBudget(row.id)
+    redirect(`/accounting/budgets/${row.id}`)
+  })
+
+export const copyBudget = action
+  .requires('report:read')
+  .input(budgetCopySchema)
+  .handler(async (ctx, input) => {
+    const row = await budgetService.copyBudget(ctx, input)
+    revalidateBudget(row.id)
+    redirect(`/accounting/budgets/${row.id}`)
+  })
+
+export const collapseBudgetToFirstMonth = action
+  .requires('report:read')
+  .input(budgetIdSchema)
+  .handler(async (ctx, input) => {
+    const row = await budgetService.collapseBudgetToFirstMonth(ctx, input.id)
+    revalidateBudget(row.id)
+    return row
+  })
+
+export const spreadBudgetEvenly = action
+  .requires('report:read')
+  .input(budgetIdSchema)
+  .handler(async (ctx, input) => {
+    const row = await budgetService.spreadBudgetEvenly(ctx, input.id)
+    revalidateBudget(row.id)
+    return row
+  })
+
+export const importBudgetCsv = action
+  .requires('report:read')
+  .input(budgetImportSchema)
+  .handler(async (ctx, input) => {
+    const result = await budgetService.importCsv(ctx, input)
+    if (result.committed) revalidateBudget(input.budgetId)
+    return result
+  })

@@ -16,6 +16,7 @@ import {
   publicSignPath,
   SIGN_REQUEST_TTL_MS,
 } from '@/lib/erp/sign-workflow'
+import { dispatchSignWebhook, parseSignProvider } from '@/lib/erp/sign-provider'
 import { toDate, type CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
@@ -62,7 +63,8 @@ export async function createSignRequest(
   assertPermission(ctx, 'knowledge:create')
   const title = input.title.trim()
   if (!title) throw validation('Give the document a title.')
-  return db.signRequest.create({
+  const token = newSignToken()
+  const created = await db.signRequest.create({
     data: {
       orgId: ctx.orgId,
       title,
@@ -70,11 +72,35 @@ export async function createSignRequest(
       signerEmail: input.signerEmail?.trim() || null,
       message: input.message?.trim() || null,
       status: 'SENT',
-      token: newSignToken(),
+      token,
       expiresAt: new Date(Date.now() + SIGN_REQUEST_TTL_MS),
     },
     select: { id: true, title: true, token: true, status: true, expiresAt: true },
   })
+
+  const org = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: { name: true, signProvider: true },
+  })
+  const provider = parseSignProvider(org?.signProvider ?? null)
+  const webhook = await dispatchSignWebhook(provider, {
+    requestId: created.id,
+    title: created.title,
+    token: created.token,
+    signerEmail: input.signerEmail?.trim() || null,
+    organizationName: org?.name ?? ctx.organization.name,
+  })
+  if (!webhook.ok) {
+    console.warn('[sign-provider] webhook dispatch failed:', webhook.error ?? 'unknown')
+  }
+  if (webhook.externalId) {
+    await db.signRequest.update({
+      where: { id: created.id },
+      data: { externalId: webhook.externalId },
+    })
+  }
+
+  return created
 }
 
 export async function markSigned(

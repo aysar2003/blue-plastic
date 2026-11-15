@@ -167,8 +167,8 @@ describe('thermal receipt', () => {
     expect(html).toContain('08/10/2026 17:56') // shop time, not UTC
     expect(html).toContain('Counter')
     expect(html).toContain('Main till')
-    expect(html).toContain('Salesman')
-    expect(html).toContain('Fahad')
+    expect(html).not.toContain('Salesman')
+    expect(html).not.toContain('Fahad')
     expect(html).not.toContain('Cashier')
     expect(html).not.toContain('Register')
     expect(html).toContain('2.00 Pcs x $20.00')

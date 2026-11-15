@@ -35,6 +35,8 @@ describe('hospital billing helpers', () => {
         payerRef: null,
         department: 'OPD',
         invoiceNumber: 'INV-1',
+        exportBatchId: 'CLM-ABC',
+        claimsExportedAt: '2026-11-07T13:00:00.000Z',
         billCode: 'CONSULT',
         description: 'Consultation',
         quantity: '1',
@@ -44,6 +46,8 @@ describe('hospital billing helpers', () => {
     ]
     const csv = claimsToCsv(rows)
     expect(csv).toContain('visitId,patientName,openedAt')
+    expect(csv).toContain('exportBatchId,claimsExportedAt')
+    expect(csv).toContain('CLM-ABC')
     expect(csv).toContain('v1,Amina Ali')
     expect(csv).toContain('CONSULT,Consultation,1,25.0000,25.0000')
   })

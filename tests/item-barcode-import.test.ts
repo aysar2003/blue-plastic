@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { ITEM_TEMPLATE, sampleRows } from '@/lib/import-template'
-import { nextBlankSku } from '@/lib/sku'
+import { nextBlankSku, skuFromName } from '@/lib/sku'
 import { matchPosBarcode } from '@/lib/pos-barcode'
 import { shapeItem } from '@/lib/spreadsheet'
 import { parseCsv } from '@/lib/csv'
@@ -46,6 +46,13 @@ describe('item barcode import', () => {
     expect(nextBlankSku(['1600-00-230', 'sku-00002'])).toBe('SKU-00003')
     expect(nextBlankSku(['sku-00003'])).toBe('SKU-00004')
     expect(nextBlankSku([])).toBe('SKU-00001')
+  })
+
+  it('builds a readable SKU from the item name when Excel left SKU blank', () => {
+    expect(skuFromName('Biyo 1.5L', [])).toBe('BIYO-15L')
+    expect(skuFromName('Phone cover / black', [])).toBe('PHONE-COVER-BLACK')
+    expect(skuFromName('Biyo 1.5L', ['biyo-15l'])).toBe('BIYO-15L-2')
+    expect(skuFromName('!!!', [])).toMatch(/^SKU-\d{5}$/)
   })
 
   it('lets POS sell after an existing item gets a barcode from import or edit', () => {

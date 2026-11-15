@@ -12,6 +12,7 @@ import {
   PURCHASE_CATEGORY_COLUMNS,
   PURCHASE_FORM_COLUMNS,
   PURCHASE_FORM_FIELDS,
+  resolveCatalogOrder,
   SALES_FORM_COLUMNS,
   SALES_FORM_FIELDS,
 } from '@/lib/form-field-catalog'
@@ -33,6 +34,12 @@ export type FormTemplate = {
   columns: Record<string, boolean>
   /** Purchase category-table column visibility. */
   categoryColumns?: Record<string, boolean>
+  /** Header field order in Customize (and future form layouts). */
+  fieldOrder?: string[]
+  /** Line column order on the entry grid. */
+  columnOrder?: string[]
+  /** Purchase category-table column order. */
+  categoryColumnOrder?: string[]
 }
 
 export type OrgFormTemplates = {
@@ -52,22 +59,39 @@ export function parseFormFamilyKey(key: string): { side: FormTemplateSide; type:
   return { side: match[1] as FormTemplateSide, type: match[2] }
 }
 
+function sanitizeOrder(raw: unknown, catalogIds: string[]): string[] {
+  const saved = Array.isArray(raw)
+    ? raw.filter((id): id is string => typeof id === 'string').map((id) => id.trim().slice(0, 40))
+    : undefined
+  return resolveCatalogOrder(catalogIds, saved)
+}
+
 function systemTemplateFor(side: FormTemplateSide): FormTemplate {
   if (side === 'sales') {
+    const fieldIds = SALES_FORM_FIELDS.map((row) => row.id)
+    const columnIds = SALES_FORM_COLUMNS.map((row) => row.id)
     return {
       id: SYSTEM_FORM_TEMPLATE_ID,
       name: 'System default',
       layoutId: 'sheet',
       fields: defaultFieldVisibility(SALES_FORM_FIELDS),
       columns: defaultColumnVisibility(SALES_FORM_COLUMNS),
+      fieldOrder: [...fieldIds],
+      columnOrder: [...columnIds],
     }
   }
+  const fieldIds = PURCHASE_FORM_FIELDS.map((row) => row.id)
+  const columnIds = PURCHASE_FORM_COLUMNS.map((row) => row.id)
+  const categoryIds = PURCHASE_CATEGORY_COLUMNS.map((row) => row.id)
   return {
     id: SYSTEM_FORM_TEMPLATE_ID,
     name: 'System default',
     fields: defaultFieldVisibility(PURCHASE_FORM_FIELDS),
     columns: defaultColumnVisibility(PURCHASE_FORM_COLUMNS),
     categoryColumns: defaultColumnVisibility(PURCHASE_CATEGORY_COLUMNS),
+    fieldOrder: [...fieldIds],
+    columnOrder: [...columnIds],
+    categoryColumnOrder: [...categoryIds],
   }
 }
 
@@ -104,6 +128,12 @@ function parseOneTemplate(raw: unknown, side: FormTemplateSide): FormTemplate | 
     side === 'purchase'
       ? sanitizeVisibility(item.categoryColumns, defaults.categoryColumns ?? {}, ['category', 'amount'])
       : undefined
+  const fieldOrder = sanitizeOrder(item.fieldOrder, Object.keys(defaults.fields))
+  const columnOrder = sanitizeOrder(item.columnOrder, Object.keys(defaults.columns))
+  const categoryColumnOrder =
+    side === 'purchase'
+      ? sanitizeOrder(item.categoryColumnOrder, Object.keys(defaults.categoryColumns ?? {}))
+      : undefined
 
   let layoutId: string | undefined
   if (typeof item.layoutId === 'string') {
@@ -124,6 +154,9 @@ function parseOneTemplate(raw: unknown, side: FormTemplateSide): FormTemplate | 
     fields,
     columns,
     categoryColumns,
+    fieldOrder,
+    columnOrder,
+    categoryColumnOrder,
   }
 }
 

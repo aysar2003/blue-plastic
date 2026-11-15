@@ -8,6 +8,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { isRetainerLowWatermark } from '@/lib/erp/verticals-p5'
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -34,6 +35,9 @@ export default async function ProjectWipPage() {
   ])
   const currency = ctx.organization.baseCurrency
   const defaultItemId = serviceItems[0]?.id ?? ''
+  const lowRetainerProjects = projects.filter((project) =>
+    isRetainerLowWatermark(project.retainerBalance, project.retainerAmount),
+  )
 
   return (
     <>
@@ -46,6 +50,16 @@ export default async function ProjectWipPage() {
           </Link>
         }
       />
+
+      {lowRetainerProjects.length > 0 ? (
+        <div className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          Retainer low on{' '}
+          {lowRetainerProjects
+            .map((project) => `${project.number} · ${project.name}`)
+            .join(', ')}
+          — bill a retainer or reduce WIP before overspending the deposit.
+        </div>
+      ) : null}
 
       <h2 className="mb-2 text-sm font-semibold">Unbilled WIP</h2>
       {projects.length === 0 ? (
@@ -61,7 +75,7 @@ export default async function ProjectWipPage() {
             <TableHead className="text-right">Entries</TableHead>
             <TableHead className="text-right">Hours</TableHead>
             <TableHead className="text-right">WIP value</TableHead>
-            <TableHead className="text-right">Retainer term</TableHead>
+            <TableHead className="text-right">Retainer left</TableHead>
             <TableHead>Bill</TableHead>
           </TableRow>
         </TableHeader>
@@ -79,9 +93,11 @@ export default async function ProjectWipPage() {
                 {formatMoney(project.wipAmount, currency)}
               </TableCell>
               <TableCell className="text-right tabular">
-                {project.retainerAmount
-                  ? formatMoney(project.retainerAmount, currency)
-                  : '—'}
+                {project.retainerRemaining
+                  ? formatMoney(project.retainerRemaining, currency)
+                  : project.retainerAmount
+                    ? formatMoney(project.retainerAmount, currency)
+                    : '—'}
               </TableCell>
               <TableCell>
                 <div className="flex flex-col gap-2 py-1">

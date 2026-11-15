@@ -45,7 +45,11 @@ import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import { workbookRecords } from '@/server/services/workbook'
 import * as approvalService from '@/server/services/approval.service'
 import { resolveProjectId } from '@/server/services/project.service'
-import { resolveId as resolveTrackingCategoryId } from '@/server/services/tracking-category.service'
+import { requiresRestrictedFundClass } from '@/lib/erp/ngo-funds'
+import {
+  orgHasRestrictedSpending,
+  resolveId as resolveTrackingCategoryId,
+} from '@/server/services/tracking-category.service'
 import * as storeService from '@/server/services/store.service'
 import { loadCodeForCalculation } from '@/server/services/tax.service'
 
@@ -908,6 +912,7 @@ async function createWithin(
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
     const trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
     const isDraft = input.saveAsDraft === true
+    await assertRestrictedFundOnPurchase(tx, ctx.orgId, type, isDraft, trackingCategoryId)
     assertNamedPurchaseLines(isDraft, input.lines)
     const lines = await resolveLines(tx, ctx, input.lines, vendor?.defaultExpenseAccountId ?? null)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
@@ -954,6 +959,7 @@ async function createWithin(
         expiryDate: HAS_EXPIRY.has(type) && input.expiryDate ? toDate(input.expiryDate) : null,
         paymentTermId: term?.id ?? null,
         status: isDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
+        encumbered: type === 'PURCHASE_ORDER' && !isDraft && !holdForApproval,
         reference: input.reference ?? null,
         inRef: input.inRef ?? null,
         memo: input.memo ?? null,
@@ -1049,6 +1055,13 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
     const { vendor, offsetCustomerId } = await resolvePurchaseParty(tx, ctx, existing.type, input)
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
     const trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
+    await assertRestrictedFundOnPurchase(
+      tx,
+      ctx.orgId,
+      existing.type,
+      input.saveAsDraft === true,
+      trackingCategoryId,
+    )
 
     if (existing.type === 'EXPENSE' && !input.saveAsDraft) {
       await requireExpenseSettlement(tx, ctx, input.paymentAccountId, offsetCustomerId)
@@ -1122,6 +1135,8 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
         journalId: null,
         version: { increment: 1 },
         status: input.saveAsDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
+        encumbered:
+          existing.type === 'PURCHASE_ORDER' && !input.saveAsDraft && !holdForApproval,
         lines: {
           create: priced.lines.map((line) => ({
             orgId: ctx.orgId,
@@ -1205,7 +1220,10 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
     if (document.status === 'PENDING_APPROVAL') {
       await tx.purchaseDocument.update({
         where: { id: document.id },
-        data: { status: 'OPEN' },
+        data: {
+          status: 'OPEN',
+          ...(document.type === 'PURCHASE_ORDER' ? { encumbered: true } : {}),
+        },
       })
     }
     return null
@@ -1377,6 +1395,38 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
 
   if (document.trackingCategoryId) {
     for (const line of draft.lines) line.trackingCategoryId = document.trackingCategoryId
+  }
+
+  // Clearer UX: budget control before the ledger write (also enforced in postJournal).
+  if (
+    (document.type === 'BILL' || document.type === 'EXPENSE') &&
+    ctx.features.enforceBudgetControl
+  ) {
+    const { assertWithinBudget } = await import('@/server/services/budget.service')
+    const accountIds = [...new Set(draft.lines.map((line) => line.accountId))]
+    const accounts = await tx.ledgerAccount.findMany({
+      where: { orgId: ctx.orgId, id: { in: accountIds } },
+      select: { id: true, code: true, type: true },
+    })
+    const byId = new Map(accounts.map((a) => [a.id, a]))
+    await assertWithinBudget(ctx, {
+      date: draft.date,
+      lines: draft.lines.map((line) => {
+        const account = byId.get(line.accountId)
+        const debit = new Decimal(line.debit ?? 0)
+        const credit = new Decimal(line.credit ?? 0)
+        const debitNatural = ['REVENUE', 'EQUITY', 'LIABILITY'].includes(account?.type ?? '')
+          ? credit.minus(debit)
+          : debit.minus(credit)
+        return {
+          accountId: line.accountId,
+          accountCode: account?.code,
+          accountType: account?.type ?? 'EXPENSE',
+          trackingCategoryId: line.trackingCategoryId ?? null,
+          amount: debitNatural.isNegative() ? '0' : debitNatural.toFixed(4),
+        }
+      }),
+    })
   }
 
   const journal = await postJournal(tx, ctx, draft)
@@ -2705,6 +2755,24 @@ export async function listBillableExpenses(ctx: OrgContext, customerId: string) 
     documentType: row.document.type,
     date: toCalendarDate(row.document.date),
   }))
+}
+
+async function assertRestrictedFundOnPurchase(
+  tx: Tx,
+  orgId: string,
+  type: PurchaseDocumentType,
+  isDraft: boolean,
+  trackingCategoryId: string | null,
+) {
+  const restricted = await orgHasRestrictedSpending(tx, orgId)
+  if (
+    requiresRestrictedFundClass(restricted, trackingCategoryId, type, isDraft)
+  ) {
+    throw validation(
+      'This company restricts spending to fund classes. Choose a class on the bill or expense.',
+      { trackingCategoryId: ['Required when restricted fund classes exist'] },
+    )
+  }
 }
 
 async function resolveLines(

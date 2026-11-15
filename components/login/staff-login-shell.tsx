@@ -59,7 +59,7 @@ export function StaffLoginShell({
           >
             Staff login
           </h1>
-          <p className={cn('mt-2 text-sm', dark ? 'text-indigo-100/70' : 'text-slate-600')}>
+          <p className={cn('mt-2 text-sm', dark ? 'text-indigo-100' : 'text-slate-600')}>
             For installation owners. Opens Databases across every company.
           </p>
         </div>
@@ -78,7 +78,7 @@ export function StaffLoginShell({
         <div
           className={cn(
             'mt-6 space-y-2 text-center text-sm',
-            dark ? 'text-indigo-100/60' : 'text-slate-500',
+            dark ? 'text-indigo-200' : 'text-slate-500',
           )}
         >
           <p>
@@ -102,14 +102,14 @@ export function StaffLoginShell({
           <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
             <Link
               href={LOGIN_HUB}
-              className={cn('text-xs hover:underline', dark ? 'text-indigo-200/50' : 'text-slate-400')}
+              className={cn('text-xs hover:underline', dark ? 'text-indigo-200' : 'text-slate-400')}
             >
               All sign-in options
             </Link>
-            <span className={dark ? 'text-indigo-200/30' : 'text-slate-300'}>·</span>
+            <span className={dark ? 'text-indigo-300' : 'text-slate-300'}>·</span>
             <Link
               href="/"
-              className={cn('text-xs hover:underline', dark ? 'text-indigo-200/50' : 'text-slate-400')}
+              className={cn('text-xs hover:underline', dark ? 'text-indigo-200' : 'text-slate-400')}
             >
               Website
             </Link>
@@ -119,10 +119,10 @@ export function StaffLoginShell({
         <p
           className={cn(
             'mt-8 text-center text-[0.65rem] tracking-wide',
-            dark ? 'text-indigo-200/40' : 'text-slate-400',
+            dark ? 'text-indigo-200' : 'text-slate-400',
           )}
         >
-          <span className={cn('font-medium', dark ? 'text-indigo-100/70' : 'text-slate-600')}>
+          <span className={cn('font-medium', dark ? 'text-indigo-100' : 'text-slate-600')}>
             {PRODUCT_NAME}
           </span>
           {showBrand ? (

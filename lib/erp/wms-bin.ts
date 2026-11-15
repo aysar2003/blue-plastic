@@ -38,4 +38,29 @@ export function waveNumberFromSeq(seq: number): string {
   return `WV-${String(seq).padStart(5, '0')}`
 }
 
+export type WaveLabelCsvInput = {
+  waveNumber: string
+  orderNumber: string
+  customerName: string
+  shipTo: string | null
+  carrier: string | null
+  itemName: string
+  sku: string | null
+  qty: string
+}
+
+/** Flat label rows for wave pick CSV download. */
+export function waveLabelCsvRows(lines: WaveLabelCsvInput[]) {
+  return lines.map((row) => [
+    row.waveNumber,
+    row.orderNumber,
+    row.customerName,
+    row.shipTo ?? '',
+    row.carrier ?? '',
+    row.itemName,
+    row.sku ?? '',
+    row.qty,
+  ])
+}
+
 export { ZERO }

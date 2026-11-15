@@ -5,7 +5,7 @@ import { unstable_cache } from 'next/cache'
 
 import type { Prisma } from '@prisma/client'
 
-import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
+import { toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
 import { Decimal, ZERO } from '@/lib/money'
 import { foldStoreQuantities } from '@/lib/store-stock'
 import type {
@@ -32,6 +32,11 @@ import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import type { StockAlertSummary } from '@/lib/stock-alert'
+import {
+  belowReorder,
+  capReplenishmentBySource,
+  suggestedReplenishmentQty,
+} from '@/lib/erp/replenishment'
 import { notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import * as approvalService from '@/server/services/approval.service'
@@ -750,6 +755,27 @@ type TransferTicketOptions = {
   ticketOrigin?: 'AUTO' | 'MANUAL'
   ticketNumber?: string | null
   takenBy?: string | null
+  /** Post an existing DRAFT transfer instead of creating a new row. */
+  existingTransferId?: string
+}
+
+export async function getStoreTransfer(ctx: OrgContext, id: string) {
+  const row = await db.storeTransfer.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      quantity: true,
+      memo: true,
+      status: true,
+      fromStore: { select: { id: true, name: true } },
+      toStore: { select: { id: true, name: true } },
+      item: { select: { id: true, name: true, sku: true } },
+    },
+  })
+  if (!row) throw notFound('Store transfer')
+  return { ...row, quantity: row.quantity.toString() }
 }
 
 /**
@@ -822,29 +848,46 @@ async function postStoreTransferInTx(
     )
   }
 
-  const number = await assignDocumentNumber(tx, ctx.orgId, 'STORE_TRANSFER', input.number)
-  const clash = await tx.storeTransfer.findFirst({
-    where: { orgId: ctx.orgId, number },
-    select: { id: true },
-  })
-  if (clash) throw numberTaken()
+  let transfer: { id: string; number: string }
+  if (options.existingTransferId) {
+    const existing = await tx.storeTransfer.findFirst({
+      where: {
+        id: options.existingTransferId,
+        orgId: ctx.orgId,
+        status: 'DRAFT',
+        fromStoreId: fromStore.id,
+        toStoreId: toStore.id,
+        itemId: item.id,
+      },
+      select: { id: true, number: true },
+    })
+    if (!existing) throw notFound('Store transfer')
+    transfer = existing
+  } else {
+    const number = await assignDocumentNumber(tx, ctx.orgId, 'STORE_TRANSFER', input.number)
+    const clash = await tx.storeTransfer.findFirst({
+      where: { orgId: ctx.orgId, number },
+      select: { id: true },
+    })
+    if (clash) throw numberTaken()
 
-  const transfer = await tx.storeTransfer.create({
-    data: {
-      orgId: ctx.orgId,
-      number,
-      date: toDate(input.date),
-      fromStoreId: fromStore.id,
-      toStoreId: toStore.id,
-      itemId: item.id,
-      quantity: quantity.toFixed(4),
-      unitCost: '0',
-      value: '0',
-      memo: input.memo ?? null,
-      createdById: ctx.userId,
-    },
-    select: { id: true, number: true },
-  })
+    transfer = await tx.storeTransfer.create({
+      data: {
+        orgId: ctx.orgId,
+        number,
+        date: toDate(input.date),
+        fromStoreId: fromStore.id,
+        toStoreId: toStore.id,
+        itemId: item.id,
+        quantity: quantity.toFixed(4),
+        unitCost: '0',
+        value: '0',
+        memo: input.memo ?? null,
+        createdById: ctx.userId,
+      },
+      select: { id: true, number: true },
+    })
+  }
 
   const out = await recordMovement(tx, ctx, {
     itemId: item.id,
@@ -938,13 +981,20 @@ async function postStoreTransferInTx(
     select: { id: true, number: true },
   })
 
+  if (options.existingTransferId) {
+    await tx.storeTransfer.update({
+      where: { id: transfer.id },
+      data: { status: 'POSTED' },
+    })
+  }
+
   await writeAudit(
     tx,
     ctx,
     {
       entity: 'StoreTransfer',
       entityId: transfer.id,
-      action: 'CREATE',
+      action: options.existingTransferId ? 'POST' : 'CREATE',
       after: {
         number: transfer.number,
         ticketNumber: ticket.number,
@@ -1280,6 +1330,201 @@ export async function storeTicketList(
     orderBy: [{ createdAt: 'desc' }],
     take: options.limit ?? 100,
   })
+}
+
+/** Phase 41: items at/below reorder for a store with suggested transfer qty. */
+export async function replenishmentSuggestions(ctx: OrgContext, toStoreId: string) {
+  const [toStore, shelf, stores] = await Promise.all([
+    db.store.findFirst({
+      where: { id: toStoreId, orgId: ctx.orgId, isActive: true },
+      select: { id: true, name: true },
+    }),
+    storeService.quantities(ctx),
+    db.store.findMany({
+      where: { orgId: ctx.orgId, isActive: true },
+      select: { id: true, name: true, isOffice: true },
+      orderBy: [{ isOffice: 'desc' }, { name: 'asc' }],
+    }),
+  ])
+  if (!toStore) throw notFound('Store')
+
+  const fromStore =
+    stores.find((row) => row.isOffice && row.id !== toStore.id) ??
+    stores.find((row) => row.id !== toStore.id) ??
+    null
+
+  const items = await db.item.findMany({
+    where: {
+      orgId: ctx.orgId,
+      deletedAt: null,
+      isActive: true,
+      type: { in: ['INVENTORY', 'INVENTORY_ASSEMBLY'] },
+      reorderPoint: { not: null },
+    },
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      unitOfMeasure: true,
+      reorderPoint: true,
+    },
+    orderBy: { name: 'asc' },
+    take: 500,
+  })
+
+  const fromStoreId = fromStore?.id ?? ''
+  const suggestions = items
+    .map((item) => {
+      const onHand = shelf.byItem[item.id]?.[toStore.id] ?? shelf.byItem[item.id]?.[''] ?? '0'
+      if (!belowReorder(item.reorderPoint, onHand)) return null
+      const sourceOnHand = fromStoreId
+        ? (shelf.byItem[item.id]?.[fromStoreId] ?? '0')
+        : '0'
+      const rawSuggest = suggestedReplenishmentQty(item.reorderPoint, onHand)
+      const suggestedQty = capReplenishmentBySource(rawSuggest, sourceOnHand)
+      if (new Decimal(suggestedQty).lessThanOrEqualTo(0)) return null
+      return {
+        itemId: item.id,
+        name: item.name,
+        sku: item.sku,
+        unitOfMeasure: item.unitOfMeasure,
+        reorderPoint: item.reorderPoint!.toString(),
+        onHand,
+        sourceOnHand,
+        suggestedQty,
+      }
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null)
+
+  return {
+    toStore,
+    fromStore,
+    suggestions,
+  }
+}
+
+/** Phase 41: plan draft transfers (status DRAFT, no stock movement). */
+export async function createDraftReplenishmentTransfers(
+  ctx: OrgContext,
+  input: { toStoreId: string; lines: { itemId: string; quantity: string }[] },
+) {
+  const plan = await replenishmentSuggestions(ctx, input.toStoreId)
+  if (!plan.fromStore) throw precondition('Add another store (office/DC) to replenish from.')
+  if (input.lines.length === 0) throw validation('Choose at least one line to transfer.')
+
+  const date = today(ctx.organization.timeZone)
+  const created: { id: string; number: string; itemId: string }[] = []
+
+  await db.$transaction(async (tx) => {
+    for (const line of input.lines) {
+      const qty = new Decimal(line.quantity || '0')
+      if (qty.lessThanOrEqualTo(0)) continue
+      const item = await tx.item.findFirst({
+        where: { id: line.itemId, orgId: ctx.orgId, deletedAt: null },
+        select: { id: true, name: true },
+      })
+      if (!item) throw notFound('Item')
+      const number = await assignDocumentNumber(tx, ctx.orgId, 'STORE_TRANSFER', undefined)
+      const transfer = await tx.storeTransfer.create({
+        data: {
+          orgId: ctx.orgId,
+          number,
+          date: toDate(date),
+          fromStoreId: plan.fromStore!.id,
+          toStoreId: plan.toStore.id,
+          itemId: item.id,
+          quantity: qty.toFixed(4),
+          unitCost: '0',
+          value: '0',
+          status: 'DRAFT',
+          memo: `Replenishment draft → ${plan.toStore.name}`,
+          createdById: ctx.userId,
+        },
+        select: { id: true, number: true },
+      })
+      created.push({ id: transfer.id, number: transfer.number, itemId: item.id })
+    }
+  })
+
+  return { count: created.length, transfers: created }
+}
+
+/** Draft replenishment transfers waiting to post for a destination store. */
+export async function listDraftReplenishmentTransfers(ctx: OrgContext, toStoreId: string) {
+  return db.storeTransfer.findMany({
+    where: {
+      orgId: ctx.orgId,
+      toStoreId,
+      status: 'DRAFT',
+      memo: { startsWith: 'Replenishment draft' },
+    },
+    select: {
+      id: true,
+      number: true,
+      quantity: true,
+      item: { select: { id: true, name: true, sku: true } },
+    },
+    orderBy: { number: 'asc' },
+    take: 200,
+  })
+}
+
+/** Post DRAFT replenishment transfers for a store (stock movement + store ticket). */
+export async function postDraftReplenishmentTransfers(
+  ctx: OrgContext,
+  input: { toStoreId: string; transferIds?: string[] },
+) {
+  const where = {
+    orgId: ctx.orgId,
+    toStoreId: input.toStoreId,
+    status: 'DRAFT' as const,
+    memo: { startsWith: 'Replenishment draft' },
+    ...(input.transferIds?.length ? { id: { in: input.transferIds } } : {}),
+  }
+  const drafts = await db.storeTransfer.findMany({
+    where,
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      quantity: true,
+      memo: true,
+      fromStoreId: true,
+      toStoreId: true,
+      itemId: true,
+    },
+    orderBy: { number: 'asc' },
+  })
+  if (drafts.length === 0) throw validation('No draft replenishment transfers to post.')
+
+  const meta = await requestMeta()
+  const posted: { id: string; number: string }[] = []
+
+  await db.$transaction(async (tx) => {
+    const reserved = new Map<string, Decimal>()
+    for (const draft of drafts) {
+      const date = toCalendarDate(draft.date)
+      const result = await postStoreTransferInTx(
+        tx,
+        ctx,
+        {
+          number: draft.number,
+          date,
+          fromStoreId: draft.fromStoreId,
+          toStoreId: draft.toStoreId,
+          itemId: draft.itemId,
+          quantity: draft.quantity.toString(),
+          memo: draft.memo,
+        },
+        { existingTransferId: draft.id },
+        meta,
+        reserved,
+      )
+      posted.push({ id: result.id, number: result.number })
+    }
+  })
+
+  return { count: posted.length, transfers: posted }
 }
 
 export { toCalendarDate, type CalendarDate }

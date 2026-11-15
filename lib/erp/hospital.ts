@@ -37,6 +37,8 @@ export type ClaimExportRow = {
   payerRef: string | null
   department: string | null
   invoiceNumber: string | null
+  exportBatchId: string | null
+  claimsExportedAt: string | null
   billCode: string | null
   description: string
   quantity: string
@@ -54,6 +56,8 @@ export function claimsToCsv(rows: ClaimExportRow[]): string {
     'payerRef',
     'department',
     'invoiceNumber',
+    'exportBatchId',
+    'claimsExportedAt',
     'billCode',
     'description',
     'quantity',
@@ -77,6 +81,8 @@ export function claimsToCsv(rows: ClaimExportRow[]): string {
         row.payerRef,
         row.department,
         row.invoiceNumber,
+        row.exportBatchId,
+        row.claimsExportedAt,
         row.billCode,
         row.description,
         row.quantity,

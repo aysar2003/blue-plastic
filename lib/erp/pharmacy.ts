@@ -2,6 +2,8 @@
  * Pharmacy dispense rules — pure helpers (no I/O).
  */
 
+import { Decimal } from '@/lib/money'
+
 export type PharmacyItemFlags = {
   name: string
   trackLots: boolean
@@ -67,4 +69,74 @@ export function daysUntilExpiry(
   const dayMs = Date.parse(`${day}T00:00:00.000Z`)
   if (Number.isNaN(expMs) || Number.isNaN(dayMs)) return null
   return Math.round((expMs - dayMs) / 86_400_000)
+}
+
+export type ControlledMovementExportRow = {
+  id: string
+  date: string
+  type: string
+  quantity: string
+  lotNumber: string | null
+  itemId: string
+  itemName: string
+  sku: string | null
+  journalId: string | null
+  journalNumber: string | null
+}
+
+export function controlledMovementsToCsv(rows: ControlledMovementExportRow[]): string {
+  const header = [
+    'date',
+    'itemName',
+    'sku',
+    'lotNumber',
+    'type',
+    'quantity',
+    'journalNumber',
+  ]
+  const escape = (value: string | null) => {
+    const raw = value ?? ''
+    if (/[",\n]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`
+    return raw
+  }
+  const lines = [header.join(',')]
+  for (const row of rows) {
+    lines.push(
+      [
+        row.date,
+        row.itemName,
+        row.sku,
+        row.lotNumber,
+        row.type,
+        row.quantity,
+        row.journalNumber,
+      ]
+        .map((cell) => escape(cell))
+        .join(','),
+    )
+  }
+  return `${lines.join('\n')}\n`
+}
+
+export type FefoLotCandidate = {
+  lotId: string
+  lotNumber: string
+  expiryDate: string | null
+  quantity: string
+}
+
+/** Pick the first non-expired lot with stock, earliest expiry first (FEFO). */
+export function pickFefoLot<T extends FefoLotCandidate>(lots: T[], asOf: string | Date): T | null {
+  const eligible = lots.filter((lot) => {
+    const qty = new Decimal(lot.quantity)
+    return qty.greaterThan(0) && !isLotExpired(lot.expiryDate, asOf)
+  })
+  eligible.sort((a, b) => {
+    if (!a.expiryDate && !b.expiryDate) return a.lotNumber.localeCompare(b.lotNumber)
+    if (!a.expiryDate) return 1
+    if (!b.expiryDate) return -1
+    const byExpiry = a.expiryDate.localeCompare(b.expiryDate)
+    return byExpiry !== 0 ? byExpiry : a.lotNumber.localeCompare(b.lotNumber)
+  })
+  return eligible[0] ?? null
 }

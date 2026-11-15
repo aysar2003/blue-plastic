@@ -737,6 +737,7 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
         type: true,
         unitOfMeasure: true,
         salesPrice: true,
+        wholesalePrice: true,
         trackLots: true,
         trackSerials: true,
         pharmacyControlled: true,
@@ -787,6 +788,7 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
       category: item.category?.name ?? null,
       unitOfMeasure: item.unitOfMeasure,
       price: item.salesPrice?.toString() ?? '0',
+      wholesalePrice: item.wholesalePrice?.toString() ?? null,
       trackLots: item.trackLots || item.pharmacyControlled,
       trackSerials: Boolean(item.trackSerials),
       pharmacyControlled: item.pharmacyControlled,
@@ -1320,7 +1322,7 @@ export async function recordCashMove(ctx: OrgContext, input: PosCashMoveInput) {
       orgId: ctx.orgId,
       isActive: true,
       type: { in: ['ASSET', 'LIABILITY'] },
-      NOT: { OR: [{ detailType: POS_BANKS_DETAIL }, { children: { some: {} } }] },
+      NOT: { detailType: POS_BANKS_DETAIL },
     },
     select: { id: true, name: true },
   })
@@ -1689,7 +1691,7 @@ export async function registerBankSnapshot(ctx: OrgContext, registerId: string) 
   }
 }
 
-/** Bank and wallet accounts a till balance can be moved to. The POS Banks heading is not one of them. */
+/** Bank and wallet accounts a till balance can be moved to. The POS Banks grouping is not one of them. */
 export async function registerTransferDestinations(ctx: OrgContext) {
   return db.ledgerAccount.findMany({
     where: {
@@ -1697,9 +1699,7 @@ export async function registerTransferDestinations(ctx: OrgContext) {
       isActive: true,
       type: { in: ['ASSET', 'LIABILITY'] },
       subtype: { in: ['BANK', 'CREDIT_CARD', 'UNDEPOSITED_FUNDS', 'OTHER_CURRENT_ASSET'] },
-      NOT: {
-        OR: [{ detailType: POS_BANKS_DETAIL }, { children: { some: {} } }],
-      },
+      NOT: { detailType: POS_BANKS_DETAIL },
     },
     select: { id: true, code: true, name: true },
     orderBy: { code: 'asc' },
@@ -1740,7 +1740,7 @@ export async function transferFromRegister(ctx: OrgContext, input: PosRegisterTr
       orgId: ctx.orgId,
       isActive: true,
       type: { in: ['ASSET', 'LIABILITY'] },
-      NOT: { OR: [{ detailType: POS_BANKS_DETAIL }, { children: { some: {} } }] },
+      NOT: { detailType: POS_BANKS_DETAIL },
     },
     select: { id: true, name: true },
   })
@@ -1777,7 +1777,7 @@ export async function transferFromRegister(ctx: OrgContext, input: PosRegisterTr
 export async function walkInCustomers(ctx: OrgContext) {
   return db.customer.findMany({
     where: { orgId: ctx.orgId, isActive: true },
-    select: { id: true, displayName: true },
+    select: { id: true, displayName: true, priceLevel: true },
     orderBy: { displayName: 'asc' },
     take: 300,
   })
@@ -1831,10 +1831,7 @@ export async function settingsOverview(ctx: OrgContext) {
         // Wallet setup posts the sale. Register bank accounts stay out of that
         // list so a till's account is not used as a payment method.
         NOT: {
-          OR: [
-            { detailType: { in: [POS_BANKS_DETAIL, POS_REGISTER_DETAIL] } },
-            { children: { some: {} } },
-          ],
+          detailType: { in: [POS_BANKS_DETAIL, POS_REGISTER_DETAIL] },
         },
       },
       select: { id: true, code: true, name: true },
@@ -2091,15 +2088,14 @@ async function assertAssetAccount(orgId: string, accountId: string) {
     select: {
       type: true,
       detailType: true,
-      _count: { select: { children: true } },
     },
   })
   if (!account) throw notFound('Account')
   if (account.type !== 'ASSET') {
     throw validation('Payment methods must post to an asset account (bank, cash, or wallet).')
   }
-  if (account._count.children > 0 || account.detailType === POS_BANKS_DETAIL) {
-    throw validation('That account is a grouping heading. Choose an account you can post to.')
+  if (account.detailType === POS_BANKS_DETAIL) {
+    throw validation('POS Banks is a grouping account. Choose a bank or wallet you can post to.')
   }
   if (account.detailType === POS_REGISTER_DETAIL) {
     throw validation(
@@ -2175,8 +2171,7 @@ export async function receipt(ctx: OrgContext, documentId: string) {
     tax: document.taxTotal.toString(),
     total: document.total.toString(),
     registerName: order?.register.name ?? null,
-    // Counter already names the till above, so Salesman names the person
-    // who rang it up rather than repeating the till name.
+    // Printed slip shows Counter only; cashier name is kept for other surfaces.
     cashierName: receiptCashierName(null, cashier),
     // The register's walk-in customer is not worth printing; a named one is.
     customer:

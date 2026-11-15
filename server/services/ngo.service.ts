@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { commitmentVsBudget, grantOverBudget } from '@/lib/erp/commitment-budget'
 import { Decimal } from '@/lib/money'
 import { toDate, today } from '@/lib/date'
 import { budgetVariance, canReceivePledge } from '@/lib/erp/verticals-p5'
@@ -148,6 +149,7 @@ export async function grantBudgetReport(ctx: OrgContext, budgetId?: string) {
     rows.push({
       id: budget.id,
       name: budget.name,
+      fundId: budget.trackingCategoryId,
       fund: budget.trackingCategory?.name ?? null,
       startDate: budget.startDate.toISOString().slice(0, 10),
       endDate: budget.endDate.toISOString().slice(0, 10),
@@ -158,6 +160,73 @@ export async function grantBudgetReport(ctx: OrgContext, budgetId?: string) {
   }
 
   return rows
+}
+
+/** Encumbered open PO vs grant budgets rolled up by fund / class. */
+export async function grantFundCommitments(ctx: OrgContext) {
+  const [grants, openPos] = await Promise.all([
+    grantBudgetReport(ctx),
+    db.purchaseDocument.findMany({
+      where: {
+        orgId: ctx.orgId,
+        type: 'PURCHASE_ORDER',
+        encumbered: true,
+        deletedAt: null,
+        status: { in: ['OPEN', 'PARTIAL', 'PENDING_APPROVAL'] },
+      },
+      select: {
+        total: true,
+        trackingCategoryId: true,
+        trackingCategory: { select: { id: true, name: true } },
+      },
+    }),
+  ])
+
+  const openPoByCategory = new Map<string | null, Decimal>()
+  const categoryNames = new Map<string | null, string | null>()
+  for (const row of openPos) {
+    const key = row.trackingCategoryId
+    const prev = openPoByCategory.get(key) ?? new Decimal(0)
+    openPoByCategory.set(key, prev.plus(row.total))
+    if (key && row.trackingCategory) categoryNames.set(key, row.trackingCategory.name)
+    if (!key) categoryNames.set(null, 'Unclassified')
+  }
+
+  const budgetByCategory = new Map<string | null, Decimal>()
+  const actualByCategory = new Map<string | null, Decimal>()
+  for (const row of grants) {
+    const key = row.fundId ?? null
+    budgetByCategory.set(key, (budgetByCategory.get(key) ?? new Decimal(0)).plus(row.budgeted))
+    actualByCategory.set(key, (actualByCategory.get(key) ?? new Decimal(0)).plus(row.actual))
+    if (key && row.fund) categoryNames.set(key, row.fund)
+  }
+
+  const commitmentRows = commitmentVsBudget({
+    openPoByCategory: [...openPoByCategory.entries()].map(([trackingCategoryId, total]) => ({
+      trackingCategoryId,
+      total: total.toFixed(4),
+    })),
+    budgetByCategory: [...budgetByCategory.entries()].map(([trackingCategoryId, amount]) => ({
+      trackingCategoryId,
+      amount: amount.toFixed(4),
+    })),
+    categoryNames,
+  })
+
+  return commitmentRows.map((row) => {
+    const actual = actualByCategory.get(row.trackingCategoryId) ?? new Decimal(0)
+    const encumbered = new Decimal(row.openPoTotal)
+    const budgeted = new Decimal(row.budgetAmount)
+    return {
+      ...row,
+      actual: actual.toFixed(2),
+      overBudget: grantOverBudget({
+        budgeted: budgeted.toFixed(2),
+        actual: actual.toFixed(2),
+        encumbered: encumbered.toFixed(2),
+      }),
+    }
+  })
 }
 
 /**

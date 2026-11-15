@@ -26,6 +26,7 @@ describe('vertical module smoke imports', () => {
     expect(hospital.claimsToCsv([{ 
       visitId: 'v', patientName: 'p', openedAt: 't', closedAt: null,
       payerName: null, payerRef: null, department: null, invoiceNumber: null,
+      exportBatchId: null, claimsExportedAt: null,
       billCode: null, description: 'd', quantity: '1', unitPrice: '1', amount: '1',
     }])).toContain('visitId')
     expect(packs.getPack('hospital_admin')?.verticalStatus).toBe('ready')

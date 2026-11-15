@@ -12,7 +12,7 @@
 
 | Area | Delivered |
 |------|-----------|
-| Pharmacy | Controlled lot **movements** on `/inventory/expiry` |
+| Pharmacy | Controlled lot **movements** on `/inventory/expiry` · FEFO `suggestIssueLot` + controlled CSV download (2026-11-15 deepen) |
 | School / university | Fees outstanding by term (`/education/fees-outstanding` + hub) |
 | Hospital admin | Patient AR + services by department on hub |
 | NGO | Hub snapshot (open pledges + grant variance) |

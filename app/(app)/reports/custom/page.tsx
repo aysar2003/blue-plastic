@@ -5,8 +5,6 @@ import { PageHeader } from '@/components/data/page-header'
 import { FavouriteReports } from '@/components/reports/favourite-reports'
 import { ReportCentreTabs } from '@/components/reports/report-centre-tabs'
 import { Button } from '@/components/ui/button'
-import { withoutBusinessOverview } from '@/lib/business-overview-access'
-import { STANDARD_FAVOURITES } from '@/lib/standard-reports'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { forgetMemorizedReport } from '../memorize-actions'
@@ -64,7 +62,7 @@ export default async function CustomReportsPage() {
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
         Favourites
       </h2>
-      <FavouriteReports reports={withoutBusinessOverview(STANDARD_FAVOURITES, ctx.permissions)} />
+      <FavouriteReports emptyHint="No favourites yet. Star a report on Standard reports to add it here." />
     </>
   )
 }

@@ -44,6 +44,34 @@
 | Lite vertical close Pass 1 | ✅ Complete | 2026-11-11 · [detail](./phases/phase-lite-close-pass1.md) · tip payout, nightly folio, lot disposal, term batch bill, claim stamp, fund BS, WIP write-up/down, site store, weekday capacity, ASN dock, price lists/promos · migration `20261111120000_phase_lite_close_pass1` |
 | 35 — Multi-entity & IC harden | ✅ Complete | 2026-11-11 · [detail](./phases/phase-35-multi-entity.md) · ownership %, IntercompanyMatch, group close checklist, consol NCI · migration `20261111140000_phase35_multi_entity` |
 | 36 — Subscriptions & recurring revenue | ✅ Complete | 2026-11-11 · [detail](./phases/phase-36-subscriptions.md) · AR INVOICE schedules, Unearned Revenue, deferred recognition · migration `20261111220000_phase36_subscriptions` |
+| 37 — Service jobs | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-37-service-jobs.md) · van stores, schedule → invoice · migration `20261114180000_phase37_40_wave_a` |
+| 38 — Sales contracts | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-38-contracts.md) · milestones, vendor retention payable · migration `20261114180000_phase37_40_wave_a` |
+| 39 — CAPA | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-39-capa.md) · quality notes + sign/doc links · migration `20261114180000_phase37_40_wave_a` |
+| 40 — Localization packs | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-40-localization.md) · payroll headers + e-invoice stub · migration `20261114180000_phase37_40_wave_a` |
+| 41 — Retail replenishment | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-41-retail.md) · reorder suggestions + draft transfers · migration `20261114200000_phase41_50_wave_b` |
+| 42 — Menu food-cost | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-42-menu-food.md) · GROUP margin report · migration `20261114200000_phase41_50_wave_b` |
+| 43 — Construction budget | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-43-construction-budget.md) · budget vs actual on progress · migration `20261114200000_phase41_50_wave_b` |
+| 44 — Mfg capacity overload | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-44-manufacturing-capacity.md) · weekday capacity overload · migration `20261114200000_phase41_50_wave_b` |
+| 45 — Distribution bins/waves | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-45-distribution-bins.md) · ItemBinDefault + wave labels API · migration `20261114200000_phase41_50_wave_b` |
+| 46 — Retainer remaining | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-46-retainer-remaining.md) · decrement + WIP guard · migration `20261114200000_phase41_50_wave_b` |
+| 47 — NGO fund restrict | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-47-ngo-fund-restrict.md) · class toggle + bill validate · migration `20261114200000_phase41_50_wave_b` |
+| 48 — Scholarship summary | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-48-education-scholarship.md) · term gross/waived/net · migration `20261114200000_phase41_50_wave_b` |
+| 49 — Hospital claims batch | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-49-hospital-claims-batch.md) · exportBatchId + payer filter · migration `20261114200000_phase41_50_wave_b` |
+| 50 — Agriculture pack | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-50-agriculture.md) · farm stores + seasonal cost · migration `20261114200000_phase41_50_wave_b` |
+| 51 — Franchise | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-51-franchise.md) · catalog push + royalty accrual · migration `20261114220000_phase51_60_wave_cd` |
+| 52 — Holding portfolio | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-52-portfolio.md) · rolled NI + NCI CSV · migration `20261114220000_phase51_60_wave_cd` |
+| 53 — Commitments vs budget | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-53-commitments.md) · encumbered PO · migration `20261114220000_phase51_60_wave_cd` |
+| 54 — Cooperative patronage | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-54-cooperative.md) · memberKind + allocate · migration `20261114220000_phase51_60_wave_cd` |
+| 55 — Scale ops | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-55-scale.md) · docs/ops/scale.md + periods card |
+| 56 — Marketplace settlement | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-56-marketplace-settlement.md) · batches + commission journals · migration `20261114220000_phase51_60_wave_cd` |
+| 57 — Banking loans | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-57-banking-loans.md) · schedule + postDue · migration `20261114220000_phase51_60_wave_cd` |
+| 58 — Insurance policies | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-58-insurance.md) · policy CRUD · migration `20261114220000_phase51_60_wave_cd` |
+| 59 — Sign provider webhook | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-59-sign-provider.md) · externalId + settings · migration `20261114220000_phase51_60_wave_cd` |
+| 60 — Trusted extensions | ✅ Complete (LITE) | 2026-11-14 · [detail](./phases/phase-60-trusted-extensions.md) · registry + capabilities gate |
+
+**LITE deepen pass (Wave A–D stubs → SME depth)** — 2026-11-15 · migration `20261115120000_lite_deepen` · phases 37–40, 51, 56–60 · `tests/lite-deepen.test.ts`.
+
+**Vertical + locale + master-data deepen** — 2026-11-15 · Wave B 41–50 second pass (replenish post/FEFO/claims/CSV/encumbrance/menu margin/capacity/waves/retainer/agriculture) · localization tax seeds + richer e-invoice/VAT · Setup Fix Hub heals (SKU, reorder, country) · `tests/localization-packs`, `tests/setup-heal`, `tests/wave-b-41-50`, pharmacy/hospital suites.
 
 Phases advance only on explicit instruction from the owner.
 

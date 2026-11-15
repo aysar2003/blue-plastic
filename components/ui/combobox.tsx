@@ -67,6 +67,11 @@ export type ComboboxProps = {
    */
   onCreate?: (label: string) => void
   createLabel?: (label: string) => string
+  /**
+   * Fired as the user types (debounced by the caller). Used to load more
+   * records from the server when the bootstrap list is capped.
+   */
+  onQueryChange?: (query: string) => void
 }
 
 const normalise = (value: string) => value.toLowerCase().normalize('NFKD')
@@ -105,11 +110,17 @@ export function Combobox({
   clearable,
   onCreate,
   createLabel = (label) => `Add “${label}”`,
+  onQueryChange,
   ...aria
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
   const [active, setActive] = React.useState(0)
+
+  React.useEffect(() => {
+    if (!open || !onQueryChange) return
+    onQueryChange(query)
+  }, [open, query, onQueryChange])
 
   const rootRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)

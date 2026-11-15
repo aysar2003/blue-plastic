@@ -36,6 +36,35 @@ const PAYMENT_ORDER: Record<
   method: (dir) => [{ method: dir }, { date: 'desc' }],
 }
 
+export async function get(ctx: OrgContext, id: string) {
+  const payment = await db.billPayment.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: {
+      ...PAYMENT_SELECT,
+      currencyCode: true,
+      exchangeRate: true,
+      applications: {
+        select: {
+          amount: true,
+          bill: { select: { id: true, number: true } },
+        },
+      },
+    },
+  })
+  if (!payment) throw notFound('Bill payment')
+
+  return {
+    ...payment,
+    amount: payment.amount.toString(),
+    exchangeRate: payment.exchangeRate.toString(),
+    applications: payment.applications.map((row) => ({
+      billId: row.bill.id,
+      billNumber: row.bill.number,
+      amount: row.amount.toString(),
+    })),
+  }
+}
+
 export async function list(
   ctx: OrgContext,
   query: ListQuery,

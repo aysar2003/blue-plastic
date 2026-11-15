@@ -14,7 +14,7 @@ import * as equityService from '@/server/services/equity-register.service'
 import * as shareholderService from '@/server/services/shareholder.service'
 import { ownersEquityStatement, totalEquity } from '@/server/reports/owners-equity-statement'
 
-import { postEquityEvent, saveShareholder } from './actions'
+import { allocatePatronage, postEquityEvent, saveShareholder } from './actions'
 
 export const metadata: Metadata = { title: 'Equity' }
 
@@ -101,6 +101,23 @@ export default async function EquityPage() {
         </Card>
 
         <Card className="p-4">
+          <h2 className="mb-3 font-medium">Patronage allocation</h2>
+          <p className="text-muted-foreground mb-3 text-sm">
+            Cooperative stub: allocate % of year net to MEMBER shareholders by linked customer sales.
+          </p>
+          <form action={allocatePatronage} className="mb-6 grid gap-2">
+            <div>
+              <Label htmlFor="patronage-year">Year</Label>
+              <Input id="patronage-year" name="year" type="number" defaultValue={new Date().getFullYear() - 1} />
+            </div>
+            <div>
+              <Label htmlFor="percentOfNet">% of net income</Label>
+              <Input id="percentOfNet" name="percentOfNet" defaultValue="5" />
+            </div>
+            <Button type="submit" size="sm" variant="secondary">
+              Allocate patronage
+            </Button>
+          </form>
           <h2 className="mb-3 font-medium">Post equity event</h2>
           <form action={postEquityEvent} className="grid gap-2">
             <div>

@@ -129,7 +129,7 @@ export function SalesSheetRegister({
         {canCreate ? (
           <Link
             href={`${basePath}/new`}
-            className="ml-auto inline-flex items-center rounded-md bg-[#2ca01c] px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-[#248a18]"
+            className="ml-auto inline-flex items-center rounded-md bg-primary px-3.5 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
             Create {unit}
           </Link>
@@ -149,7 +149,7 @@ export function SalesSheetRegister({
                     checked={allOn}
                     onChange={toggleAll}
                     aria-label={`Select the ${units} on this list`}
-                    className="size-3.5 accent-[#2ca01c]"
+                    className="size-3.5 accent-primary"
                   />
                 </TableHead>
                 <SortableHeader column="date" label="Date" state={sort} basePath={basePath} params={params} className="w-44" defaultDirection="desc" />
@@ -169,7 +169,7 @@ export function SalesSheetRegister({
                       checked={selected.includes(row.id)}
                       onChange={() => toggle(row.id)}
                       aria-label={`Select ${row.number}`}
-                      className="size-3.5 accent-[#2ca01c]"
+                      className="size-3.5 accent-primary"
                     />
                   </TableCell>
                   <TableCell className="tabular whitespace-nowrap text-muted-foreground">{row.date}</TableCell>

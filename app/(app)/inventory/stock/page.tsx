@@ -76,10 +76,19 @@ export default async function InventoryPage({
         description="The valuation view of the tracked products. Same records as Products &amp; services — this is what they are worth, at weighted-average cost, and whether the stock ledger agrees with the Inventory Asset account."
         actions={
           canAdjust ? (
-            <Link href="/inventory/adjustments/new" className={buttonVariants({ size: 'sm' })}>
-              <ScaleIcon /> Adjust stock
+            <div className="flex flex-wrap gap-2">
+              <Link href="/inventory/replenish" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+                Replenish stores
+              </Link>
+              <Link href="/inventory/adjustments/new" className={buttonVariants({ size: 'sm' })}>
+                <ScaleIcon /> Adjust stock
+              </Link>
+            </div>
+          ) : (
+            <Link href="/inventory/replenish" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+              Replenish
             </Link>
-          ) : undefined
+          )
         }
       />
 

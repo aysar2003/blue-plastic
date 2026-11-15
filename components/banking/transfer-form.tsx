@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { idleState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { Field, fieldProps } from '@/components/forms/field'
+import { FormChromeToolbar } from '@/components/forms/form-chrome-toolbar'
 import { LockedNumber } from '@/components/forms/locked-number'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
@@ -25,6 +26,8 @@ export function TransferForm({
   currency,
   documentNumber,
   defaultFromAccountId,
+  document,
+  copiedFromNumber,
 }: {
   accounts: AccountPickerOption[]
   today: string
@@ -32,19 +35,35 @@ export function TransferForm({
   documentNumber: string
   /** Pre-select the account money leaves (e.g. from the account ⋯ menu). */
   defaultFromAccountId?: string
+  document?: {
+    fromAccountId: string
+    toAccountId: string
+    amount: string
+    reference: string | null
+    memo: string | null
+  }
+  copiedFromNumber?: string
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveTransferForm, idleState)
   const [number, setNumber] = usePropState(documentNumber)
   const [date, setDate] = useState(today)
   const initialFrom =
-    (defaultFromAccountId && accounts.some((a) => a.id === defaultFromAccountId)
-      ? defaultFromAccountId
-      : accounts[0]?.id) ?? ''
+    (document?.fromAccountId && accounts.some((a) => a.id === document.fromAccountId)
+      ? document.fromAccountId
+      : defaultFromAccountId && accounts.some((a) => a.id === defaultFromAccountId)
+        ? defaultFromAccountId
+        : accounts[0]?.id) ?? ''
   const [fromAccountId, setFrom] = useState(initialFrom)
-  const [toAccountId, setTo] = useState(
-    () => accounts.find((a) => a.id !== initialFrom)?.id ?? accounts[1]?.id ?? '',
-  )
+  const [toAccountId, setTo] = useState(() => {
+    if (document?.toAccountId && accounts.some((a) => a.id === document.toAccountId)) {
+      return document.toAccountId
+    }
+    return accounts.find((a) => a.id !== initialFrom)?.id ?? accounts[1]?.id ?? ''
+  })
+  const [amount, setAmount] = useState(document?.amount ?? '')
+  const [reference, setReference] = useState(document?.reference ?? '')
+  const [memo, setMemo] = useState(document?.memo ?? '')
   const handled = useRef(false)
 
   useEffect(() => {
@@ -61,7 +80,15 @@ export function TransferForm({
   const sameAccount = fromAccountId !== '' && fromAccountId === toAccountId
 
   return (
-    <form action={formAction}>
+    <form action={formAction} className="space-y-4">
+      <FormChromeToolbar newHref="/banking/transfers/new" canSave={!sameAccount && amount !== ''} />
+      {copiedFromNumber ? (
+        <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground print:hidden">
+          Copy of <span className="font-medium text-foreground">{copiedFromNumber}</span>. Saving
+          creates a new transfer with a new number.
+        </p>
+      ) : null}
+
       <Card>
         <CardContent className="space-y-4 p-4">
           <FormStatus state={state} />
@@ -113,16 +140,26 @@ export function TransferForm({
                 inputMode="decimal"
                 className="tabular"
                 placeholder="0.00"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
                 required
               />
             </Field>
             <Field name="reference" label="Reference" error={e?.reference}>
-              <Input {...fieldProps('reference', e?.reference)} />
+              <Input
+                {...fieldProps('reference', e?.reference)}
+                value={reference}
+                onChange={(event) => setReference(event.target.value)}
+              />
             </Field>
           </div>
 
           <Field name="memo" label="Note" error={e?.memo}>
-            <Input {...fieldProps('memo', e?.memo)} />
+            <Input
+              {...fieldProps('memo', e?.memo)}
+              value={memo}
+              onChange={(event) => setMemo(event.target.value)}
+            />
           </Field>
         </CardContent>
       </Card>

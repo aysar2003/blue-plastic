@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { localizationPackById } from '@/lib/localization/packs'
 import { DEFAULT_PAYMENT_TERMS } from '@/lib/payment-terms'
 import type {
   PaymentTermInput,
@@ -9,9 +10,10 @@ import type {
 import type { TaxCodeShape } from '@/server/accounting/tax'
 import { systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { requestMeta, writeAudit } from '@/server/audit'
+import { can } from '@/server/auth/permissions'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
-import { conflict, notFound, precondition } from '@/server/errors'
+import { conflict, forbidden, notFound, precondition, validation } from '@/server/errors'
 import { assertTaxEnabled } from '@/server/feature-guards'
 
 /* --- Payment terms -------------------------------------------------------- */
@@ -331,6 +333,123 @@ export async function setCodeActive(ctx: OrgContext, id: string, isActive: boole
       meta,
     )
     return code
+  })
+}
+
+/**
+ * Idempotent tax agency/rate/code seed from the org localization pack.
+ * Skips when any tax agency already exists. Does not flip enableTax —
+ * call updateEnableTax separately from Setup when staff want tax on.
+ */
+export async function seedLocalizationTax(ctx: OrgContext) {
+  if (!can(ctx.role, 'org:update') && !ctx.isSystemOwner) {
+    throw forbidden('Only an admin can seed localization tax.')
+  }
+
+  const org = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: { localizationPackId: true },
+  })
+  if (!org) throw notFound('Organisation')
+  const pack = localizationPackById(org.localizationPackId)
+  if (!pack) {
+    throw validation('Set a localization pack (SO/KE/ET/DJ) before seeding tax.')
+  }
+
+  const existing = await db.taxAgency.count({ where: { orgId: ctx.orgId } })
+  if (existing > 0) {
+    return {
+      created: false as const,
+      packId: pack.id,
+      agencyName: pack.taxSeed.agencyName,
+      skipped: 'agencies_exist' as const,
+    }
+  }
+
+  const meta = await requestMeta()
+  const seed = pack.taxSeed
+
+  return db.$transaction(async (tx) => {
+    const agency = await tx.taxAgency.create({
+      data: {
+        orgId: ctx.orgId,
+        name: seed.agencyName,
+        registrationNumber: seed.agencyRegistrationHint ?? null,
+        filingFrequency: seed.filingFrequency,
+      },
+      select: { id: true, name: true },
+    })
+
+    let salesAccountId: string | null = null
+    try {
+      salesAccountId = await systemAccountId(tx, ctx.orgId, 'SALES_TAX_PAYABLE')
+    } catch {
+      salesAccountId = null
+    }
+
+    const rateIds: string[] = []
+    for (const rate of seed.rates) {
+      const fraction = (rate.percent / 100).toFixed(9)
+      const created = await tx.taxRate.create({
+        data: {
+          orgId: ctx.orgId,
+          name: rate.name,
+          rate: fraction,
+          agencyId: agency.id,
+          appliesTo: rate.appliesTo,
+          salesAccountId,
+        },
+        select: { id: true },
+      })
+      rateIds.push(created.id)
+    }
+
+    const code = await tx.taxCode.create({
+      data: {
+        orgId: ctx.orgId,
+        name: seed.defaultCodeName,
+        description: `${pack.vatJurisdictionLabel} default`,
+        isInclusive: false,
+      },
+      select: { id: true, name: true },
+    })
+
+    if (rateIds[0]) {
+      await tx.taxCodeRate.create({
+        data: {
+          orgId: ctx.orgId,
+          taxCodeId: code.id,
+          taxRateId: rateIds[0],
+          sequence: 1,
+          isCompound: false,
+        },
+      })
+    }
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'TaxAgency',
+        entityId: agency.id,
+        action: 'CREATE',
+        after: {
+          localizationPackId: pack.id,
+          agency: agency.name,
+          code: code.name,
+          rates: seed.rates.map((r) => r.name),
+        },
+      },
+      meta,
+    )
+
+    return {
+      created: true as const,
+      packId: pack.id,
+      agencyName: agency.name,
+      codeName: code.name,
+      rateNames: seed.rates.map((r) => r.name),
+    }
   })
 }
 

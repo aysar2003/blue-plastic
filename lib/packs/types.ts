@@ -20,6 +20,7 @@ export type PackId =
   | 'construction'
   | 'manufacturing'
   | 'distribution'
+  | 'agriculture'
   | 'services'
   | 'full'
 

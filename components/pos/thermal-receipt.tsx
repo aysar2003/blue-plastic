@@ -206,7 +206,6 @@ export function ThermalReceipt({
         <Row label="Receipt" value={receipt.number} />
         <Row label="Date" value={stamp(receipt.createdAt, shop.timeZone)} />
         {receipt.registerName ? <Row label="Counter" value={receipt.registerName} /> : null}
-        {receipt.cashierName ? <Row label="Salesman" value={receipt.cashierName} /> : null}
         {receipt.customer ? <Row label="Customer" value={receipt.customer.name} /> : null}
         {receipt.customer?.phone ? <Row label="Phone" value={receipt.customer.phone} /> : null}
         <Rule />
@@ -284,7 +283,7 @@ export function ThermalReceipt({
 function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
     <div className="flex justify-between gap-2" style={bold ? { fontWeight: 700 } : undefined}>
-      {/* break-word, not anywhere: a label like "Salesman" must never split mid-word on 58mm. */}
+      {/* break-word, not anywhere: a label like "Counter" must never split mid-word on 58mm. */}
       <span style={{ overflowWrap: 'break-word', minWidth: 'fit-content' }}>{label}</span>
       <span className="tabular-nums text-right" style={{ overflowWrap: 'break-word', minWidth: 0 }}>
         {value}

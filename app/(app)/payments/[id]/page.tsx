@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { PencilIcon } from 'lucide-react'
+import { CopyIcon, PencilIcon } from 'lucide-react'
 
 import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { DeleteButton } from '@/components/data/delete-record'
@@ -64,6 +64,15 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
             {canReport ? (
               <Link href={quickReport} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                 QuickReport
+              </Link>
+            ) : null}
+            {ctx.permissions.has('payment:create') && payment.status !== 'VOID' ? (
+              <Link
+                href={`/payments/new?copy=${id}`}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                title="Make a copy of this payment"
+              >
+                <CopyIcon /> Copy
               </Link>
             ) : null}
             {canEdit ? (

@@ -11,6 +11,7 @@ import { idleState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
+import { FormChromeToolbar } from '@/components/forms/form-chrome-toolbar'
 import { LockedNumber } from '@/components/forms/locked-number'
 import { useDuplicatePrompt } from '@/components/forms/duplicate-prompt'
 import { FormStatus } from '@/components/forms/form-status'
@@ -80,6 +81,8 @@ export function BillPaymentForm({
   loadPayables,
   documentNumber,
   initialVendorId,
+  document,
+  copiedFromNumber,
 }: {
   vendors: Option[]
   paymentAccounts: AccountPickerOption[]
@@ -89,18 +92,32 @@ export function BillPaymentForm({
   documentNumber: string
   /** Set when a vendor page opened this form, so the vendor and their open bills load at once. */
   initialVendorId?: string
+  /** Prefill from Copy — applications are not reused; open bills reload. */
+  document?: {
+    vendorId: string
+    method: string
+    paymentAccountId: string
+    reference: string | null
+    memo: string | null
+  }
+  copiedFromNumber?: string
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveBillPaymentForm, idleState)
   const { acknowledge, formRef, beforeSubmit } = useDuplicatePrompt(state)
 
   const [number, setNumber] = usePropState(documentNumber)
-  const [vendorId, setVendorId] = useState(initialVendorId ?? '')
+  const [vendorId, setVendorId] = useState(document?.vendorId ?? initialVendorId ?? '')
   const [date, setDate] = useState(today)
-  const [method, setMethod] = useState('BANK_TRANSFER')
-  const [paymentAccountId, setPaymentAccountId] = useState(paymentAccounts[0]?.id ?? '')
-  const [reference, setReference] = useState('')
-  const [memo, setMemo] = useState('')
+  const [method, setMethod] = useState(document?.method ?? 'BANK_TRANSFER')
+  const [paymentAccountId, setPaymentAccountId] = useState(
+    document?.paymentAccountId &&
+      paymentAccounts.some((account) => account.id === document.paymentAccountId)
+      ? document.paymentAccountId
+      : (paymentAccounts[0]?.id ?? ''),
+  )
+  const [reference, setReference] = useState(document?.reference ?? '')
+  const [memo, setMemo] = useState(document?.memo ?? '')
 
   const [bills, setBills] = useState<OpenBill[]>([])
   const [credits, setCredits] = useState<OpenCredit[]>([])
@@ -127,9 +144,10 @@ export function BillPaymentForm({
     })
 
   useEffect(() => {
-    if (!initialVendorId) return
-    refresh(initialVendorId)
-    // The vendor page already chose who is being paid. Load their open bills once.
+    const seedVendor = document?.vendorId ?? initialVendorId
+    if (!seedVendor) return
+    refresh(seedVendor)
+    // Load open bills once for the chosen / copied vendor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -210,6 +228,14 @@ export function BillPaymentForm({
       }}
     >
       <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor()} />
+
+      <FormChromeToolbar newHref="/bill-payments/new" canSave={canSave} />
+      {copiedFromNumber ? (
+        <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground print:hidden">
+          Copy of <span className="font-medium text-foreground">{copiedFromNumber}</span>. Tick the
+          open bills to settle — previous applications are not reused.
+        </p>
+      ) : null}
 
       <Card>
         <CardContent className="space-y-3 p-3 sm:p-4">

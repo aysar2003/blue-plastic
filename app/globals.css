@@ -2596,6 +2596,48 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   background-color: color-mix(in srgb, var(--muted-foreground) 18%, var(--card)) !important;
 }
 
+/*
+ * Paper section bars (#e8ebef journal, #eef3f7 P&L) and teal/sky pastel islands
+ * that escape the generic bg-white remaps — force muted/card on night desks.
+ */
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is([class*='bg-[#e8ebef]'], [class*='bg-[#eef3f7]']) {
+  background-color: var(--muted) !important;
+}
+
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is(.text-teal-700, .text-teal-800, .text-teal-900, .text-teal-950) {
+  color: #5eead4 !important;
+}
+
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is(
+  [class*='bg-teal-50'],
+  [class*='bg-teal-100'],
+  [class*='from-teal-50'],
+  [class*='to-sky-50'],
+  [class*='bg-sky-50']
+) {
+  background-color: color-mix(in srgb, #2dd4bf 14%, var(--card)) !important;
+}
+
+html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is([class*='border-teal-100'], [class*='border-teal-200'], [class*='border-sky-100'], [class*='border-sky-200']) {
+  border-color: color-mix(in srgb, #2dd4bf 40%, var(--border)) !important;
+}
+
 /* Warning token text (Overdue KPIs / status) follows theme --warning on every desk. */
 html :is(.app-surface, .sales-surface, [data-slot='dialog-content']) .text-warning {
   color: var(--warning) !important;

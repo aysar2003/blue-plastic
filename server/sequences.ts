@@ -30,6 +30,9 @@ const DEFAULT_PREFIX: Record<DocumentType, string> = {
   ASSEMBLY_BUILD: 'BLD-',
   WORK_ORDER: 'WO-',
   PROJECT: 'PRJ-',
+  SERVICE_JOB: 'SJ-',
+  SALES_CONTRACT: 'SC-',
+  CAPA_NOTE: 'CAP-',
 }
 
 /**

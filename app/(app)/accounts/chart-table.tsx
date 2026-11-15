@@ -37,6 +37,7 @@ export type ChartAccountRow = {
   isSystem: boolean
   isActive: boolean
   balance: string
+  groupBalance: string | null
   treeDepth: number
   hasChildren: boolean
 }
@@ -239,6 +240,43 @@ export function ChartTable({
                   </AccountTableRow>,
                 )
 
+                // After the last visible descendant of each ancestor Main, show group total.
+                const ancestors: ChartAccountRow[] = []
+                if (account.hasChildren && account.groupBalance != null) {
+                  let end = index
+                  while (end + 1 < rows.length && rows[end + 1]!.treeDepth > depth) end += 1
+                  if (end === index) ancestors.push(account)
+                }
+                let cursor = account.parentId
+                while (cursor) {
+                  const parent = rows.find((row) => row.id === cursor)
+                  if (!parent) break
+                  if (parent.hasChildren && parent.groupBalance != null) {
+                    let end = rows.findIndex((row) => row.id === parent.id)
+                    if (end >= 0) {
+                      while (end + 1 < rows.length && rows[end + 1]!.treeDepth > parent.treeDepth) {
+                        end += 1
+                      }
+                      if (end === index) ancestors.push(parent)
+                    }
+                  }
+                  cursor = parent.parentId
+                }
+                // Deepest Main first, then outer (so Total Mid before Total Main).
+                for (const main of ancestors) {
+                  nodes.push(
+                    <GroupTotalRow
+                      key={`total-${main.id}`}
+                      name={main.name}
+                      groupBalance={main.groupBalance!}
+                      depth={main.treeDepth}
+                      columns={columns}
+                      currency={currency}
+                      striped={striped}
+                    />,
+                  )
+                }
+
                 return nodes
               })}
             </TableBody>
@@ -247,6 +285,52 @@ export function ChartTable({
         <Pagination total={rows.length} />
       </Card>
     </ReportSheet>
+  )
+}
+
+function GroupTotalRow({
+  name,
+  groupBalance,
+  depth,
+  columns,
+  currency,
+  striped,
+}: {
+  name: string
+  groupBalance: string
+  depth: number
+  columns: ChartColumnId[]
+  currency: string
+  striped: boolean
+}) {
+  return (
+    <TableRow className={cn('pointer-events-none bg-muted/25', striped && 'ledger-row')}>
+      <TableCell className="w-12 print:hidden" />
+      {columns.map((column) => {
+        if (column === 'name') {
+          return (
+            <TableCell key={column} className="font-medium text-muted-foreground">
+              <span className="block" style={chartSubIndentStyle(depth)}>
+                Total {name}
+              </span>
+            </TableCell>
+          )
+        }
+        if (column === 'balance') {
+          return (
+            <TableCell key={column} className="numeric whitespace-nowrap">
+              <SignedMoney
+                amount={groupBalance}
+                currency={currency}
+                className="font-semibold"
+                title="Main plus every sub-account under it"
+              />
+            </TableCell>
+          )
+        }
+        return <TableCell key={column} />
+      })}
+    </TableRow>
   )
 }
 
@@ -294,7 +378,7 @@ function ChartCell({
             )}
             title={
               account.hasChildren
-                ? 'Main account (heading) — total of its sub-accounts'
+                ? 'Main account — posts itself; Subs nest under it for reports'
                 : depth > 0
                   ? `Sub-account under ${parentName ?? 'main account'}`
                   : 'Open this account'
@@ -305,7 +389,7 @@ function ChartCell({
           {account.hasChildren ? (
             <ChartRoleMark
               role="main"
-              title="Grouping heading: post only to its sub-accounts. Balance is the sum of those subs."
+              title="Main account — posts itself; group total below includes its Subs."
             />
           ) : null}
           {depth > 0 ? (
@@ -335,17 +419,17 @@ function ChartCell({
         <Link
           href={`/accounts/${account.id}`}
           className={cn(REPORT_DRILL_LINK, 'inline-block')}
-          title={
-            account.hasChildren
-              ? 'Total of this account and every sub-account under it — open register'
-              : 'Open this account'
-          }
+          title="Own balance — open register"
         >
         <SignedMoney
           amount={account.balance}
           currency={currency}
           className={account.hasChildren ? 'font-semibold' : undefined}
-          title={account.hasChildren ? 'Total of this account and every sub-account under it' : undefined}
+          title={
+            account.hasChildren
+              ? 'Own postings only — see Total row below for Main + Subs'
+              : undefined
+          }
         />
         </Link>
       </TableCell>

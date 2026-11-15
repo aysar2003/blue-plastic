@@ -184,6 +184,11 @@ export type OrgFeatureFlags = {
    */
   closeHardGates: boolean
   /**
+   * Budget deep: refuse bill/expense and EXPENSE/COGS journal posts that would
+   * exceed an APPROVED monthly budget cell. Off by default.
+   */
+  enforceBudgetControl: boolean
+  /**
    * Apps the ERP system owner granted this company (create / Limits / approve).
    * The company may turn granted apps off for its own screens, but cannot turn
    * on an app that was never granted — that needs a request the owner accepts.
@@ -522,6 +527,7 @@ export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   creditLimitWarn: false,
   payrollStandard: true,
   closeHardGates: false,
+  enforceBudgetControl: false,
   /** Opt-in apps are granted so Apps & features can turn them on. */
   grantedModules: allModules(true),
   modules: defaultModules(),
@@ -671,6 +677,9 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
   if (typeof data.creditLimitWarn === 'boolean') base.creditLimitWarn = data.creditLimitWarn
   if (typeof data.payrollStandard === 'boolean') base.payrollStandard = data.payrollStandard
   if (typeof data.closeHardGates === 'boolean') base.closeHardGates = data.closeHardGates
+  if (typeof data.enforceBudgetControl === 'boolean') {
+    base.enforceBudgetControl = data.enforceBudgetControl
+  }
 
   // Legacy single switch → both contact sides until the new keys are saved.
   if (typeof data.allowContactDelete === 'boolean') {

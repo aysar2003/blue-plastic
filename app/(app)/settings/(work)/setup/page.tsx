@@ -7,14 +7,19 @@ import { getPack } from '@/lib/packs'
 import { can } from '@/server/auth/permissions'
 import { requireOrgContext } from '@/server/auth/context'
 import * as onboardingService from '@/server/services/onboarding.service'
+import * as setupHealthService from '@/server/services/setup-health.service'
 
 import { SetupChecklistClient } from './setup-checklist-client'
+import { SetupFixHub } from './setup-fix-hub'
 
 export const metadata: Metadata = { title: 'Setup checklist' }
 
 export default async function SettingsSetupPage() {
   const ctx = await requireOrgContext('org:read')
-  const state = await onboardingService.getState(ctx)
+  const [state, health] = await Promise.all([
+    onboardingService.getState(ctx),
+    setupHealthService.loadSetupHealth(ctx),
+  ])
   const pack = state.installedPackId ? getPack(state.installedPackId) : null
   const canEdit = can(ctx.role, 'org:update') || ctx.isSystemOwner
 
@@ -24,6 +29,8 @@ export default async function SettingsSetupPage() {
         title="Setup checklist"
         description="Finish the first steps for this company’s institution pack."
       />
+
+      <SetupFixHub health={health} canEdit={canEdit} />
 
       <Card>
         <CardHeader>

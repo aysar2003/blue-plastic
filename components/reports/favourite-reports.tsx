@@ -4,52 +4,57 @@ import { useMemo, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { ChevronDownIcon, StarIcon } from 'lucide-react'
 
-import type { StandardReport } from '@/lib/standard-reports'
+import {
+  REPORT_FAVOURITES_CHANGE,
+  REPORT_FAVOURITES_STORAGE,
+  parseReportFavourites,
+  reportFavouriteKey,
+  toggleReportFavourite,
+  type ReportFavourite,
+} from '@/lib/report-favourites'
 import { cn } from '@/lib/utils'
 
-const STORAGE = 'bpc.reportFavourites'
-const CHANGE = 'bpc-report-favourites'
-
 function subscribe(onChange: () => void) {
-  window.addEventListener(CHANGE, onChange)
-  return () => window.removeEventListener(CHANGE, onChange)
+  window.addEventListener(REPORT_FAVOURITES_CHANGE, onChange)
+  return () => window.removeEventListener(REPORT_FAVOURITES_CHANGE, onChange)
 }
 
 let cached = ''
 
 function readSnapshot() {
-  const next = window.localStorage.getItem(STORAGE) ?? ''
+  const next = window.localStorage.getItem(REPORT_FAVOURITES_STORAGE) ?? ''
   if (next !== cached) cached = next
   return cached
 }
 
-export function FavouriteReports({ reports }: { reports: StandardReport[] }) {
+export function writeReportFavourites(next: ReportFavourite[]) {
+  const encoded = JSON.stringify(next)
+  window.localStorage.setItem(REPORT_FAVOURITES_STORAGE, encoded)
+  cached = encoded
+  window.dispatchEvent(new Event(REPORT_FAVOURITES_CHANGE))
+}
+
+export function useReportFavourites() {
+  const raw = useSyncExternalStore(subscribe, readSnapshot, () => '')
+  return useMemo(() => parseReportFavourites(raw || null), [raw])
+}
+
+export function FavouriteReports({
+  emptyHint = 'No favourites yet. Star a report in the sections below to add it here.',
+}: {
+  emptyHint?: string
+} = {}) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(true)
-  const raw = useSyncExternalStore(subscribe, readSnapshot, () => '')
-
-  const starred = useMemo(() => {
-    const fallback = reports.map((report) => report.href + report.label)
-    if (!raw) return fallback
-    try {
-      const parsed = JSON.parse(raw) as unknown
-      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : fallback
-    } catch {
-      return fallback
-    }
-  }, [raw, reports])
+  const starred = useReportFavourites()
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return q ? reports.filter((report) => report.label.toLowerCase().includes(q)) : reports
-  }, [query, reports])
+    return starred.filter((report) => !q || report.label.toLowerCase().includes(q))
+  }, [query, starred])
 
-  function toggle(key: string) {
-    const next = starred.includes(key) ? starred.filter((item) => item !== key) : [...starred, key]
-    const encoded = JSON.stringify(next)
-    window.localStorage.setItem(STORAGE, encoded)
-    cached = encoded
-    window.dispatchEvent(new Event(CHANGE))
+  function toggle(report: ReportFavourite) {
+    writeReportFavourites(toggleReportFavourite(starred, report))
   }
 
   const midpoint = Math.ceil(visible.length / 2)
@@ -78,39 +83,58 @@ export function FavouriteReports({ reports }: { reports: StandardReport[] }) {
         Favourites
       </button>
       {open ? (
-        <div className="grid gap-0 md:grid-cols-2">
-          {columns.map((column, index) => (
-            <ul key={index} className={index === 0 ? 'md:border-r' : undefined}>
-              {column.map((report) => {
-                const key = report.href + report.label
-                const on = starred?.includes(key) ?? true
-                return (
-                  <li key={key} className="flex items-center gap-2 border-b px-4 py-2.5 last:border-b-0">
-                    <Link
-                      href={report.href}
-                      className="min-w-0 flex-1 text-sm text-foreground hover:text-primary hover:underline"
-                    >
-                      {report.label}
-                    </Link>
-                    <button
-                      type="button"
-                      aria-pressed={on}
-                      aria-label={on ? `Remove ${report.label} from favourites` : `Star ${report.label}`}
-                      onClick={() => toggle(key)}
-                      className="text-primary"
-                    >
-                      <StarIcon className={cn('size-4', on ? 'fill-primary' : 'fill-transparent')} />
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          ))}
-        </div>
-      ) : null}
-      {open && visible.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-muted-foreground">No report matches that name.</p>
+        visible.length > 0 ? (
+          <div className="grid gap-0 md:grid-cols-2">
+            {columns.map((column, index) => (
+              <ul key={index} className={index === 0 ? 'md:border-r' : undefined}>
+                {column.map((report) => {
+                  const key = reportFavouriteKey(report)
+                  return (
+                    <li key={key} className="flex items-center gap-2 border-b px-4 py-2.5 last:border-b-0">
+                      <Link
+                        href={report.href}
+                        className="min-w-0 flex-1 text-sm text-foreground hover:text-primary hover:underline"
+                      >
+                        {report.label}
+                      </Link>
+                      <button
+                        type="button"
+                        aria-pressed
+                        aria-label={`Remove ${report.label} from favourites`}
+                        onClick={() => toggle(report)}
+                        className="text-primary"
+                      >
+                        <StarIcon className="size-4 fill-primary" />
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            ))}
+          </div>
+        ) : (
+          <p className="px-4 py-6 text-sm text-muted-foreground">
+            {query.trim() ? 'No favourite matches that name.' : emptyHint}
+          </p>
+        )
       ) : null}
     </section>
+  )
+}
+
+export function ReportFavouriteStar({ href, label }: ReportFavourite) {
+  const starred = useReportFavourites()
+  const on = starred.some((item) => reportFavouriteKey(item) === reportFavouriteKey({ href, label }))
+
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      aria-label={on ? `Remove ${label} from favourites` : `Star ${label}`}
+      onClick={() => writeReportFavourites(toggleReportFavourite(starred, { href, label }))}
+      className="shrink-0 text-primary"
+    >
+      <StarIcon className={cn('size-4', on ? 'fill-primary' : 'fill-transparent')} />
+    </button>
   )
 }

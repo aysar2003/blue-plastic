@@ -14,6 +14,7 @@ export async function saveContractAction(formData: FormData) {
     contractValue: String(formData.get('contractValue') ?? ''),
     retentionPercent: String(formData.get('retentionPercent') ?? ''),
     retainerAmount: String(formData.get('retainerAmount') ?? ''),
+    budgetAmount: String(formData.get('budgetAmount') ?? ''),
   })
   revalidatePath('/projects/progress')
   redirect('/projects/progress')

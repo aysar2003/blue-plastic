@@ -23,6 +23,7 @@ import { db } from '@/server/db'
 import { isAppError } from '@/server/errors'
 import * as paymentService from '@/server/services/payment.service'
 import * as purchaseService from '@/server/services/purchase.service'
+import * as salesOptions from '@/server/services/sales-options'
 import * as salesService from '@/server/services/sales.service'
 import { assertDocumentDeleteAllowed } from '@/server/feature-guards'
 
@@ -381,6 +382,22 @@ export async function savePaymentForm(_prev: FormState, formData: FormData): Pro
         : 'Recorded.',
   )
 }
+
+const formSearchQuery = z.object({
+  q: z.string().trim().min(1).max(80),
+})
+
+/** Remote customer hits when the sales form picker bootstrap is capped. */
+export const searchFormCustomers = action
+  .requires('invoice:read')
+  .input(formSearchQuery)
+  .handler((ctx, { q }) => salesOptions.searchFormCustomers(ctx, q))
+
+/** Remote item hits when the sales form picker bootstrap is capped. */
+export const searchFormItems = action
+  .requires('invoice:read')
+  .input(formSearchQuery)
+  .handler((ctx, { q }) => salesOptions.searchFormItems(ctx, q, { includeOnHand: false }))
 
 /** Open balance + recent rows for the invoice form (QuickBooks-style customer strip). */
 export const customerOpenBalancePanel = action

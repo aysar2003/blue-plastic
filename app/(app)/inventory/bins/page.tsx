@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { PageHeader } from '@/components/data/page-header'
+import { buttonVariants } from '@/components/ui/button'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -39,6 +41,20 @@ export default async function BinsPage() {
         description="Bin on-hand, putaway after receive, and wave picks. Completing a pick issues inventory and reduces the bin."
       />
       <p className="mb-4 max-w-2xl text-xs text-muted-foreground">{WMS_LEGAL}</p>
+
+      {board.itemsMissingDefaultBin.length > 0 ? (
+        <div className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          {board.itemsMissingDefaultBin.length} active product
+          {board.itemsMissingDefaultBin.length === 1 ? '' : 's'} without a default bin — putaway
+          will not auto-suggest a slot (
+          {board.itemsMissingDefaultBin
+            .slice(0, 5)
+            .map((row) => row.name)
+            .join(', ')}
+          {board.itemsMissingDefaultBin.length > 5 ? '…' : ''}
+          ).
+        </div>
+      ) : null}
 
       {canAdjust ? (
         <div className="mb-6 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
@@ -235,6 +251,20 @@ export default async function BinsPage() {
                 </Button>
               </form>
             ) : null}
+            <Link
+              href={`/api/waves/${wave.id}/labels?format=csv`}
+              className={buttonVariants({ size: 'sm', variant: 'outline' })}
+              download
+            >
+              Labels CSV
+            </Link>
+            <Link
+              href={`/api/waves/${wave.id}/labels`}
+              className={buttonVariants({ size: 'sm', variant: 'ghost' })}
+              target="_blank"
+            >
+              Label JSON
+            </Link>
           </li>
         ))}
       </ul>

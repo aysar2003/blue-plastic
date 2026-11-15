@@ -34,7 +34,7 @@ export function RegisterTransferForm({
   const [pending, startTransition] = useTransition()
 
   const text = dark ? '#f4f4f5' : undefined
-  const muted = dark ? 'rgba(255,255,255,0.55)' : undefined
+  const muted = dark ? 'rgba(255,255,255,0.78)' : undefined
   const field = dark
     ? 'mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none'
     : 'mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none'

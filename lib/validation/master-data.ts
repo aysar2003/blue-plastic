@@ -78,6 +78,14 @@ export type PaymentTermInput = z.infer<typeof paymentTermSchema>
 export const trackingCategorySchema = z.object({
   id: optionalId,
   name: requiredText('Name', 80),
+  restrictSpending: z.coerce.boolean().optional(),
+})
+
+export const trackingCategoryRestrictSchema = z.object({
+  id: cuid,
+  restrictSpending: z
+    .union([z.literal('true'), z.literal('false'), z.boolean()])
+    .transform((v) => v === true || v === 'true'),
 })
 
 export type TrackingCategoryInput = z.infer<typeof trackingCategorySchema>

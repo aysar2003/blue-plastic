@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 
 import { requireOrgContext } from '@/server/auth/context'
 import * as equityService from '@/server/services/equity-register.service'
+import * as patronage from '@/server/services/patronage.service'
 import * as shareholderService from '@/server/services/shareholder.service'
 
 export async function saveShareholder(formData: FormData) {
@@ -34,6 +35,16 @@ export async function postEquityEvent(formData: FormData) {
     shareholderId: shareholderRaw || null,
     memo,
   })
+  revalidatePath('/accounting/equity')
+  revalidatePath('/journals')
+  redirect('/accounting/equity')
+}
+
+export async function allocatePatronage(formData: FormData) {
+  const ctx = await requireOrgContext('journal:post')
+  const year = Number(formData.get('year') ?? new Date().getFullYear())
+  const percentOfNet = String(formData.get('percentOfNet') ?? '0')
+  await patronage.allocate(ctx, year, percentOfNet)
   revalidatePath('/accounting/equity')
   revalidatePath('/journals')
   redirect('/accounting/equity')

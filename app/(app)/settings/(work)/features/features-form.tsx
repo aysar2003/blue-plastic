@@ -366,10 +366,17 @@ const APP_NESTED: Partial<
         hint="Unused accounts can be removed; linked accounts are merged."
         defaultChecked={flags.allowAccountDelete}
       />
+      <SwitchRow
+        name="enforceBudgetControl"
+        label="Enforce budget control"
+        hint="Refuse bills, expenses, and EXPENSE/COGS journals that would exceed an approved monthly budget. Off by default."
+        defaultChecked={flags.enforceBudgetControl}
+      />
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         <DeepLink href="/settings/accounts">Chart of accounts</DeepLink>
         <DeepLink href="/settings/tax">Tax settings</DeepLink>
         <DeepLink href="/settings/payment-terms">Payment terms</DeepLink>
+        <DeepLink href="/accounting/budgets">Budgets</DeepLink>
       </div>
     </>
   ),

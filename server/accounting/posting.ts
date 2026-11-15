@@ -173,6 +173,34 @@ export async function postJournal(
     )
   }
 
+  // 6b. Approved budget control (EXPENSE/COGS) when enforceBudgetControl is on.
+  // Skip drafts, reversals, and closing entries — those are corrections / period close.
+  if (!draft.asDraft && !draft.reversalOfId && !draft.isClosingEntry) {
+    const { assertWithinBudget } = await import('@/server/services/budget.service')
+    const accountIds = [...new Set(rounded.map((line) => line.source.accountId))]
+    const accounts = await tx.ledgerAccount.findMany({
+      where: { orgId: ctx.orgId, id: { in: accountIds } },
+      select: { id: true, code: true, type: true },
+    })
+    const byId = new Map(accounts.map((a) => [a.id, a]))
+    await assertWithinBudget(ctx, {
+      date: draft.date,
+      lines: rounded.map((line) => {
+        const account = byId.get(line.source.accountId)
+        const debitNatural = ['REVENUE', 'EQUITY', 'LIABILITY'].includes(account?.type ?? '')
+          ? line.credit.minus(line.debit)
+          : line.debit.minus(line.credit)
+        return {
+          accountId: line.source.accountId,
+          accountCode: account?.code,
+          accountType: account?.type ?? 'EXPENSE',
+          trackingCategoryId: line.source.trackingCategoryId ?? null,
+          amount: debitNatural.isNegative() ? '0' : debitNatural.toFixed(4),
+        }
+      }),
+    })
+  }
+
   // 7. Number, allocated under a row lock so two concurrent posts cannot collide.
   const journalNumber = draft.journalNumber
     ? await assignDocumentNumber(tx, ctx.orgId, 'JOURNAL', draft.journalNumber)
@@ -448,7 +476,6 @@ async function assertAccountsPostable(tx: Tx, ctx: OrgContext, lines: RoundedLin
       name: true,
       isActive: true,
       systemKey: true,
-      _count: { select: { children: true } },
     },
   })
 
@@ -461,13 +488,6 @@ async function assertAccountsPostable(tx: Tx, ctx: OrgContext, lines: RoundedLin
     }
     if (!account.isActive) {
       throw precondition(`Account ${account.code} ${account.name} is archived and cannot be posted to.`)
-    }
-    if (account._count.children > 0) {
-      throw validation(
-        account.systemKey
-          ? `Account ${account.code} ${account.name} is a grouping heading, but it is still bound as a system account (${account.systemKey.replaceAll('_', ' ').toLowerCase()}). Open Settings → Default accounts and rebind that role to one of its sub-accounts (or create a detail account such as 5010 and bind there).`
-          : `Account ${account.code} ${account.name} is a grouping heading. Post to one of its sub-accounts.`,
-      )
     }
   }
 

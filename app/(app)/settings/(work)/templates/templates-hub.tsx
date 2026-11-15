@@ -20,9 +20,12 @@ import { ImportTemplatesPanel } from '@/app/(app)/settings/(work)/templates/impo
 import { MyTemplatesPanel } from '@/app/(app)/settings/(work)/templates/my-templates-panel'
 import { PosReceiptPicker } from '@/app/(app)/settings/(work)/templates/pos-receipt-picker'
 import { TemplateForm } from '@/app/(app)/settings/(work)/templates/template-form'
+import { CompanyFormFieldsPanel } from '@/components/forms/company-form-fields-panel'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { DocumentTemplate } from '@/lib/document-template'
+import type { FormCustomizationProps } from '@/lib/form-customization-props'
+import { salesFieldsForType, SALES_FORM_COLUMNS } from '@/lib/form-field-catalog'
 import {
   DEFAULT_REPORT_SHEET_TEMPLATE,
   parseReportSheetTemplate,
@@ -65,9 +68,15 @@ const ICONS: Partial<Record<SystemTemplateKind, typeof FileText>> = {
 export function TemplatesHub({
   template,
   canEdit,
+  invoiceForm,
+  salesReceiptForm,
+  otherSalesForm,
 }: {
   template: DocumentTemplate
   canEdit: boolean
+  invoiceForm: FormCustomizationProps
+  salesReceiptForm: FormCustomizationProps
+  otherSalesForm: FormCustomizationProps
 }) {
   const [active, setActive] = useState<SystemTemplateKind>(DEFAULT_SYSTEM_TEMPLATE)
   const current = SYSTEM_TEMPLATES.find((entry) => entry.id === active) ?? SYSTEM_TEMPLATES[0]
@@ -147,41 +156,77 @@ export function TemplatesHub({
           {active === 'document' ? <TemplateForm template={template} canEdit={canEdit} /> : null}
 
           {active === 'invoice-form' ? (
-            <FormLayoutPicker
-              title="Invoice & quotation layout"
-              description="Used when you open an invoice, estimate, or quotation form."
-              storageKey={INVOICE_FORM_TEMPLATE_STORAGE_KEY}
-              options={INVOICE_FORM_TEMPLATES}
-              defaultId={DEFAULT_INVOICE_FORM_TEMPLATE}
-              accent={template.accent}
-              parse={(raw) => (isInvoiceFormTemplateId(raw ?? '') ? raw! : DEFAULT_INVOICE_FORM_TEMPLATE)}
-            />
+            <>
+              <FormLayoutPicker
+                title="Invoice & quotation layout"
+                description="Used when you open an invoice, estimate, or quotation form."
+                storageKey={INVOICE_FORM_TEMPLATE_STORAGE_KEY}
+                options={INVOICE_FORM_TEMPLATES}
+                defaultId={DEFAULT_INVOICE_FORM_TEMPLATE}
+                accent={template.accent}
+                parse={(raw) =>
+                  isInvoiceFormTemplateId(raw ?? '') ? raw! : DEFAULT_INVOICE_FORM_TEMPLATE
+                }
+              />
+              <CompanyFormFieldsPanel
+                title="Company invoice fields & columns"
+                description="Show or hide optional header fields and line columns on invoices. Saved for everyone in this company."
+                customization={invoiceForm}
+                fieldCatalog={salesFieldsForType('INVOICE')}
+                columnCatalog={SALES_FORM_COLUMNS}
+                layoutOptions={INVOICE_FORM_TEMPLATES}
+              />
+            </>
           ) : null}
 
           {active === 'sales-receipt-form' ? (
-            <FormLayoutPicker
-              title="Sales receipt layout"
-              description="Used on sales receipts from Sales and related screens."
-              storageKey={SALES_RECEIPT_FORM_TEMPLATE_STORAGE_KEY}
-              options={SALES_RECEIPT_FORM_TEMPLATES}
-              defaultId={DEFAULT_SALES_RECEIPT_FORM_TEMPLATE}
-              accent={template.accent}
-              parse={(raw) =>
-                isSalesReceiptFormTemplateId(raw ?? '') ? raw! : DEFAULT_SALES_RECEIPT_FORM_TEMPLATE
-              }
-            />
+            <>
+              <FormLayoutPicker
+                title="Sales receipt layout"
+                description="Used on sales receipts from Sales and related screens."
+                storageKey={SALES_RECEIPT_FORM_TEMPLATE_STORAGE_KEY}
+                options={SALES_RECEIPT_FORM_TEMPLATES}
+                defaultId={DEFAULT_SALES_RECEIPT_FORM_TEMPLATE}
+                accent={template.accent}
+                parse={(raw) =>
+                  isSalesReceiptFormTemplateId(raw ?? '')
+                    ? raw!
+                    : DEFAULT_SALES_RECEIPT_FORM_TEMPLATE
+                }
+              />
+              <CompanyFormFieldsPanel
+                title="Company sales receipt fields & columns"
+                description="Show or hide optional fields (Payment method, Rx, Currency, Message…) and line columns. Saved for everyone in this company."
+                customization={salesReceiptForm}
+                fieldCatalog={salesFieldsForType('SALES_RECEIPT')}
+                columnCatalog={SALES_FORM_COLUMNS}
+                layoutOptions={SALES_RECEIPT_FORM_TEMPLATES}
+              />
+            </>
           ) : null}
 
           {active === 'sales-form' ? (
-            <FormLayoutPicker
-              title="Other sales document layout"
-              description="Default for credit memos, refunds, and related sales papers that still offer layout picks."
-              storageKey={SALES_FORM_TEMPLATE_STORAGE_KEY}
-              options={SALES_FORM_TEMPLATES}
-              defaultId={DEFAULT_SALES_FORM_TEMPLATE}
-              accent={template.accent}
-              parse={(raw) => (isSalesFormTemplateId(raw ?? '') ? raw! : DEFAULT_SALES_FORM_TEMPLATE)}
-            />
+            <>
+              <FormLayoutPicker
+                title="Other sales document layout"
+                description="Default for credit memos, refunds, and related sales papers that still offer layout picks."
+                storageKey={SALES_FORM_TEMPLATE_STORAGE_KEY}
+                options={SALES_FORM_TEMPLATES}
+                defaultId={DEFAULT_SALES_FORM_TEMPLATE}
+                accent={template.accent}
+                parse={(raw) =>
+                  isSalesFormTemplateId(raw ?? '') ? raw! : DEFAULT_SALES_FORM_TEMPLATE
+                }
+              />
+              <CompanyFormFieldsPanel
+                title="Company credit memo fields & columns"
+                description="Optional fields and line columns for credit memos (and similar papers that use this family). Saved for everyone in this company."
+                customization={otherSalesForm}
+                fieldCatalog={salesFieldsForType('CREDIT_MEMO')}
+                columnCatalog={SALES_FORM_COLUMNS}
+                layoutOptions={SALES_FORM_TEMPLATES}
+              />
+            </>
           ) : null}
 
           {active === 'report-paper' ? (

@@ -10,6 +10,7 @@ import { saveStoreTransferForm } from '@/app/(app)/inventory/actions'
 import { idleState } from '@/components/forms/action-state'
 import { EntityPicker } from '@/components/forms/entity-picker'
 import { Field, fieldProps } from '@/components/forms/field'
+import { FormChromeToolbar } from '@/components/forms/form-chrome-toolbar'
 import { FormStatus } from '@/components/forms/form-status'
 import { LockedNumber } from '@/components/forms/locked-number'
 import { SubmitButton } from '@/components/forms/submit-button'
@@ -30,6 +31,8 @@ export function StoreTransferForm({
   documentNumber,
   initialFromStoreId,
   initialItemId,
+  document,
+  copiedFromNumber,
 }: {
   stores: StoreOption[]
   items: ItemOption[]
@@ -37,18 +40,30 @@ export function StoreTransferForm({
   documentNumber: string
   initialFromStoreId?: string
   initialItemId?: string
+  document?: {
+    fromStoreId: string
+    toStoreId: string
+    itemId: string
+    quantity: string
+    memo: string | null
+  }
+  copiedFromNumber?: string
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveStoreTransferForm, idleState)
   const [number, setNumber] = usePropState(documentNumber)
   const [date, setDate] = useState(today)
-  const [fromStoreId, setFromStoreId] = useState(initialFromStoreId ?? stores[0]?.id ?? '')
-  const [toStoreId, setToStoreId] = useState(
-    stores.find((store) => store.id !== (initialFromStoreId ?? stores[0]?.id))?.id ?? '',
+  const [fromStoreId, setFromStoreId] = useState(
+    document?.fromStoreId ?? initialFromStoreId ?? stores[0]?.id ?? '',
   )
-  const [itemId, setItemId] = useState(initialItemId ?? '')
-  const [quantity, setQuantity] = useState('')
-  const [memo, setMemo] = useState('')
+  const [toStoreId, setToStoreId] = useState(() => {
+    if (document?.toStoreId) return document.toStoreId
+    const from = document?.fromStoreId ?? initialFromStoreId ?? stores[0]?.id
+    return stores.find((store) => store.id !== from)?.id ?? ''
+  })
+  const [itemId, setItemId] = useState(document?.itemId ?? initialItemId ?? '')
+  const [quantity, setQuantity] = useState(document?.quantity ?? '')
+  const [memo, setMemo] = useState(document?.memo ?? '')
   const handled = useRef(false)
 
   useEffect(() => {
@@ -65,6 +80,8 @@ export function StoreTransferForm({
   const destinations = stores.filter((store) => store.id !== fromStoreId)
   const e = state.fieldErrors
 
+  const canSave = fromStoreId !== '' && toStoreId !== '' && itemId !== '' && quantity !== ''
+
   return (
     <form action={formAction} className="mx-auto max-w-xl space-y-4">
       <input type="hidden" name="number" value={number} />
@@ -74,6 +91,14 @@ export function StoreTransferForm({
       <input type="hidden" name="itemId" value={itemId} />
       <input type="hidden" name="quantity" value={quantity} />
       <input type="hidden" name="memo" value={memo} />
+
+      <FormChromeToolbar newHref="/stores/transfer/new" canSave={canSave} />
+      {copiedFromNumber ? (
+        <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground print:hidden">
+          Copy of <span className="font-medium text-foreground">{copiedFromNumber}</span>. Check
+          that the source store still has enough stock before saving.
+        </p>
+      ) : null}
 
       <Card tone="stock">
         <CardContent className="space-y-4 p-4">

@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { Prisma } from '@prisma/client'
 
+import { localizationPackIdForCountry } from '@/lib/localization/packs'
 import { getPack, INDUSTRY_PACKS, type PackId } from '@/lib/packs'
 import { can } from '@/server/auth/permissions'
 import type { OrgContext } from '@/server/auth/context'
@@ -132,6 +133,58 @@ export async function reopen(ctx: OrgContext) {
     data: { onboardingCompletedAt: null },
   })
   return { reopened: true as const }
+}
+
+/**
+ * One-click retail shop profile: install the retail pack (POS, stock, books)
+ * and replace grants so unused apps stay hidden for staff.
+ */
+export async function applyRetailShopProfile(ctx: OrgContext) {
+  if (!can(ctx.role, 'org:update') && !ctx.isSystemOwner) {
+    throw forbidden('Only an admin can apply the retail shop profile.')
+  }
+  const mayReplace =
+    ctx.isSystemOwner || ctx.role === 'OWNER' || ctx.role === 'ADMIN'
+  const result = await packService.installPack(ctx, 'retail', {
+    seedChart: false,
+    replaceGrants: mayReplace,
+  })
+  await db.organization.update({
+    where: { id: ctx.orgId },
+    data: { onboardingCompletedAt: new Date() },
+  })
+  return result
+}
+
+/**
+ * If country is SO/KE/ET/DJ and localization pack is blank, set the matching pack.
+ * Does not overwrite an explicit pack choice.
+ */
+export async function ensureLocalizationFromCountry(ctx: OrgContext) {
+  if (!can(ctx.role, 'org:update') && !ctx.isSystemOwner) {
+    throw forbidden('Only an admin can set the localization pack.')
+  }
+  const org = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: { country: true, localizationPackId: true },
+  })
+  if (!org) throw notFound('Organisation')
+  if (org.localizationPackId) {
+    return {
+      applied: false as const,
+      localizationPackId: org.localizationPackId,
+      country: org.country,
+    }
+  }
+  const packId = localizationPackIdForCountry(org.country)
+  if (!packId) {
+    return { applied: false as const, localizationPackId: null, country: org.country }
+  }
+  await db.organization.update({
+    where: { id: ctx.orgId },
+    data: { localizationPackId: packId },
+  })
+  return { applied: true as const, localizationPackId: packId, country: org.country }
 }
 
 export async function toggleChecklistItem(

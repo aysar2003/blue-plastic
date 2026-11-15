@@ -1,10 +1,21 @@
 'use client'
 
-import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useActionState, useEffect, useMemo, useRef, useState } from 'react'
 
 import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
-import { ChevronDownIcon, ChevronUpIcon, PlusIcon, SearchIcon, Trash2Icon } from 'lucide-react'
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  CopyIcon,
+  HistoryIcon,
+  MoreHorizontalIcon,
+  PlusIcon,
+  PrinterIcon,
+  SaveIcon,
+  SearchIcon,
+  Trash2Icon,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { idleState } from '@/components/forms/action-state'
@@ -17,8 +28,22 @@ import { useDuplicatePrompt } from '@/components/forms/duplicate-prompt'
 import { FormStatus } from '@/components/forms/form-status'
 import { RecordNav } from '@/components/forms/record-nav'
 import { neighborHrefs } from '@/lib/record-nav'
+import { DeleteMenuItem } from '@/components/data/delete-record'
+import {
+  DocumentAttachments,
+  type AttachmentRow,
+} from '@/components/data/document-attachments'
+import { DocumentActions } from '@/components/print/document-actions'
+import { documentEmailBody, documentEmailSubject } from '@/lib/document-email'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Card, CardContent } from '@/components/ui/card'
 import { DateField } from '@/components/ui/date-field'
 import {
@@ -40,6 +65,8 @@ import {
   PURCHASE_CATEGORY_COLUMNS,
   PURCHASE_FORM_COLUMNS,
   PURCHASE_FORM_FIELDS,
+  resolveCatalogOrder,
+  type FormColumnDef,
 } from '@/lib/form-field-catalog'
 import type { FormTemplate } from '@/lib/form-templates'
 import { Decimal, formatMoney, parseMoneyInput, ZERO } from '@/lib/money'
@@ -50,7 +77,20 @@ import { defaultPurchaseLineRows, type PurchaseTypeConfig } from '@/lib/purchase
 import { cn } from '@/lib/utils'
 import { LineStore } from '@/components/inventory/line-store'
 import { officeStoreId, type StockByStore, type StoreChoice } from '@/lib/store-stock'
-import { findPurchaseDocuments, savePurchaseForm } from '@/app/(app)/purchases/actions'
+import {
+  findPurchaseDocuments,
+  savePurchaseForm,
+  searchPurchaseCustomers,
+  searchPurchaseItems,
+  searchPurchaseVendors,
+} from '@/app/(app)/purchases/actions'
+
+function mergeById<T extends { id: string }>(base: T[], extra: T[]): T[] {
+  const map = new Map<string, T>()
+  for (const row of base) map.set(row.id, row)
+  for (const row of extra) map.set(row.id, row)
+  return [...map.values()]
+}
 
 export type VendorOption = {
   id: string
@@ -64,7 +104,8 @@ export type CustomerOffsetOption = {
   id: string
   label: string
   email: string | null
-  balance: string
+  /** Open A/R; omitted when form bootstrap skips the ledger scan for speed. */
+  balance?: string | null
   hint?: string
 }
 export type PurchaseItemOption = {
@@ -143,9 +184,9 @@ function withItemRows(seeded: Line[], storeId = '', minimum = 15): Line[] {
  */
 export function BillForm({
   config,
-  vendors,
-  customers = [],
-  items,
+  vendors: vendorsProp,
+  customers: customersProp = [],
+  items: itemsProp,
   taxCodes,
   paymentAccounts,
   expenseAccounts,
@@ -162,6 +203,11 @@ export function BillForm({
   stores = [],
   stock = {},
   formCustomization,
+  copiedFromNumber,
+  organizationName = '',
+  attachments = [],
+  canEmail = false,
+  canDelete = false,
 }: {
   config: PurchaseTypeConfig
   vendors: VendorOption[]
@@ -174,8 +220,15 @@ export function BillForm({
   terms: Option[]
   today: string
   currency: string
+  organizationName?: string
   /** The number this document has, or the next one if it has not been saved. */
   documentNumber: string
+  /** Files already on this document (edit only). */
+  attachments?: AttachmentRow[]
+  /** Show Send on the toolbar when the user may email. */
+  canEmail?: boolean
+  /** Show Delete in More when document delete is allowed. */
+  canDelete?: boolean
   /** Set when a vendor page opened this form, so the vendor is already chosen. */
   initialVendorId?: string
   /** Set when the form was opened from a project job folder. */
@@ -188,9 +241,9 @@ export function BillForm({
     previous: { id: string; number: string } | null
     next: { id: string; number: string } | null
   }
-  /** Present when editing. Saving reverses the original journal and posts a new one. */
+  /** Present when editing, or as a Copy seed without id. */
   document?: {
-    id: string
+    id?: string
     vendorId: string
     date: string
     reference: string | null
@@ -213,11 +266,50 @@ export function BillForm({
       billableUnitPrice?: string | null
     }[]
   }
+  /** Source number when this form was opened via Copy. */
+  copiedFromNumber?: string
   /** Stores a purchased item can be received into. The office is the default. */
   stores?: StoreChoice[]
   stock?: StockByStore
   formCustomization?: FormCustomizationProps
 }) {
+  const [extraVendors, setExtraVendors] = useState<VendorOption[]>([])
+  const [extraCustomers, setExtraCustomers] = useState<CustomerOffsetOption[]>([])
+  const [extraItems, setExtraItems] = useState<PurchaseItemOption[]>([])
+  const vendors = useMemo(() => mergeById(vendorsProp, extraVendors), [vendorsProp, extraVendors])
+  const customers = useMemo(
+    () => mergeById(customersProp, extraCustomers),
+    [customersProp, extraCustomers],
+  )
+  const items = useMemo(() => mergeById(itemsProp, extraItems), [itemsProp, extraItems])
+
+  const searchVendors = async (query: string) => {
+    const result = await searchPurchaseVendors({ q: query })
+    if (!result.ok) return []
+    setExtraVendors((current) => mergeById(current, result.data))
+    return result.data.map((row) => ({ id: row.id, label: row.label }))
+  }
+  const searchCustomersRemote = async (query: string) => {
+    const result = await searchPurchaseCustomers({ q: query })
+    if (!result.ok) return []
+    setExtraCustomers((current) => mergeById(current, result.data))
+    return result.data.map((row) => ({ id: row.id, label: row.label }))
+  }
+  const searchItemsRemote = async (query: string) => {
+    const result = await searchPurchaseItems({ q: query })
+    if (!result.ok) return []
+    setExtraItems((current) => mergeById(current, result.data))
+    return result.data.map((row) => {
+      const unit = row.unitOfMeasure?.trim() || 'ea'
+      return {
+        id: row.id,
+        label: row.label,
+        group: row.group,
+        hint: row.onHand != null ? `${row.onHand} ${unit} on hand` : undefined,
+      }
+    })
+  }
+
   const officeId = officeStoreId(stores)
   const [draftTemplate, setDraftTemplate] = useState<FormTemplate | null>(null)
   const [draftActiveId, setDraftActiveId] = useState<string | null>(null)
@@ -233,6 +325,33 @@ export function BillForm({
   const showColumn = (id: string) => isColumnVisible(activeForm?.columns, id)
   const showCategoryColumn = (id: string) =>
     isColumnVisible(activeForm?.categoryColumns ?? activeForm?.columns, id)
+  const itemColumns = useMemo(() => {
+    return resolveCatalogOrder(
+      PURCHASE_FORM_COLUMNS.map((column) => column.id),
+      activeForm?.columnOrder,
+    )
+      .map((id) => PURCHASE_FORM_COLUMNS.find((column) => column.id === id))
+      .filter((column): column is FormColumnDef => Boolean(column))
+      .filter((column) => {
+        if (!showColumn(column.id)) return false
+        if (column.id === 'store') return stores.length > 0
+        if (column.id === 'tax') return taxCodes.length > 0
+        return true
+      })
+  }, [activeForm?.columnOrder, activeForm?.columns, stores.length, taxCodes.length])
+  const categoryColumns = useMemo(() => {
+    return resolveCatalogOrder(
+      PURCHASE_CATEGORY_COLUMNS.map((column) => column.id),
+      activeForm?.categoryColumnOrder,
+    )
+      .map((id) => PURCHASE_CATEGORY_COLUMNS.find((column) => column.id === id))
+      .filter((column): column is FormColumnDef => Boolean(column))
+      .filter((column) => {
+        if (!showCategoryColumn(column.id)) return false
+        if (column.id === 'tax') return taxCodes.length > 0
+        return true
+      })
+  }, [activeForm?.categoryColumnOrder, activeForm?.categoryColumns, activeForm?.columns, taxCodes.length])
   const router = useRouter()
   const [state, formAction] = useActionState(savePurchaseForm, idleState)
   const { acknowledge, formRef, beforeSubmit } = useDuplicatePrompt(state)
@@ -292,7 +411,7 @@ export function BillForm({
   )
   const nextKey = useRef(lines.reduce((max, line) => Math.max(max, line.key), 0) + 1)
   const handled = useRef(false)
-  const afterSave = useRef<'close' | 'new'>('close')
+  const afterSave = useRef<'close' | 'new' | 'send'>('close')
 
   /** Wipe typed fields back to a blank sheet (or the last saved document when editing). */
   const resetForm = () => {
@@ -400,13 +519,19 @@ export function BillForm({
     if (state.status === 'success' && !handled.current) {
       handled.current = true
       toast.success(saveAsDraft.current ? 'Saved as draft.' : (state.message ?? 'Saved.'))
+      const savedId = state.created?.id ?? document?.id
+      if (afterSave.current === 'send' && savedId) {
+        router.push(`/purchases/${config.slug}/${savedId}?send=1`)
+        router.refresh()
+        return
+      }
       if (afterSave.current === 'new' && !document?.id) {
         setVendorId('')
         setOffsetCustomerId('')
         setPaymentSource('bank')
         setDate(today)
         setReference('')
-    setInRef('')
+        setInRef('')
         setMemo('')
         setPaymentTermId('')
         setPaymentAccountId(paymentAccounts[0]?.id ?? '')
@@ -417,7 +542,6 @@ export function BillForm({
       }
       // A fresh purchase order's next job is receiving — send them there so the
       // receive screen is not buried two clicks into a list menu.
-      const savedId = state.created?.id ?? document?.id
       router.push(
         afterSave.current === 'new'
           ? `/purchases/${config.slug}/new`
@@ -645,9 +769,113 @@ export function BillForm({
       <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor(false)} />
 
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-background p-1.5">
           <RecordNav {...neighborHrefs(`/purchases/${config.slug}`, neighbors, document?.id)} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (document?.id) router.push(`/purchases/${config.slug}/${document.id}/print`)
+              else window.print()
+            }}
+          >
+            <PrinterIcon />
+            Print
+          </Button>
+          {document?.id && canEmail ? (
+            <DocumentActions
+              emailOnly
+              paper={config.singular.toLowerCase()}
+              pdfHref={`/api/purchases/${document.id}/pdf`}
+              excelHref={`/api/purchases/${document.id}/xlsx`}
+              filename={`${config.slug.replace(/s$/, '')}-${number
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')}`}
+              defaultTo={
+                (payFromCustomer
+                  ? customers.find((row) => row.id === offsetCustomerId)?.email
+                  : vendors.find((row) => row.id === vendorId)?.email) ?? ''
+              }
+              defaultSubject={documentEmailSubject(
+                config.singular,
+                number,
+                organizationName || 'Company',
+              )}
+              defaultBody={documentEmailBody({
+                partyName: payFromCustomer
+                  ? customers.find((row) => row.id === offsetCustomerId)?.label
+                  : vendors.find((row) => row.id === vendorId)?.label,
+                singular: config.singular,
+                number,
+                extraLines: [`Total: ${formatMoney(totals.total, currency)}`],
+              })}
+              canEmail
+            />
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => router.push(`/purchases/${config.slug}/new`)}
+          >
+            <PlusIcon />
+            New
+          </Button>
           <PurchaseFinder type={config.type} slug={config.slug} singular={config.singular} />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" size="sm">
+                <MoreHorizontalIcon />
+                More
+                <ChevronDownIcon className="size-3.5 opacity-70" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {document?.id ? (
+                <DropdownMenuItem
+                  onSelect={() => router.push(`/purchases/${config.slug}/new?copy=${document.id}`)}
+                >
+                  <CopyIcon className="size-4" />
+                  Copy
+                </DropdownMenuItem>
+              ) : null}
+              {document?.id ? (
+                <DropdownMenuItem
+                  onSelect={() => router.push(`/purchases/${config.slug}/${document.id}`)}
+                >
+                  <HistoryIcon className="size-4" />
+                  View history
+                </DropdownMenuItem>
+              ) : null}
+              {document?.id && canDelete ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DeleteMenuItem
+                    kind="purchase"
+                    id={document.id}
+                    number={number}
+                    redirectTo={`/purchases/${config.slug}`}
+                  />
+                </>
+              ) : null}
+              {!document?.id ? (
+                <DropdownMenuItem disabled>Save the document to unlock More actions</DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!canSave}
+            onClick={() => {
+              afterSave.current = 'close'
+              saveAsDraft.current = false
+            }}
+          >
+            <SaveIcon />
+            Save
+          </Button>
         </div>
         {formCustomization && activeForm ? (
           <FormCustomizePanel
@@ -663,6 +891,12 @@ export function BillForm({
           />
         ) : null}
       </div>
+      {copiedFromNumber && !document?.id ? (
+        <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground print:hidden">
+          Copy of <span className="font-medium text-foreground">{copiedFromNumber}</span>. Saving
+          creates a new {config.singular.toLowerCase()} with a new number.
+        </p>
+      ) : null}
 
       <Card className="overflow-hidden bg-white p-0">
         {isVendorCredit ? (
@@ -692,6 +926,7 @@ export function BillForm({
                   options={customers}
                   value={offsetCustomerId || null}
                   onChange={(next) => setOffsetCustomerId(next ?? '')}
+                  onSearch={searchCustomersRemote}
                   placeholder="Choose a customer"
                   required
                   error={state.fieldErrors?.offsetCustomerId}
@@ -726,6 +961,7 @@ export function BillForm({
                   options={vendors}
                   value={vendorId || null}
                   onChange={(next) => chooseVendor(next ?? '')}
+                  onSearch={searchVendors}
                   placeholder={vendorOptional ? 'Optional — choose later for RFQ' : 'Choose a vendor'}
                   required={!vendorOptional}
                   error={state.fieldErrors?.vendorId}
@@ -911,14 +1147,22 @@ export function BillForm({
                     className="text-[12px] font-semibold uppercase tracking-wide text-white"
                     style={{ background: isVendorCredit ? VENDOR_CREDIT.band : FORM_SHEET.band }}
                   >
-                    <th className="w-64 px-2 py-2 text-left">Category</th>
-                    {showCategoryColumn('description') ? (
-                      <th className="px-2 py-2 text-left">Description</th>
-                    ) : null}
-                    {showTax && showCategoryColumn('tax') ? (
-                      <th className="w-36 px-2 py-2 text-left">Tax</th>
-                    ) : null}
-                    <th className="w-32 px-2 py-2 text-right">Amount</th>
+                    {categoryColumns.map((column) => (
+                      <th
+                        key={column.id}
+                        className={
+                          column.id === 'category'
+                            ? 'w-64 px-2 py-2 text-left'
+                            : column.id === 'tax'
+                              ? 'w-36 px-2 py-2 text-left'
+                              : column.id === 'amount'
+                                ? 'w-32 px-2 py-2 text-right'
+                                : 'px-2 py-2 text-left'
+                        }
+                      >
+                        {column.label}
+                      </th>
+                    ))}
                     {canBillCustomer ? (
                       <>
                         <th className="w-48 px-2 py-2 text-left">Billable to</th>
@@ -933,9 +1177,7 @@ export function BillForm({
                     <tr>
                       <td
                         colSpan={
-                          2 +
-                          (showCategoryColumn('description') ? 1 : 0) +
-                          (showTax && showCategoryColumn('tax') ? 1 : 0)
+                          categoryColumns.length + 1 + (canBillCustomer ? 2 : 0)
                         }
                         className="px-3 py-4 text-sm text-muted-foreground"
                       >
@@ -945,49 +1187,64 @@ export function BillForm({
                   ) : null}
                   {categoryLines.map((line, index) => (
                     <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
-                      <td className="px-2 py-1.5">
-                        <AccountPicker
-                          options={expenseAccounts}
-                          value={line.expenseAccountId || null}
-                          onChange={(next) => update(line.key, { expenseAccountId: next ?? '' })}
-                          clearable
-                        />
-                      </td>
-                      {showCategoryColumn('description') ? (
-                        <td className="px-2 py-1.5">
-                          <Input
-                            aria-label="Description"
-                            value={line.description}
-                            onChange={(event) => update(line.key, { description: event.target.value })}
-                          />
-                        </td>
-                      ) : null}
-                      {showTax && showCategoryColumn('tax') ? (
-                        <td className="px-2 py-1.5">
-                          <NativeSelect
-                            aria-label="Tax code"
-                            value={line.taxCodeId}
-                            onChange={(event) => update(line.key, { taxCodeId: event.target.value })}
-                          >
-                            <option value="">No tax</option>
-                            {taxCodes.map((code) => (
-                              <option key={code.id} value={code.id}>
-                                {code.label}
-                              </option>
-                            ))}
-                          </NativeSelect>
-                        </td>
-                      ) : null}
-                      <td className="px-2 py-1.5">
-                        <Input
-                          aria-label="Amount"
-                          inputMode="decimal"
-                          className="tabular text-right"
-                          value={line.unitPrice}
-                          onChange={(event) => update(line.key, { unitPrice: event.target.value })}
-                          onBlur={(event) => update(line.key, { unitPrice: fixed2(event.target.value) })}
-                        />
-                      </td>
+                      {categoryColumns.map((column) => {
+                        if (column.id === 'category') {
+                          return (
+                            <td key={column.id} className="px-2 py-1.5">
+                              <AccountPicker
+                                options={expenseAccounts}
+                                value={line.expenseAccountId || null}
+                                onChange={(next) => update(line.key, { expenseAccountId: next ?? '' })}
+                                clearable
+                              />
+                            </td>
+                          )
+                        }
+                        if (column.id === 'description') {
+                          return (
+                            <td key={column.id} className="px-2 py-1.5">
+                              <Input
+                                aria-label="Description"
+                                value={line.description}
+                                onChange={(event) => update(line.key, { description: event.target.value })}
+                              />
+                            </td>
+                          )
+                        }
+                        if (column.id === 'tax') {
+                          return (
+                            <td key={column.id} className="px-2 py-1.5">
+                              <NativeSelect
+                                aria-label="Tax code"
+                                value={line.taxCodeId}
+                                onChange={(event) => update(line.key, { taxCodeId: event.target.value })}
+                              >
+                                <option value="">No tax</option>
+                                {taxCodes.map((code) => (
+                                  <option key={code.id} value={code.id}>
+                                    {code.label}
+                                  </option>
+                                ))}
+                              </NativeSelect>
+                            </td>
+                          )
+                        }
+                        if (column.id === 'amount') {
+                          return (
+                            <td key={column.id} className="px-2 py-1.5">
+                              <Input
+                                aria-label="Amount"
+                                inputMode="decimal"
+                                className="tabular text-right"
+                                value={line.unitPrice}
+                                onChange={(event) => update(line.key, { unitPrice: event.target.value })}
+                                onBlur={(event) => update(line.key, { unitPrice: fixed2(event.target.value) })}
+                              />
+                            </td>
+                          )
+                        }
+                        return <Fragment key={column.id} />
+                      })}
                       {canBillCustomer ? (
                         <>
                           <td className="px-2 py-1.5">
@@ -1001,6 +1258,7 @@ export function BillForm({
                                   billableUnitPrice: next ? line.billableUnitPrice : '',
                                 })
                               }
+                              onSearch={searchCustomersRemote}
                               placeholder="Not billable"
                               clearable
                             />
@@ -1058,16 +1316,28 @@ export function BillForm({
                   className="text-[12px] font-semibold uppercase tracking-wide text-white"
                   style={{ background: isVendorCredit ? VENDOR_CREDIT.band : FORM_SHEET.band }}
                 >
-                <th className="w-44 px-2 py-2 text-left">Item</th>
-                {showColumn('description') ? <th className="px-2 py-2 text-left">Description</th> : null}
-                {showColumn('qty') ? <th className="w-24 px-2 py-2 text-center">Qty</th> : null}
-                {showColumn('unit') ? <th className="w-16 px-2 py-2 text-center">Unit</th> : null}
-                {showColumn('rate') ? <th className="w-28 px-2 py-2 text-right">Rate</th> : null}
-                {showTax && showColumn('tax') ? <th className="w-36 px-2 py-2 text-left">Tax</th> : null}
-                <th className="w-28 px-2 py-2 text-right">Amount</th>
-                {showColumn('store') && stores.length > 0 ? (
-                  <th className="w-40 px-2 py-2 text-left">Store</th>
-                ) : null}
+                {itemColumns.map((column) => (
+                  <th
+                    key={column.id}
+                    className={
+                      column.id === 'item'
+                        ? 'w-44 px-2 py-2 text-left'
+                        : column.id === 'qty'
+                          ? 'w-24 px-2 py-2 text-center'
+                          : column.id === 'unit'
+                            ? 'w-16 px-2 py-2 text-center'
+                            : column.id === 'rate' || column.id === 'amount'
+                              ? 'w-28 px-2 py-2 text-right'
+                              : column.id === 'tax'
+                                ? 'w-36 px-2 py-2 text-left'
+                                : column.id === 'store'
+                                  ? 'w-40 px-2 py-2 text-left'
+                                  : 'px-2 py-2 text-left'
+                    }
+                  >
+                    {column.label}
+                  </th>
+                ))}
                 <th className="w-8" />
               </tr>
             </thead>
@@ -1075,108 +1345,129 @@ export function BillForm({
               {itemLines.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={
-                      3 +
-                      (showColumn('description') ? 1 : 0) +
-                      (showColumn('qty') ? 1 : 0) +
-                      (showColumn('unit') ? 1 : 0) +
-                      (showColumn('rate') ? 1 : 0) +
-                      (showTax && showColumn('tax') ? 1 : 0) +
-                      (showColumn('store') && stores.length > 0 ? 1 : 0)
-                    }
+                    colSpan={itemColumns.length + 1}
                     className="px-3 py-4 text-sm text-muted-foreground"
                   >
                     No products on this document.
                   </td>
                 </tr>
               ) : null}
-              {itemLines.map((line, index) => {
+              {itemLines.map((line, rowIndex) => {
                 return (
-                  <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
-                    <td className="px-2 py-1.5">
-                      <EntityPicker
-                        kind="item"
-                        options={itemOptions}
-                        value={line.itemId || null}
-                        onChange={(next) => chooseItem(line.key, next ?? '')}
-                        placeholder="Search or add an item"
-                        clearable
-                      />
-                    </td>
-                    {showColumn('description') ? (
-                      <td className="px-2 py-1.5">
-                        <Input
-                          aria-label="Description"
-                          value={line.description}
-                          onChange={(event) => update(line.key, { description: event.target.value })}
-                        />
-                      </td>
-                    ) : null}
-                    {showColumn('qty') ? (
-                      <td className="px-2 py-1.5">
-                        <Input
-                          aria-label="Quantity"
-                          inputMode="decimal"
-                          className="tabular text-right"
-                          value={line.quantity}
-                          onChange={(event) => update(line.key, { quantity: event.target.value })}
-                          onBlur={(event) => update(line.key, { quantity: fixed2(event.target.value) })}
-                        />
-                      </td>
-                    ) : null}
-                    {showColumn('unit') ? (
-                      <td className="px-2 py-1.5 text-center text-[0.7rem] font-medium uppercase text-muted-foreground">
-                        {line.itemId
-                          ? (itemById.get(line.itemId)?.unitOfMeasure?.trim() || 'EACH').toUpperCase()
-                          : ''}
-                      </td>
-                    ) : null}
-                    {showColumn('rate') ? (
-                      <td className="px-2 py-1.5">
-                        <Input
-                          aria-label="Unit cost"
-                          inputMode="decimal"
-                          className="tabular text-right"
-                          value={line.unitPrice}
-                          onChange={(event) => update(line.key, { unitPrice: event.target.value })}
-                          onBlur={(event) => update(line.key, { unitPrice: fixed2(event.target.value) })}
-                        />
-                      </td>
-                    ) : null}
-                    {showTax && showColumn('tax') ? (
-                      <td className="px-2 py-1.5">
-                        <NativeSelect
-                          aria-label="Tax code"
-                          value={line.taxCodeId}
-                          onChange={(event) => update(line.key, { taxCodeId: event.target.value })}
-                        >
-                          <option value="">No tax</option>
-                          {taxCodes.map((code) => (
-                            <option key={code.id} value={code.id}>
-                              {code.label}
-                            </option>
-                          ))}
-                        </NativeSelect>
-                      </td>
-                    ) : null}
-                    <td className="px-1 py-1">
-                      <ItemAmount line={line} onCommit={(next) => update(line.key, next)} />
-                    </td>
-                    {showColumn('store') && stores.length > 0 ? (
-                      <td className="px-1 py-1 align-top">
-                        <LineStore
-                          stores={stores}
-                          stock={stock}
-                          tracked={items.some((item) => item.id === line.itemId && item.type === 'INVENTORY')}
-                          warn={false}
-                          itemId={line.itemId}
-                          storeId={line.storeId}
-                          quantity={line.quantity}
-                          onChange={(storeId) => update(line.key, { storeId })}
-                          label="Store"
-                        />
-                      </td>
-                    ) : null}
+                  <tr key={line.key} className={rowIndex % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
+                    {itemColumns.map((column) => {
+                      if (column.id === 'item') {
+                        return (
+                          <td key={column.id} className="px-2 py-1.5">
+                            <EntityPicker
+                              kind="item"
+                              options={itemOptions}
+                              value={line.itemId || null}
+                              onChange={(next) => chooseItem(line.key, next ?? '')}
+                              onSearch={searchItemsRemote}
+                              placeholder="Search or add an item"
+                              clearable
+                            />
+                          </td>
+                        )
+                      }
+                      if (column.id === 'description') {
+                        return (
+                          <td key={column.id} className="px-2 py-1.5">
+                            <Input
+                              aria-label="Description"
+                              value={line.description}
+                              onChange={(event) => update(line.key, { description: event.target.value })}
+                            />
+                          </td>
+                        )
+                      }
+                      if (column.id === 'qty') {
+                        return (
+                          <td key={column.id} className="px-2 py-1.5">
+                            <Input
+                              aria-label="Quantity"
+                              inputMode="decimal"
+                              className="tabular text-right"
+                              value={line.quantity}
+                              onChange={(event) => update(line.key, { quantity: event.target.value })}
+                              onBlur={(event) => update(line.key, { quantity: fixed2(event.target.value) })}
+                            />
+                          </td>
+                        )
+                      }
+                      if (column.id === 'unit') {
+                        return (
+                          <td
+                            key={column.id}
+                            className="px-2 py-1.5 text-center text-[0.7rem] font-medium uppercase text-muted-foreground"
+                          >
+                            {line.itemId
+                              ? (itemById.get(line.itemId)?.unitOfMeasure?.trim() || 'EACH').toUpperCase()
+                              : ''}
+                          </td>
+                        )
+                      }
+                      if (column.id === 'rate') {
+                        return (
+                          <td key={column.id} className="px-2 py-1.5">
+                            <Input
+                              aria-label="Unit cost"
+                              inputMode="decimal"
+                              className="tabular text-right"
+                              value={line.unitPrice}
+                              onChange={(event) => update(line.key, { unitPrice: event.target.value })}
+                              onBlur={(event) => update(line.key, { unitPrice: fixed2(event.target.value) })}
+                            />
+                          </td>
+                        )
+                      }
+                      if (column.id === 'tax') {
+                        return (
+                          <td key={column.id} className="px-2 py-1.5">
+                            <NativeSelect
+                              aria-label="Tax code"
+                              value={line.taxCodeId}
+                              onChange={(event) => update(line.key, { taxCodeId: event.target.value })}
+                            >
+                              <option value="">No tax</option>
+                              {taxCodes.map((code) => (
+                                <option key={code.id} value={code.id}>
+                                  {code.label}
+                                </option>
+                              ))}
+                            </NativeSelect>
+                          </td>
+                        )
+                      }
+                      if (column.id === 'amount') {
+                        return (
+                          <td key={column.id} className="px-1 py-1">
+                            <ItemAmount line={line} onCommit={(next) => update(line.key, next)} />
+                          </td>
+                        )
+                      }
+                      if (column.id === 'store') {
+                        return (
+                          <td key={column.id} className="px-1 py-1 align-top">
+                            <LineStore
+                              stores={stores}
+                              stock={stock}
+                              tracked={items.some(
+                                (item) => item.id === line.itemId && item.type === 'INVENTORY',
+                              )}
+                              warn={false}
+                              itemId={line.itemId}
+                              storeId={line.storeId}
+                              quantity={line.quantity}
+                              onChange={(storeId) => update(line.key, { storeId })}
+                              label="Store"
+                            />
+                          </td>
+                        )
+                      }
+                      return <Fragment key={column.id} />
+                    })}
                     <td className="px-1 py-1.5">
                       <Button
                         type="button"
@@ -1240,6 +1531,15 @@ export function BillForm({
         </CardContent>
       </Card>
 
+      {document?.id ? (
+        <DocumentAttachments
+          target={{ kind: 'purchase', id: document.id }}
+          files={attachments}
+          canEdit
+          hint="Vendor invoice photo or PDF · 4 MB or smaller"
+        />
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => router.push(`/purchases/${config.slug}`)}>
           Close
@@ -1270,6 +1570,20 @@ export function BillForm({
         >
           Save and close
         </SubmitButton>
+        {canEmail ? (
+          <SubmitButton
+            variant="outline"
+            disabled={!canSave}
+            pendingLabel="Saving…"
+            title="Save, then open the email dialog on the document"
+            onClick={() => {
+              afterSave.current = 'send'
+              saveAsDraft.current = false
+            }}
+          >
+            Save and send
+          </SubmitButton>
+        ) : null}
         <SubmitButton
           disabled={!canSave}
           pendingLabel="Saving…"

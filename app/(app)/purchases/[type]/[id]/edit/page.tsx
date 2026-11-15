@@ -8,6 +8,7 @@ import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { toCalendarDate, today } from '@/lib/date'
 import { purchaseBySlug } from '@/lib/purchase-types'
 import { requireOrgContext } from '@/server/auth/context'
+import { listForPurchase } from '@/server/files/ledger-files'
 import { loadFormCustomization } from '@/server/services/form-customization'
 import { loadPurchaseOptions } from '@/server/services/purchase-options'
 import * as purchaseService from '@/server/services/purchase.service'
@@ -30,16 +31,28 @@ export default async function EditPurchasePage({
   if (!config) notFound()
 
   const ctx = await requireOrgContext('bill:update')
-  const [document, options, neighbors, shelf, formCustomization, classes] = await Promise.all([
-    purchaseService.get(ctx, id),
-    loadPurchaseOptions(ctx),
+  const document = await purchaseService.get(ctx, id)
+  if (document.type !== config.type) notFound()
+
+  const [options, neighbors, shelf, formCustomization, classes, papers] = await Promise.all([
+    loadPurchaseOptions(ctx, {
+      ensureVendorIds: document.vendor?.id ? [document.vendor.id] : [],
+      ensureCustomerIds: [
+        ...(document.offsetCustomer?.id ? [document.offsetCustomer.id] : []),
+        ...document.lines
+          .map((line) => line.billableCustomerId)
+          .filter((id): id is string => Boolean(id)),
+      ],
+      ensureItemIds: document.lines
+        .map((line) => line.item?.id)
+        .filter((id): id is string => Boolean(id)),
+    }),
     purchaseService.neighbors(ctx, config.type, id),
     storeService.quantities(ctx),
     loadFormCustomization(ctx, 'purchase', config.type),
     trackingCategories.list(ctx),
+    listForPurchase(ctx, id),
   ])
-
-  if (document.type !== config.type) notFound()
 
   return (
     <SalesPaperFrame>
@@ -64,6 +77,7 @@ export default async function EditPurchasePage({
         }))}
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}
+        organizationName={ctx.organization.name}
         documentNumber={document.number}
         document={{
           id: document.id,
@@ -95,6 +109,18 @@ export default async function EditPurchasePage({
         stores={shelf.stores}
         stock={shelf.byItem}
         formCustomization={formCustomization}
+        attachments={papers.map((file) => ({
+          id: file.id,
+          originalName: file.originalName,
+          contentType: file.contentType,
+          byteSize: file.byteSize,
+        }))}
+        canEmail={ctx.permissions.has('invoice:send')}
+        canDelete={
+          ctx.features.allowDocumentDelete &&
+          ctx.permissions.has('bill:void') &&
+          document.status !== 'VOID'
+        }
       />
       <ApprovalTrailPanel entityType="PURCHASE_DOCUMENT" entityId={document.id} />
     </SalesPaperFrame>

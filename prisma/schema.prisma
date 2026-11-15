@@ -164,6 +164,12 @@ enum DocumentType {
   WORK_ORDER
   /// Customer job / project folder (Odoo-style).
   PROJECT
+  /// Field service / van job (Phase 37).
+  SERVICE_JOB
+  /// Customer sales contract with progress milestones (Phase 38).
+  SALES_CONTRACT
+  /// Corrective / preventive action note (Phase 39).
+  CAPA_NOTE
 }
 
 enum WorkOrderStatus {
@@ -171,6 +177,32 @@ enum WorkOrderStatus {
   RELEASED
   DONE
   CANCELLED
+}
+
+enum ServiceJobStatus {
+  DRAFT
+  SCHEDULED
+  DONE
+  CANCELLED
+}
+
+enum ServiceJobLineKind {
+  PART
+  LABOR
+  TRAVEL
+}
+
+enum SalesContractStatus {
+  DRAFT
+  ACTIVE
+  DONE
+  CANCELLED
+}
+
+enum CapaStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
 }
 
 /// Lifecycle of a customer job (Projects app).
@@ -321,8 +353,22 @@ enum SystemAccountKey {
   TIP_LIABILITY
   /// Construction progress retention held by the customer (asset until released).
   RETENTION_RECEIVABLE
+  /// Vendor retention held on AP bills until release (Phase 38).
+  RETENTION_PAYABLE
   /// Prepaid / unearned customer revenue (subscriptions, rentals) — Phase 36.
   UNEARNED_REVENUE
+  /// Customer loan principal outstanding (Phase 57 deepen).
+  LOAN_RECEIVABLE
+  /// Interest earned on loans (Phase 57 deepen).
+  LOAN_INTEREST_INCOME
+  /// Marketplace platform commission revenue (Phase 56 deepen).
+  COMMISSION_INCOME
+  /// Amount owed to marketplace sellers (Phase 56 deepen).
+  COMMISSION_PAYABLE
+  /// Franchise royalty income on parent books (Phase 51 deepen).
+  ROYALTY_INCOME
+  /// Royalty due from franchise child (Phase 51 deepen).
+  ROYALTY_RECEIVABLE
 }
 
 /// How an item behaves. The distinction drives which accounts it must map to and
@@ -612,6 +658,9 @@ model Organization {
   /// Null = no pack installed yet. Vertical deepen may still be planned for some ids.
   installedPackId String?
 
+  /// Statutory / payroll CSV pack (`lib/localization/packs.ts`) — Phase 40.
+  localizationPackId String?
+
   /// When set, the institution onboarding wizard was finished or skipped.
   onboardingCompletedAt DateTime? @db.Timestamptz(6)
 
@@ -640,6 +689,12 @@ model Organization {
   children    Organization[] @relation("OrgGroup")
   /// Parent ownership of this company (0–100). Used only when parentOrgId is set. Default 100 = wholly owned.
   ownershipPercent Decimal @default(100) @db.Decimal(7, 4)
+  /// Franchise: royalty % owed to parent on child sales (Phase 51).
+  franchiseRoyaltyPercent Decimal? @db.Decimal(7, 4)
+  /// E-sign adapter: `{ kind: 'native'|'webhook', webhookUrl?: string, webhookSecret?: string }` (Phase 59).
+  signProvider Json?
+  /// Extra trusted extension ids merged with first-party registry (Phase 60 deepen). Shape: `{ id: string }[]`.
+  trustedExtensions Json?
 
   /// When true, only the system owner may open this company (locked / restricted).
   accessRestricted Boolean @default(false)
@@ -790,17 +845,27 @@ model Organization {
   binMovements         BinMovement[]
   putawayTasks         PutawayTask[]
   pickWaves            PickWave[]
+  itemBinDefaults      ItemBinDefault[]
   trainingCourses      TrainingCourse[]
   trainingEnrollments  TrainingEnrollment[]
   apiKeys              ApiKey[]
   reportPacks          ReportPack[]
   reportPackRuns       ReportPackRun[]
   workOrders           WorkOrder[]
+  serviceJobs          ServiceJob[]
+  salesContracts       SalesContract[]
+  capaNotes            CapaNote[]
   dashboards           Dashboard[]
   metricSnapshots      MetricSnapshot[]
   priceLists           PriceList[]
   itemPromotions       ItemPromotion[]
   intercompanyMatchesAsRoot IntercompanyMatch[] @relation("IcMatchRoot")
+  marketplaceSellers   MarketplaceSeller[]
+  settlementBatches    SettlementBatch[]
+  loanProducts         LoanProduct[]
+  loanAccounts         LoanAccount[]
+  loanScheduleLines    LoanScheduleLine[]
+  insurancePolicies    InsurancePolicy[]
 
   @@index([parentOrgId])
   @@map("organizations")
@@ -1090,6 +1155,7 @@ model User {
   discussMessagesAuthored   DiscussMessage[] @relation("DiscussMessageAuthor")
   crmActivitiesCreated      CrmActivity[]    @relation("CrmActivityCreatedBy")
   apiKeysCreated            ApiKey[]         @relation("ApiKeyCreatedBy")
+  serviceJobsAssigned       ServiceJob[]     @relation("ServiceJobAssignee")
 
   @@map("users")
 }
@@ -1628,6 +1694,7 @@ model Journal {
   endOfService          EndOfService?
   fixedAssetDepreciations FixedAssetDepreciation[]
   equityEvents            EquityEvent[]
+  settlementBatches       SettlementBatch[]
 
   reversalOf Journal? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedBy Journal? @relation("JournalReversal")
@@ -1756,6 +1823,8 @@ model TrackingCategory {
 
   name     String
   isActive Boolean @default(true)
+  /// NGO funds lite: bills/expenses must carry this class when any active class has this set.
+  restrictSpending Boolean @default(false)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -1767,6 +1836,7 @@ model TrackingCategory {
   patientVisits     PatientVisit[]
   donorPledges      DonorPledge[]
   budgets           Budget[]
+  budgetLines       BudgetLine[]
 
   @@unique([orgId, name])
   /// Target for the composite foreign keys that keep a class inside its company.
@@ -1899,6 +1969,11 @@ model Customer {
   studentEnrollments StudentEnrollment[]
   patientVisits    PatientVisit[]
   donorPledges     DonorPledge[]
+  serviceJobs      ServiceJob[]
+  salesContracts   SalesContract[]
+  shareholders     Shareholder[]
+  loanAccounts     LoanAccount[]
+  insurancePolicies InsurancePolicy[]
 
   /// Same trading party on the purchase side (e.g. Mall Group as customer and supplier).
   /// One customer ↔ one vendor. Cleared if the vendor is removed.
@@ -2023,6 +2098,8 @@ model Vendor {
   /// Reverse of Customer.linkedVendorId — same party as a customer.
   linkedCustomer        Customer? @relation("CustomerVendorLink")
   preferredItems        Item[]
+  marketplaceSellers    MarketplaceSeller[]
+  salesLinesAsSeller    SalesDocumentLine[] @relation("SalesLineSeller")
 
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
@@ -2149,6 +2226,7 @@ model Item {
   assemblyBuildLines AssemblyBuildLine[]
   workOrders       WorkOrder[] @relation("WorkOrderItem")
   workOrderLines   WorkOrderLine[] @relation("WorkOrderLineItem")
+  serviceJobLines  ServiceJobLine[] @relation("ServiceJobLineItem")
   storeTransfers   StoreTransfer[]
   storeTickets     StoreTicket[]
   deliveryNoteLines DeliveryNoteLine[]
@@ -2166,6 +2244,7 @@ model Item {
   asnShipmentLines AsnShipmentLine[]
   priceListItems   PriceListItem[]
   promotions       ItemPromotion[]
+  itemBinDefaults  ItemBinDefault[]
 
   @@unique([orgId, name])
   @@unique([orgId, sku])
@@ -2189,6 +2268,8 @@ model ItemLot {
   /// When set, lot was written off (expired disposal).
   disposedAt DateTime? @db.Timestamptz(6)
   disposedQuantity Decimal? @db.Decimal(19, 4)
+  /// Agriculture pack: field / orchard label (Phase 50).
+  originLabel String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -2234,6 +2315,10 @@ model Store {
   isActive           Boolean @default(true)
   /// The office. Stock recorded before a store was chosen is counted here.
   isOffice           Boolean @default(false)
+  /// Mobile van / technician stock (Phase 37 service jobs).
+  isVan              Boolean @default(false)
+  /// Agriculture pack: farm / field location (Phase 50).
+  isFarm             Boolean @default(false)
 
   /// Where the store sits — street / area.
   address String?
@@ -2261,6 +2346,8 @@ model Store {
   deliveryNotes DeliveryNote[]
   assemblyBuilds AssemblyBuild[]
   workOrders    WorkOrder[]
+  serviceJobVans ServiceJob[] @relation("ServiceJobVanStore")
+  serviceJobLinesVan ServiceJobLine[] @relation("ServiceJobLineVanStore")
   adjustments  InventoryAdjustment[]
   posRegisters  PosRegister[]
   bins          StockBin[]
@@ -2268,6 +2355,7 @@ model Store {
   putawayTasks  PutawayTask[]
   workCenters   WorkCenter[]
   siteProjects  Project[]
+  itemBinDefaults ItemBinDefault[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
@@ -2633,6 +2721,10 @@ model Project {
   billedPercent Decimal @default(0) @db.Decimal(7, 4)
   /// Professional services: retainer balance held (memo; billed via retainer invoices).
   retainerAmount Decimal? @db.Decimal(19, 4)
+  /// Services lite: unbilled retainer left after retainer invoices (Phase 46).
+  retainerRemaining Decimal? @db.Decimal(19, 4)
+  /// Construction: optional job budget for budget vs actual (Phase 43).
+  budgetAmount Decimal? @db.Decimal(19, 4)
   /// Construction site store — stock issued / transferred to the job.
   storeId String?
 
@@ -2649,6 +2741,8 @@ model Project {
   purchaseDocuments PurchaseDocument[]
   tasks             ProjectTask[]
   timeEntries       ProjectTimeEntry[]
+  serviceJobs       ServiceJob[]
+  salesContracts    SalesContract[]
 
   @@unique([orgId, number])
   @@unique([id, orgId])
@@ -2782,6 +2876,7 @@ model RecurringTemplate {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   createdBy    User?        @relation("RecurringCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   deferredSchedules DeferredRevenueSchedule[]
+  insurancePolicies InsurancePolicy[]
 
   @@index([orgId, isActive, nextRunOn])
   @@index([orgId, type, isActive, nextRunOn])
@@ -2940,6 +3035,8 @@ model SalesDocument {
   studentEnrollment StudentEnrollment?
   patientVisit  PatientVisit?
   files         LedgerFile[]
+  serviceJob    ServiceJob?
+  contractMilestones ContractMilestone[]
 
   @@unique([orgId, type, number])
   @@unique([id, orgId])
@@ -2997,6 +3094,8 @@ model SalesDocumentLine {
 
   /// When this invoice line recharged a purchase cost (Phase 11.5).
   sourcePurchaseLineId String? @unique
+  /// Phase 56: marketplace seller vendor on this sale line.
+  sellerVendorId String?
 
   document      SalesDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
   item          Item?          @relation(fields: [itemId], references: [id], onDelete: Restrict)
@@ -3004,9 +3103,11 @@ model SalesDocumentLine {
   incomeAccount LedgerAccount? @relation("SalesLineIncome", fields: [incomeAccountId], references: [id], onDelete: Restrict)
   store         Store?         @relation(fields: [storeId], references: [id], onDelete: SetNull)
   sourcePurchaseLine PurchaseDocumentLine? @relation("BillableExpenseInvoice", fields: [sourcePurchaseLineId], references: [id], onDelete: SetNull)
+  sellerVendor  Vendor?        @relation("SalesLineSeller", fields: [sellerVendorId], references: [id], onDelete: SetNull)
 
   @@unique([documentId, lineNumber])
   @@index([orgId, itemId])
+  @@index([orgId, sellerVendorId])
   @@map("sales_document_lines")
 }
 
@@ -3167,11 +3268,17 @@ model PurchaseDocument {
   matchApprovedAt       DateTime? @db.Timestamptz(6)
   matchApprovedById     String?
 
+  /// Vendor retention held on this bill (Phase 38 lite — stored; release via journal).
+  retentionAmount Decimal? @db.Decimal(19, 4)
+  retentionReleasedAt DateTime? @db.Timestamptz(6)
+
   /// Optional job this purchase belongs to (Projects app).
   projectId String?
 
   /// Optional class. Stamped onto every journal line when the document posts.
   trackingCategoryId String?
+  /// Phase 53: PO commitment encumbrance when the order opens.
+  encumbered Boolean @default(false)
 
   voidedAt   DateTime? @db.Timestamptz(6)
   voidReason String?
@@ -3842,6 +3949,150 @@ model WorkOrderLine {
   @@map("work_order_lines")
 }
 
+/// Field service job — parts, labour, travel; completes into a posted invoice (Phase 37).
+model ServiceJob {
+  id    String @id @default(cuid())
+  orgId String
+
+  number String
+  date   DateTime @db.Date
+
+  customerId  String
+  projectId   String?
+  assigneeId  String?
+  /// Default van store for the job (optional).
+  vanStoreId  String?
+
+  status ServiceJobStatus @default(DRAFT)
+
+  scheduledAt DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+
+  memo String?
+
+  /// Invoice created when the job is completed.
+  salesDocumentId String? @unique
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  assignee     User?         @relation("ServiceJobAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  vanStore     Store?        @relation("ServiceJobVanStore", fields: [vanStoreId], references: [id], onDelete: SetNull)
+  salesDocument SalesDocument? @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
+  lines        ServiceJobLine[]
+
+  @@unique([orgId, number])
+  @@index([orgId, status, date(sort: Desc)])
+  @@index([orgId, customerId])
+  @@index([orgId, assigneeId])
+  @@map("service_jobs")
+}
+
+model ServiceJobLine {
+  id           String @id @default(cuid())
+  serviceJobId String
+  orgId        String
+
+  lineNumber Int @db.SmallInt
+  kind       ServiceJobLineKind
+  itemId     String?
+  description String?
+  quantity   Decimal @default(1) @db.Decimal(19, 4)
+  unitPrice  Decimal @default(0) @db.Decimal(19, 4)
+  /// Van store to issue PART stock from (must be isVan when set).
+  vanStoreId String?
+
+  serviceJob ServiceJob @relation(fields: [serviceJobId], references: [id], onDelete: Cascade)
+  item       Item?      @relation("ServiceJobLineItem", fields: [itemId], references: [id], onDelete: SetNull)
+  vanStore   Store?     @relation("ServiceJobLineVanStore", fields: [vanStoreId], references: [id], onDelete: SetNull)
+
+  @@unique([serviceJobId, lineNumber])
+  @@index([orgId, itemId])
+  @@map("service_job_lines")
+}
+
+/// Customer contract with % milestones (Phase 38).
+model SalesContract {
+  id    String @id @default(cuid())
+  orgId String
+
+  number String
+  name   String
+
+  customerId String?
+  projectId  String?
+
+  contractValue Decimal @db.Decimal(19, 4)
+  status        SalesContractStatus @default(DRAFT)
+
+  memo String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  milestones   ContractMilestone[]
+
+  @@unique([orgId, number])
+  @@index([orgId, status, updatedAt(sort: Desc)])
+  @@map("sales_contracts")
+}
+
+model ContractMilestone {
+  id         String @id @default(cuid())
+  contractId String
+  orgId      String
+
+  lineNumber Int @db.SmallInt
+  name       String
+  /// Share of contract value (0–100).
+  percent    Decimal @db.Decimal(7, 4)
+
+  billedAt          DateTime? @db.Timestamptz(6)
+  salesDocumentId   String?
+
+  contract      SalesContract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  salesDocument SalesDocument? @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
+
+  @@unique([contractId, lineNumber])
+  @@index([orgId, contractId])
+  @@map("contract_milestones")
+}
+
+/// Quality CAPA note (Phase 39).
+model CapaNote {
+  id    String @id @default(cuid())
+  orgId String
+
+  number String
+  title  String
+  body   String? @db.Text
+
+  status CapaStatus @default(OPEN)
+
+  workspaceDocumentId String?
+  signRequestId       String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspaceDocument WorkspaceDocument? @relation(fields: [workspaceDocumentId], references: [id], onDelete: SetNull)
+  signRequest       SignRequest?       @relation(fields: [signRequestId], references: [id], onDelete: SetNull)
+
+  @@unique([orgId, number])
+  @@index([orgId, status, updatedAt(sort: Desc)])
+  @@map("capa_notes")
+}
+
 model AssemblyBuildLine {
   id      String @id @default(cuid())
   buildId String
@@ -4183,6 +4434,10 @@ model WorkspaceDocument {
   storageKey   String
   notes        String?
 
+  /// Optional linked e-sign request (Phase 39 CAPA).
+  signRequestId String?
+  signRequest   SignRequest? @relation(fields: [signRequestId], references: [id], onDelete: SetNull)
+
   createdById String?
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
@@ -4190,6 +4445,7 @@ model WorkspaceDocument {
   organization Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
   folder       WorkspaceDocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   createdBy    User?                    @relation("WorkspaceDocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  capaNotes    CapaNote[]
 
   @@index([orgId, createdAt])
   @@index([orgId, folderId, createdAt])
@@ -5037,6 +5293,12 @@ model EndOfService {
 }
 
 /// Named budget covering a date range (QBD-style Budget vs Actual).
+enum BudgetStatus {
+  DRAFT
+  APPROVED
+  SUPERSEDED
+}
+
 model Budget {
   id    String @id @default(cuid())
   orgId String
@@ -5048,32 +5310,50 @@ model Budget {
   /// NGO: optional fund / programme class this grant budget belongs to.
   trackingCategoryId String?
 
+  status      BudgetStatus @default(DRAFT)
+  version     Int          @default(1)
+  /// Prior version this draft revises (approve marks that row SUPERSEDED).
+  supersedesId String?
+  approvedAt   DateTime? @db.Timestamptz(6)
+  approvedById String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   organization     Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
   trackingCategory TrackingCategory? @relation(fields: [trackingCategoryId], references: [id], onDelete: SetNull)
+  supersedes       Budget?           @relation("BudgetRevisions", fields: [supersedesId], references: [id], onDelete: SetNull)
+  revisions        Budget[]          @relation("BudgetRevisions")
   lines            BudgetLine[]
 
   @@index([orgId, startDate, endDate])
+  @@index([orgId, status])
   @@index([trackingCategoryId])
+  @@index([supersedesId])
   @@map("budgets")
 }
 
 model BudgetLine {
-  id       String @id @default(cuid())
-  orgId    String
-  budgetId String
+  id        String @id @default(cuid())
+  orgId     String
+  budgetId  String
   accountId String
 
-  /// Planned amount for this account over the budget's date range.
+  /// Calendar month 1–12 within the budget window.
+  month Int @db.SmallInt
+  /// Optional class / department on this cell (in addition to budget header fund).
+  trackingCategoryId String?
+
+  /// Planned amount for this account in this month (and class).
   amount Decimal @db.Decimal(19, 4)
 
-  budget  Budget        @relation(fields: [budgetId], references: [id], onDelete: Cascade)
-  account LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  budget           Budget            @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  account          LedgerAccount     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  trackingCategory TrackingCategory? @relation(fields: [trackingCategoryId], references: [id], onDelete: SetNull)
 
-  @@unique([budgetId, accountId])
   @@index([orgId, budgetId])
+  @@index([budgetId, accountId, month])
+  @@index([trackingCategoryId])
   @@map("budget_lines")
 }
 
@@ -5351,6 +5631,11 @@ model FixedAssetDepreciation {
   @@map("fixed_asset_depreciations")
 }
 
+enum ShareholderMemberKind {
+  MEMBER
+  INVESTOR
+}
+
 model Shareholder {
   id    String @id @default(cuid())
   orgId String
@@ -5358,6 +5643,8 @@ model Shareholder {
   name             String
   shares           Decimal @default(0) @db.Decimal(19, 4)
   ownershipPercent Decimal @default(0) @db.Decimal(9, 4)
+  memberKind       ShareholderMemberKind @default(INVESTOR)
+  customerId       String?
   capitalAccountId String?
   notes            String?
 
@@ -5365,10 +5652,12 @@ model Shareholder {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   organization   Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer       Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
   capitalAccount LedgerAccount? @relation("ShareholderCapitalAccount", fields: [capitalAccountId], references: [id], onDelete: SetNull)
   equityEvents   EquityEvent[]
 
   @@index([orgId, name])
+  @@index([orgId, customerId])
   @@map("shareholders")
 }
 
@@ -5599,13 +5888,18 @@ model SignRequest {
   declinedAt     DateTime? @db.Timestamptz(6)
   declineReason  String?
   cancelledAt    DateTime? @db.Timestamptz(6)
+  /// External reference from webhook sign provider (Phase 59).
+  externalId     String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspaceDocuments WorkspaceDocument[]
+  capaNotes          CapaNote[]
 
   @@index([orgId, status])
+  @@index([orgId, externalId])
   @@map("sign_requests")
 }
 
@@ -6122,10 +6416,32 @@ model StockBin {
   picks        PickTask[]
   movements    BinMovement[]
   putaways     PutawayTask[]
+  itemBinDefaults ItemBinDefault[]
 
   @@unique([storeId, code])
   @@index([orgId, storeId])
   @@map("stock_bins")
+}
+
+/// Phase 45: default putaway bin per item per store (distribution).
+model ItemBinDefault {
+  id      String @id @default(cuid())
+  orgId   String
+  storeId String
+  itemId  String
+  binId   String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  item         Item         @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  bin          StockBin     @relation(fields: [binId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, storeId, itemId])
+  @@index([orgId, binId])
+  @@map("item_bin_defaults")
 }
 
 /// Phase 31: perpetual quantity by bin. Valuation stays on the item stock ledger.
@@ -6514,6 +6830,8 @@ model PatientVisit {
   salesDocumentId     String?            @unique
   /// Last claims export stamp — skip already-exported visits on the next run unless forced.
   claimsExportedAt    DateTime?          @db.Timestamptz(6)
+  /// Phase 49: batch id assigned on export for payer filtering.
+  exportBatchId       String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -6526,6 +6844,7 @@ model PatientVisit {
 
   @@index([orgId, status, openedAt(sort: Desc)])
   @@index([orgId, claimsExportedAt])
+  @@index([orgId, exportBatchId])
   @@index([customerId])
   @@index([trackingCategoryId])
   @@map("patient_visits")
@@ -6645,4 +6964,158 @@ model ItemPromotion {
   @@index([orgId, isActive, startsOn, endsOn])
   @@index([itemId])
   @@map("item_promotions")
+}
+
+/// Phase 56 — marketplace seller commission profile.
+model MarketplaceSeller {
+  id       String  @id @default(cuid())
+  orgId    String
+  vendorId String
+  commissionPercent Decimal @default(0) @db.Decimal(7, 4)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  vendor       Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, vendorId])
+  @@index([orgId, isActive])
+  @@map("marketplace_sellers")
+}
+
+enum SettlementBatchStatus {
+  DRAFT
+  POSTED
+}
+
+/// Phase 56 — period settlement totals for marketplace sellers.
+model SettlementBatch {
+  id     String @id @default(cuid())
+  orgId  String
+
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  status      SettlementBatchStatus @default(DRAFT)
+  grossSales  Decimal @default(0) @db.Decimal(19, 4)
+  commission  Decimal @default(0) @db.Decimal(19, 4)
+  sellerPayable Decimal @default(0) @db.Decimal(19, 4)
+  journalId String?
+  memo    String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  journal      Journal?     @relation(fields: [journalId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, periodEnd(sort: Desc)])
+  @@map("settlement_batches")
+}
+
+/// Phase 57 — loan product template.
+model LoanProduct {
+  id    String @id @default(cuid())
+  orgId String
+
+  name            String
+  defaultRate     Decimal @db.Decimal(9, 6)
+  defaultTermMonths Int   @db.SmallInt
+  isActive        Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accounts     LoanAccount[]
+
+  @@unique([orgId, name])
+  @@map("loan_products")
+}
+
+enum LoanAccountStatus {
+  ACTIVE
+  CLOSED
+  DEFAULT
+}
+
+/// Phase 57 — customer loan account.
+model LoanAccount {
+  id         String @id @default(cuid())
+  orgId      String
+  customerId String
+  productId  String?
+
+  principal   Decimal @db.Decimal(19, 4)
+  annualRate  Decimal @db.Decimal(9, 6)
+  termMonths  Int     @db.SmallInt
+  status      LoanAccountStatus @default(ACTIVE)
+  startDate   DateTime @db.Date
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  product      LoanProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  schedule     LoanScheduleLine[]
+
+  @@index([orgId, status])
+  @@index([customerId])
+  @@map("loan_accounts")
+}
+
+/// Phase 57 — amortization schedule line.
+model LoanScheduleLine {
+  id            String @id @default(cuid())
+  orgId         String
+  loanAccountId String
+
+  dueDate            DateTime @db.Date
+  principalDue       Decimal @db.Decimal(19, 4)
+  interestDue        Decimal @db.Decimal(19, 4)
+  paidAt             DateTime? @db.Timestamptz(6)
+  principalJournalId String?
+  interestJournalId  String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  loanAccount  LoanAccount  @relation(fields: [loanAccountId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, loanAccountId, dueDate])
+  @@index([orgId, dueDate, paidAt])
+  @@map("loan_schedule_lines")
+}
+
+enum InsurancePolicyStatus {
+  ACTIVE
+  LAPSED
+}
+
+/// Phase 58 — insurance policy.
+model InsurancePolicy {
+  id         String @id @default(cuid())
+  orgId      String
+  customerId String
+
+  policyNumber String
+  premium      Decimal @db.Decimal(19, 4)
+  startDate    DateTime @db.Date
+  endDate      DateTime @db.Date
+  status       InsurancePolicyStatus @default(ACTIVE)
+  recurringTemplateId String?
+  notes        String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  recurringTemplate RecurringTemplate? @relation(fields: [recurringTemplateId], references: [id], onDelete: SetNull)
+
+  @@unique([orgId, policyNumber])
+  @@index([orgId, status, endDate])
+  @@map("insurance_policies")
 }

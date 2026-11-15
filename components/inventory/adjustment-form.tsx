@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
 
 import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
-import { PlusIcon, Trash2Icon } from 'lucide-react'
+import { PlusIcon, PrinterIcon, SaveIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { idleState } from '@/components/forms/action-state'
@@ -65,6 +65,8 @@ export function AdjustmentForm({
   initialItemId,
   initialStoreId,
   initialMode = 'count',
+  document,
+  copiedFromNumber,
 }: {
   items: ItemOption[]
   stores: StoreOption[]
@@ -77,27 +79,49 @@ export function AdjustmentForm({
   initialItemId?: string
   initialStoreId?: string
   initialMode?: AdjustMode
+  /** Prefill from Copy — never includes a saved id. */
+  document?: {
+    storeId: string
+    accountId: string
+    reason: string | null
+    memo: string | null
+    mode: AdjustMode
+    lines: { itemId: string; counted: string; description: string }[]
+  }
+  copiedFromNumber?: string
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveAdjustmentForm, idleState)
 
   const [number, setNumber] = usePropState(documentNumber)
   const [date, setDate] = useState(today)
-  const [storeId, setStoreId] = useState(
-    initialStoreId && stores.some((store) => store.id === initialStoreId)
-      ? initialStoreId
-      : (stores.find((store) => store.isOffice)?.id ?? stores[0]?.id ?? ''),
-  )
-  const [accountId, setAccountId] = useState('')
-  const [reason, setReason] = useState('')
-  const [memo, setMemo] = useState('')
-  const [mode, setMode] = useState<AdjustMode>(initialMode)
+  const [storeId, setStoreId] = useState(() => {
+    if (document?.storeId && stores.some((store) => store.id === document.storeId)) {
+      return document.storeId
+    }
+    if (initialStoreId && stores.some((store) => store.id === initialStoreId)) return initialStoreId
+    return stores.find((store) => store.isOffice)?.id ?? stores[0]?.id ?? ''
+  })
+  const [accountId, setAccountId] = useState(document?.accountId ?? '')
+  const [reason, setReason] = useState(document?.reason ?? '')
+  const [memo, setMemo] = useState(document?.memo ?? '')
+  const [mode, setMode] = useState<AdjustMode>(document?.mode ?? initialMode)
   const [lines, setLines] = useState<Line[]>(() => {
+    if (document?.lines.length) {
+      const seeded = document.lines.map((line, index) => ({
+        key: index + 1,
+        itemId: line.itemId,
+        counted: line.counted,
+        description: line.description,
+      }))
+      while (seeded.length < ITEM_ROWS) seeded.push(blankLine(seeded.length + 1))
+      return seeded
+    }
     const rows = Array.from({ length: ITEM_ROWS }, (_, index) => blankLine(index + 1))
     if (initialItemId && items.some((item) => item.id === initialItemId)) rows[0]!.itemId = initialItemId
     return rows
   })
-  const nextKey = useRef(ITEM_ROWS + 1)
+  const nextKey = useRef(Math.max(document?.lines.length ?? 0, ITEM_ROWS) + 1)
   const handled = useRef(false)
   const afterSave = useRef<'close' | 'new'>('close')
 
@@ -184,9 +208,37 @@ export function AdjustmentForm({
     })),
   })
 
+  const canSave = filled.length > 0
+
   return (
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="payload" value={payload} />
+
+      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-background p-1.5 print:hidden">
+        <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
+          <PrinterIcon />
+          Print
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => router.push('/inventory/adjustments/new')}
+        >
+          <PlusIcon />
+          New
+        </Button>
+        <Button type="submit" size="sm" disabled={!canSave}>
+          <SaveIcon />
+          Save
+        </Button>
+      </div>
+      {copiedFromNumber ? (
+        <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground print:hidden">
+          Copy of <span className="font-medium text-foreground">{copiedFromNumber}</span>. Counts are
+          against today&apos;s on-hand — review before saving.
+        </p>
+      ) : null}
 
       <Card>
         <CardContent className="grid gap-4 p-4 sm:grid-cols-3">

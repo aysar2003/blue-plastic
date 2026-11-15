@@ -525,7 +525,7 @@ export function JournalEntryForm({
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="bg-[#e8ebef] text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+              <tr className="bg-muted text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <th className="min-w-56 px-2 py-1.5 text-left">Account</th>
                 <th className="w-32 px-2 py-1.5 text-right">Debit ({currency})</th>
                 <th className="w-32 px-2 py-1.5 text-right">Credit ({currency})</th>

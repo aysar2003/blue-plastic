@@ -96,6 +96,10 @@ export const THEME_GROUPS: { id: ThemeOption['group']; title: string; hint: stri
     title: 'Odoo',
     hint: 'Live Odoo Accounting: light top bar, plum buttons, teal links, system fonts — and Odoo report paper.',
   },
-  { id: 'color', title: 'Colour shells', hint: 'Other workspaces if you prefer a different accent — including AI blue.' },
+  {
+    id: 'color',
+    title: 'Colour shells',
+    hint: 'Day-only workspaces with a different accent (including AI blue). For night work use SOM Dark, Odoo Dark, Dark, or Ink.',
+  },
   { id: 'night', title: 'Night', hint: 'Low-light desks.' },
 ]

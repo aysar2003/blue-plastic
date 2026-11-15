@@ -171,26 +171,26 @@ suite('posting engine', () => {
     })
   })
 
-  it('refuses to post to a grouping heading', async () => {
+  it('allows posting to a Main that has sub-accounts', async () => {
     await inRolledBackTransaction(async (tx) => {
       const { ctx, accounts } = await makeOrg(tx)
 
-      // Make Utilities a child of Rent, which turns Rent into a heading.
+      // Nest Utilities under Rent — both remain postable.
       await tx.ledgerAccount.update({
         where: { id: accounts[CODE.utilities] },
         data: { parentId: accounts[CODE.rent] },
       })
 
-      await expect(
-        postJournal(tx, ctx, {
-          date: '2026-03-15',
-          sourceType: 'MANUAL',
-          lines: [
-            { accountId: accounts[CODE.rent], debit: '50' },
-            { accountId: accounts[CODE.bank], credit: '50' },
-          ],
-        }),
-      ).rejects.toThrow(/grouping heading/i)
+      const journal = await postJournal(tx, ctx, {
+        date: '2026-03-15',
+        sourceType: 'MANUAL',
+        lines: [
+          { accountId: accounts[CODE.rent], debit: '50' },
+          { accountId: accounts[CODE.bank], credit: '50' },
+        ],
+      })
+      expect(journal.id).toBeTruthy()
+      expect(journal.journalNumber).toBeTruthy()
     })
   })
 

@@ -80,6 +80,7 @@ export function EntityPicker({
   error,
   className,
   currency = 'USD',
+  onSearch,
 }: {
   options: PickerOption[]
   value: string | null
@@ -97,11 +98,47 @@ export function EntityPicker({
   className?: string
   /** Needed by the item dialog, which shows prices. */
   currency?: string
+  /**
+   * When the bootstrap list is capped, load more matches from the server.
+   * Return picker rows; the parent may also merge richer catalog rows itself.
+   */
+  onSearch?: (query: string) => Promise<PickerOption[]>
 }) {
   const router = useRouter()
   const [extra, setExtra] = React.useState<PickerOption[]>([])
   const [pendingName, setPendingName] = React.useState<string | null>(null)
   const [dialog, setDialog] = React.useState<DialogData | null>(null)
+  const searchTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchSeq = React.useRef(0)
+
+  const handleQueryChange = React.useCallback(
+    (query: string) => {
+      if (!onSearch) return
+      const needle = query.trim()
+      if (searchTimer.current) clearTimeout(searchTimer.current)
+      if (needle.length < 1) return
+      const seq = ++searchSeq.current
+      searchTimer.current = setTimeout(() => {
+        void onSearch(needle).then((hits) => {
+          if (seq !== searchSeq.current || hits.length === 0) return
+          setExtra((current) => {
+            const merged = [...hits, ...current]
+            return merged.filter(
+              (option, index, all) => all.findIndex((other) => other.id === option.id) === index,
+            )
+          })
+        })
+      }, 220)
+    },
+    [onSearch],
+  )
+
+  React.useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current)
+    },
+    [],
+  )
 
   const alphabetical =
     kind === 'item' ||
@@ -183,6 +220,7 @@ export function EntityPicker({
         className={className}
         onCreate={kind ? openCreate : undefined}
         createLabel={(label) => `Add “${label}”`}
+        onQueryChange={onSearch ? handleQueryChange : undefined}
       />
 
       {dialog ? (

@@ -220,6 +220,10 @@ describe('app icon bar', () => {
         new PointerEvent('pointerout', { bubbles: true, relatedTarget: document.body }),
       )
     })
+    // Side rail keeps overlay for 1s after leave so a slip onto a panel does not collapse it.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1100))
+    })
     expect(rail?.getAttribute('data-mode')).toBe('icons')
 
     await act(async () => {

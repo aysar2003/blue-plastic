@@ -18,8 +18,31 @@ import {
 import { requireOrgContext } from '@/server/auth/context'
 import { action } from '@/server/action'
 import * as billPaymentService from '@/server/services/bill-payment.service'
+import * as purchaseOptions from '@/server/services/purchase-options'
 import * as purchaseService from '@/server/services/purchase.service'
 import { assertDocumentDeleteAllowed } from '@/server/feature-guards'
+
+const formSearchQuery = z.object({
+  q: z.string().trim().min(1).max(80),
+})
+
+/** Remote vendor hits when the purchase form picker bootstrap is capped. */
+export const searchPurchaseVendors = action
+  .requires('bill:read')
+  .input(formSearchQuery)
+  .handler((ctx, { q }) => purchaseOptions.searchPurchaseVendors(ctx, q))
+
+/** Remote customer hits for expense offset / billable lines. */
+export const searchPurchaseCustomers = action
+  .requires('bill:read')
+  .input(formSearchQuery)
+  .handler((ctx, { q }) => purchaseOptions.searchPurchaseCustomers(ctx, q))
+
+/** Remote item hits when the purchase form picker bootstrap is capped. */
+export const searchPurchaseItems = action
+  .requires('bill:read')
+  .input(formSearchQuery)
+  .handler((ctx, { q }) => purchaseOptions.searchPurchaseItems(ctx, q))
 
 function revalidatePurchases() {
   for (const slug of [

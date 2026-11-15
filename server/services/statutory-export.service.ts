@@ -1,9 +1,10 @@
 import 'server-only'
 
 import { toCalendarDate, type CalendarDate } from '@/lib/date'
+import { localizationPackById } from '@/lib/localization/packs'
 import {
   buildVatReturnBoxes,
-  payrollStatutoryToCsv,
+  payrollStatutoryToCsvForPack,
   vatReturnToCsv,
   type PayrollStatutoryLine,
 } from '@/lib/statutory-exports'
@@ -20,6 +21,12 @@ export async function payrollStatutoryExport(
   range: { from: CalendarDate; to: CalendarDate },
 ): Promise<{ rows: PayrollStatutoryLine[]; csv: string; json: string }> {
   assertPermission(ctx, 'hr:payroll')
+
+  const orgPack = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: { localizationPackId: true },
+  })
+  const packId = orgPack?.localizationPackId ?? null
 
   const slips = await db.payslip.findMany({
     where: {
@@ -82,9 +89,10 @@ export async function payrollStatutoryExport(
 
   return {
     rows,
-    csv: payrollStatutoryToCsv(rows),
+    csv: payrollStatutoryToCsvForPack(rows, packId),
     json: JSON.stringify(
       {
+        packId,
         jurisdiction: ctx.organization.country ?? 'SO',
         from: range.from,
         to: range.to,
@@ -134,7 +142,13 @@ export async function vatReturnExport(
     purchaseTax = purchaseTax.plus(row.purchaseTax)
   }
 
-  const jurisdiction = ctx.organization.country?.trim() || 'SO'
+  const orgPack = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: { localizationPackId: true },
+  })
+  const pack = localizationPackById(orgPack?.localizationPackId)
+  const jurisdiction =
+    pack?.vatJurisdictionLabel ?? ctx.organization.country?.trim() ?? 'SO'
   const boxes = buildVatReturnBoxes({
     jurisdiction,
     from: range.from,
@@ -147,10 +161,11 @@ export async function vatReturnExport(
 
   return {
     boxes,
-    csv: vatReturnToCsv(boxes),
+    csv: vatReturnToCsv(boxes, pack?.vatBoxLabels),
     json: JSON.stringify(
       {
         jurisdiction: boxes.jurisdiction,
+        packId: pack?.id ?? null,
         from: boxes.from,
         to: boxes.to,
         currency: ctx.organization.baseCurrency,
@@ -161,6 +176,7 @@ export async function vatReturnExport(
           box4_input_vat: boxes.box4InputVat.toFixed(2),
           box5_net_vat_due: boxes.box5NetVatDue.toFixed(2),
         },
+        boxLabels: pack?.vatBoxLabels ?? null,
         rates: summary.rows.map((row) => ({
           rate: row.rateName,
           agency: row.agencyName,

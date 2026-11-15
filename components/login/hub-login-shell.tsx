@@ -90,7 +90,7 @@ export function HubLoginShell() {
           <p
             className={cn(
               'mx-auto mt-3 max-w-md text-sm',
-              dark ? 'text-slate-300/80' : 'text-slate-600',
+              dark ? 'text-slate-300' : 'text-slate-600',
             )}
           >
             Three separate doors — staff, company, and customers each use their own login.
@@ -123,7 +123,7 @@ export function HubLoginShell() {
                 <span
                   className={cn(
                     'mt-2 text-xs leading-relaxed',
-                    dark ? 'text-slate-300/70' : 'text-slate-500',
+                    dark ? 'text-slate-300' : 'text-slate-500',
                   )}
                 >
                   {door.description}
@@ -144,7 +144,7 @@ export function HubLoginShell() {
         <p
           className={cn(
             'mt-10 text-center text-xs',
-            dark ? 'text-slate-400/70' : 'text-slate-500',
+            dark ? 'text-slate-400' : 'text-slate-500',
           )}
         >
           <Link href="/" className={dark ? 'hover:text-cyan-100' : 'hover:text-slate-800'}>

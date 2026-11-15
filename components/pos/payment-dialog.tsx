@@ -35,7 +35,7 @@ export function PosPaymentForm(props: {
   onCancel: () => void
   onValidate: () => void
 }) {
-  const muted = props.dark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)'
+  const muted = props.dark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.55)'
   const text = props.dark ? '#f3f3f3' : '#1f1f23'
   const border = props.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
   const chip = props.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'

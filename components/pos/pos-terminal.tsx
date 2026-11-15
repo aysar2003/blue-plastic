@@ -101,6 +101,7 @@ import {
   watchPosInstallPrompt,
 } from '@/lib/pos-offline/install'
 import { POS_SHORTFALL_DISCOUNT_MAX } from '@/lib/pos-shortfall'
+import { posUnitPrice } from '@/lib/pos-price'
 import { resolveUnit } from '@/lib/quantity'
 import { formatStockQty, negativeStockWarning } from '@/lib/store-stock'
 import { cn } from '@/lib/utils'
@@ -113,6 +114,8 @@ type Product = {
   category: string | null
   unitOfMeasure?: string | null
   price: string
+  /** Used when the selected customer is wholesale. */
+  wholesalePrice?: string | null
   trackLots?: boolean
   trackSerials?: boolean
   pharmacyControlled?: boolean
@@ -123,7 +126,11 @@ type Product = {
 }
 
 type PaymentMethod = { id: string; name: string; isCash: boolean; allowsChangeReturn: boolean }
-type Customer = { id: string; displayName: string }
+type Customer = {
+  id: string
+  displayName: string
+  priceLevel?: 'RETAIL' | 'WHOLESALE'
+}
 /** `storeId` null = automatic (counter store, else a store that has enough). */
 type CartLine = PosOpenCartLine
 type RecentOrder = {
@@ -426,7 +433,23 @@ export function PosTerminal(props: {
   }
 
   function setCustomerId(nextCustomerId: string | null) {
-    commitBook((current) => patchPosOrder(current, activePosOrder(current).id, { customerId: nextCustomerId }))
+    const previousLevel = props.customers.find((row) => row.id === customerId)?.priceLevel
+    const nextLevel = props.customers.find((row) => row.id === nextCustomerId)?.priceLevel
+    commitBook((current) => {
+      const order = activePosOrder(current)
+      const nextCart =
+        previousLevel === nextLevel
+          ? order.cart
+          : order.cart.map((line) => {
+              const product = props.products.find((row) => row.id === line.itemId)
+              if (!product) return line
+              const previousDefault = posUnitPrice(product, previousLevel)
+              // Keep a price the cashier typed by hand.
+              if (line.price.trim() !== '' && line.price !== previousDefault) return line
+              return { ...line, price: posUnitPrice(product, nextLevel) }
+            })
+      return patchPosOrder(current, order.id, { customerId: nextCustomerId, cart: nextCart })
+    })
   }
 
   function setNote(nextNote: string) {
@@ -608,6 +631,7 @@ export function PosTerminal(props: {
   function addProduct(product: Product) {
     setToast(null)
     setLastReceiptId(null)
+    const priceLevel = props.customers.find((row) => row.id === customerId)?.priceLevel
     setCart((prev) => {
       const existing = prev.find((line) => line.itemId === product.id)
       if (existing) {
@@ -615,13 +639,15 @@ export function PosTerminal(props: {
           line.itemId === product.id ? { ...line, quantity: line.quantity + 1 } : line,
         )
       }
-      const startPrice = (() => {
-        const n = Number(product.price)
-        return Number.isFinite(n) && n >= 0 ? n.toFixed(2) : '0.00'
-      })()
       return [
         ...prev,
-        { itemId: product.id, name: product.name, price: startPrice, quantity: 1, storeId: null },
+        {
+          itemId: product.id,
+          name: product.name,
+          price: posUnitPrice(product, priceLevel),
+          quantity: 1,
+          storeId: null,
+        },
       ]
     })
   }
@@ -1149,7 +1175,7 @@ export function PosTerminal(props: {
   const bg = dark ? ODOO.ink : ODOO.wash
   const panel = dark ? ODOO.surface : '#ffffff'
   const text = dark ? '#f3f3f3' : '#1f1f23'
-  const muted = dark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)'
+  const muted = dark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.55)'
   const border = dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
   const chip = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
 
@@ -1694,7 +1720,13 @@ export function PosTerminal(props: {
                     className="mt-auto pt-2 text-sm font-semibold"
                     style={{ color: dark ? '#9fe0e3' : ODOO.teal }}
                   >
-                    {formatMoney(product.price, props.currency)}
+                    {formatMoney(
+                      posUnitPrice(
+                        product,
+                        props.customers.find((row) => row.id === customerId)?.priceLevel,
+                      ),
+                      props.currency,
+                    )}
                   </span>
                 </button>
               ))}
@@ -2052,7 +2084,10 @@ export function PosTerminal(props: {
                     setMenu(null)
                   }}
                 >
-                  {customer.displayName}
+                  <span className="block font-medium">{customer.displayName}</span>
+                  {customer.priceLevel === 'WHOLESALE' ? (
+                    <span className="mt-0.5 block text-xs opacity-70">Wholesale</span>
+                  ) : null}
                 </button>
               </li>
             ))}

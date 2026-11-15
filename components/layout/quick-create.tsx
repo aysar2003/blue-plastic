@@ -185,7 +185,7 @@ export function QuickCreate({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
         >
           <PlusIcon className="size-4" />
           New

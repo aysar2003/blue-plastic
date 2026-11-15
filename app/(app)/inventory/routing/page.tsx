@@ -55,9 +55,18 @@ export default async function InventoryRoutingPage({
         title="Routings & capacity"
         description="Operations with work-center minutes, plus open WO load vs weekly capacity. Not a shop-floor MES."
         actions={
-          <Link href="/inventory/work-orders" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Work orders
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/inventory/work-orders" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              Work orders
+            </Link>
+            <a
+              href="/api/inventory/routing/capacity"
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              download
+            >
+              Capacity CSV
+            </a>
+          </div>
         }
       />
 
@@ -127,7 +136,25 @@ export default async function InventoryRoutingPage({
             <TableBody>
               {capacity.map((row) => (
                 <TableRow key={row.id}>
-                  <TableCell className="font-medium">{row.name}</TableCell>
+                  <TableCell className="font-medium">
+                    {row.name}
+                    {row.overloaded && row.openWorkOrders.length > 0 ? (
+                      <p className="mt-1 text-xs font-normal text-muted-foreground">
+                        Open WO:{' '}
+                        {row.openWorkOrders.map((wo, index) => (
+                          <span key={wo.id}>
+                            {index > 0 ? ', ' : ''}
+                            <Link
+                              href={`/inventory/work-orders/${wo.id}`}
+                              className="underline underline-offset-2"
+                            >
+                              {wo.number}
+                            </Link>
+                          </span>
+                        ))}
+                      </p>
+                    ) : null}
+                  </TableCell>
                   <TableCell>{row.storeName ?? '—'}</TableCell>
                   <TableCell className="text-right tabular">{row.capacityMinutes}</TableCell>
                   <TableCell className="text-right tabular">{row.demandMinutes}</TableCell>

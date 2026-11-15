@@ -11,7 +11,7 @@ import * as workspace from '@/server/services/workspace.service'
 export const metadata: Metadata = { title: 'Apps' }
 
 /**
- * Apps home — Odoo-style flat icon grid.
+ * Apps home — flat 5×N icon grid (5 columns from sm up).
  * Only apps turned ON for this company appear here, related ones side by side.
  * Apps that are off are managed in Settings → Apps & features (like Odoo Apps).
  */

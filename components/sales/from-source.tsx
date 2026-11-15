@@ -269,7 +269,7 @@ export function FromSourcePicker({
                           setChecked(map)
                         }}
                         aria-label="Select all lines"
-                        className="size-3.5 accent-[#2ca01c]"
+                        className="size-3.5 accent-primary"
                       />
                     </th>
                     <th className="px-2 py-2 font-medium">Item</th>
@@ -297,7 +297,7 @@ export function FromSourcePicker({
                               }))
                             }
                             aria-label={`Include ${label}`}
-                            className="size-3.5 accent-[#2ca01c]"
+                            className="size-3.5 accent-primary"
                           />
                         </td>
                         <td className="px-2 py-2">

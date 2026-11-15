@@ -14,7 +14,13 @@ export const metadata: Metadata = { title: 'Fees outstanding by term' }
 
 export default async function FeesOutstandingPage() {
   const ctx = await requireOrgContext('invoice:read')
-  const rows = await education.feesOutstandingByTerm(ctx)
+  const [rows, terms] = await Promise.all([
+    education.feesOutstandingByTerm(ctx),
+    education.listTerms(ctx),
+  ])
+  const scholarshipBlocks = await Promise.all(
+    terms.slice(0, 12).map((term) => education.scholarshipSummary(ctx, term.id)),
+  )
   const currency = ctx.organization.baseCurrency
 
   return (
@@ -33,9 +39,51 @@ export default async function FeesOutstandingPage() {
             >
               Enrollments
             </Link>
+            <a
+              href="/api/education/scholarship-summary"
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              download
+            >
+              Scholarship CSV
+            </a>
           </div>
         }
       />
+
+      {scholarshipBlocks.length > 0 ? (
+        <Card className="mb-8">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Term</TableHead>
+                  <TableHead className="text-right">Enrollments</TableHead>
+                  <TableHead className="text-right">Gross fees</TableHead>
+                  <TableHead className="text-right">Scholarship waived</TableHead>
+                  <TableHead className="text-right">Net</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {scholarshipBlocks.map((block) => (
+                  <TableRow key={block.term.id}>
+                    <TableCell className="font-medium">{block.term.name}</TableCell>
+                    <TableCell className="text-right tabular">{block.enrollmentCount}</TableCell>
+                    <TableCell className="text-right tabular">
+                      {formatMoney(block.gross, currency)}
+                    </TableCell>
+                    <TableCell className="text-right tabular">
+                      {formatMoney(block.scholarshipWaived, currency)}
+                    </TableCell>
+                    <TableCell className="text-right tabular">
+                      {formatMoney(block.net, currency)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {rows.length === 0 ? (
         <EmptyState

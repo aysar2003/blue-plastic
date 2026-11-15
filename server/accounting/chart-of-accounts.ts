@@ -55,6 +55,22 @@ export const DEFAULT_CHART: SeedAccount[] = [
     description: 'Control account. Every line carries the customer it belongs to.',
   },
   {
+    code: '1120',
+    name: 'Loans Receivable',
+    type: 'ASSET',
+    subtype: 'OTHER_CURRENT_ASSET',
+    systemKey: 'LOAN_RECEIVABLE',
+    description: 'Customer loan principal outstanding.',
+  },
+  {
+    code: '1360',
+    name: 'Royalty Receivable',
+    type: 'ASSET',
+    subtype: 'OTHER_CURRENT_ASSET',
+    systemKey: 'ROYALTY_RECEIVABLE',
+    description: 'Franchise royalty due from child locations.',
+  },
+  {
     code: '1200',
     name: 'Inventory Asset',
     type: 'ASSET',
@@ -91,6 +107,14 @@ export const DEFAULT_CHART: SeedAccount[] = [
     description: 'Tax collected on sales, owed to the tax authority.',
   },
   { code: '2300', name: 'Accrued Liabilities', type: 'LIABILITY', subtype: 'OTHER_CURRENT_LIABILITY' },
+  {
+    code: '2340',
+    name: 'Commission Payable',
+    type: 'LIABILITY',
+    subtype: 'OTHER_CURRENT_LIABILITY',
+    systemKey: 'COMMISSION_PAYABLE',
+    description: 'Marketplace seller share owed after settlement.',
+  },
   {
     code: '2310',
     name: 'Tips Payable',
@@ -167,6 +191,30 @@ export const DEFAULT_CHART: SeedAccount[] = [
     description: 'Contra-revenue. Carries a debit balance.',
   },
   { code: '4950', name: 'Other Income', type: 'REVENUE', subtype: 'OTHER_INCOME' },
+  {
+    code: '4150',
+    name: 'Commission Income',
+    type: 'REVENUE',
+    subtype: 'OTHER_INCOME',
+    systemKey: 'COMMISSION_INCOME',
+    description: 'Marketplace platform fee revenue.',
+  },
+  {
+    code: '4160',
+    name: 'Loan Interest Income',
+    type: 'REVENUE',
+    subtype: 'OTHER_INCOME',
+    systemKey: 'LOAN_INTEREST_INCOME',
+    description: 'Interest on customer loans.',
+  },
+  {
+    code: '4170',
+    name: 'Royalty Income',
+    type: 'REVENUE',
+    subtype: 'OTHER_INCOME',
+    systemKey: 'ROYALTY_INCOME',
+    description: 'Franchise royalty billed to child locations.',
+  },
   {
     code: '4960',
     name: 'Cash Over (POS)',
@@ -314,14 +362,11 @@ type CogsCandidate = {
   type: AccountType
   isActive: boolean
   parentId: string | null
-  _count: { children: number }
 }
 
 /**
- * QuickBooks-style COGS: main headings are for reporting only. Posting goes to a
- * leaf. Prefer the item's mapped account; if that is a heading with exactly one
- * postable descendant, use it; otherwise fall back to the system COGS binding
- * with the same rules.
+ * Resolve the COGS account to post to. Main and Sub are both postable — if the
+ * item (or system binding) names an account, that account is used as-is.
  */
 export async function resolvePostableCogsAccountId(
   tx: Tx,
@@ -330,7 +375,7 @@ export async function resolvePostableCogsAccountId(
 ): Promise<string> {
   if (preferredId) {
     const preferred = await loadCogsCandidate(tx, orgId, preferredId)
-    if (preferred) return resolveCogsCandidate(tx, orgId, preferred)
+    if (preferred) return assertCogsPostable(preferred)
   }
 
   const system = await tx.ledgerAccount.findUnique({
@@ -342,7 +387,6 @@ export async function resolvePostableCogsAccountId(
       type: true,
       isActive: true,
       parentId: true,
-      _count: { select: { children: true } },
     },
   })
 
@@ -352,7 +396,7 @@ export async function resolvePostableCogsAccountId(
     })
   }
 
-  return resolveCogsCandidate(tx, orgId, system)
+  return assertCogsPostable(system)
 }
 
 async function loadCogsCandidate(
@@ -369,16 +413,11 @@ async function loadCogsCandidate(
       type: true,
       isActive: true,
       parentId: true,
-      _count: { select: { children: true } },
     },
   })
 }
 
-async function resolveCogsCandidate(
-  tx: Tx,
-  orgId: string,
-  account: CogsCandidate,
-): Promise<string> {
+function assertCogsPostable(account: CogsCandidate): string {
   if (!account.isActive) {
     throw validation(`Account ${account.code} ${account.name} is archived and cannot receive cost of sales.`, {
       cogsAccountId: ['Choose an active Cost of Goods Sold account'],
@@ -390,82 +429,5 @@ async function resolveCogsCandidate(
       { cogsAccountId: ['Choose a cost of goods sold account'] },
     )
   }
-  if (account._count.children === 0) return account.id
-
-  const leaves = await postableCogsDescendants(tx, orgId, account.id)
-  if (leaves.length === 1) return leaves[0]!.id
-  if (leaves.length === 0) {
-    throw validation(
-      `Account ${account.code} ${account.name} is a grouping heading with no postable sub-account. Add a Cost of Goods Sold detail account under it.`,
-      { cogsAccountId: ['Add or choose a Cost of Goods Sold sub-account'] },
-    )
-  }
-
-  // QuickBooks imports often leave the system role on the heading while every
-  // product already points at one detail leaf (e.g. Merchandise). Prefer that.
-  const leafIds = leaves.map((leaf) => leaf.id)
-  const popular = await tx.item.groupBy({
-    by: ['cogsAccountId'],
-    where: {
-      orgId,
-      deletedAt: null,
-      type: { in: ['INVENTORY', 'INVENTORY_ASSEMBLY'] },
-      cogsAccountId: { in: leafIds },
-    },
-    _count: true,
-    orderBy: { _count: { cogsAccountId: 'desc' } },
-    take: 1,
-  })
-  const popularId = popular[0]?.cogsAccountId
-  if (popularId && leafIds.includes(popularId)) return popularId
-
-  const merchandise = leaves.find(
-    (leaf) => /merchandise/i.test(leaf.name) && !/\badj\b/i.test(leaf.name),
-  )
-  if (merchandise) return merchandise.id
-
-  throw validation(
-    `Account ${account.code} ${account.name} is a grouping heading with more than one sub-account. Map this product to a postable Cost of Goods Sold sub-account.`,
-    { cogsAccountId: ['Choose a Cost of Goods Sold sub-account'] },
-  )
-}
-
-/** Active COGS leaves under a heading (any depth). */
-async function postableCogsDescendants(
-  tx: Tx,
-  orgId: string,
-  rootId: string,
-): Promise<{ id: string; code: string; name: string }[]> {
-  const accounts = await tx.ledgerAccount.findMany({
-    where: { orgId, isActive: true, type: 'COGS' },
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      parentId: true,
-      _count: { select: { children: true } },
-    },
-  })
-
-  const childrenByParent = new Map<string, string[]>()
-  for (const account of accounts) {
-    if (!account.parentId) continue
-    const list = childrenByParent.get(account.parentId) ?? []
-    list.push(account.id)
-    childrenByParent.set(account.parentId, list)
-  }
-
-  const underRoot = new Set<string>()
-  const stack = [...(childrenByParent.get(rootId) ?? [])]
-  while (stack.length > 0) {
-    const id = stack.pop()!
-    if (underRoot.has(id)) continue
-    underRoot.add(id)
-    for (const childId of childrenByParent.get(id) ?? []) stack.push(childId)
-  }
-
-  return accounts
-    .filter((account) => underRoot.has(account.id) && account._count.children === 0)
-    .map((account) => ({ id: account.id, code: account.code, name: account.name }))
-    .sort((a, b) => a.code.localeCompare(b.code))
+  return account.id
 }

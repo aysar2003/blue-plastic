@@ -78,7 +78,7 @@ export function PosOrdersBoard({
   const showDetail = preview != null && (preview.lines.length > 0 || infoId === preview.id || preview.status === 'paid')
 
   const text = dark ? '#f3f3f3' : '#1f1f23'
-  const muted = dark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)'
+  const muted = dark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.55)'
   const border = dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
   const listBg = dark ? '#232328' : '#ffffff'
   const detailBg = dark ? '#141416' : '#f6f6f7'

@@ -30,6 +30,8 @@ export type AccountChoice = {
   /** When set, this row is a Sub under that Main account. */
   parentId?: string | null
   parentName?: string | null
+  /** True when this account has nested Subs (still postable). */
+  hasChildren?: boolean
 }
 
 /**
@@ -127,7 +129,7 @@ export function accountOptions(
       ? `${account.parentName} › ${account.name}`
       : account.name
     const kind = ACCOUNT_SUBTYPE_LABELS[account.subtype]
-    const role = account.parentName ? 'Sub' : null
+    const role = account.parentName ? 'Sub' : account.hasChildren ? 'Main' : null
     const hintParts = [
       role,
       kind,

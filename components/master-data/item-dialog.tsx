@@ -59,6 +59,7 @@ export type ItemValues = {
   /** Weighted-average cost from stock movements — display only, not editable. */
   averageCost?: string | null
   expenseAccountId?: string | null
+  purchaseTaxCodeId?: string | null
   inventoryAccountId?: string | null
   cogsAccountId?: string | null
   reorderPoint?: string | null
@@ -375,8 +376,15 @@ export function ItemDialog({
     </Field>
   )
 
+  const canBuy =
+    type === 'INVENTORY' ||
+    type === 'INVENTORY_ASSEMBLY' ||
+    type === 'NON_INVENTORY' ||
+    type === 'SERVICE' ||
+    type === 'OTHER_CHARGE'
+
   const posAndTax = type && type !== 'SUBTOTAL' && type !== 'GROUP' && type !== 'PAYMENT' ? (
-    <>
+    <div className="space-y-3">
       <label className="flex items-center gap-2 text-sm">
         <input type="hidden" name="availableInPos" value="false" />
         <input
@@ -388,22 +396,55 @@ export function ItemDialog({
         />
         Available in Point of Sale
       </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="hidden" name="isTaxable" value="false" />
+        <input
+          type="checkbox"
+          name="isTaxable"
+          value="true"
+          defaultChecked={item?.isTaxable !== false}
+          className="size-4 rounded border"
+        />
+        Taxable
+      </label>
       {taxCodes.length > 0 ? (
-        <Field name="salesTaxCodeId" label="Default sales tax" error={e?.salesTaxCodeId}>
-          <NativeSelect
-            {...fieldProps('salesTaxCodeId', e?.salesTaxCodeId)}
-            defaultValue={item?.salesTaxCodeId ?? ''}
-          >
-            <option value="">— none —</option>
-            {taxCodes.map((code) => (
-              <option key={code.id} value={code.id}>
-                {code.label}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
+        <div className={`grid gap-4 ${canBuy ? 'sm:grid-cols-2' : ''}`}>
+          <Field name="salesTaxCodeId" label="Default sales tax" error={e?.salesTaxCodeId}>
+            <NativeSelect
+              {...fieldProps('salesTaxCodeId', e?.salesTaxCodeId)}
+              defaultValue={item?.salesTaxCodeId ?? ''}
+            >
+              <option value="">— none —</option>
+              {taxCodes.map((code) => (
+                <option key={code.id} value={code.id}>
+                  {code.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          {canBuy ? (
+            <Field
+              name="purchaseTaxCodeId"
+              label="Default purchase tax"
+              hint="Used when this item is bought on a bill."
+              error={e?.purchaseTaxCodeId}
+            >
+              <NativeSelect
+                {...fieldProps('purchaseTaxCodeId', e?.purchaseTaxCodeId)}
+                defaultValue={item?.purchaseTaxCodeId ?? ''}
+              >
+                <option value="">— none —</option>
+                {taxCodes.map((code) => (
+                  <option key={code.id} value={code.id}>
+                    {code.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+          ) : null}
+        </div>
       ) : null}
-    </>
+    </div>
   ) : null
 
   return (
@@ -905,8 +946,8 @@ export function ItemDialog({
                     label="Cost of goods sold"
                     hint={
                       stock
-                        ? 'A sale posts this item’s average cost here. Main/heading accounts are for grouping only — pick a sub-account.'
-                        : 'Buying this product posts the cost here. Main/heading accounts are for grouping only — pick a sub-account.'
+                        ? 'A sale posts this item’s average cost here. Main or Sub both work — pick the account you want charged.'
+                        : 'Buying this product posts the cost here. Main or Sub both work — pick the account you want charged.'
                     }
                     required
                     error={e?.cogsAccountId ?? e?.expenseAccountId}
@@ -1011,9 +1052,10 @@ export function ItemDialog({
                           className="mt-0.5"
                         />
                         <span>
-                          <span className="font-medium">Track lots</span>
+                          <span className="font-medium">Track lots / expiry</span>
                           <span className="block text-xs text-muted-foreground">
-                            Receive and issue must name a lot (batch).
+                            Receive and issue must name a lot (batch). You set the expiry date on
+                            each lot when you receive or sell — see Inventory → Lot expiry.
                           </span>
                         </span>
                       </label>
@@ -1126,9 +1168,58 @@ export function ItemDialog({
               </>
             ) : null}
 
-            <Field name="description" label="Description" error={e?.description}>
-              <Input {...fieldProps('description', e?.description)} defaultValue={item?.description ?? ''} />
-            </Field>
+            {type && type !== 'PAYMENT' ? (
+              <div className="space-y-4">
+                <Separator />
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Descriptions
+                </p>
+                {type !== 'SUBTOTAL' ? (
+                  <Field
+                    name="salesDescription"
+                    label="Sales description"
+                    hint="Shown on invoices, quotes, and receipts when this item is sold."
+                    error={e?.salesDescription}
+                  >
+                    <Input
+                      {...fieldProps('salesDescription', e?.salesDescription)}
+                      defaultValue={item?.salesDescription ?? item?.description ?? ''}
+                    />
+                  </Field>
+                ) : null}
+                {canBuy ? (
+                  <Field
+                    name="purchaseDescription"
+                    label="Purchase description"
+                    hint="Shown on bills and purchase orders when you buy this item."
+                    error={e?.purchaseDescription}
+                  >
+                    <Input
+                      {...fieldProps('purchaseDescription', e?.purchaseDescription)}
+                      defaultValue={item?.purchaseDescription ?? ''}
+                    />
+                  </Field>
+                ) : null}
+                <Field
+                  name="description"
+                  label="Internal notes"
+                  hint="For your team only — not printed on customer or vendor documents."
+                  error={e?.description}
+                >
+                  <Input
+                    {...fieldProps('description', e?.description)}
+                    defaultValue={item?.description ?? ''}
+                  />
+                </Field>
+              </div>
+            ) : (
+              <Field name="description" label="Description" error={e?.description}>
+                <Input
+                  {...fieldProps('description', e?.description)}
+                  defaultValue={item?.description ?? ''}
+                />
+              </Field>
+            )}
 
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="outline" onClick={onClose}>

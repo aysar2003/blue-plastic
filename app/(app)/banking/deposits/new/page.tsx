@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
 import { DepositForm } from '@/components/banking/deposit-form'
@@ -21,16 +22,16 @@ export default async function NewDepositPage({
   const params = await searchParams
   const bank =
     typeof params.bank === 'string' && params.bank.length > 0 ? params.bank : undefined
+  const copyId = typeof params.copy === 'string' ? params.copy : undefined
 
-  const [payments, chart, documentNumber] = await Promise.all([
+  const [payments, chart, documentNumber, copySource] = await Promise.all([
     bankingService.undepositedPayments(ctx),
     accountService.selectableAccounts(ctx, { withBalances: true }),
     peekDocumentNumber(db, ctx.orgId, 'DEPOSIT'),
+    copyId ? bankingService.getDeposit(ctx, copyId).catch(() => null) : Promise.resolve(null),
   ])
+  if (copyId && !copySource) notFound()
 
-  // Deposit *to* any account the business banks into; the rest of the chart is
-  // still there. The other side of the slip — interest, a refund, an owner's
-  // injection — can come from anywhere at all.
   const bankAccounts = accountOptions(
     chart.filter((account) => account.type === 'ASSET' || account.type === 'LIABILITY'),
     { prefer: ['BANK', 'UNDEPOSITED_FUNDS', 'OTHER_CURRENT_ASSET'], showBalance: true },
@@ -39,11 +40,25 @@ export default async function NewDepositPage({
     preferTypes: ['REVENUE', 'EQUITY'],
   })
 
+  const copySeed = copySource
+    ? {
+        bankAccountId: copySource.bankAccount.id,
+        reference: copySource.reference,
+        memo: copySource.memo,
+        otherLines: copySource.lines
+          .filter((line) => line.accountId && !line.customerPaymentId)
+          .map((line) => ({
+            accountId: line.accountId!,
+            description: line.description ?? '',
+            amount: line.amount,
+          })),
+      }
+    : undefined
+
   return (
     <>
-
       <PageHeader
-        title="Make a deposit"
+        title={copySource ? `Copy deposit ${copySource.number}` : 'Make a deposit'}
         description="Take what is in hand to the bank. This clears Undeposited Funds, so the register shows one paying-in slip where the bank shows one — which is what makes reconciliation possible."
       />
 
@@ -61,7 +76,9 @@ export default async function NewDepositPage({
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}
         documentNumber={documentNumber}
-        defaultBankAccountId={bank}
+        defaultBankAccountId={copySeed ? undefined : bank}
+        document={copySeed}
+        copiedFromNumber={copySource?.number}
       />
     </>
   )

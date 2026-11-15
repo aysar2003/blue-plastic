@@ -13,8 +13,9 @@ export const metadata: Metadata = { title: 'Hospital billing' }
 
 export default async function HospitalHubPage() {
   const ctx = await requireOrgContext('invoice:read')
-  const [stats, patientAr, byDept] = await Promise.all([
+  const [stats, claimsStats, patientAr, byDept] = await Promise.all([
     hospital.hubStats(ctx),
+    hospital.claimsHubStats(ctx),
     hospital.patientArSummary(ctx),
     hospital.servicesByDepartment(ctx),
   ])
@@ -50,6 +51,52 @@ export default async function HospitalHubPage() {
           <Link href="/settings/classes" className="underline underline-offset-4">
             Departments (classes)
           </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Claims export queue</CardTitle>
+          <CardDescription>
+            {claimsStats.unexportedClosed} closed visit
+            {claimsStats.unexportedClosed === 1 ? '' : 's'} not stamped for export yet.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {claimsStats.recentBatches.length === 0 ? (
+            <Link
+              href="/hospital/claims"
+              className="block px-6 pb-6 text-sm underline underline-offset-4"
+            >
+              Open claims export
+            </Link>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Batch</TableHead>
+                  <TableHead>Exported</TableHead>
+                  <TableHead className="text-right">Visits</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {claimsStats.recentBatches.map((batch) => (
+                  <TableRow key={batch.exportBatchId}>
+                    <TableCell className="font-mono text-sm">{batch.exportBatchId}</TableCell>
+                    <TableCell className="tabular text-muted-foreground text-sm">
+                      {batch.exportedAt.slice(0, 10)}
+                    </TableCell>
+                    <TableCell className="text-right tabular">{batch.visitCount}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          <div className="px-6 pb-4 pt-2 text-sm">
+            <Link href="/hospital/claims" className="underline underline-offset-4">
+              Claims export
+            </Link>
+          </div>
         </CardContent>
       </Card>
 

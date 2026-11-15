@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { BanknoteIcon, PlusIcon } from 'lucide-react'
+import { BanknoteIcon, CopyIcon, PlusIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
@@ -46,6 +46,7 @@ export default async function BillPaymentsPage({
   const trails = await trailsFor(ctx, page.rows.map((payment) => payment.id))
   const currency = ctx.organization.baseCurrency
   const canVoid = ctx.permissions.has('expense:void')
+  const canCreate = ctx.permissions.has('expense:create')
 
   const newButton = ctx.permissions.has('expense:create') ? (
     <Link href="/bill-payments/new" className={buttonVariants({ size: 'sm' })}>
@@ -123,14 +124,25 @@ export default async function BillPaymentsPage({
                   </TableCell>
                   <EnteredByCell trail={trails.get(payment.id)} />
                   <TableCell className="print:hidden">
-                    {canVoid && ctx.features.allowDocumentDelete ? (
-                      <DeleteButton
-                        kind="bill-payment"
-                        id={payment.id}
-                        number={payment.number}
-                        variant="ghost"
-                      />
-                    ) : null}
+                    <span className="inline-flex items-center gap-0.5">
+                      {canCreate && payment.status !== 'VOID' ? (
+                        <Link
+                          href={`/bill-payments/new?copy=${payment.id}`}
+                          className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+                          title={`Copy ${payment.number}`}
+                        >
+                          <CopyIcon />
+                        </Link>
+                      ) : null}
+                      {canVoid && ctx.features.allowDocumentDelete ? (
+                        <DeleteButton
+                          kind="bill-payment"
+                          id={payment.id}
+                          number={payment.number}
+                          variant="ghost"
+                        />
+                      ) : null}
+                    </span>
                   </TableCell>
                 </TableRow>
               ))}

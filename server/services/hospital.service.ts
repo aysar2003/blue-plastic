@@ -237,13 +237,22 @@ export async function exportClaims(
     includeExported?: boolean
     /** Stamp visits in this export with claimsExportedAt. */
     stamp?: boolean
+    /** Phase 49: filter by payer name (contains, case-insensitive). */
+    payerName?: string | null
+    /** Phase 49: only visits from this export batch. */
+    exportBatchId?: string | null
   } = { format: 'json' },
 ) {
+  const payerFilter = options.payerName?.trim() ?? ''
   const visits = await db.patientVisit.findMany({
     where: {
       orgId: ctx.orgId,
       status: options.status ?? 'CLOSED',
       ...(options.includeExported ? {} : { claimsExportedAt: null }),
+      ...(options.exportBatchId ? { exportBatchId: options.exportBatchId } : {}),
+      ...(payerFilter
+        ? { payerName: { contains: payerFilter, mode: 'insensitive' as const } }
+        : {}),
     },
     include: {
       customer: { select: { displayName: true } },
@@ -267,6 +276,8 @@ export async function exportClaims(
         payerRef: visit.payerRef,
         department: visit.trackingCategory?.name ?? null,
         invoiceNumber: visit.salesDocument?.number ?? null,
+        exportBatchId: visit.exportBatchId,
+        claimsExportedAt: visit.claimsExportedAt?.toISOString() ?? null,
         billCode: charge.billCode,
         description: charge.description,
         quantity: charge.quantity.toString(),
@@ -276,17 +287,27 @@ export async function exportClaims(
     }
   }
 
-  if (options.stamp && visits.length > 0) {
+  const batchId =
+    options.stamp && visits.length > 0
+      ? `CLM-${Date.now().toString(36).toUpperCase()}`
+      : null
+
+  if (options.stamp && visits.length > 0 && batchId) {
     await db.patientVisit.updateMany({
       where: { orgId: ctx.orgId, id: { in: visits.map((visit) => visit.id) } },
-      data: { claimsExportedAt: new Date() },
+      data: { claimsExportedAt: new Date(), exportBatchId: batchId },
     })
   }
 
   if (options.format === 'csv') {
-    return { format: 'csv' as const, body: claimsToCsv(rows), rows }
+    return { format: 'csv' as const, body: claimsToCsv(rows), rows, exportBatchId: batchId }
   }
-  return { format: 'json' as const, body: JSON.stringify({ claims: rows }, null, 2), rows }
+  return {
+    format: 'json' as const,
+    body: JSON.stringify({ exportBatchId: batchId, claims: rows }, null, 2),
+    rows,
+    exportBatchId: batchId,
+  }
 }
 
 export function visitBalance(charges: { amount: Decimal | string }[]): string {
@@ -301,6 +322,40 @@ export async function hubStats(ctx: OrgContext) {
     db.patientVisit.count({ where: { orgId: ctx.orgId, status: 'CLOSED' } }),
   ])
   return { open, closed }
+}
+
+/** Unexported closed visits + recent claim export batches for the billing hub. */
+export async function claimsHubStats(ctx: OrgContext) {
+  const [unexportedClosed, stampedVisits] = await Promise.all([
+    db.patientVisit.count({
+      where: { orgId: ctx.orgId, status: 'CLOSED', claimsExportedAt: null },
+    }),
+    db.patientVisit.findMany({
+      where: { orgId: ctx.orgId, exportBatchId: { not: null }, claimsExportedAt: { not: null } },
+      select: { exportBatchId: true, claimsExportedAt: true },
+      orderBy: { claimsExportedAt: 'desc' },
+      take: 200,
+    }),
+  ])
+
+  const batchMap = new Map<string, { exportBatchId: string; exportedAt: string; visitCount: number }>()
+  for (const visit of stampedVisits) {
+    const batchId = visit.exportBatchId!
+    const exportedAt = visit.claimsExportedAt!.toISOString()
+    const existing = batchMap.get(batchId)
+    if (!existing) {
+      batchMap.set(batchId, { exportBatchId: batchId, exportedAt, visitCount: 1 })
+    } else {
+      existing.visitCount += 1
+      if (exportedAt > existing.exportedAt) existing.exportedAt = exportedAt
+    }
+  }
+
+  const recentBatches = [...batchMap.values()]
+    .sort((a, b) => b.exportedAt.localeCompare(a.exportedAt))
+    .slice(0, 8)
+
+  return { unexportedClosed, recentBatches }
 }
 
 /** Open AR for closed patient visits that still have invoice balance. */

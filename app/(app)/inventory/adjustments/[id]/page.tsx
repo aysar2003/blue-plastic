@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { CopyIcon } from 'lucide-react'
 
 import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { DeleteButton } from '@/components/data/delete-record'
@@ -9,6 +10,7 @@ import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
 import { DocumentActions } from '@/components/print/document-actions'
 import { Badge } from '@/components/ui/badge'
+import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatTransactionDate, toCalendarDate } from '@/lib/date'
@@ -58,6 +60,15 @@ export default async function AdjustmentDetailPage({ params }: { params: Promise
                 .filter(Boolean)
                 .join('\n')}
             />
+            {ctx.permissions.has('inventory:adjust') && adjustment.status !== 'VOID' ? (
+              <Link
+                href={`/inventory/adjustments/new?copy=${id}`}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                title="Make a copy of this adjustment"
+              >
+                <CopyIcon /> Copy
+              </Link>
+            ) : null}
             {canDelete ? (
               <DeleteButton
                 kind="inventory-adjustment"

@@ -172,6 +172,14 @@ export default async function InventoryExpiryPage({
         title="Controlled movements"
         description="Recent stock in/out for pharmacy-controlled products (receive and dispense audit)."
         className="mb-2 mt-8"
+        actions={
+          <Link
+            href="/api/inventory/controlled-movements"
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            Download CSV
+          </Link>
+        }
       />
       {controlledMoves.length === 0 ? (
         <EmptyState

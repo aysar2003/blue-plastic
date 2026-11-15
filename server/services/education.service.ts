@@ -10,6 +10,7 @@ import {
   normalizeScholarshipPercent,
   type EnrollmentStatus,
 } from '@/lib/erp/education'
+import { scholarshipSummaryTotals } from '@/lib/erp/scholarship-summary'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
@@ -501,4 +502,52 @@ export async function feesOutstandingByTerm(ctx: OrgContext) {
       outstanding: row.outstanding.toFixed(2),
     }))
     .sort((a, b) => a.termName.localeCompare(b.termName))
+}
+
+/** Phase 48: enrollment counts and scholarship gross / waived / net for a term. */
+export async function scholarshipSummary(ctx: OrgContext, termId: string) {
+  const term = await db.academicTerm.findFirst({
+    where: { id: termId, orgId: ctx.orgId },
+    select: { id: true, name: true },
+  })
+  if (!term) throw notFound('Term')
+
+  const enrollments = await db.studentEnrollment.findMany({
+    where: { orgId: ctx.orgId, termId },
+    select: {
+      status: true,
+      scholarshipPercent: true,
+      feePlan: {
+        select: {
+          lines: {
+            select: { quantity: true, unitPrice: true, item: { select: { salesPrice: true } } },
+          },
+        },
+      },
+    },
+  })
+
+  const rows = enrollments.map((row) => {
+    let subtotal = new Decimal(0)
+    for (const line of row.feePlan?.lines ?? []) {
+      const price =
+        line.unitPrice != null
+          ? new Decimal(line.unitPrice.toString())
+          : new Decimal(line.item.salesPrice?.toString() ?? '0')
+      subtotal = subtotal.plus(price.times(line.quantity.toString()))
+    }
+    return {
+      status: row.status,
+      feeSubtotal: subtotal.toFixed(4),
+      scholarshipPercent: row.scholarshipPercent.toString(),
+    }
+  })
+
+  return { term, ...scholarshipSummaryTotals(rows) }
+}
+
+/** Scholarship blocks for every active term (export / CSV). */
+export async function scholarshipSummaryForTerms(ctx: OrgContext) {
+  const terms = await listTerms(ctx)
+  return Promise.all(terms.map((term) => scholarshipSummary(ctx, term.id)))
 }

@@ -163,6 +163,48 @@ export const SYSTEM_ACCOUNT_ROLES: SystemAccountRole[] = [
     types: ['LIABILITY'],
     subtypes: ['OTHER_CURRENT_LIABILITY'],
   },
+  {
+    key: 'LOAN_RECEIVABLE',
+    label: 'Loans receivable',
+    used: 'Customer loan principal balance and collections.',
+    types: ['ASSET'],
+    subtypes: ['OTHER_CURRENT_ASSET', 'ACCOUNTS_RECEIVABLE'],
+  },
+  {
+    key: 'LOAN_INTEREST_INCOME',
+    label: 'Loan interest income',
+    used: 'Interest portion recognized on loan installments.',
+    types: ['REVENUE'],
+    subtypes: ['OTHER_INCOME', 'INCOME'],
+  },
+  {
+    key: 'COMMISSION_INCOME',
+    label: 'Commission income',
+    used: 'Marketplace platform fees retained on settled sales.',
+    types: ['REVENUE'],
+    subtypes: ['OTHER_INCOME', 'INCOME'],
+  },
+  {
+    key: 'COMMISSION_PAYABLE',
+    label: 'Commission payable',
+    used: 'Seller share owed after marketplace settlement.',
+    types: ['LIABILITY'],
+    subtypes: ['OTHER_CURRENT_LIABILITY', 'ACCOUNTS_PAYABLE'],
+  },
+  {
+    key: 'ROYALTY_INCOME',
+    label: 'Royalty income',
+    used: 'Franchise royalty recognized on parent company books.',
+    types: ['REVENUE'],
+    subtypes: ['OTHER_INCOME', 'INCOME'],
+  },
+  {
+    key: 'ROYALTY_RECEIVABLE',
+    label: 'Royalty receivable',
+    used: 'Royalty accrued from franchise child sales.',
+    types: ['ASSET'],
+    subtypes: ['OTHER_CURRENT_ASSET', 'ACCOUNTS_RECEIVABLE'],
+  },
 ]
 
 export type SystemAccountBinding = {
@@ -216,6 +258,7 @@ export async function list(ctx: OrgContext): Promise<SystemAccountBinding[]> {
             name: account.name,
             type: account.type,
             isActive: account.isActive,
+            /** True when this account has nested sub-accounts (still postable). */
             isHeading: account._count.children > 0,
           }
         : null,
@@ -224,8 +267,6 @@ export async function list(ctx: OrgContext): Promise<SystemAccountBinding[]> {
         .filter(
           (candidate) =>
             candidate.isActive &&
-            // A heading has sub-accounts and is not posted to.
-            candidate._count.children === 0 &&
             role.types.includes(candidate.type) &&
             role.subtypes.includes(candidate.subtype),
         )
@@ -270,7 +311,6 @@ export async function assign(ctx: OrgContext, key: SystemAccountKey, accountId: 
         subtype: true,
         isActive: true,
         systemKey: true,
-        _count: { select: { children: true } },
       },
     })
     if (!account) throw notFound('Account')
@@ -278,12 +318,6 @@ export async function assign(ctx: OrgContext, key: SystemAccountKey, accountId: 
     if (!account.isActive) {
       throw validation('That account is archived. Restore it first, or choose another.', {
         accountId: ['Archived accounts cannot receive postings.'],
-      })
-    }
-
-    if (account._count.children > 0) {
-      throw validation('That account is a heading with sub-accounts, so nothing can post to it.', {
-        accountId: ['Choose one of its sub-accounts instead.'],
       })
     }
 

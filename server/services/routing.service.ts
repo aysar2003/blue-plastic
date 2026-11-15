@@ -4,6 +4,11 @@ import { Prisma } from '@prisma/client'
 
 import { Decimal } from '@/lib/money'
 import { routingMinutes } from '@/lib/erp/verticals-p5'
+import {
+  effectiveWeeklyCapacity,
+  isWorkCenterOverloaded,
+  loadPercent,
+} from '@/lib/erp/routing-capacity'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { conflict, notFound, validation } from '@/server/errors'
@@ -222,6 +227,7 @@ export async function capacityReport(ctx: OrgContext) {
   ])
 
   const demandByCenter = new Map<string, number>()
+  const workOrdersByCenter = new Map<string, { id: string; number: string }[]>()
   const stepsByItem = new Map<string, { workCenterId: string; minutes: number }[]>()
   for (const step of steps) {
     if (!step.workCenterId) continue
@@ -239,17 +245,22 @@ export async function capacityReport(ctx: OrgContext) {
     for (const step of stepsByItem.get(order.itemId) ?? []) {
       const prior = demandByCenter.get(step.workCenterId) ?? 0
       demandByCenter.set(step.workCenterId, prior + qty * step.minutes)
+      const woList = workOrdersByCenter.get(step.workCenterId) ?? []
+      if (!woList.some((row) => row.id === order.id)) {
+        woList.push({ id: order.id, number: order.number })
+        workOrdersByCenter.set(step.workCenterId, woList)
+      }
     }
   }
 
   return centers.map((center) => {
-    const capacity = Number(center.capacityMinutesPerWeek.toString())
-    const demand = demandByCenter.get(center.id) ?? 0
-    const load =
-      capacity > 0 ? Math.round((demand / capacity) * 1000) / 10 : demand > 0 ? 999 : 0
     const byDay = Array.isArray(center.capacityByWeekday)
       ? (center.capacityByWeekday as number[])
       : null
+    const capacity = effectiveWeeklyCapacity(center.capacityMinutesPerWeek.toString(), byDay)
+    const demand = demandByCenter.get(center.id) ?? 0
+    const overloaded = isWorkCenterOverloaded(demand, capacity)
+    const openWorkOrders = overloaded ? (workOrdersByCenter.get(center.id) ?? []) : []
     return {
       id: center.id,
       name: center.name,
@@ -257,8 +268,9 @@ export async function capacityReport(ctx: OrgContext) {
       capacityMinutes: capacity.toFixed(2),
       capacityByWeekday: byDay,
       demandMinutes: demand.toFixed(2),
-      loadPercent: load,
-      overloaded: demand > capacity + 0.0001,
+      loadPercent: loadPercent(demand, capacity),
+      overloaded,
+      openWorkOrders,
     }
   })
 }

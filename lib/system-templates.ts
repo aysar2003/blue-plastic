@@ -38,19 +38,19 @@ export const SYSTEM_TEMPLATES: SystemTemplateEntry[] = [
   {
     id: 'invoice-form',
     label: 'Invoice form layout',
-    blurb: 'Sheet, Office, Classic, Service, or Modern when entering invoices and quotes.',
+    blurb: 'Layout skin plus which fields and line columns show on invoices and quotes.',
     managedHere: true,
   },
   {
     id: 'sales-receipt-form',
     label: 'Sales receipt form',
-    blurb: 'Layout for counter and office sales receipts.',
+    blurb: 'Layout plus company fields and columns for counter and office sales receipts.',
     managedHere: true,
   },
   {
     id: 'sales-form',
     label: 'Other sales forms',
-    blurb: 'Default layout for estimates, orders, credit memos, and refunds.',
+    blurb: 'Layout and fields for credit memos and related sales papers.',
     managedHere: true,
   },
   {

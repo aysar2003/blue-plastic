@@ -165,3 +165,29 @@ export function matchAsnToPoLines(input: {
 export function canReceivePledge(status: 'PLEDGED' | 'RECEIVED' | 'CANCELLED'): boolean {
   return status === 'PLEDGED'
 }
+
+/** Job costs plus committed PO exceed project budget. */
+export function jobCostOverBudget(input: {
+  costs: string
+  committed: string
+  budget: string | null | undefined
+}): boolean {
+  if (!input.budget) return false
+  const budget = Number(input.budget)
+  if (!Number.isFinite(budget) || budget <= 0) return false
+  const total = Number(input.costs) + Number(input.committed)
+  return Number.isFinite(total) && total > budget + 0.0001
+}
+
+/** Retainer remaining below watermark % of the original retainer (default 25%). */
+export function isRetainerLowWatermark(
+  retainerRemaining: string | null | undefined,
+  retainerAmount: string | null | undefined,
+  watermarkPercent = 25,
+): boolean {
+  if (!retainerRemaining || !retainerAmount) return false
+  const remaining = Number(retainerRemaining)
+  const original = Number(retainerAmount)
+  if (!Number.isFinite(remaining) || !Number.isFinite(original) || original <= 0) return false
+  return remaining <= (original * watermarkPercent) / 100 + 0.0001
+}

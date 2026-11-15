@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowLeftRightIcon, BanknoteIcon, UploadIcon } from 'lucide-react'
+import { ArrowLeftRightIcon, BanknoteIcon, CopyIcon, UploadIcon } from 'lucide-react'
 
 import { ChartRoleMark, ChartSubElbow } from '@/components/accounts/chart-hierarchy'
 import { AccountTypeIcon, AccountTypeMark } from '@/components/accounts/account-type-icon'
@@ -256,7 +256,7 @@ export default async function BankingPage({
                         {account.hasChildren ? (
                           <ChartRoleMark
                             role="main"
-                            title="Grouping heading; postings go to its sub-accounts."
+                            title="Main account — posts itself; Subs nest under it for reports."
                           />
                         ) : null}
                         {depth > 0 ? (
@@ -390,14 +390,29 @@ export default async function BankingPage({
                       </Badge>
                     </TableCell>
                     <TableCell className="print:hidden">
-                      {canTransact && ctx.features.allowDocumentDelete ? (
-                        <DeleteButton
-                          kind={row.kind}
-                          id={row.id}
-                          number={row.number}
-                          variant="ghost"
-                        />
-                      ) : null}
+                      <span className="inline-flex items-center gap-0.5">
+                        {canTransact && row.status !== 'VOID' ? (
+                          <Link
+                            href={
+                              row.kind === 'transfer'
+                                ? `/banking/transfers/new?copy=${row.id}`
+                                : `/banking/deposits/new?copy=${row.id}`
+                            }
+                            className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+                            title={`Copy ${row.number}`}
+                          >
+                            <CopyIcon />
+                          </Link>
+                        ) : null}
+                        {canTransact && ctx.features.allowDocumentDelete ? (
+                          <DeleteButton
+                            kind={row.kind}
+                            id={row.id}
+                            number={row.number}
+                            variant="ghost"
+                          />
+                        ) : null}
+                      </span>
                     </TableCell>
                   </ClickableRow>
                 ))}

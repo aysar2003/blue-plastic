@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
 import { AdjustmentForm } from '@/components/inventory/adjustment-form'
@@ -23,24 +24,43 @@ export default async function NewAdjustmentPage({
   const itemId = typeof query.item === 'string' ? query.item : undefined
   const storeId = typeof query.store === 'string' ? query.store : undefined
   const mode = query.mode === 'damage' || query.mode === 'cost' ? query.mode : 'count'
+  const copyId = typeof query.copy === 'string' ? query.copy : undefined
 
-  const [stock, shelf, accounts, documentNumber] = await Promise.all([
+  const [stock, shelf, accounts, documentNumber, copySource] = await Promise.all([
     inventoryService.stockOnHand(ctx),
     storeService.quantities(ctx),
     accountService.selectableAccounts(ctx),
     peekDocumentNumber(db, ctx.orgId, 'INVENTORY_ADJUSTMENT'),
+    copyId ? inventoryService.getAdjustment(ctx, copyId).catch(() => null) : Promise.resolve(null),
   ])
+  if (copyId && !copySource) notFound()
+
+  const copySeed = copySource
+    ? {
+        storeId: copySource.store?.id ?? '',
+        accountId: copySource.account?.id ?? '',
+        reason: copySource.reason,
+        memo: copySource.memo,
+        mode: 'count' as const,
+        lines: copySource.lines
+          .filter((line) => line.item?.id)
+          .map((line) => ({
+            itemId: line.item!.id,
+            counted: line.countedQuantity,
+            description: line.description ?? '',
+          })),
+      }
+    : undefined
 
   return (
     <>
-
       <PageHeader
-        title="Adjust stock"
+        title={copySource ? `Copy adjustment ${copySource.number}` : 'Adjust stock'}
         description="Count what is on that store's shelf, record what was damaged, or add cost onto an item. Damage leaves the cost on what remains, so the cost rises. Adding cost does the same with an amount you type. The lines stay open down the page."
       />
 
       <AdjustmentForm
-        initialMode={mode}
+        initialMode={copySeed ? copySeed.mode : mode}
         items={stock.items.map((item) => ({
           id: item.itemId,
           label: item.sku ? `${item.sku} — ${item.name}` : item.name,
@@ -62,8 +82,10 @@ export default async function NewAdjustmentPage({
         today={today(ctx.organization.timeZone)}
         currency={ctx.organization.baseCurrency}
         documentNumber={documentNumber}
-        initialItemId={itemId}
-        initialStoreId={storeId}
+        initialItemId={copySeed ? undefined : itemId}
+        initialStoreId={copySeed ? undefined : storeId}
+        document={copySeed}
+        copiedFromNumber={copySource?.number}
       />
     </>
   )

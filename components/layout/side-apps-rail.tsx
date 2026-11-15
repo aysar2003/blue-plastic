@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 
 import type { OrgFeatureFlags } from '@/lib/feature-flags'
 import { cn } from '@/lib/utils'
-import { HeaderApps } from './app-launcher'
+import { HeaderApps } from './header-apps'
 
 /**
  * QuickBooks Online left nav:
@@ -54,9 +54,16 @@ export function SideAppsRail({
   /** Close wins over a still-hovered rail until the pointer leaves and comes back. */
   const [holdShut, setHoldShut] = useState(false)
   const hoverLocked = useRef(false)
+  const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [closeSignal, setCloseSignal] = useState(0)
   const [canHover, setCanHover] = useState(true)
   const [path, setPath] = useState(pathname)
+
+  function clearLeaveTimer() {
+    if (leaveTimerRef.current == null) return
+    clearTimeout(leaveTimerRef.current)
+    leaveTimerRef.current = null
+  }
 
   if (path !== pathname) {
     setPath(pathname)
@@ -97,6 +104,7 @@ export function SideAppsRail({
   const docked = pinned && !holdShut
 
   function openLatch() {
+    clearLeaveTimer()
     hoverLocked.current = false
     setHoldShut(false)
     setLatched(true)
@@ -105,6 +113,7 @@ export function SideAppsRail({
   function shut() {
     // A click while hovered can emit leave+enter as the rail shrinks.
     // Keep hover locked until that turn finishes so it stays closed.
+    clearLeaveTimer()
     hoverLocked.current = true
     setHoldShut(true)
     setPinned(false)
@@ -121,6 +130,7 @@ export function SideAppsRail({
 
   function onPinClick() {
     const next = !pinned
+    clearLeaveTimer()
     hoverLocked.current = false
     setHoldShut(false)
     setPinned(next)
@@ -130,16 +140,26 @@ export function SideAppsRail({
 
   function onPointerEnter() {
     if (!canHover || hoverLocked.current) return
+    clearLeaveTimer()
     setHoldShut(false)
     setPeek(true)
   }
 
   function onPointerLeave() {
-    setPeek(false)
+    // 1s grace so a slip off the rail (or a move onto a destination panel)
+    // does not collapse immediately. menuOpen still keeps the rail expanded
+    // while a panel is open even after peek clears.
+    clearLeaveTimer()
+    leaveTimerRef.current = setTimeout(() => {
+      leaveTimerRef.current = null
+      setPeek(false)
+    }, 1000)
     queueMicrotask(() => {
       hoverLocked.current = false
     })
   }
+
+  useEffect(() => () => clearLeaveTimer(), [])
 
   return (
     <div

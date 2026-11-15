@@ -26,6 +26,7 @@ const assignSchema = z.object({
     'POS_CASH_OVER',
     'TIP_LIABILITY',
     'RETENTION_RECEIVABLE',
+    'RETENTION_PAYABLE',
     'UNEARNED_REVENUE',
   ]),
   accountId: cuid,

@@ -46,6 +46,8 @@ export async function upsertShareholder(
     name: string
     shares: string
     ownershipPercent: string
+    memberKind?: 'MEMBER' | 'INVESTOR'
+    customerId?: string | null
     capitalAccountId?: string | null
     notes?: string | null
   },
@@ -72,6 +74,8 @@ export async function upsertShareholder(
     name: input.name.trim(),
     shares: shares.toFixed(4),
     ownershipPercent: (self?.ownershipPercent ?? new Decimal(input.ownershipPercent || 0)).toFixed(4),
+    memberKind: input.memberKind ?? 'INVESTOR',
+    customerId: input.customerId || null,
     capitalAccountId: input.capitalAccountId || null,
     notes: input.notes?.trim() || null,
   }

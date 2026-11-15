@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { TIME_ZONES } from '@/lib/constants'
+import { LOCALIZATION_PACKS } from '@/lib/localization/packs'
 import { updateOrganizationForm } from './actions'
 
 type Organization = {
@@ -26,6 +27,7 @@ type Organization = {
   email: string | null
   website: string | null
   timeZone: string
+  localizationPackId: string | null
 }
 
 export function OrganizationForm({ organization, canEdit }: { organization: Organization; canEdit: boolean }) {
@@ -87,6 +89,26 @@ export function OrganizationForm({ organization, canEdit }: { organization: Orga
                 ))}
               </NativeSelect>
             </Field>
+
+            <Field
+              name="localizationPackId"
+              label="Localization pack"
+              hint="Payroll CSV + e-invoice. Leave blank with country SO/KE/ET/DJ to auto-pick."
+              error={e?.localizationPackId}
+            >
+              <NativeSelect
+                {...fieldProps('localizationPackId', e?.localizationPackId, true)}
+                defaultValue={organization.localizationPackId ?? ''}
+                disabled={!canEdit}
+              >
+                <option value="">Default (international)</option>
+                {LOCALIZATION_PACKS.map((pack) => (
+                  <option key={pack.id} value={pack.id}>
+                    {pack.id.toUpperCase()} — {pack.country}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
           </div>
 
           <Field name="addressLine1" label="Address" error={e?.addressLine1}>
@@ -126,7 +148,7 @@ export function OrganizationForm({ organization, canEdit }: { organization: Orga
             <Field
               name="country"
               label="Country code"
-              hint="Two letters (ISO). Somalia = SO, Kenya = KE, UAE = AE."
+              hint="ISO-2. SO/KE/ET/DJ auto-fill the localization pack when pack is blank."
               error={e?.country}
             >
               <Input

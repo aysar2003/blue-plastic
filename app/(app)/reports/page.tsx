@@ -7,8 +7,7 @@ import { StandardReportSections } from '@/components/reports/standard-report-sec
 import { CreateReportMenu } from '@/components/reports/create-report-menu'
 import { FavouriteReports } from '@/components/reports/favourite-reports'
 import { ReportCentreTabs } from '@/components/reports/report-centre-tabs'
-import { canViewBusinessOverview, withoutBusinessOverview } from '@/lib/business-overview-access'
-import { STANDARD_FAVOURITES } from '@/lib/standard-reports'
+import { canViewBusinessOverview } from '@/lib/business-overview-access'
 import {
   EXPENSE_COLOR,
   FigureChart,
@@ -54,13 +53,19 @@ export default async function ReportsIndexPage() {
             <Link href="/reports/consolidation" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
               Consolidation
             </Link>
+            <Link href="/reports/portfolio" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+              Portfolio
+            </Link>
+            <Link href="/reports/franchise" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+              Franchise
+            </Link>
           </div>
         ) : null}
         <GiveFeedback />
         <CreateReportMenu permissions={[...ctx.permissions]} />
       </div>
       <ReportCentreTabs active="standard" />
-      <FavouriteReports reports={withoutBusinessOverview(STANDARD_FAVOURITES, ctx.permissions)} />
+      <FavouriteReports />
       <div className="mb-8">
         <FigureChart
           caption={`This month · ${formatDate(month.from)} to ${formatDate(month.to)}`}

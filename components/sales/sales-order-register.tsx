@@ -174,7 +174,7 @@ export function SalesOrderRegister({
         {canCreate ? (
           <Link
             href={`${basePath}/new`}
-            className="ml-auto inline-flex items-center rounded-md bg-[#2ca01c] px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-[#248a18]"
+            className="ml-auto inline-flex items-center rounded-md bg-primary px-3.5 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
             Create sales order
           </Link>
@@ -196,7 +196,7 @@ export function SalesOrderRegister({
                     checked={allOn}
                     onChange={toggleAll}
                     aria-label="Select the sales orders on this list"
-                    className="size-3.5 accent-[#2ca01c]"
+                    className="size-3.5 accent-primary"
                   />
                 </TableHead>
                 <SortableHeader
@@ -243,12 +243,12 @@ export function SalesOrderRegister({
                       checked={selected.includes(row.id)}
                       onChange={() => toggle(row.id)}
                       aria-label={`Select ${row.number}`}
-                      className="size-3.5 accent-[#2ca01c]"
+                      className="size-3.5 accent-primary"
                     />
                   </TableCell>
                   <TableCell className="tabular whitespace-nowrap">{row.date}</TableCell>
                   <TableCell>
-                    <Link href={row.href} className="font-medium text-[#2ca01c] hover:underline">
+                    <Link href={row.href} className="font-medium text-primary hover:underline">
                       {row.number}
                     </Link>
                   </TableCell>
@@ -258,7 +258,7 @@ export function SalesOrderRegister({
                   <TableCell data-column="entered-by">{row.recorded ?? '—'}</TableCell>
                   <TableCell className="print:hidden">
                     <span className="inline-flex flex-wrap items-center gap-2 whitespace-nowrap text-sm">
-                      <Link href={row.editHref ?? row.href} className="font-medium text-[#2ca01c] hover:underline">
+                      <Link href={row.editHref ?? row.href} className="font-medium text-primary hover:underline">
                         View/Edit
                       </Link>
                       {row.canFulfill ? (
@@ -273,7 +273,7 @@ export function SalesOrderRegister({
                         />
                       ) : null}
                       <DropdownMenu>
-                        <DropdownMenuTrigger className="text-[#2ca01c]" aria-label={`More actions for ${row.number}`}>
+                        <DropdownMenuTrigger className="text-primary" aria-label={`More actions for ${row.number}`}>
                           <ChevronDownIcon className="size-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">

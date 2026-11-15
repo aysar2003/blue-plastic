@@ -44,6 +44,7 @@ export const updateOrganization = action
   .handler(async (ctx, input) => {
     const org = await organizationService.update(ctx, input)
     revalidatePath('/settings/organization')
+    revalidatePath('/settings/setup')
     revalidatePath('/', 'layout')
     return org
   })
@@ -166,6 +167,7 @@ export async function updateFeatureFlagsForm(
     'creditLimitWarn',
     'payrollStandard',
     'closeHardGates',
+    'enforceBudgetControl',
     'enableTax',
     ...MODULE_FORM_KEY_LIST,
     ...DOCUMENT_KIND_FORM_KEY_LIST,
@@ -292,6 +294,9 @@ export const upsertFormTemplate = action
       fields: input.template.fields,
       columns: input.template.columns,
       categoryColumns: input.template.categoryColumns,
+      fieldOrder: input.template.fieldOrder,
+      columnOrder: input.template.columnOrder,
+      categoryColumnOrder: input.template.categoryColumnOrder,
     }
     const result = await organizationService.upsertFormTemplate(
       ctx,

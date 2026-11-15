@@ -48,26 +48,36 @@ export function SubscriptionForm({
   currency,
   customers,
   initial,
+  prefill,
 }: {
   mode: 'create' | 'edit'
   today: string
   currency: string
   customers: PickerOption[]
   initial?: Initial
+  /** Prefill from Make recurring on an invoice form. */
+  prefill?: {
+    customerId?: string
+    amount?: string
+    name?: string
+    lineDescription?: string
+  }
 }) {
   const router = useRouter()
   const formAction = mode === 'create' ? createSubscriptionForm : updateSubscriptionForm
   const [state, action] = useActionState(formAction, idleState)
   const handled = useRef(false)
 
-  const [name, setName] = useState(initial?.name ?? '')
+  const [name, setName] = useState(initial?.name ?? prefill?.name ?? '')
   const [frequency, setFrequency] = useState<Frequency>(initial?.frequency ?? 'MONTHLY')
   const [interval, setInterval] = useState(String(initial?.interval ?? 1))
   const [nextRunOn, setNextRunOn] = useState(initial?.nextRunOn ?? today)
   const [endOn, setEndOn] = useState(initial?.endOn ?? '')
-  const [customerId, setCustomerId] = useState(initial?.customerId ?? '')
-  const [amount, setAmount] = useState(initial?.amount ?? '')
-  const [lineDescription, setLineDescription] = useState(initial?.lineDescription ?? '')
+  const [customerId, setCustomerId] = useState(initial?.customerId ?? prefill?.customerId ?? '')
+  const [amount, setAmount] = useState(initial?.amount ?? prefill?.amount ?? '')
+  const [lineDescription, setLineDescription] = useState(
+    initial?.lineDescription ?? prefill?.lineDescription ?? '',
+  )
   const [memo, setMemo] = useState(initial?.memo ?? '')
   const [deferRevenue, setDeferRevenue] = useState(initial?.deferRevenue ?? false)
   const [serviceMonths, setServiceMonths] = useState(String(initial?.serviceMonths ?? 12))

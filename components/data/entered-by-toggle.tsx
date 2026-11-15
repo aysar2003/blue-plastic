@@ -24,7 +24,7 @@ export function EnteredByToggle() {
         type="checkbox"
         checked={shown}
         onChange={(event) => writeBrowserStore(KEY, event.target.checked ? '1' : '0')}
-        className="size-3.5 accent-[#2ca01c]"
+        className="size-3.5 accent-primary"
       />
       Entered by
     </label>

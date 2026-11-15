@@ -37,6 +37,8 @@ export type PosOfflineProduct = {
   category: string | null
   unitOfMeasure?: string | null
   price: string
+  /** Used when the selected walk-in customer is wholesale. */
+  wholesalePrice?: string | null
   trackLots?: boolean
   trackSerials?: boolean
   pharmacyControlled?: boolean
@@ -59,7 +61,7 @@ export type PosOfflineSnapshot = {
     allowsChangeReturn: boolean
   }[]
   products: PosOfflineProduct[]
-  customers: { id: string; displayName: string }[]
+  customers: { id: string; displayName: string; priceLevel?: 'RETAIL' | 'WHOLESALE' }[]
   stockStoreId: string | null
   stockStoreName: string | null
   stores: { id: string; name: string }[]

@@ -64,6 +64,7 @@ export function ReceiveForm({
   currency,
   stores = [],
   preferredStoreId = null,
+  farmStoreIds = [],
 }: {
   orderId: string
   orderNumber: string
@@ -73,6 +74,7 @@ export function ReceiveForm({
   currency: string
   stores?: StoreChoice[]
   preferredStoreId?: string | null
+  farmStoreIds?: string[]
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(receiveOrderForm, idleState)
@@ -151,6 +153,13 @@ export function ReceiveForm({
   }
 
   const valueColSpan = 4 + (showStores ? 1 : 0) + (showLotSerial ? 1 : 0) + 1
+  const farmStoreSet = new Set(farmStoreIds)
+  const receivingToFarm =
+    showStores &&
+    lines.some((line) => {
+      const storeId = storeByLine[line.lineId] ?? lineStoreDefault(line, stores, preferredStoreId)
+      return farmStoreSet.has(storeId) && line.trackLots
+    })
 
   return (
     <form action={formAction} className="space-y-2">
@@ -159,6 +168,14 @@ export function ReceiveForm({
       <Card>
         <CardContent className="space-y-3 p-3 sm:p-4">
           <FormStatus state={state} />
+
+          {receivingToFarm ? (
+            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-muted-foreground">
+              Farm store receive with lots: set an{' '}
+              <span className="text-foreground">origin label</span> on each lot under Inventory →
+              Lots after booking in, so seasonal reports can filter by field or region.
+            </p>
+          ) : null}
 
           <div className="grid gap-2 sm:grid-cols-[12rem_1fr]">
             <Field

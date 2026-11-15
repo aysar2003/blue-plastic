@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { idleState } from '@/components/forms/action-state'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { Field, fieldProps } from '@/components/forms/field'
+import { FormChromeToolbar } from '@/components/forms/form-chrome-toolbar'
 import { LockedNumber } from '@/components/forms/locked-number'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
@@ -40,6 +41,8 @@ export function DepositForm({
   currency,
   documentNumber,
   defaultBankAccountId,
+  document,
+  copiedFromNumber,
 }: {
   bankAccounts: AccountPickerOption[]
   otherAccounts: AccountPickerOption[]
@@ -48,22 +51,39 @@ export function DepositForm({
   currency: string
   documentNumber: string
   defaultBankAccountId?: string
+  /** Prefill from Copy — payment ticks are cleared; other lines kept. */
+  document?: {
+    bankAccountId: string
+    reference: string | null
+    memo: string | null
+    otherLines: { accountId: string; description: string; amount: string }[]
+  }
+  copiedFromNumber?: string
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(saveDepositForm, idleState)
 
   const [number, setNumber] = usePropState(documentNumber)
   const [bankAccountId, setBankAccountId] = useState(
-    defaultBankAccountId && bankAccounts.some((a) => a.id === defaultBankAccountId)
-      ? defaultBankAccountId
-      : (bankAccounts[0]?.id ?? ''),
+    document?.bankAccountId && bankAccounts.some((a) => a.id === document.bankAccountId)
+      ? document.bankAccountId
+      : defaultBankAccountId && bankAccounts.some((a) => a.id === defaultBankAccountId)
+        ? defaultBankAccountId
+        : (bankAccounts[0]?.id ?? ''),
   )
   const [date, setDate] = useState(today)
-  const [reference, setReference] = useState('')
-  const [memo, setMemo] = useState('')
+  const [reference, setReference] = useState(document?.reference ?? '')
+  const [memo, setMemo] = useState(document?.memo ?? '')
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [otherLines, setOtherLines] = useState<OtherLine[]>([])
-  const nextKey = useRef(1)
+  const [otherLines, setOtherLines] = useState<OtherLine[]>(() =>
+    (document?.otherLines ?? []).map((line, index) => ({
+      key: index + 1,
+      accountId: line.accountId,
+      description: line.description,
+      amount: line.amount,
+    })),
+  )
+  const nextKey = useRef((document?.otherLines.length ?? 0) + 1)
   const handled = useRef(false)
 
   useEffect(() => {
@@ -102,6 +122,17 @@ export function DepositForm({
   return (
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="payload" value={payload} />
+
+      <FormChromeToolbar
+        newHref="/banking/deposits/new"
+        canSave={total.greaterThan(0) && bankAccountId !== ''}
+      />
+      {copiedFromNumber ? (
+        <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground print:hidden">
+          Copy of <span className="font-medium text-foreground">{copiedFromNumber}</span>. Already
+          banked payments are not re-ticked — choose undeposited payments again if needed.
+        </p>
+      ) : null}
 
       <Card>
         <CardContent className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">

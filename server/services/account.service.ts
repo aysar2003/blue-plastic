@@ -19,11 +19,7 @@ import { linkColonParents, planColonHierarchyRepairs } from '@/lib/chart-tree'
 import { rollupParentBalances } from '@/lib/pos-till-ledger'
 import type { AccountCreateInput, AccountUpdateInput } from '@/lib/validation/accounting'
 import { balancesAsOf } from '@/server/accounting/balances'
-import {
-  listedOnOriginalChart,
-  seedChartOfAccounts,
-  systemAccountId,
-} from '@/server/accounting/chart-of-accounts'
+import { seedChartOfAccounts, systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { OFFICE_NAME, seedDefaultOffice } from '@/server/accounting/default-office'
 import { seedPaymentTerms } from '@/server/services/tax.service'
 import { postJournal } from '@/server/accounting/posting'
@@ -48,7 +44,10 @@ const ACCOUNT_SELECT = {
 } satisfies Prisma.LedgerAccountSelect
 
 export type AccountRow = Prisma.LedgerAccountGetPayload<{ select: typeof ACCOUNT_SELECT }> & {
+  /** Own posted balance only — Main and Sub stay separate. */
   balance: string
+  /** Main + Subs when this account has children; otherwise null. */
+  groupBalance: string | null
   hasChildren: boolean
   depth: number
 }
@@ -63,7 +62,7 @@ export type AccountRow = Prisma.LedgerAccountGetPayload<{ select: typeof ACCOUNT
  */
 export async function list(
   ctx: OrgContext,
-  options: { includeInactive?: boolean; q?: string; originalChart?: boolean } = {},
+  options: { includeInactive?: boolean; q?: string } = {},
 ): Promise<AccountRow[]> {
   const accounts = await db.ledgerAccount.findMany({
     where: {
@@ -78,7 +77,7 @@ export async function list(
           }
         : {}),
     },
-    select: { ...ACCOUNT_SELECT, createdAt: true },
+    select: ACCOUNT_SELECT,
     orderBy: [{ type: 'asc' }, { code: 'asc' }],
   })
 
@@ -87,14 +86,13 @@ export async function list(
   // Imported QBO charts often use "Parent:Child" names without parentId. Persist
   // those links (and short child names) once so the tree stays clear forever.
   const linked = await persistColonHierarchy(ctx.orgId, chartAccounts)
-  const visible = options.originalChart ? linked.filter((account) => listedOnOriginalChart(account)) : linked
   const childCount = new Map<string, number>()
-  for (const account of visible) {
+  for (const account of linked) {
     if (account.parentId) childCount.set(account.parentId, (childCount.get(account.parentId) ?? 0) + 1)
   }
 
-  const byId = new Map(visible.map((account) => [account.id, account]))
-  const depthOf = (account: (typeof visible)[number]): number => {
+  const byId = new Map(linked.map((account) => [account.id, account]))
+  const depthOf = (account: (typeof linked)[number]): number => {
     let depth = 0
     let current = account.parentId
     while (current && depth < 8) {
@@ -104,18 +102,25 @@ export async function list(
     return depth
   }
 
-  const withBalances = visible.map((account) => ({
+  const withBalances = linked.map((account) => ({
     ...account,
     balance: new Decimal(balances.get(account.id)?.natural ?? 0),
   }))
   const rolled = rollupParentBalances(withBalances)
 
-  return withBalances.map(({ createdAt: _createdAt, ...account }) => ({
-    ...account,
-    balance: toMoneyString(rolled.get(account.id) ?? account.balance ?? ZERO, 2),
-    hasChildren: (childCount.get(account.id) ?? 0) > 0,
-    depth: depthOf(account),
-  }))
+  return withBalances.map((account) => {
+    const hasChildren = (childCount.get(account.id) ?? 0) > 0
+    const own = account.balance ?? ZERO
+    return {
+      ...account,
+      balance: toMoneyString(own, 2),
+      groupBalance: hasChildren
+        ? toMoneyString(rolled.get(account.id) ?? own, 2)
+        : null,
+      hasChildren,
+      depth: depthOf(account),
+    }
+  })
 }
 
 export async function get(ctx: OrgContext, id: string) {
@@ -423,7 +428,7 @@ async function persistColonHierarchy<
   return [...byId.values()]
 }
 
-/** Accounts that can actually receive a posting: active, and not a grouping heading. */
+/** Active accounts that can receive a posting — Main and Sub both post. */
 export async function postableAccounts(ctx: OrgContext) {
   const accounts = await db.ledgerAccount.findMany({
     where: { orgId: ctx.orgId, isActive: true },
@@ -438,12 +443,11 @@ export async function postableAccounts(ctx: OrgContext) {
   const byId = new Map(linked.map((account) => [account.id, account]))
   const parents = new Set(linked.map((a) => a.parentId).filter(Boolean) as string[])
 
-  return linked
-    .filter((account) => !parents.has(account.id))
-    .map((account) => ({
-      ...account,
-      parentName: account.parentId ? (byId.get(account.parentId)?.name ?? null) : null,
-    }))
+  return linked.map((account) => ({
+    ...account,
+    hasChildren: parents.has(account.id),
+    parentName: account.parentId ? (byId.get(account.parentId)?.name ?? null) : null,
+  }))
 }
 
 /**
@@ -601,6 +605,7 @@ export async function selectableAccounts(
     systemKey: account.systemKey,
     parentId: account.parentId,
     parentName: account.parentName,
+    hasChildren: account.hasChildren,
     balance: balances ? toMoneyString(balances.get(account.id)?.natural ?? 0, 2) : null,
   }))
 }

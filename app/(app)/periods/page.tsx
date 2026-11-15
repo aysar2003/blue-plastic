@@ -22,6 +22,7 @@ import { OwnersEquityTools } from './owners-equity-tools'
 import { ClosedPeriodsBoard } from './closed-periods-board'
 import { OpenMonthButton, PeriodToggle } from './period-actions'
 import { YearArchiveCard } from './year-archive-card'
+import { ScaleOpsCard } from './scale-ops-card'
 import { CloseYearButton, ReopenYearButton } from './year-end-actions'
 import * as yearArchiveService from '@/server/services/year-archive.service'
 
@@ -102,7 +103,8 @@ export default async function PeriodsPage({
         </div>
       </Card>
 
-      <Card className="mb-6 p-4">
+      <Card className="mb-6 space-y-4 p-4">
+        <ScaleOpsCard />
         <YearArchiveCard
           liveFromYear={archiveStatus.liveFromYear}
           currentFiscalYear={archiveStatus.currentFiscalYear}

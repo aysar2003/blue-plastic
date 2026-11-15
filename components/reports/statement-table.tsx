@@ -17,8 +17,11 @@ import {
 import { chartSubIndentPadStyle, childDisplayName } from '@/lib/chart-tree'
 import { Decimal, formatMoney } from '@/lib/money'
 import { REPORT_DRILL_LINK } from '@/lib/report-drill'
+import { linesWithGroupTotals } from '@/lib/statement-group-totals'
 import { cn } from '@/lib/utils'
 import type { StatementRow, StatementSection } from '@/server/reports/statements'
+
+export { linesWithGroupTotals } from '@/lib/statement-group-totals'
 
 export type StatementColumn = { label: string; comparison?: boolean }
 
@@ -308,12 +311,49 @@ function SectionRows({
 
       {cluster(section.rows).map((group) => {
           const nameById = new Map(section.rows.map((row) => [row.accountId, row.name]))
-          const lines = group.rows.map((row) => {
+          const parentIds = new Set(
+            group.rows.map((row) => row.parentId).filter((id): id is string => Boolean(id)),
+          )
+          const lines = linesWithGroupTotals(group.rows).map((line) => {
+            if (line.kind === 'groupTotal') {
+              return (
+                <TableRow
+                  key={`total-${line.parentId}`}
+                  className="bg-muted/25 hover:bg-muted/25"
+                >
+                  <TableCell className="pl-6 font-medium text-muted-foreground">
+                    <span className="block" style={chartSubIndentPadStyle(line.depth)}>
+                      {line.label}
+                    </span>
+                  </TableCell>
+                  <TableCell />
+                  <TableCell />
+                  <TableCell className="numeric tabular font-medium">
+                    {formatMoney(line.amount, currency)}
+                  </TableCell>
+                  {hasComparison ? (
+                    <TableCell className="numeric tabular font-medium text-muted-foreground">
+                      {formatMoney(line.comparison ?? new Decimal(0), currency)}
+                    </TableCell>
+                  ) : null}
+                  {hasComparison ? (
+                    <TableCell className="numeric tabular font-medium">
+                      {formatMoney(
+                        line.amount.minus(line.comparison ?? new Decimal(0)),
+                        currency,
+                      )}
+                    </TableCell>
+                  ) : null}
+                  {showPercent ? <TableCell /> : null}
+                </TableRow>
+              )
+            }
+
+            const row = line.row
             const depth = row.depth ?? 0
             const href = drillTo?.(row.accountId)
             const parentName = row.parentId ? nameById.get(row.parentId) : null
-            const isMain =
-              depth === 0 && section.rows.some((other) => other.parentId === row.accountId)
+            const isMain = parentIds.has(row.accountId)
             const label = childDisplayName(row.name, parentName)
             const accountLabel = (
               <span className="inline-flex items-center gap-2">
@@ -324,7 +364,7 @@ function SectionRows({
                 {isMain ? (
                   <ChartRoleMark
                     role="main"
-                    title="Main account — total of its sub-accounts"
+                    title="Main account — posts itself; Subs nest under it for reports"
                   />
                 ) : null}
                 {depth > 0 ? (

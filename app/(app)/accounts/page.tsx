@@ -43,7 +43,7 @@ export default async function AccountsPage({
 
   // Load the whole chart, then filter in memory so a matching sub-account still
   // brings its parent (and children) — hierarchy never drops mid-tree.
-  const accounts = await accountService.list(ctx, { includeInactive: showArchived, originalChart: true })
+  const accounts = await accountService.list(ctx, { includeInactive: showArchived })
 
   const canCreate = ctx.permissions.has('account:create')
   const canEdit = ctx.permissions.has('account:update')
@@ -184,10 +184,10 @@ export default async function AccountsPage({
         ))}
       </div>
       <p className="mb-3 text-xs text-muted-foreground print:hidden">
-        <span className="font-medium text-foreground">Main</span> accounts are headings — their
-        balance is the total of the indented <span className="font-medium text-foreground">Sub</span>{' '}
-        accounts underneath (like QuickBooks). Post money to the sub-accounts, not the main.
-        Click a name for its register; right-click to edit or archive.
+        <span className="font-medium text-foreground">Main</span> and{' '}
+        <span className="font-medium text-foreground">Sub</span> accounts both accept postings. Each
+        row shows its own balance; under a Main with Subs, a <span className="font-medium text-foreground">Total</span>{' '}
+        line adds Main + Subs for reports. Click a name for its register; right-click to edit or archive.
       </p>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -243,6 +243,7 @@ export default async function AccountsPage({
             isSystem: account.isSystem,
             isActive: account.isActive,
             balance: account.balance,
+            groupBalance: account.groupBalance,
             treeDepth: account.treeDepth,
             hasChildren: account.hasChildren,
           }))}

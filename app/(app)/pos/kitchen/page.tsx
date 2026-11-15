@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { PageHeader } from '@/components/data/page-header'
+import { buttonVariants } from '@/components/ui/button'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -19,7 +21,15 @@ export default async function KitchenPage() {
 
   return (
     <>
-      <PageHeader title="Kitchen display" description="Open a ticket, fire it, mark ready, then done." />
+      <PageHeader
+        title="Kitchen display"
+        description="Open a ticket, fire it, mark ready, then done."
+        actions={
+          <Link href="/pos/menu-cost" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Menu food cost
+          </Link>
+        }
+      />
       <p className="mb-4 max-w-2xl text-xs text-muted-foreground">{KITCHEN_LEGAL}</p>
       {canSell ? (
         <Card className="mb-6 max-w-lg space-y-2 p-4">

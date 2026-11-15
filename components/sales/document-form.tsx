@@ -1,22 +1,30 @@
 'use client'
 
-import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useActionState, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
 import {
   CheckIcon,
   ChevronDownIcon,
+  CopyIcon,
+  HistoryIcon,
   LayoutTemplateIcon,
+  MoreHorizontalIcon,
   PlusIcon,
   PrinterIcon,
+  RefreshCwIcon,
   SaveIcon,
   SearchIcon,
   Trash2Icon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { listBillableExpenses } from '@/app/(app)/sales/actions'
+import {
+  listBillableExpenses,
+  searchFormCustomers,
+  searchFormItems,
+} from '@/app/(app)/sales/actions'
 import {
   FromSourcePicker,
   type AppliedSource,
@@ -29,6 +37,13 @@ import { Field, fieldProps } from '@/components/forms/field'
 import { FormCustomizePanel } from '@/components/forms/form-customize-panel'
 import { RecordNav } from '@/components/forms/record-nav'
 import { neighborHrefs } from '@/lib/record-nav'
+import { DeleteMenuItem } from '@/components/data/delete-record'
+import {
+  DocumentAttachments,
+  type AttachmentRow,
+} from '@/components/data/document-attachments'
+import { DocumentActions } from '@/components/print/document-actions'
+import { documentEmailBody, documentEmailSubject } from '@/lib/document-email'
 import { PartyInfo } from '@/components/forms/party-info'
 import { LockedNumber } from '@/components/forms/locked-number'
 import { FormStatus } from '@/components/forms/form-status'
@@ -39,6 +54,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Card, CardContent } from '@/components/ui/card'
@@ -54,7 +70,14 @@ import { DateField } from '@/components/ui/date-field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import type { AccountPickerOption } from '@/lib/account-options'
-import { isFieldVisible, isColumnVisible, SALES_FORM_COLUMNS, SALES_FORM_FIELDS } from '@/lib/form-field-catalog'
+import {
+  isFieldVisible,
+  isColumnVisible,
+  resolveCatalogOrder,
+  salesFieldsForType,
+  SALES_FORM_COLUMNS,
+  type FormColumnDef,
+} from '@/lib/form-field-catalog'
 import type { FormCustomizationProps } from '@/lib/form-customization-props'
 import type { FormTemplate } from '@/lib/form-templates'
 import {
@@ -179,6 +202,13 @@ const empty = (key: number, storeId = ''): Line => ({
   lotExpiryDate: '',
 })
 
+const lineInput =
+  'h-7 border-transparent bg-transparent px-1.5 shadow-none focus-visible:border-ring focus-visible:bg-muted/40'
+
+/** Sheet line cells — quiet fields that follow the theme (no paper-white rims). */
+const sheetLineInput =
+  'h-7 rounded-md border border-border/70 bg-transparent px-2 text-foreground shadow-none focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring/20'
+
 function withMinimumLines(seeded: Line[], minimum: number, storeId: string): Line[] {
   const rows = [...seeded]
   let key = rows.reduce((max, line) => Math.max(max, line.key), 0)
@@ -190,7 +220,8 @@ function withMinimumLines(seeded: Line[], minimum: number, storeId: string): Lin
 }
 
 type DocumentSeed = {
-  id: string
+  /** Absent when this seed is a Copy of another document (new form). */
+  id?: string
   customerId: string
   date: string
   reference: string | null
@@ -234,10 +265,17 @@ function sharedLineDiscount(document: DocumentSeed | undefined): string {
  * One form for every customer-facing document. The type decides the wording and
  * where money goes; company form templates control which fields and columns show.
  */
+function mergeById<T extends { id: string }>(base: T[], extra: T[]): T[] {
+  const map = new Map<string, T>()
+  for (const row of base) map.set(row.id, row)
+  for (const row of extra) map.set(row.id, row)
+  return [...map.values()]
+}
+
 export function DocumentForm({
   config,
-  customers,
-  items,
+  customers: customersProp,
+  items: itemsProp,
   taxCodes,
   depositAccounts,
   terms,
@@ -257,6 +295,10 @@ export function DocumentForm({
   stock = {},
   openSources = [],
   formCustomization,
+  copiedFromNumber,
+  attachments = [],
+  canEmail = false,
+  canDelete = false,
 }: {
   config: SalesTypeConfig
   customers: CustomerOption[]
@@ -270,6 +312,14 @@ export function DocumentForm({
   /** The number this document has, or the next one if it has not been saved. */
   documentNumber: string
   document?: DocumentSeed
+  /** Source number when this form was opened via Copy (Make a copy). */
+  copiedFromNumber?: string
+  /** Files already on this document (edit only). */
+  attachments?: AttachmentRow[]
+  /** Show Send on the toolbar when the user may email. */
+  canEmail?: boolean
+  /** Show Delete in More when document delete is allowed. */
+  canDelete?: boolean
   /** Set when the form was opened from a customer, so the sale starts on them. */
   initialCustomerId?: string
   /** Set when the form was opened from a store, so lines issue from that shelf. */
@@ -296,6 +346,39 @@ export function DocumentForm({
   /** Company form field/column templates for this document type. */
   formCustomization?: FormCustomizationProps
 }) {
+  const [extraCustomers, setExtraCustomers] = useState<CustomerOption[]>([])
+  const [extraItems, setExtraItems] = useState<ItemOption[]>([])
+  const customers = useMemo(
+    () => mergeById(customersProp, extraCustomers),
+    [customersProp, extraCustomers],
+  )
+  const items = useMemo(() => mergeById(itemsProp, extraItems), [itemsProp, extraItems])
+
+  const searchCustomers = async (query: string) => {
+    const result = await searchFormCustomers({ q: query })
+    if (!result.ok) return []
+    setExtraCustomers((current) => mergeById(current, result.data))
+    return result.data.map((row) => ({ id: row.id, label: row.label }))
+  }
+  const searchItems = async (query: string) => {
+    const result = await searchFormItems({ q: query })
+    if (!result.ok) return []
+    setExtraItems((current) => mergeById(current, result.data))
+    return result.data.map((row) => {
+      const bits = [row.sku, row.barcode].filter(Boolean).join(' · ')
+      const unit = row.unitOfMeasure?.trim() || 'ea'
+      return {
+        id: row.id,
+        label: row.label,
+        group: row.group,
+        hint:
+          row.onHand != null
+            ? `${bits ? `${bits} · ` : ''}${row.onHand} ${unit} on hand`
+            : bits || undefined,
+      }
+    })
+  }
+
   const officeId = officeStoreId(stores)
   const defaultStoreId =
     initialStoreId && stores.some((store) => store.id === initialStoreId) ? initialStoreId : officeId
@@ -416,7 +499,8 @@ export function DocumentForm({
   )
   const nextKey = useRef(Math.max(document?.lines.length ?? 0, minimumLines) + 1)
   const handled = useRef(false)
-  const afterSave = useRef<'close' | 'new'>('close')
+  const errored = useRef<FormState | null>(null)
+  const afterSave = useRef<'close' | 'new' | 'send'>('close')
   /** Set in the button click; read when the form builds the payload on submit. */
   const saveAsDraft = useRef(false)
 
@@ -504,9 +588,18 @@ export function DocumentForm({
   useEffect(() => {
     if (state.status === 'success' && !handled.current) {
       handled.current = true
+      errored.current = null
       toast.success(
         saveAsDraft.current ? 'Saved as draft.' : (state.message ?? 'Saved.'),
       )
+      if (afterSave.current === 'send') {
+        const id = document?.id ?? state.created?.id
+        if (id) {
+          router.push(`/sales/${config.slug}/${id}?send=1`)
+          router.refresh()
+          return
+        }
+      }
       if (afterSave.current === 'new' && !document?.id) {
         setCustomerId(initialCustomerId ?? '')
         setProjectId(initialProjectId ?? '')
@@ -538,8 +631,21 @@ export function DocumentForm({
         afterSave.current === 'new' ? `/sales/${config.slug}/new` : `/sales/${config.slug}`,
       )
       router.refresh()
+      return
     }
-    if (state.status !== 'success') handled.current = false
+    if (state.status === 'error' && errored.current !== state) {
+      errored.current = state
+      handled.current = false
+      const fieldMessage = state.fieldErrors
+        ? Object.values(state.fieldErrors).flat().find((message) => message.trim() !== '')
+        : undefined
+      toast.error(state.message ?? fieldMessage ?? 'Could not save.')
+      return
+    }
+    if (state.status !== 'success') {
+      if (state.status !== 'error') errored.current = null
+      handled.current = false
+    }
   }, [state, router, config.slug, document?.id, initialCustomerId, today, depositAccounts, minimumLines, defaultStoreId])
 
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
@@ -563,6 +669,21 @@ export function DocumentForm({
     () =>
       items.map((item) => {
         const unit = resolveUnit(item.unitOfMeasure)
+        const tracked = item.type === 'INVENTORY' || item.type === 'INVENTORY_ASSEMBLY'
+        // Prefer store shelves (loaded on new/edit); item.onHand is only set when
+        // the page asked for company totals. Skipping that scan used to leave
+        // every tracked item as "0.00 on hand" in the picker.
+        const shelf = stock[item.id]
+        const onHandText =
+          shelf != null
+            ? Object.values(shelf)
+                .reduce((sum, qty) => sum + (Number(qty) || 0), 0)
+                .toFixed(2)
+            : stores.length > 0 && tracked
+              ? '0.00'
+              : item.onHand != null
+                ? item.onHand
+                : null
         return {
           id: item.id,
           label: item.label,
@@ -575,13 +696,13 @@ export function DocumentForm({
             [
               item.barcode,
               item.sku,
-              item.onHand != null ? `${item.onHand} ${unit} on hand` : null,
+              onHandText != null ? `${onHandText} ${unit} on hand` : null,
             ]
               .filter(Boolean)
               .join(' · ') || undefined,
         }
       }),
-    [items],
+    [items, stock, stores.length],
   )
   /**
    * Line key → amber note when this sale takes a store to or below zero. Uses the
@@ -911,6 +1032,11 @@ export function DocumentForm({
     (!config.needsDeposit || depositAccountId !== '')
   /** A draft can be unfinished — customer and at least one line are enough. */
   const canDraft = customerId !== '' && filled.length > 0
+  const selectedCustomer = customers.find((row) => row.id === customerId)
+  const firstLineBlurb =
+    filled.find((line) => line.description.trim())?.description.trim() ||
+    memo.trim() ||
+    `${config.singular} ${number}`
 
   const shared = {
     config,
@@ -980,6 +1106,8 @@ export function DocumentForm({
     stockWarnings,
     update,
     chooseItem,
+    searchCustomers,
+    searchItems,
     addLine,
     addLines,
     clearLines,
@@ -999,6 +1127,7 @@ export function DocumentForm({
     applyFromSource,
     showField,
     showColumn,
+    columnOrder: activeForm?.columnOrder,
   }
 
   return (
@@ -1011,32 +1140,42 @@ export function DocumentForm({
     >
       <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor(false)} />
 
-      {config.type === 'SALES_RECEIPT' ? (
-        <SalesReceiptToolbar
-          type={config.type}
-          slug={config.slug}
-          singular={config.singular}
-          recordId={document?.id}
-          neighbors={neighbors}
-          canSave={canSave}
-          onSave={() => {
-            afterSave.current = 'close'
-            saveAsDraft.current = false
-          }}
-        />
-      ) : (
-        <div className="flex flex-wrap items-center gap-1 print:hidden">
-          <RecordNav
-            {...neighborHrefs(`/sales/${config.slug}`, neighbors, document?.id)}
-          />
-          <DocumentFinder type={config.type} slug={config.slug} singular={config.singular} />
-          {config.type === 'INVOICE' ? (
-            <Button type="button" variant="outline" size="sm" onClick={openBillable}>
-              Add billable expenses
-            </Button>
-          ) : null}
-        </div>
-      )}
+      <SalesDocumentToolbar
+        type={config.type}
+        slug={config.slug}
+        singular={config.singular}
+        recordId={document?.id}
+        documentNumber={number}
+        organizationName={organizationName}
+        customerName={selectedCustomer?.label}
+        customerEmail={selectedCustomer?.email}
+        totalLabel={`Total: ${formatMoney(totals.total, currency)}`}
+        neighbors={neighbors}
+        canSave={canSave}
+        canEmail={canEmail}
+        canDelete={canDelete}
+        recurringHref={
+          config.type === 'INVOICE' && customerId
+            ? `/sales/subscriptions/new?${new URLSearchParams({
+                customerId,
+                amount: totals.total.toFixed(2),
+                name: `${config.singular} ${number}`.trim(),
+                description: firstLineBlurb,
+              }).toString()}`
+            : undefined
+        }
+        onSave={() => {
+          afterSave.current = 'close'
+          saveAsDraft.current = false
+        }}
+        onBillable={config.type === 'INVOICE' ? openBillable : undefined}
+      />
+      {copiedFromNumber && !document?.id ? (
+        <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground print:hidden">
+          Copy of <span className="font-medium text-foreground">{copiedFromNumber}</span>. Saving
+          creates a new {config.singular.toLowerCase()} with a new number.
+        </p>
+      ) : null}
 
       <Dialog open={billableOpen} onOpenChange={setBillableOpen}>
         <DialogContent>
@@ -1086,7 +1225,7 @@ export function DocumentForm({
           activeId={formCustomization.activeId}
           draft={activeForm}
           onDraftChange={setFormDraft}
-          fieldCatalog={SALES_FORM_FIELDS}
+          fieldCatalog={salesFieldsForType(config.type)}
           columnCatalog={SALES_FORM_COLUMNS}
           canManage={formCustomization.canManage}
           layoutOptions={layoutOptions}
@@ -1103,6 +1242,15 @@ export function DocumentForm({
       {!usesPrintSheet && template === 'classic' ? <ClassicLayout {...shared} /> : null}
       {!usesPrintSheet && template === 'service' ? <ServiceLayout {...shared} /> : null}
       {!usesPrintSheet && template === 'modern' ? <ModernLayout {...shared} /> : null}
+
+      {document?.id ? (
+        <DocumentAttachments
+          target={{ kind: 'sale', id: document.id }}
+          files={attachments}
+          canEdit
+          hint="Signed copy, delivery note, or photo · PDF or image · 4 MB or smaller"
+        />
+      ) : null}
 
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
         <Button type="button" variant="outline" onClick={() => router.push(`/sales/${config.slug}`)}>
@@ -1134,6 +1282,20 @@ export function DocumentForm({
         >
           Save and close
         </SubmitButton>
+        {canEmail ? (
+          <SubmitButton
+            variant="outline"
+            disabled={!canSave}
+            pendingLabel="Saving…"
+            title="Save, then open the email dialog on the document"
+            onClick={() => {
+              afterSave.current = 'send'
+              saveAsDraft.current = false
+            }}
+          >
+            Save and send
+          </SubmitButton>
+        ) : null}
         <SubmitButton
           disabled={!canSave}
           pendingLabel="Saving…"
@@ -1401,6 +1563,10 @@ type LayoutProps = {
   stockWarnings: Record<number, StockWarning>
   update: (key: number, patch: Partial<Line>) => void
   chooseItem: (key: number, itemId: string) => void
+  searchCustomers: (query: string) => Promise<{ id: string; label: string }[]>
+  searchItems: (
+    query: string,
+  ) => Promise<{ id: string; label: string; group?: string; hint?: string }[]>
   addLine: () => void
   addLines: (count?: number) => void
   clearLines: () => void
@@ -1416,6 +1582,206 @@ type LayoutProps = {
   applyFromSource: (applied: AppliedSource) => void
   showField: (id: string) => boolean
   showColumn: (id: string) => boolean
+  /** Company template line-column order. */
+  columnOrder?: string[]
+}
+
+/** Visible sales line columns in template order (store/tax gated). */
+function salesVisibleColumns(props: LayoutProps): FormColumnDef[] {
+  return resolveCatalogOrder(
+    SALES_FORM_COLUMNS.map((column) => column.id),
+    props.columnOrder,
+  )
+    .map((id) => SALES_FORM_COLUMNS.find((column) => column.id === id))
+    .filter((column): column is FormColumnDef => Boolean(column))
+    .filter((column) => {
+      if (!props.showColumn(column.id)) return false
+      if (column.id === 'store') return props.stores.length > 0
+      if (column.id === 'tax') return props.showTax
+      return true
+    })
+}
+
+function salesColumnHeaderClass(id: string, compact = false): string {
+  const pad = compact ? 'px-1.5 py-1.5' : 'px-2 py-2'
+  const size = compact ? ' text-[11px] font-semibold uppercase tracking-wide' : ''
+  switch (id) {
+    case 'item':
+      return cn('w-44 text-left', pad, size)
+    case 'description':
+      return cn('text-left', pad, size)
+    case 'qty':
+      return cn('w-24 text-center', pad, size)
+    case 'unit':
+      return cn('w-16 text-center', pad, size)
+    case 'rate':
+      return cn(compact ? 'w-24' : 'w-28', 'text-right', pad, size)
+    case 'amount':
+      return cn(compact ? 'w-24' : 'w-28', 'text-right', pad, size)
+    case 'store':
+      return cn(compact ? 'w-36' : 'w-40', 'text-left', pad, size)
+    case 'tax':
+      return cn('w-36 text-left', pad, size)
+    default:
+      return cn('text-left', pad, size)
+  }
+}
+
+function salesLineCell({
+  columnId,
+  props,
+  line,
+  index,
+  inputClass,
+  showStore,
+  showUnit,
+  sheet,
+  storeClassName,
+}: {
+  columnId: string
+  props: LayoutProps
+  line: Line
+  index: number
+  inputClass: string
+  showStore: boolean
+  showUnit: boolean
+  sheet?: boolean
+  storeClassName?: string
+}): ReactNode {
+  switch (columnId) {
+    case 'item':
+      return (
+        <td className="px-1 py-1">
+          <EntityPicker
+            kind="item"
+            options={props.itemOptions}
+            value={line.itemId || null}
+            onChange={(next) => props.chooseItem(line.key, next ?? '')}
+            onSearch={props.searchItems}
+            placeholder="Item"
+            clearable
+            className={sheet ? sheetLineInput : undefined}
+          />
+          {!showStore ? <StockWarningNote warning={props.stockWarnings[line.key]} /> : null}
+        </td>
+      )
+    case 'description':
+      return (
+        <td className="px-1 py-1">
+          <Input
+            aria-label={`Description, line ${index + 1}`}
+            className={inputClass}
+            value={line.description}
+            onChange={(event) => props.update(line.key, { description: event.target.value })}
+          />
+        </td>
+      )
+    case 'qty':
+      return (
+        <td className="px-1 py-1">
+          <div className="flex items-center gap-1">
+            <Input
+              aria-label={`Quantity, line ${index + 1}`}
+              inputMode="decimal"
+              readOnly={props.subtotalItemIds.has(line.itemId)}
+              className={cn(inputClass, 'min-w-0 flex-1 tabular text-center')}
+              value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
+              onChange={(event) => props.update(line.key, { quantity: event.target.value })}
+              onBlur={(event) => props.update(line.key, { quantity: fixed2(event.target.value) })}
+            />
+            {!showUnit && line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
+              <span
+                className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
+                title={resolveUnit(
+                  props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
+                )}
+              >
+                {resolveUnit(
+                  props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
+                )}
+              </span>
+            ) : null}
+          </div>
+        </td>
+      )
+    case 'unit':
+      return (
+        <td className="px-1 py-1 text-center text-[0.7rem] font-medium uppercase text-muted-foreground">
+          {line.itemId && !props.subtotalItemIds.has(line.itemId)
+            ? (
+                props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure?.trim() ||
+                'EACH'
+              ).toUpperCase()
+            : ''}
+        </td>
+      )
+    case 'rate':
+      return (
+        <td className="px-1 py-1">
+          <Input
+            aria-label={`Rate, line ${index + 1}`}
+            inputMode="decimal"
+            readOnly={props.subtotalItemIds.has(line.itemId)}
+            className={cn(inputClass, 'tabular text-right')}
+            value={props.subtotalItemIds.has(line.itemId) ? '' : line.unitPrice}
+            onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
+            onBlur={(event) => props.update(line.key, { unitPrice: fixed2(event.target.value) })}
+          />
+        </td>
+      )
+    case 'amount':
+      return (
+        <td className="px-1 py-1">
+          <AmountField
+            line={line}
+            isDiscount={props.discountItemIds.has(line.itemId)}
+            isPayment={props.paymentItemIds.has(line.itemId)}
+            isSubtotal={props.subtotalItemIds.has(line.itemId)}
+            subtotalDisplay={props.subtotalDisplayByKey[line.key]}
+            onCommit={(next) => props.update(line.key, next)}
+            className={sheet ? sheetLineInput : undefined}
+          />
+        </td>
+      )
+    case 'store':
+      return (
+        <td className="px-1 py-1 align-top">
+          <LineStore
+            stores={props.stores}
+            stock={props.stock}
+            tracked={props.trackedIds.includes(line.itemId)}
+            warn={props.config.type === 'INVOICE' || props.config.type === 'SALES_RECEIPT'}
+            warning={props.stockWarnings[line.key]}
+            itemId={line.itemId}
+            storeId={line.storeId}
+            quantity={line.quantity}
+            onChange={(storeId) => props.update(line.key, { storeId })}
+            label={`Store, line ${index + 1}`}
+            className={storeClassName}
+          />
+        </td>
+      )
+    case 'tax':
+      return (
+        <td className="px-1 py-1">
+          <NativeSelect
+            aria-label={`Tax, line ${index + 1}`}
+            value={line.taxCodeId}
+            onChange={(event) => props.update(line.key, { taxCodeId: event.target.value })}
+            className={cn(sheet && 'h-7 rounded-md border border-border/70 bg-transparent px-2 text-sm')}
+          >
+            <option value="">No tax</option>
+            {props.taxCodes.map((code) => (
+              <option key={code.id} value={code.id}>
+                {code.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </td>
+      )
+    default:
+      return null
+  }
 }
 
 function HeaderFields({
@@ -1458,6 +1824,7 @@ function HeaderFields({
               if (chosen?.paymentTermId) props.setPaymentTermId(chosen.paymentTermId)
               if (chosen?.currencyCode) props.setCurrencyCode(chosen.currencyCode)
             }}
+            onSearch={props.searchCustomers}
             placeholder="Search or add a customer"
             required
             error={state.fieldErrors?.customerId}
@@ -1486,38 +1853,47 @@ function HeaderFields({
           recordId={props.recordId}
         />
 
-        <Field name="currencyCode" label="Currency" error={state.fieldErrors?.currencyCode}>
-          <Input
-            name="currencyCode"
-            value={props.currencyCode}
-            onChange={(event) => props.setCurrencyCode(event.target.value.toUpperCase())}
-            maxLength={3}
-            className="uppercase"
-            aria-invalid={state.fieldErrors?.currencyCode ? true : undefined}
-          />
-        </Field>
-        <Field
-          name="exchangeRate"
-          label="FX rate"
-          hint={`Base (${props.currency}) per 1 ${props.currencyCode || props.currency}. Use 1 when same currency.`}
-          error={state.fieldErrors?.exchangeRate}
-        >
-          <Input
-            name="exchangeRate"
-            value={props.exchangeRate}
-            onChange={(event) => props.setExchangeRate(event.target.value)}
-            inputMode="decimal"
-            className="tabular"
-            aria-invalid={state.fieldErrors?.exchangeRate ? true : undefined}
-          />
-        </Field>
+        {props.showField('currency') ? (
+          <>
+            <Field name="currencyCode" label="Currency" error={state.fieldErrors?.currencyCode}>
+              <Input
+                name="currencyCode"
+                value={props.currencyCode}
+                onChange={(event) => props.setCurrencyCode(event.target.value.toUpperCase())}
+                maxLength={3}
+                className="uppercase"
+                aria-invalid={state.fieldErrors?.currencyCode ? true : undefined}
+              />
+            </Field>
+            <Field
+              name="exchangeRate"
+              label="FX rate"
+              hint={`Base (${props.currency}) per 1 ${props.currencyCode || props.currency}. Use 1 when same currency.`}
+              error={state.fieldErrors?.exchangeRate}
+            >
+              <Input
+                name="exchangeRate"
+                value={props.exchangeRate}
+                onChange={(event) => props.setExchangeRate(event.target.value)}
+                inputMode="decimal"
+                className="tabular"
+                aria-invalid={state.fieldErrors?.exchangeRate ? true : undefined}
+              />
+            </Field>
+          </>
+        ) : (
+          <>
+            <input type="hidden" name="currencyCode" value={props.currencyCode} />
+            <input type="hidden" name="exchangeRate" value={props.exchangeRate} />
+          </>
+        )}
         <input
           type="hidden"
           name="acknowledgeCreditLimit"
           value={props.acknowledgeCreditLimit ? 'true' : 'false'}
         />
         {state.fieldErrors?.acknowledgeCreditLimit ? (
-          <label className="col-span-full flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          <label className="col-span-full flex items-start gap-2 rounded-md border border-warning/35 bg-warning/15 px-3 py-2 text-sm text-warning-foreground dark:text-warning">
             <input
               type="checkbox"
               checked={props.acknowledgeCreditLimit}
@@ -1559,19 +1935,23 @@ function HeaderFields({
           </Field>
         ) : null}
 
-        <Field
-          name="prescriptionRef"
-          label="Rx / prescription"
-          error={state.fieldErrors?.prescriptionRef}
-        >
-          <Input
-            {...fieldProps('prescriptionRef', state.fieldErrors?.prescriptionRef)}
-            value={props.prescriptionRef}
-            onChange={(event) => props.setPrescriptionRef(event.target.value)}
-            placeholder="Optional"
-            maxLength={120}
-          />
-        </Field>
+        {props.showField('prescriptionRef') ? (
+          <Field
+            name="prescriptionRef"
+            label="Rx / prescription"
+            error={state.fieldErrors?.prescriptionRef}
+          >
+            <Input
+              {...fieldProps('prescriptionRef', state.fieldErrors?.prescriptionRef)}
+              value={props.prescriptionRef}
+              onChange={(event) => props.setPrescriptionRef(event.target.value)}
+              placeholder="Optional"
+              maxLength={120}
+            />
+          </Field>
+        ) : (
+          <input type="hidden" name="prescriptionRef" value={props.prescriptionRef} />
+        )}
       </div>
 
       {(config.type === 'INVOICE' || config.needsDeposit) && (
@@ -1759,22 +2139,30 @@ function NotesFields({ props }: { props: LayoutProps }) {
         </div>
       ) : null}
       <div className="grid gap-2 sm:grid-cols-2">
-        <Field name="customerMessage" label="Message" error={props.state.fieldErrors?.customerMessage}>
-          <Input
-            {...fieldProps('customerMessage', props.state.fieldErrors?.customerMessage)}
-            value={props.customerMessage}
-            onChange={(event) => props.setCustomerMessage(event.target.value)}
-            placeholder="Thank you for your business"
-          />
-        </Field>
-        <Field name="memo" label="Memo" error={props.state.fieldErrors?.memo}>
-          <Input
-            {...fieldProps('memo', props.state.fieldErrors?.memo)}
-            value={props.memo}
-            onChange={(event) => props.setMemo(event.target.value)}
-            placeholder="Internal note"
-          />
-        </Field>
+        {props.showField('customerMessage') ? (
+          <Field name="customerMessage" label="Message" error={props.state.fieldErrors?.customerMessage}>
+            <Input
+              {...fieldProps('customerMessage', props.state.fieldErrors?.customerMessage)}
+              value={props.customerMessage}
+              onChange={(event) => props.setCustomerMessage(event.target.value)}
+              placeholder="Thank you for your business"
+            />
+          </Field>
+        ) : (
+          <input type="hidden" name="customerMessage" value={props.customerMessage} />
+        )}
+        {props.showField('memo') ? (
+          <Field name="memo" label="Memo" error={props.state.fieldErrors?.memo}>
+            <Input
+              {...fieldProps('memo', props.state.fieldErrors?.memo)}
+              value={props.memo}
+              onChange={(event) => props.setMemo(event.target.value)}
+              placeholder="Internal note"
+            />
+          </Field>
+        ) : (
+          <input type="hidden" name="memo" value={props.memo} />
+        )}
       </div>
     </div>
   )
@@ -1810,6 +2198,7 @@ function InvoiceLayout(props: LayoutProps) {
                     const chosen = customers.find((row) => row.id === id)
                     props.setPaymentTermId(chosen?.paymentTermId ?? '')
                   }}
+                  onSearch={props.searchCustomers}
                   placeholder="Choose a customer"
                   required
                   error={state.fieldErrors?.customerId}
@@ -1874,31 +2263,40 @@ function InvoiceLayout(props: LayoutProps) {
             error={state.fieldErrors?.number}
             recordId={props.recordId}
           />
-          <Field name="currencyCode" label="Currency" error={state.fieldErrors?.currencyCode}>
-            <Input
-              name="currencyCode"
-              value={props.currencyCode}
-              onChange={(event) => props.setCurrencyCode(event.target.value.toUpperCase())}
-              maxLength={3}
-              className="uppercase"
-            />
-          </Field>
-          <Field name="exchangeRate" label="FX rate" error={state.fieldErrors?.exchangeRate}>
-            <Input
-              name="exchangeRate"
-              value={props.exchangeRate}
-              onChange={(event) => props.setExchangeRate(event.target.value)}
-              inputMode="decimal"
-              className="tabular"
-            />
-          </Field>
+          {props.showField('currency') ? (
+            <>
+              <Field name="currencyCode" label="Currency" error={state.fieldErrors?.currencyCode}>
+                <Input
+                  name="currencyCode"
+                  value={props.currencyCode}
+                  onChange={(event) => props.setCurrencyCode(event.target.value.toUpperCase())}
+                  maxLength={3}
+                  className="uppercase"
+                />
+              </Field>
+              <Field name="exchangeRate" label="FX rate" error={state.fieldErrors?.exchangeRate}>
+                <Input
+                  name="exchangeRate"
+                  value={props.exchangeRate}
+                  onChange={(event) => props.setExchangeRate(event.target.value)}
+                  inputMode="decimal"
+                  className="tabular"
+                />
+              </Field>
+            </>
+          ) : (
+            <>
+              <input type="hidden" name="currencyCode" value={props.currencyCode} />
+              <input type="hidden" name="exchangeRate" value={props.exchangeRate} />
+            </>
+          )}
           <input
             type="hidden"
             name="acknowledgeCreditLimit"
             value={props.acknowledgeCreditLimit ? 'true' : 'false'}
           />
           {state.fieldErrors?.acknowledgeCreditLimit ? (
-            <label className="col-span-full flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            <label className="col-span-full flex items-start gap-2 rounded-md border border-warning/35 bg-warning/15 px-3 py-2 text-sm text-warning-foreground dark:text-warning">
               <input
                 type="checkbox"
                 checked={props.acknowledgeCreditLimit}
@@ -1940,19 +2338,23 @@ function InvoiceLayout(props: LayoutProps) {
               />
             </Field>
           ) : null}
-          <Field
-            name="prescriptionRef"
-            label="Rx / prescription"
-            error={state.fieldErrors?.prescriptionRef}
-          >
-            <Input
-              {...fieldProps('prescriptionRef', state.fieldErrors?.prescriptionRef)}
-              value={props.prescriptionRef}
-              onChange={(event) => props.setPrescriptionRef(event.target.value)}
-              placeholder="Optional"
-              maxLength={120}
-            />
-          </Field>
+          {props.showField('prescriptionRef') ? (
+            <Field
+              name="prescriptionRef"
+              label="Rx / prescription"
+              error={state.fieldErrors?.prescriptionRef}
+            >
+              <Input
+                {...fieldProps('prescriptionRef', state.fieldErrors?.prescriptionRef)}
+                value={props.prescriptionRef}
+                onChange={(event) => props.setPrescriptionRef(event.target.value)}
+                placeholder="Optional"
+                maxLength={120}
+              />
+            </Field>
+          ) : (
+            <input type="hidden" name="prescriptionRef" value={props.prescriptionRef} />
+          )}
           {props.config.needsDeposit ? (
             <Field
               name="depositAccountId"
@@ -1991,32 +2393,44 @@ function InvoiceLayout(props: LayoutProps) {
 
         <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="grid gap-4">
-            <Field name="customerMessage" label={`Message on ${props.config.singular.toLowerCase()}`} error={state.fieldErrors?.customerMessage}>
-              <textarea
-                id="customerMessage"
+            {props.showField('customerMessage') ? (
+              <Field
                 name="customerMessage"
-                rows={3}
-                value={props.customerMessage}
-                onChange={(event) => props.setCustomerMessage(event.target.value)}
-                placeholder="Thank you for your business"
-                className={noteBox}
-              />
-            </Field>
-            <Field
-              name="memo"
-              label="Message on statement"
-              hint="Stays with the invoice. It is not printed on the customer’s copy."
-              error={state.fieldErrors?.memo}
-            >
-              <textarea
-                id="memo"
+                label={`Message on ${props.config.singular.toLowerCase()}`}
+                error={state.fieldErrors?.customerMessage}
+              >
+                <textarea
+                  id="customerMessage"
+                  name="customerMessage"
+                  rows={3}
+                  value={props.customerMessage}
+                  onChange={(event) => props.setCustomerMessage(event.target.value)}
+                  placeholder="Thank you for your business"
+                  className={noteBox}
+                />
+              </Field>
+            ) : (
+              <input type="hidden" name="customerMessage" value={props.customerMessage} />
+            )}
+            {props.showField('memo') ? (
+              <Field
                 name="memo"
-                rows={3}
-                value={props.memo}
-                onChange={(event) => props.setMemo(event.target.value)}
-                className={noteBox}
-              />
-            </Field>
+                label="Message on statement"
+                hint="Stays with the invoice. It is not printed on the customer’s copy."
+                error={state.fieldErrors?.memo}
+              >
+                <textarea
+                  id="memo"
+                  name="memo"
+                  rows={3}
+                  value={props.memo}
+                  onChange={(event) => props.setMemo(event.target.value)}
+                  className={noteBox}
+                />
+              </Field>
+            ) : (
+              <input type="hidden" name="memo" value={props.memo} />
+            )}
           </div>
           <div className="space-y-4">
             {props.config.type === 'INVOICE' && props.showField('customerBalance') ? (
@@ -2069,131 +2483,39 @@ const noteBox =
   'flex min-h-20 w-full rounded-md border border-input bg-card px-2.5 py-2 text-[0.8125rem] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25'
 
 function InvoiceLines({ props }: { props: LayoutProps }) {
-  const showDescription = props.showColumn('description')
-  const showQty = props.showColumn('qty')
-  const showUnit = props.showColumn('unit')
-  const showRate = props.showColumn('rate')
-  const showStore = props.showColumn('store') && props.stores.length > 0
+  const columns = salesVisibleColumns(props)
+  const showStore = columns.some((column) => column.id === 'store')
+  const showUnit = columns.some((column) => column.id === 'unit')
   return (
     <div>
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full border-separate border-spacing-0 text-sm">
           <thead>
             <tr className="ledger-head text-[12px] font-semibold uppercase tracking-wide">
-              <th className="w-44 px-2 py-2 text-left">Item</th>
-              {showDescription ? <th className="px-2 py-2 text-left">Description</th> : null}
-              {showQty ? <th className="w-24 px-2 py-2 text-center">Qty</th> : null}
-              {showUnit ? <th className="w-16 px-2 py-2 text-center">Unit</th> : null}
-              {showRate ? <th className="w-28 px-2 py-2 text-right">Rate</th> : null}
-              <th className="w-28 px-2 py-2 text-right">Amount</th>
-              {showStore ? <th className="w-40 px-2 py-2 text-left">Store</th> : null}
+              {columns.map((column) => (
+                <th key={column.id} className={salesColumnHeaderClass(column.id)}>
+                  {column.label}
+                </th>
+              ))}
               <th className="w-8" />
             </tr>
           </thead>
           <tbody>
             {props.lines.map((line, index) => (
               <tr key={line.key} className={index % 2 === 0 ? 'ledger-row' : 'ledger-row-alt'}>
-                <td className="px-1 py-1">
-                  <EntityPicker
-                    kind="item"
-                    options={props.itemOptions}
-                    value={line.itemId || null}
-                    onChange={(next) => props.chooseItem(line.key, next ?? '')}
-                    placeholder="Item"
-                    clearable
-                  />
-                  {!showStore ? <StockWarningNote warning={props.stockWarnings[line.key]} /> : null}
-                </td>
-                {showDescription ? (
-                  <td className="px-1 py-1">
-                    <Input
-                      aria-label={`Description, line ${index + 1}`}
-                      className={lineInput}
-                      value={line.description}
-                      onChange={(event) => props.update(line.key, { description: event.target.value })}
-                    />
-                  </td>
-                ) : null}
-                {showQty ? (
-                  <td className="px-1 py-1">
-                    <div className="flex items-center gap-1">
-                      <Input
-                        aria-label={`Quantity, line ${index + 1}`}
-                        inputMode="decimal"
-                        readOnly={props.subtotalItemIds.has(line.itemId)}
-                        className={cn(lineInput, 'min-w-0 flex-1 tabular text-center')}
-                        value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
-                        onChange={(event) => props.update(line.key, { quantity: event.target.value })}
-                        onBlur={(event) =>
-                          props.update(line.key, { quantity: fixed2(event.target.value) })
-                        }
-                      />
-                      {!showUnit && line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
-                        <span
-                          className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
-                          title={resolveUnit(
-                            props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
-                          )}
-                        >
-                          {resolveUnit(
-                            props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
-                          )}
-                        </span>
-                      ) : null}
-                    </div>
-                  </td>
-                ) : null}
-                {showUnit ? (
-                  <td className="px-1 py-1 text-center text-[0.7rem] font-medium uppercase text-muted-foreground">
-                    {line.itemId && !props.subtotalItemIds.has(line.itemId)
-                      ? (
-                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure?.trim() ||
-                          'EACH'
-                        ).toUpperCase()
-                      : ''}
-                  </td>
-                ) : null}
-                {showRate ? (
-                  <td className="px-1 py-1">
-                    <Input
-                      aria-label={`Rate, line ${index + 1}`}
-                      inputMode="decimal"
-                      readOnly={props.subtotalItemIds.has(line.itemId)}
-                      className={cn(lineInput, 'tabular text-right')}
-                      value={props.subtotalItemIds.has(line.itemId) ? '' : line.unitPrice}
-                      onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
-                      onBlur={(event) =>
-                        props.update(line.key, { unitPrice: fixed2(event.target.value) })
-                      }
-                    />
-                  </td>
-                ) : null}
-                <td className="px-1 py-1">
-                  <AmountField
-                    line={line}
-                    isDiscount={props.discountItemIds.has(line.itemId)}
-                    isPayment={props.paymentItemIds.has(line.itemId)}
-                    isSubtotal={props.subtotalItemIds.has(line.itemId)}
-                    subtotalDisplay={props.subtotalDisplayByKey[line.key]}
-                    onCommit={(next) => props.update(line.key, next)}
-                  />
-                </td>
-                {showStore ? (
-                  <td className="px-1 py-1 align-top">
-                    <LineStore
-                      stores={props.stores}
-                      stock={props.stock}
-                      tracked={props.trackedIds.includes(line.itemId)}
-                      warn={props.config.type === 'INVOICE' || props.config.type === 'SALES_RECEIPT'}
-                      warning={props.stockWarnings[line.key]}
-                      itemId={line.itemId}
-                      storeId={line.storeId}
-                      quantity={line.quantity}
-                      onChange={(storeId) => props.update(line.key, { storeId })}
-                      label={`Store, line ${index + 1}`}
-                    />
-                  </td>
-                ) : null}
+                {columns.map((column) => (
+                  <Fragment key={column.id}>
+                    {salesLineCell({
+                      columnId: column.id,
+                      props,
+                      line,
+                      index,
+                      inputClass: lineInput,
+                      showStore,
+                      showUnit,
+                    })}
+                  </Fragment>
+                ))}
                 <td className="px-1 py-1 align-top">
                   <LotSerialFields
                     item={props.itemOptions.find((row) => row.id === line.itemId)}
@@ -2311,28 +2633,50 @@ function SheetLayout(props: LayoutProps) {
 }
 
 
-function SalesReceiptToolbar({
+/** QuickBooks-style chrome shared by every sales document form. */
+function SalesDocumentToolbar({
   type,
   slug,
   singular,
   recordId,
+  documentNumber,
+  organizationName,
+  customerName,
+  customerEmail,
+  totalLabel,
   neighbors,
   canSave,
+  canEmail,
+  canDelete,
+  recurringHref,
   onSave,
+  onBillable,
 }: {
   type: SalesTypeConfig['type']
   slug: string
   singular: string
   recordId?: string
+  documentNumber: string
+  organizationName: string
+  customerName?: string
+  customerEmail?: string | null
+  totalLabel?: string
   neighbors?: {
     previous: { id: string; number: string } | null
     next: { id: string; number: string } | null
   }
   canSave: boolean
+  canEmail: boolean
+  canDelete: boolean
+  recurringHref?: string
   onSave: () => void
+  onBillable?: () => void
 }) {
   const router = useRouter()
   const nav = neighborHrefs(`/sales/${slug}`, neighbors, recordId)
+  const fileBase = `${slug.replace(/s$/, '')}-${documentNumber
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')}`
 
   return (
     <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-background p-1.5 print:hidden">
@@ -2349,11 +2693,83 @@ function SalesReceiptToolbar({
         <PrinterIcon />
         Print
       </Button>
+      {recordId && canEmail ? (
+        <DocumentActions
+          emailOnly
+          paper={singular.toLowerCase()}
+          pdfHref={`/api/sales/${recordId}/pdf`}
+          excelHref={`/api/sales/${recordId}/xlsx`}
+          filename={fileBase}
+          defaultTo={customerEmail ?? ''}
+          defaultSubject={documentEmailSubject(singular, documentNumber, organizationName)}
+          defaultBody={documentEmailBody({
+            partyName: customerName,
+            singular,
+            number: documentNumber,
+            extraLines: totalLabel ? [totalLabel] : undefined,
+          })}
+          canEmail
+        />
+      ) : null}
       <Button type="button" variant="outline" size="sm" onClick={() => router.push(`/sales/${slug}/new`)}>
         <PlusIcon />
         New
       </Button>
       <DocumentFinder type={type} slug={slug} singular={singular} />
+      {recurringHref ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          title="Create a recurring invoice schedule from this form"
+          onClick={() => router.push(recurringHref)}
+        >
+          <RefreshCwIcon />
+          Make recurring
+        </Button>
+      ) : null}
+      {onBillable ? (
+        <Button type="button" variant="outline" size="sm" onClick={onBillable}>
+          Add billable expenses
+        </Button>
+      ) : null}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="sm">
+            <MoreHorizontalIcon />
+            More
+            <ChevronDownIcon className="size-3.5 opacity-70" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {recordId ? (
+            <DropdownMenuItem onSelect={() => router.push(`/sales/${slug}/new?copy=${recordId}`)}>
+              <CopyIcon className="size-4" />
+              Copy
+            </DropdownMenuItem>
+          ) : null}
+          {recordId ? (
+            <DropdownMenuItem onSelect={() => router.push(`/sales/${slug}/${recordId}`)}>
+              <HistoryIcon className="size-4" />
+              View history
+            </DropdownMenuItem>
+          ) : null}
+          {recordId && canDelete ? (
+            <>
+              <DropdownMenuSeparator />
+              <DeleteMenuItem
+                kind="sales"
+                id={recordId}
+                number={documentNumber}
+                redirectTo={`/sales/${slug}`}
+              />
+            </>
+          ) : null}
+          {!recordId ? (
+            <DropdownMenuItem disabled>Save the document to unlock More actions</DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Button type="submit" size="sm" disabled={!canSave} onClick={onSave}>
         <SaveIcon />
         Save
@@ -2622,14 +3038,14 @@ function ClassicLayout(props: LayoutProps) {
 function ServiceLayout(props: LayoutProps) {
   return (
     <Card className="overflow-hidden p-0">
-      <div className="border-b border-teal-100 bg-gradient-to-r from-teal-50 to-sky-50 px-5 py-4">
-        <p className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-teal-800/70">
+      <div className="border-b border-border bg-card px-5 py-4">
+        <p className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           Service template
         </p>
-        <h2 className="mt-1 text-lg font-semibold text-slate-900">
+        <h2 className="mt-1 text-lg font-semibold text-foreground">
           New {props.config.singular.toLowerCase()}
         </h2>
-        <p className="mt-1 max-w-2xl text-sm text-slate-600">
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
           Built for labour and services — description and hours lead, rates follow.
         </p>
       </div>
@@ -2678,23 +3094,13 @@ function ModernLayout(props: LayoutProps) {
   )
 }
 
-const lineInput =
-  'h-7 border-transparent bg-transparent px-1.5 shadow-none focus-visible:border-ring focus-visible:bg-muted/40'
-
-/** Sheet line cells — quiet fields that follow the theme (no paper-white rims). */
-const sheetLineInput =
-  'h-7 rounded-md border border-border/70 bg-transparent px-2 text-foreground shadow-none focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring/20'
-
 /** The line band from a ruled sales sheet: product brand head, then pale stripes. */
 function StripedLines({ props }: { props: LayoutProps }) {
   const head =
     props.config.type === 'CREDIT_MEMO' ? CUSTOMER_CREDIT.band : FORM_SHEET.band
-  const showDescription = props.showColumn('description')
-  const showQty = props.showColumn('qty')
-  const showUnit = props.showColumn('unit')
-  const showRate = props.showColumn('rate')
-  const showStore = props.showColumn('store') && props.stores.length > 0
-  const showTax = props.showColumn('tax') && props.showTax
+  const columns = salesVisibleColumns(props)
+  const showStore = columns.some((column) => column.id === 'store')
+  const showUnit = columns.some((column) => column.id === 'unit')
 
   return (
     <div className="rounded-lg bg-muted/40 p-1.5 sm:p-2">
@@ -2702,37 +3108,17 @@ function StripedLines({ props }: { props: LayoutProps }) {
         <table className="w-full border-separate border-spacing-0 text-sm">
           <thead>
             <tr className="text-white" style={{ background: head }}>
-              <th className="w-40 rounded-tl-md px-1.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide">
-                Item
-              </th>
-              {showDescription ? (
-                <th className="px-1.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide">
-                  Description
+              {columns.map((column, index) => (
+                <th
+                  key={column.id}
+                  className={cn(
+                    salesColumnHeaderClass(column.id, true),
+                    index === 0 && 'rounded-tl-md',
+                  )}
+                >
+                  {column.label}
                 </th>
-              ) : null}
-              {showQty ? (
-                <th className="w-24 px-1.5 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide">
-                  Qty
-                </th>
-              ) : null}
-              {showUnit ? (
-                <th className="w-16 px-1.5 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide">
-                  Unit
-                </th>
-              ) : null}
-              {showRate ? (
-                <th className="w-24 px-1.5 py-1.5 text-right text-[11px] font-semibold uppercase tracking-wide">
-                  Rate
-                </th>
-              ) : null}
-              <th className="w-24 px-1.5 py-1.5 text-right text-[11px] font-semibold uppercase tracking-wide">
-                Amount
-              </th>
-              {showStore ? (
-                <th className="w-36 px-1.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide">
-                  Store
-                </th>
-              ) : null}
+              ))}
               <th className="w-8 rounded-tr-md" />
             </tr>
           </thead>
@@ -2742,125 +3128,22 @@ function StripedLines({ props }: { props: LayoutProps }) {
                 key={line.key}
                 className={index % 2 === 0 ? 'bg-card/80' : 'bg-muted/30'}
               >
-                <td className="px-1 py-1">
-                  <EntityPicker
-                    kind="item"
-                    options={props.itemOptions}
-                    value={line.itemId || null}
-                    onChange={(next) => props.chooseItem(line.key, next ?? '')}
-                    placeholder="Item"
-                    clearable
-                    className={sheetLineInput}
-                  />
-                  {!showStore ? <StockWarningNote warning={props.stockWarnings[line.key]} /> : null}
-                </td>
-                {showDescription ? (
-                  <td className="px-1 py-1">
-                    <Input
-                      aria-label={`Description, line ${index + 1}`}
-                      className={sheetLineInput}
-                      value={line.description}
-                      onChange={(event) => props.update(line.key, { description: event.target.value })}
-                    />
-                    {showTax && (line.itemId || line.description || line.unitPrice || line.taxCodeId) ? (
-                      <NativeSelect
-                        aria-label={`Tax, line ${index + 1}`}
-                        value={line.taxCodeId}
-                        onChange={(event) => props.update(line.key, { taxCodeId: event.target.value })}
-                        className="mt-0.5 h-6 rounded-md border border-border/70 bg-transparent px-2 text-xs"
-                      >
-                        <option value="">No tax</option>
-                        {props.taxCodes.map((code) => (
-                          <option key={code.id} value={code.id}>
-                            {code.label}
-                          </option>
-                        ))}
-                      </NativeSelect>
-                    ) : null}
-                  </td>
-                ) : null}
-                {showQty ? (
-                  <td className="px-1 py-1">
-                    <div className="flex items-center gap-1">
-                      <Input
-                        aria-label={`Quantity, line ${index + 1}`}
-                        inputMode="decimal"
-                        readOnly={props.subtotalItemIds.has(line.itemId)}
-                        className={cn(sheetLineInput, 'min-w-0 flex-1 tabular text-center')}
-                        value={props.subtotalItemIds.has(line.itemId) ? '' : line.quantity}
-                        onChange={(event) => props.update(line.key, { quantity: event.target.value })}
-                        onBlur={(event) =>
-                          props.update(line.key, { quantity: fixed2(event.target.value) })
-                        }
-                      />
-                      {!showUnit && line.itemId && !props.subtotalItemIds.has(line.itemId) ? (
-                        <span
-                          className="w-9 shrink-0 truncate text-center text-[0.65rem] font-medium uppercase text-muted-foreground"
-                          title={resolveUnit(
-                            props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
-                          )}
-                        >
-                          {resolveUnit(
-                            props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure,
-                          )}
-                        </span>
-                      ) : null}
-                    </div>
-                  </td>
-                ) : null}
-                {showUnit ? (
-                  <td className="px-1 py-1 text-center text-[0.7rem] font-medium uppercase text-muted-foreground">
-                    {line.itemId && !props.subtotalItemIds.has(line.itemId)
-                      ? (
-                          props.itemOptions.find((item) => item.id === line.itemId)?.unitOfMeasure?.trim() ||
-                          'EACH'
-                        ).toUpperCase()
-                      : ''}
-                  </td>
-                ) : null}
-                {showRate ? (
-                  <td className="px-1 py-1">
-                    <Input
-                      aria-label={`Rate, line ${index + 1}`}
-                      inputMode="decimal"
-                      readOnly={props.subtotalItemIds.has(line.itemId)}
-                      className={cn(sheetLineInput, 'tabular text-right')}
-                      value={props.subtotalItemIds.has(line.itemId) ? '' : line.unitPrice}
-                      onChange={(event) => props.update(line.key, { unitPrice: event.target.value })}
-                      onBlur={(event) =>
-                        props.update(line.key, { unitPrice: fixed2(event.target.value) })
-                      }
-                    />
-                  </td>
-                ) : null}
-                <td className="px-1 py-1">
-                  <AmountField
-                    line={line}
-                    isDiscount={props.discountItemIds.has(line.itemId)}
-                    isPayment={props.paymentItemIds.has(line.itemId)}
-                    isSubtotal={props.subtotalItemIds.has(line.itemId)}
-                    subtotalDisplay={props.subtotalDisplayByKey[line.key]}
-                    onCommit={(next) => props.update(line.key, next)}
-                    className={sheetLineInput}
-                  />
-                </td>
-                {showStore ? (
-                  <td className="px-1 py-1 align-top">
-                    <LineStore
-                      stores={props.stores}
-                      stock={props.stock}
-                      tracked={props.trackedIds.includes(line.itemId)}
-                      warn={props.config.type === 'INVOICE' || props.config.type === 'SALES_RECEIPT'}
-                      warning={props.stockWarnings[line.key]}
-                      itemId={line.itemId}
-                      storeId={line.storeId}
-                      quantity={line.quantity}
-                      onChange={(storeId) => props.update(line.key, { storeId })}
-                      label={`Store, line ${index + 1}`}
-                      className="[&_select]:h-7 [&_select]:rounded-md [&_select]:border [&_select]:border-border/70 [&_select]:bg-transparent [&_select]:px-2 [&_select]:text-sm"
-                    />
-                  </td>
-                ) : null}
+                {columns.map((column) => (
+                  <Fragment key={column.id}>
+                    {salesLineCell({
+                      columnId: column.id,
+                      props,
+                      line,
+                      index,
+                      inputClass: sheetLineInput,
+                      showStore,
+                      showUnit,
+                      sheet: true,
+                      storeClassName:
+                        '[&_select]:h-7 [&_select]:rounded-md [&_select]:border [&_select]:border-border/70 [&_select]:bg-transparent [&_select]:px-2 [&_select]:text-sm',
+                    })}
+                  </Fragment>
+                ))}
                 <td className="px-1 py-1 align-top">
                   <LotSerialFields
                     item={props.itemOptions.find((row) => row.id === line.itemId)}

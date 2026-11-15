@@ -3,7 +3,11 @@
 import { revalidatePath } from 'next/cache'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
-import { trackingCategoryActiveSchema, trackingCategorySchema } from '@/lib/validation/master-data'
+import {
+  trackingCategoryActiveSchema,
+  trackingCategoryRestrictSchema,
+  trackingCategorySchema,
+} from '@/lib/validation/master-data'
 import { action } from '@/server/action'
 import * as trackingCategories from '@/server/services/tracking-category.service'
 
@@ -33,6 +37,27 @@ export const setClassActive = action
 
 export async function saveClassForm(_prev: FormState, formData: FormData): Promise<FormState> {
   return toFormState(await saveClass(formValues(formData)), 'Class saved.')
+}
+
+export const setRestrictSpending = action
+  .requires('tax:manage')
+  .input(trackingCategoryRestrictSchema)
+  .handler(async (ctx, input) => {
+    await trackingCategories.setRestrictSpending(ctx, input.id, input.restrictSpending)
+    revalidateClasses()
+    return { id: input.id }
+  })
+
+export async function setRestrictSpendingForm(_prev: FormState, formData: FormData): Promise<FormState> {
+  return toFormState(
+    await setRestrictSpending(formValues(formData)),
+    'Fund restriction updated.',
+  )
+}
+
+export async function setRestrictSpendingAction(formData: FormData) {
+  const result = await setRestrictSpending(formValues(formData))
+  if (result.ok) revalidateClasses()
 }
 
 export async function setClassActiveForm(_prev: FormState, formData: FormData): Promise<FormState> {

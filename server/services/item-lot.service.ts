@@ -2,7 +2,7 @@ import 'server-only'
 
 import { toDate, today } from '@/lib/date'
 import { onHandByLot } from '@/lib/inventory-lot-serial'
-import { daysUntilExpiry, isLotExpired } from '@/lib/erp/pharmacy'
+import { daysUntilExpiry, isLotExpired, pickFefoLot } from '@/lib/erp/pharmacy'
 import { Decimal } from '@/lib/money'
 import type { OrgContext } from '@/server/auth/context'
 import type { Tx } from '@/server/db'
@@ -219,4 +219,47 @@ export async function listControlledMovements(ctx: OrgContext, limit = 100) {
     journalId: row.journal?.id ?? null,
     journalNumber: row.journal?.journalNumber ?? null,
   }))
+}
+
+/** Suggest the lot to issue (FEFO) for an item at a store with available qty. */
+export async function suggestIssueLot(
+  ctx: OrgContext,
+  itemId: string,
+  storeId: string,
+  asOf?: string,
+) {
+  const day = asOf ?? new Date().toISOString().slice(0, 10)
+  const [item, lots, movements] = await Promise.all([
+    db.item.findFirst({
+      where: { id: itemId, orgId: ctx.orgId, deletedAt: null },
+      select: { id: true, name: true, trackLots: true, pharmacyControlled: true },
+    }),
+    db.itemLot.findMany({
+      where: { orgId: ctx.orgId, itemId, disposedAt: null },
+      select: { id: true, lotNumber: true, expiryDate: true },
+      orderBy: { expiryDate: 'asc' },
+    }),
+    db.inventoryTransaction.findMany({
+      where: { orgId: ctx.orgId, itemId, storeId },
+      select: { lotNumber: true, quantity: true },
+    }),
+  ])
+  if (!item) throw notFound('Item')
+
+  const onHand = onHandByLot(
+    movements.map((row) => ({
+      lotNumber: row.lotNumber,
+      quantity: row.quantity.toString(),
+    })),
+  )
+
+  const candidates = lots.map((lot) => ({
+    lotId: lot.id,
+    lotNumber: lot.lotNumber,
+    expiryDate: lot.expiryDate?.toISOString().slice(0, 10) ?? null,
+    quantity: (onHand.get(lot.lotNumber) ?? new Decimal(0)).toFixed(4),
+  }))
+
+  const pick = pickFefoLot(candidates, day)
+  return pick
 }

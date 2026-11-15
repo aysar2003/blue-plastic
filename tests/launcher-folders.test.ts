@@ -57,5 +57,7 @@ describe('launcher home apps', () => {
     expect(html).toContain('>Apps<')
     expect(html).toContain('/settings/features')
     expect(html).not.toContain('Open Sales folder')
+    expect(html).toContain('sm:grid-cols-5')
+    expect(html).not.toContain('lg:grid-cols-8')
   })
 })

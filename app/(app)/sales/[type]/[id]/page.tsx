@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { PencilIcon } from 'lucide-react'
+import { CopyIcon, PencilIcon } from 'lucide-react'
 
 import { ApprovalTrailPanel } from '@/app/(app)/approvals/approval-trail-panel'
 import { DocumentAttachments } from '@/components/data/document-attachments'
@@ -36,10 +36,14 @@ export const metadata: Metadata = { title: 'Document' }
 
 export default async function SalesDocumentPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ type: string; id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { type, id } = await params
+  const query = await searchParams
+  const openSend = query.send === '1' || query.send === 'true'
   const config = bySlug(type)
   if (!config) notFound()
 
@@ -130,6 +134,14 @@ export default async function SalesDocumentPage({
               printHref={`/sales/${config.slug}/${id}/print`}
               pdfHref={`/api/sales/${id}/pdf`}
               excelHref={`/api/sales/${id}/xlsx`}
+              jsonExportHref={
+                config.type === 'INVOICE' &&
+                (document.status === 'OPEN' ||
+                  document.status === 'PARTIAL' ||
+                  document.status === 'PAID')
+                  ? `/api/sales/${id}/e-invoice`
+                  : undefined
+              }
               filename={fileBase}
               defaultTo={document.customer.email ?? ''}
               defaultSubject={emailSubject}
@@ -137,6 +149,7 @@ export default async function SalesDocumentPage({
               whatsappPhone={document.customer.phone}
               whatsappText={shareBody}
               canEmail={ctx.permissions.has('invoice:send')}
+              defaultEmailOpen={openSend && ctx.permissions.has('invoice:send')}
             />
             {deliveryNote ? (
               <Link
@@ -154,6 +167,15 @@ export default async function SalesDocumentPage({
                 today={today(ctx.organization.timeZone)}
                 depositAccounts={depositAccounts}
               />
+            ) : null}
+            {ctx.permissions.has('invoice:create') && document.status !== 'VOID' ? (
+              <Link
+                href={`/sales/${config.slug}/new?copy=${id}`}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                title={`Make a copy of this ${config.singular.toLowerCase()}`}
+              >
+                <CopyIcon /> Copy
+              </Link>
             ) : null}
             {canEdit ? (
               <Link

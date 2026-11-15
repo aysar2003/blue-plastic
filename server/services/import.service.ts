@@ -12,7 +12,7 @@ import {
   shapeContact,
   shapeItem,
 } from '@/lib/spreadsheet'
-import { nextBlankSku } from '@/lib/sku'
+import { skuFromName } from '@/lib/sku'
 import { customerSchema, itemSchema, vendorSchema } from '@/lib/validation/master-data'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -279,11 +279,11 @@ export async function importItems(
       return
     }
     if (!draft.sku) {
-      draft.sku = nextBlankSku(new Set([...skus, ...seenSkus]))
+      draft.sku = skuFromName(draft.name, new Set([...skus, ...seenSkus]))
       issues.push({
         row: lineNumber,
         field: 'SKU',
-        message: `No SKU on this row, so ${draft.sku} was assigned`,
+        message: `No SKU on this row, so ${draft.sku} was assigned from the name`,
       })
     }
     const skuKey = draft.sku.toLowerCase()

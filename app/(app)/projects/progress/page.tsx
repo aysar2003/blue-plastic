@@ -9,6 +9,7 @@ import {
 } from '@/app/(app)/projects/progress/actions'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
+import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -34,6 +35,7 @@ export default async function ProjectProgressPage() {
         retentionPercent: true,
         billedPercent: true,
         retainerAmount: true,
+        budgetAmount: true,
         storeId: true,
       },
       orderBy: { updatedAt: 'desc' },
@@ -127,6 +129,14 @@ export default async function ProjectProgressPage() {
                       name="retainerAmount"
                       className="mt-1 w-28"
                       defaultValue={project.retainerAmount?.toString() ?? ''}
+                    />
+                  </label>
+                  <label className="text-xs">
+                    Job budget
+                    <Input
+                      name="budgetAmount"
+                      className="mt-1 w-28"
+                      defaultValue={project.budgetAmount?.toString() ?? ''}
                     />
                   </label>
                   <button type="submit" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
@@ -278,7 +288,10 @@ export default async function ProjectProgressPage() {
                 <TableHead>Project</TableHead>
                 <TableHead className="text-right">Contract</TableHead>
                 <TableHead className="text-right">Billed</TableHead>
+                <TableHead className="text-right">Budget</TableHead>
                 <TableHead className="text-right">Costs</TableHead>
+                <TableHead className="text-right">Committed PO</TableHead>
+                <TableHead className="text-right">Budget var</TableHead>
                 <TableHead className="text-right">Margin</TableHead>
                 <TableHead className="text-right">Remaining</TableHead>
               </TableRow>
@@ -290,6 +303,11 @@ export default async function ProjectProgressPage() {
                     <Link href={`/projects/${row.projectId}`} className="hover:underline">
                       {row.number} · {row.name}
                     </Link>
+                    {row.overBudget ? (
+                      <Badge variant="destructive" className="ml-2">
+                        Over budget
+                      </Badge>
+                    ) : null}
                   </TableCell>
                   <TableCell className="text-right tabular">
                     {formatMoney(row.contract, currency)}
@@ -298,7 +316,16 @@ export default async function ProjectProgressPage() {
                     {formatMoney(row.billed, currency)}
                   </TableCell>
                   <TableCell className="text-right tabular">
+                    {row.budget ? formatMoney(row.budget, currency) : '—'}
+                  </TableCell>
+                  <TableCell className="text-right tabular">
                     {formatMoney(row.costs, currency)}
+                  </TableCell>
+                  <TableCell className="text-right tabular">
+                    {formatMoney(row.committed, currency)}
+                  </TableCell>
+                  <TableCell className="text-right tabular">
+                    {row.budgetVariance ? formatMoney(row.budgetVariance, currency) : '—'}
                   </TableCell>
                   <TableCell className="text-right tabular">
                     {formatMoney(row.margin, currency)}

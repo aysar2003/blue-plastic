@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:db": "node scripts/run-db-tests.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test e2e/smoke.spec.ts",
     "test:watch": "vitest",
     "verify": "pnpm lint; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; pnpm typecheck; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; pnpm test",
     "db:generate": "prisma generate",
@@ -69,6 +71,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.2",

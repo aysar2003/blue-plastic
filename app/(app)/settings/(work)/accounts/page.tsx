@@ -24,7 +24,6 @@ export default async function DefaultAccountsPage() {
   const canEdit = ctx.permissions.has('account:update')
 
   const unset = bindings.filter((binding) => !binding.account)
-  const heading = bindings.filter((binding) => binding.account?.isHeading)
 
   return (
     <div className="space-y-4">
@@ -33,7 +32,8 @@ export default async function DefaultAccountsPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           The system does not name accounts — it asks for a role, and these are the accounts those roles
           point at. An invoice debits whatever is set as receivables here; a bill line with no category
-          lands in whatever is set as uncategorised expense. Change one and every form follows.
+          lands in whatever is set as uncategorised expense. Change one and every form follows. Main and
+          Sub accounts both accept postings.
         </p>
       </div>
 
@@ -45,31 +45,6 @@ export default async function DefaultAccountsPage() {
               {unset.length} {unset.length === 1 ? 'role has' : 'roles have'} no account. Anything that needs{' '}
               {unset.length === 1 ? 'it' : 'them'} will refuse to post until{' '}
               {unset.length === 1 ? 'it is' : 'they are'} set.
-            </span>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {heading.length > 0 ? (
-        <Card className="border-destructive/40">
-          <CardContent className="flex items-start gap-2 p-4 text-sm text-destructive">
-            <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
-            <span>
-              {heading.length === 1 ? (
-                <>
-                  <strong>{heading[0]!.role.label}</strong> points at{' '}
-                  <span className="tabular">
-                    {heading[0]!.account!.code} {heading[0]!.account!.name}
-                  </span>
-                  , which is now a grouping heading. Sales and stock moves will fail until you rebind it
-                  to a postable sub-account.
-                </>
-              ) : (
-                <>
-                  {heading.length} roles point at grouping headings. Rebind each to a postable sub-account
-                  or sales will keep refusing to post.
-                </>
-              )}
             </span>
           </CardContent>
         </Card>

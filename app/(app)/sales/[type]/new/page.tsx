@@ -44,10 +44,32 @@ export default async function NewSalesDocumentPage({
     stores: [] as Awaited<ReturnType<typeof storeService.quantities>>['stores'],
     byItem: {} as Awaited<ReturnType<typeof storeService.quantities>>['byItem'],
   }
-  const [options, query, documentNumber, neighbors, shelf, openSources, formCustomization, classes] =
+  const query = await searchParams
+  const copyId = typeof query.copy === 'string' ? query.copy : undefined
+  const copySource = copyId ? await salesService.get(ctx, copyId).catch(() => null) : null
+  if (copyId && (!copySource || copySource.type !== config.type)) notFound()
+
+  const calendarToday = today(ctx.organization.timeZone)
+  const requestedProject = typeof query.project === 'string' ? query.project : undefined
+  const project = requestedProject
+    ? await projectService.peek(ctx, requestedProject).catch(() => null)
+    : null
+  const requested = typeof query.customer === 'string' ? query.customer : project?.customerId
+  const ensureCustomerIds = [
+    ...(requested ? [requested] : []),
+    ...(copySource?.customer.id ? [copySource.customer.id] : []),
+  ]
+  const ensureItemIds = (copySource?.lines ?? [])
+    .map((line) => line.item?.id)
+    .filter((id): id is string => Boolean(id))
+
+  const [options, documentNumber, neighbors, shelf, openSources, formCustomization, classes] =
     await Promise.all([
-      loadFormOptions(ctx, { includeOnHand: false }),
-      searchParams,
+      loadFormOptions(ctx, {
+        includeOnHand: false,
+        ensureCustomerIds,
+        ensureItemIds,
+      }),
       peekDocumentNumber(db, ctx.orgId, config.type),
       salesService.neighbors(ctx, config.type, null),
       storeService.quantities(ctx).catch(() => emptyShelf),
@@ -55,11 +77,6 @@ export default async function NewSalesDocumentPage({
       loadFormCustomization(ctx, 'sales', config.type),
       trackingCategories.list(ctx),
     ])
-  const requestedProject = typeof query.project === 'string' ? query.project : undefined
-  const project = requestedProject
-    ? await projectService.peek(ctx, requestedProject).catch(() => null)
-    : null
-  const requested = typeof query.customer === 'string' ? query.customer : project?.customerId
   const initialCustomerId = options.customers.some((customer) => customer.id === requested)
     ? requested
     : undefined
@@ -68,9 +85,50 @@ export default async function NewSalesDocumentPage({
     ? requestedStore
     : undefined
 
+  const copySeed = copySource
+    ? {
+        customerId: copySource.customer.id,
+        date: calendarToday,
+        reference: copySource.reference,
+        inRef: copySource.inRef,
+        prescriptionRef: copySource.prescriptionRef,
+        memo: copySource.memo,
+        customerMessage: copySource.customerMessage,
+        workScope: copySource.workScope,
+        workSite: copySource.workSite,
+        paymentTermId: copySource.paymentTerm?.id ?? null,
+        depositAccountId: copySource.depositAccount?.id ?? null,
+        paymentMethod: copySource.paymentMethod,
+        projectId: copySource.projectId ?? null,
+        trackingCategoryId: copySource.trackingCategoryId ?? null,
+        discountAmount: copySource.discountAmount,
+        currencyCode: copySource.currencyCode,
+        exchangeRate: copySource.exchangeRate?.toString() ?? '1',
+        lines: copySource.lines.map((line) => ({
+          itemId: line.item?.id ?? null,
+          description: line.description,
+          quantity: line.quantity.toString(),
+          unitPrice: line.unitPrice.toString(),
+          discountPercent: line.discountPercent?.toString() ?? null,
+          taxCodeId: line.taxCode?.id ?? null,
+          storeId: line.storeId,
+          lotNumber: null,
+          serialNumber: null,
+          lotExpiryDate: null,
+        })),
+      }
+    : undefined
+
   return (
     <SalesPaperFrame type={config.type}>
-      <PageHeader title={`New ${config.singular.toLowerCase()}`} className="mb-2 pb-2" />
+      <PageHeader
+        title={
+          copySource
+            ? `Copy ${config.singular.toLowerCase()} ${copySource.number}`
+            : `New ${config.singular.toLowerCase()}`
+        }
+        className="mb-2 pb-2"
+      />
 
       <DocumentForm
         config={config}
@@ -84,14 +142,16 @@ export default async function NewSalesDocumentPage({
           type: term.type,
           dueDays: term.dueDays,
         }))}
-        today={today(ctx.organization.timeZone)}
+        today={calendarToday}
         currency={ctx.organization.baseCurrency}
         organizationName={ctx.organization.name}
         documentNumber={documentNumber}
-        initialCustomerId={initialCustomerId}
+        document={copySeed}
+        copiedFromNumber={copySource?.number}
+        initialCustomerId={copySeed ? undefined : initialCustomerId}
         initialStoreId={initialStoreId}
-        initialProjectId={project?.id}
-        initialWorkSite={project?.siteLocation ?? undefined}
+        initialProjectId={copySeed ? undefined : project?.id}
+        initialWorkSite={copySeed ? undefined : (project?.siteLocation ?? undefined)}
         projects={options.projects}
         classes={classes.map((row) => ({ id: row.id, label: row.name }))}
         neighbors={neighbors}
@@ -99,6 +159,7 @@ export default async function NewSalesDocumentPage({
         stock={shelf.byItem}
         openSources={openSources}
         formCustomization={formCustomization}
+        canEmail={ctx.permissions.has('invoice:send')}
       />
     </SalesPaperFrame>
   )

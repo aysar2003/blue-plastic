@@ -7,12 +7,16 @@ import { AccountingForm } from './accounting-form'
 import { BrandingForm } from './branding-form'
 import { OrganizationForm } from './organization-form'
 import { OutboundEmailForm } from './outbound-email-form'
+import { TrustedExtensionsList } from '@/components/settings/trusted-extensions-list'
+import { SignProviderForm } from './sign-provider-form'
 
 export const metadata: Metadata = { title: 'Organisation' }
 
 export default async function OrganizationSettingsPage() {
   const ctx = await requireOrgContext('org:read')
   const organization = await organizationService.get(ctx)
+  const signProvider = await organizationService.getSignProvider(ctx)
+  const trustedExtensions = await organizationService.getTrustedExtensions(ctx)
   const outboundEmail = await mailService.getOutboundSettings(ctx)
   const canEdit = ctx.permissions.has('org:update')
 
@@ -34,6 +38,8 @@ export default async function OrganizationSettingsPage() {
         fiscalYearStartMonth={organization.fiscalYearStartMonth}
         canEdit={canEdit}
       />
+      <SignProviderForm signProvider={signProvider} canEdit={canEdit} />
+      <TrustedExtensionsList trustedExtensions={trustedExtensions} />
     </div>
   )
 }

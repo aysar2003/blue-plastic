@@ -11,7 +11,6 @@ import {
   moduleForPath,
   type OrgFeatureFlags,
 } from '@/lib/feature-flags'
-import { SideAppsRail } from './side-apps-rail'
 import { AppMemoryProvider } from './app-memory'
 import { AccountantNav } from './accountant-nav'
 import { CompanySwitcher, type CompanyOption } from './company-switcher'
@@ -34,6 +33,11 @@ import { PRODUCT_CREDIT, PRODUCT_NAME } from '@/lib/product-brand'
 const CommandPalette = dynamic(
   () => import('./command-palette').then((mod) => ({ default: mod.CommandPalette })),
   { ssr: false },
+)
+
+/** Separate chunk so list pages do not parse the full apps rail up front. */
+const SideAppsRail = dynamic(() =>
+  import('./side-apps-rail').then((mod) => ({ default: mod.SideAppsRail })),
 )
 
 type ShellChromeProps = {

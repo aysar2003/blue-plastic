@@ -12,6 +12,7 @@ import { formatDate, toCalendarDate, today } from '@/lib/date'
 import { STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
 import * as purchaseService from '@/server/services/purchase.service'
+import { db } from '@/server/db'
 import * as storeService from '@/server/services/store.service'
 
 export const metadata: Metadata = { title: 'Receive items' }
@@ -37,10 +38,15 @@ export default async function ReceiveOrderPage({
   const returnTo = typeof query.return === 'string' && query.return.startsWith('/') ? query.return : null
   const preferredStoreId = typeof query.store === 'string' ? query.store : null
 
-  const [order, stores] = await Promise.all([
+  const [order, stores, farmStores] = await Promise.all([
     purchaseService.receivableOrder(ctx, id).catch(() => null),
     storeService.columns(ctx),
+    db.store.findMany({
+      where: { orgId: ctx.orgId, isActive: true, isFarm: true },
+      select: { id: true },
+    }),
   ])
+  const farmStoreIds = farmStores.map((store) => store.id)
   if (!order) notFound()
 
   return (
@@ -100,6 +106,7 @@ export default async function ReceiveOrderPage({
             currency={ctx.organization.baseCurrency}
             stores={stores}
             preferredStoreId={preferredStoreId}
+            farmStoreIds={farmStoreIds}
           />
         </>
       )}

@@ -24,10 +24,8 @@ export async function bankAccounts(ctx: OrgContext) {
       orgId: ctx.orgId,
       isActive: true,
       subtype: { in: ['BANK', 'CREDIT_CARD', 'UNDEPOSITED_FUNDS'] },
-      // POS Banks is a heading. A parent cannot take a transfer or a deposit.
-      NOT: {
-        OR: [{ detailType: POS_BANKS_DETAIL }, { children: { some: {} } }],
-      },
+      // POS Banks is a synthetic grouping account — not a real postable bank.
+      NOT: { detailType: POS_BANKS_DETAIL },
     },
     select: { id: true, code: true, name: true, subtype: true, type: true },
     orderBy: { code: 'asc' },
@@ -93,6 +91,25 @@ export async function listTransfers(ctx: OrgContext, query: ListQuery) {
   ])
 
   return paged(rows.map((row) => ({ ...row, amount: row.amount.toString() })), total, query)
+}
+
+export async function getTransfer(ctx: OrgContext, id: string) {
+  const row = await db.bankTransfer.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      amount: true,
+      memo: true,
+      reference: true,
+      status: true,
+      fromAccount: { select: { id: true, code: true, name: true } },
+      toAccount: { select: { id: true, code: true, name: true } },
+    },
+  })
+  if (!row) throw notFound('Transfer')
+  return { ...row, amount: row.amount.toString() }
 }
 
 export async function createTransfer(ctx: OrgContext, input: TransferInput) {
@@ -253,6 +270,40 @@ export async function listDeposits(ctx: OrgContext, query: ListQuery) {
   ])
 
   return paged(rows.map((row) => ({ ...row, total: row.total.toString() })), total, query)
+}
+
+export async function getDeposit(ctx: OrgContext, id: string) {
+  const deposit = await db.deposit.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: {
+      id: true,
+      number: true,
+      date: true,
+      total: true,
+      memo: true,
+      reference: true,
+      status: true,
+      bankAccount: { select: { id: true, code: true, name: true } },
+      lines: {
+        orderBy: { lineNumber: 'asc' },
+        select: {
+          amount: true,
+          description: true,
+          accountId: true,
+          customerPaymentId: true,
+        },
+      },
+    },
+  })
+  if (!deposit) throw notFound('Deposit')
+  return {
+    ...deposit,
+    total: deposit.total.toString(),
+    lines: deposit.lines.map((line) => ({
+      ...line,
+      amount: line.amount.toString(),
+    })),
+  }
 }
 
 export async function createDeposit(ctx: OrgContext, input: DepositInput) {

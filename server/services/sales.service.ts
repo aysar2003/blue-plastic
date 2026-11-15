@@ -1676,9 +1676,7 @@ export async function postDocument(tx: Tx, ctx: OrgContext, id: string) {
   const movesStockIn = document.type === 'CREDIT_MEMO'
 
   if (movesStockOut || movesStockIn) {
-    // Cost posts to each item's Cost of Goods Sold account (QuickBooks-style).
-    // Headings resolve to a single leaf when unambiguous; otherwise the cashier
-    // must map the product to a postable sub-account.
+    // Cost posts to each item's Cost of Goods Sold account (Main or Sub).
     const cogs = new Map<string, { cogsAccountId: string; inventoryAccountId: string; amount: Decimal }>()
     const storeAccounts = await storeService.accountsFor(
       tx,

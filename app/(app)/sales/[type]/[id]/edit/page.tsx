@@ -8,6 +8,7 @@ import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { toCalendarDate, today } from '@/lib/date'
 import { bySlug } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'
+import { listForSale } from '@/server/files/ledger-files'
 import { loadFormCustomization } from '@/server/services/form-customization'
 import { loadFormOptions } from '@/server/services/sales-options'
 import * as salesService from '@/server/services/sales.service'
@@ -44,16 +45,23 @@ export default async function EditSalesDocumentPage({
     stores: [] as Awaited<ReturnType<typeof storeService.quantities>>['stores'],
     byItem: {} as Awaited<ReturnType<typeof storeService.quantities>>['byItem'],
   }
-  const [document, options, neighbors, shelf, formCustomization, classes] = await Promise.all([
-    salesService.get(ctx, id),
-    loadFormOptions(ctx, { includeOnHand: false }),
+  const document = await salesService.get(ctx, id)
+  if (document.type !== config.type) notFound()
+
+  const [options, neighbors, shelf, formCustomization, classes, papers] = await Promise.all([
+    loadFormOptions(ctx, {
+      includeOnHand: false,
+      ensureCustomerIds: [document.customer.id],
+      ensureItemIds: document.lines
+        .map((line) => line.item?.id)
+        .filter((id): id is string => Boolean(id)),
+    }),
     salesService.neighbors(ctx, config.type, id),
     storeService.quantities(ctx).catch(() => emptyShelf),
     loadFormCustomization(ctx, 'sales', config.type),
     trackingCategories.list(ctx),
+    listForSale(ctx, id),
   ])
-
-  if (document.type !== config.type) notFound()
 
   return (
     <SalesPaperFrame type={config.type}>
@@ -116,6 +124,18 @@ export default async function EditSalesDocumentPage({
         stores={shelf.stores}
         stock={shelf.byItem}
         formCustomization={formCustomization}
+        attachments={papers.map((file) => ({
+          id: file.id,
+          originalName: file.originalName,
+          contentType: file.contentType,
+          byteSize: file.byteSize,
+        }))}
+        canEmail={ctx.permissions.has('invoice:send')}
+        canDelete={
+          ctx.features.allowDocumentDelete &&
+          ctx.permissions.has('invoice:void') &&
+          document.status !== 'VOID'
+        }
       />
       <ApprovalTrailPanel entityType="SALES_DOCUMENT" entityId={document.id} />
     </SalesPaperFrame>

@@ -1,9 +1,8 @@
 import { Decimal, ZERO } from '@/lib/money'
 
 /**
- * Parent balance for display — QuickBooks-style roll-up.
- * Own posted balance plus every descendant. Headings such as POS Banks usually
- * post nothing themselves, so the figure is the sum of the tills underneath.
+ * Parent group balance for display — own posted balance plus every descendant.
+ * Used for the chart/report "Total {Main}" line (Main and Sub both post separately).
  */
 export function rollupParentBalances<T extends { id: string; parentId: string | null; balance: Decimal }>(
   rows: T[],

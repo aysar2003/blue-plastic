@@ -226,16 +226,16 @@ export default async function ProfitAndLossDetailPage({
             className="scroll-mt-20"
           >
             <Card className="overflow-hidden p-0">
-              <div className="flex flex-wrap items-end justify-between gap-2 border-b bg-[#eef3f7] px-4 py-3">
+              <div className="flex flex-wrap items-end justify-between gap-2 border-b bg-muted px-4 py-3">
                 <div>
-                  <h2 className="text-sm font-semibold tracking-tight text-slate-900">{section.label}</h2>
+                  <h2 className="text-sm font-semibold tracking-tight text-foreground">{section.label}</h2>
                   <p className="text-xs text-muted-foreground">
                     {section.accounts.length === 0
                       ? 'No movements in this section'
                       : `${section.accounts.reduce((n, a) => n + a.rows.length, 0)} lines across ${section.accounts.length} accounts`}
                   </p>
                 </div>
-                <p className="text-sm font-semibold tabular text-slate-900">
+                <p className="text-sm font-semibold tabular text-foreground">
                   {formatMoney(section.total, currency)}
                 </p>
               </div>

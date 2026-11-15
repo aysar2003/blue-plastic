@@ -165,13 +165,13 @@ export function ReceiptRegister({
           <div className="ml-auto inline-flex">
             <Link
               href="/sales/sales-receipts/new"
-              className="inline-flex items-center rounded-l-md bg-[#2ca01c] px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-[#248a18]"
+              className="inline-flex items-center rounded-l-md bg-primary px-3.5 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
             >
               Create sales receipt
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger
-                className="inline-flex items-center rounded-r-md border-l border-white/30 bg-[#2ca01c] px-2 text-white hover:bg-[#248a18]"
+                className="inline-flex items-center rounded-r-md border-l border-primary-foreground/30 bg-primary px-2 text-primary-foreground hover:bg-primary/90"
                 aria-label="More ways to create"
               >
                 <ChevronDownIcon className="size-4" />
@@ -211,7 +211,7 @@ export function ReceiptRegister({
                   checked={allOn}
                   onChange={toggleAll}
                   aria-label="Select the receipts on this list"
-                  className="size-3.5 accent-[#2ca01c]"
+                  className="size-3.5 accent-primary"
                 />
               </TableHead>
               <SortableHeader column="date" label="Date" state={sort} basePath={basePath} params={params} className="w-44" defaultDirection="desc" />
@@ -233,12 +233,12 @@ export function ReceiptRegister({
                     checked={selected.includes(row.id)}
                     onChange={() => toggle(row.id)}
                     aria-label={`Select ${row.number}`}
-                    className="size-3.5 accent-[#2ca01c]"
+                    className="size-3.5 accent-primary"
                   />
                 </TableCell>
                 <TableCell className="tabular whitespace-nowrap">{row.date}</TableCell>
                 <TableCell>
-                  <Link href={row.href} className="font-medium text-[#2ca01c] hover:underline">
+                  <Link href={row.href} className="font-medium text-primary hover:underline">
                     {row.number}
                   </Link>
                 </TableCell>
@@ -249,11 +249,11 @@ export function ReceiptRegister({
                 <TableCell data-column="entered-by">{row.recorded ?? '—'}</TableCell>
                 <TableCell className="print:hidden">
                   <span className="inline-flex items-center gap-3 whitespace-nowrap text-sm">
-                    <Link href={row.editHref ?? row.href} className="font-medium text-[#2ca01c] hover:underline">
+                    <Link href={row.editHref ?? row.href} className="font-medium text-primary hover:underline">
                       View/Edit
                     </Link>
                     <DropdownMenu>
-                      <DropdownMenuTrigger className="text-[#2ca01c]" aria-label={`More actions for ${row.number}`}>
+                      <DropdownMenuTrigger className="text-primary" aria-label={`More actions for ${row.number}`}>
                         <ChevronDownIcon className="size-4" />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">

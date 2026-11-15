@@ -2892,46 +2892,63 @@ const voidedTransactions: TableReport = {
   },
 }
 
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
 const budgetVsActual: TableReport = {
   key: 'budget-vs-actual',
   title: 'Budget vs Actual',
-  description: 'Income and expense accounts — budgeted amount against ledger actuals.',
+  description:
+    'P&L and balance-sheet accounts — monthly budgeted amounts against ledger actuals (class when set).',
   group: 'Budgets',
   mode: 'range',
   async build(input) {
     const { ctx, range } = input
     const client = books(input)
+    const { monthsInRange } = await import('@/lib/erp/budget-deep')
+    const months = monthsInRange(range.from, range.to)
+    const monthSet = new Set(months)
+
     const budgets = await client.budgetLine.findMany({
       where: {
+        month: months.length ? { in: months } : undefined,
         budget: {
           orgId: ctx.orgId,
           startDate: { lte: toDate(range.to) },
           endDate: { gte: toDate(range.from) },
+          status: { in: ['APPROVED', 'DRAFT'] },
         },
       },
       select: {
         amount: true,
+        month: true,
+        trackingCategoryId: true,
         account: { select: { id: true, code: true, name: true, type: true } },
-        budget: { select: { name: true } },
+        trackingCategory: { select: { name: true } },
       },
     })
 
+    const emptyColumns = [
+      { key: 'account', label: 'Account' },
+      { key: 'class', label: 'Class' },
+      ...months.flatMap((m) => [
+        { key: `b${m}`, label: `${MONTH_SHORT[m - 1]} bud`, format: 'money' as const, width: 'w-24' },
+        { key: `a${m}`, label: `${MONTH_SHORT[m - 1]} act`, format: 'money' as const, width: 'w-24' },
+      ]),
+      { key: 'budget', label: 'Budget', format: 'money' as const, width: 'w-28' },
+      { key: 'actual', label: 'Actual', format: 'money' as const, width: 'w-28' },
+      { key: 'variance', label: 'Variance', format: 'money' as const, width: 'w-28' },
+    ]
+
     if (budgets.length === 0) {
       return {
-        columns: [
-          { key: 'account', label: 'Account' },
-          { key: 'budget', label: 'Budget', format: 'money', width: 'w-32' },
-          { key: 'actual', label: 'Actual', format: 'money', width: 'w-32' },
-          { key: 'variance', label: 'Variance', format: 'money', width: 'w-32' },
-        ],
+        columns: emptyColumns,
         rows: [],
         empty: 'No budgets cover this period. Add one under Accounting → Budgets.',
       }
     }
 
     const accountIds = [...new Set(budgets.map((row) => row.account.id))]
-    const actuals = await client.journalLine.groupBy({
-      by: ['accountId'],
+    const journalLines = await client.journalLine.findMany({
       where: {
         orgId: ctx.orgId,
         accountId: { in: accountIds },
@@ -2940,73 +2957,118 @@ const budgetVsActual: TableReport = {
           date: { gte: toDate(range.from), lte: toDate(range.to) },
         },
       },
-      _sum: { debit: true, credit: true },
+      select: {
+        accountId: true,
+        trackingCategoryId: true,
+        debit: true,
+        credit: true,
+        journal: { select: { date: true } },
+        account: { select: { type: true } },
+      },
     })
-    const actualByAccount = new Map(
-      actuals.map((row) => {
-        const debit = new Decimal(row._sum.debit?.toString() ?? '0')
-        const credit = new Decimal(row._sum.credit?.toString() ?? '0')
-        return [row.accountId, { debit, credit }]
-      }),
-    )
 
-    const rolled = new Map<
-      string,
-      { code: string; name: string; type: string; budget: Decimal; actual: Decimal }
-    >()
+    type Agg = {
+      code: string
+      name: string
+      type: string
+      className: string | null
+      budgetByMonth: Map<number, Decimal>
+      actualByMonth: Map<number, Decimal>
+    }
+    const rolled = new Map<string, Agg>()
+
     for (const line of budgets) {
-      const key = line.account.id
-      const current = rolled.get(key) ?? {
-        code: line.account.code,
-        name: line.account.name,
-        type: line.account.type,
-        budget: ZERO,
-        actual: ZERO,
-      }
-      current.budget = current.budget.plus(line.amount.toString())
-      const act = actualByAccount.get(key)
-      if (act && current.actual.isZero()) {
-        // Revenue/equity/liability: credit-natural. Expense/COGS/assets: debit-natural.
-        const creditNatural = ['REVENUE', 'EQUITY', 'LIABILITY'].includes(line.account.type)
-        current.actual = creditNatural ? act.credit.minus(act.debit) : act.debit.minus(act.credit)
-      }
+      if (!monthSet.has(line.month)) continue
+      const key = `${line.account.id}|${line.trackingCategoryId ?? ''}`
+      const current =
+        rolled.get(key) ??
+        ({
+          code: line.account.code,
+          name: line.account.name,
+          type: line.account.type,
+          className: line.trackingCategory?.name ?? null,
+          budgetByMonth: new Map(),
+          actualByMonth: new Map(),
+        } satisfies Agg)
+      current.budgetByMonth.set(
+        line.month,
+        (current.budgetByMonth.get(line.month) ?? ZERO).plus(line.amount.toString()),
+      )
       rolled.set(key, current)
+    }
+
+    for (const line of journalLines) {
+      const month = Number(toCalendarDate(line.journal.date).slice(5, 7))
+      if (!monthSet.has(month)) continue
+      const key = `${line.accountId}|${line.trackingCategoryId ?? ''}`
+      let current = rolled.get(key)
+      if (!current) {
+        // Actual without a matching classed budget cell — still show under unclassed if present
+        const fallback = rolled.get(`${line.accountId}|`)
+        if (!fallback) continue
+        current = fallback
+      }
+      const debit = new Decimal(line.debit.toString())
+      const credit = new Decimal(line.credit.toString())
+      const creditNatural = ['REVENUE', 'EQUITY', 'LIABILITY'].includes(line.account.type)
+      const actual = creditNatural ? credit.minus(debit) : debit.minus(credit)
+      current.actualByMonth.set(month, (current.actualByMonth.get(month) ?? ZERO).plus(actual))
     }
 
     let budgetTotal = ZERO
     let actualTotal = ZERO
+    const monthBudgetTotals = new Map<number, Decimal>()
+    const monthActualTotals = new Map<number, Decimal>()
+
     const rows = [...rolled.entries()]
-      .sort(([, a], [, b]) => a.code.localeCompare(b.code))
-      .map(([accountId, row]) => {
-        budgetTotal = budgetTotal.plus(row.budget)
-        actualTotal = actualTotal.plus(row.actual)
+      .sort(([, a], [, b]) => a.code.localeCompare(b.code) || (a.className ?? '').localeCompare(b.className ?? ''))
+      .map(([key, row]) => {
+        const accountId = key.split('|')[0]!
+        let rowBudget = ZERO
+        let rowActual = ZERO
+        const cells: Record<string, string | null> = {
+          account: `${row.code} ${row.name}`,
+          class: row.className,
+        }
+        for (const m of months) {
+          const b = row.budgetByMonth.get(m) ?? ZERO
+          const a = row.actualByMonth.get(m) ?? ZERO
+          cells[`b${m}`] = money(b)
+          cells[`a${m}`] = money(a)
+          rowBudget = rowBudget.plus(b)
+          rowActual = rowActual.plus(a)
+          monthBudgetTotals.set(m, (monthBudgetTotals.get(m) ?? ZERO).plus(b))
+          monthActualTotals.set(m, (monthActualTotals.get(m) ?? ZERO).plus(a))
+        }
+        budgetTotal = budgetTotal.plus(rowBudget)
+        actualTotal = actualTotal.plus(rowActual)
+        cells.budget = money(rowBudget)
+        cells.actual = money(rowActual)
+        cells.variance = money(rowActual.minus(rowBudget))
         return {
           href: `/reports/transaction-detail?account=${accountId}`,
-          cells: {
-            account: `${row.code} ${row.name}`,
-            budget: money(row.budget),
-            actual: money(row.actual),
-            variance: money(row.actual.minus(row.budget)),
-          },
+          cells,
         }
       })
 
+    const totals: Record<string, string | null> = {
+      account: 'Total',
+      class: null,
+      budget: money(budgetTotal),
+      actual: money(actualTotal),
+      variance: money(actualTotal.minus(budgetTotal)),
+    }
+    for (const m of months) {
+      totals[`b${m}`] = money(monthBudgetTotals.get(m) ?? ZERO)
+      totals[`a${m}`] = money(monthActualTotals.get(m) ?? ZERO)
+    }
+
     return {
-      columns: [
-        { key: 'account', label: 'Account' },
-        { key: 'budget', label: 'Budget', format: 'money', width: 'w-32' },
-        { key: 'actual', label: 'Actual', format: 'money', width: 'w-32' },
-        { key: 'variance', label: 'Variance', format: 'money', width: 'w-32' },
-      ],
+      columns: emptyColumns,
       rows,
-      totals: {
-        account: 'Total',
-        budget: money(budgetTotal),
-        actual: money(actualTotal),
-        variance: money(actualTotal.minus(budgetTotal)),
-      },
+      totals,
       empty: 'No budget lines for this period.',
-      note: 'Variance is actual minus budget.',
+      note: 'Monthly columns default. Variance is actual minus budget. Includes ASSET/LIABILITY/EQUITY lines when budgeted.',
     }
   },
 }

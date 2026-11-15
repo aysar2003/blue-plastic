@@ -25,6 +25,8 @@ export function PortaledFloatingPanel({
   align = 'start',
   placement = 'bottom',
   scrollIsolate = false,
+  /** After the pointer leaves the trigger and panel, close once this many ms pass with no return. */
+  closeOnPointerLeaveDelayMs,
   className,
   children,
 }: {
@@ -36,11 +38,48 @@ export function PortaledFloatingPanel({
   placement?: 'bottom' | 'right'
   /** Wheel stays in this panel and does not move the page behind it. */
   scrollIsolate?: boolean
+  closeOnPointerLeaveDelayMs?: number
   className?: string
   children: React.ReactNode
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null)
+  const leaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [anchor, setAnchor] = React.useState<Anchor>()
+
+  const clearLeaveTimer = React.useCallback(() => {
+    if (leaveTimerRef.current == null) return
+    clearTimeout(leaveTimerRef.current)
+    leaveTimerRef.current = null
+  }, [])
+
+  const scheduleLeaveClose = React.useCallback(() => {
+    if (!onClose || closeOnPointerLeaveDelayMs == null || closeOnPointerLeaveDelayMs < 0) return
+    clearLeaveTimer()
+    leaveTimerRef.current = setTimeout(() => {
+      leaveTimerRef.current = null
+      onClose()
+    }, closeOnPointerLeaveDelayMs)
+  }, [clearLeaveTimer, closeOnPointerLeaveDelayMs, onClose])
+
+  const isInsideHoverZone = React.useCallback(
+    (node: EventTarget | null) => {
+      if (!(node instanceof Node)) return false
+      return !!(panelRef.current?.contains(node) || anchorRef.current?.contains(node))
+    },
+    [anchorRef],
+  )
+
+  const onHoverZoneEnter = React.useCallback(() => {
+    clearLeaveTimer()
+  }, [clearLeaveTimer])
+
+  const onHoverZoneLeave = React.useCallback(
+    (event: React.PointerEvent | PointerEvent) => {
+      if (isInsideHoverZone(event.relatedTarget)) return
+      scheduleLeaveClose()
+    },
+    [isInsideHoverZone, scheduleLeaveClose],
+  )
 
   const place = React.useCallback(() => {
     const rect = anchorRef.current?.getBoundingClientRect()
@@ -79,15 +118,22 @@ export function PortaledFloatingPanel({
   }, [align, anchorRef, placement])
 
   React.useEffect(() => {
-    if (!open) return
+    if (!open) {
+      clearLeaveTimer()
+      return
+    }
 
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node
       if (anchorRef.current?.contains(target) || panelRef.current?.contains(target)) return
+      clearLeaveTimer()
       onClose?.()
     }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose?.()
+      if (event.key === 'Escape') {
+        clearLeaveTimer()
+        onClose?.()
+      }
     }
     const onScroll = (event: Event) => {
       if (panelRef.current?.contains(event.target as Node)) return
@@ -112,12 +158,29 @@ export function PortaledFloatingPanel({
     return () => {
       cancelAnimationFrame(frame)
       observer?.disconnect()
+      clearLeaveTimer()
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKey)
       window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', place)
     }
-  }, [open, onClose, place, anchorRef])
+  }, [open, onClose, place, anchorRef, clearLeaveTimer])
+
+  // Trigger lives outside the portaled panel — watch it so moving between the
+  // two does not start (or keeps cancelling) the leave-to-close timer.
+  React.useEffect(() => {
+    if (!open || closeOnPointerLeaveDelayMs == null) return
+    const trigger = anchorRef.current
+    if (!trigger) return
+    const onEnter = () => onHoverZoneEnter()
+    const onLeave = (event: PointerEvent) => onHoverZoneLeave(event)
+    trigger.addEventListener('pointerenter', onEnter)
+    trigger.addEventListener('pointerleave', onLeave)
+    return () => {
+      trigger.removeEventListener('pointerenter', onEnter)
+      trigger.removeEventListener('pointerleave', onLeave)
+    }
+  }, [open, closeOnPointerLeaveDelayMs, anchorRef, onHoverZoneEnter, onHoverZoneLeave])
 
   if (!open || !anchor || typeof document === 'undefined') return null
 
@@ -126,6 +189,8 @@ export function PortaledFloatingPanel({
       ref={panelRef}
       data-slot="portaled-floating-panel"
       data-scroll-isolate={scrollIsolate ? '' : undefined}
+      onPointerEnter={closeOnPointerLeaveDelayMs != null ? onHoverZoneEnter : undefined}
+      onPointerLeave={closeOnPointerLeaveDelayMs != null ? onHoverZoneLeave : undefined}
       style={{
         position: 'fixed',
         top: anchor.top,

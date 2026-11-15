@@ -5,6 +5,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   Columns3Icon,
+  GripVerticalIcon,
   LayoutTemplateIcon,
   PlusIcon,
   Trash2Icon,
@@ -34,6 +35,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import type { FormColumnDef, FormFieldDef } from '@/lib/form-field-catalog'
+import { moveCatalogId, resolveCatalogOrder } from '@/lib/form-field-catalog'
 import {
   SYSTEM_FORM_TEMPLATE_ID,
   type FormFamilyKey,
@@ -96,6 +98,9 @@ export function FormCustomizePanel({
           fields: template.fields,
           columns: template.columns,
           categoryColumns: template.categoryColumns,
+          fieldOrder: template.fieldOrder,
+          columnOrder: template.columnOrder,
+          categoryColumnOrder: template.categoryColumnOrder,
         },
         makeActive,
       })
@@ -106,6 +111,21 @@ export function FormCustomizePanel({
       toast.success('Company form template saved.')
       router.refresh()
     })
+  }
+
+  const commit = (next: FormTemplate) => {
+    if (draft.id === SYSTEM_FORM_TEMPLATE_ID) {
+      const forked: FormTemplate = {
+        ...next,
+        id: crypto.randomUUID().slice(0, 36),
+        name: 'Custom',
+      }
+      onDraftChange(forked)
+      persist(forked, true)
+      return
+    }
+    onDraftChange(next)
+    persist(next, true)
   }
 
   const switchTemplate = (templateId: string) => {
@@ -156,26 +176,29 @@ export function FormCustomizePanel({
           ? { ...draft.columns }
           : { ...(draft.categoryColumns ?? {}) }
     bag[id] = bag[id] === false
-    const next: FormTemplate = {
+    commit({
       ...draft,
       fields: kind === 'fields' ? bag : draft.fields,
       columns: kind === 'columns' ? bag : draft.columns,
       categoryColumns: kind === 'categoryColumns' ? bag : draft.categoryColumns,
-    }
+    })
+  }
 
-    if (draft.id === SYSTEM_FORM_TEMPLATE_ID) {
-      const forked: FormTemplate = {
-        ...next,
-        id: crypto.randomUUID().slice(0, 36),
-        name: 'Custom',
-      }
-      onDraftChange(forked)
-      persist(forked, true)
+  const applyOrder = (
+    kind: 'fieldOrder' | 'columnOrder' | 'categoryColumnOrder',
+    catalog: { id: string }[],
+    fromId: string,
+    toId: string,
+  ) => {
+    if (!canManage) {
+      toast.error('You do not have permission to customize this form.')
       return
     }
-
-    onDraftChange(next)
-    persist(next, true)
+    const catalogIds = catalog.map((row) => row.id)
+    const currentOrder = resolveCatalogOrder(catalogIds, draft[kind])
+    const nextOrder = moveCatalogId(currentOrder, fromId, toId)
+    if (nextOrder === currentOrder || nextOrder.join() === currentOrder.join()) return
+    commit({ ...draft, [kind]: nextOrder })
   }
 
   const saveAsNew = () => {
@@ -272,88 +295,87 @@ export function FormCustomizePanel({
           <DialogHeader className="shrink-0">
             <DialogTitle>Customize form</DialogTitle>
             <DialogDescription>
-              Show or hide fields and columns. Changes save as a company template for everyone.
+              Drag to reorder. Show or hide fields and columns. Changes save as a company template
+              for everyone.
             </DialogDescription>
           </DialogHeader>
 
-          {layoutOptions && layoutOptions.length > 0 ? (
-            <div className="mb-3 space-y-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Layout
-              </p>
-              <div className="grid gap-1.5 sm:grid-cols-2">
-                {layoutOptions.map((option) => {
-                  const active = (draft.layoutId ?? 'sheet') === option.id
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      disabled={!canManage || pending}
-                      onClick={() => {
-                        if (!canManage) return
-                        const next = { ...draft, layoutId: option.id }
-                        if (draft.id === SYSTEM_FORM_TEMPLATE_ID) {
-                          const forked = {
-                            ...next,
-                            id: crypto.randomUUID().slice(0, 36),
-                            name: 'Custom',
-                          }
-                          onDraftChange(forked)
-                          persist(forked, true)
-                          return
-                        }
-                        onDraftChange(next)
-                        persist(next, true)
-                      }}
-                      className={cn(
-                        'rounded-lg border px-2.5 py-2 text-left text-sm transition',
-                        active
-                          ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                          : 'border-border hover:bg-muted/50',
-                      )}
-                    >
-                      <span className="font-medium">{option.label}</span>
-                      <span className="mt-0.5 block text-[0.7rem] text-muted-foreground">
-                        {option.blurb}
-                      </span>
-                    </button>
-                  )
-                })}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+            {layoutOptions && layoutOptions.length > 0 ? (
+              <div className="mb-3 space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Layout
+                </p>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {layoutOptions.map((option) => {
+                    const active = (draft.layoutId ?? 'sheet') === option.id
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        disabled={!canManage || pending}
+                        onClick={() => {
+                          if (!canManage) return
+                          commit({ ...draft, layoutId: option.id })
+                        }}
+                        className={cn(
+                          'rounded-lg border px-2.5 py-2 text-left text-sm transition',
+                          active
+                            ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                            : 'border-border hover:bg-muted/50',
+                        )}
+                      >
+                        <span className="font-medium">{option.label}</span>
+                        <span className="mt-0.5 block text-[0.7rem] text-muted-foreground">
+                          {option.blurb}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          <ToggleGroup
-            title="Fields"
-            items={fieldCatalog}
-            visibility={draft.fields}
-            disabled={!canManage || pending}
-            onToggle={(id) => applyVisibility('fields', id, false)}
-          />
-
-          <ToggleGroup
-            title="Line columns"
-            items={columnCatalog}
-            visibility={draft.columns}
-            disabled={!canManage || pending}
-            onToggle={(id, locked) => applyVisibility('columns', id, locked)}
-          />
-
-          {categoryColumnCatalog && categoryColumnCatalog.length > 0 ? (
             <ToggleGroup
-              title="Category columns"
-              items={categoryColumnCatalog}
-              visibility={draft.categoryColumns ?? {}}
+              title="Fields"
+              items={fieldCatalog}
+              visibility={draft.fields}
+              order={draft.fieldOrder}
               disabled={!canManage || pending}
-              onToggle={(id, locked) => applyVisibility('categoryColumns', id, locked)}
+              onToggle={(id) => applyVisibility('fields', id, false)}
+              onReorder={(from, to) => applyOrder('fieldOrder', fieldCatalog, from, to)}
             />
-          ) : null}
 
-          {!canManage ? (
-            <p className="mt-2 text-xs text-muted-foreground">
-              You can see the company template. Ask an admin to change it.
-            </p>
-          ) : null}
+            <ToggleGroup
+              title="Line columns"
+              items={columnCatalog}
+              visibility={draft.columns}
+              order={draft.columnOrder}
+              disabled={!canManage || pending}
+              onToggle={(id, locked) => applyVisibility('columns', id, locked)}
+              onReorder={(from, to) => applyOrder('columnOrder', columnCatalog, from, to)}
+            />
+
+            {categoryColumnCatalog && categoryColumnCatalog.length > 0 ? (
+              <ToggleGroup
+                title="Category columns"
+                items={categoryColumnCatalog}
+                visibility={draft.categoryColumns ?? {}}
+                order={draft.categoryColumnOrder}
+                disabled={!canManage || pending}
+                onToggle={(id, locked) => applyVisibility('categoryColumns', id, locked)}
+                onReorder={(from, to) =>
+                  applyOrder('categoryColumnOrder', categoryColumnCatalog, from, to)
+                }
+              />
+            ) : null}
+
+            {!canManage ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                You can see the company template. Ask an admin to change it.
+              </p>
+            ) : null}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -395,23 +417,54 @@ function ToggleGroup({
   title,
   items,
   visibility,
+  order,
   disabled,
   onToggle,
+  onReorder,
 }: {
   title: string
   items: { id: string; label: string; locked?: boolean }[]
   visibility: Record<string, boolean>
+  order?: string[]
   disabled: boolean
   onToggle: (id: string, locked?: boolean) => void
+  onReorder: (fromId: string, toId: string) => void
 }) {
+  const [dragId, setDragId] = useState<string | null>(null)
+  const list = resolveCatalogOrder(
+    items.map((item) => item.id),
+    order,
+  )
+    .map((id) => items.find((item) => item.id === id))
+    .filter((item): item is { id: string; label: string; locked?: boolean } => Boolean(item))
+
   return (
     <div className="mb-3 space-y-1.5">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
       <ul className="space-y-1">
-        {items.map((item) => {
+        {list.map((item) => {
           const checked = visibility[item.id] !== false
           return (
-            <li key={item.id} className="flex items-center gap-2 rounded-md border bg-background px-2 py-2">
+            <li
+              key={item.id}
+              draggable={!disabled}
+              onDragStart={() => setDragId(item.id)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => {
+                if (dragId) onReorder(dragId, item.id)
+                setDragId(null)
+              }}
+              onDragEnd={() => setDragId(null)}
+              className={cn(
+                'flex items-center gap-2 rounded-md border bg-background px-2 py-2',
+                dragId === item.id && 'opacity-60',
+                !disabled && 'cursor-grab',
+              )}
+            >
+              <GripVerticalIcon
+                className="size-4 shrink-0 text-foreground/75"
+                aria-hidden
+              />
               <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm">
                 <input
                   type="checkbox"

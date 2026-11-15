@@ -39,9 +39,9 @@ export type BoardEvent = {
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 const KIND_TONE: Record<string, string> = {
-  meeting: 'bg-sky-100 text-sky-900 ring-sky-200',
-  appointment: 'bg-teal-100 text-teal-900 ring-teal-200',
-  reminder: 'bg-amber-100 text-amber-950 ring-amber-200',
+  meeting: 'bg-primary/10 text-primary ring-primary/25',
+  appointment: 'bg-success/10 text-success ring-success/25',
+  reminder: 'bg-warning/15 text-warning-foreground ring-warning/35 dark:text-warning',
 }
 
 function mondayOfWeek(date: CalendarDate): CalendarDate {

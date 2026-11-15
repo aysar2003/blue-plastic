@@ -11,11 +11,13 @@ export const metadata: Metadata = { title: 'NGO / nonprofit' }
 
 export default async function NgoHubPage() {
   const ctx = await requireOrgContext('customer:read')
-  const [pledges, grants, fundBs] = await Promise.all([
+  const [pledges, grants, fundBs, fundCommitments] = await Promise.all([
     ngo.listPledges(ctx),
     ngo.grantBudgetReport(ctx),
     ngo.fundBalanceSheet(ctx),
+    ngo.grantFundCommitments(ctx),
   ])
+  const overBudgetFunds = fundCommitments.filter((row) => row.overBudget)
   const openPledges = pledges.filter((row) => row.status === 'PLEDGED')
   const currency = ctx.organization.baseCurrency
 
@@ -25,6 +27,16 @@ export default async function NgoHubPage() {
         title="NGO / nonprofit"
         description="Donor pledges, fund tags (classes), grant budget vs actual, and fund BS by class. Not a full fund-restriction engine."
       />
+      {overBudgetFunds.length > 0 ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {overBudgetFunds.length} fund{overBudgetFunds.length === 1 ? '' : 's'} over budget when
+          actuals plus encumbered POs are counted — review{' '}
+          <Link href="/ngo/grants" className="font-medium underline underline-offset-4">
+            Grant budget vs actual
+          </Link>
+          .
+        </div>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Snapshot</CardTitle>

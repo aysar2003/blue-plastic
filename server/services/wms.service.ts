@@ -70,7 +70,7 @@ async function recordBinMovement(
 }
 
 export async function listBoard(ctx: OrgContext) {
-  const [stores, bins, picks, items, openOrders, putaways, waves] = await Promise.all([
+  const [stores, bins, picks, items, openOrders, putaways, waves, binDefaults] = await Promise.all([
     db.store.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: { id: true, name: true },
@@ -131,6 +131,11 @@ export async function listBoard(ctx: OrgContext) {
       include: { _count: { select: { picks: true } } },
       take: 20,
     }),
+    db.itemBinDefault.findMany({
+      where: { orgId: ctx.orgId },
+      select: { itemId: true },
+      take: 5000,
+    }),
   ])
 
   const binBalances = await db.$queryRaw<
@@ -149,6 +154,11 @@ export async function listBoard(ctx: OrgContext) {
      ORDER BY m."binId", m."itemId", m."createdAt" DESC
   `
 
+  const defaultItemIds = new Set(binDefaults.map((row) => row.itemId))
+  const itemsMissingDefaultBin = items
+    .filter((row) => !defaultItemIds.has(row.id))
+    .map((row) => ({ id: row.id, name: row.name }))
+
   return {
     stores,
     bins,
@@ -158,6 +168,7 @@ export async function listBoard(ctx: OrgContext) {
     putaways: putaways.map((row) => ({ ...row, qty: row.qty.toString() })),
     waves,
     binBalances,
+    itemsMissingDefaultBin,
   }
 }
 
@@ -341,6 +352,8 @@ export async function createPutaway(
     })
     if (!bin) throw notFound('Bin')
     binId = bin.id
+  } else {
+    binId = await suggestDefaultBin(ctx.orgId, store.id, item.id)
   }
   return db.putawayTask.create({
     data: {
@@ -635,4 +648,131 @@ export async function countOpenWaves(ctx: OrgContext): Promise<number> {
   return db.pickWave.count({
     where: { orgId: ctx.orgId, status: { in: ['OPEN', 'RELEASED'] } },
   })
+}
+
+export async function suggestDefaultBin(
+  orgId: string,
+  storeId: string,
+  itemId: string,
+): Promise<string | null> {
+  const row = await db.itemBinDefault.findUnique({
+    where: { orgId_storeId_itemId: { orgId, storeId, itemId } },
+    select: { binId: true },
+  })
+  return row?.binId ?? null
+}
+
+export async function upsertItemBinDefault(
+  ctx: OrgContext,
+  input: { storeId: string; itemId: string; binId: string },
+) {
+  const [store, item, bin] = await Promise.all([
+    db.store.findFirst({
+      where: { id: input.storeId, orgId: ctx.orgId },
+      select: { id: true },
+    }),
+    db.item.findFirst({
+      where: { id: input.itemId, orgId: ctx.orgId, deletedAt: null },
+      select: { id: true },
+    }),
+    db.stockBin.findFirst({
+      where: { id: input.binId, orgId: ctx.orgId, storeId: input.storeId },
+      select: { id: true },
+    }),
+  ])
+  if (!store || !item || !bin) throw notFound('Store, item, or bin')
+  return db.itemBinDefault.upsert({
+    where: { orgId_storeId_itemId: { orgId: ctx.orgId, storeId: store.id, itemId: item.id } },
+    create: {
+      orgId: ctx.orgId,
+      storeId: store.id,
+      itemId: item.id,
+      binId: bin.id,
+    },
+    update: { binId: bin.id },
+    select: { id: true, binId: true },
+  })
+}
+
+/** Phase 45: JSON stub for wave shipping labels (orders, ship-to, carrier). */
+export async function waveLabelExport(ctx: OrgContext, waveId: string) {
+  const wave = await db.pickWave.findFirst({
+    where: { id: waveId, orgId: ctx.orgId },
+    include: {
+      picks: {
+        select: {
+          id: true,
+          qty: true,
+          sourceType: true,
+          sourceId: true,
+          item: { select: { name: true, sku: true } },
+        },
+      },
+    },
+  })
+  if (!wave) throw notFound('Wave')
+
+  const orderIds = [
+    ...new Set(
+      wave.picks
+        .filter((row) => row.sourceType === 'SALES_ORDER' && row.sourceId)
+        .map((row) => row.sourceId as string),
+    ),
+  ]
+  const orders = orderIds.length
+    ? await db.salesDocument.findMany({
+        where: { orgId: ctx.orgId, id: { in: orderIds } },
+        select: {
+          id: true,
+          number: true,
+          customer: {
+            select: {
+              displayName: true,
+              shippingLine1: true,
+              shippingCity: true,
+              shippingRegion: true,
+              shippingPostalCode: true,
+            },
+          },
+        },
+      })
+    : []
+
+  const deliveryNotes = orderIds.length
+    ? await db.deliveryNote.findMany({
+        where: { orgId: ctx.orgId, salesDocumentId: { in: orderIds } },
+        select: { salesDocumentId: true, carrier: true, number: true },
+      })
+    : []
+  const carrierByOrder = new Map(
+    deliveryNotes.map((row) => [row.salesDocumentId, row.carrier]),
+  )
+
+  return {
+    waveId: wave.id,
+    waveNumber: wave.number,
+    status: wave.status,
+    orders: orders.map((order) => ({
+      orderId: order.id,
+      orderNumber: order.number,
+      shipTo: [
+        order.customer.shippingLine1,
+        order.customer.shippingCity,
+        order.customer.shippingRegion,
+        order.customer.shippingPostalCode,
+      ]
+        .filter(Boolean)
+        .join(', ') || null,
+      customerName: order.customer.displayName,
+      carrier: carrierByOrder.get(order.id) ?? null,
+    })),
+    pickLines: wave.picks.map((pick) => ({
+      pickId: pick.id,
+      itemName: pick.item.name,
+      sku: pick.item.sku,
+      qty: pick.qty.toString(),
+      sourceType: pick.sourceType,
+      sourceId: pick.sourceId,
+    })),
+  }
 }

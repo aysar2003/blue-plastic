@@ -56,12 +56,12 @@ export default function PosCustomerDisplayPage() {
       <main className="flex flex-1 flex-col p-8">
         {empty ? (
           <div className="flex flex-1 items-center justify-center">
-            <p className="text-4xl font-light text-black/35">Welcome</p>
+            <p className="text-4xl font-light text-black/65">Welcome</p>
           </div>
         ) : (
           <>
             {state.customerName ? (
-              <p className="mb-4 text-sm text-black/50">Customer · {state.customerName}</p>
+              <p className="mb-4 text-sm text-black/70">Customer · {state.customerName}</p>
             ) : null}
             <ul className="flex-1 space-y-3 overflow-y-auto">
               {state.lines.map((line, index) => (
@@ -74,7 +74,7 @@ export default function PosCustomerDisplayPage() {
               ))}
             </ul>
             <div className="mt-6 border-t border-black/10 pt-4 text-right">
-              <p className="text-sm uppercase tracking-wide text-black/45">Total</p>
+              <p className="text-sm uppercase tracking-wide text-black/70">Total</p>
               <p className="text-4xl font-semibold tabular" style={{ color: ODOO.purple }}>
                 {state.total}
               </p>

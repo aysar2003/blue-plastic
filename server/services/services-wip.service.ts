@@ -22,6 +22,7 @@ export async function projectWip(ctx: OrgContext, projectId?: string) {
       name: true,
       customerId: true,
       retainerAmount: true,
+      retainerRemaining: true,
       timeEntries: {
         where: { billable: true, invoicedAt: null },
         select: { hours: true, billableRate: true, billable: true, invoicedAt: true },
@@ -46,6 +47,8 @@ export async function projectWip(ctx: OrgContext, projectId?: string) {
       name: project.name,
       customerId: project.customerId,
       retainerAmount: project.retainerAmount?.toString() ?? null,
+      retainerBalance: project.retainerRemaining?.toString() ?? null,
+      retainerRemaining: project.retainerRemaining?.toString() ?? project.retainerAmount?.toString() ?? null,
       wipHours: wip.hours,
       wipAmount: wip.amount,
       wipEntries: wip.entryCount,
@@ -94,7 +97,14 @@ export async function billRetainer(
 ) {
   const project = await db.project.findFirst({
     where: { id: input.projectId, orgId: ctx.orgId },
-    select: { id: true, name: true, number: true, customerId: true },
+    select: {
+      id: true,
+      name: true,
+      number: true,
+      customerId: true,
+      retainerAmount: true,
+      retainerRemaining: true,
+    },
   })
   if (!project) throw notFound('Project')
 
@@ -128,7 +138,19 @@ export async function billRetainer(
     customerMessage: `Retainer for ${project.name}`,
   })
 
-  return { invoiceId: invoice.id, invoiceNumber: invoice.number }
+  const prior =
+    project.retainerRemaining != null
+      ? new Decimal(project.retainerRemaining.toString())
+      : project.retainerAmount != null
+        ? new Decimal(project.retainerAmount.toString())
+        : amount
+  const next = Decimal.max(prior.minus(amount), new Decimal(0))
+  await db.project.update({
+    where: { id: project.id },
+    data: { retainerRemaining: next.toFixed(4) },
+  })
+
+  return { invoiceId: invoice.id, invoiceNumber: invoice.number, retainerRemaining: next.toFixed(4) }
 }
 
 /** Invoice unbilled billable time on a project, then mark those entries invoiced. */
@@ -144,7 +166,14 @@ export async function billWipFromTime(
 ) {
   const project = await db.project.findFirst({
     where: { id: input.projectId, orgId: ctx.orgId },
-    select: { id: true, name: true, number: true, customerId: true },
+    select: {
+      id: true,
+      name: true,
+      number: true,
+      customerId: true,
+      retainerRemaining: true,
+      retainerAmount: true,
+    },
   })
   if (!project) throw notFound('Project')
 
@@ -181,6 +210,30 @@ export async function billWipFromTime(
     throw validation('Write-up / write-down percent must be between -100 and 500.')
   }
   const factor = new Decimal(1).plus(new Decimal(adjustPct).div(100))
+
+  const wipPreview = wipFromEntries(
+    entries.map((entry) => ({
+      hours: entry.hours.toString(),
+      billableRate: entry.billableRate?.toString() ?? null,
+      billable: true,
+      invoicedAt: null,
+    })),
+  )
+  const remaining =
+    project.retainerRemaining != null
+      ? new Decimal(project.retainerRemaining.toString())
+      : project.retainerAmount != null
+        ? new Decimal(project.retainerAmount.toString())
+        : null
+  if (
+    remaining != null &&
+    remaining.greaterThan(0) &&
+    new Decimal(wipPreview.amount).greaterThan(remaining)
+  ) {
+    throw precondition(
+      `WIP to bill (${wipPreview.amount}) exceeds retainer remaining (${remaining.toFixed(2)}).`,
+    )
+  }
 
   const lines = entries.map((entry) => {
     const hours = new Decimal(entry.hours.toString())

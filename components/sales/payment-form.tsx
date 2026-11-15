@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState, useTransition } f
 
 import { usePropState } from '@/lib/use-prop-state'
 import { useRouter } from 'next/navigation'
+import { CopyIcon, PlusIcon, PrinterIcon, SaveIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { idleState } from '@/components/forms/action-state'
@@ -41,7 +42,8 @@ function orderedInvoices(rows: OpenInvoice[]): OpenInvoice[] {
 }
 
 export type PaymentFormValues = {
-  id: string
+  /** Absent when this seed is a Copy of another payment. */
+  id?: string
   customerId: string
   date: string
   amount: string
@@ -69,6 +71,7 @@ export function PaymentForm({
   initialCustomerId,
   documentNumber,
   payment,
+  copiedFromNumber,
 }: {
   customers: Option[]
   depositAccounts: AccountPickerOption[]
@@ -78,11 +81,13 @@ export function PaymentForm({
   initialCustomerId?: string
   documentNumber: string
   payment?: PaymentFormValues
+  /** Source number when this form was opened via Copy. */
+  copiedFromNumber?: string
 }) {
   const router = useRouter()
   const [state, formAction] = useActionState(savePaymentForm, idleState)
   const { acknowledge, formRef, beforeSubmit } = useDuplicatePrompt(state)
-  const editing = Boolean(payment)
+  const editing = Boolean(payment?.id)
 
   const [number, setNumber] = usePropState(documentNumber)
   const [customerId, setCustomerId] = useState(payment?.customerId ?? initialCustomerId ?? '')
@@ -116,7 +121,7 @@ export function PaymentForm({
     if (state.status === 'success' && !handled.current) {
       handled.current = true
       toast.success(state.message ?? (editing ? 'Saved.' : 'Recorded.'))
-      router.push(payment ? `/payments/${payment.id}` : '/payments')
+      router.push(payment?.id ? `/payments/${payment.id}` : '/payments')
       router.refresh()
     }
     if (state.status !== 'success') handled.current = false
@@ -185,7 +190,7 @@ export function PaymentForm({
   const payloadInput = useRef<HTMLInputElement>(null)
   const payloadFor = () =>
     JSON.stringify({
-    ...(payment ? { id: payment.id } : {}),
+    ...(payment?.id ? { id: payment.id } : {}),
     number,
     customerId,
     date,
@@ -214,6 +219,47 @@ export function PaymentForm({
       }}
     >
       <input ref={payloadInput} type="hidden" name="payload" defaultValue={payloadFor()} />
+
+      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-background p-1.5 print:hidden">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (payment?.id) router.push(`/payments/${payment.id}`)
+            else window.print()
+          }}
+        >
+          <PrinterIcon />
+          Print
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => router.push('/payments/new')}>
+          <PlusIcon />
+          New
+        </Button>
+        {payment?.id ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            title="Make a copy of this payment"
+            onClick={() => router.push(`/payments/new?copy=${payment.id}`)}
+          >
+            <CopyIcon />
+            Copy
+          </Button>
+        ) : null}
+        <Button type="submit" size="sm" disabled={!canSave}>
+          <SaveIcon />
+          Save
+        </Button>
+      </div>
+      {copiedFromNumber && !payment?.id ? (
+        <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground print:hidden">
+          Copy of <span className="font-medium text-foreground">{copiedFromNumber}</span>. Saving
+          creates a new payment with a new number. Open invoices are reloaded for this customer.
+        </p>
+      ) : null}
 
       <Card>
         <CardContent className="space-y-3 p-3 sm:p-4">
@@ -401,7 +447,7 @@ export function PaymentForm({
         <Button
           type="button"
           variant="outline"
-          onClick={() => router.push(payment ? `/payments/${payment.id}` : '/payments')}
+          onClick={() => router.push(payment?.id ? `/payments/${payment.id}` : '/payments')}
         >
           Cancel
         </Button>

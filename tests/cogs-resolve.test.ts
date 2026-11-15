@@ -5,7 +5,6 @@ import { resolvePostableCogsAccountId } from '@/server/accounting/chart-of-accou
 import { positionOf, recordMovement } from '@/server/accounting/inventory'
 import { postJournal } from '@/server/accounting/posting'
 import { type Tx } from '@/server/db'
-import { isAppError } from '@/server/errors'
 import { postDocument as postSale } from '@/server/services/sales.service'
 import { CODE, inRolledBackTransaction, makeOrg, type Fixture } from './ledger-helpers'
 
@@ -99,8 +98,8 @@ function side(
     )
 }
 
-suite('QB-style COGS heading + detail', () => {
-  it('posts a sale to the item leaf COGS, not the heading parent', async () => {
+suite('COGS Main + Sub both postable', () => {
+  it('posts a sale to the item leaf COGS when the item maps to a Sub', async () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)
       const leaf = await tx.ledgerAccount.create({
@@ -138,10 +137,10 @@ suite('QB-style COGS heading + detail', () => {
     })
   })
 
-  it('resolves a heading with exactly one postable child', async () => {
+  it('resolves a Main with children to itself (not forced to a leaf)', async () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)
-      const leaf = await tx.ledgerAccount.create({
+      await tx.ledgerAccount.create({
         data: {
           orgId: fixture.ctx.orgId,
           code: '5010',
@@ -150,11 +149,30 @@ suite('QB-style COGS heading + detail', () => {
           subtype: 'COST_OF_GOODS_SOLD',
           parentId: fixture.accounts['5000'],
         },
-        select: { id: true },
       })
 
-      const resolved = await resolvePostableCogsAccountId(tx, fixture.ctx.orgId, fixture.accounts['5000'])
-      expect(resolved).toBe(leaf.id)
+      const resolved = await resolvePostableCogsAccountId(
+        tx,
+        fixture.ctx.orgId,
+        fixture.accounts['5000'],
+      )
+      expect(resolved).toBe(fixture.accounts['5000'])
+    })
+  })
+
+  it('posts cost to Main when the item maps to the Main COGS account', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const fixture = await makeOrg(tx)
+      await tx.ledgerAccount.create({
+        data: {
+          orgId: fixture.ctx.orgId,
+          code: '5010',
+          name: 'Detail under Main',
+          type: 'COGS',
+          subtype: 'COST_OF_GOODS_SOLD',
+          parentId: fixture.accounts['5000'],
+        },
+      })
 
       const buyer = await customer(tx, fixture)
       const item = await inventoryItem(tx, fixture, 'Pipe', fixture.accounts['5000'])
@@ -166,91 +184,15 @@ suite('QB-style COGS heading + detail', () => {
         quantity: '2',
         unitCost: '6',
       })
-      const doc = await saleReceipt(tx, fixture, buyer.id, item.id, 'SR-ONE')
+      const doc = await saleReceipt(tx, fixture, buyer.id, item.id, 'SR-MAIN')
       await postSale(tx, fixture.ctx, doc.id)
       const journal = await journalOf(tx, fixture.ctx.orgId, doc.id)
-      expect(side(journal!, '5010', 'debit').toString()).toBe('6')
+      expect(side(journal!, '5000', 'debit').toString()).toBe('6')
+      expect(side(journal!, '5010', 'debit').isZero()).toBe(true)
     })
   })
 
-  it('refuses a heading with more than one postable child when none are in use', async () => {
-    await inRolledBackTransaction(async (tx) => {
-      const fixture = await makeOrg(tx)
-      await tx.ledgerAccount.create({
-        data: {
-          orgId: fixture.ctx.orgId,
-          code: '5010',
-          name: 'COGS A',
-          type: 'COGS',
-          subtype: 'COST_OF_GOODS_SOLD',
-          parentId: fixture.accounts['5000'],
-        },
-      })
-      await tx.ledgerAccount.create({
-        data: {
-          orgId: fixture.ctx.orgId,
-          code: '5020',
-          name: 'COGS B',
-          type: 'COGS',
-          subtype: 'COST_OF_GOODS_SOLD',
-          parentId: fixture.accounts['5000'],
-        },
-      })
-
-      await expect(
-        resolvePostableCogsAccountId(tx, fixture.ctx.orgId, fixture.accounts['5000']),
-      ).rejects.toSatisfy((error: unknown) => {
-        expect(isAppError(error)).toBe(true)
-        expect(String(error)).toMatch(/grouping heading/i)
-        return true
-      })
-    })
-  })
-
-  it('picks the leaf most inventory items already use under an ambiguous heading', async () => {
-    await inRolledBackTransaction(async (tx) => {
-      const fixture = await makeOrg(tx)
-      const leafA = await tx.ledgerAccount.create({
-        data: {
-          orgId: fixture.ctx.orgId,
-          code: '5010',
-          name: '2024 ADJ',
-          type: 'COGS',
-          subtype: 'COST_OF_GOODS_SOLD',
-          parentId: fixture.accounts['5000'],
-        },
-        select: { id: true },
-      })
-      const leafB = await tx.ledgerAccount.create({
-        data: {
-          orgId: fixture.ctx.orgId,
-          code: '5005',
-          name: 'Merchandise',
-          type: 'COGS',
-          subtype: 'COST_OF_GOODS_SOLD',
-          parentId: fixture.accounts['5000'],
-        },
-        select: { id: true },
-      })
-      await tx.item.create({
-        data: {
-          orgId: fixture.ctx.orgId,
-          name: 'Widget',
-          type: 'INVENTORY',
-          incomeAccountId: fixture.accounts[CODE.sales],
-          inventoryAccountId: fixture.accounts['1200'],
-          cogsAccountId: leafB.id,
-        },
-      })
-
-      await expect(
-        resolvePostableCogsAccountId(tx, fixture.ctx.orgId, fixture.accounts['5000']),
-      ).resolves.toBe(leafB.id)
-      expect(leafA.id).not.toBe(leafB.id)
-    })
-  })
-
-  it('allows creating a main COGS heading and refuses posting to it', async () => {
+  it('allows posting a journal directly to a Main with sub-accounts', async () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)
 
@@ -275,16 +217,16 @@ suite('QB-style COGS heading + detail', () => {
         },
       })
 
-      await expect(
-        postJournal(tx, fixture.ctx, {
-          date: '2026-04-01',
-          sourceType: 'MANUAL',
-          lines: [
-            { accountId: main.id, debit: '10' },
-            { accountId: fixture.accounts[CODE.bank], credit: '10' },
-          ],
-        }),
-      ).rejects.toThrow(/grouping heading/i)
+      const journal = await postJournal(tx, fixture.ctx, {
+        date: '2026-04-01',
+        sourceType: 'MANUAL',
+        lines: [
+          { accountId: main.id, debit: '10' },
+          { accountId: fixture.accounts[CODE.bank], credit: '10' },
+        ],
+      })
+      expect(journal.id).toBeTruthy()
+      expect(journal.journalNumber).toBeTruthy()
     })
   })
 })

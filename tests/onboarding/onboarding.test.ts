@@ -38,4 +38,15 @@ describe('P7 onboarding validation', () => {
       expect(getPack(pack.id)?.id).toBe(pack.id)
     }
   })
+
+  it('retail checklist covers locale, apps hide, and reorder', () => {
+    const retail = getPack('retail')
+    expect(retail).toBeTruthy()
+    const ids = new Set(retail!.setupChecklist.map((item) => item.id))
+    expect(ids.has('locale')).toBe(true)
+    expect(ids.has('apps')).toBe(true)
+    expect(ids.has('reorder')).toBe(true)
+    expect(retail!.enabledModules).toContain('pos')
+    expect(retail!.enabledModules).not.toContain('employees')
+  })
 })

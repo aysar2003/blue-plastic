@@ -1,4 +1,5 @@
 import { Decimal, ZERO } from '@/lib/money'
+import { localizationPackById } from '@/lib/localization/packs'
 
 export type PayrollStatutoryLine = {
   runId: string
@@ -56,8 +57,11 @@ export function buildVatReturnBoxes(input: {
   }
 }
 
-export function payrollStatutoryToCsv(rows: PayrollStatutoryLine[]): string {
-  const header = [
+export function payrollStatutoryToCsv(
+  rows: PayrollStatutoryLine[],
+  headerOverride?: string[],
+): string {
+  const defaultHeader = [
     'periodStart',
     'periodEnd',
     'payslipNumber',
@@ -73,6 +77,7 @@ export function payrollStatutoryToCsv(rows: PayrollStatutoryLine[]): string {
     'lineKind',
     'lineAmount',
   ]
+  const header = headerOverride ?? defaultHeader
   const out: string[] = [header.join(',')]
   for (const row of rows) {
     if (row.lines.length === 0) {
@@ -120,18 +125,28 @@ export function payrollStatutoryToCsv(rows: PayrollStatutoryLine[]): string {
   return `${out.join('\r\n')}\r\n`
 }
 
-export function vatReturnToCsv(boxes: VatReturnBoxes): string {
+export function vatReturnToCsv(
+  boxes: VatReturnBoxes,
+  labels?: Partial<Record<'box1' | 'box2' | 'box3' | 'box4' | 'box5', string>> | null,
+): string {
+  const L = {
+    box1: labels?.box1 ?? 'box1_taxable_supplies',
+    box2: labels?.box2 ?? 'box2_output_vat',
+    box3: labels?.box3 ?? 'box3_taxable_purchases',
+    box4: labels?.box4 ?? 'box4_input_vat',
+    box5: labels?.box5 ?? 'box5_net_vat_due',
+  }
   const rows = [
     ['jurisdiction', boxes.jurisdiction],
     ['from', boxes.from],
     ['to', boxes.to],
-    ['box1_taxable_supplies', boxes.box1TaxableSupplies.toFixed(2)],
-    ['box2_output_vat', boxes.box2OutputVat.toFixed(2)],
-    ['box3_taxable_purchases', boxes.box3TaxablePurchases.toFixed(2)],
-    ['box4_input_vat', boxes.box4InputVat.toFixed(2)],
-    ['box5_net_vat_due', boxes.box5NetVatDue.toFixed(2)],
+    [L.box1, boxes.box1TaxableSupplies.toFixed(2)],
+    [L.box2, boxes.box2OutputVat.toFixed(2)],
+    [L.box3, boxes.box3TaxablePurchases.toFixed(2)],
+    [L.box4, boxes.box4InputVat.toFixed(2)],
+    [L.box5, boxes.box5NetVatDue.toFixed(2)],
   ]
-  return `box,amount\r\n${rows.map((row) => row.join(',')).join('\r\n')}\r\n`
+  return `box,amount\r\n${rows.map((row) => `${csvEscape(row[0])},${row[1]}`).join('\r\n')}\r\n`
 }
 
 function csvEscape(value: string): string {
@@ -141,4 +156,13 @@ function csvEscape(value: string): string {
 
 export function emptyVatTotals() {
   return { salesNet: ZERO, salesTax: ZERO, purchaseNet: ZERO, purchaseTax: ZERO }
+}
+
+/** Pack-aware payroll CSV headers (Phase 40). */
+export function payrollStatutoryToCsvForPack(
+  rows: PayrollStatutoryLine[],
+  localizationPackId: string | null | undefined,
+): string {
+  const pack = localizationPackById(localizationPackId)
+  return payrollStatutoryToCsv(rows, pack?.payrollCsvHeaders)
 }
