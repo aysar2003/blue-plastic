@@ -58,7 +58,7 @@ export function IdleLock({
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const [signingOut, setSigningOut] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timerRef = useRef<number | null>(null)
   const lockedRef = useRef(false)
 
   const lockNow = useCallback(() => {
