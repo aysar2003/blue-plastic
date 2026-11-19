@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 
 import { PlatformConsoleChrome } from '@/components/layout/platform-console-chrome'
 import { ShellChrome } from '@/components/layout/shell-chrome'
+import { IdleLock } from '@/components/security/idle-lock'
 import type { OrgFeatureFlags } from '@/lib/feature-flags'
 import type { LetterheadSource } from '@/lib/letterhead'
 import type { CompanyOption } from '@/components/layout/company-switcher'
@@ -45,19 +46,30 @@ export function ShellGate({
   const pathname = usePathname()
   const onPlatformRoutes = pathname === '/databases' || pathname.startsWith('/databases/')
 
+  const userLabel = props.user.email || props.user.name || 'this account'
+  const lock = <IdleLock orgName={props.orgName} userLabel={userLabel} />
+
   if (isSystemOwner && onPlatformRoutes) {
     return (
-      <PlatformConsoleChrome
-        user={props.user}
-        roleLabel={props.roleLabel}
-        showCompanyReports={props.showCompanyReports}
-        showCreatorBrand={props.showCreatorBrand}
-        currentCompanyName={props.orgName}
-      >
-        {props.children}
-      </PlatformConsoleChrome>
+      <>
+        <PlatformConsoleChrome
+          user={props.user}
+          roleLabel={props.roleLabel}
+          showCompanyReports={props.showCompanyReports}
+          showCreatorBrand={props.showCreatorBrand}
+          currentCompanyName={props.orgName}
+        >
+          {props.children}
+        </PlatformConsoleChrome>
+        {lock}
+      </>
     )
   }
 
-  return <ShellChrome {...props} />
+  return (
+    <>
+      <ShellChrome {...props} />
+      {lock}
+    </>
+  )
 }
