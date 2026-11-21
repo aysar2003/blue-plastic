@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ClipboardListIcon, FileCheck2Icon, Loader2Icon, ReceiptIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { convertSalesDocument } from '@/app/(app)/sales/actions'
+import { convertSalesDocument, respondToProposal } from '@/app/(app)/sales/actions'
 import { AccountPicker } from '@/components/forms/account-picker'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -150,6 +150,48 @@ export function ConvertSalesDocumentActions({
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+/** Mark an open estimate / quotation accepted or declined (staff). */
+export function ProposalResponseActions({
+  id,
+  number,
+  status,
+}: {
+  id: string
+  number: string
+  status: string
+}) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  if (status !== 'OPEN') return null
+
+  const respond = (response: 'ACCEPTED' | 'DECLINED') => {
+    startTransition(async () => {
+      const result = await respondToProposal({ id, response })
+      if (result.ok) {
+        toast.success(
+          response === 'ACCEPTED'
+            ? `${number} marked accepted.`
+            : `${number} marked declined.`,
+        )
+        router.refresh()
+      } else {
+        toast.error(result.error.message)
+      }
+    })
+  }
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <Button size="sm" variant="secondary" disabled={isPending} onClick={() => respond('ACCEPTED')}>
+        Accept
+      </Button>
+      <Button size="sm" variant="outline" disabled={isPending} onClick={() => respond('DECLINED')}>
+        Decline
+      </Button>
+    </span>
   )
 }
 

@@ -111,7 +111,7 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 /** Bump when `prisma generate` adds models the cached client does not know. */
-const PRISMA_SCHEMA = 'rate-limit-buckets'
+const PRISMA_SCHEMA = 'wave-c-deepen'
 
 const getClient = (): PrismaClient => {
   if (globalForPrisma.prismaSchema !== PRISMA_SCHEMA) {

@@ -18,7 +18,8 @@ type Entry = {
   description: string | null
   billable: boolean
   billableRate: string | null
-  invoicedAt: Date | null
+  costRate?: string | null
+  invoicedAt: string | null
   task: { id: string; name: string } | null
   user: { id: string; name: string }
 }
@@ -44,6 +45,7 @@ export function TimesheetPanel({
   const [hours, setHours] = useState('1')
   const [description, setDescription] = useState('')
   const [billableRate, setBillableRate] = useState('')
+  const [costRate, setCostRate] = useState('')
   const [taskId, setTaskId] = useState('')
   const [billable, setBillable] = useState(true)
 
@@ -71,6 +73,7 @@ export function TimesheetPanel({
                 description: description || null,
                 billable,
                 billableRate: billableRate || null,
+                costRate: costRate || null,
               })
               if (!result.ok) {
                 toast.error(result.error.message)
@@ -111,12 +114,20 @@ export function TimesheetPanel({
             />
           </label>
           <label className="text-xs">
-            Rate ({currency}/h)
+            Bill rate ({currency}/h)
             <Input
               value={billableRate}
               onChange={(event) => setBillableRate(event.target.value)}
               className="mt-1 tabular"
               disabled={!billable}
+            />
+          </label>
+          <label className="text-xs">
+            Cost rate ({currency}/h)
+            <Input
+              value={costRate}
+              onChange={(event) => setCostRate(event.target.value)}
+              className="mt-1 tabular"
             />
           </label>
           <div className="flex flex-col justify-end gap-2">

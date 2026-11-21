@@ -20,25 +20,40 @@ export function profitOf(slice: ProjectProfitSlice): Decimal {
   return slice.income.minus(slice.purchaseCost).minus(slice.stockCost).minus(slice.laborCost)
 }
 
-/** Signed sales amount into income (credits negative). */
+/**
+ * Document subtotal in org base. `exchangeRate` is base per 1 document unit
+ * (1 when the document is already in base). Missing or non-positive rates stay 1.
+ */
+export function toBaseAmount(
+  amount: Decimal.Value,
+  exchangeRate?: Decimal.Value | null,
+): Decimal {
+  const rate = new Decimal(exchangeRate?.toString() ?? '1')
+  const safeRate = rate.lessThanOrEqualTo(0) ? new Decimal(1) : rate
+  return new Decimal(amount).times(safeRate)
+}
+
+/** Signed sales amount into income (credits negative). Amounts convert to org base. */
 export function addSalesIncome(
   slice: ProjectProfitSlice,
   type: string,
   subtotal: Decimal.Value,
+  exchangeRate?: Decimal.Value | null,
 ): ProjectProfitSlice {
-  const amount = new Decimal(subtotal)
+  const amount = toBaseAmount(subtotal, exchangeRate)
   const signed =
     type === 'CREDIT_MEMO' || type === 'REFUND_RECEIPT' ? amount.negated() : amount
   return { ...slice, income: slice.income.plus(signed) }
 }
 
-/** Signed purchase amount into purchase cost (vendor credits negative). */
+/** Signed purchase amount into purchase cost (vendor credits negative). Amounts convert to org base. */
 export function addPurchaseCost(
   slice: ProjectProfitSlice,
   type: string,
   subtotal: Decimal.Value,
+  exchangeRate?: Decimal.Value | null,
 ): ProjectProfitSlice {
-  const amount = new Decimal(subtotal)
+  const amount = toBaseAmount(subtotal, exchangeRate)
   const signed = type === 'VENDOR_CREDIT' ? amount.negated() : amount
   return { ...slice, purchaseCost: slice.purchaseCost.plus(signed) }
 }
@@ -48,7 +63,9 @@ export function addStockCost(slice: ProjectProfitSlice, movementValue: Decimal.V
   return { ...slice, stockCost: slice.stockCost.plus(new Decimal(movementValue).abs()) }
 }
 
-/** Labor at hours × rate (SME uses billable rate as the only rate on the card). */
+/**
+ * Labor at hours × rate. Prefer internal costRate; callers pass costRate ?? billableRate.
+ */
 export function addLaborCost(
   slice: ProjectProfitSlice,
   hours: Decimal.Value,

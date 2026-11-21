@@ -6,6 +6,7 @@ import type { Prisma } from '@prisma/client'
 
 import { accountOptions, MONEY_SUBTYPES } from '@/lib/account-options'
 import { Decimal } from '@/lib/money'
+import { formatPostalAddress, formatShipToWorkSite } from '@/lib/postal-address'
 import { positionsOf } from '@/server/accounting/inventory'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
@@ -36,6 +37,19 @@ const CUSTOMER_FORM_SELECT = {
   shippingRegion: true,
   shippingPostalCode: true,
   shippingCountry: true,
+  shipTos: {
+    orderBy: [{ isDefault: 'desc' as const }, { createdAt: 'asc' as const }],
+    select: {
+      id: true,
+      label: true,
+      line1: true,
+      line2: true,
+      city: true,
+      region: true,
+      postalCode: true,
+      country: true,
+    },
+  },
 } satisfies Prisma.CustomerSelect
 
 const ITEM_FORM_SELECT = {
@@ -148,7 +162,7 @@ const cachedFormOptions = cache(
   (orgId: string, enableTax: boolean, includeOnHand: boolean, canReadProjects: boolean) =>
     unstable_cache(
       () => queryFormOptions(orgId, enableTax, includeOnHand, canReadProjects),
-      ['sales-form-options-v5', orgId, String(enableTax), String(includeOnHand), String(canReadProjects)],
+      ['sales-form-options-v6', orgId, String(enableTax), String(includeOnHand), String(canReadProjects)],
       { revalidate: 60 },
     )(),
 )
@@ -283,6 +297,33 @@ export async function searchFormItems(
 }
 
 function presentCustomer(customer: CustomerFormRow) {
+  const shippingAddress = formatPostalAddress(
+    customer.shippingLine1,
+    customer.shippingLine2,
+    customer.shippingCity,
+    customer.shippingRegion,
+    customer.shippingPostalCode,
+    customer.shippingCountry,
+  )
+  const extra = customer.shipTos.map((row) => ({
+    id: row.id,
+    label: row.label,
+    address: formatShipToWorkSite(row),
+  }))
+  const shipTos = [
+    ...(shippingAddress
+      ? [{ id: 'default', label: 'Default shipping', address: formatShipToWorkSite({
+          label: 'Default shipping',
+          line1: customer.shippingLine1,
+          line2: customer.shippingLine2,
+          city: customer.shippingCity,
+          region: customer.shippingRegion,
+          postalCode: customer.shippingPostalCode,
+          country: customer.shippingCountry,
+        }) }]
+      : []),
+    ...extra,
+  ]
   return {
     id: customer.id,
     label: customer.displayName,
@@ -291,7 +332,7 @@ function presentCustomer(customer: CustomerFormRow) {
     currencyCode: customer.currencyCode,
     priceLevel: customer.priceLevel,
     balance: null as string | null,
-    billingAddress: postalAddress(
+    billingAddress: formatPostalAddress(
       customer.billingLine1,
       customer.billingLine2,
       customer.billingCity,
@@ -299,14 +340,8 @@ function presentCustomer(customer: CustomerFormRow) {
       customer.billingPostalCode,
       customer.billingCountry,
     ),
-    shippingAddress: postalAddress(
-      customer.shippingLine1,
-      customer.shippingLine2,
-      customer.shippingCity,
-      customer.shippingRegion,
-      customer.shippingPostalCode,
-      customer.shippingCountry,
-    ),
+    shippingAddress,
+    shipTos,
   }
 }
 
@@ -383,18 +418,6 @@ export async function depositAccountChoices(ctx: OrgContext) {
     prefer: ['BANK', 'UNDEPOSITED_FUNDS', 'CREDIT_CARD', 'OTHER_CURRENT_ASSET'],
     showBalance: true,
   })
-}
-
-function postalAddress(
-  line1: string | null,
-  line2: string | null,
-  city: string | null,
-  region: string | null,
-  postalCode: string | null,
-  country: string | null,
-) {
-  const place = [city, region, postalCode].map((part) => part?.trim()).filter(Boolean).join(', ')
-  return [line1, line2, place, country].map((part) => part?.trim()).filter(Boolean).join('\n')
 }
 
 /** Bank / undeposited accounts for a sales receipt — including when fulfilling an order. */

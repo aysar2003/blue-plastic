@@ -1,7 +1,7 @@
 import 'server-only'
 
-import { allocatePatronage, patronageCsv, type PatronageMember } from '@/lib/erp/patronage'
-import { toCalendarDate, toDate } from '@/lib/date'
+import { allocatePatronage, patronageCsv, patronageMemberCsvRows, type PatronageMember } from '@/lib/erp/patronage'
+import { toDate } from '@/lib/date'
 import { Decimal } from '@/lib/money'
 import { seedChartOfAccounts, systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
@@ -73,7 +73,7 @@ export async function allocate(ctx: OrgContext, year: number, percentOfNet: stri
   await db.$transaction(async (tx) => seedChartOfAccounts(tx, ctx.orgId))
   const equityId = await db.$transaction((tx) => systemAccountId(tx, ctx.orgId, 'OPENING_BALANCE_EQUITY'))
   const expenseId = await db.$transaction((tx) => systemAccountId(tx, ctx.orgId, 'UNCATEGORISED_EXPENSE'))
-  await journalService.createManual(ctx, {
+  const journal = await journalService.createManual(ctx, {
     number: undefined,
     date: to,
     memo: `Patronage allocation ${year}`,
@@ -95,6 +95,23 @@ export async function allocate(ctx: OrgContext, year: number, percentOfNet: stri
     ],
   })
 
+  for (const share of shares) {
+    if (new Decimal(share.amount).lessThanOrEqualTo(0)) continue
+    await db.equityEvent.create({
+      data: {
+        orgId: ctx.orgId,
+        kind: 'PATRONAGE',
+        shareholderId: share.shareholderId,
+        amount: share.amount,
+        date: toDate(to),
+        memo: `Patronage ${year} · ${share.name}`,
+        bankAccountId: null,
+        equityAccountId: equityId,
+        journalId: journal.id,
+      },
+    })
+  }
+
   return {
     year,
     netIncome: net.toFixed(4),
@@ -102,5 +119,28 @@ export async function allocate(ctx: OrgContext, year: number, percentOfNet: stri
     pool,
     shares,
     csv: patronageCsv(shares),
+    memberCsvRows: patronageMemberCsvRows(shares),
   }
+}
+
+export async function memberCsv(ctx: OrgContext, year?: number) {
+  assertPermission(ctx, 'account:read')
+  const whereYear = year
+    ? { date: { gte: toDate(`${year}-01-01`), lte: toDate(`${year}-12-31`) } }
+    : {}
+  const events = await db.equityEvent.findMany({
+    where: { orgId: ctx.orgId, kind: 'PATRONAGE', ...whereYear },
+    include: { shareholder: { select: { name: true } } },
+    orderBy: { date: 'desc' },
+    take: 500,
+  })
+  if (events.length === 0) return null
+  return patronageMemberCsvRows(
+    events.map((row) => ({
+      shareholderId: row.shareholderId ?? '',
+      name: row.shareholder?.name ?? '',
+      amount: row.amount.toFixed(4),
+      weight: '',
+    })),
+  )
 }

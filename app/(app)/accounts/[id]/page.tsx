@@ -49,10 +49,11 @@ export default async function AccountRegisterPage({
 
   const timeZone = ctx.organization.timeZone
   const currency = ctx.organization.baseCurrency
-  const defaults = fiscalYearRange(
-    fiscalYearOf(today(timeZone), ctx.organization.fiscalYearStartMonth),
-    ctx.organization.fiscalYearStartMonth,
-  )
+  const fyStart = {
+    month: ctx.organization.fiscalYearStartMonth,
+    day: ctx.organization.fiscalYearStartDay,
+  }
+  const defaults = fiscalYearRange(fiscalYearOf(today(timeZone), fyStart), fyStart)
   const from = typeof query.from === 'string' ? query.from : defaults.start
   const to = typeof query.to === 'string' ? query.to : defaults.end
   const sourceFilter =

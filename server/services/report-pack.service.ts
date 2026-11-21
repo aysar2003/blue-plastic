@@ -393,6 +393,7 @@ export async function runDueForAllOrganizations() {
         baseCurrency: true,
         timeZone: true,
         fiscalYearStartMonth: true,
+        fiscalYearStartDay: true,
       },
     })
     if (!org) {

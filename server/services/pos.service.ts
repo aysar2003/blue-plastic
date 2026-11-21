@@ -26,6 +26,7 @@ import { chooseLineStore } from '@/lib/pos-line-store'
 import { CASHIER_PIN_REQUIRED, CASHIER_PIN_WRONG } from '@/lib/pos-pin'
 import { receiptCashierName } from '@/lib/pos-receipt'
 import { POS_SHORTFALL_DISCOUNT_MAX } from '@/lib/pos-shortfall'
+import { isDateWindowActive } from '@/lib/erp/price-list-window'
 import { foldStoreQuantities } from '@/lib/store-stock'
 import type {
   PosCashMoveInput,
@@ -303,8 +304,11 @@ export async function closeSession(ctx: OrgContext, input: PosCloseSessionInput)
 
   const closing = new Decimal(input.closingCash)
   if (closing.isNegative()) throw validation('Closing cash cannot be negative.')
+  const payouts = new Decimal(input.payouts || '0')
+  if (payouts.isNegative()) throw validation('Payouts cannot be negative.')
 
-  const expected = await computeSessionExpectedCash(ctx, session.id)
+  const expectedBeforePayouts = await computeSessionExpectedCash(ctx, session.id)
+  const expected = expectedBeforePayouts.minus(payouts)
   const difference = closing.minus(expected)
   const register = await db.posRegister.findFirst({
     where: { id: session.registerId, orgId: ctx.orgId },
@@ -348,6 +352,7 @@ export async function closeSession(ctx: OrgContext, input: PosCloseSessionInput)
         closingCash: closing.toFixed(4),
         expectedCashAtClose: expected.toFixed(4),
         cashDifference: difference.toFixed(4),
+        closePayouts: payouts.toFixed(4),
         closingJournalId,
         closedByUserId: ctx.userId,
       },
@@ -714,6 +719,19 @@ export async function registerForTerminal(ctx: OrgContext, registerId: string) {
   }
 }
 
+function promoPercentFor(
+  promos: { itemId: string | null; percentOff: { toString(): string } }[],
+  itemId: string,
+): number {
+  let best = 0
+  for (const promo of promos) {
+    if (promo.itemId && promo.itemId !== itemId) continue
+    const pct = Number(promo.percentOff.toString())
+    if (pct > best) best = pct
+  }
+  return best
+}
+
 /**
  * Products for the till, with on-hand for the store this register sells from
  * (register store, else the office — where store-less movements are counted).
@@ -721,7 +739,9 @@ export async function registerForTerminal(ctx: OrgContext, registerId: string) {
  * takes stock below zero without asking the database per line.
  */
 export async function catalog(ctx: OrgContext, storeId: string | null) {
-  const [items, stores] = await Promise.all([
+  const asOf = today(ctx.organization.timeZone)
+  const asOfDate = toDate(asOf)
+  const [items, stores, promos] = await Promise.all([
     db.item.findMany({
       where: {
         orgId: ctx.orgId,
@@ -750,6 +770,15 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
       where: { orgId: ctx.orgId, isActive: true },
       select: { id: true, name: true, isOffice: true },
       orderBy: [{ isOffice: 'desc' }, { name: 'asc' }],
+    }),
+    db.itemPromotion.findMany({
+      where: {
+        orgId: ctx.orgId,
+        isActive: true,
+        startsOn: { lte: asOfDate },
+        endsOn: { gte: asOfDate },
+      },
+      select: { itemId: true, percentOff: true },
     }),
   ])
 
@@ -789,6 +818,7 @@ export async function catalog(ctx: OrgContext, storeId: string | null) {
       unitOfMeasure: item.unitOfMeasure,
       price: item.salesPrice?.toString() ?? '0',
       wholesalePrice: item.wholesalePrice?.toString() ?? null,
+      promoPercent: promoPercentFor(promos, item.id),
       trackLots: item.trackLots || item.pharmacyControlled,
       trackSerials: Boolean(item.trackSerials),
       pharmacyControlled: item.pharmacyControlled,
@@ -1025,6 +1055,7 @@ export async function checkout(ctx: OrgContext, input: PosCheckoutInput) {
     {
       number: undefined,
       customerId,
+      projectId: input.projectId ?? null,
       date: receiptDate,
       depositAccountId: tillAccountId,
       lines,
@@ -1188,6 +1219,7 @@ export async function createQuotation(ctx: OrgContext, input: PosCreateQuotation
   const document = await salesService.create(ctx, 'QUOTATION', {
     number: undefined,
     customerId,
+    projectId: input.projectId ?? null,
     date: today(ctx.organization.timeZone),
     lines,
     saveAsDraft: false,
@@ -1227,6 +1259,7 @@ export async function getEstimateCart(ctx: OrgContext, estimateId: string) {
       id: true,
       number: true,
       customerId: true,
+      projectId: true,
       customerMessage: true,
       customer: { select: { displayName: true } },
       lines: {
@@ -1262,6 +1295,7 @@ export async function getEstimateCart(ctx: OrgContext, estimateId: string) {
     id: estimate.id,
     number: estimate.number,
     customerId: estimate.customerId,
+    projectId: estimate.projectId,
     customerName: estimate.customer.displayName,
     note: estimate.customerMessage,
     lines,
@@ -1377,6 +1411,8 @@ type SessionCashParts = {
   cashSales: Decimal
   cashRefunds: Decimal
   expected: Decimal
+  sales: Decimal
+  refunds: Decimal
 }
 
 async function loadSessionCashParts(ctx: OrgContext, sessionId: string): Promise<SessionCashParts> {
@@ -1388,7 +1424,7 @@ async function loadSessionCashParts(ctx: OrgContext, sessionId: string): Promise
       cashMoves: { select: { kind: true, amount: true } },
       orders: {
         select: {
-          salesDocument: { select: { type: true } },
+          salesDocument: { select: { type: true, total: true } },
           changeAmount: true,
           changePaymentMethod: { select: { name: true } },
           payments: {
@@ -1433,7 +1469,16 @@ async function loadSessionCashParts(ctx: OrgContext, sessionId: string): Promise
 
   const opening = new Decimal(session.openingCash.toString())
   const expected = opening.plus(cashIn).minus(cashOut).plus(cashSales).minus(cashRefunds)
-  return { opening, cashIn, cashOut, cashSales, cashRefunds, expected }
+
+  let sales = ZERO
+  let refunds = ZERO
+  for (const order of session.orders) {
+    const total = new Decimal(order.salesDocument.total?.toString?.() ?? '0')
+    if (order.salesDocument.type === 'REFUND_RECEIPT') refunds = refunds.plus(total)
+    else if (order.salesDocument.type === 'SALES_RECEIPT') sales = sales.plus(total)
+  }
+
+  return { opening, cashIn, cashOut, cashSales, cashRefunds, expected, sales, refunds }
 }
 
 async function computeSessionExpectedCash(ctx: OrgContext, sessionId: string) {
@@ -1454,6 +1499,9 @@ export async function sessionCashSummary(ctx: OrgContext, sessionId: string) {
     cashRefunds: toMoneyString(parts.cashRefunds, 2),
     expectedCash: toMoneyString(parts.expected, 2),
     expectedCashRaw: parts.expected.toFixed(4),
+    sales: toMoneyString(parts.sales, 2),
+    refunds: toMoneyString(parts.refunds, 2),
+    netSales: toMoneyString(parts.sales.minus(parts.refunds), 2),
     currency,
   }
 }
@@ -1573,6 +1621,7 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
           number: true,
           type: true,
           customerId: true,
+          projectId: true,
           total: true,
           lines: {
             select: {
@@ -1646,6 +1695,7 @@ export async function refundOrder(ctx: OrgContext, input: PosRefundInput) {
     {
       number: undefined,
       customerId: order.salesDocument.customerId,
+      projectId: order.salesDocument.projectId,
       date: receiptDate,
       depositAccountId: depositLedgerAccountId ?? resolvedPayments[0]!.ledgerAccountId,
       lines,
@@ -1775,11 +1825,45 @@ export async function transferFromRegister(ctx: OrgContext, input: PosRegisterTr
 }
 
 export async function walkInCustomers(ctx: OrgContext) {
-  return db.customer.findMany({
+  const asOf = today(ctx.organization.timeZone)
+  const rows = await db.customer.findMany({
     where: { orgId: ctx.orgId, isActive: true },
-    select: { id: true, displayName: true, priceLevel: true },
+    select: {
+      id: true,
+      displayName: true,
+      priceLevel: true,
+      priceListId: true,
+      priceList: {
+        select: {
+          id: true,
+          isActive: true,
+          startsOn: true,
+          endsOn: true,
+          items: { select: { itemId: true, unitPrice: true } },
+        },
+      },
+    },
     orderBy: { displayName: 'asc' },
     take: 300,
+  })
+  return rows.map((row) => {
+    const list = row.priceList
+    const listActive =
+      list &&
+      list.isActive &&
+      isDateWindowActive(asOf, list.startsOn, list.endsOn)
+    const listPrices: Record<string, string> = {}
+    if (listActive) {
+      for (const line of list.items) {
+        listPrices[line.itemId] = line.unitPrice.toString()
+      }
+    }
+    return {
+      id: row.id,
+      displayName: row.displayName,
+      priceLevel: row.priceLevel,
+      listPrices,
+    }
   })
 }
 

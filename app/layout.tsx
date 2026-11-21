@@ -11,9 +11,9 @@ import { Analytics } from "@vercel/analytics/next"
 const sans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
 const mono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] })
 /** Odoo brand typeface — applied when the Odoo / Odoo Dark theme is selected. */
-const inter = Inter({ variable: "--font-odoo", subsets: ["latin"] })
+const inter = Inter({ variable: "--font-odoo", subsets: ["latin"], preload: false })
 /** QuickBooks Online report typeface — used when report style is QuickBooks. */
-const sourceSans = Source_Sans_3({ variable: "--font-quickbooks", subsets: ["latin"] })
+const sourceSans = Source_Sans_3({ variable: "--font-quickbooks", subsets: ["latin"], preload: false })
 
 export const metadata: Metadata = {
   metadataBase: resolveSiteUrl(),

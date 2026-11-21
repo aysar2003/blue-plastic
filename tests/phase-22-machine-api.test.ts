@@ -43,9 +43,23 @@ describe('Phase 22 — ERP layers', () => {
 })
 
 describe('Phase 22 — capability registry ↔ OpenAPI ↔ MCP', () => {
-  it('registers the five starter capabilities with valid permissions', () => {
+  it('registers the starter + deepen capabilities with valid permissions', () => {
     expect(ERP_CAPABILITIES.map((c) => c.id).sort()).toEqual(
-      ['ar.listOpen', 'payment.create', 'po.create', 'report.trialBalance', 'stock.onHand'].sort(),
+      [
+        'ar.listOpen',
+        'crm.board',
+        'customers.list',
+        'invoices.create',
+        'invoices.list',
+        'mrp.materialsPlan',
+        'payment.create',
+        'po.create',
+        'report.trialBalance',
+        'serviceJobs.complete',
+        'serviceJobs.get',
+        'serviceJobs.list',
+        'stock.onHand',
+      ].sort(),
     )
     for (const cap of ERP_CAPABILITIES) {
       expect(isStaffPermission(cap.permission)).toBe(true)
@@ -64,8 +78,11 @@ describe('Phase 22 — capability registry ↔ OpenAPI ↔ MCP', () => {
       expect(pathItem?.[item.method], `${item.method} ${item.path}`).toBeTruthy()
     }
     expect(doc.paths['/api/v1/capabilities']).toBeTruthy()
+    expect(doc.paths['/api/v1/extensions/probe']).toBeTruthy()
     expect(doc.paths['/api/v1/mcp/tools']).toBeTruthy()
     expect(doc.paths['/api/v1/mcp/call']).toBeTruthy()
+    expect(doc.paths['/api/v1/invoices']?.get).toBeTruthy()
+    expect(doc.paths['/api/v1/invoices']?.post).toBeTruthy()
   })
 
   it('MCP tools mirror capability ids, permissions, and HTTP paths', () => {
@@ -83,7 +100,7 @@ describe('Phase 22 — capability registry ↔ OpenAPI ↔ MCP', () => {
 
   it('covers one capability per ready loop used by the machine surface', () => {
     const loops = new Set(ERP_CAPABILITIES.map((c) => c.loop))
-    for (const loop of ['collect', 'buy', 'stock', 'books'] as const) {
+    for (const loop of ['collect', 'buy', 'stock', 'books', 'sell', 'crm'] as const) {
       expect(loops.has(loop), loop).toBe(true)
     }
   })
@@ -97,6 +114,13 @@ describe('Phase 22 — capability registry ↔ OpenAPI ↔ MCP', () => {
       'app/api/v1/payments/route.ts',
       'app/api/v1/purchase-orders/route.ts',
       'app/api/v1/reports/trial-balance/route.ts',
+      'app/api/v1/customers/route.ts',
+      'app/api/v1/service-jobs/route.ts',
+      'app/api/v1/service-jobs/get/route.ts',
+      'app/api/v1/service-jobs/complete/route.ts',
+      'app/api/v1/invoices/route.ts',
+      'app/api/v1/crm/board/route.ts',
+      'app/api/v1/mrp/plan/route.ts',
       'app/api/v1/mcp/tools/route.ts',
       'app/api/v1/mcp/call/route.ts',
       'app/(app)/settings/(work)/api-keys/page.tsx',

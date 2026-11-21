@@ -112,3 +112,11 @@ export const healOrgCountryFromPack = action.handler(async (ctx) => {
   revalidatePath('/', 'layout')
   return result
 })
+
+export const healItemTaxFromPack = action.handler(async (ctx) => {
+  const result = await setupHealService.healItemTaxFromPack(ctx)
+  revalidatePath('/settings/setup')
+  revalidatePath('/items')
+  revalidatePath('/settings/tax')
+  return result
+})

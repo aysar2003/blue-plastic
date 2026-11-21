@@ -17,8 +17,18 @@ type SharedShellProps = {
   logoVersion?: Date | string | number | null
   baseCurrency: string
   fiscalYearStartMonth: number
+  fiscalYearStartDay?: number
+  idleLockSeconds?: number
+  sessionMaxHours?: number
   roleLabel: string
-  user: { id: string; name: string; email: string; image: string | null }
+  user: {
+    id: string
+    name: string
+    email: string
+    image: string | null
+    loginAt?: number | null
+    hasDeskPin?: boolean
+  }
   moduleKeys: string[]
   permissions: string[]
   companies?: CompanyOption[]
@@ -47,7 +57,16 @@ export function ShellGate({
   const onPlatformRoutes = pathname === '/databases' || pathname.startsWith('/databases/')
 
   const userLabel = props.user.email || props.user.name || 'this account'
-  const lock = <IdleLock orgName={props.orgName} userLabel={userLabel} />
+  const lock = (
+    <IdleLock
+      orgName={props.orgName}
+      userLabel={userLabel}
+      hasDeskPin={Boolean(props.user.hasDeskPin)}
+      idleLockSeconds={props.idleLockSeconds}
+      sessionMaxHours={props.sessionMaxHours}
+      loginAt={props.user.loginAt}
+    />
+  )
 
   if (isSystemOwner && onPlatformRoutes) {
     return (

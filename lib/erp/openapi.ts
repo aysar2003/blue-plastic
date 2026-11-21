@@ -42,6 +42,44 @@ function zodToRoughSchema(capabilityId: string): Record<string, unknown> {
           lines: { type: 'array', items: { type: 'object' } },
         },
       }
+    case 'mrp.materialsPlan':
+      return {
+        type: 'object',
+        required: ['itemId'],
+        properties: {
+          itemId: { type: 'string' },
+          qty: { type: 'string', description: 'Build quantity; omit to use open sales demand when present' },
+          fromDemand: { type: 'string', description: '1 or true to force open sales demand qty' },
+        },
+      }
+    case 'invoices.list':
+      return {
+        type: 'object',
+        properties: {
+          q: { type: 'string' },
+          page: { type: 'string' },
+          status: { type: 'string' },
+          customerId: { type: 'string' },
+        },
+      }
+    case 'invoices.create':
+      return {
+        type: 'object',
+        required: ['customerId', 'date', 'lines'],
+        properties: {
+          customerId: { type: 'string' },
+          date: { type: 'string', format: 'date' },
+          lines: { type: 'array', items: { type: 'object' } },
+          saveAsDraft: { type: 'boolean' },
+        },
+      }
+    case 'serviceJobs.get':
+    case 'serviceJobs.complete':
+      return {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'string' } },
+      }
     default:
       return { type: 'object', additionalProperties: false }
   }
@@ -67,6 +105,26 @@ export function buildOpenApiDocument(baseUrl = '') {
         security: [{ bearerAuth: [] }],
         responses: {
           '200': { description: 'Tool list' },
+          '401': { description: 'Missing or invalid API key' },
+        },
+      },
+    },
+    '/api/v1/extensions/probe': {
+      get: {
+        operationId: 'probeTrustedExtension',
+        summary: 'Probe a trusted extension id against the capability catalogue',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'extensionId',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          '200': { description: 'Trusted — extension plus capabilities' },
+          '400': { description: 'Untrusted extension' },
           '401': { description: 'Missing or invalid API key' },
         },
       },

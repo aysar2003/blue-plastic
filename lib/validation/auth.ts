@@ -9,6 +9,7 @@ import {
 } from '@/lib/feature-flags'
 import { normalizePhone } from '@/lib/phone'
 
+import { refineFiscalYearStartDay } from './organization'
 import { currencyCode, email, password, requiredText } from './common'
 
 /** Optional mobile on register / profile — stored as E.164 when present. */
@@ -64,6 +65,7 @@ export const setupSchema = z
     organizationName: requiredText('Organisation name', 200),
     baseCurrency: currencyCode.default('USD'),
     fiscalYearStartMonth: z.coerce.number().int().min(1).max(12).default(1),
+    fiscalYearStartDay: z.coerce.number().int().min(1).max(31).default(1),
     name: requiredText('Your name', 120),
     email,
     phone: optionalPhone,
@@ -77,6 +79,7 @@ export const setupSchema = z
     path: ['confirmPassword'],
   })
   .superRefine((v, ctx) => {
+    refineFiscalYearStartDay(v, ctx)
     const modules = modulesFromFormValues(v as Record<string, unknown>)
     if (!hasAnyModuleEnabled(modules)) {
       ctx.addIssue({

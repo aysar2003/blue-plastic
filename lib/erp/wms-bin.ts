@@ -63,4 +63,29 @@ export function waveLabelCsvRows(lines: WaveLabelCsvInput[]) {
   ])
 }
 
+export type WavePackingCsvInput = {
+  waveNumber: string
+  pickStatus: string
+  binCode: string | null
+  itemName: string
+  sku: string | null
+  qty: string
+  orderNumber: string | null
+  customerName: string | null
+}
+
+/** Packing list rows: pick → issue contents of a wave. */
+export function wavePackingCsvRows(lines: WavePackingCsvInput[]) {
+  return lines.map((row) => [
+    row.waveNumber,
+    row.pickStatus,
+    row.binCode ?? '',
+    row.itemName,
+    row.sku ?? '',
+    row.qty,
+    row.orderNumber ?? '',
+    row.customerName ?? '',
+  ])
+}
+
 export { ZERO }

@@ -133,14 +133,14 @@ export const ERP_LAYERS: readonly ErpLayer[] = [
     title: 'Manufacturing',
     status: 'complete',
     nextPhase: null,
-    note: 'BOM + MRP + assembly + SME work orders (Phase 28). Not MES.',
+    note: 'BOM + MRP + assembly + SME work orders (Phase 28); MRP open sales demand (2026-11-21). Not MES.',
   },
   {
     id: 'L6',
     title: 'CRM / Projects',
     status: 'complete',
     nextPhase: null,
-    note: 'Job P&L from sales, purchases, COGS, timesheets (Phase 25).',
+    note: 'Job P&L (Phase 25); Won → draft estimate + portal quote accept (2026-11-21).',
   },
   {
     id: 'L7',
@@ -161,7 +161,7 @@ export const ERP_LAYERS: readonly ErpLayer[] = [
     title: 'Integration / AI',
     status: 'complete',
     nextPhase: null,
-    note: 'Phase 22: capability registry, API keys, OpenAPI, MCP mirror.',
+    note: 'Phase 22 registry + invoices list/create, payments, stock, job get/complete (Wave F).',
   },
 ] as const
 

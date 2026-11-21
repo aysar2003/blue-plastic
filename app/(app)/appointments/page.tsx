@@ -65,6 +65,14 @@ export default async function AppointmentsPage() {
               <Input id="guestName" name="guestName" className="mt-1" />
             </div>
             <div>
+              <Label htmlFor="projectId">Project id</Label>
+              <Input id="projectId" name="projectId" className="mt-1" placeholder="Optional" />
+            </div>
+            <div>
+              <Label htmlFor="serviceJobId">Service job id</Label>
+              <Input id="serviceJobId" name="serviceJobId" className="mt-1" placeholder="Optional" />
+            </div>
+            <div>
               <Label htmlFor="notes">Notes</Label>
               <Input id="notes" name="notes" className="mt-1" />
             </div>

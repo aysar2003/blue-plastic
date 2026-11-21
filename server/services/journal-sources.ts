@@ -79,6 +79,7 @@ export async function resolveSources(
   const transferIds = idsFor(['TRANSFER'])
   const depositIds = idsFor(['DEPOSIT'])
   const adjustmentIds = idsFor(['INVENTORY_ADJUSTMENT'])
+  const landedCostIds = idsFor(['LANDED_COST'])
   const buildIds = idsFor(['ASSEMBLY_BUILD'])
   const openingIds = idsFor(['OPENING_BALANCE'])
   const posCashMoveIds = idsFor(['POS_CASH_MOVE'])
@@ -93,6 +94,7 @@ export async function resolveSources(
     transfers,
     deposits,
     adjustments,
+    landedCosts,
     builds,
     openingAccounts,
     openingItems,
@@ -149,6 +151,15 @@ export async function resolveSources(
       ? db.inventoryAdjustment.findMany({
           where: { orgId, id: { in: adjustmentIds } },
           select: { id: true, number: true },
+        })
+      : [],
+    landedCostIds.length
+      ? db.landedCostBatch.findMany({
+          where: { orgId, id: { in: landedCostIds } },
+          select: {
+            id: true,
+            bill: { select: { id: true, number: true, vendor: { select: { displayName: true } } } },
+          },
         })
       : [],
     buildIds.length
@@ -280,6 +291,15 @@ export async function resolveSources(
       number: adjustment.number,
       href: `/inventory/adjustments/${adjustment.id}`,
       partyName: null,
+      partyHref: null,
+    })
+  }
+
+  for (const batch of landedCosts) {
+    resolved.set(key('LANDED_COST', batch.id), {
+      number: batch.bill.number,
+      href: `/purchases/bills/${batch.bill.id}/landed-cost`,
+      partyName: batch.bill.vendor?.displayName ?? null,
       partyHref: null,
     })
   }

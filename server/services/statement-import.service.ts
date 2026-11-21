@@ -1,6 +1,11 @@
 import 'server-only'
 
 import { parseCsv, pick, type CsvRow } from '@/lib/csv'
+import {
+  applyStatementPackRow,
+  statementFormatPackById,
+  type StatementPackId,
+} from '@/lib/erp/statement-import-packs'
 import { isCalendarDate, toDate, type CalendarDate } from '@/lib/date'
 import { Decimal, parseMoneyInput, ZERO } from '@/lib/money'
 import { requestMeta, writeAudit } from '@/server/audit'
@@ -94,7 +99,7 @@ export async function importStatement(
   ctx: OrgContext,
   accountId: string,
   csv: string,
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; packId?: StatementPackId | string | null } = {},
 ): Promise<StatementPreview & { imported: number }> {
   const account = await db.ledgerAccount.findFirst({
     where: { id: accountId, orgId: ctx.orgId, isActive: true },
@@ -106,11 +111,12 @@ export async function importStatement(
   }
 
   const { rows } = parseCsv(csv)
+  const pack = statementFormatPackById(options.packId)
   const issues: { row: number; message: string }[] = []
   const parsed: ReturnType<typeof readRow>[] = []
 
   rows.forEach((row, index) => {
-    const read = readRow(row)
+    const read = readRow(applyStatementPackRow(row, pack))
     if (!read) {
       issues.push({
         row: index + 2,

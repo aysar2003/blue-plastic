@@ -164,7 +164,10 @@ export async function postJournal(
   const period = await resolvePeriod(
     tx,
     ctx.orgId,
-    ctx.organization.fiscalYearStartMonth,
+    {
+      month: ctx.organization.fiscalYearStartMonth,
+      day: ctx.organization.fiscalYearStartDay,
+    },
     draft.date,
   )
 
@@ -337,7 +340,15 @@ export async function autoReversePostedJournal(
   journalId: string,
   originalDate: Date,
 ): Promise<PostedJournal> {
-  const period = await resolvePeriod(tx, ctx.orgId, ctx.organization.fiscalYearStartMonth, toCalendarDate(originalDate))
+  const period = await resolvePeriod(
+    tx,
+    ctx.orgId,
+    {
+      month: ctx.organization.fiscalYearStartMonth,
+      day: ctx.organization.fiscalYearStartDay,
+    },
+    toCalendarDate(originalDate),
+  )
   const reverseOn = addDays(toCalendarDate(period.endDate), 1)
   return reverseJournal(tx, ctx, journalId, {
     date: reverseOn,

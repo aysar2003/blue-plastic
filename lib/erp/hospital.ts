@@ -5,6 +5,25 @@
 export const PATIENT_VISIT_STATUSES = ['OPEN', 'CLOSED', 'CANCELLED'] as const
 export type PatientVisitStatus = (typeof PATIENT_VISIT_STATUSES)[number]
 
+export const PATIENT_CLAIM_STATUSES = ['OPEN', 'SUBMITTED', 'PAID', 'DENIED'] as const
+export type PatientClaimStatus = (typeof PATIENT_CLAIM_STATUSES)[number]
+
+export function canSubmitClaim(input: {
+  visitStatus: PatientVisitStatus
+  claimStatus: PatientClaimStatus
+}): boolean {
+  return input.visitStatus === 'CLOSED' && (input.claimStatus === 'OPEN' || input.claimStatus === 'DENIED')
+}
+
+export function canApplyClaimRemittance(input: {
+  visitStatus: PatientVisitStatus
+  claimStatus: PatientClaimStatus
+  hasInvoice: boolean
+}): boolean {
+  if (input.visitStatus !== 'CLOSED' || !input.hasInvoice) return false
+  return input.claimStatus === 'SUBMITTED' || input.claimStatus === 'OPEN'
+}
+
 export function visitChargeAmount(quantity: string | number, unitPrice: string | number): string {
   const qty = Number(quantity)
   const price = Number(unitPrice)
@@ -39,6 +58,7 @@ export type ClaimExportRow = {
   invoiceNumber: string | null
   exportBatchId: string | null
   claimsExportedAt: string | null
+  claimStatus?: string | null
   billCode: string | null
   description: string
   quantity: string
@@ -58,13 +78,14 @@ export function claimsToCsv(rows: ClaimExportRow[]): string {
     'invoiceNumber',
     'exportBatchId',
     'claimsExportedAt',
+    'claimStatus',
     'billCode',
     'description',
     'quantity',
     'unitPrice',
     'amount',
   ]
-  const escape = (value: string | null) => {
+  const escape = (value: string | null | undefined) => {
     const raw = value ?? ''
     if (/[",\n]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`
     return raw
@@ -83,6 +104,7 @@ export function claimsToCsv(rows: ClaimExportRow[]): string {
         row.invoiceNumber,
         row.exportBatchId,
         row.claimsExportedAt,
+        row.claimStatus,
         row.billCode,
         row.description,
         row.quantity,

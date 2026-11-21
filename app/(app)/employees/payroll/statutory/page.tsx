@@ -29,8 +29,14 @@ export default async function PayrollStatutoryPage({
         actions={
           <>
             <Link
-              href={`/api/employees/payroll/statutory?from=${from}&to=${to}`}
+              href={`/api/employees/payroll/statutory?from=${from}&to=${to}&format=csv`}
               className={buttonVariants({ size: 'sm' })}
+            >
+              Download CSV
+            </Link>
+            <Link
+              href={`/api/employees/payroll/statutory?from=${from}&to=${to}`}
+              className={buttonVariants({ size: 'sm', variant: 'outline' })}
             >
               Download Excel
             </Link>

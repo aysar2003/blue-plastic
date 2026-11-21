@@ -47,3 +47,29 @@ export async function setSiteStoreAction(formData: FormData) {
   revalidatePath('/projects/progress')
   redirect('/projects/progress')
 }
+
+export async function saveSovLineAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await construction.upsertSovLine(ctx, {
+    id: String(formData.get('id') || '') || undefined,
+    projectId: String(formData.get('projectId') ?? ''),
+    contractId: String(formData.get('contractId') || '') || null,
+    name: String(formData.get('name') ?? ''),
+    budgetAmount: String(formData.get('budgetAmount') ?? '0'),
+    percentComplete: String(formData.get('percentComplete') || '') || null,
+    thisBillAmount: String(formData.get('thisBillAmount') || '') || null,
+    retainagePercent: String(formData.get('retainagePercent') || '') || null,
+  })
+  revalidatePath('/projects/progress')
+  redirect('/projects/progress')
+}
+
+export async function billSovLineAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  const result = await construction.billSovLine(ctx, {
+    sovLineId: String(formData.get('sovLineId') ?? ''),
+    itemId: String(formData.get('itemId') ?? ''),
+  })
+  revalidatePath('/projects/progress')
+  redirect(`/sales/invoices/${result.invoiceId}`)
+}

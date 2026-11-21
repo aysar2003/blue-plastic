@@ -26,11 +26,16 @@ export const setPeriodStatus = action
       throw forbidden(`This action requires the "${permission}" permission.`)
     }
 
-    await periodService.setStatus(ctx, input.periodId, input.status)
+    const result = await periodService.setStatus(ctx, input.periodId, input.status)
     revalidatePath('/periods')
     revalidatePath(`/periods/${input.periodId}`)
     revalidatePath('/journals')
-    return { id: input.periodId, status: input.status }
+    if (result.pendingApproval) revalidatePath('/approvals')
+    return {
+      id: result.id,
+      status: input.status,
+      pendingApproval: Boolean(result.pendingApproval),
+    }
   })
 
 export const createFiscalYear = action

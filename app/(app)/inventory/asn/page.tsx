@@ -23,7 +23,7 @@ export default async function InventoryAsnPage({
 }) {
   const ctx = await requireOrgContext('inventory:read')
   const query = await searchParams
-  const [shipments, vendors, items, orders] = await Promise.all([
+  const [shipments, vendors, items, orders, dockDays, discrepancies] = await Promise.all([
     asn.listAsn(ctx),
     db.vendor.findMany({
       where: { orgId: ctx.orgId, isActive: true },
@@ -43,6 +43,8 @@ export default async function InventoryAsnPage({
       orderBy: { date: 'desc' },
       take: 100,
     }),
+    asn.dockCalendar(ctx),
+    asn.discrepancyReport(ctx),
   ])
   const errorMessage = query.error?.trim() || null
 
@@ -52,9 +54,18 @@ export default async function InventoryAsnPage({
         title="Advance ship notices"
         description="Expected inbound shipments against vendors and POs. Receive posts a bill and stock against the linked purchase order."
         actions={
-          <Link href="/inventory/bins" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Bins & picks
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/api/inventory/asn/discrepancy"
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              download
+            >
+              Discrepancy CSV
+            </a>
+            <Link href="/inventory/bins" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              Bins & picks
+            </Link>
+          </div>
         }
       />
 
@@ -143,6 +154,7 @@ export default async function InventoryAsnPage({
               <TableHead>Vendor</TableHead>
               <TableHead>PO</TableHead>
               <TableHead>Lines</TableHead>
+              <TableHead>Dock</TableHead>
               <TableHead>Status</TableHead>
               <TableHead />
             </TableRow>
@@ -157,6 +169,12 @@ export default async function InventoryAsnPage({
                   {shipment.lines
                     .map((line) => `${line.description} × ${line.quantity.toString()}`)
                     .join(' · ')}
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {shipment.dockName || '—'}
+                  {shipment.dockAt
+                    ? ` · ${shipment.dockAt.toISOString().slice(0, 16).replace('T', ' ')}`
+                    : ''}
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline">{shipment.status}</Badge>
@@ -176,6 +194,91 @@ export default async function InventoryAsnPage({
           </TableBody>
         </Table>
       )}
+
+      <div className="mt-8">
+        <h2 className="mb-2 text-sm font-semibold">Dock calendar</h2>
+        {dockDays.length === 0 ? (
+          <EmptyState
+            title="No dock appointments"
+            description="Set a dock name and time on an expected ASN to see it on the calendar."
+          />
+        ) : (
+          <div className="space-y-4">
+            {dockDays.map((day) => (
+              <Card key={day.date}>
+                <CardContent className="p-4">
+                  <p className="mb-2 font-medium">{day.date}</p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Time</TableHead>
+                        <TableHead>Dock</TableHead>
+                        <TableHead>ASN</TableHead>
+                        <TableHead>Vendor</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {day.slots.map((slot) => (
+                        <TableRow key={slot.id}>
+                          <TableCell className="tabular">{slot.time ?? '—'}</TableCell>
+                          <TableCell>{slot.dockName}</TableCell>
+                          <TableCell className="font-medium">{slot.number}</TableCell>
+                          <TableCell>{slot.vendorName}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{slot.status}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8">
+        <h2 className="mb-2 text-sm font-semibold">ASN vs PO discrepancy</h2>
+        {discrepancies.length === 0 ? (
+          <EmptyState
+            title="No variances"
+            description="Linked ASNs match remaining PO quantity. Over, short, or unmatched items appear here."
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ASN</TableHead>
+                <TableHead>PO</TableHead>
+                <TableHead>Item</TableHead>
+                <TableHead className="text-right">ASN qty</TableHead>
+                <TableHead className="text-right">PO open</TableHead>
+                <TableHead className="text-right">Variance</TableHead>
+                <TableHead>Kind</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {discrepancies.map((row) => (
+                <TableRow key={`${row.asnId}-${row.itemId}`}>
+                  <TableCell>{row.asnNumber}</TableCell>
+                  <TableCell>{row.poNumber}</TableCell>
+                  <TableCell>{row.itemName}</TableCell>
+                  <TableCell className="text-right tabular">{row.asnQty}</TableCell>
+                  <TableCell className="text-right tabular">{row.poOpen}</TableCell>
+                  <TableCell className="text-right tabular">{row.variance}</TableCell>
+                  <TableCell>
+                    <Badge variant={row.kind === 'over' || row.kind === 'asn_only' ? 'destructive' : 'outline'}>
+                      {row.kind}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
     </>
   )
 }

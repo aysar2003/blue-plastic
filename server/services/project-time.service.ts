@@ -14,6 +14,7 @@ export type TimeEntryInput = {
   description?: string | null
   billable?: boolean
   billableRate?: string | null
+  costRate?: string | null
 }
 
 export async function listForProject(ctx: OrgContext, projectId: string) {
@@ -34,6 +35,7 @@ export async function listForProject(ctx: OrgContext, projectId: string) {
       description: true,
       billable: true,
       billableRate: true,
+      costRate: true,
       invoicedAt: true,
       taskId: true,
       task: { select: { id: true, name: true } },
@@ -46,6 +48,37 @@ export async function listForProject(ctx: OrgContext, projectId: string) {
     workDate: toCalendarDate(row.workDate),
     hours: row.hours.toString(),
     billableRate: row.billableRate?.toString() ?? null,
+    costRate: row.costRate?.toString() ?? null,
+    invoicedAt: row.invoicedAt?.toISOString() ?? null,
+  }))
+}
+
+export async function listMine(ctx: OrgContext) {
+  assertPermission(ctx, 'project:read')
+  const rows = await db.projectTimeEntry.findMany({
+    where: { orgId: ctx.orgId, userId: ctx.userId },
+    orderBy: [{ workDate: 'desc' }, { createdAt: 'desc' }],
+    take: 200,
+    select: {
+      id: true,
+      workDate: true,
+      hours: true,
+      description: true,
+      billable: true,
+      billableRate: true,
+      costRate: true,
+      invoicedAt: true,
+      project: { select: { id: true, number: true, name: true } },
+      task: { select: { id: true, name: true } },
+    },
+  })
+  return rows.map((row) => ({
+    ...row,
+    workDate: toCalendarDate(row.workDate),
+    hours: row.hours.toString(),
+    billableRate: row.billableRate?.toString() ?? null,
+    costRate: row.costRate?.toString() ?? null,
+    invoicedAt: row.invoicedAt?.toISOString() ?? null,
   }))
 }
 
@@ -114,6 +147,9 @@ export async function create(ctx: OrgContext, input: TimeEntryInput) {
         ? new Decimal(input.billableRate)
         : null
   if (rate && rate.isNegative()) throw validation('Billable rate cannot be negative.')
+  const cost =
+    input.costRate != null && input.costRate !== '' ? new Decimal(input.costRate) : null
+  if (cost && cost.isNegative()) throw validation('Cost rate cannot be negative.')
 
   const row = await db.projectTimeEntry.create({
     data: {
@@ -126,6 +162,7 @@ export async function create(ctx: OrgContext, input: TimeEntryInput) {
       description: input.description ?? null,
       billable: input.billable !== false,
       billableRate: rate?.toFixed(4) ?? null,
+      costRate: cost?.toFixed(4) ?? null,
     },
     select: { id: true },
   })

@@ -14,6 +14,8 @@ suite('sales contracts schema', () => {
           number: 'SC-TEST-1',
           name: 'Frame',
           contractValue: '50000',
+          changeOrderAmount: '2500',
+          retentionPercent: '10',
           status: 'ACTIVE',
           milestones: {
             create: [
@@ -25,6 +27,8 @@ suite('sales contracts schema', () => {
         include: { milestones: true },
       })
       expect(contract.milestones).toHaveLength(2)
+      expect(contract.changeOrderAmount.toString()).toBe('2500')
+      expect(contract.retentionPercent?.toString()).toBe('10')
     })
   })
 })

@@ -7,14 +7,21 @@ import {
   capabilityById,
   type CapabilityId,
 } from '@/lib/erp/capabilities'
+import { parseListQuery } from '@/lib/validation/common'
+import type { SalesDocumentInput } from '@/lib/validation/sales'
 import { trialBalance } from '@/server/accounting/balances'
 import { requireApiKeyContext } from '@/server/auth/api-key-context'
 import { isAppError } from '@/server/errors'
 import { serializeForApi } from '@/server/api/v1/serialize'
+import * as assemblyBuild from '@/server/services/assembly-build.service'
 import * as bankFeed from '@/server/services/bank-feed.service'
+import * as contact from '@/server/services/contact.service'
+import * as crm from '@/server/services/crm.service'
 import * as inventory from '@/server/services/inventory.service'
 import * as payment from '@/server/services/payment.service'
 import * as purchase from '@/server/services/purchase.service'
+import * as sales from '@/server/services/sales.service'
+import * as serviceJob from '@/server/services/service-job.service'
 
 async function runCapability(id: CapabilityId, ctx: Awaited<ReturnType<typeof requireApiKeyContext>>, input: unknown) {
   const cap = capabilityById(id)
@@ -33,6 +40,55 @@ async function runCapability(id: CapabilityId, ctx: Awaited<ReturnType<typeof re
     case 'report.trialBalance': {
       const range = parsed as { from: string; to: string }
       return trialBalance(ctx.orgId, range)
+    }
+    case 'customers.list':
+      return contact.listCustomers(ctx, { page: 1, pageSize: 500, dir: 'asc' })
+    case 'serviceJobs.list':
+      return serviceJob.list(ctx)
+    case 'invoices.list': {
+      const body = parsed as {
+        q?: string
+        page?: string
+        pageSize?: string
+        status?: string
+        customerId?: string
+        sort?: string
+        dir?: string
+      }
+      const query = parseListQuery({
+        q: body.q,
+        page: body.page,
+        pageSize: body.pageSize ?? '200',
+        sort: body.sort,
+        dir: body.dir,
+      })
+      return sales.list(ctx, 'INVOICE', query, {
+        status: body.status,
+        customerId: body.customerId,
+        takeMax: 200,
+      })
+    }
+    case 'invoices.create':
+      return sales.create(ctx, 'INVOICE', parsed as SalesDocumentInput)
+    case 'serviceJobs.get':
+      return serviceJob.get(ctx, (parsed as { id: string }).id)
+    case 'serviceJobs.complete':
+      return serviceJob.complete(ctx, (parsed as { id: string }).id)
+    case 'crm.board':
+      return crm.listBoard(ctx)
+    case 'mrp.materialsPlan': {
+      const body = parsed as { itemId: string; qty?: string; fromDemand?: string }
+      const useDemand = body.fromDemand === '1' || body.fromDemand === 'true'
+      let qty = body.qty && Number(body.qty) > 0 ? body.qty : '1'
+      if (useDemand || !body.qty) {
+        const demand = await assemblyBuild.openSalesDemand(ctx, body.itemId)
+        if (useDemand || (!body.qty && demand.hasDemand)) {
+          qty = demand.quantity
+        }
+      }
+      const plan = await assemblyBuild.materialsPlan(ctx, body.itemId, qty)
+      const demand = await assemblyBuild.openSalesDemand(ctx, body.itemId)
+      return { ...plan, demand }
     }
     default: {
       const _exhaustive: never = id

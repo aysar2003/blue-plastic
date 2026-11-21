@@ -22,6 +22,9 @@ export async function createServiceJob(formData: FormData) {
     projectId: String(formData.get('projectId') ?? '') || '',
     assigneeId: String(formData.get('assigneeId') ?? '') || '',
     vanStoreId: String(formData.get('vanStoreId') ?? '') || '',
+    siteLocation: String(formData.get('siteLocation') ?? '') || undefined,
+    promisedWindowStart: String(formData.get('promisedWindowStart') ?? '') || '',
+    promisedWindowEnd: String(formData.get('promisedWindowEnd') ?? '') || '',
     memo: String(formData.get('memo') ?? '') || undefined,
     lines: [
       {
@@ -58,4 +61,13 @@ export async function cancelJobAction(formData: FormData) {
   await serviceJobService.cancel(ctx, String(formData.get('id') ?? ''))
   revalidateJobs()
   redirect(PATH)
+}
+
+export async function replenishVanAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  const id = String(formData.get('id') ?? '')
+  await serviceJobService.replenishVan(ctx, id)
+  revalidateJobs()
+  revalidatePath('/inventory/stock')
+  redirect(`${PATH}/${id}`)
 }

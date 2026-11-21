@@ -42,6 +42,7 @@ export async function runSetup(input: SetupInput) {
         name: input.organizationName,
         baseCurrency: input.baseCurrency,
         fiscalYearStartMonth: input.fiscalYearStartMonth,
+        fiscalYearStartDay: input.fiscalYearStartDay,
       },
       select: { id: true, name: true },
     })

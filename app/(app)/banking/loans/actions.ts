@@ -23,3 +23,20 @@ export async function postLoanDue() {
   revalidatePath('/banking/loans')
   revalidatePath('/journals')
 }
+
+export async function disburseLoan(formData: FormData) {
+  const ctx = await requireOrgContext('journal:post')
+  await loan.disburse(ctx, {
+    loanAccountId: String(formData.get('loanAccountId') ?? ''),
+    bankAccountId: String(formData.get('bankAccountId') ?? ''),
+  })
+  revalidatePath('/banking/loans')
+  revalidatePath('/journals')
+}
+
+export async function accrueLoanInterest() {
+  const ctx = await requireOrgContext('journal:post')
+  await loan.accrueInterest(ctx)
+  revalidatePath('/banking/loans')
+  revalidatePath('/journals')
+}

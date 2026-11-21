@@ -15,7 +15,7 @@ import {
 } from '@/server/accounting/posting'
 import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
-import { notFound, validation } from '@/server/errors'
+import { notFound, precondition, validation } from '@/server/errors'
 import * as approvalService from '@/server/services/approval.service'
 import * as assemblyBuildService from '@/server/services/assembly-build.service'
 import * as bankingService from '@/server/services/banking.service'
@@ -726,6 +726,11 @@ const OWNED_BY: Partial<
   ASSEMBLY_BUILD: (ctx, id, reason) => assemblyBuildService.remove(ctx, id, reason),
   PAYROLL: (ctx, id, reason) => payrollService.remove(ctx, id, reason),
   PAYROLL_SETTLEMENT: (ctx, id, reason) => payrollService.unsettle(ctx, id, reason),
+  LANDED_COST: async () => {
+    throw precondition(
+      'A landed-cost allocation cannot be deleted. The freight stays in inventory cost until a correcting allocation is posted.',
+    )
+  },
 }
 
 const RESTORED_BY: Partial<

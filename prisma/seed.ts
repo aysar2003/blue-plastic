@@ -87,6 +87,7 @@ async function main() {
         name: orgName,
         baseCurrency: process.env.SEED_BASE_CURRENCY ?? 'USD',
         fiscalYearStartMonth: Number(process.env.SEED_FISCAL_YEAR_START_MONTH ?? 1),
+        fiscalYearStartDay: Number(process.env.SEED_FISCAL_YEAR_START_DAY ?? 1),
       },
       select: { id: true, name: true },
     })

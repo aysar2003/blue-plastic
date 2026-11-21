@@ -25,6 +25,7 @@ function toCheckoutInput(row: PosOfflinePendingSale): PosCheckoutInput {
     registerId: row.registerId,
     sessionId: row.sessionId,
     customerId: row.customerId,
+    projectId: row.projectId,
     note: row.note ?? null,
     lines: row.lines.map((line) => ({
       itemId: line.itemId,

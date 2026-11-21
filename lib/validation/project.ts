@@ -1,6 +1,29 @@
 import { z } from 'zod'
 
-import { calendarDate, chosenNumber, cuid, optionalText, requiredText } from './common'
+import {
+  calendarDate,
+  chosenNumber,
+  cuid,
+  moneyString,
+  optionalText,
+  requiredText,
+} from './common'
+import { projectBoardStagesSchema } from './project-task'
+
+const optionalMoney = z
+  .union([moneyString, z.literal('')])
+  .transform((v) => (v === '' ? null : v))
+  .nullable()
+  .optional()
+
+const optionalPercent = z
+  .union([
+    z.literal(''),
+    moneyString.refine((v) => Number(v) >= 0 && Number(v) <= 100, 'At most 100%'),
+  ])
+  .transform((v) => (v === '' ? null : v))
+  .nullable()
+  .optional()
 
 const optionalDate = z
   .union([calendarDate, z.literal('')])
@@ -33,6 +56,32 @@ export const projectSchema = z.object({
     .transform((v) => (v === '' ? null : v))
     .nullable()
     .optional(),
+  contractValue: optionalMoney,
+  retentionPercent: optionalPercent,
+  retainerAmount: optionalMoney,
+  budgetAmount: optionalMoney,
+  currencyCode: z
+    .union([z.string().trim().toUpperCase().length(3), z.literal('')])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+  /** One stage per line: KEY|Label (e.g. TODO|To do). Blank = built-in four. */
+  boardStagesText: z
+    .union([z.string(), z.literal('')])
+    .optional()
+    .transform((raw) => {
+      const text = (raw ?? '').trim()
+      if (!text) return null
+      const stages = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const [key, ...rest] = line.split('|')
+          return { key: (key ?? '').trim().toUpperCase(), label: rest.join('|').trim() || (key ?? '').trim() }
+        })
+      return projectBoardStagesSchema.parse(stages)
+    }),
 })
 
 export type ProjectInput = z.infer<typeof projectSchema>

@@ -39,12 +39,8 @@ export type OnboardingState = {
 export async function needsWizard(ctx: OrgContext): Promise<boolean> {
   const canRun = can(ctx.role, 'org:update') || ctx.isSystemOwner
   if (!canRun) return false
-  const org = await db.organization.findUnique({
-    where: { id: ctx.orgId },
-    select: { onboardingCompletedAt: true },
-  })
-  if (!org) throw notFound('Organisation')
-  return org.onboardingCompletedAt == null
+  // Prefer org fields already loaded on ctx (avoids a second org round-trip per navigation).
+  return ctx.organization.onboardingCompletedAt == null
 }
 
 export async function getState(ctx: OrgContext): Promise<OnboardingState> {

@@ -1,7 +1,11 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
-import { draftReplenishAction, postDraftReplenishAction } from '@/app/(app)/inventory/replenish/actions'
+import {
+  draftReplenishAction,
+  postDraftReplenishAction,
+  upsertStoreLevelAction,
+} from '@/app/(app)/inventory/replenish/actions'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { buttonVariants } from '@/components/ui/button'
@@ -28,12 +32,23 @@ export default async function ReplenishPage({
   })
   const toStoreId =
     query.storeId ?? stores.find((row) => !row.isOffice)?.id ?? stores[0]?.id ?? ''
-  const [plan, draftTransfers] = toStoreId
+  const [plan, draftTransfers, stockItems] = toStoreId
     ? await Promise.all([
         inventory.replenishmentSuggestions(ctx, toStoreId),
         inventory.listDraftReplenishmentTransfers(ctx, toStoreId),
+        db.item.findMany({
+          where: {
+            orgId: ctx.orgId,
+            isActive: true,
+            deletedAt: null,
+            type: { in: ['INVENTORY', 'INVENTORY_ASSEMBLY'] },
+          },
+          select: { id: true, name: true, sku: true },
+          orderBy: { name: 'asc' },
+          take: 400,
+        }),
       ])
-    : [null, []]
+    : [null, [], []]
   const canDraft = ctx.permissions.has('inventory:adjust')
   const postedBanner = query.posted === '1'
 
@@ -41,7 +56,7 @@ export default async function ReplenishPage({
     <>
       <PageHeader
         title="Replenishment"
-        description="Items at or below reorder for a store, with suggested transfer qty from the office or default DC."
+        description="Items at or below store min (or reorder), filled to max, with suggested transfer qty from the office."
         actions={
           <Link href="/inventory/stock" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             Stock on hand
@@ -70,6 +85,51 @@ export default async function ReplenishPage({
                 </button>
               </form>
             ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {canDraft && toStoreId ? (
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <p className="mb-2 text-sm font-medium">Store min / max</p>
+            <form action={upsertStoreLevelAction} className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="storeId" value={toStoreId} />
+              <label className="text-xs">
+                Product
+                <NativeSelect name="itemId" required className="mt-1 h-8 w-56">
+                  <option value="">Choose…</option>
+                  {stockItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                      {item.sku ? ` · ${item.sku}` : ''}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </label>
+              <label className="text-xs">
+                Min
+                <input
+                  name="minQty"
+                  placeholder="0"
+                  className="mt-1 h-8 w-24 rounded-md border border-input bg-background px-2 text-sm tabular"
+                />
+              </label>
+              <label className="text-xs">
+                Max
+                <input
+                  name="maxQty"
+                  placeholder="0"
+                  className="mt-1 h-8 w-24 rounded-md border border-input bg-background px-2 text-sm tabular"
+                />
+              </label>
+              <button type="submit" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+                Save levels
+              </button>
+            </form>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Min triggers a suggestion; qty fills to max (or the product max / reorder).
+            </p>
           </CardContent>
         </Card>
       ) : null}
@@ -103,7 +163,7 @@ export default async function ReplenishPage({
       {!plan || plan.suggestions.length === 0 ? (
         <EmptyState
           title="Nothing to replenish"
-          description="Set reorder points on products and pick a branch store that is below limit."
+          description="Set min/max on the store or reorder/max on the product, then pick a branch below min."
         />
       ) : (
         <form action={draftReplenishAction}>
@@ -113,7 +173,8 @@ export default async function ReplenishPage({
               <TableRow>
                 <TableHead>Product</TableHead>
                 <TableHead className="text-right">On hand</TableHead>
-                <TableHead className="text-right">Reorder</TableHead>
+                <TableHead className="text-right">Min</TableHead>
+                <TableHead className="text-right">Max</TableHead>
                 <TableHead className="text-right">Source on hand</TableHead>
                 <TableHead className="text-right">Suggest qty</TableHead>
                 <TableHead className="w-24">Include</TableHead>
@@ -128,6 +189,7 @@ export default async function ReplenishPage({
                   </TableCell>
                   <TableCell className="text-right tabular">{row.onHand}</TableCell>
                   <TableCell className="text-right tabular">{row.reorderPoint}</TableCell>
+                  <TableCell className="text-right tabular">{row.maxQty ?? '—'}</TableCell>
                   <TableCell className="text-right tabular">{row.sourceOnHand}</TableCell>
                   <TableCell className="text-right tabular">{row.suggestedQty}</TableCell>
                   <TableCell>

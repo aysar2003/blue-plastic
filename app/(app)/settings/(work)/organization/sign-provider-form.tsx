@@ -11,9 +11,11 @@ import { parseSignProvider } from '@/lib/erp/sign-provider'
 import { updateSignProviderAction } from './sign-provider-actions'
 
 export function SignProviderForm({
+  orgId,
   signProvider,
   canEdit,
 }: {
+  orgId: string
   signProvider: unknown
   canEdit: boolean
 }) {
@@ -27,7 +29,10 @@ export function SignProviderForm({
     <div className="rounded-lg border p-4">
       <p className="text-sm font-medium">Sign provider</p>
       <p className="mt-1 text-sm text-muted-foreground">
-        Native signing in-app, or POST to a webhook when a sign request is sent.
+        Native signing in-app, or POST to a webhook when a sign request is sent. Inbound status
+        callbacks HMAC-verify at{' '}
+        <code className="text-xs">/api/webhooks/sign?orgId={orgId}</code> and map signed/declined
+        onto the request.
       </p>
       <div className="mt-3 grid max-w-md gap-3">
         <div>

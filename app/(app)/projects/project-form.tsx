@@ -32,6 +32,12 @@ export type ProjectFormValues = {
   status: ProjectStatusValue
   startDate: string
   endDate: string
+  contractValue?: string
+  retentionPercent?: string
+  retainerAmount?: string
+  budgetAmount?: string
+  currencyCode?: string
+  boardStagesText?: string
 }
 
 export function ProjectForm({
@@ -133,6 +139,64 @@ export function ProjectForm({
             rows={3}
             placeholder="Scope notes for the job"
             className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          />
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field name="contractValue" label="Contract value" error={e?.contractValue}>
+            <Input
+              {...fieldProps('contractValue', e?.contractValue)}
+              defaultValue={initial.contractValue ?? ''}
+              inputMode="decimal"
+              placeholder="0.00"
+            />
+          </Field>
+          <Field name="budgetAmount" label="Job budget" error={e?.budgetAmount}>
+            <Input
+              {...fieldProps('budgetAmount', e?.budgetAmount)}
+              defaultValue={initial.budgetAmount ?? ''}
+              inputMode="decimal"
+              placeholder="0.00"
+            />
+          </Field>
+          <Field name="retainerAmount" label="Retainer" error={e?.retainerAmount}>
+            <Input
+              {...fieldProps('retainerAmount', e?.retainerAmount)}
+              defaultValue={initial.retainerAmount ?? ''}
+              inputMode="decimal"
+              placeholder="0.00"
+            />
+          </Field>
+          <Field name="retentionPercent" label="Retention %" error={e?.retentionPercent}>
+            <Input
+              {...fieldProps('retentionPercent', e?.retentionPercent)}
+              defaultValue={initial.retentionPercent ?? ''}
+              inputMode="decimal"
+              placeholder="0"
+            />
+          </Field>
+          <Field name="currencyCode" label="Job currency" error={e?.currencyCode}>
+            <Input
+              {...fieldProps('currencyCode', e?.currencyCode)}
+              defaultValue={initial.currencyCode ?? ''}
+              placeholder="Leave blank for company base"
+              maxLength={3}
+            />
+          </Field>
+        </div>
+
+        <Field
+          name="boardStagesText"
+          label="Task board stages"
+          error={e?.boardStagesText}
+          hint="One per line: KEY|Label. Example: TODO|To do. Leave blank for the built-in four."
+        >
+          <textarea
+            {...fieldProps('boardStagesText', e?.boardStagesText)}
+            defaultValue={initial.boardStagesText ?? ''}
+            rows={4}
+            placeholder={'TODO|To do\nIN_PROGRESS|In progress\nDONE|Done\nCANCELLED|Cancelled'}
+            className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
           />
         </Field>
 

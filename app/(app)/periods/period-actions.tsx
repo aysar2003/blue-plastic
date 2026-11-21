@@ -95,7 +95,13 @@ export function PeriodToggle({
             status: closing ? 'CLOSED' : 'OPEN',
           })
           if (result.ok) {
-            toast.success(closing ? `${label} closed.` : `${label} reopened.`)
+            toast.success(
+              closing && result.data.pendingApproval
+                ? `${label} sent for two-person close approval.`
+                : closing
+                  ? `${label} closed.`
+                  : `${label} reopened.`,
+            )
             router.refresh()
           } else {
             toast.error(result.error.message)

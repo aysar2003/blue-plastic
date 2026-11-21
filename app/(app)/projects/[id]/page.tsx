@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { addMonths, formatDate, startOfMonth, today } from '@/lib/date'
+import { addMonths, formatDate, startOfMonth, toCalendarDate, today } from '@/lib/date'
 import { isDocumentKindEnabled, isModuleEnabled } from '@/lib/feature-flags'
 import { formatMoney } from '@/lib/money'
 import { printableProjectQuotations } from '@/lib/project-quotations'
@@ -18,9 +18,12 @@ import { byType as salesByType, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/sal
 import { PROJECT_STATUS_LABELS } from '@/lib/validation/project'
 import type { Permission } from '@/server/auth/permissions'
 import { requireOrgContext } from '@/server/auth/context'
+import { db } from '@/server/db'
 import * as projectService from '@/server/services/project.service'
 
+import { ProjectChatter } from '@/components/projects/project-chatter'
 import { TimesheetPanel } from '@/components/projects/timesheet-panel'
+import * as projectCommentService from '@/server/services/project-comment.service'
 import * as projectProfitability from '@/server/services/project-profitability.service'
 import * as projectTaskService from '@/server/services/project-task.service'
 import * as projectTimeService from '@/server/services/project-time.service'
@@ -57,7 +60,7 @@ export default async function ProjectDetailPage({
   if (!project) notFound()
   const asOf = today(ctx.organization.timeZone)
   const profitFrom = startOfMonth(addMonths(asOf, -11))
-  const [tasks, members, timeEntries, profit] = await Promise.all([
+  const [tasks, members, timeEntries, profit, serviceJobs, comments] = await Promise.all([
     projectTaskService.listForProject(ctx, project.id),
     userHistoryService.listMembers(ctx),
     projectTimeService.listForProject(ctx, project.id),
@@ -65,6 +68,13 @@ export default async function ProjectDetailPage({
       from: profitFrom,
       to: asOf,
     }),
+    db.serviceJob.findMany({
+      where: { orgId: ctx.orgId, projectId: project.id },
+      select: { id: true, number: true, status: true, date: true },
+      orderBy: { date: 'desc' },
+      take: 50,
+    }),
+    projectCommentService.listForProject(ctx, project.id),
   ])
 
   const currency = ctx.organization.baseCurrency
@@ -75,6 +85,7 @@ export default async function ProjectDetailPage({
   const canCreatePurchases =
     (ctx.permissions.has('bill:create') || ctx.permissions.has('expense:create')) && purchasesOn
   const canUpdate = ctx.permissions.has('project:update')
+  const canCreateServiceJob = ctx.permissions.has('invoice:create')
   const quotations = printableProjectQuotations(project.sales)
   const canPrintQuotations = quotations.length > 0 && ctx.permissions.has('invoice:read')
   const job = `project=${project.id}&customer=${project.customer.id}`
@@ -177,6 +188,68 @@ export default async function ProjectDetailPage({
         <p className="mb-6 max-w-3xl text-sm text-muted-foreground">{project.description}</p>
       ) : null}
 
+      <Card className="mb-6 p-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Job health</h2>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Link href="/projects/wip" className="text-primary hover:underline">
+              WIP
+            </Link>
+            <Link href="/projects/progress" className="text-primary hover:underline">
+              Progress
+            </Link>
+            <Link href="/projects/contracts" className="text-primary hover:underline">
+              Contracts
+            </Link>
+          </div>
+        </div>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Use <span className="font-medium text-foreground">WIP</span> for services time,{' '}
+          <span className="font-medium text-foreground">Progress</span> for construction %,{' '}
+          <span className="font-medium text-foreground">Contracts</span> for milestones.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-4">
+          <div>
+            <p className="text-xs text-muted-foreground">Unbilled time</p>
+            <p className="tabular font-medium">
+              {formatMoney(
+                timeEntries
+                  .filter((row) => row.billable && !row.invoicedAt)
+                  .reduce((sum, row) => {
+                    const hours = Number(row.hours)
+                    const rate = Number(row.billableRate ?? 0)
+                    return sum + hours * rate
+                  }, 0)
+                  .toFixed(2),
+                currency,
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Budget</p>
+            <p className="tabular font-medium">
+              {project.budgetAmount ? formatMoney(project.budgetAmount, currency) : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Contract</p>
+            <p className="tabular font-medium">
+              {project.contractValue ? formatMoney(project.contractValue, currency) : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Retainer left</p>
+            <p className="tabular font-medium">
+              {project.retainerRemaining
+                ? formatMoney(project.retainerRemaining, currency)
+                : project.retainerAmount
+                  ? formatMoney(project.retainerAmount, currency)
+                  : '—'}
+            </p>
+          </div>
+        </div>
+      </Card>
+
       <section className="mb-6">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Job P&amp;L</h2>
@@ -227,7 +300,10 @@ export default async function ProjectDetailPage({
         tasks={tasks}
         members={members}
         canEdit={canUpdate}
+        boardStages={project.boardStages}
       />
+
+      <ProjectChatter projectId={project.id} comments={comments} canEdit={canUpdate} />
 
       <TimesheetPanel
         projectId={project.id}
@@ -415,6 +491,39 @@ export default async function ProjectDetailPage({
               </TableBody>
             </Table>
           </Card>
+        )}
+      </section>
+
+      <section className="mt-8">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Service jobs</h2>
+          {canCreateServiceJob ? (
+            <Link
+              href={`/service/jobs/new?project=${project.id}`}
+              className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+            >
+              New service job
+            </Link>
+          ) : null}
+        </div>
+        {serviceJobs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No service jobs on this job yet.</p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {serviceJobs.map((row) => (
+              <li key={row.id} className="flex flex-wrap items-center gap-2">
+                <Link
+                  href={`/service/jobs/${row.id}`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  {row.number}
+                </Link>
+                <span className="text-muted-foreground">
+                  {formatDate(toCalendarDate(row.date))} · {row.status}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </>

@@ -26,6 +26,12 @@ describe('phase 41 replenishment', () => {
     expect(belowReorder('5', '5')).toBe(true)
   })
 
+  it('fills to max when on hand is at or below min', () => {
+    expect(suggestedReplenishmentQty('4', '2', { storeMax: '10' })).toBe('8.0000')
+    expect(suggestedReplenishmentQty('4', '2', { storeMin: '5', storeMax: '12' })).toBe('10.0000')
+    expect(suggestedReplenishmentQty(null, '1', { storeMin: '3', itemMax: '9' })).toBe('8.0000')
+  })
+
   it('caps transfer qty by source on-hand', () => {
     expect(capReplenishmentBySource('7', '4')).toBe('4.0000')
     expect(capReplenishmentBySource('7', '12')).toBe('7.0000')

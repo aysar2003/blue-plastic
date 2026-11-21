@@ -41,10 +41,15 @@ const APPROVE_PERMISSION: Partial<Record<ApprovalEntityType, Permission>> = {
   CUSTOMER: 'customer:approve',
   VENDOR: 'vendor:approve',
   PAYROLL: 'hr:payroll',
+  ACCOUNTING_PERIOD: 'period:close',
 }
 
 export function approvalsEnabled(ctx: OrgContext): boolean {
   return ctx.features.enableDocumentApprovals === true
+}
+
+function closeApprovalsEnabled(ctx: OrgContext): boolean {
+  return Boolean(ctx.features.closeHardGates && ctx.features.closeSecondApprover)
 }
 
 type DbLike = Tx | typeof db
@@ -372,6 +377,12 @@ export async function needsApproval(
   tx: DbLike = db,
   documentKind?: string | null,
 ): Promise<{ required: boolean; levels: number; requireDifferentApprover: boolean; policyId?: string }> {
+  if (entityType === 'ACCOUNTING_PERIOD') {
+    if (!closeApprovalsEnabled(ctx)) {
+      return { required: false, levels: 1, requireDifferentApprover: true }
+    }
+    return { required: true, levels: 2, requireDifferentApprover: true }
+  }
   if (!approvalsEnabled(ctx)) {
     return { required: false, levels: 1, requireDifferentApprover: true }
   }
@@ -696,7 +707,13 @@ export async function decide(
   ctx: OrgContext,
   input: { requestId: string; decision: 'APPROVED' | 'REJECTED'; note?: string | null },
 ) {
-  if (!approvalsEnabled(ctx)) {
+  const requestPeek = await db.approvalRequest.findFirst({
+    where: { id: input.requestId, orgId: ctx.orgId },
+    select: { entityType: true },
+  })
+  const periodCloseInbox =
+    requestPeek?.entityType === 'ACCOUNTING_PERIOD' && closeApprovalsEnabled(ctx)
+  if (!approvalsEnabled(ctx) && !periodCloseInbox) {
     throw precondition('Document approvals are switched off for this company.')
   }
 
@@ -943,6 +960,11 @@ async function postApprovedEntity(
   if (entityType === 'PAYROLL') {
     const payroll = await import('@/server/services/payroll-standard.service')
     await payroll.standardPost(ctx, entityId, {}, tx)
+    return
+  }
+  if (entityType === 'ACCOUNTING_PERIOD') {
+    const periods = await import('@/server/services/period.service')
+    await periods.setStatus(ctx, entityId, 'CLOSED', { fromApproval: true })
   }
 }
 

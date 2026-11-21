@@ -47,6 +47,19 @@ export default async function EditProjectPage({
           status: project.status,
           startDate: project.startDate ?? '',
           endDate: project.endDate ?? '',
+          contractValue: project.contractValue ?? '',
+          retentionPercent: project.retentionPercent ?? '',
+          retainerAmount: project.retainerAmount ?? '',
+          budgetAmount: project.budgetAmount ?? '',
+          currencyCode: project.currencyCode ?? '',
+          boardStagesText: Array.isArray(project.boardStages)
+            ? (project.boardStages as { key?: string; label?: string }[])
+                .map((row) =>
+                  row?.key ? `${row.key}|${row.label ?? row.key}` : '',
+                )
+                .filter(Boolean)
+                .join('\n')
+            : '',
         }}
       />
     </>

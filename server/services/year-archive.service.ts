@@ -80,10 +80,10 @@ function cutoffYear(currentFiscalYear: number): number {
 }
 
 export async function listArchiveStatus(ctx: OrgContext): Promise<ArchiveStatus> {
-  const currentFiscalYear = fiscalYearOf(
-    today(ctx.organization.timeZone),
-    ctx.organization.fiscalYearStartMonth,
-  )
+  const currentFiscalYear = fiscalYearOf(today(ctx.organization.timeZone), {
+    month: ctx.organization.fiscalYearStartMonth,
+    day: ctx.organization.fiscalYearStartDay,
+  })
   const liveFromYear = currentFiscalYear - LIVE_FISCAL_YEARS + 1
 
   const years = await db.fiscalYear.findMany({
@@ -193,10 +193,10 @@ export async function archiveFiscalYearTx(
   ctx: OrgContext,
   fiscalYearId: string,
 ): Promise<{ year: number; checksum: string; bridgeJournalId: string | null }> {
-  const currentFiscalYear = fiscalYearOf(
-    today(ctx.organization.timeZone),
-    ctx.organization.fiscalYearStartMonth,
-  )
+  const currentFiscalYear = fiscalYearOf(today(ctx.organization.timeZone), {
+    month: ctx.organization.fiscalYearStartMonth,
+    day: ctx.organization.fiscalYearStartDay,
+  })
   const maxArchivable = cutoffYear(currentFiscalYear)
 
   const fiscalYear = await tx.fiscalYear.findFirst({
@@ -580,7 +580,10 @@ async function postArchiveBridge(
   await ensureFiscalYear(
     tx,
     ctx.orgId,
-    ctx.organization.fiscalYearStartMonth,
+    {
+      month: ctx.organization.fiscalYearStartMonth,
+      day: ctx.organization.fiscalYearStartDay,
+    },
     fiscalYear.year + 1,
   )
   const nextYear = await tx.fiscalYear.findFirstOrThrow({

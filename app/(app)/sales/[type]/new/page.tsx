@@ -1,9 +1,13 @@
 import type { Metadata } from 'next'
+import dynamic from 'next/dynamic'
 import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/data/page-header'
-import { DocumentForm } from '@/components/sales/document-form'
 import { SalesPaperFrame } from '@/components/sales/paper-width'
+
+const DocumentForm = dynamic(() =>
+  import('@/components/sales/document-form').then((m) => ({ default: m.DocumentForm })),
+)
 import { today } from '@/lib/date'
 import { bySlug } from '@/lib/sales-types'
 import { requireOrgContext } from '@/server/auth/context'

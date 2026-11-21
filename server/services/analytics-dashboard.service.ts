@@ -334,6 +334,7 @@ export async function loadAnalyticsDashboard(
     month: params?.month,
     timeZone: ctx.organization.timeZone,
     fiscalYearStartMonth: ctx.organization.fiscalYearStartMonth,
+    fiscalYearStartDay: ctx.organization.fiscalYearStartDay,
   })
 
   const [overviewRaw, banksRaw, extras, reorder] = await Promise.all([

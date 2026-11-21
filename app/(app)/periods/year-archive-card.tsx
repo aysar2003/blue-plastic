@@ -36,7 +36,7 @@ export function YearArchiveCard({
   const [confirmRestoreId, setConfirmRestoreId] = useState<string | null>(null)
 
   return (
-    <div className="space-y-3">
+    <div id="year-archive" className="space-y-3">
       <p className="text-sm font-medium">Archive &amp; restore</p>
       <p className="text-sm text-muted-foreground">
         Keeping FY {liveFromYear}–{currentFiscalYear} live ({liveWindowYears} years). Older closed

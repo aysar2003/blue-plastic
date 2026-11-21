@@ -77,6 +77,7 @@ export async function createCompany(ctx: OrgContext, input: CreateCompanyInput) 
         name,
         baseCurrency: input.baseCurrency,
         fiscalYearStartMonth: input.fiscalYearStartMonth,
+        fiscalYearStartDay: input.fiscalYearStartDay,
         timeZone: ctx.organization.timeZone,
         parentOrgId,
         rentExpiresAt: trialEnds,

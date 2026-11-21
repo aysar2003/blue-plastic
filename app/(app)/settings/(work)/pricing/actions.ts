@@ -14,6 +14,8 @@ export async function savePriceListAction(formData: FormData) {
   const unitPrice = String(formData.get('unitPrice') || '')
   await pricing.upsertPriceList(ctx, {
     name: String(formData.get('name') ?? ''),
+    startsOn: String(formData.get('startsOn') ?? '') || null,
+    endsOn: String(formData.get('endsOn') ?? '') || null,
     lines:
       itemId && unitPrice
         ? [{ itemId, unitPrice }]

@@ -25,7 +25,7 @@ const ITEM_SELECT = {
   unitOfMeasure: true,
   salesDescription: true, salesPrice: true, wholesalePrice: true, incomeAccountId: true, isTaxable: true, salesTaxCodeId: true,
   purchaseDescription: true, purchaseCost: true, expenseAccountId: true, purchaseTaxCodeId: true,
-  inventoryAccountId: true, cogsAccountId: true, reorderPoint: true, storeId: true, preferredVendorId: true,
+  inventoryAccountId: true, cogsAccountId: true, reorderPoint: true, maxQty: true, storeId: true, preferredVendorId: true,
   trackLots: true, trackSerials: true, pharmacyControlled: true,
   isActive: true, availableInPos: true,
   printGroupItems: true, itemPaymentMethod: true, depositAccountId: true,
@@ -51,6 +51,7 @@ function serialise<
     wholesalePrice: unknown
     purchaseCost: unknown
     reorderPoint: unknown
+    maxQty?: unknown
     bomChildren?: { componentItemId: string; quantity: unknown; sortOrder: number }[]
   },
 >(item: T) {
@@ -61,6 +62,7 @@ function serialise<
     wholesalePrice: item.wholesalePrice?.toString() ?? null,
     purchaseCost: item.purchaseCost?.toString() ?? null,
     reorderPoint: item.reorderPoint?.toString() ?? null,
+    maxQty: item.maxQty == null ? null : String(item.maxQty),
     components: (bomChildren ?? []).map((row) => ({
       itemId: row.componentItemId,
       quantity: String(row.quantity),
@@ -987,6 +989,7 @@ function toData(input: ItemInput) {
     inventoryAccountId: input.inventoryAccountId ?? null,
     cogsAccountId: input.cogsAccountId ?? null,
     reorderPoint: input.reorderPoint ?? null,
+    maxQty: input.maxQty ?? null,
     storeId: isStockTracked(input.type) ? (input.storeId ?? null) : null,
     preferredVendorId: isStockTracked(input.type) ? (input.preferredVendorId ?? null) : null,
     trackLots: isStockTracked(input.type)

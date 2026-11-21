@@ -1,7 +1,16 @@
 import 'server-only'
 import type { PeriodStatus } from '@prisma/client'
 
-import { addMonths, endOfMonth, fiscalYearOf, fiscalYearRange, toDate, type CalendarDate } from '@/lib/date'
+import {
+  addMonths,
+  dayBefore,
+  fiscalYearOf,
+  fiscalYearRange,
+  normalizeFiscalYearStart,
+  toDate,
+  type CalendarDate,
+  type FiscalYearStart,
+} from '@/lib/date'
 import type { Tx } from '@/server/db'
 import { precondition } from '@/server/errors'
 
@@ -26,13 +35,15 @@ export type ResolvedPeriod = {
 export async function resolvePeriod(
   tx: Tx,
   orgId: string,
-  fiscalYearStartMonth: number,
+  fiscalYearStart: FiscalYearStart | number,
   date: CalendarDate,
+  startDay = 1,
 ): Promise<ResolvedPeriod> {
+  const start = normalizeFiscalYearStart(fiscalYearStart, startDay)
   const existing = await findPeriod(tx, orgId, date)
   if (existing) return existing
 
-  await ensureFiscalYear(tx, orgId, fiscalYearStartMonth, fiscalYearOf(date, fiscalYearStartMonth))
+  await ensureFiscalYear(tx, orgId, start, fiscalYearOf(date, start))
 
   const created = await findPeriod(tx, orgId, date)
   if (!created) {
@@ -62,42 +73,49 @@ async function findPeriod(tx: Tx, orgId: string, date: CalendarDate): Promise<Re
  * there so they never sit inside a trading month and distort it — the January
  * profit and loss should show January's trading, not the balances the business
  * carried in with.
+ *
+ * Periods 1–12 are anniversary months: for a year opening on 20 Apr they run
+ * 20 Apr–19 May, …, 20 Mar–19 Apr. When the start day is 1 they coincide with
+ * calendar months (1 Apr–30 Apr, …).
  */
 export async function ensureFiscalYear(
   tx: Tx,
   orgId: string,
-  fiscalYearStartMonth: number,
+  fiscalYearStart: FiscalYearStart | number,
   year: number,
+  startDay = 1,
 ): Promise<{ id: string; year: number; created: boolean }> {
+  const start = normalizeFiscalYearStart(fiscalYearStart, startDay)
   const existing = await tx.fiscalYear.findUnique({
     where: { orgId_year: { orgId, year } },
     select: { id: true, year: true },
   })
   if (existing) return { ...existing, created: false }
 
-  const { start, end } = fiscalYearRange(year, fiscalYearStartMonth)
+  const { start: open, end } = fiscalYearRange(year, start)
 
   const fiscalYear = await tx.fiscalYear.create({
     data: {
       orgId,
       year,
-      startDate: toDate(start),
+      startDate: toDate(open),
       endDate: toDate(end),
       periods: {
         create: [
           {
             orgId,
             periodNumber: 0,
-            startDate: toDate(dayBefore(start)),
-            endDate: toDate(dayBefore(start)),
+            startDate: toDate(dayBefore(open)),
+            endDate: toDate(dayBefore(open)),
           },
           ...Array.from({ length: 12 }, (_, index) => {
-            const monthStart = addMonths(start, index)
+            const periodStart = addMonths(open, index)
+            const periodEnd = index === 11 ? end : dayBefore(addMonths(open, index + 1))
             return {
               orgId,
               periodNumber: index + 1,
-              startDate: toDate(monthStart),
-              endDate: toDate(endOfMonth(monthStart)),
+              startDate: toDate(periodStart),
+              endDate: toDate(periodEnd),
             }
           }),
         ],
@@ -107,12 +125,6 @@ export async function ensureFiscalYear(
   })
 
   return { ...fiscalYear, created: true }
-}
-
-function dayBefore(date: CalendarDate): CalendarDate {
-  const d = toDate(date)
-  d.setUTCDate(d.getUTCDate() - 1)
-  return d.toISOString().slice(0, 10)
 }
 
 /** The earliest date that can still be posted to, or null if every period is open. */

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import {
+  addHolidayAction,
   saveRoutingAction,
   saveWorkCenterAction,
 } from '@/app/(app)/inventory/routing/actions'
@@ -13,6 +14,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { toCalendarDate } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import * as routing from '@/server/services/routing.service'
@@ -26,7 +28,7 @@ export default async function InventoryRoutingPage({
 }) {
   const ctx = await requireOrgContext('inventory:read')
   const query = await searchParams
-  const [items, centers, stores, capacity] = await Promise.all([
+  const [items, centers, stores, capacity, holidays] = await Promise.all([
     db.item.findMany({
       where: {
         orgId: ctx.orgId,
@@ -45,6 +47,7 @@ export default async function InventoryRoutingPage({
       orderBy: { name: 'asc' },
     }),
     routing.capacityReport(ctx),
+    routing.listWorkCenterExceptions(ctx),
   ])
   const selected = query.itemId || items[0]?.id
   const detail = selected ? await routing.listRouting(ctx, selected) : null
@@ -112,6 +115,40 @@ export default async function InventoryRoutingPage({
               {centers.map((center) => center.name).join(' · ')}
             </p>
           ) : null}
+
+          <h3 className="pt-2 text-sm font-semibold">Holiday / exception (zero capacity that day)</h3>
+          {centers.length > 0 ? (
+            <form action={addHolidayAction} className="flex flex-wrap items-end gap-2">
+              <label className="text-xs">
+                Center
+                <NativeSelect name="workCenterId" required className="mt-1">
+                  {centers.map((center) => (
+                    <option key={center.id} value={center.id}>
+                      {center.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </label>
+              <label className="text-xs">
+                Date
+                <Input name="date" type="date" required className="mt-1" />
+              </label>
+              <label className="text-xs">
+                Notes
+                <Input name="notes" className="mt-1 w-40" placeholder="Public holiday" />
+              </label>
+              <button type="submit" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+                Add exception
+              </button>
+            </form>
+          ) : null}
+          {holidays.length > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {holidays
+                .map((row) => `${row.workCenter.name} ${toCalendarDate(row.date)}`)
+                .join(' · ')}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -156,7 +193,14 @@ export default async function InventoryRoutingPage({
                     ) : null}
                   </TableCell>
                   <TableCell>{row.storeName ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular">{row.capacityMinutes}</TableCell>
+                  <TableCell className="text-right tabular">
+                    {row.capacityMinutes}
+                    {row.holidayDates.length > 0 ? (
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        Holiday {row.holidayDates.join(', ')}
+                      </span>
+                    ) : null}
+                  </TableCell>
                   <TableCell className="text-right tabular">{row.demandMinutes}</TableCell>
                   <TableCell className="text-right">
                     <Badge variant={row.overloaded ? 'destructive' : 'outline'}>

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { commitmentVsBudget } from '@/lib/erp/commitment-budget'
+import { commitmentVsBudget, outstandingPoAmount } from '@/lib/erp/commitment-budget'
 import { Decimal } from '@/lib/money'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -20,6 +20,7 @@ export async function commitmentReport(ctx: OrgContext) {
       total: true,
       trackingCategoryId: true,
       trackingCategory: { select: { id: true, name: true } },
+      lines: { select: { quantity: true, quantityReceived: true, amount: true } },
     },
   })
 
@@ -28,9 +29,35 @@ export async function commitmentReport(ctx: OrgContext) {
   for (const row of openPos) {
     const key = row.trackingCategoryId
     const prev = openPoByCategory.get(key) ?? new Decimal(0)
-    openPoByCategory.set(key, prev.plus(row.total))
+    const outstanding = outstandingPoAmount(
+      row.lines.map((line) => ({
+        quantity: line.quantity.toString(),
+        quantityReceived: line.quantityReceived.toString(),
+        amount: line.amount.toString(),
+      })),
+    )
+    openPoByCategory.set(key, prev.plus(outstanding))
     if (key && row.trackingCategory) categoryNames.set(key, row.trackingCategory.name)
     if (!key) categoryNames.set(null, 'Unclassified')
+  }
+
+  const postedActuals = await db.purchaseDocument.groupBy({
+    by: ['trackingCategoryId'],
+    where: {
+      orgId: ctx.orgId,
+      deletedAt: null,
+      status: { not: 'VOID' },
+      type: { in: ['BILL', 'EXPENSE'] },
+    },
+    _sum: { total: true },
+  })
+  const actualByCategory = postedActuals.map((row) => ({
+    trackingCategoryId: row.trackingCategoryId,
+    total: row._sum.total?.toString() ?? '0',
+  }))
+  for (const row of postedActuals) {
+    if (row.trackingCategoryId) continue
+    categoryNames.set(null, 'Unclassified')
   }
 
   const budgets = await db.budget.findMany({
@@ -63,6 +90,7 @@ export async function commitmentReport(ctx: OrgContext) {
       total: total.toFixed(4),
     })),
     budgetByCategory,
+    actualByCategory,
     categoryNames,
   })
 

@@ -22,6 +22,7 @@ import { toast } from 'sonner'
 
 import {
   listBillableExpenses,
+  listBillableTime,
   searchFormCustomers,
   searchFormItems,
 } from '@/app/(app)/sales/actions'
@@ -166,6 +167,8 @@ export type CustomerOption = Option & {
   hint?: string
   billingAddress: string
   shippingAddress: string
+  /** Extra ship-to / work-site addresses, including the default shipping row. */
+  shipTos?: { id: string; label: string; address: string }[]
 }
 export type TermOption = Option & {
   type: 'DUE_ON_RECEIPT' | 'NET_DAYS' | 'DAY_OF_MONTH'
@@ -186,6 +189,7 @@ type Line = {
   serialNumber: string
   lotExpiryDate: string
   sourcePurchaseLineId?: string
+  sourceTimeEntryId?: string
 }
 
 const empty = (key: number, storeId = ''): Line => ({
@@ -447,6 +451,19 @@ export function DocumentForm({
       amount: string
       billableUnitPrice: string | null
       documentNumber: string
+    }[]
+  >([])
+  const [billableTimeOpen, setBillableTimeOpen] = useState(false)
+  const [billableTimeLoading, setBillableTimeLoading] = useState(false)
+  const [billableTimeRows, setBillableTimeRows] = useState<
+    {
+      id: string
+      projectLabel: string
+      workDate: string
+      hours: string
+      billableRate: string
+      amount: string
+      description: string
     }[]
   >([])
   const [projectId, setProjectId] = useState(document?.projectId ?? initialProjectId ?? '')
@@ -917,6 +934,44 @@ export function DocumentForm({
       ]
     })
   }
+  const openBillableTime = () => {
+    if (!customerId) {
+      toast.error('Choose a customer first.')
+      return
+    }
+    setBillableTimeOpen(true)
+    setBillableTimeLoading(true)
+    void listBillableTime({ customerId }).then((result) => {
+      setBillableTimeLoading(false)
+      if (result.ok) setBillableTimeRows(result.data)
+      else {
+        setBillableTimeRows([])
+        toast.error(result.error.message)
+      }
+    })
+  }
+  const appendBillableTime = (row: (typeof billableTimeRows)[number]) => {
+    setLines((current) => {
+      if (current.some((line) => line.sourceTimeEntryId === row.id)) return current
+      return [
+        ...current,
+        {
+          key: nextKey.current++,
+          itemId: '',
+          description: row.description,
+          quantity: row.hours,
+          unitPrice: fixed2(row.billableRate),
+          discountPercent: '',
+          taxCodeId: '',
+          storeId: defaultStoreId,
+          lotNumber: '',
+          serialNumber: '',
+          lotExpiryDate: '',
+          sourceTimeEntryId: row.id,
+        },
+      ]
+    })
+  }
   const clearLines = () => {
     setLines(Array.from({ length: minimumLines }, (_, index) => empty(index + 1, defaultStoreId)))
     nextKey.current = minimumLines + 1
@@ -964,7 +1019,7 @@ export function DocumentForm({
     const next = customers.find((row) => row.id === id)
     setLines((current) =>
       current.map((line) => {
-        if (!line.itemId || line.sourcePurchaseLineId) return line
+        if (!line.itemId || line.sourcePurchaseLineId || line.sourceTimeEntryId) return line
         const item = itemById.get(line.itemId)
         const previousDefault = priceFor(item, previous?.priceLevel)
         const stillDefault = line.unitPrice.trim() === '' || fixed2(line.unitPrice) === previousDefault
@@ -1018,6 +1073,7 @@ export function DocumentForm({
         serialNumber: line.serialNumber,
         lotExpiryDate: line.lotExpiryDate,
         sourcePurchaseLineId: line.sourcePurchaseLineId || '',
+        sourceTimeEntryId: line.sourceTimeEntryId || '',
       })),
       prescriptionRef,
     })
@@ -1169,6 +1225,7 @@ export function DocumentForm({
           saveAsDraft.current = false
         }}
         onBillable={config.type === 'INVOICE' ? openBillable : undefined}
+        onBillableTime={config.type === 'INVOICE' ? openBillableTime : undefined}
       />
       {copiedFromNumber && !document?.id ? (
         <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground print:hidden">
@@ -1207,6 +1264,47 @@ export function DocumentForm({
                       variant="outline"
                       disabled={added}
                       onClick={() => appendBillable(row)}
+                    >
+                      {added ? 'Added' : 'Add'}
+                    </Button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={billableTimeOpen} onOpenChange={setBillableTimeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Billable time</DialogTitle>
+            <DialogDescription>
+              Unbilled project hours for this customer. Added lines are marked invoiced when you save.
+            </DialogDescription>
+          </DialogHeader>
+          {billableTimeLoading ? (
+            <p className="text-sm text-muted-foreground">Looking up time…</p>
+          ) : billableTimeRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No unbilled billable hours.</p>
+          ) : (
+            <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
+              {billableTimeRows.map((row) => {
+                const added = lines.some((line) => line.sourceTimeEntryId === row.id)
+                return (
+                  <li key={row.id} className="flex items-center justify-between gap-3">
+                    <span>
+                      <span className="font-medium">{row.projectLabel}</span>
+                      <span className="block text-muted-foreground">
+                        {row.workDate} · {row.hours}h · {formatMoney(row.amount, currency)}
+                      </span>
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={added}
+                      onClick={() => appendBillableTime(row)}
                     >
                       {added ? 'Added' : 'Add'}
                     </Button>
@@ -2092,30 +2190,63 @@ function TotalsBlock({ props }: { props: LayoutProps }) {
   )
 }
 
+function ShipToPicker({ props }: { props: LayoutProps }) {
+  const customer = props.customers.find((row) => row.id === props.customerId)
+  const shipTos = customer?.shipTos ?? []
+  if (shipTos.length === 0) return null
+  const current = shipTos.find((row) => row.address === props.workSite)?.id ?? ''
+  return (
+    <Field
+      name="shipTo"
+      label="Ship to"
+      hint="Pick a customer address. It fills work site on this document."
+    >
+      <NativeSelect
+        value={current}
+        onChange={(event) => {
+          const next = shipTos.find((row) => row.id === event.target.value)
+          props.setWorkSite(next?.address ?? '')
+        }}
+      >
+        <option value="">Choose a ship-to</option>
+        {shipTos.map((row) => (
+          <option key={row.id} value={row.id}>
+            {row.label}
+          </option>
+        ))}
+      </NativeSelect>
+    </Field>
+  )
+}
+
 function NotesFields({ props }: { props: LayoutProps }) {
   const showWorkScope = isProposal(props.config.type)
-  const customerName =
-    props.customers.find((row) => row.id === props.customerId)?.label ?? ''
-  const showSite = showWorkScope && props.showField('workSite')
+  const customer = props.customers.find((row) => row.id === props.customerId)
+  const customerName = customer?.label ?? ''
+  const hasShipTos = (customer?.shipTos?.length ?? 0) > 0
+  const showSite = (showWorkScope || hasShipTos) && props.showField('workSite')
   const showScope = showWorkScope && props.showField('workScope')
   return (
     <div className="grid gap-2">
       {showSite || showScope ? (
         <div className="grid gap-2 sm:grid-cols-2">
           {showSite ? (
-            <Field
-              name="workSite"
-              label="Work site"
-              hint="Magaca ama nooca goobta shaqada. Waxaa ka soo muuqda hoosta Sales person."
-              error={props.state.fieldErrors?.workSite}
-            >
-              <Input
-                {...fieldProps('workSite', props.state.fieldErrors?.workSite)}
-                value={props.workSite}
-                onChange={(event) => props.setWorkSite(event.target.value)}
-                placeholder="e.g. Alanley villa, Site A, Warehouse 2"
-              />
-            </Field>
+            <div className="grid gap-2">
+              <ShipToPicker props={props} />
+              <Field
+                name="workSite"
+                label="Work site"
+                hint="Magaca ama nooca goobta shaqada. Waxaa ka soo muuqda hoosta Sales person."
+                error={props.state.fieldErrors?.workSite}
+              >
+                <Input
+                  {...fieldProps('workSite', props.state.fieldErrors?.workSite)}
+                  value={props.workSite}
+                  onChange={(event) => props.setWorkSite(event.target.value)}
+                  placeholder="e.g. Alanley villa, Site A, Warehouse 2"
+                />
+              </Field>
+            </div>
           ) : null}
           {showScope ? (
             <Field
@@ -2215,6 +2346,25 @@ function InvoiceLayout(props: LayoutProps) {
               <div className="grid gap-2 md:grid-cols-2">
                 <AddressBox label="Billing address" value={customer?.billingAddress ?? ''} empty="No billing address" />
                 <AddressBox label="Shipping address" value={customer?.shippingAddress ?? ''} empty="No shipping address" />
+              </div>
+            ) : null}
+            {props.showField('workSite') ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <ShipToPicker props={props} />
+                {(customer?.shipTos?.length ?? 0) > 0 || props.workSite ? (
+                  <Field
+                    name="workSite"
+                    label="Work site"
+                    error={state.fieldErrors?.workSite}
+                  >
+                    <Input
+                      {...fieldProps('workSite', state.fieldErrors?.workSite)}
+                      value={props.workSite}
+                      onChange={(event) => props.setWorkSite(event.target.value)}
+                      placeholder="Ship-to or job site"
+                    />
+                  </Field>
+                ) : null}
               </div>
             ) : null}
           </PartyInfo>
@@ -2651,6 +2801,7 @@ function SalesDocumentToolbar({
   recurringHref,
   onSave,
   onBillable,
+  onBillableTime,
 }: {
   type: SalesTypeConfig['type']
   slug: string
@@ -2671,6 +2822,7 @@ function SalesDocumentToolbar({
   recurringHref?: string
   onSave: () => void
   onBillable?: () => void
+  onBillableTime?: () => void
 }) {
   const router = useRouter()
   const nav = neighborHrefs(`/sales/${slug}`, neighbors, recordId)
@@ -2731,6 +2883,11 @@ function SalesDocumentToolbar({
       {onBillable ? (
         <Button type="button" variant="outline" size="sm" onClick={onBillable}>
           Add billable expenses
+        </Button>
+      ) : null}
+      {onBillableTime ? (
+        <Button type="button" variant="outline" size="sm" onClick={onBillableTime}>
+          Add billable time
         </Button>
       ) : null}
       <DropdownMenu>

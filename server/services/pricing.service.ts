@@ -2,6 +2,7 @@ import 'server-only'
 
 import { Decimal } from '@/lib/money'
 import { toDate, today } from '@/lib/date'
+import { isDateWindowActive } from '@/lib/erp/price-list-window'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { conflict, notFound, validation } from '@/server/errors'
@@ -25,11 +26,18 @@ export async function upsertPriceList(
   input: {
     id?: string
     name: string
+    startsOn?: string | null
+    endsOn?: string | null
     lines?: { itemId: string; unitPrice: string }[]
   },
 ) {
   const name = input.name.trim()
   if (!name) throw validation('Price list name is required.')
+  const startsOn = input.startsOn ? toDate(input.startsOn) : null
+  const endsOn = input.endsOn ? toDate(input.endsOn) : null
+  if (startsOn && endsOn && endsOn < startsOn) {
+    throw validation('Price list end date must be on or after the start.')
+  }
 
   if (input.id) {
     const existing = await db.priceList.findFirst({
@@ -37,7 +45,10 @@ export async function upsertPriceList(
       select: { id: true },
     })
     if (!existing) throw notFound('Price list')
-    await db.priceList.update({ where: { id: existing.id }, data: { name } })
+    await db.priceList.update({
+      where: { id: existing.id },
+      data: { name, startsOn, endsOn },
+    })
     if (input.lines) {
       await replacePriceListItems(ctx, existing.id, input.lines)
     }
@@ -46,7 +57,7 @@ export async function upsertPriceList(
 
   try {
     const created = await db.priceList.create({
-      data: { orgId: ctx.orgId, name },
+      data: { orgId: ctx.orgId, name, startsOn, endsOn },
     })
     if (input.lines?.length) {
       await replacePriceListItems(ctx, created.id, input.lines)
@@ -211,6 +222,13 @@ export async function resolveListUnitPrice(
     select: { priceListId: true },
   })
   if (!customer?.priceListId) return null
+  const list = await db.priceList.findFirst({
+    where: { id: customer.priceListId, orgId: ctx.orgId, isActive: true },
+    select: { id: true, startsOn: true, endsOn: true },
+  })
+  if (!list) return null
+  const asOf = today(ctx.organization.timeZone)
+  if (!isDateWindowActive(asOf, list.startsOn, list.endsOn)) return null
   const row = await db.priceListItem.findFirst({
     where: { priceListId: customer.priceListId, itemId: input.itemId },
     select: { unitPrice: true },

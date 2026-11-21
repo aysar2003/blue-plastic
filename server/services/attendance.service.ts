@@ -160,3 +160,20 @@ export async function workedHoursInPeriod(
   }
   return { hours: total, attendedDays }
 }
+
+/** Attendance days as hours rows for the payroll hours file. */
+export async function exportHours(
+  ctx: OrgContext,
+  range: { from: CalendarDate; to: CalendarDate },
+) {
+  const rows = await list(ctx, range)
+  return rows
+    .filter((row) => row.workedHours && Number(row.workedHours) > 0)
+    .map((row) => ({
+      date: row.date,
+      employee: row.employeeName,
+      kind: 'attendance' as const,
+      hours: row.workedHours ?? '0.0000',
+      note: row.note,
+    }))
+}

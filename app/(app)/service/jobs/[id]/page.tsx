@@ -4,6 +4,7 @@ import Link from 'next/link'
 import {
   cancelJobAction,
   completeJobAction,
+  replenishVanAction,
   scheduleJobAction,
 } from '@/app/(app)/service/jobs/actions'
 import { PageHeader } from '@/components/data/page-header'
@@ -13,6 +14,7 @@ import {
   canCancelServiceJob,
   canCompleteServiceJob,
   canScheduleServiceJob,
+  promisedWindowLabel,
   type ServiceJobStatus,
 } from '@/lib/erp/service-job'
 import { formatMoney } from '@/lib/money'
@@ -53,6 +55,10 @@ export default async function ServiceJobDetailPage({ params }: Props) {
             </p>
           ) : null}
           {job.assignee ? <p>Assignee: {job.assignee.name}</p> : null}
+          {job.siteLocation ? <p>Site: {job.siteLocation}</p> : null}
+          {promisedWindowLabel(job.promisedWindowStart, job.promisedWindowEnd) ? (
+            <p>Window: {promisedWindowLabel(job.promisedWindowStart, job.promisedWindowEnd)}</p>
+          ) : null}
           {job.vanStore ? <p>Van: {job.vanStore.name}</p> : null}
           {job.memo ? <p className="text-muted-foreground">{job.memo}</p> : null}
           {job.salesDocument ? (
@@ -99,6 +105,14 @@ export default async function ServiceJobDetailPage({ params }: Props) {
                 <input type="hidden" name="id" value={job.id} />
                 <Button type="submit" size="sm">
                   Complete & invoice
+                </Button>
+              </form>
+            ) : null}
+            {canEdit && job.vanStore && (job.status === 'DRAFT' || job.status === 'SCHEDULED') ? (
+              <form action={replenishVanAction}>
+                <input type="hidden" name="id" value={job.id} />
+                <Button type="submit" size="sm" variant="outline">
+                  Draft van replenish
                 </Button>
               </form>
             ) : null}

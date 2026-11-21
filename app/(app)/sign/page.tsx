@@ -49,6 +49,21 @@ export default async function SignPage() {
             <Label htmlFor="message">Note to signer</Label>
             <Input id="message" name="message" className="mt-1" />
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="salesDocumentId">Sales document id</Label>
+              <Input id="salesDocumentId" name="salesDocumentId" className="mt-1" placeholder="Optional invoice" />
+            </div>
+            <div>
+              <Label htmlFor="purchaseDocumentId">Purchase document id</Label>
+              <Input
+                id="purchaseDocumentId"
+                name="purchaseDocumentId"
+                className="mt-1"
+                placeholder="Optional bill"
+              />
+            </div>
+          </div>
           <Button type="submit" size="sm">
             Send for signature
           </Button>

@@ -40,83 +40,74 @@ export function useReportFavourites() {
 }
 
 export function FavouriteReports({
-  emptyHint = 'No favourites yet. Star a report in the sections below to add it here.',
+  emptyHint = 'Star any report below to pin it here.',
 }: {
   emptyHint?: string
 } = {}) {
-  const [query, setQuery] = useState('')
   const [open, setOpen] = useState(true)
   const starred = useReportFavourites()
-
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return starred.filter((report) => !q || report.label.toLowerCase().includes(q))
-  }, [query, starred])
 
   function toggle(report: ReportFavourite) {
     writeReportFavourites(toggleReportFavourite(starred, report))
   }
 
-  const midpoint = Math.ceil(visible.length / 2)
-  const columns = [visible.slice(0, midpoint), visible.slice(midpoint)]
+  if (starred.length === 0) {
+    return (
+      <p className="mb-5 rounded-2xl border border-dashed border-border/70 bg-muted/20 px-4 py-4 text-sm text-muted-foreground print:hidden">
+        {emptyHint}
+      </p>
+    )
+  }
+
+  const midpoint = Math.ceil(starred.length / 2)
+  const columns = [starred.slice(0, midpoint), starred.slice(midpoint)]
 
   return (
-    <section className="mb-8 overflow-hidden rounded-lg border bg-card">
-      <div className="border-b px-4 py-3 print:hidden">
-        <label className="sr-only" htmlFor="report-name-search">
-          Type report name here
-        </label>
-        <input
-          id="report-name-search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Type report name here"
-          className="h-9 w-full max-w-xs rounded-md border bg-background px-3 text-sm"
-        />
-      </div>
+    <section className="mb-5 overflow-hidden rounded-2xl border border-border/60 bg-card/95 shadow-sm">
       <button
         type="button"
-        className="flex w-full items-center gap-2 border-b px-4 py-3 text-left text-sm font-semibold"
+        className="flex w-full items-center gap-2 px-4 py-3.5 text-left text-sm font-semibold"
         onClick={() => setOpen((value) => !value)}
       >
+        <StarIcon className="size-4 fill-primary text-primary" />
+        <span className="flex-1">Favourites</span>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          {starred.length}
+        </span>
         <ChevronDownIcon className={cn('size-4 transition-transform', open ? '' : '-rotate-90')} />
-        Favourites
       </button>
       {open ? (
-        visible.length > 0 ? (
-          <div className="grid gap-0 md:grid-cols-2">
-            {columns.map((column, index) => (
-              <ul key={index} className={index === 0 ? 'md:border-r' : undefined}>
-                {column.map((report) => {
-                  const key = reportFavouriteKey(report)
-                  return (
-                    <li key={key} className="flex items-center gap-2 border-b px-4 py-2.5 last:border-b-0">
-                      <Link
-                        href={report.href}
-                        className="min-w-0 flex-1 text-sm text-foreground hover:text-primary hover:underline"
-                      >
-                        {report.label}
-                      </Link>
-                      <button
-                        type="button"
-                        aria-pressed
-                        aria-label={`Remove ${report.label} from favourites`}
-                        onClick={() => toggle(report)}
-                        className="text-primary"
-                      >
-                        <StarIcon className="size-4 fill-primary" />
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            ))}
-          </div>
-        ) : (
-          <p className="px-4 py-6 text-sm text-muted-foreground">
-            {query.trim() ? 'No favourite matches that name.' : emptyHint}
-          </p>
-        )
+        <div className="grid border-t border-border/60 md:grid-cols-2">
+          {columns.map((column, index) => (
+            <ul key={index} className={index === 0 ? 'md:border-r md:border-border/60' : undefined}>
+              {column.map((report) => {
+                const key = reportFavouriteKey(report)
+                return (
+                  <li
+                    key={key}
+                    className="flex items-center gap-2 border-b border-border/50 px-4 py-2.5 last:border-b-0 hover:bg-muted/25"
+                  >
+                    <Link
+                      href={report.href}
+                      className="min-w-0 flex-1 text-sm font-medium hover:text-primary"
+                    >
+                      {report.label}
+                    </Link>
+                    <button
+                      type="button"
+                      aria-pressed
+                      aria-label={`Remove ${report.label} from favourites`}
+                      onClick={() => toggle(report)}
+                      className="text-primary"
+                    >
+                      <StarIcon className="size-4 fill-primary" />
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          ))}
+        </div>
       ) : null}
     </section>
   )
@@ -132,7 +123,7 @@ export function ReportFavouriteStar({ href, label }: ReportFavourite) {
       aria-pressed={on}
       aria-label={on ? `Remove ${label} from favourites` : `Star ${label}`}
       onClick={() => writeReportFavourites(toggleReportFavourite(starred, { href, label }))}
-      className="shrink-0 text-primary"
+      className="shrink-0 text-primary opacity-70 transition hover:opacity-100"
     >
       <StarIcon className={cn('size-4', on ? 'fill-primary' : 'fill-transparent')} />
     </button>

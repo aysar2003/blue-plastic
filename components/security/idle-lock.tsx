@@ -8,13 +8,24 @@ import { signOutWithHistory } from '@/app/(app)/auth/actions'
 import { unlockIdleScreen } from '@/app/(app)/security/unlock-actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  DEFAULT_IDLE_LOCK_SECONDS,
+  DEFAULT_SESSION_MAX_HOURS,
+  clampIdleLockSeconds,
+  clampSessionMaxHours,
+  formatIdleLockLabel,
+} from '@/lib/desk-security'
+import { DESK_PIN_LENGTHS, isDeskPin, normalizeDeskPin } from '@/lib/desk-unlock'
 import { fullScreenOverlayZIndex } from '@/lib/dialog-stack'
+import { cn } from '@/lib/utils'
 
-/** Idle before the desk lock appears. */
-export const IDLE_LOCK_MS = 15 * 60 * 1000
+/** @deprecated Prefer idleLockSeconds from org settings. Kept for tests. */
+export const IDLE_LOCK_MS = DEFAULT_IDLE_LOCK_SECONDS * 1000
 
 const STORAGE_KEY = 'som-idle-screen-locked'
 const LAST_ACTIVE_KEY = 'som-idle-last-active'
+
+type UnlockMethod = 'password' | 'pin'
 
 function readLocked(): boolean {
   if (typeof window === 'undefined') return false
@@ -40,21 +51,36 @@ function writeLastActive(at: number) {
 }
 
 /**
- * After 15 minutes without pointer/keyboard activity, covers the desk with a
- * password lock. Unlock uses the signed-in user's normal login password.
- * Absolute session lifetime (10h) is enforced by NextAuth maxAge separately.
+ * Idle lock + absolute session logout for the desk (computer and mobile).
+ * Timeouts come from Settings → Organisation.
+ * Optional desk PIN is opt-in (Profile); POS till PIN is separate.
  */
 export function IdleLock({
   orgName,
   userLabel,
+  hasDeskPin = false,
+  idleLockSeconds = DEFAULT_IDLE_LOCK_SECONDS,
+  sessionMaxHours = DEFAULT_SESSION_MAX_HOURS,
+  loginAt = null,
 }: {
   orgName: string
   /** Email or name shown on the lock so the cashier knows whose password. */
   userLabel: string
+  /** True when this user set a desk unlock PIN in Profile. */
+  hasDeskPin?: boolean
+  idleLockSeconds?: number
+  sessionMaxHours?: number
+  /** Epoch ms when this login started. */
+  loginAt?: number | null
 }) {
   const router = useRouter()
+  const idleMs = clampIdleLockSeconds(idleLockSeconds) * 1000
+  const sessionMs = clampSessionMaxHours(sessionMaxHours) * 60 * 60 * 1000
+  const idleLabel = formatIdleLockLabel(idleLockSeconds)
+
   const [locked, setLocked] = useState(false)
-  const [password, setPassword] = useState('')
+  const [method, setMethod] = useState<UnlockMethod>(hasDeskPin ? 'pin' : 'password')
+  const [secret, setSecret] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const [signingOut, setSigningOut] = useState(false)
@@ -65,9 +91,10 @@ export function IdleLock({
     lockedRef.current = true
     writeLocked(true)
     setLocked(true)
-    setPassword('')
+    setSecret('')
     setError(null)
-  }, [])
+    setMethod(hasDeskPin ? 'pin' : 'password')
+  }, [hasDeskPin])
 
   const clearTimer = useCallback(() => {
     if (timerRef.current != null) {
@@ -76,13 +103,22 @@ export function IdleLock({
     }
   }, [])
 
+  const signOut = useCallback(() => {
+    setSigningOut(true)
+    writeLocked(false)
+    void signOutWithHistory('/login/company').catch(() => {
+      setSigningOut(false)
+      router.push('/login/company')
+    })
+  }, [router])
+
   const armTimer = useCallback(() => {
     clearTimer()
     if (lockedRef.current) return
     timerRef.current = window.setTimeout(() => {
       lockNow()
-    }, IDLE_LOCK_MS)
-  }, [clearTimer, lockNow])
+    }, idleMs)
+  }, [clearTimer, idleMs, lockNow])
 
   const noteActivity = useCallback(() => {
     if (lockedRef.current) return
@@ -94,7 +130,7 @@ export function IdleLock({
     // Restore lock across refresh, or lock if idle already exceeded while away.
     const wasLocked = readLocked()
     const idleFor = Date.now() - readLastActive()
-    if (wasLocked || idleFor >= IDLE_LOCK_MS) {
+    if (wasLocked || idleFor >= idleMs) {
       lockNow()
     } else {
       writeLastActive(Date.now())
@@ -109,7 +145,7 @@ export function IdleLock({
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') return
       if (lockedRef.current) return
-      if (Date.now() - readLastActive() >= IDLE_LOCK_MS) lockNow()
+      if (Date.now() - readLastActive() >= idleMs) lockNow()
       else armTimer()
     }
     document.addEventListener('visibilitychange', onVisibility)
@@ -119,12 +155,25 @@ export function IdleLock({
       for (const name of events) window.removeEventListener(name, onActivity, opts)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [armTimer, clearTimer, lockNow, noteActivity])
+  }, [armTimer, clearTimer, idleMs, lockNow, noteActivity])
+
+  // Absolute session logout from login time (company setting).
+  useEffect(() => {
+    if (loginAt == null || !Number.isFinite(loginAt)) return
+
+    const check = () => {
+      if (Date.now() - loginAt >= sessionMs) signOut()
+    }
+    check()
+    const id = window.setInterval(check, 30_000)
+    return () => window.clearInterval(id)
+  }, [loginAt, sessionMs, signOut])
 
   function unlock() {
     setError(null)
     startTransition(async () => {
-      const result = await unlockIdleScreen(password)
+      const value = method === 'pin' ? normalizeDeskPin(secret) : secret
+      const result = await unlockIdleScreen({ method, secret: value })
       if (!result.ok) {
         setError(result.error)
         return
@@ -133,21 +182,15 @@ export function IdleLock({
       writeLocked(false)
       writeLastActive(Date.now())
       setLocked(false)
-      setPassword('')
+      setSecret('')
       armTimer()
     })
   }
 
-  function signOut() {
-    setSigningOut(true)
-    writeLocked(false)
-    void signOutWithHistory('/login/company').catch(() => {
-      setSigningOut(false)
-      router.push('/login/company')
-    })
-  }
-
   if (!locked) return null
+
+  const canSubmit =
+    method === 'pin' ? isDeskPin(normalizeDeskPin(secret)) : Boolean(secret.trim())
 
   return (
     <div
@@ -176,9 +219,44 @@ export function IdleLock({
           </div>
         </div>
         <p className="mb-4 text-sm text-muted-foreground">
-          Idle for 15 minutes. Enter the password for <span className="font-medium text-foreground">{userLabel}</span>{' '}
-          to continue.
+          Idle for {idleLabel}. Enter the {method === 'pin' ? 'PIN' : 'password'} for{' '}
+          <span className="font-medium text-foreground">{userLabel}</span> to continue.
         </p>
+
+        {hasDeskPin ? (
+          <div className="mb-3 grid grid-cols-2 gap-1 rounded-md border border-border p-1">
+            {(
+              [
+                { id: 'pin' as const, label: 'PIN' },
+                { id: 'password' as const, label: 'Password' },
+              ] as const
+            ).map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                disabled={pending || signingOut}
+                onClick={() => {
+                  setMethod(row.id)
+                  setSecret('')
+                  setError(null)
+                }}
+                className={cn(
+                  'rounded-sm px-2 py-1.5 text-sm font-medium transition-colors',
+                  method === row.id
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {row.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="mb-3 text-xs text-muted-foreground">
+            Optional: set a screen PIN in Settings → Profile (off by default).
+          </p>
+        )}
+
         <form
           className="space-y-3"
           onSubmit={(event) => {
@@ -187,15 +265,20 @@ export function IdleLock({
           }}
         >
           <label className="block text-xs font-medium text-muted-foreground">
-            Password
+            {method === 'pin' ? `PIN (${DESK_PIN_LENGTHS.join(', ')} digits)` : 'Password'}
             <Input
               type="password"
-              autoComplete="current-password"
+              inputMode={method === 'pin' ? 'numeric' : undefined}
+              autoComplete={method === 'pin' ? 'off' : 'current-password'}
               autoFocus
-              value={password}
+              value={secret}
               disabled={pending || signingOut}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => {
+                const next = event.target.value
+                setSecret(method === 'pin' ? next.replace(/\D/g, '').slice(0, 10) : next)
+              }}
               className="mt-1"
+              maxLength={method === 'pin' ? 10 : undefined}
             />
           </label>
           {error ? (
@@ -204,7 +287,7 @@ export function IdleLock({
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2 pt-1">
-            <Button type="submit" disabled={pending || signingOut || !password.trim()}>
+            <Button type="submit" disabled={pending || signingOut || !canSubmit}>
               {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
               Unlock
             </Button>

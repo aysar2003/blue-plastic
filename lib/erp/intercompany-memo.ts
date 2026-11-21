@@ -1,3 +1,5 @@
+import { isEliminationMemo, isMatchableIcMemo } from '@/lib/erp/ic-elimination'
+
 const PREFIX = '[IC]'
 
 export function withIntercompanyMemo(memo: string | null | undefined, intercompany: boolean): string {
@@ -10,3 +12,5 @@ export function withIntercompanyMemo(memo: string | null | undefined, intercompa
 export function isIntercompanyMemo(memo: string | null | undefined): boolean {
   return (memo ?? '').trim().startsWith(PREFIX)
 }
+
+export { isEliminationMemo, isMatchableIcMemo }

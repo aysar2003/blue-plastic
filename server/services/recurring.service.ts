@@ -249,6 +249,38 @@ export async function setActive(ctx: OrgContext, id: string, isActive: boolean) 
   return present(row, today(ctx.organization.timeZone))
 }
 
+/** Pause/resume a subscription. Pause stops new invoices; recognition of already-deferred revenue continues. */
+export async function pauseSchedule(ctx: OrgContext, id: string) {
+  return setActive(ctx, id, false)
+}
+
+export async function resumeSchedule(ctx: OrgContext, id: string) {
+  return setActive(ctx, id, true)
+}
+
+/** Cancel: stop the schedule and clear remaining unearned so it does not hang on the books. */
+export async function cancelSchedule(ctx: OrgContext, id: string) {
+  const existing = await db.recurringTemplate.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: { id: true, type: true },
+  })
+  if (!existing) throw notFound('Recurring transaction')
+  assertCanCreate(ctx, existing.type)
+
+  const asOf = today(ctx.organization.timeZone)
+  const cleared =
+    existing.type === 'INVOICE'
+      ? await deferredRevenue.recognizeRemainingForTemplate(ctx, existing.id)
+      : { clearedCount: 0, cleared: [] }
+
+  const row = await db.recurringTemplate.update({
+    where: { id: existing.id },
+    data: { isActive: false, endOn: toDate(asOf) },
+    select: LIST_SELECT,
+  })
+  return { ...present(row, asOf), unearnedCleared: cleared.clearedCount }
+}
+
 export async function remove(ctx: OrgContext, id: string) {
   const existing = await db.recurringTemplate.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -473,8 +505,11 @@ export async function createDueForAllOrganizations(): Promise<{
             legalName: true,
             baseCurrency: true,
             fiscalYearStartMonth: true,
+            fiscalYearStartDay: true,
             timeZone: true,
             allowNegativeStock: true,
+            idleLockSeconds: true,
+            sessionMaxHours: true,
             posTillLedgerMode: true,
             featureFlags: true,
             parentOrgId: true,
@@ -509,7 +544,7 @@ export async function createDueForAllOrganizations(): Promise<{
       permissions: effectivePermissions(membership.role, membership.permissionsOverride),
       features: parseFeatureFlags(featureFlags) ?? DEFAULT_FEATURE_FLAGS,
       organization: { ...organization, hasLogo: Boolean(logoStorageKey) },
-      user: membership.user,
+      user: { ...membership.user, loginAt: null, hasDeskPin: false },
       portalCustomerId: null,
       isSystemOwner: false,
       canConnect: false,

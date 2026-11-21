@@ -42,7 +42,8 @@ export type HeaderMenuItem = {
 
 /** QBD Report Centre category names mapped onto our catalogue sections. */
 const QBD_SECTION_LABEL: Record<string, string> = {
-  'Business overview': 'Company & Financial',
+  'Boards & pulse': 'Business Snapshot',
+  'Company & financial': 'Company & Financial',
   'Who owes you': 'Customers & Receivables',
   'Sales and customers': 'Sales',
   'What you owe': 'Vendors & Payables',
@@ -57,19 +58,18 @@ const QBD_SECTION_LABEL: Record<string, string> = {
   'Data analysis': 'List',
 }
 
+const OVERVIEW_BOARD_KEYS = new Set([
+  'company-snapshot',
+  'business-overview',
+  'analytics-board',
+])
+
 function reportsMenuFromCatalogue(permissions: ReadonlySet<string>): HeaderMenuItem[] {
   const allowOverview = permissions.has('report:overview')
-  const groups = REPORT_SECTIONS.filter((section) => {
-    if (section.label === 'Business overview' && !allowOverview) {
-      // Still show P&L / BS / TB without the overview tile.
-      return true
-    }
-    return section.apps.length > 0
-  }).map((section) => {
-    const apps =
-      section.label === 'Business overview' && !allowOverview
-        ? section.apps.filter((app) => app.key !== 'business-overview')
-        : section.apps
+  const groups = REPORT_SECTIONS.map((section) => {
+    const apps = allowOverview
+      ? section.apps
+      : section.apps.filter((app) => !OVERVIEW_BOARD_KEYS.has(app.key))
     return {
       label: QBD_SECTION_LABEL[section.label] ?? section.label,
       blurb: section.blurb,
@@ -82,7 +82,7 @@ function reportsMenuFromCatalogue(permissions: ReadonlySet<string>): HeaderMenuI
         wash: app.wash,
       })),
     } satisfies HeaderMenuItem
-  })
+  }).filter((section) => section.children.length > 0)
 
   return [
     {
@@ -216,7 +216,6 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
   reports: [],
   analytics: [
     row('Analytics board', '/analytics', 'trending', 'report:overview', '#0F766E', '#CCFBF1'),
-    row('Business overview', '/reports/business-overview', 'trending', 'report:overview', '#0369A1', '#E0F2FE'),
     row('AI brief (JSON)', '/api/analytics/brief', 'file', 'report:overview', '#4338CA', '#E0E7FF'),
     row('All reports', '/reports', 'trending', 'report:read', '#BE123C', '#FFE4E6'),
   ],

@@ -7,6 +7,7 @@ import {
   addStockCost,
   emptySlice,
   profitOf,
+  toBaseAmount,
 } from '@/lib/project-profitability'
 
 describe('project profitability', () => {
@@ -30,5 +31,21 @@ describe('project profitability', () => {
   it('skips labor when no rate', () => {
     const slice = addLaborCost(emptySlice(), '8', null)
     expect(slice.laborCost.equals(0)).toBe(true)
+  })
+
+  it('converts foreign subtotals to org base using exchangeRate', () => {
+    expect(toBaseAmount('100', '1.5').toFixed(0)).toBe('150')
+    expect(toBaseAmount('100', null).toFixed(0)).toBe('100')
+    expect(toBaseAmount('100', '0').toFixed(0)).toBe('100')
+
+    let slice = emptySlice()
+    slice = addSalesIncome(slice, 'INVOICE', '100', '1.5')
+    slice = addSalesIncome(slice, 'CREDIT_MEMO', '10', '1.5')
+    slice = addPurchaseCost(slice, 'BILL', '40', '1.5')
+    slice = addPurchaseCost(slice, 'VENDOR_CREDIT', '4', '1.5')
+
+    expect(slice.income.toFixed(0)).toBe('135')
+    expect(slice.purchaseCost.toFixed(0)).toBe('54')
+    expect(profitOf(slice).toFixed(0)).toBe('81')
   })
 })

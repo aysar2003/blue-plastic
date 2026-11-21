@@ -2,22 +2,20 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ChevronDownIcon } from 'lucide-react'
+import { ChevronDownIcon, SearchIcon } from 'lucide-react'
 
 import type { LauncherSection } from '@/components/layout/app-launcher'
 import { ReportFavouriteStar } from '@/components/reports/favourite-reports'
 import { cn } from '@/lib/utils'
 
 /**
- * The report catalogue as one standard list: each group follows the one above
- * it, and every name opens its report. The same order as the Reports menu.
+ * Modern standard catalogue: one search, collapsible sections, clean rows.
  */
 export function StandardReportSections({
   sections,
   headings = true,
 }: {
   sections: LauncherSection[]
-  /** Module hubs are one list of names. The main catalogue keeps a heading per group. */
   headings?: boolean
 }) {
   const [query, setQuery] = useState('')
@@ -43,7 +41,8 @@ export function StandardReportSections({
 
   return (
     <div className="space-y-4">
-      <div className="print:hidden">
+      <div className="relative print:hidden">
+        <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <label className="sr-only" htmlFor="report-section-search">
           Find a report
         </label>
@@ -51,41 +50,60 @@ export function StandardReportSections({
           id="report-section-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder={headings ? 'Find a report in the sections below' : 'Find a report'}
-          className="h-9 w-full max-w-xs rounded-md border bg-background px-3 text-sm"
+          placeholder="Search all reports…"
+          className="h-11 w-full rounded-2xl border border-border/60 bg-card pl-10 pr-4 text-sm shadow-sm outline-none ring-primary/20 focus:ring-2"
         />
       </div>
 
       {shown.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No report matches that name.</p>
+        <p className="rounded-2xl border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
+          No report matches that name.
+        </p>
       ) : headings ? null : (
         <ReportColumns apps={shown.flatMap((section) => section.apps)} framed />
       )}
 
       {headings
-        ? shown.map((section) => {
+        ? shown.map((section, sectionIndex) => {
             const open = needle ? true : !closed[section.label]
             return (
-              <section key={section.label} className="overflow-hidden rounded-lg border bg-card">
+              <section
+                key={section.label}
+                className="overflow-hidden rounded-2xl border border-border/60 bg-card/95 shadow-sm"
+                style={{ animationDelay: `${sectionIndex * 30}ms` }}
+              >
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 border-b px-4 py-3 text-left"
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-muted/30"
                   aria-expanded={open}
                   onClick={() =>
-                    setClosed((current) => ({ ...current, [section.label]: !current[section.label] }))
+                    setClosed((current) => ({
+                      ...current,
+                      [section.label]: !current[section.label],
+                    }))
                   }
                 >
-                  <ChevronDownIcon
-                    className={cn('size-4 shrink-0 transition-transform', open ? '' : '-rotate-90')}
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold">{section.label}</span>
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-xs font-bold text-muted-foreground">
+                    {section.apps.length}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold tracking-tight">{section.label}</span>
                     {section.blurb ? (
                       <span className="block text-xs text-muted-foreground">{section.blurb}</span>
                     ) : null}
                   </span>
+                  <ChevronDownIcon
+                    className={cn(
+                      'size-4 shrink-0 text-muted-foreground transition-transform',
+                      open ? '' : '-rotate-90',
+                    )}
+                  />
                 </button>
-                {open ? <ReportColumns apps={section.apps} /> : null}
+                {open ? (
+                  <div className="border-t border-border/60">
+                    <ReportColumns apps={section.apps} />
+                  </div>
+                ) : null}
               </section>
             )
           })
@@ -104,20 +122,28 @@ function ReportColumns({
   const midpoint = Math.ceil(apps.length / 2)
   const columns = [apps.slice(0, midpoint), apps.slice(midpoint)]
   return (
-    <div className={cn('grid md:grid-cols-2', framed && 'overflow-hidden rounded-lg border bg-card')}>
+    <div className={cn('grid md:grid-cols-2', framed && 'overflow-hidden rounded-2xl border bg-card')}>
       {columns.map((column, index) => (
-        <ul key={index} className={index === 0 ? 'md:border-r' : undefined}>
+        <ul key={index} className={index === 0 ? 'md:border-r md:border-border/60' : undefined}>
           {column.map((app) => (
-            <li key={app.key} className="flex items-start gap-2 border-b px-4 py-2.5 last:border-b-0">
+            <li
+              key={app.key}
+              className="group flex items-start gap-3 border-b border-border/50 px-4 py-3 last:border-b-0 hover:bg-muted/25"
+            >
+              <span
+                aria-hidden
+                className="mt-1.5 size-2 shrink-0 rounded-full"
+                style={{ background: app.accent ?? '#64748b' }}
+              />
               <div className="min-w-0 flex-1">
                 <Link
                   href={app.href}
-                  className="block text-sm text-foreground hover:text-primary hover:underline"
+                  className="block text-sm font-medium text-foreground group-hover:text-primary"
                 >
                   {app.label}
                 </Link>
                 {app.blurb ? (
-                  <span className="block text-xs text-muted-foreground">{app.blurb}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">{app.blurb}</span>
                 ) : null}
               </div>
               <ReportFavouriteStar href={app.href} label={app.label} />

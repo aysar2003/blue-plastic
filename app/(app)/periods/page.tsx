@@ -42,34 +42,35 @@ export default async function PeriodsPage({
   // Periods are created on demand by posting; this makes sure the page has
   // something to show before anything has been posted.
   await periodService.ensureCurrentFiscalYear(ctx)
-  const [years, closures, closingBoards, archiveStatus] = await Promise.all([
-    periodService.listFiscalYears(ctx),
-    periodService.listClosures(ctx),
-    closeService.listClosingAccountsBoards(ctx),
-    yearArchiveService.listArchiveStatus(ctx),
-  ])
 
   const canClose = ctx.permissions.has('period:close')
   const canReopen = ctx.permissions.has('period:reopen')
   const canPostJournal = ctx.permissions.has('journal:post')
-
-  // The checklist is run for the period that is actually next in line, because
-  // periods close in order and any other one is not a decision the user can make.
-  const next = await closeService.nextPeriodToClose(ctx)
-  const checklist = next ? await closeService.closeChecklist(ctx, next) : null
-
-  // The earliest year that has finished and has not been closed. Years close in
-  // order, so no other one can be next.
   const now = today(ctx.organization.timeZone)
+
+  const [years, closures, closingBoards, archiveStatus, pendingCloseIds, next, ownersSnap] =
+    await Promise.all([
+      periodService.listFiscalYears(ctx),
+      periodService.listClosures(ctx),
+      closeService.listClosingAccountsBoards(ctx),
+      yearArchiveService.listArchiveStatus(ctx),
+      periodService.pendingCloseApprovalIds(ctx),
+      closeService.nextPeriodToClose(ctx),
+      canPostJournal
+        ? equityOwnersService.ownersEquitySnapshot(ctx).catch(() => null)
+        : Promise.resolve(null),
+    ])
+
+  // Checklist + year-close preview after we know next/years (depend on those results).
   const closable = [...years]
     .reverse()
     .find((year) => year.status !== 'LOCKED' && toCalendarDate(year.endDate) < now)
-  const closingPreview =
-    closable && canClose ? await closeService.previewClose(ctx, closable.id).catch(() => null) : null
-
-  const ownersSnap = canPostJournal
-    ? await equityOwnersService.ownersEquitySnapshot(ctx).catch(() => null)
-    : null
+  const [checklist, closingPreview] = await Promise.all([
+    next ? closeService.closeChecklist(ctx, next) : Promise.resolve(null),
+    closable && canClose
+      ? closeService.previewClose(ctx, closable.id).catch(() => null)
+      : Promise.resolve(null),
+  ])
 
   return (
     <>
@@ -104,7 +105,12 @@ export default async function PeriodsPage({
       </Card>
 
       <Card className="mb-6 space-y-4 p-4">
-        <ScaleOpsCard />
+        <ScaleOpsCard
+          liveFromYear={archiveStatus.liveFromYear}
+          currentFiscalYear={archiveStatus.currentFiscalYear}
+          liveWindowYears={archiveStatus.liveWindowYears}
+          nextToArchive={archiveStatus.nextToArchive}
+        />
         <YearArchiveCard
           liveFromYear={archiveStatus.liveFromYear}
           currentFiscalYear={archiveStatus.currentFiscalYear}
@@ -257,6 +263,11 @@ export default async function PeriodsPage({
                         >
                           {PERIOD_STATUS_LABELS[period.status].toLowerCase()}
                         </Badge>
+                        {pendingCloseIds.has(period.id) ? (
+                          <Badge variant="warning" className="ml-1">
+                            close pending approval
+                          </Badge>
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         <OpenMonthButton
@@ -272,7 +283,7 @@ export default async function PeriodsPage({
                           periodId={period.id}
                           status={period.status}
                           label={label}
-                          canClose={canClose}
+                          canClose={canClose && !pendingCloseIds.has(period.id)}
                           canReopen={canReopen}
                         />
                       </TableCell>

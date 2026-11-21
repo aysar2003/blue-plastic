@@ -73,21 +73,72 @@ export const isWithin = (d: CalendarDate, start: CalendarDate, end: CalendarDate
   d >= start && d <= end
 
 /**
- * The fiscal year a date falls in, given the organisation's start month.
- * A year starting in April is labelled by the calendar year it *begins* in.
+ * Anniversary the fiscal year opens on (month 1–12, day 1–31).
+ * Day 1 keeps classic calendar-month periods; any other day uses
+ * anniversary spans (e.g. 20 Apr → 19 May).
  */
-export function fiscalYearOf(date: CalendarDate, startMonth: number): number {
+export type FiscalYearStart = { month: number; day: number }
+
+/** Accept a full start object or the legacy month-only number (day defaults to 1). */
+export function normalizeFiscalYearStart(
+  start: FiscalYearStart | number,
+  day = 1,
+): FiscalYearStart {
+  if (typeof start === 'number') return { month: start, day }
+  return { month: start.month, day: start.day }
+}
+
+/** Read the anniversary from an organisation (or fixture) row. */
+export function fiscalYearStartFrom(org: {
+  fiscalYearStartMonth: number
+  fiscalYearStartDay?: number | null
+}): FiscalYearStart {
+  return { month: org.fiscalYearStartMonth, day: org.fiscalYearStartDay ?? 1 }
+}
+
+/** Clamp day into the real length of that calendar month (Feb 29 → 28 in non-leap). */
+export function anniversaryOn(year: number, month: number, day: number): CalendarDate {
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const clamped = Math.min(Math.max(1, day), lastDay)
+  return `${year}-${String(month).padStart(2, '0')}-${String(clamped).padStart(2, '0')}`
+}
+
+export function dayBefore(date: CalendarDate): CalendarDate {
+  return addDays(date, -1)
+}
+
+/**
+ * Move an anniversary date forward/back by N months, preserving the intended
+ * day-of-month with clamping (31 Jan + 1 month → 28/29 Feb).
+ */
+export function addAnniversaryMonths(date: CalendarDate, months: number): CalendarDate {
+  return addMonths(date, months)
+}
+
+/**
+ * The fiscal year a date falls in.
+ * A year starting on M/D is labelled by the calendar year it *begins* in.
+ */
+export function fiscalYearOf(
+  date: CalendarDate,
+  start: FiscalYearStart | number,
+  day = 1,
+): number {
+  const { month: startMonth, day: startDay } = normalizeFiscalYearStart(start, day)
   const year = Number(date.slice(0, 4))
-  const month = Number(date.slice(5, 7))
-  return month >= startMonth ? year : year - 1
+  const openThisYear = anniversaryOn(year, startMonth, startDay)
+  return date >= openThisYear ? year : year - 1
 }
 
 export function fiscalYearRange(
   fiscalYear: number,
-  startMonth: number,
+  start: FiscalYearStart | number,
+  day = 1,
 ): { start: CalendarDate; end: CalendarDate } {
-  const start = `${fiscalYear}-${String(startMonth).padStart(2, '0')}-01`
-  return { start, end: endOfMonth(addMonths(start, 11)) }
+  const { month: startMonth, day: startDay } = normalizeFiscalYearStart(start, day)
+  const startDate = anniversaryOn(fiscalYear, startMonth, startDay)
+  const nextOpen = anniversaryOn(fiscalYear + 1, startMonth, startDay)
+  return { start: startDate, end: dayBefore(nextOpen) }
 }
 
 export function formatDate(date: CalendarDate, locale = 'en-US'): string {

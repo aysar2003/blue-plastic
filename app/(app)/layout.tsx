@@ -22,7 +22,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     if (ctx.role === 'CUSTOMER') redirect('/portal')
 
     const canSwitch = ctx.isSystemOwner || ctx.canConnect
-    // Light switcher list only — File size estimates stay on /databases.
+    // needsWizard is free (onboardingCompletedAt already on ctx.organization).
+    // Switcher + group-report flag are unstable_cache'd — still run in parallel.
     const [showCompanyReports, databases, needsWizard] = await Promise.all([
       canViewGroupReports(ctx),
       canSwitch ? listSwitchableCompanies(ctx) : Promise.resolve([]),

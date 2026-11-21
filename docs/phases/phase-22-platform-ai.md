@@ -1,6 +1,6 @@
 # Phase 22 — Platform + AI surface (L0 / L9)
 
-**Status:** Complete
+**Status:** Complete (FULL)
 
 ## Shipped
 
@@ -12,6 +12,7 @@
 - MCP tool list + call: `GET /api/v1/mcp/tools`, `POST /api/v1/mcp/call`.
 - ADR-0014 — single service surface for UI / API / MCP.
 - Tests: capability ↔ OpenAPI sync, scope authz, registry happy-path wiring.
+- **Wave F (2026-11-21)** — trading caps: `invoices.list`, `invoices.create`, `payment.create` (already), `stock.onHand` (already), `serviceJobs.get`, `serviceJobs.complete`. Routes `/api/v1/invoices`, `/api/v1/service-jobs/get`, `/api/v1/service-jobs/complete`. OpenAPI + MCP inherit from the registry.
 
 ## Explicitly out
 

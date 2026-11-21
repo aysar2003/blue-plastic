@@ -11,6 +11,13 @@ import { CODE, inRolledBackTransaction, makeOrg, type Fixture } from './ledger-h
 
 const suite = process.env.DATABASE_URL ? describe : describe.skip
 
+function fyStart(ctx: Fixture['ctx']) {
+  return {
+    month: ctx.organization.fiscalYearStartMonth,
+    day: ctx.organization.fiscalYearStartDay,
+  }
+}
+
 async function fiscalYearId(tx: Tx, orgId: string, year: number) {
   const row = await tx.fiscalYear.findFirstOrThrow({
     where: { orgId, year },
@@ -21,7 +28,7 @@ async function fiscalYearId(tx: Tx, orgId: string, year: number) {
 
 async function seedClosedYear(tx: Tx, fixture: Fixture, year: number) {
   const { ctx, accounts } = fixture
-  await ensureFiscalYear(tx, ctx.orgId, ctx.organization.fiscalYearStartMonth, year)
+  await ensureFiscalYear(tx, ctx.orgId, fyStart(ctx), year)
 
   await postJournal(tx, ctx, {
     date: `${year}-03-15`,
@@ -52,11 +59,11 @@ suite('year archive', () => {
     await inRolledBackTransaction(async (tx) => {
       const fixture = await makeOrg(tx)
       const { ctx } = fixture
-      await ensureFiscalYear(tx, ctx.orgId, ctx.organization.fiscalYearStartMonth, 2018)
+      await ensureFiscalYear(tx, ctx.orgId, fyStart(ctx), 2018)
       const yearId = await fiscalYearId(tx, ctx.orgId, 2018)
       await closeYear(tx, ctx, yearId)
       for (let y = 2019; y <= 2026; y++) {
-        await ensureFiscalYear(tx, ctx.orgId, ctx.organization.fiscalYearStartMonth, y)
+        await ensureFiscalYear(tx, ctx.orgId, fyStart(ctx), y)
       }
 
       const result = await archiveFiscalYearTx(tx, ctx, yearId)
@@ -95,7 +102,7 @@ suite('year archive', () => {
       const oldYear = 2020
       const yearId = await seedClosedYear(tx, fixture, oldYear)
       for (let y = oldYear + 1; y <= 2026; y++) {
-        await ensureFiscalYear(tx, ctx.orgId, ctx.organization.fiscalYearStartMonth, y)
+        await ensureFiscalYear(tx, ctx.orgId, fyStart(ctx), y)
       }
 
       const before = await balanceSheet(ctx.orgId, '2026-12-31', { client: tx })
@@ -149,12 +156,7 @@ suite('year archive', () => {
       await seedClosedYear(tx, fixture, 2019)
       await seedClosedYear(tx, fixture, 2020)
       for (let y = 2021; y <= 2026; y++) {
-        await ensureFiscalYear(
-          tx,
-          fixture.ctx.orgId,
-          fixture.ctx.organization.fiscalYearStartMonth,
-          y,
-        )
+        await ensureFiscalYear(tx, fixture.ctx.orgId, fyStart(fixture.ctx), y)
       }
 
       // listArchiveStatus uses db, not tx — call eligibility logic via archive attempt order.

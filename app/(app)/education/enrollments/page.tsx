@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import {
+  awardScholarshipAction,
   billEnrollmentAction,
   billTermEnrollmentsAction,
   enrollAndBill,
@@ -49,7 +50,7 @@ export default async function EducationEnrollmentsPage({
     <>
       <PageHeader
         title="Enrollments"
-        description="Link a student (customer) to a program and term, then raise the fee invoice."
+        description="Link a student (customer) to a program and term, then raise the fee invoice. A scholarship award adds a fee-waiver line on the term invoice."
         actions={
           <Link href="/education" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             Education hub
@@ -213,6 +214,20 @@ export default async function EducationEnrollmentsPage({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex flex-wrap justify-end gap-2">
+                    {row.status === 'ENROLLED' && !row.salesDocument ? (
+                      <form action={awardScholarshipAction} className="inline-flex items-center gap-1">
+                        <input type="hidden" name="enrollmentId" value={row.id} />
+                        <Input
+                          name="percent"
+                          defaultValue={row.scholarshipPercent.toString()}
+                          className="h-8 w-16 text-xs"
+                          aria-label="Scholarship percent"
+                        />
+                        <button type="submit" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+                          Award
+                        </button>
+                      </form>
+                    ) : null}
                     {!row.salesDocument && row.status === 'ENROLLED' && row.feePlan ? (
                       <form action={billEnrollmentAction}>
                         <input type="hidden" name="enrollmentId" value={row.id} />

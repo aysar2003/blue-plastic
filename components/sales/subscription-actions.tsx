@@ -5,6 +5,7 @@ import { useTransition } from 'react'
 import { toast } from 'sonner'
 
 import {
+  cancelSubscription,
   createDueSubscriptions,
   createSubscriptionInstance,
   deleteSubscription,
@@ -89,6 +90,30 @@ export function SubscriptionRowActions({
         }}
       >
         {isActive ? 'Pause' : 'Resume'}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        disabled={pending}
+        onClick={() => {
+          start(async () => {
+            if (!window.confirm('Cancel this schedule and clear remaining unearned?')) return
+            const result = await cancelSubscription({ id })
+            if (!result.ok) {
+              toast.error(result.error.message)
+              return
+            }
+            toast.success(
+              result.data.unearnedCleared
+                ? `Cancelled. Cleared ${result.data.unearnedCleared} unearned schedule(s).`
+                : 'Cancelled.',
+            )
+            router.refresh()
+          })
+        }}
+      >
+        Cancel
       </Button>
       <Button
         type="button"

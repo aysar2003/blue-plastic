@@ -48,6 +48,9 @@ export default async function SalesSubscriptionsPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             {canCreate ? <CreateDueSubscriptionsButton dueCount={dueCount} /> : null}
+            <Link href="/sales/subscriptions/dunning" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+              Dunning
+            </Link>
             {canCreate ? (
               <Link href="/sales/subscriptions/new" className={buttonVariants({ size: 'sm' })}>
                 New schedule

@@ -69,10 +69,24 @@ describe('fiscal years', () => {
     expect(fiscalYearOf('2026-03-31', 4)).toBe(2025)
   })
 
+  it('labels an anniversary fiscal year by the year it begins in', () => {
+    const apr20 = { month: 4, day: 20 }
+    expect(fiscalYearOf('2026-04-20', apr20)).toBe(2026)
+    expect(fiscalYearOf('2026-04-19', apr20)).toBe(2025)
+    expect(fiscalYearOf('2027-04-19', apr20)).toBe(2026)
+  })
+
   it('produces a 12-month range', () => {
     expect(fiscalYearRange(2026, 1)).toEqual({ start: '2026-01-01', end: '2026-12-31' })
     expect(fiscalYearRange(2026, 4)).toEqual({ start: '2026-04-01', end: '2027-03-31' })
     expect(fiscalYearRange(2026, 7)).toEqual({ start: '2026-07-01', end: '2027-06-30' })
+  })
+
+  it('produces an anniversary range spanning ~365 days', () => {
+    expect(fiscalYearRange(2026, { month: 4, day: 20 })).toEqual({
+      start: '2026-04-20',
+      end: '2027-04-19',
+    })
   })
 })
 

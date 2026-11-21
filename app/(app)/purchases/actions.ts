@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { toFormState, type FormState } from '@/components/forms/action-state'
 import { cuid, deleteRecordSchema } from '@/lib/validation/common'
 import {
+  allocateLandedCostSchema,
   applyVendorCreditSchema,
   billPaymentSchema,
   convertOrderSchema,
@@ -19,6 +20,7 @@ import { requireOrgContext } from '@/server/auth/context'
 import { action } from '@/server/action'
 import * as billPaymentService from '@/server/services/bill-payment.service'
 import * as purchaseOptions from '@/server/services/purchase-options'
+import * as landedCostService from '@/server/services/landed-cost.service'
 import * as purchaseService from '@/server/services/purchase.service'
 import { assertDocumentDeleteAllowed } from '@/server/feature-guards'
 
@@ -319,5 +321,29 @@ export async function saveBillPaymentForm(_prev: FormState, formData: FormData):
   return toFormState(
     result,
     result.ok && 'number' in result.data ? `Payment ${result.data.number} recorded.` : 'Recorded.',
+  )
+}
+
+export const allocateLandedCost = action
+  .requires('inventory:adjust')
+  .input(allocateLandedCostSchema)
+  .handler(async (ctx, input) => {
+    const result = await landedCostService.allocate(ctx, input)
+    revalidatePurchases()
+    revalidatePath('/inventory/stock')
+    revalidatePath(`/purchases/bills/${input.billId}`)
+    revalidatePath(`/purchases/bills/${input.billId}/landed-cost`)
+    revalidatePath('/purchases/landed-costs')
+    return result
+  })
+
+export async function allocateLandedCostForm(_prev: FormState, formData: FormData): Promise<FormState> {
+  const billId = String(formData.get('billId') ?? '')
+  const memo = String(formData.get('memo') ?? '')
+  const linesRaw = String(formData.get('lines') ?? '[]')
+  const result = await allocateLandedCost({ billId, memo, lines: linesRaw })
+  return toFormState(
+    result,
+    result.ok ? `Allocated ${result.data.total} onto inventory cost.` : 'Allocated.',
   )
 }

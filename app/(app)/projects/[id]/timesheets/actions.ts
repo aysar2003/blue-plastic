@@ -25,6 +25,14 @@ export const createTimeEntry = action
         .transform((v) => (v === '' ? null : v))
         .nullable()
         .optional(),
+      costRate: z
+        .union([
+          z.string().trim().regex(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a rate'),
+          z.literal(''),
+        ])
+        .transform((v) => (v === '' ? null : v))
+        .nullable()
+        .optional(),
     }),
   )
   .handler(async (ctx, input) => {

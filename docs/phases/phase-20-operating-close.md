@@ -10,6 +10,7 @@ Closes the last SME operating gaps after Phase 19: backup **restore** of people/
 | --- | --- |
 | Backup restore | After books restore, extras return: BOM components, employees, leave, planning, equity, ATS, appraisals, sign, surveys, CRM, discuss threads, appointment types |
 | Portal | Customers open estimates and quotations at `/portal/quotes` (list, paper, PDF) |
+| Portal pay-proof (Wave A 2026-11-21) | Invoice page shows org bank instructions; customer uploads payment proof as a ledger attachment |
 | Appointments | Staff create named types with duration; booking still refuses overlaps |
 
 ## Tests

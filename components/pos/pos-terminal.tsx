@@ -22,6 +22,7 @@ import {
   MoreVerticalIcon,
   MoonIcon,
   PlusIcon,
+  PrinterIcon,
   RefreshCwIcon,
   SearchIcon,
   SunIcon,
@@ -116,6 +117,7 @@ type Product = {
   price: string
   /** Used when the selected customer is wholesale. */
   wholesalePrice?: string | null
+  promoPercent?: number | null
   trackLots?: boolean
   trackSerials?: boolean
   pharmacyControlled?: boolean
@@ -130,6 +132,12 @@ type Customer = {
   id: string
   displayName: string
   priceLevel?: 'RETAIL' | 'WHOLESALE'
+  listPrices?: Record<string, string>
+}
+type Project = {
+  id: string
+  label: string
+  customerId: string
 }
 /** `storeId` null = automatic (counter store, else a store that has enough). */
 type CartLine = PosOpenCartLine
@@ -226,6 +234,9 @@ export function PosTerminal(props: {
     cashOut: string
     cashSales: string
     cashRefunds: string
+    sales?: string
+    refunds?: string
+    netSales?: string
   }
   tillBalance?: { balance: string; balanceRaw: string } | null
   transferDestinations?: TransferDestination[]
@@ -242,6 +253,8 @@ export function PosTerminal(props: {
   stockStoreId?: string | null
   stores?: { id: string; name: string }[]
   customers: Customer[]
+  /** Open jobs for optional till tagging. Empty = hide the picker. */
+  projects?: Project[]
   currency: string
   orgId: string
   orgName: string
@@ -269,6 +282,7 @@ export function PosTerminal(props: {
   const themeStored = useBrowserStore(THEME_KEY)
   const dark = themeStored !== 'light'
   const [customerQuery, setCustomerQuery] = useState('')
+  const [projectQuery, setProjectQuery] = useState('')
   /** When the cart was loaded from a quotation, checkout closes that quote. */
   const [loadedEstimateId, setLoadedEstimateId] = useState<string | null>(null)
   const [prescriptionRef, setPrescriptionRef] = useState('')
@@ -279,7 +293,17 @@ export function PosTerminal(props: {
   const [toast, setToast] = useState<string | null>(null)
   const [lastReceiptId, setLastReceiptId] = useState<string | null>(null)
   const [menu, setMenu] = useState<
-    'actions' | 'burger' | 'cash' | 'customer' | 'note' | 'close' | 'refund' | 'quotes' | 'transfer' | null
+    | 'actions'
+    | 'burger'
+    | 'cash'
+    | 'customer'
+    | 'project'
+    | 'note'
+    | 'close'
+    | 'refund'
+    | 'quotes'
+    | 'transfer'
+    | null
   >(null)
   const [refundOrderId, setRefundOrderId] = useState<string | null>(null)
   const [refundAmounts, setRefundAmounts] = useState<Record<string, string>>({})
@@ -290,6 +314,7 @@ export function PosTerminal(props: {
     () => props.transferDestinations?.[0]?.id ?? '',
   )
   const [closingCash, setClosingCash] = usePropState(props.cashSummary.expectedCash)
+  const [closePayouts, setClosePayouts] = useState('0')
   const [pending, startTransition] = useTransition()
   const [tillView, setTillView] = useState<'sell' | 'orders'>('sell')
   // Assume online until the client mount probe runs — avoids SSR/test flash and
@@ -422,7 +447,9 @@ export function PosTerminal(props: {
   const active = useMemo(() => (book ? activePosOrder(book) : null), [book])
   const cart = active?.cart ?? EMPTY_CART
   const customerId = active?.customerId ?? null
+  const projectId = active?.projectId ?? null
   const note = active?.note ?? ''
+  const projects = props.projects ?? []
 
   function setCart(updater: CartLine[] | ((prev: CartLine[]) => CartLine[])) {
     commitBook((current) => {
@@ -433,23 +460,30 @@ export function PosTerminal(props: {
   }
 
   function setCustomerId(nextCustomerId: string | null) {
-    const previousLevel = props.customers.find((row) => row.id === customerId)?.priceLevel
-    const nextLevel = props.customers.find((row) => row.id === nextCustomerId)?.priceLevel
+    const previousDefaultFor = (product: Product) => customerUnitPrice(product, customerId)
     commitBook((current) => {
       const order = activePosOrder(current)
-      const nextCart =
-        previousLevel === nextLevel
-          ? order.cart
-          : order.cart.map((line) => {
+      const nextCart = order.cart.map((line) => {
               const product = props.products.find((row) => row.id === line.itemId)
               if (!product) return line
-              const previousDefault = posUnitPrice(product, previousLevel)
+              const previousDefault = previousDefaultFor(product)
               // Keep a price the cashier typed by hand.
               if (line.price.trim() !== '' && line.price !== previousDefault) return line
-              return { ...line, price: posUnitPrice(product, nextLevel) }
+              return { ...line, price: customerUnitPrice(product, nextCustomerId) }
             })
-      return patchPosOrder(current, order.id, { customerId: nextCustomerId, cart: nextCart })
+      const job = order.projectId ? projects.find((row) => row.id === order.projectId) : undefined
+      const nextProjectId =
+        job && nextCustomerId && job.customerId !== nextCustomerId ? null : order.projectId
+      return patchPosOrder(current, order.id, {
+        customerId: nextCustomerId,
+        projectId: nextProjectId ?? null,
+        cart: nextCart,
+      })
     })
+  }
+
+  function setProjectId(nextProjectId: string | null) {
+    commitBook((current) => patchPosOrder(current, activePosOrder(current).id, { projectId: nextProjectId }))
   }
 
   function setNote(nextNote: string) {
@@ -491,6 +525,10 @@ export function PosTerminal(props: {
     () => props.customers.find((row) => row.id === customerId)?.displayName ?? null,
     [customerId, props.customers],
   )
+  const projectName = useMemo(
+    () => projects.find((row) => row.id === projectId)?.label ?? null,
+    [projectId, projects],
+  )
   const filteredCustomers = useMemo(() => {
     const needle = customerQuery.trim().toLowerCase()
     if (!needle) return props.customers
@@ -498,6 +536,14 @@ export function PosTerminal(props: {
       customer.displayName.toLowerCase().includes(needle),
     )
   }, [customerQuery, props.customers])
+  const filteredProjects = useMemo(() => {
+    const forCustomer = customerId
+      ? projects.filter((row) => row.customerId === customerId || row.id === projectId)
+      : projects
+    const needle = projectQuery.trim().toLowerCase()
+    if (!needle) return forCustomer
+    return forCustomer.filter((row) => row.label.toLowerCase().includes(needle))
+  }, [customerId, projectId, projectQuery, projects])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -631,7 +677,6 @@ export function PosTerminal(props: {
   function addProduct(product: Product) {
     setToast(null)
     setLastReceiptId(null)
-    const priceLevel = props.customers.find((row) => row.id === customerId)?.priceLevel
     setCart((prev) => {
       const existing = prev.find((line) => line.itemId === product.id)
       if (existing) {
@@ -644,7 +689,7 @@ export function PosTerminal(props: {
         {
           itemId: product.id,
           name: product.name,
-          price: posUnitPrice(product, priceLevel),
+          price: customerUnitPrice(product, customerId),
           quantity: 1,
           storeId: null,
         },
@@ -734,6 +779,7 @@ export function PosTerminal(props: {
       const result = await posCreateQuotation({
         registerId: props.register.id,
         customerId: customerId ?? undefined,
+        projectId: projectId ?? undefined,
         note: note || null,
         lines: cartLinesPayload(),
       })
@@ -771,6 +817,7 @@ export function PosTerminal(props: {
         })),
       )
       setCustomerId(quote.customerId)
+      setProjectId(quote.projectId ?? null)
       setNote(quote.note ?? '')
       setLoadedEstimateId(quote.id)
       setMenu(null)
@@ -945,6 +992,7 @@ export function PosTerminal(props: {
             registerId: props.register.id,
             sessionId: props.session.id,
             customerId: selling.customerId ?? undefined,
+            projectId: selling.projectId ?? undefined,
             note: selling.note || null,
             prescriptionRef: prescriptionRef.trim() || undefined,
             lines,
@@ -973,6 +1021,7 @@ export function PosTerminal(props: {
         registerId: props.register.id,
         sessionId: props.session.id,
         customerId: selling.customerId ?? undefined,
+        projectId: selling.projectId ?? undefined,
         note: selling.note || null,
         prescriptionRef: prescriptionRef.trim() || undefined,
         lines,
@@ -992,6 +1041,7 @@ export function PosTerminal(props: {
               registerId: props.register.id,
               sessionId: props.session.id,
               customerId: selling.customerId ?? undefined,
+              projectId: selling.projectId ?? undefined,
               note: selling.note || null,
               prescriptionRef: prescriptionRef.trim() || undefined,
               lines,
@@ -1061,6 +1111,7 @@ export function PosTerminal(props: {
       const result = await closePosSession({
         sessionId: props.session.id,
         closingCash,
+        payouts: closePayouts || '0',
       })
       if (!result.ok) {
         setError(result.error.message)
@@ -1165,10 +1216,17 @@ export function PosTerminal(props: {
   }, [])
 
   const closeVariance = useMemo(() => {
-    const expected = Number(props.cashSummary.expectedCash) || 0
+    const expected = (Number(props.cashSummary.expectedCash) || 0) - (Number(closePayouts) || 0)
     const counted = Number(closingCash) || 0
     return counted - expected
-  }, [closingCash, props.cashSummary.expectedCash])
+  }, [closingCash, closePayouts, props.cashSummary.expectedCash])
+
+  const lastReceiptDocumentId = lastReceiptId ?? props.recentOrders[0]?.documentId ?? null
+
+  function customerUnitPrice(product: Product, nextCustomerId: string | null | undefined) {
+    const customer = props.customers.find((row) => row.id === nextCustomerId)
+    return posUnitPrice(product, customer?.priceLevel, customer?.listPrices?.[product.id])
+  }
 
   if (!ready || !book || !active) return null
 
@@ -1382,11 +1440,11 @@ export function PosTerminal(props: {
           style={{ background: `${ODOO.teal}22`, color: dark ? '#9fe0e3' : ODOO.tealDark }}
         >
           <span>{toast}</span>
-          {lastReceiptId ? (
+          {lastReceiptDocumentId ? (
             <button
               type="button"
               className="underline"
-              onClick={() => openReceiptPrint(lastReceiptId)}
+              onClick={() => openReceiptPrint(lastReceiptDocumentId)}
             >
               Print receipt
             </button>
@@ -1432,6 +1490,19 @@ export function PosTerminal(props: {
               >
                 {customerName ?? 'Customer'}
               </button>
+              {projects.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProjectQuery('')
+                    setMenu('project')
+                  }}
+                  className="min-w-0 flex-1 truncate rounded-lg px-3 py-2.5 text-sm font-medium"
+                  style={{ border: `1px solid ${border}`, background: chip }}
+                >
+                  {projectName ?? 'Project'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setMenu('note')}
@@ -1720,13 +1791,7 @@ export function PosTerminal(props: {
                     className="mt-auto pt-2 text-sm font-semibold"
                     style={{ color: dark ? '#9fe0e3' : ODOO.teal }}
                   >
-                    {formatMoney(
-                      posUnitPrice(
-                        product,
-                        props.customers.find((row) => row.id === customerId)?.priceLevel,
-                      ),
-                      props.currency,
-                    )}
+                    {formatMoney(customerUnitPrice(product, customerId), props.currency)}
                   </span>
                 </button>
               ))}
@@ -1805,6 +1870,17 @@ export function PosTerminal(props: {
               label="Customer Display"
               icon={<MonitorIcon className="size-6" />}
               onClick={openCustomerDisplay}
+              dark={dark}
+            />
+            <ActionTile
+              label="Reprint last"
+              icon={<PrinterIcon className="size-6" />}
+              disabled={!lastReceiptDocumentId}
+              onClick={() => {
+                if (!lastReceiptDocumentId) return
+                openReceiptPrint(lastReceiptDocumentId)
+                setMenu(null)
+              }}
               dark={dark}
             />
             <ActionTile
@@ -2098,6 +2174,63 @@ export function PosTerminal(props: {
         </Modal>
       ) : null}
 
+      {menu === 'project' ? (
+        <Modal
+          title="Project"
+          dark={dark}
+          onClose={() => {
+            setProjectQuery('')
+            setMenu(null)
+          }}
+        >
+          <label className="mb-2 flex items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: border, background: chip }}>
+            <SearchIcon className="size-4 shrink-0 opacity-60" aria-hidden />
+            <input
+              type="search"
+              value={projectQuery}
+              onChange={(event) => setProjectQuery(event.target.value)}
+              placeholder="Search project…"
+              autoFocus
+              className="w-full bg-transparent text-sm outline-none"
+              style={{ color: text }}
+            />
+          </label>
+          <button
+            type="button"
+            className="mb-2 w-full rounded-lg px-3 py-2 text-left text-sm"
+            style={{ background: chip }}
+            onClick={() => {
+              setProjectId(null)
+              setProjectQuery('')
+              setMenu(null)
+            }}
+          >
+            No project
+          </button>
+          <ul className="max-h-72 space-y-1 overflow-y-auto">
+            {filteredProjects.map((project) => (
+              <li key={project.id}>
+                <button
+                  type="button"
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm hover:opacity-90"
+                  style={{ background: projectId === project.id ? `${ODOO.cta}44` : chip }}
+                  onClick={() => {
+                    setProjectId(project.id)
+                    setProjectQuery('')
+                    setMenu(null)
+                  }}
+                >
+                  <span className="block font-medium">{project.label}</span>
+                </button>
+              </li>
+            ))}
+            {filteredProjects.length === 0 ? (
+              <li className="px-3 py-4 text-center text-sm opacity-60">No project matches that search.</li>
+            ) : null}
+          </ul>
+        </Modal>
+      ) : null}
+
       {menu === 'note' ? (
         <Modal title="Customer Note" dark={dark} onClose={() => setMenu(null)}>
           <textarea
@@ -2150,11 +2283,34 @@ export function PosTerminal(props: {
             <dd className="text-right tabular">
               −{formatMoney(props.cashSummary.cashOut, props.currency)}
             </dd>
-            <dt className="font-semibold">Expected</dt>
+            <dt className="font-semibold">Expected in drawer</dt>
             <dd className="text-right font-semibold tabular">
-              {formatMoney(props.cashSummary.expectedCash, props.currency)}
+              {formatMoney(
+                (Number(props.cashSummary.expectedCash) || 0) - (Number(closePayouts) || 0),
+                props.currency,
+              )}
             </dd>
           </dl>
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t pt-3 text-sm" style={{ borderColor: border }}>
+            <dt style={{ color: muted }}>Session sales</dt>
+            <dd className="text-right tabular">{formatMoney(props.cashSummary.sales ?? '0', props.currency)}</dd>
+            <dt style={{ color: muted }}>Refunds</dt>
+            <dd className="text-right tabular">−{formatMoney(props.cashSummary.refunds ?? '0', props.currency)}</dd>
+            <dt className="font-semibold">Net sales</dt>
+            <dd className="text-right font-semibold tabular">
+              {formatMoney(props.cashSummary.netSales ?? '0', props.currency)}
+            </dd>
+          </dl>
+          <label className="mt-4 block text-sm">
+            Payouts / safe drop ({props.currency})
+            <input
+              value={closePayouts}
+              onChange={(event) => setClosePayouts(event.target.value)}
+              inputMode="decimal"
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ background: chip, borderColor: border, color: text }}
+            />
+          </label>
           <label className="mt-4 block text-sm">
             Counted cash ({props.currency})
             <input

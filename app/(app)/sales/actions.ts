@@ -16,6 +16,7 @@ import {
   invoiceFromSourceSchema,
   paymentSchema,
   paymentUpdateSchema,
+  respondToProposalSchema,
   salesDocumentSchema,
 } from '@/lib/validation/sales'
 import { action } from '@/server/action'
@@ -241,6 +242,24 @@ export const listBillableExpenses = action
   .requires('invoice:read')
   .input(z.object({ customerId: cuid }))
   .handler((ctx, input) => purchaseService.listBillableExpenses(ctx, input.customerId))
+
+/** Unbilled billable project hours waiting to be pulled onto an invoice. */
+export const listBillableTime = action
+  .requires('invoice:create')
+  .input(z.object({ customerId: cuid }))
+  .handler(async (ctx, input) => {
+    const { listBillableForCustomer } = await import('@/server/services/project-time.service')
+    return listBillableForCustomer(ctx, input.customerId)
+  })
+
+export const respondToProposal = action
+  .requires('invoice:update')
+  .input(respondToProposalSchema)
+  .handler(async (ctx, input) => {
+    const result = await salesService.respondToProposal(ctx, input.id, input.response)
+    revalidateSales()
+    return result
+  })
 
 export const convertSalesDocument = action
   .requires('invoice:create')

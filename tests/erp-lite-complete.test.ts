@@ -161,6 +161,7 @@ describe('intercompany memo', () => {
     expect(withIntercompanyMemo('[IC] rent', true)).toBe('[IC] rent')
     expect(withIntercompanyMemo('rent', false)).toBe('rent')
     expect(isIntercompanyMemo('[IC] rent')).toBe(true)
+    expect(isIntercompanyMemo('[IC] ELIM J-1 ↔ J-2')).toBe(true)
   })
 })
 

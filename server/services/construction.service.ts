@@ -1,10 +1,13 @@
 import 'server-only'
 
+import { computeSovLine, siteStoreIssueValue } from '@/lib/erp/sov'
 import { jobCostOverBudget } from '@/lib/erp/verticals-p5'
 import { Decimal } from '@/lib/money'
 import { today } from '@/lib/date'
 import {
   canBillMilestone,
+  contractBilledRemaining,
+  effectiveContractValue,
   milestoneAmount,
   type SalesContractStatus,
 } from '@/lib/erp/contracts'
@@ -229,11 +232,12 @@ export async function jobCostReport(ctx: OrgContext, projectId: string) {
       budgetAmount: true,
       billedPercent: true,
       retentionPercent: true,
+      storeId: true,
     },
   })
   if (!project) throw notFound('Project')
 
-  const [sales, purchases, committedAgg] = await Promise.all([
+  const [sales, purchases, committedAgg, siteIssues] = await Promise.all([
     db.salesDocument.aggregate({
       where: {
         orgId: ctx.orgId,
@@ -265,28 +269,43 @@ export async function jobCostReport(ctx: OrgContext, projectId: string) {
       },
       _sum: { total: true },
     }),
+    project.storeId
+      ? db.inventoryTransaction.findMany({
+          where: { orgId: ctx.orgId, storeId: project.storeId, quantity: { lt: 0 } },
+          select: { quantity: true, value: true },
+          take: 5000,
+        })
+      : Promise.resolve([]),
   ])
 
   const billed = new Decimal(sales._sum.total?.toString() ?? '0')
   const costs = new Decimal(purchases._sum.total?.toString() ?? '0')
   const committed = new Decimal(committedAgg._sum.total?.toString() ?? '0')
+  const siteStoreIssues = siteStoreIssueValue(
+    siteIssues.map((row) => ({
+      quantity: row.quantity.toString(),
+      value: row.value.toString(),
+    })),
+  )
+  const costsWithSite = costs.plus(siteStoreIssues)
   const contract = new Decimal(project.contractValue?.toString() ?? '0')
   const budget = project.budgetAmount
     ? new Decimal(project.budgetAmount.toString())
     : null
 
   const budgetStr = budget?.toFixed(2) ?? null
-  const costsStr = costs.toFixed(2)
+  const costsStr = costsWithSite.toFixed(2)
   const committedStr = committed.toFixed(2)
   return {
     project,
     billed: billed.toFixed(2),
     costs: costsStr,
+    siteStoreIssues,
     committed: committedStr,
-    margin: billed.minus(costs).toFixed(2),
+    margin: billed.minus(costsWithSite).toFixed(2),
     contractRemaining: contract.minus(billed).toFixed(2),
     budget: budgetStr,
-    budgetVariance: budget ? budget.minus(costs.plus(committed)).toFixed(2) : null,
+    budgetVariance: budget ? budget.minus(costsWithSite.plus(committed)).toFixed(2) : null,
     overBudget: jobCostOverBudget({ costs: costsStr, committed: committedStr, budget: budgetStr }),
   }
 }
@@ -301,6 +320,7 @@ export async function listJobCostSummaries(ctx: OrgContext) {
       number: true,
       contractValue: true,
       budgetAmount: true,
+      storeId: true,
     },
     orderBy: { updatedAt: 'desc' },
     take: 50,
@@ -308,7 +328,8 @@ export async function listJobCostSummaries(ctx: OrgContext) {
   if (projects.length === 0) return []
 
   const projectIds = projects.map((row) => row.id)
-  const [sales, purchases, committed] = await Promise.all([
+  const storeIds = [...new Set(projects.map((row) => row.storeId).filter((id): id is string => Boolean(id)))]
+  const [sales, purchases, committed, siteIssueMoves] = await Promise.all([
     db.salesDocument.groupBy({
       by: ['projectId'],
       where: {
@@ -343,6 +364,13 @@ export async function listJobCostSummaries(ctx: OrgContext) {
       },
       _sum: { total: true },
     }),
+    storeIds.length
+      ? db.inventoryTransaction.groupBy({
+          by: ['storeId'],
+          where: { orgId: ctx.orgId, storeId: { in: storeIds }, quantity: { lt: 0 } },
+          _sum: { value: true },
+        })
+      : Promise.resolve([]),
   ])
 
   const billedBy = new Map(
@@ -354,10 +382,16 @@ export async function listJobCostSummaries(ctx: OrgContext) {
   const committedBy = new Map(
     committed.map((row) => [row.projectId, new Decimal(row._sum.total?.toString() ?? '0')]),
   )
+  const issuesByStore = new Map(
+    siteIssueMoves.map((row) => [row.storeId, new Decimal(row._sum.value?.toString() ?? '0').abs()]),
+  )
 
   return projects.map((project) => {
     const billed = billedBy.get(project.id) ?? new Decimal(0)
-    const costs = costBy.get(project.id) ?? new Decimal(0)
+    const siteStoreIssues = project.storeId
+      ? (issuesByStore.get(project.storeId) ?? new Decimal(0))
+      : new Decimal(0)
+    const costs = (costBy.get(project.id) ?? new Decimal(0)).plus(siteStoreIssues)
     const committed = committedBy.get(project.id) ?? new Decimal(0)
     const contract = new Decimal(project.contractValue?.toString() ?? '0')
     const budget = project.budgetAmount
@@ -376,6 +410,7 @@ export async function listJobCostSummaries(ctx: OrgContext) {
       overBudget: jobCostOverBudget({ costs: costsStr, committed: committedStr, budget: budgetStr }),
       billed: billed.toFixed(2),
       costs: costsStr,
+      siteStoreIssues: siteStoreIssues.toFixed(2),
       committed: committedStr,
       margin: billed.minus(costs).toFixed(2),
       remaining: contract.minus(billed).toFixed(2),
@@ -390,18 +425,47 @@ export async function listContracts(ctx: OrgContext) {
     include: {
       customer: { select: { displayName: true } },
       project: { select: { number: true, name: true } },
-      milestones: { orderBy: { lineNumber: 'asc' }, select: { id: true, name: true, percent: true, billedAt: true } },
+      milestones: {
+        orderBy: { lineNumber: 'asc' },
+        select: { id: true, name: true, percent: true, billedAt: true, salesDocumentId: true },
+      },
     },
     take: 100,
   }).then((rows) =>
-    rows.map((row) => ({
-      ...row,
-      contractValue: row.contractValue.toString(),
-      milestones: row.milestones.map((m) => ({
-        ...m,
-        percent: m.percent.toString(),
-      })),
-    })),
+    rows.map((row) => {
+      const billedAmount = row.milestones
+        .filter((m) => m.billedAt)
+        .reduce(
+          (sum, m) =>
+            sum.plus(
+              new Decimal(
+                milestoneAmount(
+                  effectiveContractValue(row.contractValue.toString(), row.changeOrderAmount.toString()),
+                  m.percent.toString(),
+                ),
+              ),
+            ),
+          new Decimal(0),
+        )
+      const remaining = contractBilledRemaining({
+        contractValue: row.contractValue.toString(),
+        changeOrderAmount: row.changeOrderAmount.toString(),
+        billedAmount: billedAmount.toFixed(4),
+      })
+      return {
+        ...row,
+        contractValue: row.contractValue.toString(),
+        changeOrderAmount: row.changeOrderAmount.toString(),
+        retentionPercent: row.retentionPercent?.toString() ?? null,
+        billedAmount: remaining.billed,
+        remainingAmount: remaining.remaining,
+        effectiveValue: remaining.effective,
+        milestones: row.milestones.map((m) => ({
+          ...m,
+          percent: m.percent.toString(),
+        })),
+      }
+    }),
   )
 }
 
@@ -421,11 +485,48 @@ export async function getContract(ctx: OrgContext, id: string) {
   return {
     ...row,
     contractValue: row.contractValue.toString(),
+    changeOrderAmount: row.changeOrderAmount.toString(),
+    retentionPercent: row.retentionPercent?.toString() ?? null,
     milestones: row.milestones.map((m) => ({
       ...m,
       percent: m.percent.toString(),
     })),
   }
+}
+
+export async function updateContractAmounts(
+  ctx: OrgContext,
+  input: { contractId: string; changeOrderAmount?: string | null; retentionPercent?: string | null },
+) {
+  const row = await db.salesContract.findFirst({
+    where: { id: input.contractId, orgId: ctx.orgId },
+    select: { id: true, status: true },
+  })
+  if (!row) throw notFound('Contract')
+  if (row.status === 'CANCELLED') throw precondition('A cancelled contract cannot be changed.')
+
+  return db.salesContract.update({
+    where: { id: row.id },
+    data: {
+      ...(input.changeOrderAmount !== undefined
+        ? {
+            changeOrderAmount:
+              input.changeOrderAmount != null && input.changeOrderAmount !== ''
+                ? new Decimal(input.changeOrderAmount)
+                : new Decimal(0),
+          }
+        : {}),
+      ...(input.retentionPercent !== undefined
+        ? {
+            retentionPercent:
+              input.retentionPercent != null && input.retentionPercent !== ''
+                ? clampPercent(input.retentionPercent)
+                : null,
+          }
+        : {}),
+    },
+    select: { id: true },
+  })
 }
 
 export async function activateContract(ctx: OrgContext, contractId: string) {
@@ -476,7 +577,13 @@ export async function billMilestone(
   })
   if (!item) throw notFound('Item')
 
-  const net = milestoneAmount(contract.contractValue.toString(), milestone.percent.toString())
+  const gross = milestoneAmount(
+    effectiveContractValue(contract.contractValue.toString(), contract.changeOrderAmount.toString()),
+    milestone.percent.toString(),
+  )
+  const retentionPct = contract.retentionPercent?.toString() ?? '0'
+  const held = retentionHeld(gross, retentionPct)
+  const net = new Decimal(gross).minus(held)
 
   const invoice = await salesService.create(ctx, 'INVOICE', {
     number: undefined,
@@ -487,15 +594,17 @@ export async function billMilestone(
       {
         itemId: item.id,
         quantity: '1',
-        unitPrice: net,
+        unitPrice: net.toFixed(4),
         description:
           input.description?.trim() ||
-          `${contract.number} · ${milestone.name} (${milestone.percent.toString()}%)`,
+          `${contract.number} · ${milestone.name} (${milestone.percent.toString()}%)` +
+            (Number(held) > 0 ? ` (retention ${held} held)` : ''),
       },
     ],
     saveAsDraft: false,
     acknowledgeCreditLimit: false,
     discountKind: 'percent',
+    retentionAmount: held,
     customerMessage: contract.name,
   })
 
@@ -512,7 +621,9 @@ export async function billMilestone(
     milestoneId: milestone.id,
     invoiceId: invoice.id,
     invoiceNumber: invoice.number,
-    amount: net,
+    amount: net.toFixed(4),
+    gross,
+    retention: held,
   }
 }
 
@@ -601,6 +712,8 @@ export async function createContract(
     number?: string
     name: string
     contractValue: string
+    changeOrderAmount?: string | null
+    retentionPercent?: string | null
     customerId?: string | null
     projectId?: string | null
     memo?: string | null
@@ -637,6 +750,11 @@ export async function createContract(
         number,
         name: input.name.trim(),
         contractValue: input.contractValue,
+        changeOrderAmount: input.changeOrderAmount && input.changeOrderAmount !== '' ? input.changeOrderAmount : '0',
+        retentionPercent:
+          input.retentionPercent != null && input.retentionPercent !== ''
+            ? clampPercent(input.retentionPercent)
+            : null,
         customerId: input.customerId ?? null,
         projectId: input.projectId ?? null,
         memo: input.memo?.trim() || null,
@@ -654,4 +772,190 @@ export async function createContract(
     })
     return contract
   })
+}
+
+export async function listSovLines(ctx: OrgContext, projectId?: string) {
+  const rows = await db.projectSovLine.findMany({
+    where: {
+      orgId: ctx.orgId,
+      ...(projectId ? { projectId } : {}),
+    },
+    orderBy: [{ projectId: 'asc' }, { lineNumber: 'asc' }],
+    include: {
+      project: { select: { id: true, number: true, name: true } },
+      contract: { select: { id: true, number: true, name: true } },
+    },
+    take: 500,
+  })
+  return rows.map((row) => {
+    const computed = computeSovLine({
+      budgetAmount: row.budgetAmount.toString(),
+      percentComplete: row.percentComplete.toString(),
+      billedPercent: row.billedPercent.toString(),
+      thisBillAmount: row.thisBillAmount?.toString() ?? null,
+      retainagePercent: row.retainagePercent?.toString() ?? null,
+    })
+    return {
+      id: row.id,
+      projectId: row.projectId,
+      contractId: row.contractId,
+      lineNumber: row.lineNumber,
+      name: row.name,
+      project: row.project,
+      contract: row.contract,
+      ...computed,
+      retainagePercent: row.retainagePercent?.toString() ?? null,
+    }
+  })
+}
+
+export async function upsertSovLine(
+  ctx: OrgContext,
+  input: {
+    id?: string
+    projectId: string
+    contractId?: string | null
+    name: string
+    budgetAmount: string
+    percentComplete?: string | null
+    thisBillAmount?: string | null
+    retainagePercent?: string | null
+  },
+) {
+  const project = await db.project.findFirst({
+    where: { id: input.projectId, orgId: ctx.orgId },
+    select: { id: true },
+  })
+  if (!project) throw notFound('Project')
+  if (input.contractId) {
+    const contract = await db.salesContract.findFirst({
+      where: { id: input.contractId, orgId: ctx.orgId },
+      select: { id: true },
+    })
+    if (!contract) throw notFound('Contract')
+  }
+  const name = input.name.trim()
+  if (!name) throw validation('SOV line needs a name.')
+  const budget = new Decimal(input.budgetAmount || '0')
+  if (budget.lessThan(0)) throw validation('SOV budget cannot be negative.')
+
+  if (input.id) {
+    const existing = await db.projectSovLine.findFirst({
+      where: { id: input.id, orgId: ctx.orgId },
+      select: { id: true },
+    })
+    if (!existing) throw notFound('SOV line')
+    return db.projectSovLine.update({
+      where: { id: existing.id },
+      data: {
+        name,
+        budgetAmount: budget,
+        percentComplete: clampPercent(input.percentComplete),
+        thisBillAmount:
+          input.thisBillAmount != null && input.thisBillAmount !== ''
+            ? new Decimal(input.thisBillAmount)
+            : null,
+        retainagePercent:
+          input.retainagePercent != null && input.retainagePercent !== ''
+            ? clampPercent(input.retainagePercent)
+            : null,
+        contractId: input.contractId || null,
+      },
+      select: { id: true },
+    })
+  }
+
+  const last = await db.projectSovLine.findFirst({
+    where: { orgId: ctx.orgId, projectId: project.id },
+    orderBy: { lineNumber: 'desc' },
+    select: { lineNumber: true },
+  })
+  return db.projectSovLine.create({
+    data: {
+      orgId: ctx.orgId,
+      projectId: project.id,
+      contractId: input.contractId || null,
+      lineNumber: (last?.lineNumber ?? 0) + 1,
+      name,
+      budgetAmount: budget,
+      percentComplete: clampPercent(input.percentComplete),
+      thisBillAmount:
+        input.thisBillAmount != null && input.thisBillAmount !== ''
+          ? new Decimal(input.thisBillAmount)
+          : null,
+      retainagePercent:
+        input.retainagePercent != null && input.retainagePercent !== ''
+          ? clampPercent(input.retainagePercent)
+          : null,
+    },
+    select: { id: true },
+  })
+}
+
+export async function billSovLine(
+  ctx: OrgContext,
+  input: { sovLineId: string; itemId: string; description?: string },
+) {
+  const line = await db.projectSovLine.findFirst({
+    where: { id: input.sovLineId, orgId: ctx.orgId },
+    include: {
+      project: {
+        select: { id: true, number: true, name: true, customerId: true },
+      },
+    },
+  })
+  if (!line) throw notFound('SOV line')
+  const computed = computeSovLine({
+    budgetAmount: line.budgetAmount.toString(),
+    percentComplete: line.percentComplete.toString(),
+    billedPercent: line.billedPercent.toString(),
+    thisBillAmount: line.thisBillAmount?.toString() ?? null,
+    retainagePercent: line.retainagePercent?.toString() ?? null,
+  })
+  if (new Decimal(computed.thisBillNet).lessThanOrEqualTo(0)) {
+    throw validation('Nothing to bill on this SOV line. Raise % complete or this-bill amount.')
+  }
+  const item = await db.item.findFirst({
+    where: { id: input.itemId, orgId: ctx.orgId, isActive: true, deletedAt: null },
+    select: { id: true },
+  })
+  if (!item) throw notFound('Item')
+
+  const invoice = await salesService.create(ctx, 'INVOICE', {
+    number: undefined,
+    customerId: line.project.customerId,
+    date: today(ctx.organization.timeZone),
+    projectId: line.project.id,
+    lines: [
+      {
+        itemId: item.id,
+        quantity: '1',
+        unitPrice: computed.thisBillNet,
+        description:
+          input.description?.trim() ||
+          `${line.project.number} SOV · ${line.name}` +
+            (Number(computed.retainage) > 0 ? ` (retainage ${computed.retainage} held)` : ''),
+      },
+    ],
+    saveAsDraft: false,
+    acknowledgeCreditLimit: false,
+    discountKind: 'percent',
+    retentionAmount: computed.retainage,
+    customerMessage: `SOV ${line.name} · ${line.project.name}`,
+  })
+
+  await db.projectSovLine.update({
+    where: { id: line.id },
+    data: {
+      billedPercent: computed.percentComplete,
+      thisBillAmount: null,
+    },
+  })
+
+  return {
+    invoiceId: invoice.id,
+    invoiceNumber: invoice.number,
+    net: computed.thisBillNet,
+    retainage: computed.retainage,
+  }
 }

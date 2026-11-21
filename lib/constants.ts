@@ -3,6 +3,9 @@ export const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ] as const
 
+/** Day-of-month options for fiscal year start (1–31). Invalid combos are rejected in Zod. */
+export const MONTH_DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
+
 /** Currencies offered in settings. The ledger supports any ISO code; this is the shortlist. */
 export const CURRENCIES = [
   { code: 'USD', label: 'US Dollar' },

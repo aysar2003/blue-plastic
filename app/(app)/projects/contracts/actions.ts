@@ -26,6 +26,16 @@ export async function activateContractAction(formData: FormData) {
   revalidatePath(PATH)
 }
 
+export async function updateContractAmountsAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await construction.updateContractAmounts(ctx, {
+    contractId: String(formData.get('contractId') ?? ''),
+    changeOrderAmount: String(formData.get('changeOrderAmount') ?? '') || '0',
+    retentionPercent: String(formData.get('retentionPercent') ?? '') || null,
+  })
+  revalidatePath(PATH)
+}
+
 export async function releaseVendorRetentionAction(formData: FormData) {
   const ctx = await requireOrgContext('bill:create')
   await construction.releaseVendorRetention(ctx, String(formData.get('billId') ?? ''))

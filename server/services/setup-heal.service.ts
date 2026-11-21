@@ -1,7 +1,9 @@
 import 'server-only'
 
 import { localizationPackById } from '@/lib/localization/packs'
+import { shouldHealReorderPoint } from '@/lib/setup-heal'
 import { skuFromName } from '@/lib/sku'
+import * as taxService from '@/server/services/tax.service'
 import { requestMeta, writeAudit } from '@/server/audit'
 import { can } from '@/server/auth/permissions'
 import type { OrgContext } from '@/server/auth/context'
@@ -83,16 +85,23 @@ export async function healMissingReorderPoints(ctx: OrgContext, defaultRaw = '1'
       type: { in: ['INVENTORY', 'INVENTORY_ASSEMBLY'] },
       reorderPoint: null,
     },
-    select: { id: true },
+    select: { id: true, reorderPoint: true },
     take: 5000,
   })
 
   let healed = 0
   for (const item of missing) {
+    if (!shouldHealReorderPoint(item.reorderPoint)) continue
     await itemService.setReorderPoint(ctx, item.id, defaultRaw)
     healed += 1
   }
   return { healed, scanned: missing.length, defaultValue: defaultRaw }
+}
+
+/** Pack default tax code on items missing tax — never writes reorderPoint. */
+export async function healItemTaxFromPack(ctx: OrgContext) {
+  assertAdmin(ctx)
+  return taxService.applyPackTaxToUntaxedItems(ctx)
 }
 
 /** Copy org country onto customers missing billingCountry. */

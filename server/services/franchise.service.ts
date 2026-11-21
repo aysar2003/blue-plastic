@@ -1,7 +1,12 @@
 import 'server-only'
 
-import { franchiseRoyaltyAmount } from '@/lib/erp/franchise'
-import { endOfMonth, startOfMonth, toCalendarDate, toDate } from '@/lib/date'
+import {
+  brandPnlRollup,
+  franchiseRoyaltyAmount,
+  isFranchisee,
+  royaltyStatementCsv,
+} from '@/lib/erp/franchise'
+import { endOfMonth, startOfMonth, toDate } from '@/lib/date'
 import { Decimal } from '@/lib/money'
 import { seedChartOfAccounts, systemAccountId } from '@/server/accounting/chart-of-accounts'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
@@ -205,4 +210,65 @@ export async function franchiseSummary(parentCtx: OrgContext, asOfMonth: string)
     })
   }
   return { asOfMonth, children: rows }
+}
+
+export async function royaltyStatementCsvExport(parentCtx: OrgContext, asOfMonth: string) {
+  const summary = await franchiseSummary(parentCtx, asOfMonth)
+  return royaltyStatementCsv(
+    summary.children.map((row) => ({
+      name: row.name,
+      royaltyPercent: row.royaltyPercent ?? '',
+      sales: row.sales,
+      royaltyDue: row.royaltyDue,
+    })),
+  )
+}
+
+/** Brand P&L for children that carry a franchise royalty %. */
+export async function brandProfitAndLoss(parentCtx: OrgContext, asOfMonth: string) {
+  if (!parentCtx.permissions.has('report:read')) throw forbidden('Reports required.')
+  const children = await listFranchiseChildren(parentCtx)
+  const branded = children.filter((child) =>
+    isFranchisee(child.franchiseRoyaltyPercent?.toString() ?? null),
+  )
+  const monthStart = startOfMonth(asOfMonth)
+  const monthEnd = endOfMonth(asOfMonth)
+  const rows = []
+  for (const child of branded) {
+    const sales = await childSalesInMonth(child.id, asOfMonth)
+    const royalty = franchiseRoyaltyAmount(sales, child.franchiseRoyaltyPercent?.toString() ?? null)
+    const [pl] = await db.$queryRaw<{ income: string; expense: string }[]>`
+      SELECT
+        COALESCE(SUM(CASE WHEN a.type = 'INCOME' THEN l.credit - l.debit ELSE 0 END), 0) AS income,
+        COALESCE(SUM(CASE WHEN a.type IN ('EXPENSE', 'COST_OF_GOODS_SOLD', 'OTHER_EXPENSE')
+          THEN l.debit - l.credit ELSE 0 END), 0) AS expense
+        FROM journal_lines l
+        JOIN journals j ON j.id = l."journalId" AND j.status NOT IN ('DRAFT', 'DELETED')
+        JOIN ledger_accounts a ON a.id = l."accountId"
+       WHERE l."orgId" = ${child.id}
+         AND l."journalDate" >= ${toDate(monthStart)}
+         AND l."journalDate" <= ${toDate(monthEnd)}
+         AND COALESCE(j.memo, '') NOT LIKE '[IC]%'
+    `
+    const income = new Decimal(pl?.income ?? 0)
+    const expense = new Decimal(pl?.expense ?? 0)
+    rows.push({
+      id: child.id,
+      name: child.name,
+      royaltyPercent: child.franchiseRoyaltyPercent?.toString() ?? '0',
+      income: income.toFixed(4),
+      expense: expense.toFixed(4),
+      net: income.minus(expense).toFixed(4),
+      royaltyDue: royalty.toFixed(4),
+    })
+  }
+  const rollup = brandPnlRollup(
+    rows.map((row) => ({
+      income: row.income,
+      expense: row.expense,
+      net: row.net,
+      royaltyDue: row.royaltyDue,
+    })),
+  )
+  return { asOfMonth, hasFranchisees: branded.length > 0, children: rows, rollup }
 }

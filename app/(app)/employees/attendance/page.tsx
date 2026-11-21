@@ -39,9 +39,14 @@ export default async function AttendancePage({
         title="Attendance"
         description="Daily check-in / check-out or hours worked."
         actions={
-          <Button asChild type="button" size="sm" variant="outline">
-            <Link href="/employees/attendance/devices">Devices</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild type="button" size="sm" variant="outline">
+              <Link href={`/api/employees/hours?kind=attendance&from=${from}&to=${to}`}>Hours CSV</Link>
+            </Button>
+            <Button asChild type="button" size="sm" variant="outline">
+              <Link href="/employees/attendance/devices">Devices</Link>
+            </Button>
+          </div>
         }
       />
       <AttendanceBoard

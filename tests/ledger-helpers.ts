@@ -34,7 +34,10 @@ export type Fixture = {
  * A throwaway organisation with the default chart installed, inside the caller's
  * transaction. Returns the account ids the tests reach for by name.
  */
-export async function makeOrg(tx: Tx, options: { fiscalYearStartMonth?: number } = {}): Promise<Fixture> {
+export async function makeOrg(
+  tx: Tx,
+  options: { fiscalYearStartMonth?: number; fiscalYearStartDay?: number } = {},
+): Promise<Fixture> {
   const suffix = Math.random().toString(36).slice(2, 10)
 
   const organization = await tx.organization.create({
@@ -42,15 +45,19 @@ export async function makeOrg(tx: Tx, options: { fiscalYearStartMonth?: number }
       name: `Ledger Test ${suffix}`,
       baseCurrency: 'USD',
       fiscalYearStartMonth: options.fiscalYearStartMonth ?? 1,
+      fiscalYearStartDay: options.fiscalYearStartDay ?? 1,
       timeZone: 'UTC',
     },
     select: {
-      id: true, name: true, legalName: true, baseCurrency: true, fiscalYearStartMonth: true,
-      timeZone: true, allowNegativeStock: true, posTillLedgerMode: true, parentOrgId: true,
+      id: true, name: true, legalName: true, baseCurrency: true,
+      fiscalYearStartMonth: true, fiscalYearStartDay: true,
+      timeZone: true, allowNegativeStock: true, idleLockSeconds: true, sessionMaxHours: true,
+      posTillLedgerMode: true, parentOrgId: true,
       addressLine1: true, addressLine2: true, city: true, region: true,
       postalCode: true, country: true, phone: true, email: true, website: true,
       brandMark: true, logoStorageKey: true, updatedAt: true,
       accessRestricted: true, rentExpiresAt: true, maxUsers: true, rentNote: true,
+      onboardingCompletedAt: true,
     },
   })
 
@@ -90,7 +97,7 @@ export async function makeOrg(tx: Tx, options: { fiscalYearStartMonth?: number }
         ...orgFields,
         hasLogo: Boolean(logoStorageKey),
       },
-      user,
+      user: { ...user, loginAt: null, hasDeskPin: false },
     },
     accounts,
   }

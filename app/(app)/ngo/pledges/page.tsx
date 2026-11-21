@@ -45,11 +45,18 @@ export default async function NgoPledgesPage() {
     <>
       <PageHeader
         title="Donor pledges"
-        description="Record a pledge against a fund, then receive it as a customer payment."
+        description="Record a pledge against a fund, then receive it as a customer payment. Receive writes a receipt note on the payment."
         actions={
-          <Link href="/ngo" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            NGO hub
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {pledges.length > 0 ? (
+              <Link href="/api/ngo/donors" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                Donor CSV
+              </Link>
+            ) : null}
+            <Link href="/ngo" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              NGO hub
+            </Link>
+          </div>
         }
       />
 
@@ -114,6 +121,7 @@ export default async function NgoPledgesPage() {
               <TableHead>Fund</TableHead>
               <TableHead>Amount</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Receipt</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -135,6 +143,9 @@ export default async function NgoPledgesPage() {
                       {pledge.payment.number}
                     </Link>
                   ) : null}
+                </TableCell>
+                <TableCell className="max-w-xs truncate text-xs text-muted-foreground">
+                  {pledge.receiptNote ?? '—'}
                 </TableCell>
                 <TableCell className="text-right">
                   {pledge.status === 'PLEDGED' && banks[0] ? (

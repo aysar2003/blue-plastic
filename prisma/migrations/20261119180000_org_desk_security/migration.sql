@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "idleLockSeconds" INTEGER NOT NULL DEFAULT 900;
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "sessionMaxHours" INTEGER NOT NULL DEFAULT 10;

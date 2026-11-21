@@ -194,6 +194,11 @@ export type OrgFeatureFlags = {
    */
   closeHardGates: boolean
   /**
+   * Wave D: when hard gates are on, month close waits for two approvers in the
+   * Approvals inbox before the period actually closes.
+   */
+  closeSecondApprover: boolean
+  /**
    * International-style budget control against APPROVED monthly cells:
    * - off — report only (default, like most SMEs)
    * - warn — ask to confirm, then allow (QBO/Odoo-style)
@@ -539,6 +544,7 @@ export const DEFAULT_FEATURE_FLAGS: OrgFeatureFlags = {
   creditLimitWarn: false,
   payrollStandard: true,
   closeHardGates: false,
+  closeSecondApprover: false,
   budgetControlMode: 'off',
   /** Opt-in apps are granted so Apps & features can turn them on. */
   grantedModules: allModules(true),
@@ -592,6 +598,7 @@ export const MODULE_PATH_PREFIXES: readonly { prefix: string; module: ModuleFlag
   { prefix: '/periods', module: 'periods' },
   { prefix: '/reports', module: 'reports' },
   { prefix: '/analytics', module: 'reports' },
+  { prefix: '/snapshots', module: 'reports' },
   { prefix: '/calendar', module: 'calendar' },
   { prefix: '/todos', module: 'todos' },
   { prefix: '/documents', module: 'documents' },
@@ -656,6 +663,7 @@ export const MODULE_KEY_TO_FLAG: Record<string, ModuleFlag | null> = {
   journals: 'journals',
   reports: 'reports',
   analytics: 'reports',
+  snapshots: 'reports',
   'bill-payments': 'bill-payments',
   periods: 'periods',
   calendar: 'calendar',
@@ -689,6 +697,9 @@ export function parseFeatureFlags(raw: unknown): OrgFeatureFlags {
   if (typeof data.creditLimitWarn === 'boolean') base.creditLimitWarn = data.creditLimitWarn
   if (typeof data.payrollStandard === 'boolean') base.payrollStandard = data.payrollStandard
   if (typeof data.closeHardGates === 'boolean') base.closeHardGates = data.closeHardGates
+  if (typeof data.closeSecondApprover === 'boolean') {
+    base.closeSecondApprover = data.closeSecondApprover
+  }
   const mode = parseBudgetControlMode(data.budgetControlMode)
   if (mode) {
     base.budgetControlMode = mode

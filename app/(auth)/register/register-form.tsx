@@ -8,7 +8,7 @@ import { FormError } from '@/components/forms/form-error'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
-import { CURRENCIES, MONTHS } from '@/lib/constants'
+import { CURRENCIES, MONTH_DAYS, MONTHS } from '@/lib/constants'
 import {
   MODULE_FLAG_LABELS,
   MODULE_FLAGS,
@@ -87,7 +87,7 @@ export function RegisterForm() {
 
           <Field
             name="fiscalYearStartMonth"
-            label="Fiscal year starts"
+            label="Fiscal year month"
             error={state.fieldErrors?.fiscalYearStartMonth}
           >
             <select
@@ -98,6 +98,24 @@ export function RegisterForm() {
               {MONTHS.map((m, i) => (
                 <option key={m} value={i + 1}>
                   {m}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field
+            name="fiscalYearStartDay"
+            label="Fiscal year day"
+            error={state.fieldErrors?.fiscalYearStartDay}
+          >
+            <select
+              {...fieldProps('fiscalYearStartDay', state.fieldErrors?.fiscalYearStartDay)}
+              defaultValue={v.fiscalYearStartDay ?? '1'}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+            >
+              {MONTH_DAYS.map((d) => (
+                <option key={d} value={d}>
+                  {d}
                 </option>
               ))}
             </select>

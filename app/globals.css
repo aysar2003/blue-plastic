@@ -3944,3 +3944,42 @@ html[data-font-style='system'] [data-report-root] {
     animation: none;
   }
 }
+
+/* Company Snapshot — entrance + bar rise (respect reduced motion). */
+@keyframes snapshot-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes snapshot-bar-rise {
+  from {
+    opacity: 0;
+    transform: scaleY(0.25);
+    transform-origin: center bottom;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.snapshot-fade-in {
+  animation: snapshot-fade-in 0.42s ease-out both;
+}
+.snapshot-bar {
+  animation: snapshot-bar-rise 0.45s ease-out both;
+}
+.snapshot-board .snapshot-fade-in,
+.snapshot-board .snapshot-bar {
+  animation-fill-mode: both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .snapshot-fade-in,
+  .snapshot-bar {
+    animation: none;
+  }
+}

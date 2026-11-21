@@ -7,7 +7,9 @@ import {
   canBillEnrollment,
   canWithdrawEnrollment,
   enrollmentCount,
+  feeInvoiceLinesWithWaiver,
   normalizeScholarshipPercent,
+  scholarshipDiscountAmount,
   type EnrollmentStatus,
 } from '@/lib/erp/education'
 import { scholarshipSummaryTotals } from '@/lib/erp/scholarship-summary'
@@ -299,16 +301,28 @@ export async function billEnrollment(ctx: OrgContext, enrollmentId: string) {
   })
 
   const scholarship = normalizeScholarshipPercent(enrollment.scholarshipPercent.toString())
+  const feeSubtotal = lines.reduce((sum, line) => {
+    return sum.plus(new Decimal(line.unitPrice).times(line.quantity || '1'))
+  }, new Decimal(0))
+  const waiverAmount = scholarshipDiscountAmount(feeSubtotal.toString(), scholarship)
+  const waiverItem = scholarship > 0 ? await ensureScholarshipWaiverItem(ctx) : null
+  const invoiceLines = waiverItem
+    ? feeInvoiceLinesWithWaiver(lines, {
+        itemId: waiverItem.id,
+        amount: waiverAmount,
+        description: `Scholarship waiver ${scholarship}% · ${enrollment.term.name}`,
+      })
+    : lines
 
   const invoice = await salesService.create(ctx, 'INVOICE', {
     number: undefined,
     customerId: enrollment.customerId,
     date: today(ctx.organization.timeZone),
-    lines,
+    lines: invoiceLines,
     saveAsDraft: false,
     acknowledgeCreditLimit: false,
     discountKind: 'percent',
-    discountValue: scholarship > 0 ? String(scholarship) : null,
+    discountValue: null,
     customerMessage: `Tuition / fees — ${enrollment.program.name} · ${enrollment.term.name}`,
     memo: enrollment.notes ?? undefined,
   })
@@ -550,4 +564,65 @@ export async function scholarshipSummary(ctx: OrgContext, termId: string) {
 export async function scholarshipSummaryForTerms(ctx: OrgContext) {
   const terms = await listTerms(ctx)
   return Promise.all(terms.map((term) => scholarshipSummary(ctx, term.id)))
+}
+
+const SCHOLARSHIP_WAIVER_SKU = 'SCH-WAIVER'
+
+async function ensureScholarshipWaiverItem(ctx: OrgContext) {
+  const existing = await db.item.findFirst({
+    where: {
+      orgId: ctx.orgId,
+      deletedAt: null,
+      OR: [{ sku: SCHOLARSHIP_WAIVER_SKU }, { name: 'Scholarship waiver', type: 'DISCOUNT' }],
+    },
+    select: { id: true },
+  })
+  if (existing) return existing
+
+  const income = await db.ledgerAccount.findFirst({
+    where: { orgId: ctx.orgId, isActive: true, subtype: 'SALES_DISCOUNTS' },
+    select: { id: true },
+    orderBy: { code: 'asc' },
+  })
+  if (!income) throw precondition('Sales Discounts account is missing, so a fee waiver cannot post.')
+
+  try {
+    return await db.item.create({
+      data: {
+        orgId: ctx.orgId,
+        name: 'Scholarship waiver',
+        sku: SCHOLARSHIP_WAIVER_SKU,
+        type: 'DISCOUNT',
+        incomeAccountId: income.id,
+        isTaxable: false,
+        availableInPos: false,
+      },
+      select: { id: true },
+    })
+  } catch {
+    const raced = await db.item.findFirst({
+      where: { orgId: ctx.orgId, sku: SCHOLARSHIP_WAIVER_SKU, deletedAt: null },
+      select: { id: true },
+    })
+    if (raced) return raced
+    throw conflict('Scholarship waiver item could not be created.')
+  }
+}
+
+/** Record an award percent; the fee-waiver line is applied when the term invoice is billed. */
+export async function awardScholarship(
+  ctx: OrgContext,
+  input: { enrollmentId: string; percent: string | number },
+) {
+  const enrollment = await db.studentEnrollment.findFirst({
+    where: { id: input.enrollmentId, orgId: ctx.orgId },
+    select: { id: true, salesDocumentId: true },
+  })
+  if (!enrollment) throw notFound('Enrollment')
+  const scholarshipPercent = normalizeScholarshipPercent(input.percent)
+  return db.studentEnrollment.update({
+    where: { id: enrollment.id },
+    data: { scholarshipPercent },
+    select: { id: true, scholarshipPercent: true, salesDocumentId: true },
+  })
 }

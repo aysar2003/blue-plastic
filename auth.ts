@@ -194,6 +194,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.orgId = user.orgId
         token.role = user.role
         token.membershipVersion = user.membershipVersion
+        token.loginAt = Date.now()
+      }
+      if (typeof token.loginAt !== 'number') {
+        token.loginAt = typeof token.iat === 'number' ? token.iat * 1000 : Date.now()
       }
 
       // Refresh the claims when the client calls `useSession().update()` — used
@@ -254,6 +258,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.orgId = token.orgId as string
       session.user.role = token.role as typeof session.user.role
       session.user.membershipVersion = token.membershipVersion as number
+      if (typeof token.loginAt === 'number') session.user.loginAt = token.loginAt
       return session
     },
   },

@@ -142,7 +142,10 @@ export async function main() {
   console.log('periods')
   await db.$transaction(async (tx) => {
     for (let y = 2019; y <= 2027; y++) {
-      await ensureFiscalYear(tx, org.id, org.fiscalYearStartMonth, y)
+      await ensureFiscalYear(tx, org.id, {
+        month: org.fiscalYearStartMonth,
+        day: org.fiscalYearStartDay ?? 1,
+      }, y)
     }
   })
 

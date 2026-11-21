@@ -20,7 +20,7 @@ export default async function PortfolioPage() {
     <>
       <PageHeader
         title="Holding portfolio"
-        description="Subsidiaries with ownership %, rolled net income, and NCI."
+        description="Group strip at ownership %: cash, AR, stock, and net income, with prior-year compare."
         actions={
           <>
             <Link href="/reports/consolidation" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
@@ -35,6 +35,21 @@ export default async function PortfolioPage() {
           </>
         }
       />
+
+      <ul className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {report.kpis.map((kpi) => (
+          <li key={kpi.key} className="rounded-lg border p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{kpi.label}</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">{formatMoney(kpi.current, currency)}</p>
+            {kpi.priorYear != null ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Prior year {formatMoney(kpi.priorYear, currency)}
+                {kpi.change != null ? ` · Δ ${formatMoney(kpi.change, currency)}` : ''}
+              </p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
 
       <Card className="mb-4 grid max-w-xl gap-1 p-4 text-sm">
         <p>

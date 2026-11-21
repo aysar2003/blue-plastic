@@ -26,6 +26,10 @@ type Organization = {
   phone: string | null
   email: string | null
   website: string | null
+  paymentBankName: string | null
+  paymentAccountName: string | null
+  paymentAccountNumber: string | null
+  paymentInstructions: string | null
   timeZone: string
   localizationPackId: string | null
 }
@@ -174,6 +178,42 @@ export function OrganizationForm({ organization, canEdit }: { organization: Orga
 
           <Field name="website" label="Website" error={e?.website}>
             <Input {...fieldProps('website', e?.website)} defaultValue={organization.website ?? ''} disabled={!canEdit} />
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field name="paymentBankName" label="Invoice bank name" error={e?.paymentBankName}>
+              <Input
+                {...fieldProps('paymentBankName', e?.paymentBankName)}
+                defaultValue={organization.paymentBankName ?? ''}
+                disabled={!canEdit}
+              />
+            </Field>
+            <Field name="paymentAccountName" label="Invoice account name" error={e?.paymentAccountName}>
+              <Input
+                {...fieldProps('paymentAccountName', e?.paymentAccountName)}
+                defaultValue={organization.paymentAccountName ?? ''}
+                disabled={!canEdit}
+              />
+            </Field>
+          </div>
+          <Field name="paymentAccountNumber" label="Invoice account number" error={e?.paymentAccountNumber}>
+            <Input
+              {...fieldProps('paymentAccountNumber', e?.paymentAccountNumber)}
+              defaultValue={organization.paymentAccountNumber ?? ''}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field
+            name="paymentInstructions"
+            label="Payment instructions"
+            hint="Shown to customers on the portal with the invoice."
+            error={e?.paymentInstructions}
+          >
+            <Input
+              {...fieldProps('paymentInstructions', e?.paymentInstructions)}
+              defaultValue={organization.paymentInstructions ?? ''}
+              disabled={!canEdit}
+            />
           </Field>
         </CardContent>
 

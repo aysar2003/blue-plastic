@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { PortalPrintButton } from '@/components/portal/portal-print-button'
+import { PortalQuoteResponse } from '@/components/portal/portal-quote-response'
 import { MerchantInvoice } from '@/components/sales/merchant-invoice'
 import { buttonVariants } from '@/components/ui/button'
 import { byType } from '@/lib/sales-types'
@@ -56,9 +57,14 @@ export default async function PortalQuotePage({
           <h1 className="mt-1 text-xl font-semibold tracking-tight">
             {config.singular} {document.number}
           </h1>
-          <p className="text-sm text-muted-foreground">View only — you can print or download a PDF.</p>
+          <p className="text-sm text-muted-foreground">
+            {document.status === 'OPEN'
+              ? 'Review the quote, then accept or decline — or print / download a PDF.'
+              : 'You can print or download a PDF.'}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <PortalQuoteResponse id={document.id} status={document.status} />
           <PortalPrintButton />
           <a
             href={`/api/sales/${document.id}/pdf`}

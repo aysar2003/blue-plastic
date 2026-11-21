@@ -27,3 +27,14 @@ export async function billRetainerAction(formData: FormData) {
   revalidatePath('/projects/wip')
   redirect(`/sales/invoices/${result.invoiceId}`)
 }
+
+export async function replenishRetainerAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  const result = await wip.replenishRetainer(ctx, {
+    projectId: String(formData.get('projectId') ?? ''),
+    itemId: String(formData.get('itemId') ?? ''),
+    amount: String(formData.get('amount') ?? ''),
+  })
+  revalidatePath('/projects/wip')
+  redirect(`/sales/invoices/${result.invoiceId}`)
+}

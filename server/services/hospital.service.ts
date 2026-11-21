@@ -4,16 +4,20 @@ import { Decimal } from '@/lib/money'
 import { today } from '@/lib/date'
 import {
   canAddVisitCharge,
+  canApplyClaimRemittance,
   canCancelVisit,
   canCloseVisit,
+  canSubmitClaim,
   claimsToCsv,
   visitChargeAmount,
   type ClaimExportRow,
+  type PatientClaimStatus,
   type PatientVisitStatus,
 } from '@/lib/erp/hospital'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
+import * as paymentService from '@/server/services/payment.service'
 import * as salesService from '@/server/services/sales.service'
 
 export async function listOpenVisits(ctx: OrgContext) {
@@ -278,6 +282,7 @@ export async function exportClaims(
         invoiceNumber: visit.salesDocument?.number ?? null,
         exportBatchId: visit.exportBatchId,
         claimsExportedAt: visit.claimsExportedAt?.toISOString() ?? null,
+        claimStatus: visit.claimStatus,
         billCode: charge.billCode,
         description: charge.description,
         quantity: charge.quantity.toString(),
@@ -295,7 +300,11 @@ export async function exportClaims(
   if (options.stamp && visits.length > 0 && batchId) {
     await db.patientVisit.updateMany({
       where: { orgId: ctx.orgId, id: { in: visits.map((visit) => visit.id) } },
-      data: { claimsExportedAt: new Date(), exportBatchId: batchId },
+      data: {
+        claimsExportedAt: new Date(),
+        exportBatchId: batchId,
+        claimStatus: 'SUBMITTED',
+      },
     })
   }
 
@@ -437,4 +446,116 @@ export async function servicesByDepartment(ctx: OrgContext) {
       amount: row.amount.toFixed(2),
     }))
     .sort((a, b) => a.department.localeCompare(b.department))
+}
+
+export async function listClaimVisits(ctx: OrgContext) {
+  return db.patientVisit.findMany({
+    where: { orgId: ctx.orgId, status: 'CLOSED', salesDocumentId: { not: null } },
+    include: {
+      customer: { select: { id: true, displayName: true } },
+      salesDocument: { select: { id: true, number: true, total: true } },
+      remittancePayment: { select: { id: true, number: true } },
+    },
+    orderBy: { closedAt: 'desc' },
+    take: 100,
+  })
+}
+
+export async function submitClaim(ctx: OrgContext, visitId: string) {
+  const visit = await db.patientVisit.findFirst({
+    where: { id: visitId, orgId: ctx.orgId },
+    select: { id: true, status: true, claimStatus: true },
+  })
+  if (!visit) throw notFound('Visit')
+  if (
+    !canSubmitClaim({
+      visitStatus: visit.status as PatientVisitStatus,
+      claimStatus: visit.claimStatus as PatientClaimStatus,
+    })
+  ) {
+    throw precondition('Only a closed visit with an open or denied claim can be submitted.')
+  }
+  return db.patientVisit.update({
+    where: { id: visit.id },
+    data: { claimStatus: 'SUBMITTED' },
+    select: { id: true, claimStatus: true },
+  })
+}
+
+/** Apply a remittance note to visit AR: paid creates a customer payment; denied stamps the claim. */
+export async function applyClaimRemittance(
+  ctx: OrgContext,
+  input: {
+    visitId: string
+    status: 'PAID' | 'DENIED'
+    note?: string | null
+    depositAccountId?: string | null
+    amount?: string | null
+  },
+) {
+  const visit = await db.patientVisit.findFirst({
+    where: { id: input.visitId, orgId: ctx.orgId },
+    select: {
+      id: true,
+      status: true,
+      claimStatus: true,
+      customerId: true,
+      salesDocumentId: true,
+      payerName: true,
+      payerRef: true,
+    },
+  })
+  if (!visit) throw notFound('Visit')
+  if (
+    !canApplyClaimRemittance({
+      visitStatus: visit.status as PatientVisitStatus,
+      claimStatus: visit.claimStatus as PatientClaimStatus,
+      hasInvoice: Boolean(visit.salesDocumentId),
+    })
+  ) {
+    throw precondition('Remittance applies only to a closed visit with an invoice claim.')
+  }
+
+  const note = input.note?.trim() || null
+
+  if (input.status === 'DENIED') {
+    return db.patientVisit.update({
+      where: { id: visit.id },
+      data: { claimStatus: 'DENIED', remittanceNote: note },
+      select: { id: true, claimStatus: true, remittancePaymentId: true },
+    })
+  }
+
+  if (!visit.salesDocumentId) throw precondition('Visit has no invoice to apply remittance to.')
+  if (!input.depositAccountId) throw validation('Choose a deposit account for the remittance.')
+
+  const balances = await salesService.outstandingBalances(db, [visit.salesDocumentId], ctx.orgId)
+  const outstanding = balances.get(visit.salesDocumentId) ?? new Decimal(0)
+  const amount = input.amount?.trim()
+    ? new Decimal(input.amount)
+    : outstanding
+  if (amount.lessThanOrEqualTo(0)) throw validation('Remittance amount must be more than zero.')
+
+  const payment = await paymentService.create(ctx, {
+    number: undefined,
+    customerId: visit.customerId,
+    date: today(ctx.organization.timeZone),
+    amount: amount.toFixed(4),
+    depositAccountId: input.depositAccountId,
+    method: 'BANK_TRANSFER',
+    reference: visit.payerRef ?? undefined,
+    memo: note || `Claim remittance${visit.payerName ? ` · ${visit.payerName}` : ''}`,
+    applications: [{ invoiceId: visit.salesDocumentId, amount: amount.toFixed(4) }],
+    acknowledgeDuplicate: true,
+  })
+
+  return db.patientVisit.update({
+    where: { id: visit.id },
+    data: {
+      claimStatus: 'PAID',
+      remittanceNote: note || payment.number,
+      remittancePaymentId: payment.id,
+    },
+    select: { id: true, claimStatus: true, remittancePaymentId: true },
+  })
 }

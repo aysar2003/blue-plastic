@@ -40,7 +40,7 @@ const one = (value: string | string[] | undefined): string | undefined =>
  */
 export function readSettings(
   query: SearchParams,
-  organization: { timeZone: string; fiscalYearStartMonth: number },
+  organization: { timeZone: string; fiscalYearStartMonth: number; fiscalYearStartDay?: number },
   // Default to this month — a full fiscal year over ~40k sales lines / 100k
   // journal lines is the usual cause of “reports feel stuck”.
   fallback: PeriodKey = 'this-month',
@@ -61,7 +61,15 @@ export function readSettings(
       ? 'custom'
       : fallback
 
-  const range = resolvePeriod(period, now, organization.fiscalYearStartMonth, custom)
+  const range = resolvePeriod(
+    period,
+    now,
+    {
+      month: organization.fiscalYearStartMonth,
+      day: organization.fiscalYearStartDay ?? 1,
+    },
+    custom,
+  )
   const basis: ReportBasis = one(query.basis) === 'cash' ? 'cash' : 'accrual'
 
   const requestedComparison = one(query.compare)

@@ -346,7 +346,12 @@ export async function removeStructureRule(ctx: OrgContext, id: string) {
 
 export async function listPeople(ctx: OrgContext) {
   const rows = await db.employee.findMany({
-    where: { orgId: ctx.orgId, lifecycleStatus: 'ACTIVE', active: true },
+    where: {
+      orgId: ctx.orgId,
+      lifecycleStatus: 'ACTIVE',
+      active: true,
+      OR: [{ wageAmount: { gt: 0 } }, { contracts: { some: { state: 'OPEN', wageAmount: { gt: 0 } } } }],
+    },
     select: { id: true, name: true, department: true },
     orderBy: { name: 'asc' },
   })
@@ -688,6 +693,7 @@ export async function standardCreate(ctx: OrgContext, input: RunInput) {
     where: {
       orgId: ctx.orgId,
       active: true,
+      lifecycleStatus: 'ACTIVE',
       AND: [
         { OR: [{ leftAt: null }, { leftAt: { gte: periodStartDate } }] },
         { OR: [{ hiredAt: null }, { hiredAt: { lte: periodEndDate } }] },

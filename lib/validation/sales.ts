@@ -47,6 +47,8 @@ export const salesLineSchema = z.object({
   lotExpiryDate: optionalDate,
   /** A purchase line marked billable to this customer, pulled onto the invoice. */
   sourcePurchaseLineId: optionalId,
+  /** A project time entry pulled onto the invoice. */
+  sourceTimeEntryId: optionalId,
 })
 
 export const salesDocumentSchema = z.object({
@@ -78,8 +80,8 @@ export const salesDocumentSchema = z.object({
   customerMessage: optionalText(1000),
   /** Nature / section of work — printed on quotations and estimates. */
   workScope: optionalText(200),
-  /** Place the work is done — printed below Sales person. */
-  workSite: optionalText(200),
+  /** Place the work is done — printed below Sales person. Extra ship-to addresses fill this. */
+  workSite: optionalText(500),
   depositAccountId: optionalId,
   /** Sales receipt only. Blank is allowed so an older receipt can still be saved. */
   paymentMethod: z
@@ -159,6 +161,12 @@ export type SalesDocumentInput = z.infer<typeof salesDocumentSchema>
 export const convertEstimateSchema = z.object({
   id: cuid,
   date: calendarDate,
+})
+
+/** Staff mark an open estimate / quotation accepted or declined. */
+export const respondToProposalSchema = z.object({
+  id: cuid,
+  response: z.enum(['ACCEPTED', 'DECLINED']),
 })
 
 /**

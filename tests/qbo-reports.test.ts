@@ -123,12 +123,14 @@ suite('QuickBooks-style lists follow the documents', () => {
     async () => {
       const organization = await db.organization.findFirst({
         select: {
-          id: true, name: true, legalName: true, baseCurrency: true, fiscalYearStartMonth: true,
-          timeZone: true, allowNegativeStock: true, posTillLedgerMode: true, parentOrgId: true,
+          id: true, name: true, legalName: true, baseCurrency: true, fiscalYearStartMonth: true, fiscalYearStartDay: true,
+          timeZone: true, allowNegativeStock: true, idleLockSeconds: true, sessionMaxHours: true,
+          posTillLedgerMode: true, parentOrgId: true,
           addressLine1: true, addressLine2: true, city: true, region: true,
           postalCode: true, country: true, phone: true, email: true, website: true,
           brandMark: true, logoStorageKey: true, updatedAt: true,
           accessRestricted: true, rentExpiresAt: true, maxUsers: true, rentNote: true,
+          onboardingCompletedAt: true,
         },
       })
       const user = await db.user.findFirst({ select: { id: true, name: true, email: true, image: true } })
@@ -146,7 +148,14 @@ suite('QuickBooks-style lists follow the documents', () => {
         portalCustomerId: null,
         features: DEFAULT_FEATURE_FLAGS,
         organization: { ...orgFields, hasLogo: Boolean(logoStorageKey) },
-        user: { id: user.id, name: user.name ?? '', email: user.email, image: user.image },
+        user: {
+          id: user.id,
+          name: user.name ?? '',
+          email: user.email,
+          image: user.image,
+          loginAt: null,
+          hasDeskPin: false,
+        },
       }
 
       // Keep this smoke light — general-ledger / journal-report on a live books

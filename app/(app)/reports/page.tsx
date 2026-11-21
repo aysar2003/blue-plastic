@@ -3,19 +3,15 @@ import Link from 'next/link'
 
 import { GiveFeedback } from '@/components/data/give-feedback'
 import { reportSectionsFor } from '@/components/layout/report-apps'
-import { StandardReportSections } from '@/components/reports/standard-report-sections'
 import { CreateReportMenu } from '@/components/reports/create-report-menu'
 import { FavouriteReports } from '@/components/reports/favourite-reports'
 import { ReportCentreTabs } from '@/components/reports/report-centre-tabs'
+import { ReportsQuickBoards } from '@/components/reports/reports-quick-boards'
+import { StandardReportSections } from '@/components/reports/standard-report-sections'
+import { statementPicture } from '@/components/reports/figure-chart'
 import { canViewBusinessOverview } from '@/lib/business-overview-access'
-import {
-  EXPENSE_COLOR,
-  FigureChart,
-  INCOME_COLOR,
-  NET_COLOR,
-  statementPicture,
-} from '@/components/reports/figure-chart'
 import { formatDate, today } from '@/lib/date'
+import { toMoneyString } from '@/lib/money'
 import { resolvePeriod } from '@/lib/report-periods'
 import { requireOrgContext } from '@/server/auth/context'
 import { profitAndLoss } from '@/server/reports/statements'
@@ -24,96 +20,90 @@ import { canViewGroupReports } from '@/server/services/company-group.service'
 export const metadata: Metadata = { title: 'Reports' }
 
 /**
- * Every report, in the standard order: favourites, then each catalogue
- * section as a list that opens the report.
+ * Modern standard Reports Centre: quick boards, favourites, then the catalogue.
  */
 export default async function ReportsIndexPage() {
   const ctx = await requireOrgContext('report:read')
   const showOverview = canViewBusinessOverview(ctx.permissions)
-  const showGroupReports = await canViewGroupReports(ctx)
   const now = today(ctx.organization.timeZone)
-  const month = resolvePeriod('this-month', now, ctx.organization.fiscalYearStartMonth)
-  const report = await profitAndLoss(ctx.orgId, { ...month, basis: 'accrual' })
+  const month = resolvePeriod('this-month', now, {
+    month: ctx.organization.fiscalYearStartMonth,
+    day: ctx.organization.fiscalYearStartDay,
+  })
+  const [showGroupReports, report] = await Promise.all([
+    canViewGroupReports(ctx),
+    profitAndLoss(ctx.orgId, { ...month, basis: 'accrual' }),
+  ])
   const picture = statementPicture(report.sections, 'total')
 
   return (
-    <>
-      <div className="mb-3 flex flex-wrap items-center justify-end gap-4 print:hidden">
-        {showGroupReports ? (
-          <div className="mr-auto flex flex-wrap gap-x-4 gap-y-1">
-            <Link href="/reports/companies" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
-              {ctx.isSystemOwner ? 'All companies' : 'Company group'}
+    <div className="relative pb-8">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_100%_60%_at_0%_0%,color-mix(in_oklab,#0E7490_10%,transparent),transparent_50%)]"
+      />
+
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            {ctx.organization.name}
+          </p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight">Reports</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Standard report centre · {formatDate(month.from)} → {formatDate(month.to)}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <GiveFeedback />
+          <CreateReportMenu permissions={[...ctx.permissions]} />
+        </div>
+      </header>
+
+      {showGroupReports ? (
+        <div className="mb-4 flex flex-wrap gap-2 print:hidden">
+          {[
+            { href: '/reports/companies', label: ctx.isSystemOwner ? 'All companies' : 'Company group' },
+            { href: '/reports/group-close', label: 'Group close' },
+            { href: '/reports/intercompany', label: 'IC matches' },
+            { href: '/reports/consolidation', label: 'Consolidation' },
+            { href: '/reports/portfolio', label: 'Portfolio' },
+            { href: '/reports/franchise', label: 'Franchise' },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-muted-foreground transition hover:border-primary/30 hover:text-foreground"
+            >
+              {item.label}
             </Link>
-            <Link href="/reports/group-close" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
-              Group close
-            </Link>
-            <Link href="/reports/intercompany" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
-              IC matches
-            </Link>
-            <Link href="/reports/consolidation" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
-              Consolidation
-            </Link>
-            <Link href="/reports/portfolio" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
-              Portfolio
-            </Link>
-            <Link href="/reports/franchise" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
-              Franchise
-            </Link>
-          </div>
-        ) : null}
-        <GiveFeedback />
-        <CreateReportMenu permissions={[...ctx.permissions]} />
-      </div>
+          ))}
+        </div>
+      ) : null}
+
       <ReportCentreTabs active="standard" />
+
+      <ReportsQuickBoards
+        showOverview={showOverview}
+        currency={ctx.organization.baseCurrency}
+        monthPulse={{
+          income: toMoneyString(picture.income, 2),
+          expenses: toMoneyString(picture.expenses, 2),
+          net: toMoneyString(picture.net, 2),
+        }}
+      />
+
       <FavouriteReports />
-      <div className="mb-8">
-        <FigureChart
-          caption={`This month · ${formatDate(month.from)} to ${formatDate(month.to)}`}
-          currency={ctx.organization.baseCurrency}
-          bars={[
-            {
-              label: 'Income',
-              value: picture.income,
-              color: INCOME_COLOR,
-              href: '/reports/profit-loss?period=this-month',
-            },
-            {
-              label: 'Expenses',
-              value: picture.expenses,
-              color: EXPENSE_COLOR,
-              href: '/reports/profit-loss?period=this-month',
-            },
-            {
-              label: 'Net income',
-              value: picture.net,
-              color: NET_COLOR,
-              href: '/reports/profit-loss/detail?period=this-month',
-            },
-          ]}
-        />
-        <p className="mt-3 text-center text-sm">
-          {showOverview ? (
-            <>
-              <Link
-                href="/reports/business-overview"
-                className="font-medium text-primary underline-offset-4 hover:underline"
-              >
-                Business overview
-              </Link>
-              <span className="text-muted-foreground"> · </span>
-            </>
-          ) : null}
-          <Link
-            href="/reports/profit-loss?period=this-month&compare=prior-period"
-            className="font-medium text-primary underline-offset-4 hover:underline"
-          >
-            Open the full profit and loss, compared with the previous period
-          </Link>
-        </p>
+
+      <div className="mb-3 flex items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">All standard reports</h2>
+          <p className="text-sm text-muted-foreground">Grouped by question — search or open a section.</p>
+        </div>
       </div>
+
       <StandardReportSections
         sections={reportSectionsFor(ctx.permissions, { enableTax: ctx.features.enableTax })}
       />
-    </>
+    </div>
   )
 }

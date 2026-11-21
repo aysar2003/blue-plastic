@@ -38,11 +38,10 @@ export default async function PortalStatementPage({
   const ctx = await requirePortalContext()
   const params = await searchParams
   const asOf = today(ctx.organization.timeZone)
-  const defaults = resolvePeriod(
-    'year-to-date',
-    asOf,
-    ctx.organization.fiscalYearStartMonth ?? 1,
-  )
+  const defaults = resolvePeriod('year-to-date', asOf, {
+    month: ctx.organization.fiscalYearStartMonth ?? 1,
+    day: ctx.organization.fiscalYearStartDay ?? 1,
+  })
   const report: ReportKind = params.report === 'invoices' ? 'invoices' : 'balance'
   // Balance sheet runs Balance from 0 → closing, so default to all dates
   // unless the customer picked a range.

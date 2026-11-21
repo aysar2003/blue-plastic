@@ -9,6 +9,7 @@ import { toCalendarDate, today, type CalendarDate } from '@/lib/date'
 import { describeCustomerBalance } from '@/lib/portal-balance'
 import { openPortalInvite, sealPortalInvite } from '@/lib/portal-invite-token'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
+import { PROJECT_STATUS_LABELS } from '@/lib/validation/project'
 import type {
   AcceptPortalInviteInput,
   InvitePortalUserInput,
@@ -825,6 +826,29 @@ export async function listInvoices(ctx: PortalContext, query: ListQuery) {
   )
 }
 
+/** Next scheduled subscription invoices for this portal customer. */
+export async function listUpcomingSubscriptions(ctx: PortalContext) {
+  assertPortalFeatureEnabled(ctx)
+  const customerId = ctx.portalCustomerId
+  const templates = await db.recurringTemplate.findMany({
+    where: { orgId: ctx.orgId, type: 'INVOICE', isActive: true },
+    select: { id: true, name: true, nextRunOn: true, payload: true },
+    orderBy: { nextRunOn: 'asc' },
+    take: 20,
+  })
+  return templates
+    .filter((row) => (row.payload as { customerId?: string }).customerId === customerId)
+    .map((row) => {
+      const payload = row.payload as { amount?: string }
+      return {
+        id: row.id,
+        name: row.name,
+        nextRunOn: toCalendarDate(row.nextRunOn),
+        amount: payload.amount ?? null,
+      }
+    })
+}
+
 /** One invoice the portal customer may open — view only, own account. */
 export async function getInvoice(ctx: PortalContext, id: string) {
   assertPortalFeatureEnabled(ctx)
@@ -839,6 +863,31 @@ export async function getInvoice(ctx: PortalContext, id: string) {
     throw notFound('Invoice')
   }
   return document
+}
+
+export async function orgPaymentInstructions(ctx: OrgContext) {
+  const org = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: {
+      paymentBankName: true,
+      paymentAccountName: true,
+      paymentAccountNumber: true,
+      paymentInstructions: true,
+    },
+  })
+  return {
+    bankName: org?.paymentBankName ?? null,
+    accountName: org?.paymentAccountName ?? null,
+    accountNumber: org?.paymentAccountNumber ?? null,
+    instructions: org?.paymentInstructions ?? null,
+  }
+}
+
+export async function attachInvoicePaymentProof(ctx: PortalContext, invoiceId: string, file: File) {
+  assertPortalFeatureEnabled(ctx)
+  await getInvoice(ctx, invoiceId)
+  const { storeLedgerFile } = await import('@/server/files/ledger-files')
+  return storeLedgerFile(ctx, file, { salesDocumentId: invoiceId })
 }
 
 export async function listQuotes(ctx: PortalContext, query: ListQuery) {
@@ -892,7 +941,7 @@ export async function listQuotes(ctx: PortalContext, query: ListQuery) {
   )
 }
 
-/** One estimate or quotation the portal customer may open — view only. */
+/** One estimate or quotation the portal customer may open. */
 export async function getQuote(ctx: PortalContext, id: string) {
   assertPortalFeatureEnabled(ctx)
   const document = await salesService.get(ctx, id)
@@ -905,6 +954,72 @@ export async function getQuote(ctx: PortalContext, id: string) {
     throw notFound('Quote')
   }
   return document
+}
+
+/** Portal customer accepts or declines an open estimate / quotation. */
+export async function respondToQuote(
+  ctx: PortalContext,
+  id: string,
+  decision: 'accept' | 'decline',
+) {
+  assertPortalFeatureEnabled(ctx)
+  return salesService.respondToProposal(
+    ctx,
+    id,
+    decision === 'accept' ? 'ACCEPTED' : 'DECLINED',
+    { customerId: ctx.portalCustomerId },
+  )
+}
+
+/** Jobs on this portal customer's account — view only. */
+export async function listProjectsForCustomer(ctx: PortalContext, query: ListQuery) {
+  const customerId = ctx.portalCustomerId
+  const where: Prisma.ProjectWhereInput = {
+    orgId: ctx.orgId,
+    customerId,
+    ...(query.q
+      ? {
+          OR: [
+            { number: { contains: query.q, mode: 'insensitive' } },
+            { name: { contains: query.q, mode: 'insensitive' } },
+            { siteLocation: { contains: query.q, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  }
+
+  const [rows, total] = await Promise.all([
+    db.project.findMany({
+      where,
+      select: {
+        id: true,
+        number: true,
+        name: true,
+        status: true,
+        siteLocation: true,
+        startDate: true,
+        endDate: true,
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      ...paginate(query),
+    }),
+    db.project.count({ where }),
+  ])
+
+  return paged(
+    rows.map((row) => ({
+      id: row.id,
+      number: row.number,
+      name: row.name,
+      status: row.status,
+      statusLabel: PROJECT_STATUS_LABELS[row.status],
+      siteLocation: row.siteLocation,
+      startDate: row.startDate ? toCalendarDate(row.startDate) : null,
+      endDate: row.endDate ? toCalendarDate(row.endDate) : null,
+    })),
+    total,
+    query,
+  )
 }
 
 export async function listPayments(ctx: PortalContext, query: ListQuery) {

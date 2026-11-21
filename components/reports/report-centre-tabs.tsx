@@ -5,7 +5,10 @@ import { cn } from '@/lib/utils'
 
 export function ReportCentreTabs({ active }: { active: (typeof REPORT_CENTRE_TABS)[number]['key'] }) {
   return (
-    <nav aria-label="Report centre" className="mb-4 flex gap-1 overflow-x-auto border-b print:hidden">
+    <nav
+      aria-label="Report centre"
+      className="mb-5 flex flex-wrap gap-1.5 rounded-2xl border border-border/60 bg-muted/30 p-1.5 print:hidden"
+    >
       {REPORT_CENTRE_TABS.map((tab) => {
         const on = tab.key === active
         return (
@@ -14,10 +17,10 @@ export function ReportCentreTabs({ active }: { active: (typeof REPORT_CENTRE_TAB
             href={tab.href}
             aria-current={on ? 'page' : undefined}
             className={cn(
-              'shrink-0 border-b-2 px-3 py-2 text-sm',
+              'rounded-xl px-3.5 py-2 text-sm transition',
               on
-                ? 'border-primary font-semibold text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
+                ? 'bg-card font-semibold text-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-card/70 hover:text-foreground',
             )}
           >
             {tab.label}

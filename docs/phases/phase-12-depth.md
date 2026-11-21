@@ -11,6 +11,7 @@ Started 2026-11-01. Extends Phase 11 surfaces rather than adding Discuss / Sign 
 | Projects timesheets | Hours on project detail; billable rate; mark invoiced when pulled later |
 | Approvals | Multi-level toast: intermediate approve no longer says “posted” |
 | POS | Close-session checklist (cash moves → count → close) |
+| POS till (Wave A 2026-11-21) | Expected vs counted, payouts/safe drop, session P&L, reprint last receipt |
 | Home | KPI cards: P&L MTD, open AR, to-reorder count |
 | Equity lite | `/accounting/equity-contribution` — Dr Bank / Cr Owner's Capital |
 | Recurring (Wave A) | Page-load auto Create due + `POST /api/cron/recurring` with `CRON_SECRET` |

@@ -358,11 +358,13 @@ export async function seedLocalizationTax(ctx: OrgContext) {
 
   const existing = await db.taxAgency.count({ where: { orgId: ctx.orgId } })
   if (existing > 0) {
+    const itemsTaxed = await applyPackTaxToUntaxedItems(ctx)
     return {
       created: false as const,
       packId: pack.id,
       agencyName: pack.taxSeed.agencyName,
       skipped: 'agencies_exist' as const,
+      itemsTaxed,
     }
   }
 
@@ -443,14 +445,65 @@ export async function seedLocalizationTax(ctx: OrgContext) {
       meta,
     )
 
+    const itemsTaxed = await stampPackTaxOnItems(tx, ctx.orgId, code.id)
+
     return {
       created: true as const,
       packId: pack.id,
       agencyName: agency.name,
       codeName: code.name,
       rateNames: seed.rates.map((r) => r.name),
+      vatJurisdictionLabel: pack.vatJurisdictionLabel,
+      vatBoxLabels: pack.vatBoxLabels,
+      itemsTaxed,
     }
   })
+}
+
+/**
+ * Stamp the pack default tax code onto items that have none.
+ * Writes only salesTaxCodeId / purchaseTaxCodeId — never reorderPoint or SKU.
+ */
+async function stampPackTaxOnItems(tx: Tx, orgId: string, taxCodeId: string) {
+  const sales = await tx.item.updateMany({
+    where: { orgId, deletedAt: null, isActive: true, salesTaxCodeId: null },
+    data: { salesTaxCodeId: taxCodeId },
+  })
+  const purchase = await tx.item.updateMany({
+    where: { orgId, deletedAt: null, isActive: true, purchaseTaxCodeId: null },
+    data: { purchaseTaxCodeId: taxCodeId },
+  })
+  return sales.count + purchase.count
+}
+
+/** Apply the localisation pack's default tax code to items missing tax — reorder points stay as clerks set them. */
+export async function applyPackTaxToUntaxedItems(ctx: OrgContext) {
+  if (!can(ctx.role, 'org:update') && !ctx.isSystemOwner) {
+    throw forbidden('Only an admin can apply pack tax to items.')
+  }
+  const org = await db.organization.findUnique({
+    where: { id: ctx.orgId },
+    select: { localizationPackId: true },
+  })
+  if (!org) throw notFound('Organisation')
+  const pack = localizationPackById(org.localizationPackId)
+  const code =
+    (pack
+      ? await db.taxCode.findFirst({
+          where: { orgId: ctx.orgId, isActive: true, name: pack.taxSeed.defaultCodeName },
+          select: { id: true, name: true },
+        })
+      : null) ??
+    (await db.taxCode.findFirst({
+      where: { orgId: ctx.orgId, isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    }))
+  if (!code) {
+    throw validation('Seed localisation tax first, then apply it to items.')
+  }
+  const itemsTaxed = await db.$transaction((tx) => stampPackTaxOnItems(tx, ctx.orgId, code.id))
+  return { itemsTaxed, codeName: code.name, packId: pack?.id ?? null }
 }
 
 /**

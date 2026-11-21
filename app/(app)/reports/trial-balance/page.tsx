@@ -27,9 +27,13 @@ export default async function TrialBalancePage({
   const ctx = await requireOrgContext('report:read')
   const query = await searchParams
 
+  const fyStart = {
+    month: ctx.organization.fiscalYearStartMonth,
+    day: ctx.organization.fiscalYearStartDay,
+  }
   const defaults = fiscalYearRange(
-    fiscalYearOf(today(ctx.organization.timeZone), ctx.organization.fiscalYearStartMonth),
-    ctx.organization.fiscalYearStartMonth,
+    fiscalYearOf(today(ctx.organization.timeZone), fyStart),
+    fyStart,
   )
   const from = typeof query.from === 'string' ? query.from : defaults.start
   const to = typeof query.to === 'string' ? query.to : defaults.end

@@ -18,4 +18,10 @@ describe('posUnitPrice', () => {
     expect(posUnitPrice({ price: '10.00', wholesalePrice: null }, 'WHOLESALE')).toBe('10.00')
     expect(posUnitPrice({ price: '10.00', wholesalePrice: '' }, 'WHOLESALE')).toBe('10.00')
   })
+
+  it('uses an active list price before wholesale, then applies promo %', () => {
+    expect(posUnitPrice(product, 'WHOLESALE', '8.00')).toBe('8.00')
+    expect(posUnitPrice({ ...product, promoPercent: 10 }, 'RETAIL')).toBe('9.00')
+    expect(posUnitPrice({ ...product, promoPercent: 10 }, 'WHOLESALE', '8.00')).toBe('7.20')
+  })
 })

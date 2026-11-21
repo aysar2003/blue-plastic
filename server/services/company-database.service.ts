@@ -87,6 +87,7 @@ export async function getDetail(ctx: OrgContext, orgId: string) {
       createdAt: true,
       updatedAt: true,
       fiscalYearStartMonth: true,
+      fiscalYearStartDay: true,
       allowNegativeStock: true,
       _count: {
         select: {
@@ -151,6 +152,7 @@ export async function getDetail(ctx: OrgContext, orgId: string) {
     address: address || null,
     brandMark: organization.brandMark,
     fiscalYearStartMonth: organization.fiscalYearStartMonth,
+    fiscalYearStartDay: organization.fiscalYearStartDay,
     allowNegativeStock: organization.allowNegativeStock,
     parentOrgId: organization.parentOrgId,
     parentName: organization.parent?.name ?? null,

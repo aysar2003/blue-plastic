@@ -1,8 +1,14 @@
 import { z } from 'zod'
 
+import { DESK_PIN_LENGTH_MESSAGE, isDeskPin } from '@/lib/desk-unlock'
 import { PERMISSIONS } from '@/lib/permissions-catalog'
 import { optionalPhone } from './auth'
 import { cuid, email, password, requiredText } from './common'
+
+const deskPinField = z
+  .string()
+  .trim()
+  .refine(isDeskPin, { message: DESK_PIN_LENGTH_MESSAGE })
 
 const assignableOrCustom = z.enum([
   'ADMIN',
@@ -112,6 +118,15 @@ export const disableTwoFactorSchema = z.object({
   currentPassword: z.string().min(1, 'Enter your current password'),
 })
 
+/** Odoo Security Control — password before showing QR / secret. */
+export const beginTotpSetupSchema = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password'),
+})
+
+export const adminDisableMemberTwoFactorSchema = z.object({
+  membershipId: cuid,
+})
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Enter your current password'),
@@ -122,3 +137,30 @@ export const changePasswordSchema = z
     message: 'Passwords do not match',
     path: ['confirmPassword'],
   })
+
+/** Opt-in desk idle-lock PIN (off until set). */
+export const setDeskPinSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Enter your current password'),
+    pin: deskPinField,
+    confirmPin: z.string().trim(),
+  })
+  .refine((v) => v.pin === v.confirmPin, {
+    message: 'PINs do not match',
+    path: ['confirmPin'],
+  })
+
+export type SetDeskPinInput = z.infer<typeof setDeskPinSchema>
+
+export const clearDeskPinSchema = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password'),
+})
+
+export type ClearDeskPinInput = z.infer<typeof clearDeskPinSchema>
+
+export const unlockIdleScreenSchema = z.object({
+  method: z.enum(['password', 'pin']),
+  secret: z.string().min(1, 'Enter your password or PIN.'),
+})
+
+export type UnlockIdleScreenInput = z.infer<typeof unlockIdleScreenSchema>

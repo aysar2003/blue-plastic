@@ -3,6 +3,7 @@ import 'server-only'
 import { commitmentVsBudget, grantOverBudget } from '@/lib/erp/commitment-budget'
 import { Decimal } from '@/lib/money'
 import { toDate, today } from '@/lib/date'
+import { donorPledgeCsvRows, pledgeReceiptNote } from '@/lib/erp/ngo-funds'
 import { budgetVariance, canReceivePledge } from '@/lib/erp/verticals-p5'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -78,6 +79,23 @@ export async function receivePledge(
     throw precondition('Only an open pledge can be received.')
   }
 
+  const donor = await db.customer.findFirst({
+    where: { id: pledge.customerId, orgId: ctx.orgId },
+    select: { displayName: true },
+  })
+  const fund = pledge.trackingCategoryId
+    ? await db.trackingCategory.findFirst({
+        where: { id: pledge.trackingCategoryId, orgId: ctx.orgId },
+        select: { name: true },
+      })
+    : null
+  const receiptNote = pledgeReceiptNote({
+    donorName: donor?.displayName,
+    amount: pledge.amount.toString(),
+    fundName: fund?.name,
+    purpose: pledge.purpose,
+  })
+
   const payment = await paymentService.create(ctx, {
     number: undefined,
     customerId: pledge.customerId,
@@ -85,7 +103,7 @@ export async function receivePledge(
     amount: pledge.amount.toString(),
     depositAccountId: input.depositAccountId,
     reference: input.reference ?? pledge.purpose ?? undefined,
-    memo: `Donor pledge ${pledge.id}`,
+    memo: receiptNote,
     method: 'BANK_TRANSFER',
     applications: [],
     acknowledgeDuplicate: true,
@@ -93,7 +111,7 @@ export async function receivePledge(
 
   await db.donorPledge.update({
     where: { id: pledge.id },
-    data: { status: 'RECEIVED', paymentId: payment.id },
+    data: { status: 'RECEIVED', paymentId: payment.id, receiptNote },
   })
 
   return { pledgeId: pledge.id, paymentId: payment.id, paymentNumber: payment.number }
@@ -301,4 +319,20 @@ export async function fundBalanceSheet(ctx: OrgContext) {
   }
 
   return rows
+}
+
+/** Donor pledge register as CSV rows (null when no pledges). */
+export async function donorPledgeCsv(ctx: OrgContext) {
+  const pledges = await listPledges(ctx)
+  if (pledges.length === 0) return null
+  return donorPledgeCsvRows(
+    pledges.map((row) => ({
+      donorName: row.customer.displayName,
+      fund: row.trackingCategory?.name ?? null,
+      amount: row.amount.toString(),
+      status: row.status,
+      pledgedAt: row.pledgedAt.toISOString().slice(0, 10),
+      receiptNote: row.receiptNote,
+    })),
+  )
 }

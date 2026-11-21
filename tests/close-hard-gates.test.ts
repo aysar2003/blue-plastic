@@ -6,5 +6,7 @@ describe('close hard gates flag', () => {
   it('defaults off and parses from JSON', () => {
     expect(DEFAULT_FEATURE_FLAGS.closeHardGates).toBe(false)
     expect(parseFeatureFlags({ closeHardGates: true }).closeHardGates).toBe(true)
+    expect(DEFAULT_FEATURE_FLAGS.closeSecondApprover).toBe(false)
+    expect(parseFeatureFlags({ closeSecondApprover: true }).closeSecondApprover).toBe(true)
   })
 })

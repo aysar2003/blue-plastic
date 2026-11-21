@@ -25,9 +25,17 @@ export default async function NgoGrantsPage() {
     <>
       <PageHeader
         title="Grant budget vs actual"
-        description="Budgets optionally tagged to a fund class. Actuals from posted journals in the budget window."
+        description="Budgets optionally tagged to a fund class. Actuals from posted journals in the budget window. BvA rolled up by class below."
         actions={
           <div className="flex flex-wrap gap-2">
+            {commitments.length > 0 ? (
+              <Link
+                href="/api/ngo/grant-bva"
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              >
+                BvA CSV
+              </Link>
+            ) : null}
             <Link href="/ngo" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
               NGO hub
             </Link>

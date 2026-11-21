@@ -4,10 +4,13 @@ import { Prisma } from '@prisma/client'
 
 import { Decimal } from '@/lib/money'
 import { routingMinutes } from '@/lib/erp/verticals-p5'
+import { addDays, toCalendarDate, toDate, today } from '@/lib/date'
 import {
+  capacityAfterExceptions,
   effectiveWeeklyCapacity,
   isWorkCenterOverloaded,
   loadPercent,
+  weekdayIndexMon0,
 } from '@/lib/erp/routing-capacity'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -198,8 +201,51 @@ export async function replaceRouting(
 /**
  * Open work-order demand (qty × routing minutes) vs work-center weekly capacity.
  */
+export async function addWorkCenterException(
+  ctx: OrgContext,
+  input: { workCenterId: string; date: string; notes?: string | null },
+) {
+  const center = await db.workCenter.findFirst({
+    where: { id: input.workCenterId, orgId: ctx.orgId },
+    select: { id: true },
+  })
+  if (!center) throw notFound('Work center')
+  const date = toDate(input.date)
+  try {
+    return await db.workCenterException.create({
+      data: {
+        orgId: ctx.orgId,
+        workCenterId: center.id,
+        date,
+        kind: 'HOLIDAY',
+        notes: input.notes?.trim() || null,
+      },
+      select: { id: true, date: true },
+    })
+  } catch (error) {
+    const code =
+      error && typeof error === 'object' && 'code' in error
+        ? String((error as { code: unknown }).code)
+        : ''
+    if (code === 'P2002') throw conflict('That date is already an exception for this work center.')
+    throw error
+  }
+}
+
+export async function listWorkCenterExceptions(ctx: OrgContext) {
+  return db.workCenterException.findMany({
+    where: { orgId: ctx.orgId },
+    include: { workCenter: { select: { id: true, name: true } } },
+    orderBy: { date: 'asc' },
+    take: 200,
+  })
+}
+
 export async function capacityReport(ctx: OrgContext) {
-  const [centers, openOrders, steps] = await Promise.all([
+  const asOf = today(ctx.organization.timeZone)
+  const weekMonday = addDays(asOf, -weekdayIndexMon0(asOf))
+  const weekSunday = addDays(weekMonday, 6)
+  const [centers, openOrders, steps, exceptions] = await Promise.all([
     db.workCenter.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: {
@@ -223,6 +269,13 @@ export async function capacityReport(ctx: OrgContext) {
         workCenterId: true,
         minutes: true,
       },
+    }),
+    db.workCenterException.findMany({
+      where: {
+        orgId: ctx.orgId,
+        date: { gte: toDate(weekMonday), lte: toDate(weekSunday) },
+      },
+      select: { workCenterId: true, date: true },
     }),
   ])
 
@@ -253,11 +306,23 @@ export async function capacityReport(ctx: OrgContext) {
     }
   }
 
+  const holidaysByCenter = new Map<string, string[]>()
+  for (const row of exceptions) {
+    const list = holidaysByCenter.get(row.workCenterId) ?? []
+    list.push(toCalendarDate(row.date))
+    holidaysByCenter.set(row.workCenterId, list)
+  }
+
   return centers.map((center) => {
     const byDay = Array.isArray(center.capacityByWeekday)
       ? (center.capacityByWeekday as number[])
       : null
-    const capacity = effectiveWeeklyCapacity(center.capacityMinutesPerWeek.toString(), byDay)
+    const weekly = effectiveWeeklyCapacity(center.capacityMinutesPerWeek.toString(), byDay)
+    const capacity = capacityAfterExceptions(
+      weekly,
+      byDay,
+      holidaysByCenter.get(center.id) ?? [],
+    )
     const demand = demandByCenter.get(center.id) ?? 0
     const overloaded = isWorkCenterOverloaded(demand, capacity)
     const openWorkOrders = overloaded ? (workOrdersByCenter.get(center.id) ?? []) : []
@@ -270,6 +335,7 @@ export async function capacityReport(ctx: OrgContext) {
       demandMinutes: demand.toFixed(2),
       loadPercent: loadPercent(demand, capacity),
       overloaded,
+      holidayDates: holidaysByCenter.get(center.id) ?? [],
       openWorkOrders,
     }
   })

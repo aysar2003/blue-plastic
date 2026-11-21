@@ -199,6 +199,19 @@ describe('POS open orders', () => {
     expect(legacy.orders[1]?.openedAt).toBeUndefined()
   })
 
+  it('reads tickets saved before projectId existed', () => {
+    const store = memory()
+    const book = createPosOrderBook(() => 'id-1')
+    savePosOrderBook(store, 'user-a', 'sess-1', book)
+    const key = posOrderStorageKey('user-a', 'sess-1')
+    const raw = JSON.parse(store.getItem(key)!) as { book: { orders: Record<string, unknown>[] } }
+    delete raw.book.orders[0]!.projectId
+    store.setItem(key, JSON.stringify(raw))
+
+    const loaded = loadPosOrderBook(store, 'user-a', 'sess-1', () => 'clean')
+    expect(loaded.orders[0]).toMatchObject({ id: 'id-1', projectId: null })
+  })
+
   it('labels an order for the list: today, an older day, and a stable reference', () => {
     const now = new Date(2026, 9, 10, 19, 40)
     const older = new Date(2026, 9, 7, 19, 39)

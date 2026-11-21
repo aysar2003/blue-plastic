@@ -776,3 +776,65 @@ export async function waveLabelExport(ctx: OrgContext, waveId: string) {
     })),
   }
 }
+
+/** Packing list after pick→issue: bins, qty, order, customer. */
+export async function wavePackingExport(ctx: OrgContext, waveId: string) {
+  const wave = await db.pickWave.findFirst({
+    where: { id: waveId, orgId: ctx.orgId },
+    include: {
+      picks: {
+        select: {
+          id: true,
+          qty: true,
+          status: true,
+          sourceType: true,
+          sourceId: true,
+          item: { select: { name: true, sku: true } },
+          bin: { select: { code: true } },
+        },
+      },
+    },
+  })
+  if (!wave) throw notFound('Wave')
+
+  const orderIds = [
+    ...new Set(
+      wave.picks
+        .filter((row) => row.sourceType === 'SALES_ORDER' && row.sourceId)
+        .map((row) => row.sourceId as string),
+    ),
+  ]
+  const orders = orderIds.length
+    ? await db.salesDocument.findMany({
+        where: { orgId: ctx.orgId, id: { in: orderIds } },
+        select: {
+          id: true,
+          number: true,
+          customer: { select: { displayName: true } },
+        },
+      })
+    : []
+  const orderById = new Map(orders.map((order) => [order.id, order]))
+
+  return {
+    waveId: wave.id,
+    waveNumber: wave.number,
+    status: wave.status,
+    lines: wave.picks.map((pick) => {
+      const order =
+        pick.sourceType === 'SALES_ORDER' && pick.sourceId
+          ? orderById.get(pick.sourceId)
+          : undefined
+      return {
+        waveNumber: wave.number,
+        pickStatus: pick.status,
+        binCode: pick.bin?.code ?? null,
+        itemName: pick.item.name,
+        sku: pick.item.sku,
+        qty: pick.qty.toString(),
+        orderNumber: order?.number ?? null,
+        customerName: order?.customer.displayName ?? null,
+      }
+    }),
+  }
+}

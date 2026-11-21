@@ -2092,6 +2092,8 @@ const APPROVAL_ENTITY: Record<string, string> = {
   DEPOSIT: 'Deposit',
   CUSTOMER: 'Customer',
   VENDOR: 'Vendor',
+  PAYROLL: 'Payroll',
+  ACCOUNTING_PERIOD: 'Period close',
 }
 
 const APPROVAL_STATUS: Record<string, string> = {

@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { capTable } from '@/lib/erp/cap-table'
+import { equityEventCreditsEquity, equityEventStatementSubtype } from '@/lib/erp/equity-csv'
 import { Decimal } from '@/lib/money'
 import { toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
 import { postJournal } from '@/server/accounting/posting'
@@ -142,10 +143,28 @@ export async function postEquityEvent(
       select: { id: true },
     })
     if (!bank) throw notFound('Bank account')
-    const equity = await tx.ledgerAccount.findFirst({
+    const statementSubtype = equityEventStatementSubtype(input.kind)
+    const namedEquity = await tx.ledgerAccount.findFirst({
       where: { id: input.equityAccountId, orgId: ctx.orgId, isActive: true },
-      select: { id: true },
+      select: { id: true, subtype: true, systemKey: true },
     })
+    const statementAccount =
+      namedEquity &&
+      (namedEquity.subtype === statementSubtype ||
+        (statementSubtype === 'RETAINED_EARNINGS' && namedEquity.systemKey === 'RETAINED_EARNINGS'))
+        ? namedEquity
+        : await tx.ledgerAccount.findFirst({
+            where: {
+              orgId: ctx.orgId,
+              isActive: true,
+              ...(statementSubtype === 'RETAINED_EARNINGS'
+                ? { OR: [{ subtype: 'RETAINED_EARNINGS' }, { systemKey: 'RETAINED_EARNINGS' }] }
+                : { subtype: statementSubtype }),
+            },
+            select: { id: true },
+            orderBy: { code: 'asc' },
+          })
+    const equity = statementAccount ?? namedEquity
     if (!equity) throw notFound('Equity account')
 
     const memo =
@@ -156,13 +175,12 @@ export async function postEquityEvent(
           ? 'Owner draw'
           : 'Dividend')
 
-    // Contribution: Dr Bank Cr Equity. Draw/Dividend: Dr Equity Cr Bank.
-    const lines =
-      input.kind === 'CONTRIBUTION'
-        ? [
-            { accountId: bank.id, debit: amount, description: memo },
-            { accountId: equity.id, credit: amount, description: memo },
-          ]
+    // Contribution/patronage: Dr Bank Cr Equity. Draw/Dividend: Dr Equity Cr Bank.
+    const lines = equityEventCreditsEquity(input.kind)
+      ? [
+          { accountId: bank.id, debit: amount, description: memo },
+          { accountId: equity.id, credit: amount, description: memo },
+        ]
         : [
             { accountId: equity.id, debit: amount, description: memo },
             { accountId: bank.id, credit: amount, description: memo },

@@ -1,5 +1,7 @@
 import 'server-only'
 
+import type { InsuranceClaimStatus } from '@prisma/client'
+
 import { toCalendarDate, toDate, today, type CalendarDate } from '@/lib/date'
 import { Decimal } from '@/lib/money'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
@@ -33,6 +35,7 @@ export async function listPolicies(ctx: OrgContext) {
     include: {
       customer: { select: { id: true, displayName: true } },
       recurringTemplate: { select: { id: true, name: true, isActive: true } },
+      claims: { orderBy: { claimedOn: 'desc' }, take: 8 },
     },
     orderBy: { endDate: 'desc' },
     take: 100,
@@ -67,6 +70,8 @@ export async function createPolicy(
     premium: string
     startDate: string
     endDate: string
+    coverStart?: string | null
+    coverEnd?: string | null
     recurringTemplateId?: string | null
     notes?: string | null
   },
@@ -74,6 +79,8 @@ export async function createPolicy(
   assertPermission(ctx, 'customer:create')
   const premium = new Decimal(input.premium)
   if (premium.lessThan(0)) throw validation('Premium cannot be negative.')
+  const coverStart = input.coverStart || input.startDate
+  const coverEnd = input.coverEnd || input.endDate
   return db.insurancePolicy.create({
     data: {
       orgId: ctx.orgId,
@@ -82,6 +89,8 @@ export async function createPolicy(
       premium: premium.toFixed(4),
       startDate: toDate(input.startDate),
       endDate: toDate(input.endDate),
+      coverStart: toDate(coverStart),
+      coverEnd: toDate(coverEnd),
       status: 'ACTIVE',
       recurringTemplateId: input.recurringTemplateId || null,
       notes: input.notes?.trim() || null,
@@ -153,4 +162,65 @@ export async function createPremiumRecurring(ctx: OrgContext, policyId: string) 
     data: { recurringTemplateId: template.id },
   })
   return { policyId: policy.id, recurringTemplateId: template.id, templateName: template.name }
+}
+
+export async function listClaims(ctx: OrgContext, policyId?: string) {
+  assertPermission(ctx, 'customer:read')
+  const rows = await db.insuranceClaim.findMany({
+    where: { orgId: ctx.orgId, ...(policyId ? { policyId } : {}) },
+    include: {
+      policy: { select: { policyNumber: true, customer: { select: { displayName: true } } } },
+    },
+    orderBy: { claimedOn: 'desc' },
+    take: 100,
+  })
+  return rows.map((row) => ({
+    ...row,
+    amount: row.amount.toString(),
+    claimedOn: toCalendarDate(row.claimedOn),
+  }))
+}
+
+export async function registerClaim(
+  ctx: OrgContext,
+  input: {
+    policyId: string
+    amount: string
+    payer?: string | null
+    notes?: string | null
+    claimedOn: string
+    status?: InsuranceClaimStatus
+  },
+) {
+  assertPermission(ctx, 'customer:create')
+  const policy = await db.insurancePolicy.findFirst({
+    where: { id: input.policyId, orgId: ctx.orgId },
+    select: { id: true },
+  })
+  if (!policy) throw notFound('Policy')
+  const amount = new Decimal(input.amount)
+  if (amount.lessThan(0)) throw validation('Claim amount cannot be negative.')
+  return db.insuranceClaim.create({
+    data: {
+      orgId: ctx.orgId,
+      policyId: policy.id,
+      amount: amount.toFixed(4),
+      payer: input.payer?.trim() || null,
+      notes: input.notes?.trim() || null,
+      claimedOn: toDate(input.claimedOn),
+      status: input.status ?? 'OPEN',
+    },
+    select: { id: true, amount: true, status: true },
+  })
+}
+
+export async function setClaimStatus(
+  ctx: OrgContext,
+  id: string,
+  status: InsuranceClaimStatus,
+) {
+  assertPermission(ctx, 'customer:update')
+  const row = await db.insuranceClaim.findFirst({ where: { id, orgId: ctx.orgId }, select: { id: true } })
+  if (!row) throw notFound('Claim')
+  return db.insuranceClaim.update({ where: { id: row.id }, data: { status } })
 }

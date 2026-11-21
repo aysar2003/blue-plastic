@@ -19,7 +19,10 @@ export default async function PortalInvoicesPage({
   const ctx = await requirePortalContext()
   const params = await searchParams
   const query = parseListQuery(params)
-  const page = await portalService.listInvoices(ctx, query)
+  const [page, upcoming] = await Promise.all([
+    portalService.listInvoices(ctx, query),
+    portalService.listUpcomingSubscriptions(ctx),
+  ])
   const currency = ctx.organization.baseCurrency
 
   return (
@@ -29,6 +32,20 @@ export default async function PortalInvoicesPage({
         description="Open any invoice to view it. Sort, drag columns, or Customize which columns show."
       />
       <SearchInput placeholder="Search by number or reference" />
+
+      {upcoming.length > 0 ? (
+        <div className="rounded-md border p-3 text-sm">
+          <p className="mb-1 font-medium">Upcoming invoices</p>
+          <ul className="space-y-1 text-muted-foreground">
+            {upcoming.map((row) => (
+              <li key={row.id}>
+                {row.name} · {row.nextRunOn}
+                {row.amount ? ` · ${row.amount}` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {page.total === 0 ? (
         <EmptyState

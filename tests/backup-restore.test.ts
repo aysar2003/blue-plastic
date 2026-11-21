@@ -62,8 +62,11 @@ suite('company backup restore', () => {
           legalName: true,
           baseCurrency: true,
           fiscalYearStartMonth: true,
+          fiscalYearStartDay: true,
           timeZone: true,
           allowNegativeStock: true,
+          idleLockSeconds: true,
+          sessionMaxHours: true,
           posTillLedgerMode: true,
           parentOrgId: true,
           addressLine1: true,
@@ -82,6 +85,7 @@ suite('company backup restore', () => {
           rentExpiresAt: true,
           maxUsers: true,
           rentNote: true,
+          onboardingCompletedAt: true,
         },
       })
       orgId = organization.id
@@ -122,7 +126,7 @@ suite('company backup restore', () => {
         portalCustomerId: null,
         features: DEFAULT_FEATURE_FLAGS,
         organization: { ...orgFields, hasLogo: Boolean(logoStorageKey) },
-        user: owner,
+        user: { ...owner, loginAt: null, hasDeskPin: false },
       }
 
       const backup = await companyBackup(ctx)
@@ -188,8 +192,11 @@ suite('company backup restore', () => {
         legalName: true,
         baseCurrency: true,
         fiscalYearStartMonth: true,
+        fiscalYearStartDay: true,
         timeZone: true,
         allowNegativeStock: true,
+        idleLockSeconds: true,
+        sessionMaxHours: true,
         posTillLedgerMode: true,
         parentOrgId: true,
         addressLine1: true,
@@ -208,6 +215,7 @@ suite('company backup restore', () => {
         rentExpiresAt: true,
         maxUsers: true,
         rentNote: true,
+        onboardingCompletedAt: true,
       },
     })
     orgId = organization.id
@@ -234,7 +242,7 @@ suite('company backup restore', () => {
       portalCustomerId: null,
       features: DEFAULT_FEATURE_FLAGS,
       organization: { ...orgFields, hasLogo: Boolean(logoStorageKey) },
-      user: owner,
+      user: { ...owner, loginAt: null, hasDeskPin: false },
     }
 
     const backup = await companyBackup(ctx)

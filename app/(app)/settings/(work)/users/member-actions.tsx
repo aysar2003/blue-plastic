@@ -18,6 +18,7 @@ import {
 import { ROLE_LABELS } from '@/lib/roles'
 import { EditMemberAccessDialog } from './edit-member-access-dialog'
 import {
+  adminDisableMemberTwoFactor,
   removeMember,
   resetMemberPasswordForm,
   setMemberStatus,
@@ -80,6 +81,23 @@ export function MemberActions({
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setResetOpen(true)}>
                 Reset password…
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (
+                    !window.confirm(
+                      `Turn off two-factor authentication for ${name}? They can sign in with password only until they set it up again.`,
+                    )
+                  ) {
+                    return
+                  }
+                  run(
+                    () => adminDisableMemberTwoFactor({ membershipId }),
+                    `Two-factor turned off for ${name}.`,
+                  )
+                }}
+              >
+                Turn off two-factor…
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Quick role</DropdownMenuLabel>

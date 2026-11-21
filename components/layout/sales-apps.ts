@@ -75,6 +75,16 @@ export const SALES_HUB_APPS: SalesHubApp[] = [
     blurb: 'Recurring invoices & deferred revenue',
   },
   {
+    key: 'dunning',
+    label: 'Dunning',
+    href: '/sales/subscriptions/dunning',
+    icon: 'clock',
+    permission: 'invoice:read',
+    accent: '#B45309',
+    wash: '#FEF3C7',
+    blurb: 'Overdue subscription invoices',
+  },
+  {
     key: 'sales-receipts',
     label: 'Sales receipts',
     href: '/sales/sales-receipts',

@@ -3,8 +3,10 @@ import Link from 'next/link'
 
 import {
   billProgressAction,
+  billSovLineAction,
   releaseRetentionAction,
   saveContractAction,
+  saveSovLineAction,
   setSiteStoreAction,
 } from '@/app/(app)/projects/progress/actions'
 import { EmptyState } from '@/components/data/empty-state'
@@ -24,7 +26,7 @@ export const metadata: Metadata = { title: 'Progress billing' }
 
 export default async function ProjectProgressPage() {
   const ctx = await requireOrgContext('invoice:create')
-  const [projects, items, stores, retentionInvoices, jobCosts] = await Promise.all([
+  const [projects, items, stores, retentionInvoices, jobCosts, sovLines] = await Promise.all([
     db.project.findMany({
       where: { orgId: ctx.orgId, status: { in: ['DRAFT', 'ACTIVE', 'ON_HOLD'] } },
       select: {
@@ -71,7 +73,14 @@ export default async function ProjectProgressPage() {
       take: 50,
     }),
     construction.listJobCostSummaries(ctx),
+    construction.listSovLines(ctx),
   ])
+  const sovByProject = new Map<string, typeof sovLines>()
+  for (const line of sovLines) {
+    const list = sovByProject.get(line.projectId) ?? []
+    list.push(line)
+    sovByProject.set(line.projectId, list)
+  }
   const currency = ctx.organization.baseCurrency
 
   return (
@@ -165,6 +174,96 @@ export default async function ProjectProgressPage() {
                     Link store
                   </button>
                 </form>
+
+                {(() => {
+                  const lines = sovByProject.get(project.id) ?? []
+                  return (
+                    <div className="space-y-2 border-t pt-3">
+                      <p className="text-xs font-semibold">Schedule of values</p>
+                      {lines.map((line) => (
+                        <div key={line.id} className="rounded-md border p-2 text-xs">
+                          <p className="font-medium">
+                            {line.name} · budget {formatMoney(line.budget, currency)} · {line.percentComplete}% complete
+                          </p>
+                          <p className="text-muted-foreground">
+                            This bill {formatMoney(line.thisBillGross, currency)} · retainage{' '}
+                            {formatMoney(line.retainage, currency)} · remaining{' '}
+                            {formatMoney(line.remaining, currency)}
+                          </p>
+                          <form action={saveSovLineAction} className="mt-2 flex flex-wrap items-end gap-1">
+                            <input type="hidden" name="id" value={line.id} />
+                            <input type="hidden" name="projectId" value={project.id} />
+                            <input type="hidden" name="name" value={line.name} />
+                            <input type="hidden" name="budgetAmount" value={line.budget} />
+                            <label>
+                              % complete
+                              <Input
+                                name="percentComplete"
+                                className="mt-1 h-8 w-20"
+                                defaultValue={String(line.percentComplete)}
+                              />
+                            </label>
+                            <label>
+                              This bill
+                              <Input
+                                name="thisBillAmount"
+                                className="mt-1 h-8 w-24"
+                                defaultValue={line.thisBillGross}
+                              />
+                            </label>
+                            <label>
+                              Retainage %
+                              <Input
+                                name="retainagePercent"
+                                className="mt-1 h-8 w-20"
+                                defaultValue={line.retainagePercent ?? ''}
+                              />
+                            </label>
+                            <button type="submit" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+                              Update
+                            </button>
+                          </form>
+                          <form action={billSovLineAction} className="mt-1 flex flex-wrap items-end gap-1">
+                            <input type="hidden" name="sovLineId" value={line.id} />
+                            <NativeSelect name="itemId" required className="h-8">
+                              <option value="">Item…</option>
+                              {items.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.name}
+                                </option>
+                              ))}
+                            </NativeSelect>
+                            <button type="submit" className={buttonVariants({ size: 'sm' })}>
+                              Bill this line
+                            </button>
+                          </form>
+                        </div>
+                      ))}
+                      <form action={saveSovLineAction} className="flex flex-wrap items-end gap-1">
+                        <input type="hidden" name="projectId" value={project.id} />
+                        <label>
+                          Line
+                          <Input name="name" className="mt-1 h-8 w-36" placeholder="Division / work" required />
+                        </label>
+                        <label>
+                          Budget
+                          <Input name="budgetAmount" className="mt-1 h-8 w-24" required />
+                        </label>
+                        <label>
+                          % complete
+                          <Input name="percentComplete" className="mt-1 h-8 w-20" defaultValue="0" />
+                        </label>
+                        <label>
+                          Retainage %
+                          <Input name="retainagePercent" className="mt-1 h-8 w-20" />
+                        </label>
+                        <button type="submit" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+                          Add SOV line
+                        </button>
+                      </form>
+                    </div>
+                  )
+                })()}
 
                 <form action={billProgressAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="projectId" value={project.id} />
@@ -290,6 +389,7 @@ export default async function ProjectProgressPage() {
                 <TableHead className="text-right">Billed</TableHead>
                 <TableHead className="text-right">Budget</TableHead>
                 <TableHead className="text-right">Costs</TableHead>
+                <TableHead className="text-right">Site issues</TableHead>
                 <TableHead className="text-right">Committed PO</TableHead>
                 <TableHead className="text-right">Budget var</TableHead>
                 <TableHead className="text-right">Margin</TableHead>
@@ -320,6 +420,9 @@ export default async function ProjectProgressPage() {
                   </TableCell>
                   <TableCell className="text-right tabular">
                     {formatMoney(row.costs, currency)}
+                  </TableCell>
+                  <TableCell className="text-right tabular">
+                    {formatMoney(row.siteStoreIssues, currency)}
                   </TableCell>
                   <TableCell className="text-right tabular">
                     {formatMoney(row.committed, currency)}

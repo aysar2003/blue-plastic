@@ -334,3 +334,28 @@ export async function unpaidLeaveDaysInPeriod(
   // Simple: sum request days that fall in range (full request days if overlapping).
   return rows.reduce((sum, row) => sum.plus(row.days), money(0))
 }
+
+/** Approved leave as hours rows for the payroll hours file. */
+export async function exportHours(
+  ctx: OrgContext,
+  range: { from: CalendarDate; to: CalendarDate },
+  hoursPerDay: Decimal.Value = 8,
+) {
+  const rows = await db.leaveRequest.findMany({
+    where: {
+      orgId: ctx.orgId,
+      status: 'APPROVED',
+      dateFrom: { lte: toDate(range.to) },
+      dateTo: { gte: toDate(range.from) },
+    },
+    include: { employee: { select: { name: true } }, leaveType: { select: { name: true } } },
+    orderBy: [{ dateFrom: 'asc' }],
+  })
+  return rows.map((row) => ({
+    date: toCalendarDate(row.dateFrom),
+    employee: row.employee.name,
+    kind: 'leave' as const,
+    hours: new Decimal(row.days.toString()).times(hoursPerDay).toFixed(4),
+    note: row.leaveType.name,
+  }))
+}

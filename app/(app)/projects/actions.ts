@@ -12,11 +12,13 @@ import {
 } from '@/lib/validation/project'
 import {
   moveProjectTaskSchema,
+  projectTaskDependencySchema,
   projectTaskSchema,
   updateProjectTaskSchema,
 } from '@/lib/validation/project-task'
-import { cuid } from '@/lib/validation/common'
+import { cuid, requiredText } from '@/lib/validation/common'
 import { action } from '@/server/action'
+import * as projectCommentService from '@/server/services/project-comment.service'
 import * as projectService from '@/server/services/project.service'
 import * as projectTaskService from '@/server/services/project-task.service'
 import { z } from 'zod'
@@ -134,4 +136,38 @@ export async function updateProjectTaskForm(
   formData: FormData,
 ): Promise<FormState> {
   return toFormState(await updateProjectTask(formValues(formData)), 'Task saved.')
+}
+
+export const addProjectTaskDependency = action
+  .requires('project:update')
+  .input(projectTaskDependencySchema)
+  .handler(async (ctx, input) => {
+    const row = await projectTaskService.addDependency(ctx, input)
+    revalidateProjects(row.projectId)
+    return row
+  })
+
+export const removeProjectTaskDependency = action
+  .requires('project:update')
+  .input(z.object({ id: cuid }))
+  .handler(async (ctx, input) => {
+    const row = await projectTaskService.removeDependency(ctx, input.id)
+    revalidateProjects(row.projectId)
+    return row
+  })
+
+export const createProjectComment = action
+  .requires('project:update')
+  .input(z.object({ projectId: cuid, body: requiredText('Note', 4000) }))
+  .handler(async (ctx, input) => {
+    const row = await projectCommentService.create(ctx, input)
+    revalidateProjects(input.projectId)
+    return row
+  })
+
+export async function createProjectCommentForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  return toFormState(await createProjectComment(formValues(formData)), 'Note posted.')
 }

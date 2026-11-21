@@ -37,6 +37,7 @@ organisation exists.
 | `pnpm dev` / `pnpm build` / `pnpm start` | the app |
 | `pnpm verify` | lint + typecheck + tests — run before every hand-off |
 | `pnpm test` | Vitest (unit; DB suites skip when `DATABASE_URL` is hosted Supabase) |
+| `pnpm test:e2e:cycle` | Playwright sell→pay→buy→stock→recon→close (`e2e/cycle-smoke.spec.ts`; skip without `E2E_EMAIL`) |
 | `pnpm test:db` | Same, but runs DB integration suites (`ALLOW_DB_TESTS=1`; prefer local Postgres) |
 | `pnpm db:migrate` / `db:deploy` / `db:studio` / `db:seed` / `db:reset` | Prisma |
 

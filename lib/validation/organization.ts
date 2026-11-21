@@ -1,6 +1,12 @@
 import { z } from 'zod'
 
 import {
+  clampIdleLockSeconds,
+  clampSessionMaxHours,
+  DEFAULT_IDLE_LOCK_SECONDS,
+  DEFAULT_SESSION_MAX_HOURS,
+} from '@/lib/desk-security'
+import {
   DOCUMENT_KIND_FORM_KEY_LIST,
   MODULE_FLAGS,
   MODULE_FORM_KEYS,
@@ -24,6 +30,10 @@ export const organizationUpdateSchema = z.object({
   phone: optionalText(40),
   email: z.union([email, z.literal('')]).transform((v) => (v === '' ? null : v)).nullable().optional(),
   website: optionalText(200),
+  paymentBankName: optionalText(120),
+  paymentAccountName: optionalText(120),
+  paymentAccountNumber: optionalText(80),
+  paymentInstructions: optionalText(2000),
   timeZone: requiredText('Time zone', 60),
   localizationPackId: z
     .union([z.enum(['so', 'ke', 'et', 'dj']), z.literal('')])
@@ -46,17 +56,57 @@ export const organizationBrandingSchema = z.object({
 
 export type OrganizationBrandingInput = z.infer<typeof organizationBrandingSchema>
 
+/** Max day allowed per month; February allows 29 (clamped in non-leap years). */
+const FISCAL_YEAR_DAYS_IN_MONTH = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const
+
+export const fiscalYearStartMonthField = z.coerce.number().int().min(1).max(12)
+export const fiscalYearStartDayField = z.coerce.number().int().min(1).max(31)
+
+export function refineFiscalYearStartDay(
+  data: { fiscalYearStartMonth: number; fiscalYearStartDay: number },
+  ctx: z.RefinementCtx,
+) {
+  const max = FISCAL_YEAR_DAYS_IN_MONTH[data.fiscalYearStartMonth] ?? 31
+  if (data.fiscalYearStartDay > max) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['fiscalYearStartDay'],
+      message: `That month only has ${max} days`,
+    })
+  }
+}
+
 /**
  * Currency and fiscal year are separated from the profile form on purpose: they
  * are ledger-defining settings, and Phase 2 will refuse to change them once a
  * journal exists.
  */
-export const organizationAccountingSchema = z.object({
-  baseCurrency: currencyCode,
-  fiscalYearStartMonth: z.coerce.number().int().min(1).max(12),
-})
+export const organizationAccountingSchema = z
+  .object({
+    baseCurrency: currencyCode,
+    fiscalYearStartMonth: fiscalYearStartMonthField,
+    fiscalYearStartDay: fiscalYearStartDayField.default(1),
+  })
+  .superRefine(refineFiscalYearStartDay)
 
 export type OrganizationAccountingInput = z.infer<typeof organizationAccountingSchema>
+
+/** Desk lock + absolute session logout + 2FA enforce (Settings → Organisation). */
+export const organizationSecuritySchema = z.object({
+  idleLockSeconds: z.coerce
+    .number()
+    .int()
+    .transform((v) => clampIdleLockSeconds(v))
+    .default(DEFAULT_IDLE_LOCK_SECONDS),
+  sessionMaxHours: z.coerce
+    .number()
+    .int()
+    .transform((v) => clampSessionMaxHours(v))
+    .default(DEFAULT_SESSION_MAX_HOURS),
+  enforceTwoFactor: z.enum(['OFF', 'STAFF', 'ALL']).default('OFF'),
+})
+
+export type OrganizationSecurityInput = z.infer<typeof organizationSecuritySchema>
 
 const boolFlag = z
   .union([z.literal('true'), z.literal('false'), z.literal('on'), z.boolean()])
@@ -83,6 +133,7 @@ export const organizationFeaturesSchema = z.object({
   creditLimitWarn: boolFlag.default(false),
   payrollStandard: boolFlag.default(true),
   closeHardGates: boolFlag.default(false),
+  closeSecondApprover: boolFlag.default(false),
   budgetControlMode: z.enum(['off', 'warn', 'enforce']).default('off'),
   enableTax: boolFlag.default(true),
   ...moduleFeatureFields,

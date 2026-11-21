@@ -62,3 +62,11 @@ export const acceptPortalInviteSchema = z
   })
 
 export type AcceptPortalInviteInput = z.infer<typeof acceptPortalInviteSchema>
+
+/** Portal customer accept / decline on an open estimate or quotation. */
+export const portalQuoteResponseSchema = z.object({
+  id: cuid,
+  decision: z.enum(['accept', 'decline']),
+})
+
+export type PortalQuoteResponseInput = z.infer<typeof portalQuoteResponseSchema>

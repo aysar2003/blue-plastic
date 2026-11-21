@@ -216,6 +216,22 @@ export const DEFAULT_CHART: SeedAccount[] = [
     description: 'Franchise royalty billed to child locations.',
   },
   {
+    code: '1370',
+    name: 'IC Elimination (debit)',
+    type: 'ASSET',
+    subtype: 'OTHER_CURRENT_ASSET',
+    systemKey: 'IC_ELIMINATION_DEBIT',
+    description: 'Memo debit side of an intercompany elimination pair.',
+  },
+  {
+    code: '2370',
+    name: 'IC Elimination (credit)',
+    type: 'LIABILITY',
+    subtype: 'OTHER_CURRENT_LIABILITY',
+    systemKey: 'IC_ELIMINATION_CREDIT',
+    description: 'Memo credit side of an intercompany elimination pair.',
+  },
+  {
     code: '4960',
     name: 'Cash Over (POS)',
     type: 'REVENUE',

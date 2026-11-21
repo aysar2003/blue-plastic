@@ -44,6 +44,13 @@ const CUSTOMER_SELECT = {
   billingPostalCode: true, billingCountry: true,
   shippingLine1: true, shippingLine2: true, shippingCity: true, shippingRegion: true,
   shippingPostalCode: true, shippingCountry: true,
+  shipTos: {
+    orderBy: [{ isDefault: 'desc' as const }, { createdAt: 'asc' as const }],
+    select: {
+      id: true, label: true, line1: true, line2: true, city: true, region: true,
+      postalCode: true, country: true, isDefault: true,
+    },
+  },
   paymentTermId: true, creditLimit: true, currencyCode: true, priceLevel: true, notes: true, salesPerson: true, isActive: true, createdAt: true,
   agreementDate: true, balanceDate: true, balanceTime: true, reminderDays: true,
   linkedVendorId: true,
@@ -405,6 +412,7 @@ export async function createCustomer(ctx: OrgContext, input: CustomerInput) {
       },
       select: { id: true, displayName: true },
     })
+    await replaceCustomerShipTos(tx, ctx.orgId, customer.id, input.shipTos)
 
     await writeAudit(
       tx,
@@ -548,6 +556,7 @@ export async function updateCustomer(ctx: OrgContext, input: CustomerInput & { i
       },
       select: { id: true, displayName: true },
     })
+    await replaceCustomerShipTos(tx, ctx.orgId, input.id, input.shipTos)
 
     await writeAudit(
       tx,
@@ -870,6 +879,32 @@ function searchTerms(q: string) {
     { email: { contains: q, mode: 'insensitive' as const } },
     { phone: { contains: q, mode: 'insensitive' as const } },
   ]
+}
+
+async function replaceCustomerShipTos(
+  tx: Tx,
+  orgId: string,
+  customerId: string,
+  shipTos: CustomerInput['shipTos'],
+) {
+  if (shipTos === undefined) return
+  await tx.customerAddress.deleteMany({ where: { orgId, customerId } })
+  const rows = shipTos.filter((row) => row.label.trim())
+  if (rows.length === 0) return
+  await tx.customerAddress.createMany({
+    data: rows.map((row) => ({
+      orgId,
+      customerId,
+      label: row.label.trim(),
+      line1: row.line1 ?? null,
+      line2: row.line2 ?? null,
+      city: row.city ?? null,
+      region: row.region ?? null,
+      postalCode: row.postalCode ?? null,
+      country: row.country ?? null,
+      isDefault: Boolean(row.isDefault),
+    })),
+  })
 }
 
 function pickContact(input: CustomerInput | VendorInput) {

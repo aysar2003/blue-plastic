@@ -29,6 +29,97 @@ export function signWebhookBody(secret: string, body: string): string {
   return createHmac('sha256', secret).update(body, 'utf8').digest('hex')
 }
 
+export type InboundSignMappedStatus = 'SIGNED' | 'DECLINED'
+
+export type InboundSignWebhookPayload = {
+  requestId?: string
+  externalId?: string
+  orgId?: string
+  status: string
+  reason?: string
+  signatureData?: string
+  signerName?: string
+}
+
+const SIGNED_STATUSES = new Set([
+  'signed',
+  'completed',
+  'complete',
+  'done',
+  'success',
+  'finished',
+  'executed',
+])
+
+const DECLINED_STATUSES = new Set([
+  'declined',
+  'decline',
+  'rejected',
+  'reject',
+  'refused',
+  'refuse',
+])
+
+/** Map a provider status string onto SignRequest SIGNED / DECLINED. */
+export function mapInboundSignStatus(raw: string): InboundSignMappedStatus | null {
+  const key = raw.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  if (SIGNED_STATUSES.has(key)) return 'SIGNED'
+  if (DECLINED_STATUSES.has(key)) return 'DECLINED'
+  return null
+}
+
+export function parseInboundSignWebhookPayload(raw: unknown): InboundSignWebhookPayload | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  const status =
+    typeof row.status === 'string'
+      ? row.status
+      : typeof row.event === 'string'
+        ? row.event
+        : typeof row.state === 'string'
+          ? row.state
+          : ''
+  if (!status.trim()) return null
+  const requestId =
+    typeof row.requestId === 'string'
+      ? row.requestId.trim()
+      : typeof row.id === 'string'
+        ? row.id.trim()
+        : typeof row.signRequestId === 'string'
+          ? row.signRequestId.trim()
+          : undefined
+  const externalId =
+    typeof row.externalId === 'string'
+      ? row.externalId.trim()
+      : typeof row.providerId === 'string'
+        ? row.providerId.trim()
+        : undefined
+  const orgId =
+    typeof row.orgId === 'string'
+      ? row.orgId.trim()
+      : typeof row.organizationId === 'string'
+        ? row.organizationId.trim()
+        : undefined
+  const reason = typeof row.reason === 'string' ? row.reason.trim() : undefined
+  const signatureData = typeof row.signatureData === 'string' ? row.signatureData.trim() : undefined
+  const signerName = typeof row.signerName === 'string' ? row.signerName.trim() : undefined
+  return {
+    requestId: requestId || undefined,
+    externalId: externalId || undefined,
+    orgId: orgId || undefined,
+    status: status.trim(),
+    reason: reason || undefined,
+    signatureData: signatureData || undefined,
+    signerName: signerName || undefined,
+  }
+}
+
+export function inboundEventType(mapped: InboundSignMappedStatus | null): string {
+  if (mapped === 'SIGNED') return 'inbound.signed'
+  if (mapped === 'DECLINED') return 'inbound.declined'
+  return 'inbound.unknown'
+}
+
 /** Verify inbound `X-Som-Signature` against the raw JSON body. */
 export function verifySignWebhookSignature(secret: string, body: string, header: string | null): boolean {
   if (!header?.trim()) return false

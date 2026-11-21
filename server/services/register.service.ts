@@ -78,6 +78,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
           name: orgName,
           baseCurrency: input.baseCurrency,
           fiscalYearStartMonth: input.fiscalYearStartMonth,
+          fiscalYearStartDay: input.fiscalYearStartDay,
           featureFlags: flagsForSignup(requestedModules),
         },
         select: { id: true, name: true },
@@ -157,6 +158,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
         organizationName: orgName,
         baseCurrency: input.baseCurrency,
         fiscalYearStartMonth: input.fiscalYearStartMonth,
+        fiscalYearStartDay: input.fiscalYearStartDay,
         ownerName: input.name.trim(),
         email,
         passwordHash,
@@ -175,6 +177,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
         name: orgName,
         baseCurrency: input.baseCurrency,
         fiscalYearStartMonth: input.fiscalYearStartMonth,
+        fiscalYearStartDay: input.fiscalYearStartDay,
         rentExpiresAt: trialEndsAt(),
         rentNote: 'Free trial',
         featureFlags: flagsForSignup(requestedModules),
@@ -239,6 +242,7 @@ export type SignupRequestRow = {
   organizationName: string
   baseCurrency: string
   fiscalYearStartMonth: number
+  fiscalYearStartDay: number
   ownerName: string
   email: string
   createdAt: string
@@ -258,6 +262,7 @@ export async function listPendingSignupRequests(ctx: OrgContext): Promise<Signup
       organizationName: true,
       baseCurrency: true,
       fiscalYearStartMonth: true,
+      fiscalYearStartDay: true,
       ownerName: true,
       email: true,
       createdAt: true,
@@ -271,6 +276,7 @@ export async function listPendingSignupRequests(ctx: OrgContext): Promise<Signup
       organizationName: row.organizationName,
       baseCurrency: row.baseCurrency,
       fiscalYearStartMonth: row.fiscalYearStartMonth,
+      fiscalYearStartDay: row.fiscalYearStartDay,
       ownerName: row.ownerName,
       email: row.email,
       createdAt: row.createdAt.toISOString(),
@@ -339,6 +345,7 @@ export async function reviewSignupRequest(
         name: request.organizationName,
         baseCurrency: request.baseCurrency,
         fiscalYearStartMonth: request.fiscalYearStartMonth,
+        fiscalYearStartDay: request.fiscalYearStartDay,
         rentExpiresAt: trialEndsAt(),
         rentNote: 'Free trial',
         featureFlags: flagsForSignup(modules),

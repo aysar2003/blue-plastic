@@ -42,6 +42,13 @@ export function allocatePatronage(
   return { pool: pool.toFixed(4), shares }
 }
 
+export function patronageMemberCsvRows(shares: PatronageShare[]): string[][] {
+  return [
+    ['shareholderId', 'name', 'weight', 'allocation'],
+    ...shares.map((s) => [s.shareholderId, s.name, s.weight, s.amount]),
+  ]
+}
+
 export function patronageCsv(shares: PatronageShare[]): string {
   const header = 'shareholderId,name,weight,allocation'
   const body = shares.map(

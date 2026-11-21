@@ -16,8 +16,11 @@ export const authConfig = {
   },
   session: {
     strategy: 'jwt',
-    /** Absolute login lifetime — after this the cookie expires and middleware sends to /login. */
-    maxAge: 60 * 60 * 10, // 10 hours
+    /**
+     * Hard ceiling for the JWT cookie. Per-company session length is set in
+     * Settings → Organisation (up to 24h) and enforced by the desk IdleLock.
+     */
+    maxAge: 60 * 60 * 24, // 24 hours
     updateAge: 60 * 60,
   },
   // Required behind Vercel / reverse proxies. Prefer setting APP_URL / AUTH_URL

@@ -228,3 +228,42 @@ export const markBillableSchema = z.object({
 })
 
 export type MarkBillableInput = z.infer<typeof markBillableSchema>
+
+const landedCostLineSchema = z.object({
+  itemId: cuid,
+  storeId: optionalId,
+  amount: moneyString.refine((value) => Number(value) > 0, 'Enter an amount greater than zero'),
+  quantity: z
+    .union([
+      z.literal(''),
+      calculatedDecimal(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity'),
+    ])
+    .transform((value) => (value === '' ? null : value))
+    .nullable()
+    .optional(),
+})
+
+function parseLandedCostLines(value: unknown) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    try {
+      return JSON.parse(trimmed) as unknown
+    } catch {
+      return value
+    }
+  }
+  return value
+}
+
+/** Allocate freight/duty on a posted bill onto inventory items from recent receives. */
+export const allocateLandedCostSchema = z.object({
+  billId: cuid,
+  memo: optionalText(500),
+  lines: z.preprocess(
+    parseLandedCostLines,
+    z.array(landedCostLineSchema).min(1, 'Allocate at least one amount').max(200),
+  ),
+})
+
+export type AllocateLandedCostInput = z.infer<typeof allocateLandedCostSchema>

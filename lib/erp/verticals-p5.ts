@@ -73,6 +73,45 @@ export function utilizationPercent(billableHours: string | number, availableHour
   return Math.round((billable / available) * 1000) / 10
 }
 
+/**
+ * When logged hours exist, available = total hours (billable + non-billable).
+ * Otherwise fall back to the capacity default (typically 40).
+ */
+export function utilizationAvailableHours(
+  totalLoggedHours: string | number,
+  fallbackAvailable: string | number,
+): number {
+  const logged = Number(totalLoggedHours)
+  if (Number.isFinite(logged) && logged > 0) return logged
+  const fallback = Number(fallbackAvailable)
+  return Number.isFinite(fallback) && fallback > 0 ? fallback : 0
+}
+
+export type WipAgeBucket = '0-30' | '31-60' | '61-90' | '90+'
+
+export function wipAgeBucket(workDate: string | Date, asOf: string): WipAgeBucket {
+  const work =
+    typeof workDate === 'string' ? workDate.slice(0, 10) : workDate.toISOString().slice(0, 10)
+  const start = Date.parse(`${work}T00:00:00.000Z`)
+  const end = Date.parse(`${asOf.slice(0, 10)}T00:00:00.000Z`)
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return '0-30'
+  const days = Math.max(0, Math.floor((end - start) / 86_400_000))
+  if (days <= 30) return '0-30'
+  if (days <= 60) return '31-60'
+  if (days <= 90) return '61-90'
+  return '90+'
+}
+
+export function replenishRetainerRemaining(
+  priorRemaining: string | number | null | undefined,
+  topUp: string | number,
+): string {
+  const prior = Number(priorRemaining || 0)
+  const add = Number(topUp || 0)
+  const next = (Number.isFinite(prior) ? prior : 0) + (Number.isFinite(add) ? add : 0)
+  return (next > 0 ? next : 0).toFixed(4)
+}
+
 /** Budget vs actual variance (positive = under budget). */
 export function budgetVariance(budgeted: string | number, actual: string | number): string {
   const b = Number(budgeted)

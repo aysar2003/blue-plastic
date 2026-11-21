@@ -230,3 +230,68 @@ export async function recognizeDue(ctx: OrgContext, asOfInput?: CalendarDate) {
 
   return { created, skipped, asOf, dueCount: due.length }
 }
+
+/** Recognize remaining unearned in one journal so a cancelled schedule does not leave a hanging liability. */
+export async function recognizeRemainingForTemplate(ctx: OrgContext, recurringTemplateId: string) {
+  const rows = await db.deferredRevenueSchedule.findMany({
+    where: { orgId: ctx.orgId, recurringTemplateId, isComplete: false },
+  })
+  const asOf = today(ctx.organization.timeZone)
+  const cleared: { scheduleId: string; amount: string; journalId: string }[] = []
+
+  for (const row of rows) {
+    const remaining = remainingUnearned(row.totalAmount, row.recognizedAmount)
+    if (remaining.lessThanOrEqualTo(ZERO)) {
+      await db.deferredRevenueSchedule.update({
+        where: { id: row.id },
+        data: { isComplete: true },
+      })
+      continue
+    }
+
+    await db.$transaction(async (tx) => {
+      await seedChartOfAccounts(tx, ctx.orgId)
+    })
+    const unearnedAccountId = await db.$transaction((tx) =>
+      systemAccountId(tx, ctx.orgId, 'UNEARNED_REVENUE'),
+    )
+    const incomeAccountId = await db.$transaction((tx) =>
+      systemAccountId(tx, ctx.orgId, 'UNCATEGORISED_INCOME'),
+    )
+
+    const journal = await journalService.createManual(ctx, {
+      date: asOf,
+      number: undefined,
+      memo: `[RECOGNIZE] Remaining unearned on cancelled schedule`,
+      isAdjusting: true,
+      autoReverse: false,
+      lines: [
+        {
+          accountId: unearnedAccountId,
+          debit: remaining.toFixed(4),
+          credit: '0',
+          description: 'Clear remaining unearned on cancel',
+        },
+        {
+          accountId: incomeAccountId,
+          debit: '0',
+          credit: remaining.toFixed(4),
+          description: 'Earned on cancelled subscription',
+        },
+      ],
+    })
+
+    const nextRecognized = new Decimal(row.recognizedAmount.toString()).plus(remaining)
+    await db.deferredRevenueSchedule.update({
+      where: { id: row.id },
+      data: {
+        recognizedAmount: nextRecognized,
+        lastRecognitionJournalId: journal.id,
+        isComplete: true,
+      },
+    })
+    cleared.push({ scheduleId: row.id, amount: remaining.toFixed(4), journalId: journal.id })
+  }
+
+  return { asOf, clearedCount: cleared.length, cleared }
+}

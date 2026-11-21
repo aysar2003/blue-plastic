@@ -10,6 +10,7 @@ import { visiblePosNav } from '@/components/pos/pos-shell'
 import { reportMenuItems } from '@/components/reports/create-report-menu'
 import {
   BUSINESS_OVERVIEW_HREF,
+  COMPANY_SNAPSHOT_HREF,
   canViewBusinessOverview,
   withoutBusinessOverview,
 } from '@/lib/business-overview-access'
@@ -49,6 +50,7 @@ describe('business overview access', () => {
     const links = overviewLinks(sales)
     for (const list of Object.values(links)) {
       expect(list).not.toContain(BUSINESS_OVERVIEW_HREF)
+      expect(list).not.toContain(COMPANY_SNAPSHOT_HREF)
     }
     expect(canViewBusinessOverview(sales)).toBe(false)
   })
@@ -57,6 +59,11 @@ describe('business overview access', () => {
     const links = overviewLinks(accountant)
     expect(links.tabs).toContain(BUSINESS_OVERVIEW_HREF)
     expect(links.sections).toContain(BUSINESS_OVERVIEW_HREF)
+    expect(links.sections).toContain(COMPANY_SNAPSHOT_HREF)
+    expect(links.tabs).toContain(COMPANY_SNAPSHOT_HREF)
+    expect(links.favourites).toContain(COMPANY_SNAPSHOT_HREF)
+    expect(links.management).toContain(COMPANY_SNAPSHOT_HREF)
+    expect(links.menu).toContain(COMPANY_SNAPSHOT_HREF)
     expect(links.pos).toContain(BUSINESS_OVERVIEW_HREF)
     expect(links.menu).toContain(BUSINESS_OVERVIEW_HREF)
     expect(links.favourites).toContain(BUSINESS_OVERVIEW_HREF)
@@ -74,17 +81,30 @@ describe('business overview access', () => {
     expect(withoutBusinessOverview(rows, accountant)).toHaveLength(3)
   })
 
-  it('still lists the other statements in the business overview group', () => {
-    const section = reportSectionsFor(sales).find((item) => item.label === 'Business overview')
-    expect(section?.apps.map((app) => app.href)).toEqual([
+  it('hides management boards from sellers and keeps financial statements', () => {
+    expect(reportSectionsFor(sales).find((item) => item.label === 'Boards & pulse')).toBeUndefined()
+    const financial = reportSectionsFor(sales).find((item) => item.label === 'Company & financial')
+    expect(financial?.apps.map((app) => app.href)).toEqual([
       '/reports/profit-loss',
       '/reports/balance-sheet',
       '/reports/cash-flow',
       '/reports/trial-balance',
-      '/reports/packs',
-      '/reports/dashboards',
       '/reports/profit-loss/by-class',
       '/reports/profit-loss/by-month',
+      '/reports/profit-loss/by-customer',
+      '/reports/profit-loss/detail',
+      '/reports/profit-loss/percent',
+      '/reports/dashboards',
+      '/reports/packs',
+    ])
+  })
+
+  it('shows boards & pulse for an accountant', () => {
+    const boards = reportSectionsFor(accountant).find((item) => item.label === 'Boards & pulse')
+    expect(boards?.apps.map((app) => app.href)).toEqual([
+      '/reports/snapshot',
+      '/reports/business-overview',
+      '/analytics',
     ])
   })
 

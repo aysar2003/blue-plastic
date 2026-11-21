@@ -161,6 +161,18 @@ export default async function PurchaseDocumentPage({
                 <PackageIcon /> Receive items
               </Link>
             ) : null}
+            {config.type === 'BILL' &&
+            document.status !== 'VOID' &&
+            document.status !== 'DRAFT' &&
+            document.status !== 'PENDING_APPROVAL' &&
+            ctx.permissions.has('inventory:adjust') ? (
+              <Link
+                href={`/purchases/bills/${id}/landed-cost`}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              >
+                Allocate to receipts
+              </Link>
+            ) : null}
             {ctx.permissions.has('bill:create') && document.status !== 'VOID' ? (
               <Link
                 href={`/purchases/${config.slug}/new?copy=${id}`}

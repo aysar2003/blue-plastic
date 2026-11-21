@@ -80,6 +80,9 @@ export async function AppShell({
       logoVersion={ctx.organization.updatedAt.getTime()}
       baseCurrency={ctx.organization.baseCurrency}
       fiscalYearStartMonth={ctx.organization.fiscalYearStartMonth}
+      fiscalYearStartDay={ctx.organization.fiscalYearStartDay}
+      idleLockSeconds={ctx.organization.idleLockSeconds}
+      sessionMaxHours={ctx.organization.sessionMaxHours}
       roleLabel={ROLE_LABELS[ctx.role]}
       user={ctx.user}
       moduleKeys={moduleKeys}

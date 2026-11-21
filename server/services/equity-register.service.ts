@@ -1,23 +1,38 @@
 import 'server-only'
 
-import type { EquityEventKind } from '@prisma/client'
+import type { AccountSubtype, EquityEventKind } from '@prisma/client'
 
-import { today, toDate, type CalendarDate } from '@/lib/date'
+import { today, toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
+import {
+  equityEventCreditsEquity,
+  equityEventStatementSubtype,
+  equityMovementCsv,
+  shareholderRegisterCsv,
+  type EquityMovementRow,
+} from '@/lib/erp/equity-csv'
 import { Decimal } from '@/lib/money'
 import { postJournal } from '@/server/accounting/posting'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, validation } from '@/server/errors'
 
-async function ownersEquityAccount(ctx: OrgContext) {
-  const capital = await db.ledgerAccount.findFirst({
-    where: { orgId: ctx.orgId, isActive: true, subtype: 'OWNERS_EQUITY', code: '3000' },
-    select: { id: true },
-  })
+async function accountBySubtype(ctx: OrgContext, subtype: AccountSubtype) {
+  const preferred =
+    subtype === 'OWNERS_EQUITY'
+      ? await db.ledgerAccount.findFirst({
+          where: { orgId: ctx.orgId, isActive: true, subtype, code: '3000' },
+          select: { id: true },
+        })
+      : subtype === 'RETAINED_EARNINGS'
+        ? await db.ledgerAccount.findFirst({
+            where: { orgId: ctx.orgId, isActive: true, systemKey: 'RETAINED_EARNINGS' },
+            select: { id: true },
+          })
+        : null
   return (
-    capital ??
+    preferred ??
     (await db.ledgerAccount.findFirst({
-      where: { orgId: ctx.orgId, isActive: true, subtype: 'OWNERS_EQUITY' },
+      where: { orgId: ctx.orgId, isActive: true, subtype },
       select: { id: true },
       orderBy: { code: 'asc' },
     }))
@@ -76,6 +91,7 @@ export async function postEquityEvent(
   })
   if (!bank) throw notFound('Bank account')
 
+  const statementSubtype = equityEventStatementSubtype(input.kind)
   let equityAccountId = input.equityAccountId
   if (input.shareholderId) {
     const sh = await db.shareholder.findFirst({
@@ -83,12 +99,13 @@ export async function postEquityEvent(
       select: { capitalAccountId: true, name: true },
     })
     if (!sh) throw notFound('Shareholder')
-    if (sh.capitalAccountId) equityAccountId = sh.capitalAccountId
+    if (sh.capitalAccountId && input.kind === 'CONTRIBUTION') equityAccountId = sh.capitalAccountId
   }
 
   const equity =
     equityAccountId ??
-    (await ownersEquityAccount(ctx))?.id
+    (await accountBySubtype(ctx, statementSubtype))?.id ??
+    (await accountBySubtype(ctx, 'OWNERS_EQUITY'))?.id
   if (!equity) throw validation("Owner's equity account is missing from the chart.")
 
   const date = input.date ?? today(ctx.organization.timeZone)
@@ -98,18 +115,18 @@ export async function postEquityEvent(
       CONTRIBUTION: 'Owner contribution',
       DRAW: 'Owner draw',
       DIVIDEND: 'Dividend distribution',
+      PATRONAGE: 'Patronage allocation',
     }[input.kind] ?? 'Equity event')
 
-  const lines =
-    input.kind === 'CONTRIBUTION'
-      ? [
-          { accountId: bank.id, debit: amount, description: memo },
-          { accountId: equity, credit: amount, description: memo },
-        ]
-      : [
-          { accountId: equity, debit: amount, description: memo },
-          { accountId: bank.id, credit: amount, description: memo },
-        ]
+  const lines = equityEventCreditsEquity(input.kind)
+    ? [
+        { accountId: bank.id, debit: amount, description: memo },
+        { accountId: equity, credit: amount, description: memo },
+      ]
+    : [
+        { accountId: equity, debit: amount, description: memo },
+        { accountId: bank.id, credit: amount, description: memo },
+      ]
 
   return db.$transaction(async (tx) => {
     const journal = await postJournal(tx, ctx, {
@@ -135,4 +152,59 @@ export async function postEquityEvent(
 
     return { eventId: event.id, journalId: journal.id, journalNumber: journal.journalNumber }
   })
+}
+
+export async function shareholderRegisterExport(ctx: OrgContext) {
+  assertPermission(ctx, 'account:read')
+  const rows = await db.shareholder.findMany({
+    where: { orgId: ctx.orgId },
+    orderBy: { name: 'asc' },
+    include: { capitalAccount: { select: { code: true, name: true } } },
+  })
+  return shareholderRegisterCsv(
+    rows.map((row) => ({
+      name: row.name,
+      shares: row.shares.toString(),
+      ownershipPercent: row.ownershipPercent.toString(),
+      capitalAccount: row.capitalAccount
+        ? `${row.capitalAccount.code} ${row.capitalAccount.name}`
+        : '',
+    })),
+  )
+}
+
+export async function periodEquityMovementExport(
+  ctx: OrgContext,
+  range?: { from?: CalendarDate | null; to?: CalendarDate | null },
+) {
+  assertPermission(ctx, 'account:read')
+  const from = range?.from ? toDate(range.from) : undefined
+  const to = range?.to ? toDate(range.to) : undefined
+  const events = await db.equityEvent.findMany({
+    where: {
+      orgId: ctx.orgId,
+      ...(from || to
+        ? {
+            date: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+    },
+    include: {
+      shareholder: { select: { name: true } },
+      equityAccount: { select: { code: true, name: true } },
+    },
+    orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+  })
+  const rows: EquityMovementRow[] = events.map((row) => ({
+    date: toCalendarDate(row.date),
+    kind: row.kind,
+    shareholder: row.shareholder?.name ?? '',
+    amount: row.amount.toFixed(4),
+    memo: row.memo ?? '',
+    equityAccount: `${row.equityAccount.code} ${row.equityAccount.name}`,
+  }))
+  return equityMovementCsv(rows)
 }

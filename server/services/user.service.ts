@@ -87,6 +87,55 @@ export async function changePassword(
   return { ok: true as const }
 }
 
+async function assertCurrentPassword(userId: string, currentPassword: string) {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { passwordHash: true },
+  })
+  if (!user?.passwordHash) throw notFound('User')
+  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+    throw validation('Your current password is not correct.', {
+      currentPassword: ['Your current password is not correct.'],
+    })
+  }
+}
+
+/** Opt-in desk unlock PIN. Null deskPinHash means off (password unlock only). */
+export async function setDeskPin(ctx: OrgContext, input: { currentPassword: string; pin: string }) {
+  await assertCurrentPassword(ctx.userId, input.currentPassword)
+  const deskPinHash = await hashPassword(input.pin)
+  const meta = await requestMeta()
+
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: ctx.userId }, data: { deskPinHash } })
+    await writeAudit(
+      tx,
+      ctx,
+      { entity: 'User', entityId: ctx.userId, action: 'UPDATE', after: { deskPinChanged: true } },
+      meta,
+    )
+  })
+
+  return { ok: true as const }
+}
+
+export async function clearDeskPin(ctx: OrgContext, input: { currentPassword: string }) {
+  await assertCurrentPassword(ctx.userId, input.currentPassword)
+  const meta = await requestMeta()
+
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: ctx.userId }, data: { deskPinHash: null } })
+    await writeAudit(
+      tx,
+      ctx,
+      { entity: 'User', entityId: ctx.userId, action: 'UPDATE', after: { deskPinCleared: true } },
+      meta,
+    )
+  })
+
+  return { ok: true as const }
+}
+
 const SYSTEM_USER_SELECT = {
   id: true,
   name: true,

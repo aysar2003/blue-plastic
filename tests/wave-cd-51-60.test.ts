@@ -9,7 +9,12 @@ import { generateLoanSchedule, scheduleLineTotal } from '@/lib/erp/loan-schedule
 import { settlementTotals } from '@/lib/erp/marketplace-settlement'
 import { allocatePatronage } from '@/lib/erp/patronage'
 import { portfolioCsv, portfolioRowsFromConsol } from '@/lib/erp/portfolio'
-import { liveLedgerWindowYears, partitionKeyForOrg } from '@/lib/erp/scale-ops'
+import {
+  liveLedgerWindowYears,
+  liveYearWindowLabel,
+  partitionKeyForOrg,
+  REPORT_PACK_LIVE_YEAR_WARNING,
+} from '@/lib/erp/scale-ops'
 import { dispatchSignWebhook, parseSignProvider } from '@/lib/erp/sign-provider'
 import { Decimal } from '@/lib/money'
 import { ownedShare, type ConsolCompanyRow } from '@/lib/erp/consolidation-ownership'
@@ -98,6 +103,8 @@ describe('phase 55 scale', () => {
     expect(readFileSync(path, 'utf8')).toContain('orgId')
     expect(liveLedgerWindowYears()).toBeGreaterThan(0)
     expect(partitionKeyForOrg('abc')).toBe('org:abc')
+    expect(liveYearWindowLabel(2022, 2026, 5)).toContain('2022')
+    expect(REPORT_PACK_LIVE_YEAR_WARNING).toMatch(/report packs/i)
   })
 })
 

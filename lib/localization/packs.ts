@@ -53,14 +53,15 @@ export const LOCALIZATION_PACKS: LocalizationPack[] = [
     eInvoiceFormat: 'json-stub',
     vatJurisdictionLabel: 'Somalia VAT return',
     vatBoxLabels: {
-      box1: 'Taxable supplies',
-      box2: 'Output VAT',
-      box3: 'Taxable purchases',
-      box4: 'Input VAT',
-      box5: 'Net VAT due',
+      box1: 'Box 1 — Taxable supplies',
+      box2: 'Box 2 — Output VAT',
+      box3: 'Box 3 — Taxable purchases',
+      box4: 'Box 4 — Input VAT',
+      box5: 'Box 5 — Net VAT due',
     },
     taxSeed: {
       agencyName: 'Tax authority',
+      agencyRegistrationHint: 'TIN',
       filingFrequency: 'MONTHLY',
       rates: [{ name: 'Exempt 0%', percent: 0, appliesTo: 'BOTH' }],
       defaultCodeName: 'Exempt',
@@ -135,14 +136,15 @@ export const LOCALIZATION_PACKS: LocalizationPack[] = [
     eInvoiceFormat: 'json-stub',
     vatJurisdictionLabel: 'Ethiopia VAT return',
     vatBoxLabels: {
-      box1: 'Taxable supplies',
-      box2: 'Output VAT',
-      box3: 'Taxable purchases',
-      box4: 'Input VAT',
-      box5: 'Net VAT due',
+      box1: 'Box 1 — Taxable supplies',
+      box2: 'Box 2 — Output VAT',
+      box3: 'Box 3 — Taxable purchases',
+      box4: 'Box 4 — Input VAT',
+      box5: 'Box 5 — Net VAT due',
     },
     taxSeed: {
       agencyName: 'MoR / ERCA',
+      agencyRegistrationHint: 'TIN',
       filingFrequency: 'MONTHLY',
       rates: [{ name: 'VAT 15%', percent: 15, appliesTo: 'BOTH' }],
       defaultCodeName: 'Standard',
@@ -183,6 +185,7 @@ export const LOCALIZATION_PACKS: LocalizationPack[] = [
     },
     taxSeed: {
       agencyName: 'DGI',
+      agencyRegistrationHint: 'NIF',
       filingFrequency: 'MONTHLY',
       rates: [{ name: 'TVA 10%', percent: 10, appliesTo: 'BOTH' }],
       defaultCodeName: 'Standard',
@@ -194,6 +197,20 @@ export const LOCALIZATION_PACKS: LocalizationPack[] = [
     },
   },
 ]
+
+export const DEFAULT_VAT_BOX_LABELS: LocalizationPack['vatBoxLabels'] = {
+  box1: 'Box 1 · Taxable supplies',
+  box2: 'Box 2 · Output VAT',
+  box3: 'Box 3 · Taxable purchases',
+  box4: 'Box 4 · Input VAT',
+  box5: 'Box 5 · Net VAT due',
+}
+
+export function vatBoxLabelsForPack(
+  id: string | null | undefined,
+): LocalizationPack['vatBoxLabels'] {
+  return localizationPackById(id)?.vatBoxLabels ?? DEFAULT_VAT_BOX_LABELS
+}
 
 export function localizationPackById(id: string | null | undefined): LocalizationPack | null {
   if (!id) return null
@@ -297,13 +314,17 @@ export function buildEInvoiceStub(org: EInvoiceStubOrg, invoice: EInvoiceStubInv
       prev.tax += Number(line.taxAmount) || 0
       byCode.set(key, prev)
     }
+    const rows = [...byCode.entries()].map(([code, amounts]) => ({
+      taxCode: code,
+      net: amounts.net.toFixed(2),
+      tax: amounts.tax.toFixed(2),
+    }))
     payload.taxSummary = {
       taxTotal,
-      byCode: [...byCode.entries()].map(([code, amounts]) => ({
-        taxCode: code,
-        net: amounts.net.toFixed(2),
-        tax: amounts.tax.toFixed(2),
-      })),
+      byCode: rows,
+      ...(rows.length === 0 && invoice.subtotal != null
+        ? { netTotal: String(invoice.subtotal) }
+        : {}),
     }
   }
 

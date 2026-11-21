@@ -5,7 +5,14 @@ import { setCapaStatusAction } from '@/app/(app)/quality/capa/actions'
 import { PageHeader } from '@/components/data/page-header'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { CAPA_STATUSES, canCloseCapa, isCapaStatus, type CapaStatus } from '@/lib/erp/capa'
+import {
+  CAPA_STATUSES,
+  canCloseCapa,
+  isCapaOverdue,
+  isCapaStatus,
+  type CapaStatus,
+} from '@/lib/erp/capa'
+import { today, toCalendarDate } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import * as capaService from '@/server/services/capa.service'
 
@@ -19,6 +26,7 @@ export default async function CapaPage({ searchParams }: Props) {
   const ctx = await requireOrgContext('audit:read')
   const rows = await capaService.list(ctx, statusFilter ? { status: statusFilter } : undefined)
   const canEdit = ctx.permissions.has('docs:update')
+  const asOf = today(ctx.organization.timeZone)
 
   return (
     <>
@@ -26,11 +34,16 @@ export default async function CapaPage({ searchParams }: Props) {
         title="CAPA"
         description="Corrective and preventive action notes — optional links to workspace files or sign requests."
         actions={
-          ctx.permissions.has('docs:create') ? (
-            <Link href="/quality/capa/new" className={buttonVariants({ size: 'sm' })}>
-              New CAPA
-            </Link>
-          ) : null
+          <div className="flex flex-wrap gap-2">
+            <a href="/api/quality/capa" className={buttonVariants({ variant: 'outline', size: 'sm' })} download>
+              Export CSV
+            </a>
+            {ctx.permissions.has('docs:create') ? (
+              <Link href="/quality/capa/new" className={buttonVariants({ size: 'sm' })}>
+                New CAPA
+              </Link>
+            ) : null}
+          </div>
         }
       />
 
@@ -66,6 +79,15 @@ export default async function CapaPage({ searchParams }: Props) {
             </Link>
             <span>
               {row.title} · {row.status}
+              {row.owner ? ` · ${row.owner.name}` : ''}
+              {row.dueDate ? ` · due ${toCalendarDate(row.dueDate)}` : ''}
+              {isCapaOverdue({
+                status: row.status as CapaStatus,
+                dueDate: row.dueDate,
+                asOf,
+              })
+                ? ' · overdue'
+                : ''}
             </span>
             {canEdit && row.status === 'OPEN' ? (
               <form action={setCapaStatusAction}>

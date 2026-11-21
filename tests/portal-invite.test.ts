@@ -96,8 +96,11 @@ live('portal invite dual-mode (live db)', () => {
         legalName: true,
         baseCurrency: true,
         fiscalYearStartMonth: true,
+        fiscalYearStartDay: true,
         timeZone: true,
         allowNegativeStock: true,
+        idleLockSeconds: true,
+        sessionMaxHours: true,
         posTillLedgerMode: true,
         parentOrgId: true,
         addressLine1: true,
@@ -116,6 +119,7 @@ live('portal invite dual-mode (live db)', () => {
         rentExpiresAt: true,
         maxUsers: true,
         rentNote: true,
+        onboardingCompletedAt: true,
       },
     })
     cleanup.orgId = organization.id
@@ -151,7 +155,7 @@ live('portal invite dual-mode (live db)', () => {
       portalCustomerId: null,
       features: { ...DEFAULT_FEATURE_FLAGS, enableCustomerPortal: true },
       organization: { ...orgFields, hasLogo: Boolean(logoStorageKey) },
-      user: staff,
+      user: { ...staff, loginAt: null, hasDeskPin: false },
     }
 
     const passwordInvite = await portalService.invitePortalUser(realCtx, {

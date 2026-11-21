@@ -33,7 +33,7 @@ export default async function CustomerPipelinePage() {
     <>
       <PageHeader
         title="Sales pipeline"
-        description="Opportunities and follow-ups on customers — Lead → Qualified → Proposal → Won."
+        description="Opportunities and follow-ups — Lead → Qualified → Proposal → Won creates a draft estimate."
         actions={
           <Button asChild variant="outline" size="sm">
             <Link href="/customers">Customers</Link>
@@ -103,12 +103,25 @@ export default async function CustomerPipelinePage() {
                         {row.customer.displayName}
                         {row.amount ? ` · ${formatMoney(row.amount, currency)}` : ''}
                       </div>
+                      {(() => {
+                        const match = row.notes?.match(/Draft estimate\s+(\S+)(?:\s+→\s+(\S+))?/)
+                        if (row.stage !== 'WON' || !match) return null
+                        const [, number, estimateId] = match
+                        return (
+                          <Link
+                            href={estimateId ? `/sales/estimates/${estimateId}` : '/sales/estimates'}
+                            className="text-primary mt-1 block text-xs underline"
+                          >
+                            Draft estimate {number}
+                          </Link>
+                        )
+                      })()}
                       {next ? (
                         <form action={moveOpportunity} className="mt-1">
                           <input type="hidden" name="id" value={row.id} />
                           <input type="hidden" name="stage" value={next} />
                           <Button type="submit" size="sm" variant="secondary">
-                            {next === 'LEAD' ? 'Reopen' : `To ${next}`}
+                            {next === 'LEAD' ? 'Reopen' : next === 'WON' ? 'Won → draft estimate' : `To ${next}`}
                           </Button>
                         </form>
                       ) : null}

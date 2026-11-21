@@ -1,7 +1,11 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
-import { activateContractAction, billMilestoneAction } from '@/app/(app)/projects/contracts/actions'
+import {
+  activateContractAction,
+  billMilestoneAction,
+  updateContractAmountsAction,
+} from '@/app/(app)/projects/contracts/actions'
 import { PageHeader } from '@/components/data/page-header'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -48,13 +52,45 @@ export default async function ProjectContractsPage() {
                 <p className="font-medium">
                   {contract.number} · {contract.name} · {contract.status}
                 </p>
-                <p>{formatMoney(contract.contractValue.toString(), currency)}</p>
+                <p>{formatMoney(contract.effectiveValue, currency)}</p>
               </div>
+              <p className="text-muted-foreground">
+                Billed {formatMoney(contract.billedAmount, currency)} · remaining{' '}
+                {formatMoney(contract.remainingAmount, currency)}
+                {contract.changeOrderAmount && Number(contract.changeOrderAmount) !== 0
+                  ? ` · change orders ${formatMoney(contract.changeOrderAmount, currency)}`
+                  : ''}
+                {contract.retentionPercent ? ` · retainage ${contract.retentionPercent}%` : ''}
+              </p>
               {contract.customer ? <p>Customer: {contract.customer.displayName}</p> : null}
               {contract.project ? (
                 <p>
                   Project: {contract.project.number} · {contract.project.name}
                 </p>
+              ) : null}
+              {canBill && contract.status !== 'CANCELLED' ? (
+                <form action={updateContractAmountsAction} className="flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="contractId" value={contract.id} />
+                  <label className="text-xs">
+                    Change-order amount
+                    <Input
+                      name="changeOrderAmount"
+                      className="mt-1 h-8 w-32"
+                      defaultValue={contract.changeOrderAmount}
+                    />
+                  </label>
+                  <label className="text-xs">
+                    Retainage %
+                    <Input
+                      name="retentionPercent"
+                      className="mt-1 h-8 w-24"
+                      defaultValue={contract.retentionPercent ?? ''}
+                    />
+                  </label>
+                  <Button type="submit" size="sm" variant="outline">
+                    Save
+                  </Button>
+                </form>
               ) : null}
               {canBill && contract.status === 'DRAFT' ? (
                 <form action={activateContractAction}>

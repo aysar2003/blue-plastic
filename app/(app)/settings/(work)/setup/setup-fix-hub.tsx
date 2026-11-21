@@ -8,6 +8,7 @@ import {
   applyRetailShopProfile,
   ensureLocalizationFromCountry,
   healCustomerCountriesFromOrg,
+  healItemTaxFromPack,
   healMissingItemSkus,
   healMissingReorderPoints,
   healOrgCountryFromPack,
@@ -107,6 +108,14 @@ export function SetupFixHub({
       href: '/customers',
       tone: health.customersMissingBillingCountry > 0 ? 'warn' : 'ok',
     },
+    {
+      label:
+        health.itemsMissingTax > 0
+          ? `${health.itemsMissingTax} items missing pack tax code`
+          : 'Item tax codes set (or no items)',
+      href: '/settings/tax',
+      tone: health.itemsMissingTax > 0 ? 'warn' : 'ok',
+    },
   ]
 
   return (
@@ -114,8 +123,8 @@ export function SetupFixHub({
       <CardHeader>
         <CardTitle className="text-base">Fix weaknesses</CardTitle>
         <CardDescription>
-          Retail apps, localization tax seeds, and master-data heals — without removing forms or
-          power.
+          Retail apps, localization pack tax seed (agency + rate + VAT return box labels), and
+          master-data heals — without removing forms or power.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -182,8 +191,16 @@ export function SetupFixHub({
                   'Locale tax',
                   () => seedLocalizationTax({ enableTax: true }),
                   (data) => {
-                    const d = data as { created: boolean; agencyName?: string; skipped?: string }
-                    if (d.created) return `seeded ${d.agencyName}`
+                    const d = data as {
+                      created: boolean
+                      agencyName?: string
+                      skipped?: string
+                      vatJurisdictionLabel?: string
+                    }
+                    if (d.created) {
+                      const juris = d.vatJurisdictionLabel ? ` · ${d.vatJurisdictionLabel}` : ''
+                      return `seeded ${d.agencyName}${juris} (VAT boxes 1–5 mapped to pack)`
+                    }
                     return d.skipped === 'agencies_exist' ? 'agencies already exist' : 'done'
                   },
                 )
@@ -247,11 +264,31 @@ export function SetupFixHub({
             >
               Country from pack
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                run('Item tax', () => healItemTaxFromPack(undefined), (data) => {
+                  const d = data as { itemsTaxed: number; codeName: string }
+                  return `${d.itemsTaxed} → ${d.codeName}`
+                })
+              }
+            >
+              Apply pack tax to items
+            </Button>
             <Button type="button" size="sm" variant="outline" asChild>
               <Link href="/settings/features">Hide apps manually</Link>
             </Button>
           </div>
         ) : null}
+
+        <p>
+          <Link href="/api/setup-health/csv" className="text-xs underline underline-offset-4">
+            Download remaining-gaps CSV
+          </Link>
+        </p>
       </CardContent>
     </Card>
   )

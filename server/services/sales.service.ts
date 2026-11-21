@@ -10,6 +10,7 @@ import { Decimal, formatMoney, parseMoneyInput, toMoneyString, ZERO } from '@/li
 import { dueDateFor } from '@/lib/payment-terms'
 import { isCashMethodName } from '@/lib/pos-payment'
 import { posPostedAccounts } from '@/lib/pos-register-posting'
+import { isDateWindowActive } from '@/lib/erp/price-list-window'
 import { byType as salesByType } from '@/lib/sales-types'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { InvoiceFromSourceInput, SalesDocumentInput } from '@/lib/validation/sales'
@@ -930,7 +931,14 @@ async function createWithin(
   {
     const customer = await requireCustomer(tx, ctx, input.customerId)
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
-    const trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
+    let trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
+    if (!trackingCategoryId && projectId) {
+      const linked = await tx.project.findFirst({
+        where: { id: projectId, orgId: ctx.orgId },
+        select: { trackingCategoryId: true },
+      })
+      trackingCategoryId = linked?.trackingCategoryId ?? null
+    }
     const lines = await resolveLines(tx, ctx, input.lines, { customerId: input.customerId })
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency, documentDiscount(input))
@@ -1043,6 +1051,7 @@ async function createWithin(
             incomeAccountId: line.incomeAccountId,
             serviceDate: line.source.serviceDate ? toDate(line.source.serviceDate) : null,
             sourcePurchaseLineId: line.source.sourcePurchaseLineId ?? null,
+            sourceTimeEntryId: line.source.sourceTimeEntryId ?? null,
           })),
         },
       },
@@ -1110,8 +1119,27 @@ async function createWithin(
       meta,
     )
 
+    if (!isDraft && type === 'INVOICE') {
+      await stampBillableTimeInvoiced(tx, ctx.orgId, lines)
+    }
+
     return { id: document.id, number: document.number, total: document.total.toString() }
   }
+}
+
+async function stampBillableTimeInvoiced(
+  tx: Tx,
+  orgId: string,
+  lines: { sourceTimeEntryId?: string | null }[],
+) {
+  const ids = [
+    ...new Set(lines.map((line) => line.sourceTimeEntryId).filter((id): id is string => Boolean(id))),
+  ]
+  if (ids.length === 0) return
+  await tx.projectTimeEntry.updateMany({
+    where: { id: { in: ids }, orgId, billable: true, invoicedAt: null },
+    data: { invoicedAt: new Date() },
+  })
 }
 
 /** Link a new invoice/receipt to the proposal or order it came from, and close that source. */
@@ -1209,7 +1237,14 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
 
     const customer = await requireCustomer(tx, ctx, input.customerId)
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
-    const trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
+    let trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
+    if (!trackingCategoryId && projectId) {
+      const linked = await tx.project.findFirst({
+        where: { id: projectId, orgId: ctx.orgId },
+        select: { trackingCategoryId: true },
+      })
+      trackingCategoryId = linked?.trackingCategoryId ?? null
+    }
     const lines = await resolveLines(tx, ctx, input.lines, {
       customerId: input.customerId,
       excludeDocumentId: id,
@@ -1342,6 +1377,7 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
             incomeAccountId: line.incomeAccountId,
             serviceDate: line.source.serviceDate ? toDate(line.source.serviceDate) : null,
             sourcePurchaseLineId: line.source.sourcePurchaseLineId ?? null,
+            sourceTimeEntryId: line.source.sourceTimeEntryId ?? null,
           })),
         },
       },
@@ -1374,6 +1410,10 @@ export async function update(ctx: OrgContext, id: string, input: SalesDocumentIn
       },
       meta,
     )
+
+    if (!input.saveAsDraft && existing.type === 'INVOICE') {
+      await stampBillableTimeInvoiced(tx, ctx.orgId, lines)
+    }
 
     return { id, number: existing.number }
   })
@@ -2543,6 +2583,75 @@ async function refreshSourceInvoiceStatus(
 }
 
 /**
+ * Customer (or staff) answer on an open estimate / quotation.
+ * ACCEPTED / DECLINED were already in the status enum and home filters —
+ * this is the write path. Conversion to SO / invoice stays a separate step.
+ */
+export async function respondToProposal(
+  ctx: OrgContext,
+  id: string,
+  response: 'ACCEPTED' | 'DECLINED',
+  options?: { customerId?: string },
+) {
+  const meta = await requestMeta()
+  const document = await db.salesDocument.findFirst({
+    where: {
+      id,
+      orgId: ctx.orgId,
+      type: { in: ['ESTIMATE', 'QUOTATION'] },
+      deletedAt: null,
+      ...(options?.customerId ? { customerId: options.customerId } : {}),
+    },
+    select: {
+      id: true,
+      number: true,
+      type: true,
+      status: true,
+      customerId: true,
+    },
+  })
+  if (!document) throw notFound('Quote')
+  if (document.status === 'VOID' || document.status === 'DRAFT') {
+    throw precondition(`${document.number} is not open for a customer response.`)
+  }
+  if (document.status === 'CLOSED') {
+    throw precondition(`${document.number} has already been converted.`)
+  }
+  if (document.status === response) {
+    return { id: document.id, number: document.number, status: document.status, already: true as const }
+  }
+  if (document.status === 'ACCEPTED' || document.status === 'DECLINED') {
+    throw precondition(
+      `${document.number} was already ${document.status.toLowerCase()}.`,
+    )
+  }
+  if (document.status !== 'OPEN') {
+    throw precondition(
+      `${document.number} is ${document.status.toLowerCase()} and cannot be ${response.toLowerCase()}.`,
+    )
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.salesDocument.update({
+      where: { id: document.id },
+      data: { status: response },
+    })
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'SalesDocument',
+        entityId: document.id,
+        action: 'UPDATE',
+        after: { status: response, response },
+      },
+      meta,
+    )
+  })
+  return { id: document.id, number: document.number, status: response, already: false as const }
+}
+
+/**
  * Turn an estimate, quotation, or sales order into the next paper.
  *
  * Paths match QuickBooks Online + Desktop:
@@ -2859,7 +2968,7 @@ function assertPostedSaleLines(
 
   for (const [index, line] of lines.entries()) {
     if (line.isSubtotal) continue
-    if (line.itemId || line.sourcePurchaseLineId) continue
+    if (line.itemId || line.sourcePurchaseLineId || line.sourceTimeEntryId) continue
     throw validation(
       'Every posted sales line must use a product or service from the item list. A name typed by hand is not a registered sale.',
       { lines: [`Line ${index + 1}: choose an item from Products and services`] },
@@ -2900,21 +3009,27 @@ async function resolveLines(
       })
     : null
   const priceLevel = customerPricing?.priceLevel ?? 'RETAIL'
-  const listPrices = new Map<string, string>()
-  if (customerPricing?.priceListId && itemIds.length > 0) {
-    const rows = await tx.priceListItem.findMany({
-      where: {
-        priceListId: customerPricing.priceListId,
-        itemId: { in: itemIds },
-      },
-      select: { itemId: true, unitPrice: true },
-    })
-    for (const row of rows) {
-      listPrices.set(row.itemId, row.unitPrice.toString())
-    }
-  }
   const asOf = today(ctx.organization.timeZone)
   const asOfDate = toDate(asOf)
+  const listPrices = new Map<string, string>()
+  if (customerPricing?.priceListId && itemIds.length > 0) {
+    const list = await tx.priceList.findFirst({
+      where: { id: customerPricing.priceListId, orgId: ctx.orgId, isActive: true },
+      select: { id: true, startsOn: true, endsOn: true },
+    })
+    if (list && isDateWindowActive(asOf, list.startsOn, list.endsOn)) {
+      const rows = await tx.priceListItem.findMany({
+        where: {
+          priceListId: customerPricing.priceListId,
+          itemId: { in: itemIds },
+        },
+        select: { itemId: true, unitPrice: true },
+      })
+      for (const row of rows) {
+        listPrices.set(row.itemId, row.unitPrice.toString())
+      }
+    }
+  }
   const promos =
     itemIds.length > 0
       ? await tx.itemPromotion.findMany({
@@ -2941,6 +3056,9 @@ async function resolveLines(
   const purchaseLineIds = [
     ...new Set(lines.map((line) => line.sourcePurchaseLineId).filter((id): id is string => Boolean(id))),
   ]
+  const timeEntryIds = [
+    ...new Set(lines.map((line) => line.sourceTimeEntryId).filter((id): id is string => Boolean(id))),
+  ]
   const billableRows = purchaseLineIds.length
     ? await tx.purchaseDocumentLine.findMany({
         where: { id: { in: purchaseLineIds }, orgId: ctx.orgId },
@@ -2954,11 +3072,25 @@ async function resolveLines(
     : []
   const billableById = new Map(billableRows.map((row) => [row.id, row]))
   const seenPurchaseLines = new Set<string>()
+  const timeRows = timeEntryIds.length
+    ? await tx.projectTimeEntry.findMany({
+        where: { id: { in: timeEntryIds }, orgId: ctx.orgId },
+        select: {
+          id: true,
+          billable: true,
+          invoicedAt: true,
+          project: { select: { customerId: true } },
+          billedInvoiceLine: { select: { id: true, documentId: true } },
+        },
+      })
+    : []
+  const timeById = new Map(timeRows.map((row) => [row.id, row]))
+  const seenTimeEntries = new Set<string>()
   // A recharged cost with no item still has to post somewhere visible. The same
   // uncategorised income used as the journal fallback is frozen on the line so
   // the invoice shows where the money went without inventing a second default.
   const uncategorisedIncomeId =
-    purchaseLineIds.length > 0
+    purchaseLineIds.length > 0 || timeEntryIds.length > 0
       ? await systemAccountId(tx, ctx.orgId, 'UNCATEGORISED_INCOME')
       : null
   const storeIds = [...new Set(lines.map((line) => line.storeId).filter((id): id is string => Boolean(id)))]
@@ -3012,13 +3144,35 @@ async function resolveLines(
       }
     }
 
+    if (line.sourceTimeEntryId) {
+      if (seenTimeEntries.has(line.sourceTimeEntryId)) {
+        throw validation('The same time entry cannot be added twice on one invoice.')
+      }
+      seenTimeEntries.add(line.sourceTimeEntryId)
+      const timeEntry = timeById.get(line.sourceTimeEntryId)
+      if (!timeEntry) throw notFound('Billable time')
+      if (!timeEntry.billable) {
+        throw precondition('That time entry is not billable.')
+      }
+      if (timeEntry.invoicedAt) {
+        throw conflict('That time entry has already been billed.')
+      }
+      if (!options?.customerId || timeEntry.project.customerId !== options.customerId) {
+        throw validation('That time is not billable to this customer.')
+      }
+      const already = timeEntry.billedInvoiceLine
+      if (already && already.documentId !== options.excludeDocumentId) {
+        throw conflict('That time entry has already been pulled onto an invoice.')
+      }
+    }
+
     const isDiscount = item?.type === 'DISCOUNT'
     const isSubtotal = item?.type === 'SUBTOTAL'
     const isPayment = item?.type === 'PAYMENT'
     const incomeAccountId = isPayment || isSubtotal
       ? null
       : (item?.incomeAccountId ??
-        (line.sourcePurchaseLineId ? uncategorisedIncomeId : null))
+        (line.sourcePurchaseLineId || line.sourceTimeEntryId ? uncategorisedIncomeId : null))
 
     return {
       itemId: line.itemId ?? null,
@@ -3054,6 +3208,7 @@ async function resolveLines(
       isPayment,
       isStock: item?.type === 'INVENTORY' || item?.type === 'INVENTORY_ASSEMBLY',
       sourcePurchaseLineId: line.sourcePurchaseLineId ?? null,
+      sourceTimeEntryId: line.sourceTimeEntryId ?? null,
     }
   })
 }

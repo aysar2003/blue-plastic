@@ -26,6 +26,22 @@ export function menuMarginPercent(salesPrice: string | null, foodCost: string): 
   return margin.toDecimalPlaces(2).toFixed(2)
 }
 
+/** Period food-cost % = component issue value ÷ GROUP/POS sales × 100. */
+export function periodFoodCostPercent(
+  componentIssueValue: string | number,
+  groupOrPosSales: string | number,
+): string | null {
+  const sales = new Decimal(groupOrPosSales || 0)
+  if (sales.lessThanOrEqualTo(0)) return null
+  const issues = new Decimal(componentIssueValue || 0)
+  return issues.dividedBy(sales).times(100).toDecimalPlaces(2).toFixed(2)
+}
+
+/** Actual issues minus recipe expected (positive = over-usage). */
+export function recipeVsActualVariance(recipeExpected: string | number, actualIssued: string | number): string {
+  return new Decimal(actualIssued || 0).minus(recipeExpected || 0).toDecimalPlaces(4).toFixed(4)
+}
+
 const DEFAULT_LOW_MARGIN_PERCENT = 25
 
 /** True when margin % is known and below the hospitality threshold. */

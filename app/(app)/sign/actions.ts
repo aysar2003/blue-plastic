@@ -12,7 +12,16 @@ export async function createSignRequest(formData: FormData) {
   const signerName = String(formData.get('signerName') ?? '').trim() || null
   const signerEmail = String(formData.get('signerEmail') ?? '').trim() || null
   const message = String(formData.get('message') ?? '').trim() || null
-  await collab.createSignRequest(ctx, { title, signerName, signerEmail, message })
+  const salesDocumentId = String(formData.get('salesDocumentId') ?? '').trim() || null
+  const purchaseDocumentId = String(formData.get('purchaseDocumentId') ?? '').trim() || null
+  await collab.createSignRequest(ctx, {
+    title,
+    signerName,
+    signerEmail,
+    message,
+    salesDocumentId,
+    purchaseDocumentId,
+  })
   revalidatePath('/sign')
   redirect('/sign')
 }

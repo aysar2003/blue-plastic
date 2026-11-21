@@ -63,6 +63,7 @@ export type ItemValues = {
   inventoryAccountId?: string | null
   cogsAccountId?: string | null
   reorderPoint?: string | null
+  maxQty?: string | null
   categoryId?: string | null
   storeId?: string | null
   preferredVendorId?: string | null
@@ -1021,6 +1022,14 @@ export function ItemDialog({
                           inputMode="decimal"
                           className="tabular"
                           defaultValue={item?.reorderPoint ?? ''}
+                        />
+                      </Field>
+                      <Field name="maxQty" label="Max on hand" hint="Replenish up to this qty when below reorder." error={e?.maxQty}>
+                        <Input
+                          {...fieldProps('maxQty', e?.maxQty)}
+                          inputMode="decimal"
+                          className="tabular"
+                          defaultValue={item?.maxQty ?? ''}
                         />
                       </Field>
                       <Field

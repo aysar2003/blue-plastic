@@ -84,13 +84,20 @@ export const deleteDeposit = action
 export const previewStatement = action
   .requires('bank:import')
   .input(importStatementSchema)
-  .handler((ctx, input) => importService.importStatement(ctx, input.accountId, input.csv, { dryRun: true }))
+  .handler((ctx, input) =>
+    importService.importStatement(ctx, input.accountId, input.csv, {
+      dryRun: true,
+      packId: input.packId,
+    }),
+  )
 
 export const runStatementImport = action
   .requires('bank:import')
   .input(importStatementSchema)
   .handler(async (ctx, input) => {
-    const result = await importService.importStatement(ctx, input.accountId, input.csv)
+    const result = await importService.importStatement(ctx, input.accountId, input.csv, {
+      packId: input.packId,
+    })
     revalidatePath('/banking/import')
     return result
   })

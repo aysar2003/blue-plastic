@@ -8,6 +8,7 @@ import {
   canRejectApplicant,
   type ApplicantStage,
 } from '@/lib/erp/applicant-pipeline'
+import { hireContractName, isPayrollEligible } from '@/lib/erp/hris-hire'
 import { Decimal } from '@/lib/money'
 import { toCalendarDate, toDate, today } from '@/lib/date'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
@@ -119,8 +120,12 @@ export async function createApplicant(
   })
 }
 
-/** Hire path: applicant → employee card, mark hired, close opening. */
-export async function hireApplicant(ctx: OrgContext, applicantId: string) {
+/** Hire path: applicant → employee + open contract + wage sync → payroll-eligible. */
+export async function hireApplicant(
+  ctx: OrgContext,
+  applicantId: string,
+  extras: { wageAmount?: string | null; wageType?: 'MONTHLY' | 'DAILY' | 'HOURLY' } = {},
+) {
   assertPermission(ctx, 'hr:update')
   return db.$transaction(async (tx) => {
     const applicant = await tx.applicant.findFirst({
@@ -129,11 +134,15 @@ export async function hireApplicant(ctx: OrgContext, applicantId: string) {
     })
     if (!applicant) throw notFound('Applicant')
     if (applicant.status === 'HIRED' && applicant.employeeId) {
-      return { employeeId: applicant.employeeId, alreadyHired: true as const }
+      return { employeeId: applicant.employeeId, alreadyHired: true as const, payrollEligible: true }
     }
     if (!canHireApplicant(applicant.status as ApplicantStage)) {
       throw precondition('Move the applicant to Offer before hiring.')
     }
+
+    const hiredAt = toDate(today(ctx.organization.timeZone))
+    const wageAmount = extras.wageAmount != null && extras.wageAmount !== '' ? extras.wageAmount : '0'
+    const wageType = extras.wageType ?? 'MONTHLY'
 
     const employee = await tx.employee.create({
       data: {
@@ -145,10 +154,26 @@ export async function hireApplicant(ctx: OrgContext, applicantId: string) {
         department: applicant.jobOpening.department,
         active: true,
         lifecycleStatus: 'ACTIVE',
-        hiredAt: toDate(today(ctx.organization.timeZone)),
+        hiredAt,
         notes: applicant.notes,
+        wageType,
+        wageAmount,
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, wageAmount: true, lifecycleStatus: true, active: true },
+    })
+
+    await tx.employeeContract.create({
+      data: {
+        orgId: ctx.orgId,
+        employeeId: employee.id,
+        name: hireContractName(employee.name, applicant.jobOpening.title),
+        state: 'OPEN',
+        dateStart: hiredAt,
+        wageType,
+        wageAmount,
+        jobTitle: applicant.jobOpening.title,
+        createdById: ctx.userId,
+      },
     })
 
     await tx.applicant.update({
@@ -160,7 +185,17 @@ export async function hireApplicant(ctx: OrgContext, applicantId: string) {
       data: { status: 'FILLED' },
     })
 
-    return { employeeId: employee.id, name: employee.name, alreadyHired: false as const }
+    return {
+      employeeId: employee.id,
+      name: employee.name,
+      alreadyHired: false as const,
+      payrollEligible: isPayrollEligible({
+        lifecycleStatus: employee.lifecycleStatus,
+        active: employee.active,
+        wageAmount: employee.wageAmount,
+        hasOpenContract: true,
+      }),
+    }
   })
 }
 

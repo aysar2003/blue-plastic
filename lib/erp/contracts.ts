@@ -37,3 +37,22 @@ export function milestonePercentsValid(percents: string[]): boolean {
   const total = percents.reduce((sum, p) => sum.plus(new Decimal(p)), new Decimal(0))
   return total.lessThanOrEqualTo(100)
 }
+
+/** Contract value including approved change orders. */
+export function effectiveContractValue(contractValue: string, changeOrderAmount?: string | null): string {
+  return new Decimal(contractValue || '0').plus(new Decimal(changeOrderAmount || '0')).toFixed(4)
+}
+
+export function contractBilledRemaining(input: {
+  contractValue: string
+  changeOrderAmount?: string | null
+  billedAmount: string
+}): { effective: string; billed: string; remaining: string } {
+  const effective = new Decimal(effectiveContractValue(input.contractValue, input.changeOrderAmount))
+  const billed = new Decimal(input.billedAmount || '0')
+  return {
+    effective: effective.toFixed(4),
+    billed: billed.toFixed(4),
+    remaining: effective.minus(billed).toFixed(4),
+  }
+}

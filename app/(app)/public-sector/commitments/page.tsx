@@ -19,7 +19,7 @@ export default async function CommitmentsPage() {
     <>
       <PageHeader
         title="Open PO commitments"
-        description="Encumbered purchase orders vs budget lines by tracking category."
+        description="Remaining = budget − encumbered open PO − posted actual (bills/expenses). Warn/enforce budget control applies when opening POs."
         actions={
           <Link href="/accounting/budgets" className="text-sm text-primary underline-offset-4 hover:underline">
             Budgets
@@ -36,6 +36,7 @@ export default async function CommitmentsPage() {
           <TableRow>
             <TableHead>Class / fund</TableHead>
             <TableHead className="text-right">Open PO</TableHead>
+            <TableHead className="text-right">Actual</TableHead>
             <TableHead className="text-right">Budget</TableHead>
             <TableHead className="text-right">Remaining</TableHead>
           </TableRow>
@@ -45,6 +46,7 @@ export default async function CommitmentsPage() {
             <TableRow key={row.trackingCategoryId ?? `none-${i}`}>
               <TableCell>{row.trackingCategoryName ?? 'Unclassified'}</TableCell>
               <TableCell className="text-right">{formatMoney(row.openPoTotal, currency)}</TableCell>
+              <TableCell className="text-right">{formatMoney(row.actual, currency)}</TableCell>
               <TableCell className="text-right">{formatMoney(row.budgetAmount, currency)}</TableCell>
               <TableCell className="text-right">{formatMoney(row.remaining, currency)}</TableCell>
             </TableRow>

@@ -2,15 +2,39 @@ import 'server-only'
 
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto'
 
+import QRCode from 'qrcode'
+
 import { env } from '@/lib/env'
 import { PRODUCT_NAME } from '@/lib/product-brand'
 import { openSecret, sealSecret } from '@/lib/sealed-secret'
 import { buildOtpAuthUrl, generateTotpSecret, verifyTotp } from '@/lib/totp'
 import { normalizePhone } from '@/lib/phone'
+import { requestMeta, writeAudit } from '@/server/audit'
+import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { forbidden, notFound, precondition, validation } from '@/server/errors'
 import { verifyPassword } from '@/server/auth/password'
 import { sendAuthEmailOtp } from '@/server/services/platform-notify.service'
+
+export type TotpSetupPayload = {
+  secret: string
+  otpauthUrl: string
+  qrDataUrl: string
+}
+
+async function totpQrPayload(secret: string, accountName: string): Promise<TotpSetupPayload> {
+  const otpauthUrl = buildOtpAuthUrl({
+    secret,
+    accountName,
+    issuer: PRODUCT_NAME,
+  })
+  const qrDataUrl = await QRCode.toDataURL(otpauthUrl, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 220,
+  })
+  return { secret, otpauthUrl, qrDataUrl }
+}
 
 const OTP_TTL_MS = 10 * 60 * 1000
 export const LOGIN_OTP_RESEND_COOLDOWN_MS = 60 * 1000
@@ -234,29 +258,49 @@ export async function updatePhone(userId: string, phoneRaw: string | null): Prom
   return after
 }
 
-/** Start authenticator setup — returns secret + otpauth URL (confirm before enable). */
-export async function beginTotpSetup(userId: string): Promise<{ secret: string; otpauthUrl: string }> {
+async function storePendingTotpSecret(userId: string, email: string): Promise<TotpSetupPayload> {
+  const secret = generateTotpSecret()
+  await db.user.update({
+    where: { id: userId },
+    data: { totpSecretSealed: sealSecret(secret, env.AUTH_SECRET) },
+  })
+  return totpQrPayload(secret, email)
+}
+
+/**
+ * Odoo-style Security Control: confirm password, then return QR + secret.
+ * Confirm with confirmTotpSetup before the authenticator is considered on.
+ */
+export async function beginTotpSetup(
+  userId: string,
+  currentPassword: string,
+): Promise<TotpSetupPayload> {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { email: true, totpEnabledAt: true, passwordHash: true },
+  })
+  if (!user?.passwordHash) throw notFound('User')
+  if (user.totpEnabledAt) throw precondition('Authenticator is already on.')
+  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+    throw validation('Your current password is not correct.', {
+      currentPassword: ['Your current password is not correct.'],
+    })
+  }
+
+  return storePendingTotpSecret(userId, user.email)
+}
+
+/**
+ * After password login when company enforce requires TOTP — password already verified.
+ */
+export async function beginTotpSetupAfterPassword(userId: string): Promise<TotpSetupPayload> {
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { email: true, totpEnabledAt: true },
   })
   if (!user) throw notFound('User')
   if (user.totpEnabledAt) throw precondition('Authenticator is already on.')
-
-  const secret = generateTotpSecret()
-  await db.user.update({
-    where: { id: userId },
-    data: { totpSecretSealed: sealSecret(secret, env.AUTH_SECRET) },
-  })
-
-  return {
-    secret,
-    otpauthUrl: buildOtpAuthUrl({
-      secret,
-      accountName: user.email,
-      issuer: PRODUCT_NAME,
-    }),
-  }
+  return storePendingTotpSecret(userId, user.email)
 }
 
 export async function confirmTotpSetup(userId: string, code: string): Promise<void> {
@@ -378,4 +422,61 @@ export async function cancelTotpSetup(userId: string): Promise<void> {
     where: { id: userId },
     data: { totpSecretSealed: null },
   })
+}
+
+/** Admin turns off a member's 2FA (Odoo: lost authenticator recovery). */
+export async function adminDisableMemberTwoFactor(
+  ctx: OrgContext,
+  membershipId: string,
+): Promise<{ userId: string; name: string; email: string }> {
+  const membership = await db.membership.findFirst({
+    where: { id: membershipId, orgId: ctx.orgId },
+    select: {
+      id: true,
+      userId: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          totpEnabledAt: true,
+          otp2faEnabledAt: true,
+          isSystemOwner: true,
+        },
+      },
+    },
+  })
+  if (!membership) throw notFound('Member')
+  if (membership.user.isSystemOwner) {
+    throw forbidden('Cannot turn off two-factor for a system owner from here.')
+  }
+
+  const meta = await requestMeta()
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: membership.userId },
+      data: {
+        totpEnabledAt: null,
+        totpSecretSealed: null,
+        otp2faEnabledAt: null,
+      },
+    })
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'User',
+        entityId: membership.userId,
+        action: 'UPDATE',
+        after: { twoFactorDisabledByAdmin: true },
+      },
+      meta,
+    )
+  })
+
+  return {
+    userId: membership.user.id,
+    name: membership.user.name,
+    email: membership.user.email,
+  }
 }

@@ -6,11 +6,13 @@ import { z } from 'zod'
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 import { cuid } from '@/lib/validation/common'
 import {
+  adminDisableMemberTwoFactorSchema,
   inviteUserSchema,
   resetMemberPasswordSchema,
   updateMemberRoleSchema,
 } from '@/lib/validation/user'
 import { action } from '@/server/action'
+import * as auth2fa from '@/server/services/auth-2fa.service'
 import * as membershipService from '@/server/services/membership.service'
 
 export const inviteUser = action
@@ -66,6 +68,15 @@ export const resetMemberPassword = action
   .input(resetMemberPasswordSchema)
   .handler(async (ctx, input) => {
     const result = await membershipService.resetMemberPassword(ctx, input)
+    revalidatePath('/settings/users')
+    return result
+  })
+
+export const adminDisableMemberTwoFactor = action
+  .requires('user:update')
+  .input(adminDisableMemberTwoFactorSchema)
+  .handler(async (ctx, input) => {
+    const result = await auth2fa.adminDisableMemberTwoFactor(ctx, input.membershipId)
     revalidatePath('/settings/users')
     return result
   })

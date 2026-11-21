@@ -433,12 +433,20 @@ const APP_NESTED: Partial<
     </>
   ),
   periods: (flags) => (
-    <SwitchRow
-      name="closeHardGates"
-      label="Hard gates on period close"
-      hint="Elevate selected close checklist warnings (bank recon, match hold, open pick waves) to blocked until fixed."
-      defaultChecked={flags.closeHardGates}
-    />
+    <>
+      <SwitchRow
+        name="closeHardGates"
+        label="Hard gates on period close"
+        hint="Elevate selected close checklist warnings (bank recon, match hold, open pick waves) to blocked until fixed."
+        defaultChecked={flags.closeHardGates}
+      />
+      <SwitchRow
+        name="closeSecondApprover"
+        label="Second approver on hard-gate close"
+        hint="When hard gates are on, closing a month waits for two people in Approvals before the period actually closes."
+        defaultChecked={flags.closeSecondApprover}
+      />
+    </>
   ),
   journals: (flags) => (
     <SwitchRow

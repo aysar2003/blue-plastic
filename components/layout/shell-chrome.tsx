@@ -49,6 +49,7 @@ type ShellChromeProps = {
   logoVersion?: Date | string | number | null
   baseCurrency: string
   fiscalYearStartMonth: number
+  fiscalYearStartDay?: number
   roleLabel: string
   user: { id: string; name: string; email: string; image: string | null }
   moduleKeys: string[]

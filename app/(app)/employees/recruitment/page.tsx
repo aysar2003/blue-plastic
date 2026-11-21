@@ -126,8 +126,14 @@ export default async function RecruitmentPage() {
                   </form>
                 ) : null}
                 {row.status === 'OFFER' ? (
-                  <form action={hireApplicant}>
+                  <form action={hireApplicant} className="flex flex-wrap items-center gap-1">
                     <input type="hidden" name="applicantId" value={row.id} />
+                    <Input name="wageAmount" placeholder="Wage" className="w-24" />
+                    <select name="wageType" className="rounded-md border px-1 text-xs" defaultValue="MONTHLY">
+                      <option value="MONTHLY">Monthly</option>
+                      <option value="DAILY">Daily</option>
+                      <option value="HOURLY">Hourly</option>
+                    </select>
                     <Button type="submit" size="sm" variant="secondary">
                       Hire
                     </Button>

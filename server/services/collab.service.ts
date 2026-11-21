@@ -58,11 +58,34 @@ export async function createSignRequest(
     signerName?: string | null
     signerEmail?: string | null
     message?: string | null
+    salesDocumentId?: string | null
+    purchaseDocumentId?: string | null
   },
 ) {
   assertPermission(ctx, 'knowledge:create')
   const title = input.title.trim()
   if (!title) throw validation('Give the document a title.')
+  if (input.salesDocumentId && input.purchaseDocumentId) {
+    throw validation('Attach either a sales document or a purchase document, not both.')
+  }
+  let salesDocumentId: string | null = null
+  let purchaseDocumentId: string | null = null
+  if (input.salesDocumentId) {
+    const doc = await db.salesDocument.findFirst({
+      where: { id: input.salesDocumentId, orgId: ctx.orgId, deletedAt: null },
+      select: { id: true, number: true },
+    })
+    if (!doc) throw notFound('Sales document')
+    salesDocumentId = doc.id
+  }
+  if (input.purchaseDocumentId) {
+    const doc = await db.purchaseDocument.findFirst({
+      where: { id: input.purchaseDocumentId, orgId: ctx.orgId, deletedAt: null },
+      select: { id: true, number: true },
+    })
+    if (!doc) throw notFound('Purchase document')
+    purchaseDocumentId = doc.id
+  }
   const token = newSignToken()
   const created = await db.signRequest.create({
     data: {
@@ -74,8 +97,18 @@ export async function createSignRequest(
       status: 'SENT',
       token,
       expiresAt: new Date(Date.now() + SIGN_REQUEST_TTL_MS),
+      salesDocumentId,
+      purchaseDocumentId,
     },
-    select: { id: true, title: true, token: true, status: true, expiresAt: true },
+    select: {
+      id: true,
+      title: true,
+      token: true,
+      status: true,
+      expiresAt: true,
+      salesDocumentId: true,
+      purchaseDocumentId: true,
+    },
   })
 
   const org = await db.organization.findUnique({
@@ -376,6 +409,8 @@ export async function bookAppointment(
     startsAt: string
     endsAt: string
     customerId?: string | null
+    projectId?: string | null
+    serviceJobId?: string | null
     guestName?: string | null
     guestEmail?: string | null
     notes?: string | null
@@ -390,6 +425,25 @@ export async function bookAppointment(
   const startsAt = new Date(input.startsAt)
   const endsAt = new Date(input.endsAt)
   if (!(endsAt > startsAt)) throw validation('End must be after start.')
+
+  let projectId: string | null = null
+  let serviceJobId: string | null = null
+  if (input.projectId) {
+    const project = await db.project.findFirst({
+      where: { id: input.projectId, orgId: ctx.orgId },
+      select: { id: true },
+    })
+    if (!project) throw notFound('Project')
+    projectId = project.id
+  }
+  if (input.serviceJobId) {
+    const job = await db.serviceJob.findFirst({
+      where: { id: input.serviceJobId, orgId: ctx.orgId },
+      select: { id: true },
+    })
+    if (!job) throw notFound('Service job')
+    serviceJobId = job.id
+  }
 
   const open = await db.appointment.findMany({
     where: { orgId: ctx.orgId, status: 'BOOKED' },
@@ -408,6 +462,8 @@ export async function bookAppointment(
       startsAt,
       endsAt,
       customerId: input.customerId || null,
+      projectId,
+      serviceJobId,
       guestName: input.guestName?.trim() || null,
       guestEmail: input.guestEmail?.trim() || null,
       notes: input.notes?.trim() || null,
@@ -564,7 +620,7 @@ export async function planningWeek(ctx: OrgContext, weekStart?: CalendarDate) {
         name: true,
         deadline: true,
         assigneeId: true,
-        project: { select: { name: true } },
+        project: { select: { id: true, name: true } },
       },
       take: 80,
     }),
@@ -596,22 +652,53 @@ export async function assignPlanning(
   assertPermission(ctx, 'project:create')
   const employee = await db.employee.findFirst({
     where: { id: input.employeeId, orgId: ctx.orgId, active: true },
-    select: { id: true },
+    select: { id: true, userId: true, name: true },
   })
   if (!employee) throw notFound('Employee')
   const hours = new Decimal(input.hours || 0)
   if (hours.lessThanOrEqualTo(ZERO)) throw validation('Hours must be greater than zero.')
   if (hours.greaterThan(24)) throw validation('Hours cannot exceed 24 in one day.')
+
+  let projectTimeEntryId: string | null = null
+  let notes = input.notes?.trim() || null
+  if (input.taskId) {
+    const task = await db.projectTask.findFirst({
+      where: { id: input.taskId, orgId: ctx.orgId },
+      select: { id: true, name: true, projectId: true },
+    })
+    if (!task) throw notFound('Task')
+    if (employee.userId) {
+      const entry = await db.projectTimeEntry.create({
+        data: {
+          orgId: ctx.orgId,
+          projectId: task.projectId,
+          taskId: task.id,
+          userId: employee.userId,
+          workDate: toDate(input.workDate),
+          hours: hours.toFixed(4),
+          description: notes || `Planning · ${employee.name} · ${task.name}`,
+          billable: true,
+        },
+        select: { id: true },
+      })
+      projectTimeEntryId = entry.id
+    } else {
+      const stub = `TIMESHEET_STUB project:${task.projectId} task:${task.id}`
+      notes = notes ? `${notes} · ${stub}` : stub
+    }
+  }
+
   return db.planningAssignment.create({
     data: {
       orgId: ctx.orgId,
       employeeId: employee.id,
       taskId: input.taskId || null,
+      projectTimeEntryId,
       workDate: toDate(input.workDate),
       hours: hours.toFixed(4),
-      notes: input.notes?.trim() || null,
+      notes,
     },
-    select: { id: true },
+    select: { id: true, projectTimeEntryId: true },
   })
 }
 

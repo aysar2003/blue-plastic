@@ -115,6 +115,8 @@ enum ApprovalEntityType {
   CUSTOMER
   VENDOR
   PAYROLL
+  /// Hard-gate period close with an optional second approver (Wave D).
+  ACCOUNTING_PERIOD
 }
 
 enum ApprovalRequestStatus {
@@ -288,6 +290,13 @@ enum PosTillLedgerMode {
   REGISTER_IN_CHART
 }
 
+/// Company 2FA enforcement (Odoo-style). Authenticator TOTP required when not OFF.
+enum EnforceTwoFactor {
+  OFF
+  STAFF
+  ALL
+}
+
 /// Detail classification. Drives report grouping and app behaviour (a BANK
 /// account gets a register; an ACCOUNTS_RECEIVABLE account is a control account).
 enum AccountSubtype {
@@ -369,6 +378,10 @@ enum SystemAccountKey {
   ROYALTY_INCOME
   /// Royalty due from franchise child (Phase 51 deepen).
   ROYALTY_RECEIVABLE
+  /// Intercompany elimination debit (Wave D memo pair).
+  IC_ELIMINATION_DEBIT
+  /// Intercompany elimination credit (Wave D memo pair).
+  IC_ELIMINATION_CREDIT
 }
 
 /// How an item behaves. The distinction drives which accounts it must map to and
@@ -604,6 +617,8 @@ enum JournalSourceType {
   POS_TIP_PAYOUT
   PAYROLL
   PAYROLL_SETTLEMENT
+  /// Freight/duty from a posted bill allocated onto inventory cost.
+  LANDED_COST
 }
 
 // ---------------------------------------------------------------------------
@@ -619,8 +634,11 @@ model Organization {
   /// (guarded in the service layer, and by Phase 2's posting engine).
   baseCurrency String @default("USD") @db.Char(3)
 
-  /// 1 = January. A fiscal year starting in month M runs M..M+11.
+  /// 1 = January. Together with fiscalYearStartDay, the anniversary the year opens on.
+  /// A year starting on M/D runs from that date through the day before the next M/D.
   fiscalYearStartMonth Int @default(1) @db.SmallInt
+  /// Day of month (1–31) the fiscal year opens. Default 1 keeps calendar-month periods.
+  fiscalYearStartDay   Int @default(1) @db.SmallInt
 
   taxRegistrationNumber String?
 
@@ -635,6 +653,12 @@ model Organization {
   email   String?
   website String?
 
+  /// Bank details shown to customers paying invoices (portal pay-proof).
+  paymentBankName          String?
+  paymentAccountName       String?
+  paymentAccountNumber     String?
+  paymentInstructions      String? @db.Text
+
   /// IANA zone used to resolve "today" for date defaults and period boundaries.
   timeZone String @default("UTC")
 
@@ -644,6 +668,16 @@ model Organization {
   /// store goes below zero and a receipt fills it. Turn off only when the
   /// business must refuse sales that would leave a shelf short.
   allowNegativeStock Boolean @default(true)
+
+  /// Desk idle lock: seconds without activity before the password lock screen.
+  /// Defaults to 15 minutes. Presets include 30s … 30m; custom values allowed.
+  idleLockSeconds Int @default(900)
+
+  /// Absolute signed-in lifetime in hours (client + JWT ceiling). Default 10.
+  sessionMaxHours Int @default(10)
+
+  /// Odoo-style: require authenticator TOTP. OFF by default.
+  enforceTwoFactor EnforceTwoFactor @default(OFF)
 
   /// How POS till money appears on the chart of accounts.
   /// HOLD_OFF_CHART = till holds sales until transfer; till banks stay off the chart.
@@ -797,7 +831,9 @@ model Organization {
   approvalRequests  ApprovalRequest[]
   projects            Project[]
   projectTasks        ProjectTask[]
+  projectTaskDependencies ProjectTaskDependency[]
   projectTimeEntries  ProjectTimeEntry[]
+  projectComments     ProjectComment[]
   appAccessRequests   AppAccessRequest[]
   recurringTemplates  RecurringTemplate[]
   deferredRevenueSchedules DeferredRevenueSchedule[]
@@ -817,6 +853,7 @@ model Organization {
   appointmentTypes     AppointmentType[]
   appointments         Appointment[]
   signRequests         SignRequest[]
+  signWebhookEvents    SignWebhookEvent[]
   surveys              Survey[]
   surveyResponses      SurveyResponse[]
   planningAssignments  PlanningAssignment[]
@@ -859,6 +896,7 @@ model Organization {
   metricSnapshots      MetricSnapshot[]
   priceLists           PriceList[]
   itemPromotions       ItemPromotion[]
+  storeItemLevels      StoreItemLevel[]
   intercompanyMatchesAsRoot IntercompanyMatch[] @relation("IcMatchRoot")
   marketplaceSellers   MarketplaceSeller[]
   settlementBatches    SettlementBatch[]
@@ -866,6 +904,13 @@ model Organization {
   loanAccounts         LoanAccount[]
   loanScheduleLines    LoanScheduleLine[]
   insurancePolicies    InsurancePolicy[]
+  insuranceClaims      InsuranceClaim[]
+  fxDailyRates         FxDailyRate[]
+  customerAddresses    CustomerAddress[]
+  landedCostBatches    LandedCostBatch[]
+  projectSovLines      ProjectSovLine[]
+  workCenterExceptions WorkCenterException[]
+  settlementSellerLines SettlementSellerLine[]
 
   @@index([parentOrgId])
   @@map("organizations")
@@ -1086,6 +1131,9 @@ model User {
   /// Argon2id/bcrypt hash. Null for users who only ever sign in via an OAuth
   /// provider (none configured yet — see ADR-0007).
   passwordHash  String?
+  /// Optional desk idle-lock PIN (4/6/8/10 digits). Null = off (password unlock only).
+  /// Separate from POS register pinHash.
+  deskPinHash   String?
   image         String?
   emailVerified DateTime? @db.Timestamptz(6)
   /// Optional mobile (E.164). Login alias + future WhatsApp/SMS notify.
@@ -1146,6 +1194,7 @@ model User {
   projectsCreated           Project[]          @relation("ProjectCreatedBy")
   projectTasksCreated       ProjectTask[]      @relation("ProjectTaskCreatedBy")
   projectTasksAssigned      ProjectTask[]      @relation("ProjectTaskAssignee")
+  projectCommentsAuthored   ProjectComment[]   @relation("ProjectCommentAuthor")
   projectTimeEntries        ProjectTimeEntry[] @relation("ProjectTimeEntryUser")
   appAccessRequests         AppAccessRequest[] @relation("AppAccessRequestedBy")
   appAccessReviews          AppAccessRequest[] @relation("AppAccessReviewedBy")
@@ -1156,6 +1205,7 @@ model User {
   crmActivitiesCreated      CrmActivity[]    @relation("CrmActivityCreatedBy")
   apiKeysCreated            ApiKey[]         @relation("ApiKeyCreatedBy")
   serviceJobsAssigned       ServiceJob[]     @relation("ServiceJobAssignee")
+  capaNotesOwned            CapaNote[]       @relation("CapaNoteOwner")
 
   @@map("users")
 }
@@ -1237,6 +1287,7 @@ model CompanySignupRequest {
   organizationName     String
   baseCurrency         String   @db.Char(3)
   fiscalYearStartMonth Int      @default(1)
+  fiscalYearStartDay   Int      @default(1)
   ownerName            String
   email                String
   /// Password hash ready to copy onto User on approve — never plaintext.
@@ -1522,6 +1573,7 @@ model LedgerAccount {
   shareholderCapitalAccounts Shareholder[] @relation("ShareholderCapitalAccount")
   equityEventBanks          EquityEvent[] @relation("EquityEventBank")
   equityEventEquityAccounts EquityEvent[] @relation("EquityEventEquity")
+  loanDisbursementBanks     LoanAccount[] @relation("LoanDisbursementBank")
 
   @@unique([orgId, code])
   @@unique([orgId, systemKey])
@@ -1683,6 +1735,7 @@ model Journal {
   deposits          Deposit[]
   inventoryMovements InventoryTransaction[]
   inventoryAdjustments InventoryAdjustment[]
+  landedCostBatches    LandedCostBatch[]
   assemblyBuilds       AssemblyBuild[]
   storeTransfers StoreTransfer[]
   files LedgerFile[]
@@ -1701,6 +1754,8 @@ model Journal {
 
   icMatchAsA IntercompanyMatch? @relation("IcMatchJournalA")
   icMatchAsB IntercompanyMatch? @relation("IcMatchJournalB")
+  icElimAsA  IntercompanyMatch? @relation("IcElimJournalA")
+  icElimAsB  IntercompanyMatch? @relation("IcElimJournalB")
 
   @@unique([orgId, journalNumber])
   @@index([orgId, deletedAt])
@@ -1726,6 +1781,9 @@ model IntercompanyMatch {
   matchedAt  DateTime @default(now()) @db.Timestamptz(6)
   matchedById String?
   notes      String?
+  /// Memo elimination journals posted on confirm (one per company).
+  elimJournalAId String? @unique
+  elimJournalBId String? @unique
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -1733,6 +1791,8 @@ model IntercompanyMatch {
   root     Organization @relation("IcMatchRoot", fields: [rootOrgId], references: [id], onDelete: Cascade)
   journalA Journal      @relation("IcMatchJournalA", fields: [journalAId], references: [id], onDelete: Cascade)
   journalB Journal      @relation("IcMatchJournalB", fields: [journalBId], references: [id], onDelete: Cascade)
+  elimJournalA Journal? @relation("IcElimJournalA", fields: [elimJournalAId], references: [id], onDelete: SetNull)
+  elimJournalB Journal? @relation("IcElimJournalB", fields: [elimJournalBId], references: [id], onDelete: SetNull)
 
   @@index([rootOrgId, matchedAt(sort: Desc)])
   @@map("intercompany_matches")
@@ -1833,8 +1893,10 @@ model TrackingCategory {
   journalLines      JournalLine[]
   salesDocuments    SalesDocument[]
   purchaseDocuments PurchaseDocument[]
+  projects          Project[]
   patientVisits     PatientVisit[]
   donorPledges      DonorPledge[]
+  itemLots          ItemLot[]
   budgets           Budget[]
   budgetLines       BudgetLine[]
 
@@ -1974,6 +2036,7 @@ model Customer {
   shareholders     Shareholder[]
   loanAccounts     LoanAccount[]
   insurancePolicies InsurancePolicy[]
+  shipTos          CustomerAddress[]
 
   /// Same trading party on the purchase side (e.g. Mall Group as customer and supplier).
   /// One customer ↔ one vendor. Cleared if the vendor is removed.
@@ -1986,6 +2049,34 @@ model Customer {
   @@index([orgId, isActive, displayName])
   @@index([priceListId])
   @@map("customers")
+}
+
+/// Extra ship-to / work-site address for a customer (beyond the default shipping fields).
+model CustomerAddress {
+  id         String @id @default(cuid())
+  orgId      String
+  customerId String
+
+  /// Warehouse, site A, villa name — shown in the sales ship-to picker.
+  label String
+
+  line1      String?
+  line2      String?
+  city       String?
+  region     String?
+  postalCode String?
+  country    String? @db.Char(2)
+
+  isDefault Boolean @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, customerId])
+  @@map("customer_addresses")
 }
 
 /// Login that may open the customer portal for one customer in one company.
@@ -2095,11 +2186,13 @@ model Vendor {
   bankRules             BankRule[]
   calendarEvents        CalendarEvent[]
   asnShipments          AsnShipment[]
+  capaNotes             CapaNote[]
   /// Reverse of Customer.linkedVendorId — same party as a customer.
   linkedCustomer        Customer? @relation("CustomerVendorLink")
   preferredItems        Item[]
   marketplaceSellers    MarketplaceSeller[]
   salesLinesAsSeller    SalesDocumentLine[] @relation("SalesLineSeller")
+  settlementSellerLines SettlementSellerLine[]
 
   @@unique([orgId, displayName])
   /// Target for the tenancy-carrying composite foreign key on journal_lines (R9).
@@ -2170,6 +2263,8 @@ model Item {
   inventoryAccountId String?
   cogsAccountId      String?
   reorderPoint       Decimal? @db.Decimal(19, 4)
+  /// Target on-hand after replenish (global fallback when store max is unset).
+  maxQty             Decimal? @db.Decimal(19, 4)
 
   /// Usual vendor for reorders. Optional; shown on the products list.
   preferredVendorId String?
@@ -2222,6 +2317,7 @@ model Item {
   purchaseLines    PurchaseDocumentLine[]
   movements        InventoryTransaction[]
   adjustmentLines  InventoryAdjustmentLine[]
+  landedCostLines  LandedCostLine[]
   assemblyBuilds   AssemblyBuild[] @relation("AssemblyBuildItem")
   assemblyBuildLines AssemblyBuildLine[]
   workOrders       WorkOrder[] @relation("WorkOrderItem")
@@ -2245,6 +2341,7 @@ model Item {
   priceListItems   PriceListItem[]
   promotions       ItemPromotion[]
   itemBinDefaults  ItemBinDefault[]
+  storeLevels      StoreItemLevel[]
 
   @@unique([orgId, name])
   @@unique([orgId, sku])
@@ -2254,6 +2351,8 @@ model Item {
   @@index([orgId, deletedAt])
   @@index([orgId, storeId])
   @@index([orgId, preferredVendorId])
+  @@index([orgId, categoryId])
+  @@index([orgId, availableInPos, isActive])
   @@index([orgId, pharmacyControlled])
   @@map("items")
 }
@@ -2270,17 +2369,24 @@ model ItemLot {
   disposedQuantity Decimal? @db.Decimal(19, 4)
   /// Agriculture pack: field / orchard label (Phase 50).
   originLabel String?
+  /// Wave E: season linked to a job / class for seasonal cost filters.
+  trackingCategoryId String?
+  projectId          String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  item         Item         @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  organization     Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  item             Item              @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  trackingCategory TrackingCategory? @relation(fields: [trackingCategoryId], references: [id], onDelete: SetNull)
+  project          Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@unique([orgId, itemId, lotNumber])
   @@index([orgId, expiryDate])
   @@index([itemId, expiryDate])
   @@index([orgId, disposedAt])
+  @@index([trackingCategoryId])
+  @@index([projectId])
   @@map("item_lots")
 }
 
@@ -2339,6 +2445,7 @@ model Store {
   movements    InventoryTransaction[]
   salesLines   SalesDocumentLine[]
   purchaseLines PurchaseDocumentLine[]
+  landedCostLines LandedCostLine[]
   transfersOut StoreTransfer[] @relation("TransferFrom")
   transfersIn  StoreTransfer[] @relation("TransferTo")
   tickets      StoreTicket[]
@@ -2356,10 +2463,33 @@ model Store {
   workCenters   WorkCenter[]
   siteProjects  Project[]
   itemBinDefaults ItemBinDefault[]
+  itemLevels    StoreItemLevel[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
   @@map("stores")
+}
+
+/// Min/max on-hand per item at a store (Phase 41 replenish FULL).
+model StoreItemLevel {
+  id      String @id @default(cuid())
+  orgId   String
+  storeId String
+  itemId  String
+
+  minQty Decimal? @db.Decimal(19, 4)
+  maxQty Decimal? @db.Decimal(19, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  item         Item         @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, itemId])
+  @@index([orgId, storeId])
+  @@map("store_item_levels")
 }
 
 // ---------------------------------------------------------------------------
@@ -2463,6 +2593,8 @@ model PosSession {
   expectedCashAtClose Decimal? @db.Decimal(19, 4)
   /// counted − expected. Positive = over, negative = short.
   cashDifference      Decimal? @db.Decimal(19, 4)
+  /// Cash taken out of the drawer at close (safe drop / payouts), before the count.
+  closePayouts        Decimal? @db.Decimal(19, 4)
   closingJournalId    String?  @unique
 
   openedByUserId String
@@ -2723,10 +2855,16 @@ model Project {
   retainerAmount Decimal? @db.Decimal(19, 4)
   /// Services lite: unbilled retainer left after retainer invoices (Phase 46).
   retainerRemaining Decimal? @db.Decimal(19, 4)
+  /// Optional analytical class auto-linked for GL project slicing (Wave 4).
+  trackingCategoryId String?
+  /// Optional job currency (defaults to org base). FX rolls into Job P&L in base.
+  currencyCode String? @db.Char(3)
   /// Construction: optional job budget for budget vs actual (Phase 43).
   budgetAmount Decimal? @db.Decimal(19, 4)
   /// Construction site store — stock issued / transferred to the job.
   storeId String?
+  /// Kanban columns: [{ "key": "TODO", "label": "To do" }, ...]. Null = built-in four.
+  boardStages Json?
 
   createdById String?
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
@@ -2736,6 +2874,7 @@ model Project {
   customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
   createdBy    User?        @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   store        Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  trackingCategory TrackingCategory? @relation(fields: [trackingCategoryId], references: [id], onDelete: SetNull)
 
   salesDocuments    SalesDocument[]
   purchaseDocuments PurchaseDocument[]
@@ -2743,12 +2882,17 @@ model Project {
   timeEntries       ProjectTimeEntry[]
   serviceJobs       ServiceJob[]
   salesContracts    SalesContract[]
+  comments          ProjectComment[]
+  sovLines          ProjectSovLine[]
+  appointments      Appointment[]
+  itemLots          ItemLot[]
 
   @@unique([orgId, number])
   @@unique([id, orgId])
   @@index([orgId, status, updatedAt(sort: Desc)])
   @@index([orgId, customerId, updatedAt(sort: Desc)])
   @@index([storeId])
+  @@index([trackingCategoryId])
   @@map("projects")
 }
 
@@ -2760,12 +2904,17 @@ model ProjectTask {
 
   name        String
   description String?
-  stage       ProjectTaskStage @default(TODO)
+  /// Kanban column key (built-in TODO/IN_PROGRESS/DONE/CANCELLED or custom UPPER_SNAKE).
+  stage       String @default("TODO") @db.VarChar(40)
   /// Order within the stage column (lower = higher on the board).
   sequence    Int              @default(0)
 
   assigneeId String?
   deadline   DateTime? @db.Date
+  /// Planned start for Gantt / timeline views.
+  startDate  DateTime? @db.Date
+  /// Optional parent for subtasks (same project).
+  parentTaskId String?
 
   createdById String?
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
@@ -2775,11 +2924,51 @@ model ProjectTask {
   project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   assignee     User?        @relation("ProjectTaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   createdBy    User?        @relation("ProjectTaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  parentTask   ProjectTask?  @relation("ProjectTaskTree", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  childTasks   ProjectTask[] @relation("ProjectTaskTree")
   timeEntries  ProjectTimeEntry[]
+  blockersAsSuccessor ProjectTaskDependency[] @relation("TaskSuccessor")
+  blockersAsPredecessor ProjectTaskDependency[] @relation("TaskPredecessor")
 
   @@index([orgId, projectId, stage, sequence])
   @@index([orgId, assigneeId, stage])
+  @@index([parentTaskId])
   @@map("project_tasks")
+}
+
+/// Task A must finish before task B can be marked done.
+model ProjectTaskDependency {
+  id            String @id @default(cuid())
+  orgId         String
+  predecessorId String
+  successorId   String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  predecessor  ProjectTask  @relation("TaskPredecessor", fields: [predecessorId], references: [id], onDelete: Cascade)
+  successor    ProjectTask  @relation("TaskSuccessor", fields: [successorId], references: [id], onDelete: Cascade)
+
+  @@unique([predecessorId, successorId])
+  @@index([orgId, successorId])
+  @@map("project_task_dependencies")
+}
+
+/// Chatter notes on a job folder (project-scoped discuss).
+model ProjectComment {
+  id        String @id @default(cuid())
+  orgId     String
+  projectId String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author       User        @relation("ProjectCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, projectId, createdAt(sort: Desc)])
+  @@map("project_comments")
 }
 
 /// Hours worked on a project, optionally billable onto a later invoice.
@@ -2797,6 +2986,8 @@ model ProjectTimeEntry {
   billable     Boolean  @default(true)
   /// Charge-out rate in organisation base currency (per hour).
   billableRate Decimal? @db.Decimal(19, 4)
+  /// Internal labour cost per hour (Job P&L). Null falls back to billableRate in reports.
+  costRate Decimal? @db.Decimal(19, 4)
 
   /// When set, this entry was pulled onto an invoice line and must not be billed again.
   invoicedAt DateTime? @db.Timestamptz(6)
@@ -2808,6 +2999,8 @@ model ProjectTimeEntry {
   project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task         ProjectTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
   user         User         @relation("ProjectTimeEntryUser", fields: [userId], references: [id], onDelete: Restrict)
+  billedInvoiceLine SalesDocumentLine? @relation("BillableTimeInvoice")
+  planningAssignments PlanningAssignment[]
 
   @@index([orgId, projectId, workDate(sort: Desc)])
   @@index([orgId, billable, invoicedAt])
@@ -3037,6 +3230,7 @@ model SalesDocument {
   files         LedgerFile[]
   serviceJob    ServiceJob?
   contractMilestones ContractMilestone[]
+  signRequests  SignRequest[]
 
   @@unique([orgId, type, number])
   @@unique([id, orgId])
@@ -3094,6 +3288,8 @@ model SalesDocumentLine {
 
   /// When this invoice line recharged a purchase cost (Phase 11.5).
   sourcePurchaseLineId String? @unique
+  /// When this invoice line billed a project time entry.
+  sourceTimeEntryId String? @unique
   /// Phase 56: marketplace seller vendor on this sale line.
   sellerVendorId String?
 
@@ -3103,6 +3299,7 @@ model SalesDocumentLine {
   incomeAccount LedgerAccount? @relation("SalesLineIncome", fields: [incomeAccountId], references: [id], onDelete: Restrict)
   store         Store?         @relation(fields: [storeId], references: [id], onDelete: SetNull)
   sourcePurchaseLine PurchaseDocumentLine? @relation("BillableExpenseInvoice", fields: [sourcePurchaseLineId], references: [id], onDelete: SetNull)
+  sourceTimeEntry ProjectTimeEntry? @relation("BillableTimeInvoice", fields: [sourceTimeEntryId], references: [id], onDelete: SetNull)
   sellerVendor  Vendor?        @relation("SalesLineSeller", fields: [sellerVendorId], references: [id], onDelete: SetNull)
 
   @@unique([documentId, lineNumber])
@@ -3160,6 +3357,7 @@ model CustomerPayment {
   applications   SalesApplication[]
   depositLines   DepositLine[]
   donorPledges   DonorPledge[]
+  claimRemittances PatientVisit[] @relation("VisitClaimRemittance")
 
   @@unique([orgId, number])
   @@unique([id, orgId])
@@ -3311,6 +3509,9 @@ model PurchaseDocument {
   creditsApplied PurchaseApplication[] @relation("AppliedFromVendorCredit")
   files          LedgerFile[]
   asnShipments   AsnShipment[]
+  landedCostBatches LandedCostBatch[]
+  signRequests   SignRequest[]
+  settlementSellerLines SettlementSellerLine[]
 
   @@unique([orgId, type, number])
   @@unique([id, orgId])
@@ -3429,6 +3630,7 @@ model BillPayment {
   paymentAccount LedgerAccount         @relation("BillPaymentAccount", fields: [paymentAccountId], references: [id], onDelete: Restrict)
   journal        Journal?              @relation(fields: [journalId], references: [id], onDelete: Restrict)
   applications   PurchaseApplication[]
+  settlementSellerLines SettlementSellerLine[]
 
   @@unique([orgId, number])
   @@unique([id, orgId])
@@ -3817,6 +4019,51 @@ model InventoryAdjustment {
   @@map("inventory_adjustments")
 }
 
+/// Freight/duty from a posted bill allocated onto inventory weighted-average cost.
+model LandedCostBatch {
+  id     String @id @default(cuid())
+  orgId  String
+  billId String
+
+  memo String?
+
+  postedAt  DateTime  @default(now()) @db.Timestamptz(6)
+  journalId String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  bill         PurchaseDocument @relation(fields: [billId], references: [id], onDelete: Restrict)
+  journal      Journal?         @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  lines        LandedCostLine[]
+
+  @@index([orgId, billId])
+  @@index([orgId, postedAt(sort: Desc)])
+  @@map("landed_cost_batches")
+}
+
+model LandedCostLine {
+  id      String @id @default(cuid())
+  batchId String
+  orgId   String
+
+  itemId  String
+  storeId String?
+
+  amount   Decimal  @db.Decimal(19, 4)
+  quantity Decimal? @db.Decimal(19, 4)
+
+  batch LandedCostBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  item  Item            @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  store Store?          @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, itemId])
+  @@index([batchId])
+  @@map("landed_cost_lines")
+}
+
 model InventoryAdjustmentLine {
   id           String @id @default(cuid())
   adjustmentId String
@@ -3962,6 +4209,11 @@ model ServiceJob {
   assigneeId  String?
   /// Default van store for the job (optional).
   vanStoreId  String?
+  /// Customer site / job address (no GPS).
+  siteLocation String?
+  /// Promised arrival window.
+  promisedWindowStart DateTime? @db.Timestamptz(6)
+  promisedWindowEnd   DateTime? @db.Timestamptz(6)
 
   status ServiceJobStatus @default(DRAFT)
 
@@ -3984,11 +4236,13 @@ model ServiceJob {
   vanStore     Store?        @relation("ServiceJobVanStore", fields: [vanStoreId], references: [id], onDelete: SetNull)
   salesDocument SalesDocument? @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
   lines        ServiceJobLine[]
+  appointments Appointment[]
 
   @@unique([orgId, number])
   @@index([orgId, status, date(sort: Desc)])
   @@index([orgId, customerId])
   @@index([orgId, assigneeId])
+  @@index([orgId, projectId])
   @@map("service_jobs")
 }
 
@@ -4027,6 +4281,10 @@ model SalesContract {
   projectId  String?
 
   contractValue Decimal @db.Decimal(19, 4)
+  /// Extra value from approved change orders (added to billed-vs-remaining).
+  changeOrderAmount Decimal @default(0) @db.Decimal(19, 4)
+  /// Customer retainage % held on milestone invoices (0–100).
+  retentionPercent Decimal? @db.Decimal(7, 4)
   status        SalesContractStatus @default(DRAFT)
 
   memo String?
@@ -4039,6 +4297,7 @@ model SalesContract {
   customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
   project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   milestones   ContractMilestone[]
+  sovLines     ProjectSovLine[]
 
   @@unique([orgId, number])
   @@index([orgId, status, updatedAt(sort: Desc)])
@@ -4077,6 +4336,16 @@ model CapaNote {
 
   status CapaStatus @default(OPEN)
 
+  /// Owner responsible for the action (Wave B FULL).
+  ownerId String?
+  dueDate DateTime? @db.Date
+  rootCause String? @db.Text
+  /// Date effectiveness of the close-out was verified.
+  effectivenessDate DateTime? @db.Date
+  vendorId String?
+  /// Lot / batch label (free text; links quality to inventory without a hard FK).
+  lotNumber String?
+
   workspaceDocumentId String?
   signRequestId       String?
 
@@ -4085,12 +4354,45 @@ model CapaNote {
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
   organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  owner             User?              @relation("CapaNoteOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  vendor            Vendor?            @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   workspaceDocument WorkspaceDocument? @relation(fields: [workspaceDocumentId], references: [id], onDelete: SetNull)
   signRequest       SignRequest?       @relation(fields: [signRequestId], references: [id], onDelete: SetNull)
 
   @@unique([orgId, number])
   @@index([orgId, status, updatedAt(sort: Desc)])
+  @@index([orgId, dueDate])
+  @@index([orgId, ownerId])
+  @@index([vendorId])
   @@map("capa_notes")
+}
+
+/// Construction schedule of values on a job / contract (Phase 43 FULL).
+model ProjectSovLine {
+  id         String  @id @default(cuid())
+  orgId      String
+  projectId  String
+  contractId String?
+
+  lineNumber Int    @db.SmallInt
+  name       String
+  budgetAmount     Decimal @db.Decimal(19, 4)
+  percentComplete  Decimal @default(0) @db.Decimal(7, 4)
+  billedPercent    Decimal @default(0) @db.Decimal(7, 4)
+  thisBillAmount   Decimal? @db.Decimal(19, 4)
+  retainagePercent Decimal? @db.Decimal(7, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contract     SalesContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, lineNumber])
+  @@index([orgId, projectId])
+  @@index([contractId])
+  @@map("project_sov_lines")
 }
 
 model AssemblyBuildLine {
@@ -5665,6 +5967,7 @@ enum EquityEventKind {
   CONTRIBUTION
   DRAW
   DIVIDEND
+  PATRONAGE
 }
 
 model EquityEvent {
@@ -5676,7 +5979,8 @@ model EquityEvent {
   date      DateTime @db.Date
   amount    Decimal  @db.Decimal(19, 4)
   memo      String?
-  bankAccountId String
+  /// Optional: patronage allocations post to equity without a cash account.
+  bankAccountId String?
   equityAccountId String
   journalId String?
 
@@ -5684,11 +5988,12 @@ model EquityEvent {
 
   organization  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   shareholder   Shareholder? @relation(fields: [shareholderId], references: [id], onDelete: SetNull)
-  bankAccount   LedgerAccount @relation("EquityEventBank", fields: [bankAccountId], references: [id], onDelete: Restrict)
+  bankAccount   LedgerAccount? @relation("EquityEventBank", fields: [bankAccountId], references: [id], onDelete: Restrict)
   equityAccount LedgerAccount @relation("EquityEventEquity", fields: [equityAccountId], references: [id], onDelete: Restrict)
   journal       Journal?      @relation(fields: [journalId], references: [id], onDelete: SetNull)
 
   @@index([orgId, date(sort: Desc)])
+  @@index([orgId, kind])
   @@map("equity_events")
 }
 
@@ -5845,6 +6150,8 @@ model Appointment {
   startsAt    DateTime @db.Timestamptz(6)
   endsAt      DateTime @db.Timestamptz(6)
   customerId  String?
+  projectId   String?
+  serviceJobId String?
   guestName   String?
   guestEmail  String?
   notes       String?
@@ -5855,9 +6162,13 @@ model Appointment {
   organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   type         AppointmentType @relation(fields: [typeId], references: [id], onDelete: Restrict)
   customer     Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  project      Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  serviceJob   ServiceJob?     @relation(fields: [serviceJobId], references: [id], onDelete: SetNull)
 
   @@index([orgId, startsAt])
   @@index([orgId, status])
+  @@index([orgId, projectId])
+  @@index([orgId, serviceJobId])
   @@map("appointments")
 }
 
@@ -5890,17 +6201,60 @@ model SignRequest {
   cancelledAt    DateTime? @db.Timestamptz(6)
   /// External reference from webhook sign provider (Phase 59).
   externalId     String?
+  /// Optional sales invoice / estimate / order this signature belongs to.
+  salesDocumentId    String?
+  /// Optional purchase bill / PO this signature belongs to.
+  purchaseDocumentId String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  salesDocument    SalesDocument?    @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
+  purchaseDocument PurchaseDocument? @relation(fields: [purchaseDocumentId], references: [id], onDelete: SetNull)
   workspaceDocuments WorkspaceDocument[]
   capaNotes          CapaNote[]
+  webhookEvents      SignWebhookEvent[]
 
   @@index([orgId, status])
   @@index([orgId, externalId])
+  @@index([orgId, salesDocumentId])
+  @@index([orgId, purchaseDocumentId])
   @@map("sign_requests")
+}
+
+enum SignWebhookEventStatus {
+  RECEIVED
+  APPLIED
+  FAILED
+  REJECTED
+}
+
+/// Inbound sign-provider webhook attempts (Phase 59 FULL). HMAC log + retry.
+model SignWebhookEvent {
+  id            String @id @default(cuid())
+  orgId         String
+  signRequestId String?
+  externalId    String?
+
+  /// inbound.signed | inbound.declined | inbound.unknown
+  eventType   String
+  payload     Json
+  signatureOk Boolean
+  status      SignWebhookEventStatus @default(RECEIVED)
+  attempts    Int                    @default(1)
+  lastError   String?
+  processedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  signRequest  SignRequest? @relation(fields: [signRequestId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status, createdAt])
+  @@index([orgId, signRequestId])
+  @@map("sign_webhook_events")
 }
 
 enum SurveyStatus {
@@ -5953,6 +6307,8 @@ model PlanningAssignment {
   orgId      String
   employeeId String
   taskId     String?
+  /// Timesheet stub created from this assignment (minimal planning → timesheet link).
+  projectTimeEntryId String?
 
   workDate DateTime @db.Date
   hours    Decimal  @default(0) @db.Decimal(19, 4)
@@ -5963,6 +6319,7 @@ model PlanningAssignment {
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  projectTimeEntry ProjectTimeEntry? @relation(fields: [projectTimeEntryId], references: [id], onDelete: SetNull)
 
   @@index([orgId, workDate])
   @@index([orgId, employeeId, workDate])
@@ -6316,10 +6673,32 @@ model WorkCenter {
   organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store        Store?        @relation(fields: [storeId], references: [id], onDelete: SetNull)
   routingSteps RoutingStep[]
+  exceptions   WorkCenterException[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
   @@map("work_centers")
+}
+
+/// Calendar exception (holiday / shutdown) that zeros that day's capacity.
+model WorkCenterException {
+  id           String   @id @default(cuid())
+  orgId        String
+  workCenterId String
+  date         DateTime @db.Date
+  /// HOLIDAY (default) zeros weekday capacity; notes optional.
+  kind         String   @default("HOLIDAY") @db.VarChar(20)
+  notes        String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workCenter   WorkCenter   @relation(fields: [workCenterId], references: [id], onDelete: Cascade)
+
+  @@unique([workCenterId, date])
+  @@index([orgId, date])
+  @@map("work_center_exceptions")
 }
 
 model RoutingStep {
@@ -6813,6 +7192,14 @@ enum PatientVisitStatus {
   CANCELLED
 }
 
+/// Wave E: payer claim lifecycle on the visit invoice (not EMR).
+enum PatientClaimStatus {
+  OPEN
+  SUBMITTED
+  PAID
+  DENIED
+}
+
 model PatientVisit {
   id                  String             @id @default(cuid())
   orgId               String
@@ -6832,21 +7219,28 @@ model PatientVisit {
   claimsExportedAt    DateTime?          @db.Timestamptz(6)
   /// Phase 49: batch id assigned on export for payer filtering.
   exportBatchId       String?
+  /// Wave E: submitted / paid / denied against the visit AR invoice.
+  claimStatus         PatientClaimStatus @default(OPEN)
+  remittanceNote      String?
+  remittancePaymentId String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  organization     Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  trackingCategory TrackingCategory? @relation(fields: [trackingCategoryId], references: [id], onDelete: SetNull)
-  salesDocument    SalesDocument?    @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
-  charges          VisitCharge[]
+  organization       Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer           Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  trackingCategory   TrackingCategory? @relation(fields: [trackingCategoryId], references: [id], onDelete: SetNull)
+  salesDocument      SalesDocument?    @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
+  remittancePayment  CustomerPayment?  @relation("VisitClaimRemittance", fields: [remittancePaymentId], references: [id], onDelete: SetNull)
+  charges            VisitCharge[]
 
   @@index([orgId, status, openedAt(sort: Desc)])
   @@index([orgId, claimsExportedAt])
   @@index([orgId, exportBatchId])
+  @@index([orgId, claimStatus])
   @@index([customerId])
   @@index([trackingCategoryId])
+  @@index([remittancePaymentId])
   @@map("patient_visits")
 }
 
@@ -6891,6 +7285,8 @@ model DonorPledge {
   status             DonorPledgeStatus @default(PLEDGED)
   purpose            String?
   notes              String?
+  /// Wave E: receipt text written when the pledge is received.
+  receiptNote        String?
   paymentId          String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -6914,6 +7310,9 @@ model PriceList {
   orgId    String
   name     String
   isActive Boolean @default(true)
+  /// Inclusive promo / validity window. Null start or end means unbounded.
+  startsOn DateTime? @db.Date
+  endsOn   DateTime? @db.Date
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -7009,9 +7408,37 @@ model SettlementBatch {
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   journal      Journal?     @relation(fields: [journalId], references: [id], onDelete: SetNull)
+  sellerLines  SettlementSellerLine[]
 
   @@index([orgId, periodEnd(sort: Desc)])
   @@map("settlement_batches")
+}
+
+/// Wave E: per-seller statement row; settle posts a vendor bill (and optional payment).
+model SettlementSellerLine {
+  id     String @id @default(cuid())
+  orgId  String
+  batchId String
+  vendorId String
+
+  grossSales    Decimal @default(0) @db.Decimal(19, 4)
+  commission    Decimal @default(0) @db.Decimal(19, 4)
+  sellerPayable Decimal @default(0) @db.Decimal(19, 4)
+  purchaseDocumentId String?
+  billPaymentId      String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization     Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  batch            SettlementBatch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  vendor           Vendor            @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  purchaseDocument PurchaseDocument? @relation(fields: [purchaseDocumentId], references: [id], onDelete: SetNull)
+  billPayment      BillPayment?      @relation(fields: [billPaymentId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, batchId])
+  @@index([vendorId])
+  @@index([purchaseDocumentId])
+  @@map("settlement_seller_lines")
 }
 
 /// Phase 57 — loan product template.
@@ -7052,6 +7479,10 @@ model LoanAccount {
   termMonths  Int     @db.SmallInt
   status      LoanAccountStatus @default(ACTIVE)
   startDate   DateTime @db.Date
+  /// Bank the principal was paid from (disbursement).
+  bankAccountId String?
+  disbursementJournalId String?
+  disbursedAt DateTime? @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -7059,6 +7490,7 @@ model LoanAccount {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
   product      LoanProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  bankAccount  LedgerAccount? @relation("LoanDisbursementBank", fields: [bankAccountId], references: [id], onDelete: SetNull)
   schedule     LoanScheduleLine[]
 
   @@index([orgId, status])
@@ -7104,6 +7536,9 @@ model InsurancePolicy {
   premium      Decimal @db.Decimal(19, 4)
   startDate    DateTime @db.Date
   endDate      DateTime @db.Date
+  /// Cover window (vehicle / cargo / site). Defaults to startDate–endDate.
+  coverStart   DateTime @db.Date
+  coverEnd     DateTime @db.Date
   status       InsurancePolicyStatus @default(ACTIVE)
   recurringTemplateId String?
   notes        String?
@@ -7114,8 +7549,59 @@ model InsurancePolicy {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
   recurringTemplate RecurringTemplate? @relation(fields: [recurringTemplateId], references: [id], onDelete: SetNull)
+  claims       InsuranceClaim[]
 
   @@unique([orgId, policyNumber])
   @@index([orgId, status, endDate])
+  @@index([orgId, coverStart, coverEnd])
   @@map("insurance_policies")
+}
+
+enum InsuranceClaimStatus {
+  OPEN
+  SUBMITTED
+  PAID
+  DENIED
+  CLOSED
+}
+
+/// Phase 58 — claim register (no underwriting).
+model InsuranceClaim {
+  id       String @id @default(cuid())
+  orgId    String
+  policyId String
+
+  amount    Decimal @db.Decimal(19, 4)
+  status    InsuranceClaimStatus @default(OPEN)
+  payer     String?
+  notes     String?
+  claimedOn DateTime @db.Date
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  policy       InsurancePolicy  @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status, claimedOn])
+  @@index([policyId])
+  @@map("insurance_claims")
+}
+
+/// Spot FX rate: organisation base per 1 unit of `currencyCode` on `rateDate`.
+model FxDailyRate {
+  id           String @id @default(cuid())
+  orgId        String
+  currencyCode String @db.Char(3)
+  rateDate     DateTime @db.Date
+  rate         Decimal @db.Decimal(19, 9)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, currencyCode, rateDate])
+  @@index([orgId, currencyCode, rateDate])
+  @@map("fx_daily_rates")
 }

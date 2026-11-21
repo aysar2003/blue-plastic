@@ -24,8 +24,11 @@ function staffCtx(overrides: Partial<OrgContext> = {}): OrgContext {
       legalName: null,
       baseCurrency: 'USD',
       fiscalYearStartMonth: 1,
+      fiscalYearStartDay: 1,
       timeZone: 'UTC',
       allowNegativeStock: false,
+      idleLockSeconds: 900,
+      sessionMaxHours: 10,
       posTillLedgerMode: 'HOLD_OFF_CHART',
       parentOrgId: null,
       addressLine1: null,
@@ -44,8 +47,16 @@ function staffCtx(overrides: Partial<OrgContext> = {}): OrgContext {
       rentExpiresAt: null,
       maxUsers: null,
       rentNote: null,
+      onboardingCompletedAt: new Date(),
     },
-    user: { id: 'user_staff', name: 'Staff', email: 'staff@test.invalid', image: null },
+    user: {
+      id: 'user_staff',
+      name: 'Staff',
+      email: 'staff@test.invalid',
+      image: null,
+      loginAt: null,
+      hasDeskPin: false,
+    },
     ...overrides,
   }
 }
@@ -56,7 +67,14 @@ function portalCtx(customerId: string, overrides: Partial<OrgContext> = {}): Org
     role: 'CUSTOMER',
     permissions: permissionsFor('CUSTOMER'),
     portalCustomerId: customerId,
-    user: { id: 'user_portal', name: 'Customer', email: 'customer@test.invalid', image: null },
+    user: {
+      id: 'user_portal',
+      name: 'Customer',
+      email: 'customer@test.invalid',
+      image: null,
+      loginAt: null,
+      hasDeskPin: false,
+    },
     ...overrides,
   })
 }

@@ -218,6 +218,7 @@ export function DatabasesBoard({
         name,
         baseCurrency: newCurrency || 'USD',
         fiscalYearStartMonth: 1,
+        fiscalYearStartDay: 1,
         seedChart: true,
         parentOrgId: newParentOrgId || null,
         ...moduleActionFields(newModules),

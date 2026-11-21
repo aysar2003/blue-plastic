@@ -13,12 +13,16 @@ export async function bookAppointment(formData: FormData) {
   const endsAt = String(formData.get('endsAt') ?? '').trim()
   const guestName = String(formData.get('guestName') ?? '').trim() || null
   const notes = String(formData.get('notes') ?? '').trim() || null
+  const projectId = String(formData.get('projectId') ?? '').trim() || null
+  const serviceJobId = String(formData.get('serviceJobId') ?? '').trim() || null
   await collab.bookAppointment(ctx, {
     typeId,
     startsAt: new Date(startsAt).toISOString(),
     endsAt: new Date(endsAt).toISOString(),
     guestName,
     notes,
+    projectId,
+    serviceJobId,
   })
   revalidatePath('/appointments')
   revalidatePath('/calendar')

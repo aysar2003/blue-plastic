@@ -67,6 +67,8 @@ describe('analytics app wiring', () => {
     expect(MODULE_KEY_TO_FLAG.analytics).toBe('reports')
     expect(moduleForPath('/analytics')).toBe('reports')
     expect(moduleForPath('/analytics/anything')).toBe('reports')
+    expect(moduleForPath('/reports/snapshot')).toBe('reports')
+    expect(moduleForPath('/snapshots')).toBe('reports')
 
     const finance = LAUNCHER_FOLDERS.find((folder) => folder.id === 'finance')
     expect(finance?.appKeys).toContain('analytics')

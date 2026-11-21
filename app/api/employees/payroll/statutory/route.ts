@@ -14,11 +14,21 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const from = url.searchParams.get('from') ?? `${new Date().getFullYear()}-01-01`
     const to = url.searchParams.get('to') ?? `${new Date().getFullYear()}-12-31`
-    const format = url.searchParams.get('format') === 'json' ? 'json' : 'xlsx'
+    const formatParam = url.searchParams.get('format')
+    const format = formatParam === 'json' ? 'json' : formatParam === 'csv' ? 'csv' : 'xlsx'
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
       return NextResponse.json({ error: 'Invalid dates.' }, { status: 400 })
     }
     const pack = await statutoryExport.payrollStatutoryExport(ctx, { from, to })
+    if (format === 'csv') {
+      return new Response(pack.csv, {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="payroll-statutory-${to}.csv"`,
+          'Cache-Control': 'no-store',
+        },
+      })
+    }
     if (format === 'json') {
       return new Response(pack.json, {
         headers: {

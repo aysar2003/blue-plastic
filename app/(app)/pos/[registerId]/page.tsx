@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
+import dynamic from 'next/dynamic'
 import { redirect } from 'next/navigation'
 
-import { PosTerminal } from '@/components/pos/pos-terminal'
 import { RegisterPinGate } from '@/components/pos/register-pin-gate'
 import { formatMoney } from '@/lib/money'
 import { formatDateTime } from '@/lib/date'
@@ -9,6 +9,11 @@ import { preferredPaymentMethodId } from '@/lib/pos-payment'
 import { requireOrgContext } from '@/server/auth/context'
 import { registerUnlockMatches } from '@/server/pos/cashier-unlock'
 import * as posService from '@/server/services/pos.service'
+import { listForPicker as listProjects } from '@/server/services/project.service'
+
+const PosTerminal = dynamic(() =>
+  import('@/components/pos/pos-terminal').then((m) => ({ default: m.PosTerminal })),
+)
 
 export const metadata: Metadata = { title: 'Till' }
 
@@ -19,20 +24,23 @@ export default async function PosRegisterPage({ params }: Props) {
   const ctx = await requireOrgContext('pos:sell')
   if (!(await posService.mayUseRegister(ctx, registerId))) redirect('/pos')
 
-  const session = await posService.openSessionForRegister(ctx, registerId)
+  // Session open + PIN state + register payload in parallel after access check.
+  const [session, pin, register] = await Promise.all([
+    posService.openSessionForRegister(ctx, registerId),
+    posService.registerPinState(ctx, registerId),
+    posService.registerForTerminal(ctx, registerId),
+  ])
   if (!session) redirect(`/pos?open=${registerId}`)
 
-  const pin = await posService.registerPinState(ctx, registerId)
   if (pin.hasPin && !(await registerUnlockMatches(ctx.orgId, registerId))) {
     return <RegisterPinGate registerId={pin.id} registerName={pin.name} />
   }
 
   // The register decides which store's stock the cart warns about.
-  const register = await posService.registerForTerminal(ctx, registerId)
   const canCreateQuote = ctx.permissions.has('invoice:create')
   const canReadQuote = ctx.permissions.has('invoice:read')
   const canQuote = canCreateQuote || canReadQuote
-  const [catalog, customers, cashSummary, recentOrders, useCounts, openQuotations, tillBank, transferDestinations] =
+  const [catalog, customers, cashSummary, recentOrders, useCounts, openQuotations, tillBank, transferDestinations, projects] =
     await Promise.all([
     posService.catalog(ctx, register.storeId),
     posService.walkInCustomers(ctx),
@@ -42,6 +50,7 @@ export default async function PosRegisterPage({ params }: Props) {
     canReadQuote ? posService.listOpenQuotations(ctx) : Promise.resolve([]),
     posService.registerBankSnapshot(ctx, registerId),
     posService.registerTransferDestinations(ctx),
+    listProjects(ctx),
   ])
   const currency = ctx.organization.baseCurrency
 
@@ -71,6 +80,9 @@ export default async function PosRegisterPage({ params }: Props) {
         cashOut: cashSummary.cashOut,
         cashSales: cashSummary.cashSales,
         cashRefunds: cashSummary.cashRefunds,
+        sales: cashSummary.sales,
+        refunds: cashSummary.refunds,
+        netSales: cashSummary.netSales,
       }}
       tillBalance={
         tillBank.balance && tillBank.balanceRaw
@@ -96,6 +108,11 @@ export default async function PosRegisterPage({ params }: Props) {
       stockStoreId={catalog.storeId}
       stores={catalog.stores}
       customers={customers}
+      projects={projects.map((project) => ({
+        id: project.id,
+        label: project.label,
+        customerId: project.customerId,
+      }))}
       currency={currency}
       orgId={ctx.orgId}
       orgName={ctx.organization.name}

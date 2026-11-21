@@ -453,6 +453,53 @@ export async function listAssemblies(ctx: OrgContext) {
 }
 
 /**
+ * Open sales demand for an item (sales orders + accepted proposals still open).
+ * Used to default MRP quantity from what customers already asked for.
+ */
+export async function openSalesDemand(ctx: OrgContext, itemId: string) {
+  const lines = await db.salesDocumentLine.findMany({
+    where: {
+      orgId: ctx.orgId,
+      itemId,
+      document: {
+        orgId: ctx.orgId,
+        deletedAt: null,
+        type: { in: ['SALES_ORDER', 'ESTIMATE', 'QUOTATION'] },
+        status: { in: ['OPEN', 'PARTIAL', 'ACCEPTED'] },
+      },
+    },
+    select: {
+      quantity: true,
+      quantityInvoiced: true,
+      document: { select: { id: true, number: true, type: true, status: true } },
+    },
+  })
+
+  let total = ZERO
+  const sources = lines.map((line) => {
+    const remaining = Decimal.max(
+      new Decimal(line.quantity.toString()).minus(line.quantityInvoiced.toString()),
+      ZERO,
+    )
+    total = total.plus(remaining)
+    return {
+      documentId: line.document.id,
+      number: line.document.number,
+      type: line.document.type,
+      status: line.document.status,
+      remaining: remaining.toFixed(4),
+    }
+  })
+
+  return {
+    itemId,
+    quantity: total.toFixed(4),
+    hasDemand: total.greaterThan(0),
+    sources: sources.filter((row) => new Decimal(row.remaining).greaterThan(0)),
+  }
+}
+
+/**
  * Multi-level materials plan: explode nested assemblies into leaf parts
  * and compare against on-hand.
  */

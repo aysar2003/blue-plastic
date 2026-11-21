@@ -8,6 +8,8 @@ declare module 'next-auth' {
       orgId: string
       role: Role
       membershipVersion: number
+      /** Epoch ms when this login started (absolute session logout). */
+      loginAt?: number
     } & DefaultSession['user']
   }
 
@@ -23,5 +25,6 @@ declare module 'next-auth/jwt' {
     orgId?: string
     role?: Role
     membershipVersion?: number
+    loginAt?: number
   }
 }

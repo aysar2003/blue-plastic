@@ -81,6 +81,14 @@ export const deleteSubscription = action
     return row
   })
 
+export const cancelSubscription = action
+  .input(recurringIdSchema)
+  .handler(async (ctx, input) => {
+    const row = await recurringService.cancelSchedule(ctx, input.id)
+    revalidateSubs(input.id)
+    return row
+  })
+
 export async function createSubscriptionForm(
   _prev: FormState,
   formData: FormData,

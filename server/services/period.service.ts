@@ -1,8 +1,10 @@
 import 'server-only'
 import type { PeriodStatus } from '@prisma/client'
 
+import { closeApprovalLevels, closeSecondApproverRequired } from '@/lib/erp/close-approver'
 import { fiscalYearOf, today, toCalendarDate } from '@/lib/date'
 import type { ClosureKind, ClosureRow } from '@/lib/period-closures'
+import { closeChecklist } from '@/server/accounting/close-checklist'
 import { ensureFiscalYear } from '@/server/accounting/period'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
@@ -84,7 +86,10 @@ export async function createFiscalYear(ctx: OrgContext, year: number) {
     const result = await ensureFiscalYear(
       tx,
       ctx.orgId,
-      ctx.organization.fiscalYearStartMonth,
+      {
+        month: ctx.organization.fiscalYearStartMonth,
+        day: ctx.organization.fiscalYearStartDay,
+      },
       year,
     )
 
@@ -118,10 +123,12 @@ export async function find(ctx: OrgContext, id: string) {
 
 /** Make sure the year containing today exists, so the periods page is never empty. */
 export async function ensureCurrentFiscalYear(ctx: OrgContext) {
-  const year = fiscalYearOf(today(ctx.organization.timeZone), ctx.organization.fiscalYearStartMonth)
-  return db.$transaction((tx) =>
-    ensureFiscalYear(tx, ctx.orgId, ctx.organization.fiscalYearStartMonth, year),
-  )
+  const fyStart = {
+    month: ctx.organization.fiscalYearStartMonth,
+    day: ctx.organization.fiscalYearStartDay,
+  }
+  const year = fiscalYearOf(today(ctx.organization.timeZone), fyStart)
+  return db.$transaction((tx) => ensureFiscalYear(tx, ctx.orgId, fyStart, year))
 }
 
 /**
@@ -132,7 +139,12 @@ export async function ensureCurrentFiscalYear(ctx: OrgContext) {
  * closing March while February accepts entries would leave the March figures
  * able to change without March ever being reopened.
  */
-export async function setStatus(ctx: OrgContext, periodId: string, status: 'OPEN' | 'CLOSED') {
+export async function setStatus(
+  ctx: OrgContext,
+  periodId: string,
+  status: 'OPEN' | 'CLOSED',
+  options?: { fromApproval?: boolean },
+) {
   const meta = await requestMeta()
 
   const period = await db.accountingPeriod.findFirst({
@@ -165,6 +177,18 @@ export async function setStatus(ctx: OrgContext, periodId: string, status: 'OPEN
         `Close ${toCalendarDate(earlierOpen.startDate)} to ${toCalendarDate(earlierOpen.endDate)} first. ` +
           `Periods close in order, or a closed month can still change through an open earlier one.`,
       )
+    }
+    if (ctx.features.closeHardGates) {
+      const checklist = await closeChecklist(ctx, {
+        from: toCalendarDate(period.startDate),
+        to: toCalendarDate(period.endDate),
+      })
+      if (checklist.blocked) {
+        throw precondition('Hard-gate close is blocked until the month-end checklist is clear.')
+      }
+    }
+    if (closeSecondApproverRequired(ctx.features) && !options?.fromApproval) {
+      return submitCloseApproval(ctx, period)
     }
   }
 
@@ -209,8 +233,54 @@ export async function setStatus(ctx: OrgContext, periodId: string, status: 'OPEN
       meta,
     )
 
-    return updated
+    return { ...updated, pendingApproval: false as const }
   })
+}
+
+async function submitCloseApproval(
+  ctx: OrgContext,
+  period: { id: string; startDate: Date; endDate: Date },
+) {
+  const pending = await db.approvalRequest.findFirst({
+    where: {
+      orgId: ctx.orgId,
+      entityType: 'ACCOUNTING_PERIOD',
+      entityId: period.id,
+      status: 'PENDING',
+    },
+    select: { id: true },
+  })
+  if (pending) {
+    throw precondition('This period is already waiting for close approval.')
+  }
+  const approval = await import('@/server/services/approval.service')
+  const from = toCalendarDate(period.startDate)
+  const to = toCalendarDate(period.endDate)
+  await db.$transaction(async (tx) => {
+    await approval.submitRequest(tx, ctx, {
+      entityType: 'ACCOUNTING_PERIOD',
+      entityId: period.id,
+      title: `Close period ${from}–${to}`,
+      href: `/periods/${period.id}`,
+      amount: 0,
+      levels: closeApprovalLevels(),
+    })
+  })
+  return {
+    id: period.id,
+    status: 'OPEN' as const,
+    startDate: period.startDate,
+    endDate: period.endDate,
+    pendingApproval: true as const,
+  }
+}
+
+export async function pendingCloseApprovalIds(ctx: OrgContext): Promise<Set<string>> {
+  const rows = await db.approvalRequest.findMany({
+    where: { orgId: ctx.orgId, entityType: 'ACCOUNTING_PERIOD', status: 'PENDING' },
+    select: { entityId: true },
+  })
+  return new Set(rows.map((row) => row.entityId))
 }
 
 /**

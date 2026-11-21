@@ -28,6 +28,9 @@ suite('service jobs schema', () => {
           date: new Date('2026-04-01'),
           customerId: customer.id,
           status: 'DRAFT',
+          siteLocation: 'Site A',
+          promisedWindowStart: new Date('2026-04-01T08:00:00.000Z'),
+          promisedWindowEnd: new Date('2026-04-01T10:00:00.000Z'),
           lines: {
             create: {
               orgId: fixture.ctx.orgId,
@@ -42,6 +45,8 @@ suite('service jobs schema', () => {
         include: { lines: true },
       })
       expect(job.lines).toHaveLength(1)
+      expect(job.siteLocation).toBe('Site A')
+      expect(job.promisedWindowStart).toBeTruthy()
     })
   })
 })

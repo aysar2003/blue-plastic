@@ -27,6 +27,8 @@ export type PosOpenOrder = {
   label: string
   cart: PosOpenCartLine[]
   customerId: string | null
+  /** Optional Projects job this ticket belongs to. */
+  projectId: string | null
   note: string
   /** When the ticket was opened. Missing on tickets saved before this field existed. */
   openedAt?: string
@@ -81,7 +83,7 @@ export function selectPosOrder(book: PosOrderBook, id: string): PosOrderBook {
 export function patchPosOrder(
   book: PosOrderBook,
   id: string,
-  patch: Partial<Pick<PosOpenOrder, 'cart' | 'customerId' | 'note'>>,
+  patch: Partial<Pick<PosOpenOrder, 'cart' | 'customerId' | 'projectId' | 'note'>>,
 ): PosOrderBook {
   if (!book.orders.some((order) => order.id === id)) return book
   return {
@@ -111,7 +113,7 @@ export function settlePosOrder(book: PosOrderBook, id: string): PosOrderBook {
   const order = book.orders.find((row) => row.id === id)
   if (!order) return book
   if (order.kind === 'register') {
-    return patchPosOrder(book, id, { cart: [], customerId: null, note: '' })
+    return patchPosOrder(book, id, { cart: [], customerId: null, projectId: null, note: '' })
   }
   return dropOrder(book, id)
 }
@@ -121,7 +123,7 @@ export function clearPosOrder(book: PosOrderBook, id: string): PosOrderBook {
   const order = book.orders.find((row) => row.id === id)
   if (!order) return book
   if (order.kind === 'order') return dropOrder(book, id)
-  return patchPosOrder(book, id, { cart: [], customerId: null, note: '' })
+  return patchPosOrder(book, id, { cart: [], customerId: null, projectId: null, note: '' })
 }
 
 export function loadPosOrderBook(
@@ -167,7 +169,16 @@ function dropOrder(book: PosOrderBook, id: string): PosOrderBook {
 }
 
 function blankOrder(id: string, kind: PosOpenOrder['kind'], label: string): PosOpenOrder {
-  return { id, kind, label, cart: [], customerId: null, note: '', openedAt: new Date().toISOString() }
+  return {
+    id,
+    kind,
+    label,
+    cart: [],
+    customerId: null,
+    projectId: null,
+    note: '',
+    openedAt: new Date().toISOString(),
+  }
 }
 
 /** What the ticket would ring up, before payment. */
@@ -270,7 +281,7 @@ function parseLine(value: unknown): PosOpenCartLine | null {
 
 function parseOrder(value: unknown): PosOpenOrder | null {
   if (!isRecord(value)) return null
-  const { id, kind, label, cart, customerId, note } = value
+  const { id, kind, label, cart, customerId, note, projectId: rawProjectId } = value
   if (typeof id !== 'string' || id.length === 0 || id.length > 80) return null
   if (kind !== 'register' && kind !== 'order') return null
   if (typeof label !== 'string' || label.length === 0 || label.length > 40) return null
@@ -285,9 +296,18 @@ function parseOrder(value: unknown): PosOpenOrder | null {
   if (customerId !== null && (typeof customerId !== 'string' || customerId.length === 0 || customerId.length > 64)) {
     return null
   }
+  const projectId =
+    rawProjectId === undefined || rawProjectId === null
+      ? null
+      : typeof rawProjectId === 'string'
+        ? rawProjectId
+        : undefined
+  if (projectId === undefined || (projectId !== null && (projectId.length === 0 || projectId.length > 64))) {
+    return null
+  }
   if (typeof note !== 'string' || note.length > 500) return null
   const openedAt = parseOpenedAt(value.openedAt)
-  return { id, kind, label, cart: lines, customerId, note, ...(openedAt ? { openedAt } : {}) }
+  return { id, kind, label, cart: lines, customerId, projectId, note, ...(openedAt ? { openedAt } : {}) }
 }
 
 function parseOpenedAt(value: unknown): string | undefined {

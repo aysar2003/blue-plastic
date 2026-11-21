@@ -71,6 +71,8 @@ export const posCheckoutSchema = z.object({
   registerId: cuid,
   sessionId: cuid,
   customerId: cuid.optional(),
+  /** Optional Projects job this till sale belongs to. */
+  projectId: cuid.optional(),
   note: optionalText(500),
   lines: z.array(posLine).min(1, 'Add at least one product').max(100),
   /** Gross tendered. Cash may be more than the sale; the difference is change. */
@@ -94,6 +96,8 @@ export const posCheckoutSchema = z.object({
 export const posCreateQuotationSchema = z.object({
   registerId: cuid,
   customerId: cuid.optional(),
+  /** Optional Projects job this quotation belongs to. */
+  projectId: cuid.optional(),
   note: optionalText(500),
   lines: z.array(posLine).min(1, 'Add at least one product').max(100),
 })
@@ -121,6 +125,10 @@ export const posUnlockSchema = z.object({
 export const posCloseSessionSchema = z.object({
   sessionId: cuid,
   closingCash: moneyString,
+  payouts: z
+    .union([moneyString, z.literal('')])
+    .optional()
+    .transform((v) => (v === undefined || v === '' ? '0' : v)),
 })
 
 export const posRegisterTransferSchema = z.object({

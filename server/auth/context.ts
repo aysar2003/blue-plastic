@@ -32,8 +32,13 @@ export type OrgContext = {
     legalName: string | null
     baseCurrency: string
     fiscalYearStartMonth: number
+    fiscalYearStartDay: number
     timeZone: string
     allowNegativeStock: boolean
+    /** Seconds of inactivity before desk lock screen. */
+    idleLockSeconds: number
+    /** Absolute signed-in lifetime in hours. */
+    sessionMaxHours: number
     posTillLedgerMode: 'HOLD_OFF_CHART' | 'REGISTER_IN_CHART'
     /** Null when this company is the group main / standalone. */
     parentOrgId: string | null
@@ -53,12 +58,18 @@ export type OrgContext = {
     rentExpiresAt: Date | null
     maxUsers: number | null
     rentNote: string | null
+    /** Null until the org finishes (or skips) the first-run wizard. */
+    onboardingCompletedAt: Date | null
   }
   user: {
     id: string
     name: string
     email: string
     image: string | null
+    /** Epoch ms when this login started (absolute session logout). */
+    loginAt: number | null
+    /** True when the user opted in to a desk idle-lock PIN. */
+    hasDeskPin: boolean
   }
   /** Sees every company database and the consolidated reports. */
   isSystemOwner: boolean
@@ -90,8 +101,11 @@ const ORGANIZATION_SELECT = {
   legalName: true,
   baseCurrency: true,
   fiscalYearStartMonth: true,
+  fiscalYearStartDay: true,
   timeZone: true,
   allowNegativeStock: true,
+  idleLockSeconds: true,
+  sessionMaxHours: true,
   posTillLedgerMode: true,
   featureFlags: true,
   parentOrgId: true,
@@ -111,6 +125,7 @@ const ORGANIZATION_SELECT = {
   rentExpiresAt: true,
   maxUsers: true,
   rentNote: true,
+  onboardingCompletedAt: true,
 } as const
 
 export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
@@ -137,7 +152,9 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
       version: true,
       permissionsOverride: true,
       organization: { select: ORGANIZATION_SELECT },
-      user: { select: { id: true, name: true, email: true, image: true } },
+      user: {
+        select: { id: true, name: true, email: true, image: true, deskPinHash: true },
+      },
     },
   })
 
@@ -176,7 +193,14 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
         ...organization,
         hasLogo: Boolean(logoStorageKey),
       },
-      user: membership.user,
+      user: {
+        id: membership.user.id,
+        name: membership.user.name,
+        email: membership.user.email,
+        image: membership.user.image,
+        loginAt: typeof session.user.loginAt === 'number' ? session.user.loginAt : null,
+        hasDeskPin: Boolean(membership.user.deskPinHash),
+      },
       portalCustomerId,
       systemOwnerBreakGlass: false,
       ...flags,
@@ -194,6 +218,11 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
   })
   if (!organization) return null
 
+  const ownerUser = await db.user.findUnique({
+    where: { id: access.id },
+    select: { deskPinHash: true },
+  })
+
   const { featureFlags, logoStorageKey, ...orgFields } = organization
   return {
     orgId: organization.id,
@@ -210,6 +239,8 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
       name: access.name,
       email: access.email,
       image: access.image,
+      loginAt: typeof session.user.loginAt === 'number' ? session.user.loginAt : null,
+      hasDeskPin: Boolean(ownerUser?.deskPinHash),
     },
     portalCustomerId: null,
     systemOwnerBreakGlass: true,

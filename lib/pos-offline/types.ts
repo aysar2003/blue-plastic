@@ -3,6 +3,7 @@ export type PosOfflineCheckoutPayload = {
   registerId: string
   sessionId: string
   customerId?: string
+  projectId?: string
   note?: string | null
   lines: {
     itemId: string

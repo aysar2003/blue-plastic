@@ -10,19 +10,23 @@ import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import * as loan from '@/server/services/loan.service'
 
-import { createLoanAccount, postLoanDue } from './actions'
+import { accrueLoanInterest, createLoanAccount, disburseLoan, postLoanDue } from './actions'
 
 export const metadata: Metadata = { title: 'Loans' }
 
 export default async function LoansPage() {
   const ctx = await requireOrgContext('customer:read')
-  const accounts = await loan.listAccounts(ctx)
+  const [accounts, aging] = await Promise.all([loan.listAccounts(ctx), loan.overdueAging(ctx)])
   const currency = ctx.organization.baseCurrency
   const todayStr = today(ctx.organization.timeZone)
+  const canPost = ctx.permissions.has('journal:post')
 
   return (
     <>
-      <PageHeader title="Loans" description="Loan accounts, schedules, and due posting (Maaha lite)." />
+      <PageHeader
+        title="Loans"
+        description="Disburse to bank, post collections, accrue interest once, and age overdue instalments."
+      />
 
       <form action={createLoanAccount} className="mb-6 grid max-w-lg gap-2 rounded-md border p-4">
         <p className="text-sm font-medium">New loan</p>
@@ -38,19 +42,31 @@ export default async function LoansPage() {
         </Button>
       </form>
 
-      <form action={postLoanDue} className="mb-8">
-        <Button type="submit" size="sm" variant="outline">
-          Post due installments (as of today)
-        </Button>
-      </form>
+      {canPost ? (
+        <div className="mb-8 flex flex-wrap gap-2">
+          <form action={postLoanDue}>
+            <Button type="submit" size="sm" variant="outline">
+              Post due installments
+            </Button>
+          </form>
+          <form action={accrueLoanInterest}>
+            <Button type="submit" size="sm" variant="outline">
+              Accrue interest
+            </Button>
+          </form>
+        </div>
+      ) : null}
 
+      <h2 className="mb-2 text-sm font-medium">Accounts</h2>
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Customer</TableHead>
             <TableHead className="text-right">Principal</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead>Disbursed</TableHead>
             <TableHead>Next due</TableHead>
+            {canPost ? <TableHead>Bank account id</TableHead> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -61,10 +77,50 @@ export default async function LoansPage() {
                 <TableCell>{row.customer.displayName}</TableCell>
                 <TableCell className="text-right">{formatMoney(row.principal.toString(), currency)}</TableCell>
                 <TableCell>{row.status}</TableCell>
+                <TableCell>{row.disbursementJournalId ? 'Yes' : 'No'}</TableCell>
                 <TableCell>{next ? formatDate(next.dueDate.toISOString().slice(0, 10)) : '—'}</TableCell>
+                {canPost ? (
+                  <TableCell>
+                    {row.disbursementJournalId ? (
+                      '—'
+                    ) : (
+                      <form action={disburseLoan} className="flex gap-1">
+                        <input type="hidden" name="loanAccountId" value={row.id} />
+                        <Input name="bankAccountId" placeholder="Bank account id" className="h-8 w-40" required />
+                        <Button type="submit" size="sm" variant="secondary">
+                          Disburse
+                        </Button>
+                      </form>
+                    )}
+                  </TableCell>
+                ) : null}
               </TableRow>
             )
           })}
+        </TableBody>
+      </Table>
+
+      <h2 className="mb-2 mt-8 text-sm font-medium">Overdue aging</h2>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Customer</TableHead>
+            <TableHead className="text-right">1–30</TableHead>
+            <TableHead className="text-right">31–60</TableHead>
+            <TableHead className="text-right">61–90</TableHead>
+            <TableHead className="text-right">90+</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {aging.map((row) => (
+            <TableRow key={row.id}>
+              <TableCell>{row.customerName}</TableCell>
+              <TableCell className="text-right">{formatMoney(row.buckets['1-30'], currency)}</TableCell>
+              <TableCell className="text-right">{formatMoney(row.buckets['31-60'], currency)}</TableCell>
+              <TableCell className="text-right">{formatMoney(row.buckets['61-90'], currency)}</TableCell>
+              <TableCell className="text-right">{formatMoney(row.buckets['90+'], currency)}</TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </>

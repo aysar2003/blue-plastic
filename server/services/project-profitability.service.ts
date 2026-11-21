@@ -60,6 +60,7 @@ export async function profitabilityByRange(
         projectId: true,
         type: true,
         subtotal: true,
+        exchangeRate: true,
       },
     }),
     db.purchaseDocument.findMany({
@@ -71,7 +72,7 @@ export async function profitabilityByRange(
         deletedAt: null,
         date: { gte: toDate(range.from), lte: toDate(range.to) },
       },
-      select: { projectId: true, type: true, subtotal: true },
+      select: { projectId: true, type: true, subtotal: true, exchangeRate: true },
     }),
     db.projectTimeEntry.findMany({
       where: {
@@ -79,7 +80,7 @@ export async function profitabilityByRange(
         ...(options.projectId ? { projectId: options.projectId } : {}),
         workDate: { gte: toDate(range.from), lte: toDate(range.to) },
       },
-      select: { projectId: true, hours: true, billableRate: true },
+      select: { projectId: true, hours: true, billableRate: true, costRate: true },
     }),
   ])
 
@@ -104,7 +105,7 @@ export async function profitabilityByRange(
     const prior = byProject.get(document.projectId) ?? emptySlice()
     byProject.set(
       document.projectId,
-      addSalesIncome(prior, document.type, document.subtotal.toString()),
+      addSalesIncome(prior, document.type, document.subtotal.toString(), document.exchangeRate),
     )
   }
 
@@ -113,7 +114,7 @@ export async function profitabilityByRange(
     const prior = byProject.get(document.projectId) ?? emptySlice()
     byProject.set(
       document.projectId,
-      addPurchaseCost(prior, document.type, document.subtotal.toString()),
+      addPurchaseCost(prior, document.type, document.subtotal.toString(), document.exchangeRate),
     )
   }
 
@@ -129,7 +130,11 @@ export async function profitabilityByRange(
     const prior = byProject.get(entry.projectId) ?? emptySlice()
     byProject.set(
       entry.projectId,
-      addLaborCost(prior, entry.hours.toString(), entry.billableRate?.toString() ?? null),
+      addLaborCost(
+        prior,
+        entry.hours.toString(),
+        entry.costRate?.toString() ?? entry.billableRate?.toString() ?? null,
+      ),
     )
   }
 

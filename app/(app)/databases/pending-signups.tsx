@@ -89,8 +89,8 @@ export function PendingSignups({ requests }: { requests: SignupRequestRow[] }) {
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground">{row.organizationName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {row.ownerName} · {row.email} · {row.baseCurrency} · FY starts month{' '}
-                    {row.fiscalYearStartMonth}
+                    {row.ownerName} · {row.email} · {row.baseCurrency} · FY starts{' '}
+                    {row.fiscalYearStartDay}/{row.fiscalYearStartMonth}
                   </p>
                   <p className="mt-1 text-xs text-foreground">
                     Requested apps:{' '}

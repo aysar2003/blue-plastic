@@ -16,6 +16,8 @@ import { conflict, notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import * as approvalService from '@/server/services/approval.service'
 import { outstandingBalances, refreshStatus } from '@/server/services/purchase.service'
+import { realisedFxResidual } from '@/lib/erp/fx-payment'
+import { resolvePaymentDateRate } from '@/server/services/fx-rate.service'
 
 const PAYMENT_SELECT = {
   id: true, number: true, date: true, createdAt: true, amount: true, method: true, reference: true,
@@ -394,22 +396,22 @@ export async function postBillPayment(tx: Tx, ctx: OrgContext, id: string) {
   if (!payment) throw notFound('Bill payment')
   if (payment.journalId) throw precondition(`Bill payment ${payment.number} is already posted.`)
 
-  const payRate = new Decimal(payment.exchangeRate?.toString() ?? 1)
+  const payRate = await resolvePaymentDateRate(tx, ctx, {
+    currencyCode: payment.currencyCode,
+    paymentDate: toCalendarDate(payment.date),
+    enteredRate: payment.exchangeRate?.toString() ?? 1,
+  })
   const foreignAmount = new Decimal(payment.amount.toString())
-  const bankBase = foreignAmount.times(payRate)
-
-  let apBase = ZERO
-  let appliedForeign = ZERO
-  for (const application of payment.applications) {
-    const f = new Decimal(application.amount.toString())
-    appliedForeign = appliedForeign.plus(f)
-    const invRate = new Decimal(application.bill.exchangeRate?.toString() ?? 1)
-    apBase = apBase.plus(f.times(invRate))
-  }
-  const unapplied = foreignAmount.minus(appliedForeign)
-  if (unapplied.greaterThan(0)) {
-    apBase = apBase.plus(unapplied.times(payRate))
-  }
+  const fx = realisedFxResidual({
+    foreignAmount,
+    paymentDateRate: payRate,
+    applications: payment.applications.map((application) => ({
+      foreignAmount: application.amount.toString(),
+      documentRate: application.bill.exchangeRate?.toString() ?? 1,
+    })),
+  })
+  const bankBase = fx.bankBase
+  const apBase = fx.controlBase
 
   const needsFx = !bankBase.equals(apBase)
   const fxAccountId = needsFx
@@ -437,7 +439,7 @@ export async function postBillPayment(tx: Tx, ctx: OrgContext, id: string) {
 
   await tx.billPayment.update({
     where: { id: payment.id },
-    data: { journalId: journal.id, status: 'OPEN' },
+    data: { journalId: journal.id, status: 'OPEN', exchangeRate: payRate.toFixed(9) },
   })
 
   for (const application of payment.applications) {

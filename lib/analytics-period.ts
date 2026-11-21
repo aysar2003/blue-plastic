@@ -51,8 +51,13 @@ export function resolveAnalyticsPeriod(input: {
   month?: string | null
   timeZone: string
   fiscalYearStartMonth: number
+  fiscalYearStartDay?: number
 }): AnalyticsPeriodSelection {
   const now = today(input.timeZone)
+  const fyStart = {
+    month: input.fiscalYearStartMonth,
+    day: input.fiscalYearStartDay ?? 1,
+  }
 
   // Legacy month deep-link.
   if ((!input.period || input.period === 'month') && input.month && /^\d{4}-\d{2}$/.test(input.month)) {
@@ -72,7 +77,7 @@ export function resolveAnalyticsPeriod(input: {
   const customFrom =
     input.from && isCalendarDate(input.from) ? (input.from as CalendarDate) : undefined
   const customTo = input.to && isCalendarDate(input.to) ? (input.to as CalendarDate) : undefined
-  const range = resolvePeriod(key, now, input.fiscalYearStartMonth, {
+  const range = resolvePeriod(key, now, fyStart, {
     from: customFrom,
     to: customTo,
   })

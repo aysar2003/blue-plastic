@@ -1,6 +1,6 @@
 # Phase 10 — Interface and hardening
 
-**Status:** ✅ Complete — 2026-08-29
+**Status:** ✅ Complete (FULL) — 2026-09-01; Playwright cycle smoke 2026-11-21
 **Depends on:** every earlier phase
 **Blocks:** nothing — this is the last planned phase
 
@@ -856,13 +856,19 @@ still no test that drives a document delete end to end on a bill carrying stock
 and then asserts `stockAgreesWithLedger` — the pieces are covered separately, the
 composition is not. That is the next test worth writing.
 
+## Wave F — Playwright cycle smoke (2026-11-21)
+
+`e2e/cycle-smoke.spec.ts` walks sell → pay → buy → stock → recon → close. The
+login door always runs; the authenticated walk skips without `E2E_EMAIL` /
+`E2E_PASSWORD`. Selectors are the real page titles (`Point of Sale`, invoices,
+payments, bills, stock, reconcile, periods / scale checklist).
+`pnpm test:e2e:cycle`.
+
 ## What Phase 10 does not do
 
 - No attachments on documents, no full-text search, no rate limiting, no
   multi-currency activation, no backup runbook. These were listed in the original
   Phase 10 sketch and remain unbuilt.
-- No end-to-end browser test suite. That is the honest gap left by this phase,
-  and the thing most worth building next.
 - **No screen showing deleted records.** A deleted transaction is invisible but
   not gone, and the audit log holds every deletion with its reason and its author
   — which is enough to answer "what happened to INV-00042" but requires somebody

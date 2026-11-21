@@ -4,8 +4,11 @@ import { revalidatePath } from 'next/cache'
 
 import { formValues, toFormState, type FormState } from '@/components/forms/action-state'
 import {
+  beginTotpSetupSchema,
   changePasswordSchema,
+  clearDeskPinSchema,
   disableTwoFactorSchema,
+  setDeskPinSchema,
   twoFactorCodeOnlySchema,
   updateProfileSchema,
 } from '@/lib/validation/user'
@@ -27,6 +30,20 @@ export const changePassword = action
   .input(changePasswordSchema)
   .handler((ctx, input) => userService.changePassword(ctx, input))
 
+export const setDeskPin = action.input(setDeskPinSchema).handler(async (ctx, input) => {
+  const result = await userService.setDeskPin(ctx, input)
+  revalidatePath('/', 'layout')
+  revalidatePath('/settings/profile')
+  return result
+})
+
+export const clearDeskPin = action.input(clearDeskPinSchema).handler(async (ctx, input) => {
+  const result = await userService.clearDeskPin(ctx, input)
+  revalidatePath('/', 'layout')
+  revalidatePath('/settings/profile')
+  return result
+})
+
 /* --- form adapters ------------------------------------------------------- */
 
 export async function updateProfileForm(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -37,24 +54,43 @@ export async function changePasswordForm(_prev: FormState, formData: FormData): 
   return toFormState(await changePassword(formValues(formData)), 'Password changed.')
 }
 
+export async function setDeskPinForm(_prev: FormState, formData: FormData): Promise<FormState> {
+  return toFormState(await setDeskPin(formValues(formData)), 'Screen PIN turned on.')
+}
+
+export async function clearDeskPinForm(_prev: FormState, formData: FormData): Promise<FormState> {
+  return toFormState(await clearDeskPin(formValues(formData)), 'Screen PIN turned off.')
+}
+
 export type TotpSetupState = FormState & {
   secret?: string
   otpauthUrl?: string
+  qrDataUrl?: string
 }
 
 export async function beginTotpSetupForm(
   _prev: TotpSetupState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<TotpSetupState> {
+  const parsed = beginTotpSetupSchema.safeParse(formValues(formData))
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string[]> = {}
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.join('.') || '_'
+      ;(fieldErrors[key] ??= []).push(issue.message)
+    }
+    return { status: 'error', fieldErrors }
+  }
   try {
     const ctx = await requireOrgContext()
-    const setup = await auth2fa.beginTotpSetup(ctx.userId)
+    const setup = await auth2fa.beginTotpSetup(ctx.userId, parsed.data.currentPassword)
     revalidatePath('/settings/profile')
     return {
       status: 'success',
-      message: 'Scan the code in your authenticator app, then confirm below.',
+      message: 'Scan the QR code in your authenticator app, then enter the verification code.',
       secret: setup.secret,
       otpauthUrl: setup.otpauthUrl,
+      qrDataUrl: setup.qrDataUrl,
     }
   } catch (error) {
     if (isAppError(error)) {

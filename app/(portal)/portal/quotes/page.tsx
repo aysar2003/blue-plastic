@@ -26,7 +26,7 @@ export default async function PortalQuotesPage({
     <div className="space-y-4">
       <PageHeader
         title="Quotes"
-        description="Estimates and quotations sent to this account. Open one to print or download a PDF."
+        description="Estimates and quotations sent to this account. Open one to accept, decline, print, or download a PDF."
       />
       <SearchInput placeholder="Search by number or reference" />
 

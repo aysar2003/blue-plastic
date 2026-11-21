@@ -7,7 +7,8 @@ import { AccountingForm } from './accounting-form'
 import { BrandingForm } from './branding-form'
 import { OrganizationForm } from './organization-form'
 import { OutboundEmailForm } from './outbound-email-form'
-import { TrustedExtensionsList } from '@/components/settings/trusted-extensions-list'
+import { SecurityForm } from './security-form'
+import { TrustedExtensionsAllowlist } from '@/components/settings/trusted-extensions-allowlist'
 import { SignProviderForm } from './sign-provider-form'
 
 export const metadata: Metadata = { title: 'Organisation' }
@@ -36,10 +37,21 @@ export default async function OrganizationSettingsPage() {
       <AccountingForm
         baseCurrency={organization.baseCurrency}
         fiscalYearStartMonth={organization.fiscalYearStartMonth}
+        fiscalYearStartDay={organization.fiscalYearStartDay}
         canEdit={canEdit}
       />
-      <SignProviderForm signProvider={signProvider} canEdit={canEdit} />
-      <TrustedExtensionsList trustedExtensions={trustedExtensions} />
+      <SecurityForm
+        idleLockSeconds={organization.idleLockSeconds}
+        sessionMaxHours={organization.sessionMaxHours}
+        enforceTwoFactor={organization.enforceTwoFactor}
+        canEdit={canEdit}
+      />
+      <SignProviderForm
+        orgId={organization.id}
+        signProvider={signProvider}
+        canEdit={canEdit}
+      />
+      <TrustedExtensionsAllowlist trustedExtensions={trustedExtensions} canEdit={canEdit} />
     </div>
   )
 }

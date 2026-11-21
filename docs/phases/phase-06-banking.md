@@ -1,6 +1,6 @@
 # Phase 6 — Banking & Cash
 
-**Status:** ✅ Complete — 2026-08-29
+**Status:** ✅ Complete (FULL) — 2026-08-29 · statement format packs Wave C 2026-11-21
 **Depends on:** Phases 2, 4 and 5
 **Blocks:** Phase 8 (cash flow), Phase 9 (period close)
 
@@ -123,11 +123,14 @@ account), `reconciliations_one_in_progress`, and the deposit tenancy key.
 | Builders (6) | transfer proved to have exactly two lines and no P&L account; deposit proved to merge sources and balance |
 | Guards (10) | transfer to itself, zero transfer, deposit line with neither source, deposit total disagreeing with lines, clearing a line from another account, two reconciliations in progress, clearing a line twice, changing a completed reconciliation, adding to a completed one, and — most importantly — that clearing a line leaves the line itself untouched |
 
+## Wave C — statement import format packs (2026-11-21)
+
+CSV import on `/banking/import` accepts **column mapping presets** (`generic`, `so`, `ke`) for common Somalia and Kenya bank layouts (value date / particulars / Dr-Cr, paid in / withdrawn). Still not a live bank feed.
+
+Migration: `20261121191000_wave_c_deepen` (no extra tables — mapping is code).
+
 ## What Phase 6 deliberately does not do
 
 - No OFX or QIF parsing. CSV covers what banks actually hand a small business,
   and a second format is a second thing to get subtly wrong.
-- No bank rules or auto-categorisation of unmatched lines — Phase 10. Today an
-  unmatched line is a prompt to enter the document it represents, which keeps the
-  ledger the product of deliberate entries.
 - No live bank feeds. That is an integration, not an accounting feature.

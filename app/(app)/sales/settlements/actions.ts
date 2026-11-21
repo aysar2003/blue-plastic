@@ -19,7 +19,9 @@ export async function runSettlement(formData: FormData) {
   await settlement.settlePeriod(ctx, {
     periodStart: String(formData.get('periodStart') ?? ''),
     periodEnd: String(formData.get('periodEnd') ?? ''),
+    paymentAccountId: String(formData.get('paymentAccountId') || '') || null,
   })
   revalidatePath('/sales/settlements')
   revalidatePath('/journals')
+  revalidatePath('/purchases/bills')
 }

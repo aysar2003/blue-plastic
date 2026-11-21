@@ -1,6 +1,6 @@
 # Phase 7 — Inventory
 
-**Status:** ✅ Complete — 2026-08-29
+**Status:** ✅ Complete (FULL) — 2026-08-29 · landed cost 2026-11-21
 **Depends on:** Phases 3, 4 and 5
 **Blocks:** Phase 8 (gross margin reporting)
 
@@ -154,6 +154,20 @@ Unit tests would not have found any of them; only posting real documents did.
 - No FIFO or specific identification. `inventory_transactions` retains quantity,
   unit cost, date and document, so layers could be rebuilt if a real requirement
   ever appears — see ADR-0005.
-- No landed costs, assemblies or multi-warehouse. Each is a real feature, and
-  each would be built on this ledger rather than around it.
 - No back-dated recosting, for the reason set out above.
+
+## Wave A deepen — landed cost (2026-11-21)
+
+Freight/duty on a posted bill can be allocated onto inventory weighted-average
+cost without rewriting history.
+
+1. `LandedCostBatch` / `LandedCostLine` — bill, memo, journal, item amounts.
+2. `allocateLandedCost` — zero-qty `ADJUSTMENT` movement with `valueOverride`,
+   journal Dr Inventory Asset / Cr the bill's freight expense.
+3. UI: bill **Allocate to receipts** (`/purchases/bills/[id]/landed-cost`) and
+   `/purchases/landed-costs`. Candidates are stock items on the bill, its PO, or
+   recent receives from the same vendor.
+
+Migration: `20261121180000_wave_a_landed_cost_ship_to` (apply with `pnpm db:deploy`).
+
+Verify: `pnpm exec vitest run tests/landed-cost`

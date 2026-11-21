@@ -1,11 +1,12 @@
 import 'server-only'
 
-import { toDate, today } from '@/lib/date'
+import { isCalendarDate, toDate, today } from '@/lib/date'
 import { Decimal } from '@/lib/money'
 import {
   canCancelServiceJob,
   canCompleteServiceJob,
   canScheduleServiceJob,
+  cancelRestoresVanStock,
   type ServiceJobStatus,
 } from '@/lib/erp/service-job'
 import type { ServiceJobInput } from '@/lib/validation/service-job'
@@ -14,6 +15,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import { notFound, precondition, validation } from '@/server/errors'
 import { assignDocumentNumber, numberTaken } from '@/server/sequences'
+import * as inventory from '@/server/services/inventory.service'
 import * as salesService from '@/server/services/sales.service'
 import * as storeService from '@/server/services/store.service'
 
@@ -29,10 +31,20 @@ async function assertVanStore(tx: Tx, ctx: OrgContext, storeId: string | null | 
   }
 }
 
-export async function list(ctx: OrgContext) {
+export async function list(
+  ctx: OrgContext,
+  filters?: { date?: string; assigneeId?: string },
+) {
+  const dateRaw = filters?.date?.trim()
+  const date = dateRaw && isCalendarDate(dateRaw) ? dateRaw : undefined
+  const assigneeId = filters?.assigneeId?.trim()
   const rows = await db.serviceJob.findMany({
-    where: { orgId: ctx.orgId },
-    orderBy: [{ status: 'asc' }, { date: 'desc' }],
+    where: {
+      orgId: ctx.orgId,
+      ...(date ? { date: toDate(date) } : {}),
+      ...(assigneeId ? { assigneeId } : {}),
+    },
+    orderBy: [{ status: 'asc' }, { promisedWindowStart: 'asc' }, { date: 'desc' }],
     include: {
       customer: { select: { displayName: true } },
       assignee: { select: { name: true } },
@@ -125,6 +137,9 @@ export async function create(ctx: OrgContext, input: ServiceJobInput) {
         projectId: input.projectId ?? null,
         assigneeId: input.assigneeId ?? null,
         vanStoreId: input.vanStoreId ?? null,
+        siteLocation: input.siteLocation?.trim() || null,
+        promisedWindowStart: input.promisedWindowStart ?? null,
+        promisedWindowEnd: input.promisedWindowEnd ?? null,
         memo: input.memo?.trim() || null,
         status: 'DRAFT',
         createdById: ctx.userId,
@@ -190,18 +205,23 @@ export async function schedule(ctx: OrgContext, id: string, scheduledAt?: Date) 
 
 export async function cancel(ctx: OrgContext, id: string) {
   const meta = await requestMeta()
-  return db.$transaction(async (tx) => {
-    const job = await tx.serviceJob.findFirst({
-      where: { id, orgId: ctx.orgId },
-      select: { id: true, number: true, status: true },
-    })
-    if (!job) throw notFound('Service job')
-    if (!canCancelServiceJob(job.status as ServiceJobStatus)) {
-      throw precondition('This service job cannot be cancelled.')
-    }
+  const job = await db.serviceJob.findFirst({
+    where: { id, orgId: ctx.orgId },
+    select: { id: true, number: true, status: true, salesDocumentId: true },
+  })
+  if (!job) throw notFound('Service job')
+  if (!canCancelServiceJob(job.status as ServiceJobStatus)) {
+    throw precondition('This service job cannot be cancelled.')
+  }
+
+  if (cancelRestoresVanStock(job.status as ServiceJobStatus, job.salesDocumentId) && job.salesDocumentId) {
+    await salesService.remove(ctx, job.salesDocumentId, `Service job ${job.number} cancelled`)
+  }
+
+  await db.$transaction(async (tx) => {
     await tx.serviceJob.update({
       where: { id: job.id },
-      data: { status: 'CANCELLED' },
+      data: { status: 'CANCELLED', salesDocumentId: null },
     })
     await writeAudit(
       tx,
@@ -211,11 +231,50 @@ export async function cancel(ctx: OrgContext, id: string) {
         entityId: job.id,
         action: 'UPDATE',
         before: { status: job.status },
-        after: { status: 'CANCELLED' },
+        after: { status: 'CANCELLED', restoredVanStock: Boolean(job.salesDocumentId) },
       },
       meta,
     )
-    return { id: job.id, number: job.number }
+  })
+  return { id: job.id, number: job.number }
+}
+
+/** Draft warehouse → van store transfers for PART lines on this job. */
+export async function replenishVan(ctx: OrgContext, id: string) {
+  const job = await db.serviceJob.findFirst({
+    where: { id, orgId: ctx.orgId },
+    include: {
+      lines: {
+        where: { kind: 'PART' },
+        orderBy: { lineNumber: 'asc' },
+        include: { item: { select: { id: true, name: true, type: true } } },
+      },
+    },
+  })
+  if (!job) throw notFound('Service job')
+  if (job.status === 'CANCELLED' || job.status === 'DONE') {
+    throw precondition('Only draft or scheduled jobs can replenish the van.')
+  }
+  const vanStoreId = job.vanStoreId
+  if (!vanStoreId) throw validation('Set a van store on the job before replenishing.')
+
+  const warehouse = await db.store.findFirst({
+    where: { orgId: ctx.orgId, isActive: true, isVan: false, id: { not: vanStoreId } },
+    select: { id: true, name: true, isOffice: true },
+    orderBy: [{ isOffice: 'desc' }, { name: 'asc' }],
+  })
+  if (!warehouse) throw precondition('Add a warehouse or office store to replenish the van from.')
+
+  const lines = job.lines
+    .filter((line) => line.itemId && (line.item?.type === 'INVENTORY' || line.item?.type === 'INVENTORY_ASSEMBLY'))
+    .map((line) => ({ itemId: line.itemId!, quantity: line.quantity.toString() }))
+  if (lines.length === 0) throw validation('This job has no inventory parts to transfer.')
+
+  return inventory.createDraftTransfersToStore(ctx, {
+    fromStoreId: warehouse.id,
+    toStoreId: vanStoreId,
+    memo: `Replenishment draft → van ${job.number}`,
+    lines,
   })
 }
 

@@ -53,6 +53,33 @@ function inputSchemaFor(cap: CapabilityDef): Record<string, unknown> {
           saveAsDraft: { type: 'boolean' },
         },
       }
+    case 'invoices.create':
+      return {
+        type: 'object',
+        required: ['customerId', 'date', 'lines'],
+        properties: {
+          customerId: { type: 'string' },
+          date: { type: 'string' },
+          lines: { type: 'array' },
+          saveAsDraft: { type: 'boolean' },
+        },
+      }
+    case 'invoices.list':
+      return {
+        type: 'object',
+        properties: {
+          q: { type: 'string' },
+          status: { type: 'string' },
+          customerId: { type: 'string' },
+        },
+      }
+    case 'serviceJobs.get':
+    case 'serviceJobs.complete':
+      return {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'string' } },
+      }
     default:
       return { type: 'object', properties: {}, additionalProperties: false }
   }

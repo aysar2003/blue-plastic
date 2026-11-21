@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   cancelTwoFactorAction,
+  completeTotpSetupLoginAction,
   completeTwoFactorAction,
   resendTwoFactorOtpAction,
   type DoorSignInState,
@@ -52,15 +53,28 @@ export function LoginForm({
 }) {
   const [passwordState, passwordAction] = useActionState(action, initialState)
   const [codeState, codeAction] = useActionState(completeTwoFactorAction, initialState)
-  const [step, setStep] = useState<'password' | 'twoFactor'>('password')
+  const [setupState, setupAction] = useActionState(completeTotpSetupLoginAction, initialState)
+  const [step, setStep] = useState<'password' | 'twoFactor' | 'totpSetup'>('password')
   const [hint, setHint] = useState<DoorSignInState['twoFactorHint']>()
   const [emailHint, setEmailHint] = useState<string | undefined>()
   const [info, setInfo] = useState<string | undefined>()
   const [resendError, setResendError] = useState<string | undefined>()
   const [cooldown, setCooldown] = useState(0)
   const [resending, startResend] = useTransition()
+  const [qrDataUrl, setQrDataUrl] = useState<string | undefined>()
+  const [totpSecret, setTotpSecret] = useState<string | undefined>()
+  const [showSecret, setShowSecret] = useState(false)
 
   useEffect(() => {
+    if (passwordState.needsTotpSetup) {
+      setStep('totpSetup')
+      setQrDataUrl(passwordState.qrDataUrl)
+      setTotpSecret(passwordState.totpSecret)
+      setInfo(passwordState.info)
+      setShowSecret(false)
+      setResendError(undefined)
+      return
+    }
     if (passwordState.needsTwoFactor) {
       setStep('twoFactor')
       setHint(passwordState.twoFactorHint)
@@ -70,6 +84,20 @@ export function LoginForm({
       setCooldown(passwordState.resendAfterSeconds ?? 0)
     }
   }, [passwordState])
+
+  useEffect(() => {
+    if (setupState.needsTwoFactor) {
+      setStep('twoFactor')
+      if (setupState.twoFactorHint) setHint(setupState.twoFactorHint)
+      if (setupState.emailHint) setEmailHint(setupState.emailHint)
+      if (setupState.info) setInfo(setupState.info)
+      if (setupState.resendAfterSeconds != null) setCooldown(setupState.resendAfterSeconds)
+      return
+    }
+    if (setupState.needsTotpSetup) {
+      setStep('totpSetup')
+    }
+  }, [setupState])
 
   useEffect(() => {
     if (codeState.needsTwoFactor) {
@@ -95,6 +123,9 @@ export function LoginForm({
     setInfo(undefined)
     setResendError(undefined)
     setCooldown(0)
+    setQrDataUrl(undefined)
+    setTotpSecret(undefined)
+    setShowSecret(false)
   }
 
   function onResend() {
@@ -117,6 +148,56 @@ export function LoginForm({
   }
 
   const canResendEmail = hint === 'otp' || hint === 'either'
+
+  if (step === 'totpSetup') {
+    return (
+      <form action={setupAction} className="space-y-4">
+        <FormError message={setupState.error ?? passwordState.error} />
+        {info ? <p className="text-sm text-emerald-600 dark:text-emerald-400">{info}</p> : null}
+        <p className="text-sm text-muted-foreground">
+          Scan this QR code with Google Authenticator or a similar app, then enter the code it shows.
+        </p>
+        {qrDataUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={qrDataUrl}
+            alt="Authenticator QR code"
+            className="mx-auto size-[220px] rounded-md border border-border bg-white p-2"
+          />
+        ) : null}
+        <div className="text-center">
+          <button
+            type="button"
+            className="text-sm text-primary underline-offset-2 hover:underline"
+            onClick={() => setShowSecret((v) => !v)}
+          >
+            {showSecret ? 'Hide secret' : 'Cannot scan it?'}
+          </button>
+          {showSecret && totpSecret ? (
+            <p className="mt-2 break-all font-mono text-xs select-all">{totpSecret}</p>
+          ) : null}
+        </div>
+        <Field name="code" label="Verification code" required error={setupState.fieldErrors?.code}>
+          <Input
+            {...fieldProps('code', setupState.fieldErrors?.code)}
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            required
+            maxLength={6}
+            className={inputClassName}
+          />
+        </Field>
+        <SubmitButton className={`w-full ${labelClassName ?? ''}`} pendingLabel="Activating…">
+          Activate
+        </SubmitButton>
+        <Button type="button" variant="ghost" className="w-full" onClick={() => void onCancel()}>
+          Back
+        </Button>
+      </form>
+    )
+  }
 
   if (step === 'twoFactor') {
     return (

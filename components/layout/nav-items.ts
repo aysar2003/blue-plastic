@@ -71,6 +71,7 @@ export const MODULES: NavModule[] = [
       { label: 'Sales orders', href: '/sales/sales-orders', permission: 'invoice:read' },
       { label: 'Invoices', href: '/sales/invoices?status=open', permission: 'invoice:read' },
       { label: 'Subscriptions', href: '/sales/subscriptions', permission: 'invoice:read' },
+      { label: 'Dunning', href: '/sales/subscriptions/dunning', permission: 'invoice:read' },
       { label: 'Service jobs', href: '/service/jobs', permission: 'invoice:read' },
       { label: 'Sales receipts', href: '/sales/sales-receipts', permission: 'invoice:read' },
       { label: 'Delivery', href: '/sales/delivery', permission: 'invoice:read' },
@@ -95,8 +96,11 @@ export const MODULES: NavModule[] = [
       { label: 'All projects', href: '/projects/list', permission: 'project:read' },
       { label: 'New', href: '/projects/new', permission: 'project:create' },
       { label: 'Reports', href: '/projects/reports', permission: 'report:read' },
+      { label: 'WIP', href: '/projects/wip', permission: 'invoice:create' },
       { label: 'Progress', href: '/projects/progress', permission: 'invoice:create' },
       { label: 'Contracts', href: '/projects/contracts', permission: 'invoice:read' },
+      { label: 'My tasks', href: '/projects/my-tasks', permission: 'project:read' },
+      { label: 'My timesheets', href: '/projects/timesheets', permission: 'project:read' },
     ],
   },
   {
@@ -143,6 +147,7 @@ export const MODULES: NavModule[] = [
         ],
       },
       { label: 'Bill payments', href: '/bill-payments', permission: 'expense:read' },
+      { label: 'Landed costs', href: '/purchases/landed-costs', permission: 'bill:read' },
       { label: 'Vendors', href: '/vendors', permission: 'vendor:read' },
       { label: 'Reports', href: '/purchases/reports', permission: 'report:read' },
     ],
@@ -163,6 +168,8 @@ export const MODULES: NavModule[] = [
       { label: 'New transfer', href: '/banking/transfers/new', permission: 'bank:transact' },
       { label: 'New deposit', href: '/banking/deposits/new', permission: 'bank:transact' },
       { label: 'Import a statement', href: '/banking/import', permission: 'bank:import' },
+      { label: 'Loans', href: '/banking/loans', permission: 'customer:read' },
+      { label: 'Insurance', href: '/insurance/policies', permission: 'customer:read' },
       { label: 'Reports', href: '/banking/reports', permission: 'report:read' },
     ],
   },
@@ -211,7 +218,6 @@ export const MODULES: NavModule[] = [
     owns: ['/analytics'],
     tabs: [
       { label: 'Board', href: '/analytics', permission: 'report:overview' },
-      { label: 'Business overview', href: '/reports/business-overview', permission: 'report:overview' },
       { label: 'All reports', href: '/reports', permission: 'report:read' },
     ],
   },
@@ -223,19 +229,16 @@ export const MODULES: NavModule[] = [
     permission: 'report:read',
     owns: ['/reports'],
     preserveQuery: true,
-    // The sidebar lists the handful people open daily. Everything else — and
-    // there are now thirty of them — lives on the index, grouped by the question
-    // it answers, which is a better way to find one than a list of names.
+    // Daily doors only. The full catalogue lives on /reports, grouped by question.
     tabs: [
       { label: 'All reports', href: '/reports' },
+      { label: 'Company Snapshot', href: '/reports/snapshot', permission: 'report:overview' },
       { label: 'Business overview', href: '/reports/business-overview', permission: 'report:overview' },
       { label: 'Profit and Loss', href: '/reports/profit-loss' },
       { label: 'Balance Sheet', href: '/reports/balance-sheet' },
-      { label: 'Statement of Cash Flows', href: '/reports/cash-flow' },
+      { label: 'Cash Flow', href: '/reports/cash-flow' },
+      { label: 'A/R Aging', href: '/reports/ar-aging' },
       { label: 'Trial Balance', href: '/reports/trial-balance' },
-      { label: 'Customer Balance Detail', href: '/reports/statements/customer', also: ['/reports/statements'] },
-      { label: 'General Ledger', href: '/reports/general-ledger' },
-      { label: 'Transaction Detail by Account', href: '/reports/transaction-detail' },
     ],
   },
   {
@@ -270,6 +273,7 @@ export const MODULES: NavModule[] = [
     tabs: [
       { label: 'Home', href: '/settings' },
       { label: 'Organisation', href: '/settings/organization' },
+      { label: 'Extensions', href: '/settings/extensions', permission: 'org:read' },
       { label: 'Billing', href: '/billing', permission: 'org:read' },
       { label: 'Apps & features', href: '/settings/features', permission: 'org:update' },
       { label: 'Marketplace', href: '/settings/marketplace', permission: 'org:update' },

@@ -42,8 +42,11 @@ async function ownerCtx(): Promise<OrgContext | null> {
       legalName: true,
       baseCurrency: true,
       fiscalYearStartMonth: true,
+      fiscalYearStartDay: true,
       timeZone: true,
       allowNegativeStock: true,
+      idleLockSeconds: true,
+      sessionMaxHours: true,
       posTillLedgerMode: true,
       parentOrgId: true,
       addressLine1: true,
@@ -62,6 +65,7 @@ async function ownerCtx(): Promise<OrgContext | null> {
       rentExpiresAt: true,
       maxUsers: true,
       rentNote: true,
+      onboardingCompletedAt: true,
     },
   })
   if (!organization) return null
@@ -78,7 +82,7 @@ async function ownerCtx(): Promise<OrgContext | null> {
     portalCustomerId: null,
     features: DEFAULT_FEATURE_FLAGS,
     organization: { ...orgFields, hasLogo: Boolean(logoStorageKey) },
-    user: owner,
+    user: { ...owner, loginAt: null, hasDeskPin: false },
   }
 }
 
@@ -110,6 +114,7 @@ suite('company group service', () => {
         name: `${stamp}-MAIN`,
         baseCurrency: 'USD',
         fiscalYearStartMonth: 1,
+        fiscalYearStartDay: 1,
         seedChart: false, ...ALL_APPS,
         parentOrgId: null,
       })
@@ -119,6 +124,7 @@ suite('company group service', () => {
         name: `${stamp}-SUB-A`,
         baseCurrency: 'USD',
         fiscalYearStartMonth: 1,
+        fiscalYearStartDay: 1,
         seedChart: false, ...ALL_APPS,
         parentOrgId: main.id,
       })
@@ -128,6 +134,7 @@ suite('company group service', () => {
         name: `${stamp}-SUB-B`,
         baseCurrency: 'USD',
         fiscalYearStartMonth: 1,
+        fiscalYearStartDay: 1,
         seedChart: false, ...ALL_APPS,
         parentOrgId: main.id,
       })
@@ -145,6 +152,7 @@ suite('company group service', () => {
           name: `${stamp}-SUB-C`,
           baseCurrency: 'USD',
           fiscalYearStartMonth: 1,
+        fiscalYearStartDay: 1,
           seedChart: false, ...ALL_APPS,
           parentOrgId: main.id,
         }),
@@ -179,6 +187,7 @@ suite('company group service', () => {
       name: `${stamp}-ATTACH-MAIN`,
       baseCurrency: 'USD',
       fiscalYearStartMonth: 1,
+        fiscalYearStartDay: 1,
       seedChart: false, ...ALL_APPS,
     })
     createdIds.push(main.id)
@@ -187,6 +196,7 @@ suite('company group service', () => {
       name: `${stamp}-ATTACH-CHILD`,
       baseCurrency: 'USD',
       fiscalYearStartMonth: 1,
+        fiscalYearStartDay: 1,
       seedChart: false, ...ALL_APPS,
     })
     createdIds.push(standalone.id)

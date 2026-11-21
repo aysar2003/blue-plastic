@@ -72,6 +72,7 @@ export type IndustryPack = {
       | 'payrollStandard'
       | 'creditLimitWarn'
       | 'closeHardGates'
+      | 'closeSecondApprover'
     >
   >
   setupChecklist: readonly PackChecklistItem[]

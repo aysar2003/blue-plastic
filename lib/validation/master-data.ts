@@ -116,6 +116,32 @@ const contactBase = {
   notes: optionalText(2000),
 }
 
+const customerShipToSchema = z.object({
+  id: optionalId,
+  label: requiredText('Ship-to label', 80),
+  line1: optionalText(200),
+  line2: optionalText(200),
+  city: optionalText(120),
+  region: optionalText(120),
+  postalCode: optionalText(30),
+  country: countryCode,
+  isDefault: z.coerce.boolean().optional(),
+})
+
+function parseShipTosJson(value: unknown) {
+  if (value == null || value === '') return []
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    try {
+      return JSON.parse(trimmed) as unknown
+    } catch {
+      return value
+    }
+  }
+  return value
+}
+
 export const customerSchema = z.object({
   id: optionalId,
   ...contactBase,
@@ -170,6 +196,9 @@ export const customerSchema = z.object({
 
   /** Vendor that is the same party (supplier side). Empty clears the link. */
   linkedVendorId: optionalId,
+
+  /** Extra ship-to / work-site addresses beyond the default shipping fields. */
+  shipTos: z.preprocess(parseShipTosJson, z.array(customerShipToSchema).max(20)).optional(),
 })
 
 export type CustomerInput = z.infer<typeof customerSchema>
@@ -243,6 +272,7 @@ export const itemSchema = z
     inventoryAccountId: optionalId,
     cogsAccountId: optionalId,
     reorderPoint: optionalMoney,
+    maxQty: optionalMoney,
     storeId: optionalId,
     preferredVendorId: optionalId,
     trackLots: z

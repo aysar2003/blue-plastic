@@ -28,7 +28,7 @@ export default async function IntercompanyMatchPage() {
     <>
       <PageHeader
         title="Intercompany matches"
-        description="Pair [IC] journals across companies in the group. Unmatched IC blocks the group close checklist."
+        description="Pair [IC] journals across companies in the group. Confirming a match posts a Dr/Cr elimination memo in each company."
         actions={
           <div className="flex flex-wrap gap-2">
             <Link
@@ -165,6 +165,7 @@ export default async function IntercompanyMatchPage() {
                   <TableHead>Pair</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Matched</TableHead>
+                  <TableHead>Elim journals</TableHead>
                   {canManage ? <TableHead /> : null}
                 </TableRow>
               </TableHeader>
@@ -179,6 +180,25 @@ export default async function IntercompanyMatchPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {row.matchedAt.slice(0, 10)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {row.elimA || row.elimB ? (
+                        <>
+                          {row.elimA ? (
+                            <Link href={`/journals/${row.elimA.id}`} className="hover:underline">
+                              {row.elimA.number}
+                            </Link>
+                          ) : null}
+                          {row.elimA && row.elimB ? ' · ' : null}
+                          {row.elimB ? (
+                            <Link href={`/journals/${row.elimB.id}`} className="hover:underline">
+                              {row.elimB.number}
+                            </Link>
+                          ) : null}
+                        </>
+                      ) : (
+                        '—'
+                      )}
                     </TableCell>
                     {canManage ? (
                       <TableCell className="text-right">

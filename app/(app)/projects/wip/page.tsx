@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
-import { billRetainerAction, billWipAction } from '@/app/(app)/projects/wip/actions'
+import { billRetainerAction, billWipAction, replenishRetainerAction } from '@/app/(app)/projects/wip/actions'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
 import { buttonVariants } from '@/components/ui/button'
@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: 'WIP / utilization' }
 
 export default async function ProjectWipPage() {
   const ctx = await requireOrgContext('report:read')
-  const [projects, utilization, serviceItems] = await Promise.all([
+  const [projects, utilization, serviceItems, aging] = await Promise.all([
     wip.projectWip(ctx),
     wip.utilizationReport(ctx),
     db.item.findMany({
@@ -32,6 +32,7 @@ export default async function ProjectWipPage() {
       orderBy: { name: 'asc' },
       take: 300,
     }),
+    wip.wipAging(ctx),
   ])
   const currency = ctx.organization.baseCurrency
   const defaultItemId = serviceItems[0]?.id ?? ''
@@ -128,6 +129,7 @@ export default async function ProjectWipPage() {
                     </form>
                   ) : null}
                   {defaultItemId ? (
+                    <>
                     <form action={billRetainerAction} className="flex flex-wrap items-center gap-1">
                       <input type="hidden" name="projectId" value={project.id} />
                       <input type="hidden" name="itemId" value={defaultItemId} />
@@ -145,6 +147,23 @@ export default async function ProjectWipPage() {
                         Bill retainer
                       </button>
                     </form>
+                    <form action={replenishRetainerAction} className="flex flex-wrap items-center gap-1">
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <input type="hidden" name="itemId" value={defaultItemId} />
+                      <Input
+                        name="amount"
+                        placeholder="Top-up $"
+                        className="h-8 w-24 text-xs"
+                        required
+                      />
+                      <button
+                        type="submit"
+                        className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                      >
+                        Replenish (unearned)
+                      </button>
+                    </form>
+                    </>
                   ) : (
                     <span className="text-xs text-muted-foreground">Add a service item first</span>
                   )}
@@ -154,6 +173,65 @@ export default async function ProjectWipPage() {
           ))}
         </TableBody>
       </Table>
+      )}
+
+      <h2 className="mb-2 mt-8 text-sm font-semibold">WIP aging</h2>
+      {aging.projects.length === 0 ? (
+        <EmptyState
+          title="No aging WIP"
+          description="Unbilled billable time appears here by age once timesheets are logged."
+        />
+      ) : (
+        <>
+          <Table className="mb-4">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Bucket</TableHead>
+                <TableHead className="text-right">Entries</TableHead>
+                <TableHead className="text-right">Hours</TableHead>
+                <TableHead className="text-right">Value</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {aging.buckets.map((row) => (
+                <TableRow key={row.bucket}>
+                  <TableCell>{row.bucket} days</TableCell>
+                  <TableCell className="text-right tabular">{row.entries}</TableCell>
+                  <TableCell className="text-right tabular">{row.hours}</TableCell>
+                  <TableCell className="text-right tabular">
+                    {formatMoney(row.amount, currency)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <Table className="mb-8">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Project</TableHead>
+                <TableHead className="text-right">Hours</TableHead>
+                <TableHead className="text-right">Value</TableHead>
+                <TableHead>Oldest</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {aging.projects.map((row) => (
+                <TableRow key={row.projectId}>
+                  <TableCell>
+                    <Link href={`/projects/${row.projectId}`} className="hover:underline">
+                      {row.number} · {row.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-right tabular">{row.hours}</TableCell>
+                  <TableCell className="text-right tabular">
+                    {formatMoney(row.amount, currency)}
+                  </TableCell>
+                  <TableCell>{row.oldest} days</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </>
       )}
 
       <h2 className="mb-2 mt-8 text-sm font-semibold">Utilization</h2>

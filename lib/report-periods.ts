@@ -1,11 +1,14 @@
 import {
   addDays,
   addMonths,
+  dayBefore,
   endOfMonth,
   fiscalYearOf,
   fiscalYearRange,
+  normalizeFiscalYearStart,
   startOfMonth,
   type CalendarDate,
+  type FiscalYearStart,
 } from '@/lib/date'
 
 /**
@@ -86,81 +89,142 @@ function startOfWeek(date: CalendarDate): CalendarDate {
 
 export type Period = { from: CalendarDate; to: CalendarDate }
 
-function quarterOf(date: CalendarDate, fiscalYearStartMonth: number): Period {
-  const month = Number(date.slice(5, 7))
-  // Quarters run from the start of the fiscal year, not from January, so a
-  // business whose year starts in April reports April–June as Q1.
-  const offset = (month - fiscalYearStartMonth + 12) % 12
-  const start = addMonths(startOfMonth(date), -(offset % 3))
-  return { from: start, to: endOfMonth(addMonths(start, 2)) }
+function periodIndexInYear(date: CalendarDate, yearStart: CalendarDate, yearEnd: CalendarDate): number {
+  for (let i = 0; i < 12; i++) {
+    const from = addMonths(yearStart, i)
+    const to = i === 11 ? yearEnd : dayBefore(addMonths(yearStart, i + 1))
+    if (date >= from && date <= to) return i
+  }
+  return 0
+}
+
+function anniversaryPeriodAt(
+  yearStart: CalendarDate,
+  yearEnd: CalendarDate,
+  index: number,
+): Period {
+  const from = addMonths(yearStart, index)
+  const to = index === 11 ? yearEnd : dayBefore(addMonths(yearStart, index + 1))
+  return { from, to }
+}
+
+/** The anniversary (or calendar-month) period containing `date`. */
+function fiscalMonthOf(date: CalendarDate, start: FiscalYearStart): Period {
+  if (start.day === 1) {
+    return { from: startOfMonth(date), to: endOfMonth(date) }
+  }
+  const fy = fiscalYearOf(date, start)
+  const year = fiscalYearRange(fy, start)
+  const index = periodIndexInYear(date, year.start, year.end)
+  return anniversaryPeriodAt(year.start, year.end, index)
+}
+
+function quarterOf(date: CalendarDate, start: FiscalYearStart): Period {
+  const fy = fiscalYearOf(date, start)
+  const year = fiscalYearRange(fy, start)
+  if (start.day === 1) {
+    const month = Number(date.slice(5, 7))
+    // Quarters run from the start of the fiscal year, not from January, so a
+    // business whose year starts in April reports April–June as Q1.
+    const offset = (month - start.month + 12) % 12
+    const from = addMonths(startOfMonth(date), -(offset % 3))
+    return { from, to: endOfMonth(addMonths(from, 2)) }
+  }
+  const index = periodIndexInYear(date, year.start, year.end)
+  const qStart = Math.floor(index / 3) * 3
+  return {
+    from: addMonths(year.start, qStart),
+    to: qStart + 2 === 11 ? year.end : dayBefore(addMonths(year.start, qStart + 3)),
+  }
 }
 
 /** Named fiscal quarter 1–4 within a labelled fiscal year. */
 export function fiscalQuarterRange(
   fiscalYear: number,
   quarter: 1 | 2 | 3 | 4,
-  fiscalYearStartMonth: number,
+  fiscalYearStart: FiscalYearStart | number,
+  startDay = 1,
 ): Period {
-  const year = fiscalYearRange(fiscalYear, fiscalYearStartMonth)
-  const start = addMonths(year.start, (quarter - 1) * 3)
-  return { from: start, to: endOfMonth(addMonths(start, 2)) }
+  const start = normalizeFiscalYearStart(fiscalYearStart, startDay)
+  const year = fiscalYearRange(fiscalYear, start)
+  const qStart = (quarter - 1) * 3
+  if (start.day === 1) {
+    const from = addMonths(year.start, qStart)
+    return { from, to: endOfMonth(addMonths(from, 2)) }
+  }
+  return {
+    from: addMonths(year.start, qStart),
+    to: qStart + 2 === 11 ? year.end : dayBefore(addMonths(year.start, qStart + 3)),
+  }
 }
 
 export function resolvePeriod(
   key: PeriodKey,
   today: CalendarDate,
-  fiscalYearStartMonth: number,
+  fiscalYearStart: FiscalYearStart | number,
   custom?: Partial<Period>,
+  startDay = 1,
 ): Period {
-  const thisFy = fiscalYearOf(today, fiscalYearStartMonth)
-  const thisYear = fiscalYearRange(thisFy, fiscalYearStartMonth)
+  const start = normalizeFiscalYearStart(fiscalYearStart, startDay)
+  // Support legacy resolvePeriod(key, today, month, custom) and
+  // resolvePeriod(key, today, month, undefined, day) — when the 4th arg is a
+  // number it was never used that way; custom is always an object or undefined.
+  const thisFy = fiscalYearOf(today, start)
+  const thisYear = fiscalYearRange(thisFy, start)
 
   switch (key) {
     case 'today':
       return { from: today, to: today }
     case 'this-week': {
-      const start = startOfWeek(today)
-      return { from: start, to: addDays(start, 6) }
+      const weekStart = startOfWeek(today)
+      return { from: weekStart, to: addDays(weekStart, 6) }
     }
     case 'last-week': {
-      const start = addDays(startOfWeek(today), -7)
-      return { from: start, to: addDays(start, 6) }
+      const weekStart = addDays(startOfWeek(today), -7)
+      return { from: weekStart, to: addDays(weekStart, 6) }
     }
     case 'all-dates':
       return { from: EARLIEST_DATE, to: today }
     case 'this-month':
-      return { from: startOfMonth(today), to: endOfMonth(today) }
+      return fiscalMonthOf(today, start)
     case 'last-month': {
-      const previous = addMonths(startOfMonth(today), -1)
-      return { from: previous, to: endOfMonth(previous) }
+      if (start.day === 1) {
+        const previous = addMonths(startOfMonth(today), -1)
+        return { from: previous, to: endOfMonth(previous) }
+      }
+      const current = fiscalMonthOf(today, start)
+      const prevEnd = dayBefore(current.from)
+      return fiscalMonthOf(prevEnd, start)
     }
     case 'this-quarter':
-      return quarterOf(today, fiscalYearStartMonth)
+      return quarterOf(today, start)
     case 'last-quarter': {
-      const current = quarterOf(today, fiscalYearStartMonth)
-      const start = addMonths(current.from, -3)
-      return { from: start, to: addDays(current.from, -1) }
+      const current = quarterOf(today, start)
+      return {
+        from: addMonths(current.from, -3),
+        to: dayBefore(current.from),
+      }
     }
     case 'fy-q1':
-      return fiscalQuarterRange(thisFy, 1, fiscalYearStartMonth)
+      return fiscalQuarterRange(thisFy, 1, start)
     case 'fy-q2':
-      return fiscalQuarterRange(thisFy, 2, fiscalYearStartMonth)
+      return fiscalQuarterRange(thisFy, 2, start)
     case 'fy-q3':
-      return fiscalQuarterRange(thisFy, 3, fiscalYearStartMonth)
+      return fiscalQuarterRange(thisFy, 3, start)
     case 'fy-q4':
-      return fiscalQuarterRange(thisFy, 4, fiscalYearStartMonth)
+      return fiscalQuarterRange(thisFy, 4, start)
     case 'last-fy-q1':
-      return fiscalQuarterRange(thisFy - 1, 1, fiscalYearStartMonth)
+      return fiscalQuarterRange(thisFy - 1, 1, start)
     case 'last-fy-q2':
-      return fiscalQuarterRange(thisFy - 1, 2, fiscalYearStartMonth)
+      return fiscalQuarterRange(thisFy - 1, 2, start)
     case 'last-fy-q3':
-      return fiscalQuarterRange(thisFy - 1, 3, fiscalYearStartMonth)
+      return fiscalQuarterRange(thisFy - 1, 3, start)
     case 'last-fy-q4':
-      return fiscalQuarterRange(thisFy - 1, 4, fiscalYearStartMonth)
+      return fiscalQuarterRange(thisFy - 1, 4, start)
     case 'this-fiscal-year':
       return { from: thisYear.start, to: thisYear.end }
     case 'last-fiscal-year': {
-      const previous = fiscalYearRange(thisFy - 1, fiscalYearStartMonth)
+      const previous = fiscalYearRange(thisFy - 1, start)
       return { from: previous.start, to: previous.end }
     }
     case 'year-to-date':

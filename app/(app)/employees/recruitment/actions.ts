@@ -60,7 +60,11 @@ export async function reopenOpening(formData: FormData) {
 export async function hireApplicant(formData: FormData) {
   const ctx = await requireOrgContext('hr:update')
   const applicantId = String(formData.get('applicantId') ?? '').trim()
-  const hired = await hris.hireApplicant(ctx, applicantId)
+  const wageAmount = String(formData.get('wageAmount') ?? '').trim() || null
+  const wageTypeRaw = String(formData.get('wageType') ?? 'MONTHLY')
+  const wageType =
+    wageTypeRaw === 'DAILY' || wageTypeRaw === 'HOURLY' ? wageTypeRaw : 'MONTHLY'
+  const hired = await hris.hireApplicant(ctx, applicantId, { wageAmount, wageType })
   if (!hired.alreadyHired && hired.employeeId) {
     await hris.queueOnboarding(ctx, {
       id: hired.employeeId,

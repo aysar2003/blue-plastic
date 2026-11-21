@@ -24,6 +24,7 @@ import {
   organizationAccountingSchema,
   organizationBrandingSchema,
   organizationFeaturesSchema,
+  organizationSecuritySchema,
   organizationUpdateSchema,
   outboundEmailSchema,
   setActiveFormTemplateSchema,
@@ -54,6 +55,16 @@ export const updateAccountingSettings = action
   .input(organizationAccountingSchema)
   .handler(async (ctx, input) => {
     const org = await organizationService.updateAccountingSettings(ctx, input)
+    revalidatePath('/settings/organization')
+    revalidatePath('/', 'layout')
+    return org
+  })
+
+export const updateSecuritySettings = action
+  .requires('org:update')
+  .input(organizationSecuritySchema)
+  .handler(async (ctx, input) => {
+    const org = await organizationService.updateSecuritySettings(ctx, input)
     revalidatePath('/settings/organization')
     revalidatePath('/', 'layout')
     return org
@@ -139,6 +150,14 @@ export async function updateAccountingSettingsForm(
   return toFormState(result, 'Accounting settings saved.')
 }
 
+export async function updateSecuritySettingsForm(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const result = await updateSecuritySettings(formValues(formData))
+  return toFormState(result, 'Desk lock and session settings saved.')
+}
+
 export const updateFeatureFlags = action
   .requires('org:update')
   .input(organizationFeaturesSchema)
@@ -167,6 +186,7 @@ export async function updateFeatureFlagsForm(
     'creditLimitWarn',
     'payrollStandard',
     'closeHardGates',
+    'closeSecondApprover',
     'enableTax',
     ...MODULE_FORM_KEY_LIST,
     ...DOCUMENT_KIND_FORM_KEY_LIST,

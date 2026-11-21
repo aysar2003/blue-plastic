@@ -205,6 +205,20 @@ export const SYSTEM_ACCOUNT_ROLES: SystemAccountRole[] = [
     types: ['ASSET'],
     subtypes: ['OTHER_CURRENT_ASSET', 'ACCOUNTS_RECEIVABLE'],
   },
+  {
+    key: 'IC_ELIMINATION_DEBIT',
+    label: 'IC elimination (debit)',
+    used: 'Debit side of the memo journal posted when an intercompany match is confirmed.',
+    types: ['ASSET'],
+    subtypes: ['OTHER_CURRENT_ASSET'],
+  },
+  {
+    key: 'IC_ELIMINATION_CREDIT',
+    label: 'IC elimination (credit)',
+    used: 'Credit side of the memo journal posted when an intercompany match is confirmed.',
+    types: ['LIABILITY'],
+    subtypes: ['OTHER_CURRENT_LIABILITY'],
+  },
 ]
 
 export type SystemAccountBinding = {

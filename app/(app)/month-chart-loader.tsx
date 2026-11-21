@@ -10,7 +10,10 @@ import { GlobalMonthChart, type MonthChartData } from '@/components/layout/globa
 export async function MonthChartLoader({ ctx }: { ctx: OrgContext }) {
   const currency = ctx.organization.baseCurrency
   const now = today(ctx.organization.timeZone)
-  const month = resolvePeriod('this-month', now, ctx.organization.fiscalYearStartMonth)
+  const month = resolvePeriod('this-month', now, {
+    month: ctx.organization.fiscalYearStartMonth,
+    day: ctx.organization.fiscalYearStartDay,
+  })
 
   const [report, openInvoices] = await Promise.all([
     profitAndLoss(ctx.orgId, { ...month, basis: 'accrual' }),

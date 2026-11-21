@@ -64,3 +64,24 @@ export async function stampClaimsExportAction(formData: FormData) {
     `${PATH}/claims?format=${format}${includeExported ? '&includeExported=1' : ''}`,
   )
 }
+
+export async function submitClaimAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await hospital.submitClaim(ctx, String(formData.get('visitId') ?? ''))
+  revalidatePath(PATH)
+  redirect(`${PATH}/claims`)
+}
+
+export async function applyClaimRemittanceAction(formData: FormData) {
+  const ctx = await requireOrgContext('payment:create')
+  const status = String(formData.get('status') ?? 'PAID') === 'DENIED' ? 'DENIED' : 'PAID'
+  await hospital.applyClaimRemittance(ctx, {
+    visitId: String(formData.get('visitId') ?? ''),
+    status,
+    note: String(formData.get('note') ?? ''),
+    depositAccountId: String(formData.get('depositAccountId') || '') || null,
+    amount: String(formData.get('amount') || '') || null,
+  })
+  revalidatePath(PATH)
+  redirect(`${PATH}/claims`)
+}

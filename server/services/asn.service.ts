@@ -2,6 +2,7 @@ import 'server-only'
 
 import { Decimal } from '@/lib/money'
 import { toDate, today } from '@/lib/date'
+import { asnPoDiscrepancy, groupAsnByDockDay } from '@/lib/erp/asn'
 import { canReceiveAsn, matchAsnToPoLines } from '@/lib/erp/verticals-p5'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -196,5 +197,98 @@ export async function scheduleDock(
       dockName: input.dockName?.trim() || null,
       dockAt: input.dockAt?.trim() ? new Date(input.dockAt) : null,
     },
+  })
+}
+
+export async function dockCalendar(ctx: OrgContext) {
+  const rows = await db.asnShipment.findMany({
+    where: { orgId: ctx.orgId, status: { not: 'CANCELLED' } },
+    select: {
+      id: true,
+      number: true,
+      dockName: true,
+      dockAt: true,
+      expectedAt: true,
+      status: true,
+      vendor: { select: { displayName: true } },
+    },
+    orderBy: { dockAt: 'asc' },
+    take: 200,
+  })
+  return groupAsnByDockDay(
+    rows.map((row) => ({
+      id: row.id,
+      number: row.number,
+      vendorName: row.vendor.displayName,
+      dockName: row.dockName,
+      dockAt: row.dockAt,
+      expectedAt: row.expectedAt,
+      status: row.status,
+    })),
+  )
+}
+
+export async function discrepancyReport(ctx: OrgContext) {
+  const shipments = await db.asnShipment.findMany({
+    where: {
+      orgId: ctx.orgId,
+      status: { not: 'CANCELLED' },
+      purchaseDocumentId: { not: null },
+    },
+    include: {
+      vendor: { select: { displayName: true } },
+      purchaseDocument: {
+        select: {
+          id: true,
+          number: true,
+          lines: {
+            select: {
+              itemId: true,
+              quantity: true,
+              quantityReceived: true,
+              item: { select: { name: true } },
+              description: true,
+            },
+          },
+        },
+      },
+      lines: {
+        select: {
+          itemId: true,
+          quantity: true,
+          description: true,
+          item: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  })
+
+  return shipments.flatMap((shipment) => {
+    const po = shipment.purchaseDocument
+    if (!po) return []
+    const rows = asnPoDiscrepancy({
+      asnLines: shipment.lines.map((line) => ({
+        itemId: line.itemId,
+        quantity: line.quantity.toString(),
+        itemName: line.item?.name ?? line.description,
+      })),
+      poLines: po.lines.map((line) => ({
+        itemId: line.itemId,
+        ordered: line.quantity.toString(),
+        received: line.quantityReceived.toString(),
+        itemName: line.item?.name ?? line.description,
+      })),
+    })
+    return rows
+      .filter((row) => row.kind !== 'match')
+      .map((row) => ({
+        asnId: shipment.id,
+        asnNumber: shipment.number,
+        poNumber: po.number,
+        vendorName: shipment.vendor.displayName,
+        ...row,
+      }))
   })
 }

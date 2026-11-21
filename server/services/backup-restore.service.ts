@@ -145,6 +145,8 @@ export async function replaceCompanyFromBackup(
           baseCurrency: typeof org.baseCurrency === 'string' ? org.baseCurrency : 'USD',
           fiscalYearStartMonth:
             typeof org.fiscalYearStartMonth === 'number' ? org.fiscalYearStartMonth : 1,
+          fiscalYearStartDay:
+            typeof org.fiscalYearStartDay === 'number' ? org.fiscalYearStartDay : 1,
           taxRegistrationNumber: (org.taxRegistrationNumber as string | null) ?? null,
           addressLine1: (org.addressLine1 as string | null) ?? null,
           addressLine2: (org.addressLine2 as string | null) ?? null,

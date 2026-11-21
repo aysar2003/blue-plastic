@@ -29,6 +29,41 @@ export function sumWeekdayCapacity(values: readonly (string | number)[]): number
   }, 0)
 }
 
+/** Monday = 0 … Sunday = 6 for a calendar date (YYYY-MM-DD or Date). */
+export function weekdayIndexMon0(date: string | Date): number {
+  const iso = typeof date === 'string' ? date.slice(0, 10) : date.toISOString().slice(0, 10)
+  const utc = new Date(`${iso}T00:00:00.000Z`)
+  const js = utc.getUTCDay()
+  return js === 0 ? 6 : js - 1
+}
+
+/**
+ * Subtract holiday/exception days from weekly capacity.
+ * Each exception zeros that weekday's minutes (or weekly/7 when no weekday split).
+ */
+export function capacityAfterExceptions(
+  weeklyCapacity: number,
+  capacityByWeekday: number[] | null | undefined,
+  exceptionDates: readonly (string | Date)[],
+): number {
+  if (exceptionDates.length === 0) return weeklyCapacity
+  const byDay =
+    capacityByWeekday && capacityByWeekday.length === 7
+      ? capacityByWeekday.map((n) => (Number.isFinite(n) && n > 0 ? n : 0))
+      : null
+  const perDayFallback = weeklyCapacity > 0 ? weeklyCapacity / 7 : 0
+  const seen = new Set<number>()
+  let subtract = 0
+  for (const date of exceptionDates) {
+    const idx = weekdayIndexMon0(date)
+    if (seen.has(idx)) continue
+    seen.add(idx)
+    subtract += byDay ? byDay[idx] ?? 0 : perDayFallback
+  }
+  const next = weeklyCapacity - subtract
+  return next > 0 ? next : 0
+}
+
 export type CapacityCsvRow = {
   centerName: string
   storeName: string | null

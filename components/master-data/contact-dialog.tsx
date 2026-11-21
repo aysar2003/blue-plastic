@@ -48,6 +48,17 @@ export type ContactValues = {
   shippingLine1?: string | null
   shippingCity?: string | null
   shippingPostalCode?: string | null
+  shipTos?: {
+    id?: string | null
+    label: string
+    line1?: string | null
+    line2?: string | null
+    city?: string | null
+    region?: string | null
+    postalCode?: string | null
+    country?: string | null
+    isDefault?: boolean
+  }[]
   paymentTermId?: string | null
   creditLimit?: string | null
   currencyCode?: string | null
@@ -141,6 +152,17 @@ export function ContactDialog({
   const [linkOptions, setLinkOptions] = useState<Option[]>([])
   const handled = useRef(false)
   const [mergeOpen, setMergeOpen] = useState(false)
+  const [shipTos, setShipTos] = useState(
+    () =>
+      contact?.shipTos?.map((row) => ({
+        key: row.id ?? Math.random().toString(36).slice(2),
+        label: row.label ?? '',
+        line1: row.line1 ?? '',
+        city: row.city ?? '',
+        postalCode: row.postalCode ?? '',
+        country: row.country ?? '',
+      })) ?? [],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -332,6 +354,126 @@ export function ContactDialog({
                       defaultValue={contact?.shippingPostalCode ?? ''}
                     />
                   </Field>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Extra ship-to addresses
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setShipTos((rows) => [
+                          ...rows,
+                          {
+                            key: Math.random().toString(36).slice(2),
+                            label: '',
+                            line1: '',
+                            city: '',
+                            postalCode: '',
+                            country: '',
+                          },
+                        ])
+                      }
+                    >
+                      Add ship-to
+                    </Button>
+                  </div>
+                  <input
+                    type="hidden"
+                    name="shipTos"
+                    value={JSON.stringify(
+                      shipTos
+                        .filter((row) => row.label.trim() || row.line1.trim())
+                        .map((row) => ({
+                          label: row.label.trim() || row.line1.trim() || 'Ship-to',
+                          line1: row.line1.trim() || null,
+                          city: row.city.trim() || null,
+                          postalCode: row.postalCode.trim() || null,
+                          country: row.country.trim() || null,
+                        })),
+                    )}
+                  />
+                  {shipTos.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Add warehouses, job sites, or villas. Sales documents can pick one as ship-to /
+                      work site.
+                    </p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {shipTos.map((row, index) => (
+                        <li key={row.key} className="grid gap-2 rounded-md border p-3 sm:grid-cols-4">
+                          <Field name={`shipToLabel-${index}`} label="Label">
+                            <Input
+                              value={row.label}
+                              onChange={(event) =>
+                                setShipTos((rows) =>
+                                  rows.map((item) =>
+                                    item.key === row.key ? { ...item, label: event.target.value } : item,
+                                  ),
+                                )
+                              }
+                              placeholder="Warehouse, Site A"
+                            />
+                          </Field>
+                          <Field name={`shipToLine1-${index}`} label="Address">
+                            <Input
+                              value={row.line1}
+                              onChange={(event) =>
+                                setShipTos((rows) =>
+                                  rows.map((item) =>
+                                    item.key === row.key ? { ...item, line1: event.target.value } : item,
+                                  ),
+                                )
+                              }
+                            />
+                          </Field>
+                          <Field name={`shipToCity-${index}`} label="City">
+                            <Input
+                              value={row.city}
+                              onChange={(event) =>
+                                setShipTos((rows) =>
+                                  rows.map((item) =>
+                                    item.key === row.key ? { ...item, city: event.target.value } : item,
+                                  ),
+                                )
+                              }
+                            />
+                          </Field>
+                          <div className="flex items-end gap-2">
+                            <Field name={`shipToCountry-${index}`} label="Country" className="flex-1">
+                              <Input
+                                value={row.country}
+                                maxLength={2}
+                                className="uppercase"
+                                onChange={(event) =>
+                                  setShipTos((rows) =>
+                                    rows.map((item) =>
+                                      item.key === row.key
+                                        ? { ...item, country: event.target.value }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                              />
+                            </Field>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setShipTos((rows) => rows.filter((item) => item.key !== row.key))
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </div>
             </>

@@ -16,6 +16,8 @@ export type VerifiedLogin = {
   audience: VerifiedAudience
   /** Home membership role when present. */
   role: string | null
+  /** Home organisation id when present (for company 2FA enforce). */
+  homeOrgId: string | null
   needsTwoFactor: boolean
   otp2faEnabled: boolean
   totpEnabled: boolean
@@ -94,6 +96,7 @@ export async function verifyCredentials(
     email: user.email,
     audience,
     role,
+    homeOrgId: homeId,
     needsTwoFactor: userNeedsTwoFactor(user),
     // System owners always receive an email OTP even when otp2fa is not toggled on.
     otp2faEnabled: Boolean(user.otp2faEnabledAt) || user.isSystemOwner,

@@ -8,8 +8,8 @@
 
 import { z } from 'zod'
 
-import { calendarDate } from '@/lib/validation/common'
-import { paymentSchema } from '@/lib/validation/sales'
+import { calendarDate, cuid } from '@/lib/validation/common'
+import { paymentSchema, salesDocumentSchema } from '@/lib/validation/sales'
 import { purchaseDocumentSchema } from '@/lib/validation/purchases'
 import type { Permission } from '@/lib/permissions-catalog'
 
@@ -20,9 +20,9 @@ export type CapabilityDef = {
   title: string
   description: string
   /** World-ERP layer this capability serves. */
-  layer: 'L1' | 'L3' | 'L4' | 'L8' | 'L9'
+  layer: 'L1' | 'L2' | 'L3' | 'L4' | 'L5' | 'L6' | 'L8' | 'L9'
   /** Operating loop label for readiness tests. */
-  loop: 'sell' | 'collect' | 'buy' | 'stock' | 'books'
+  loop: 'sell' | 'collect' | 'buy' | 'stock' | 'books' | 'crm'
   permission: Permission
   method: CapabilityHttpMethod
   /** Absolute path under this app, e.g. /api/v1/ar/open */
@@ -46,6 +46,44 @@ export const trialBalanceInput = z.object({
 export const paymentCreateInput = paymentSchema
 
 export const poCreateInput = purchaseDocumentSchema
+
+export const customersListInput = emptyInput
+
+export const serviceJobsListInput = emptyInput
+
+export const invoicesListInput = z.object({
+  q: z.string().optional(),
+  page: z.string().optional(),
+  pageSize: z.string().optional(),
+  status: z.string().optional(),
+  customerId: z.string().optional(),
+  sort: z.string().optional(),
+  dir: z.string().optional(),
+})
+
+export const invoicesCreateInput = salesDocumentSchema
+
+export const serviceJobGetInput = z.object({
+  id: cuid,
+})
+
+export const serviceJobCompleteInput = z.object({
+  id: cuid,
+})
+
+export const crmBoardInput = emptyInput
+
+export const mrpPlanInput = z.object({
+  itemId: cuid,
+  qty: z
+    .string()
+    .trim()
+    .regex(/^\d{1,12}(\.\d{1,4})?$/, 'Enter a quantity')
+    .optional(),
+  fromDemand: z
+    .union([z.literal('1'), z.literal('true'), z.literal('0'), z.literal('false'), z.literal('')])
+    .optional(),
+})
 
 export const ERP_CAPABILITIES = [
   {
@@ -107,6 +145,102 @@ export const ERP_CAPABILITIES = [
     path: '/api/v1/reports/trial-balance',
     input: trialBalanceInput,
     service: 'accounting.trialBalance',
+  },
+  {
+    id: 'customers.list',
+    title: 'List customers',
+    description: 'Active customers with display name and open AR balance.',
+    layer: 'L2',
+    loop: 'sell',
+    permission: 'customer:read',
+    method: 'GET',
+    path: '/api/v1/customers',
+    input: customersListInput,
+    service: 'contact.listCustomers',
+  },
+  {
+    id: 'invoices.list',
+    title: 'List invoices',
+    description: 'Customer invoices (sales documents of type INVOICE).',
+    layer: 'L3',
+    loop: 'sell',
+    permission: 'invoice:read',
+    method: 'GET',
+    path: '/api/v1/invoices',
+    input: invoicesListInput,
+    service: 'sales.list(INVOICE)',
+  },
+  {
+    id: 'invoices.create',
+    title: 'Create invoice',
+    description: 'Create a customer invoice (draft or posted per saveAsDraft).',
+    layer: 'L3',
+    loop: 'sell',
+    permission: 'invoice:create',
+    method: 'POST',
+    path: '/api/v1/invoices',
+    input: invoicesCreateInput,
+    service: 'sales.create(INVOICE)',
+  },
+  {
+    id: 'serviceJobs.list',
+    title: 'List service jobs',
+    description: 'Field / van service jobs (FSM lite).',
+    layer: 'L3',
+    loop: 'sell',
+    permission: 'invoice:read',
+    method: 'GET',
+    path: '/api/v1/service-jobs',
+    input: serviceJobsListInput,
+    service: 'service-job.list',
+  },
+  {
+    id: 'serviceJobs.get',
+    title: 'Get service job',
+    description: 'One field / van service job by id, including lines.',
+    layer: 'L3',
+    loop: 'sell',
+    permission: 'invoice:read',
+    method: 'GET',
+    path: '/api/v1/service-jobs/get',
+    input: serviceJobGetInput,
+    service: 'service-job.get',
+  },
+  {
+    id: 'serviceJobs.complete',
+    title: 'Complete service job',
+    description: 'Complete a scheduled job (invoice + COGS, van stock issue).',
+    layer: 'L3',
+    loop: 'sell',
+    permission: 'invoice:create',
+    method: 'POST',
+    path: '/api/v1/service-jobs/complete',
+    input: serviceJobCompleteInput,
+    service: 'service-job.complete',
+  },
+  {
+    id: 'crm.board',
+    title: 'CRM pipeline board',
+    description: 'Opportunities and follow-up activities.',
+    layer: 'L6',
+    loop: 'crm',
+    permission: 'customer:read',
+    method: 'GET',
+    path: '/api/v1/crm/board',
+    input: crmBoardInput,
+    service: 'crm.listBoard',
+  },
+  {
+    id: 'mrp.materialsPlan',
+    title: 'Materials plan',
+    description: 'BOM explode + shortage vs on-hand; optional qty from open sales demand.',
+    layer: 'L5',
+    loop: 'stock',
+    permission: 'inventory:read',
+    method: 'GET',
+    path: '/api/v1/mrp/plan',
+    input: mrpPlanInput,
+    service: 'assembly-build.materialsPlan',
   },
 ] as const satisfies readonly CapabilityDef[]
 

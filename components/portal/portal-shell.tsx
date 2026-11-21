@@ -12,6 +12,7 @@ const NAV: { href: string; label: string; exact?: boolean }[] = [
   { href: '/portal', label: 'Home', exact: true },
   { href: '/portal/invoices', label: 'Invoices' },
   { href: '/portal/quotes', label: 'Quotes' },
+  { href: '/portal/projects', label: 'Projects' },
   { href: '/portal/payments', label: 'Payments' },
   { href: '/portal/statement', label: 'Statements' },
 ]

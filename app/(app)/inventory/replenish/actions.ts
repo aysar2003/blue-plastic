@@ -23,6 +23,19 @@ export async function draftReplenishAction(formData: FormData) {
   redirect('/inventory/replenish?storeId=' + encodeURIComponent(toStoreId))
 }
 
+export async function upsertStoreLevelAction(formData: FormData) {
+  const ctx = await requireOrgContext('inventory:adjust')
+  const storeId = String(formData.get('storeId') ?? '')
+  await inventory.upsertStoreItemLevel(ctx, {
+    storeId,
+    itemId: String(formData.get('itemId') ?? ''),
+    minQty: String(formData.get('minQty') ?? '') || null,
+    maxQty: String(formData.get('maxQty') ?? '') || null,
+  })
+  revalidatePath('/inventory/replenish')
+  redirect('/inventory/replenish?storeId=' + encodeURIComponent(storeId))
+}
+
 export async function postDraftReplenishAction(formData: FormData) {
   const ctx = await requireOrgContext('inventory:adjust')
   const toStoreId = String(formData.get('toStoreId') ?? '')

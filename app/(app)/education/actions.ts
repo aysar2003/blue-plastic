@@ -99,3 +99,13 @@ export async function withdrawEnrollmentAction(formData: FormData) {
   revalidatePath(PATH)
   redirect(`${PATH}/enrollments`)
 }
+
+export async function awardScholarshipAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await education.awardScholarship(ctx, {
+    enrollmentId: String(formData.get('enrollmentId') ?? ''),
+    percent: String(formData.get('percent') ?? '0'),
+  })
+  revalidatePath(PATH)
+  redirect(`${PATH}/enrollments`)
+}

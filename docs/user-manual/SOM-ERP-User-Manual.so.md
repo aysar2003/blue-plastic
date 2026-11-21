@@ -332,7 +332,17 @@ Isticmaal kuwan marka shirkaddu app-ka furto.
 
 ### Projects
 
-[Projects](/projects) — folder shaqo oo ku xidha estimates, sales orders, invoices, POs, iyo bills hal shaqo macmiil. Reports waxay muujisaa in shaqadu faa’iido samaysay iyo in kale.
+[Projects](/projects) — folder shaqo oo ku xidha estimates, sales orders, invoices, POs, iyo bills hal shaqo macmiil.
+
+**Waqtiga (time):** Ku diiwaangeli saacadaha mashruuca (billable rate + cost rate doorasho). Fur [WIP & retainers](/projects/wip) si aad ugu soo saarto invoice waqtiga aan la bixin, ama invoice cusub → **Add billable time**.
+
+**Dhismaha:** [Progress](/projects/progress) % qandaraaska; [Contracts](/projects/contracts) milestones. Budget / contract / retainer ka beddel foomka mashruuca.
+
+**Tasks:** Kanban oo leh subtasks, blockers, iyo Gantt (fur mashruuc → **Gantt**). [My tasks](/projects/my-tasks) iyo [My timesheets](/projects/timesheets). [Planning](/planning) dadka maalmaha.
+
+**Lacag & class:** Job P&L lacagaha ajnabiga → base shirkadda. Mashruuc ku xidhid iib/bill waxay buuxisaa class-ka. POS waxay ku calaamadin kartaa iib. Portal → Projects.
+
+Reports: [Projects → Reports](/projects/reports).
 
 ### Documents & knowledge
 

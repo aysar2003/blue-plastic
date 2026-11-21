@@ -133,7 +133,12 @@ export async function main() {
     },
   })
   await db.$transaction(async (tx) => {
-    for (let y = 2019; y <= 2027; y++) await ensureFiscalYear(tx, org.id, org.fiscalYearStartMonth, y)
+    for (let y = 2019; y <= 2027; y++) {
+      await ensureFiscalYear(tx, org.id, {
+        month: org.fiscalYearStartMonth,
+        day: org.fiscalYearStartDay ?? 1,
+      }, y)
+    }
   })
 
   const registerAcct = (map: Map<string, string>, name: string, id: string) => {

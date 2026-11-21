@@ -53,6 +53,8 @@ export async function requireApiKeyContext(
       name: createdBy.name,
       email: createdBy.email,
       image: createdBy.image,
+      loginAt: null,
+      hasDeskPin: false,
     },
     isSystemOwner: false,
     canConnect: false,

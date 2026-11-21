@@ -8,7 +8,10 @@ import { DocumentAttachments } from '@/components/data/document-attachments'
 import { DocumentHistory } from '@/components/data/document-history'
 import { PageHeader } from '@/components/data/page-header'
 import { RecordedBy } from '@/components/data/recorded-by'
-import { ConvertSalesDocumentActions } from '@/components/sales/document-actions'
+import {
+  ConvertSalesDocumentActions,
+  ProposalResponseActions,
+} from '@/components/sales/document-actions'
 import { SalesPaperFrame } from '@/components/sales/paper-width'
 import { DeleteButton } from '@/components/data/delete-record'
 import { DocumentActions } from '@/components/print/document-actions'
@@ -158,6 +161,14 @@ export default async function SalesDocumentPage({
               >
                 Delivery {deliveryNote.number}
               </Link>
+            ) : null}
+            {(config.type === 'ESTIMATE' || config.type === 'QUOTATION') &&
+            ctx.permissions.has('invoice:update') ? (
+              <ProposalResponseActions
+                id={id}
+                number={document.number}
+                status={document.status}
+              />
             ) : null}
             {canConvert ? (
               <ConvertSalesDocumentActions

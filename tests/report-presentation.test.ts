@@ -63,6 +63,23 @@ describe('report periods', () => {
     expect(resolvePeriod('this-fiscal-year', today, 10)).toEqual({ from: '2025-10-01', to: '2026-09-30' })
   })
 
+  it('resolves an anniversary fiscal year starting mid-month', () => {
+    const apr20 = { month: 4, day: 20 }
+    expect(resolvePeriod('this-fiscal-year', today, apr20)).toEqual({
+      from: '2026-04-20',
+      to: '2027-04-19',
+    })
+    // 29 Aug falls in the anniversary period 20 Aug–19 Sep.
+    expect(resolvePeriod('this-month', today, apr20)).toEqual({
+      from: '2026-08-20',
+      to: '2026-09-19',
+    })
+    expect(resolvePeriod('fy-q1', today, apr20)).toEqual({
+      from: '2026-04-20',
+      to: '2026-07-19',
+    })
+  })
+
   it('compares against the same length of period immediately before', () => {
     expect(priorPeriod({ from: '2026-08-01', to: '2026-08-31' })).toEqual({
       from: '2026-07-01',

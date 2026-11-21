@@ -1,9 +1,9 @@
 import 'server-only'
 
-import type { Prisma, ProjectStatus } from '@prisma/client'
+import { Prisma, type ProjectStatus } from '@prisma/client'
 
 import { toCalendarDate, toDate } from '@/lib/date'
-import { ZERO } from '@/lib/money'
+import { Decimal, ZERO } from '@/lib/money'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { ProjectInput } from '@/lib/validation/project'
 import { requestMeta, writeAudit } from '@/server/audit'
@@ -30,6 +30,15 @@ const DETAIL_SELECT = {
   description: true,
   createdById: true,
   storeId: true,
+  contractValue: true,
+  retentionPercent: true,
+  retainerAmount: true,
+  retainerRemaining: true,
+  budgetAmount: true,
+  billedPercent: true,
+  currencyCode: true,
+  trackingCategoryId: true,
+  boardStages: true,
   store: { select: { id: true, name: true } },
   customer: {
     select: {
@@ -193,6 +202,17 @@ export async function get(ctx: OrgContext, id: string) {
     description: project.description,
     startDate: project.startDate ? toCalendarDate(project.startDate) : null,
     endDate: project.endDate ? toCalendarDate(project.endDate) : null,
+    storeId: project.storeId,
+    store: project.store,
+    contractValue: project.contractValue?.toString() ?? null,
+    retentionPercent: project.retentionPercent?.toString() ?? null,
+    retainerAmount: project.retainerAmount?.toString() ?? null,
+    retainerRemaining: project.retainerRemaining?.toString() ?? null,
+    budgetAmount: project.budgetAmount?.toString() ?? null,
+    billedPercent: project.billedPercent?.toString() ?? null,
+    currencyCode: project.currencyCode,
+    trackingCategoryId: project.trackingCategoryId,
+    boardStages: project.boardStages,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
     customer: project.customer,
@@ -273,6 +293,14 @@ export async function create(ctx: OrgContext, input: ProjectInput) {
     if (clash) throw numberTaken()
 
     const storeId = await resolveSiteStoreId(tx, ctx, input.storeId)
+    const trackingCategory = await tx.trackingCategory.create({
+      data: {
+        orgId: ctx.orgId,
+        name: `PRJ ${number} · ${input.name}`.slice(0, 120),
+        isActive: true,
+      },
+      select: { id: true },
+    })
     const project = await tx.project.create({
       data: {
         orgId: ctx.orgId,
@@ -285,6 +313,17 @@ export async function create(ctx: OrgContext, input: ProjectInput) {
         startDate: input.startDate ? toDate(input.startDate) : null,
         endDate: input.endDate ? toDate(input.endDate) : null,
         storeId,
+        contractValue: input.contractValue != null ? new Decimal(input.contractValue) : null,
+        retentionPercent:
+          input.retentionPercent != null ? new Decimal(input.retentionPercent) : null,
+        retainerAmount: input.retainerAmount != null ? new Decimal(input.retainerAmount) : null,
+        budgetAmount: input.budgetAmount != null ? new Decimal(input.budgetAmount) : null,
+        currencyCode: input.currencyCode ?? null,
+        boardStages:
+          input.boardStagesText === null
+            ? Prisma.JsonNull
+            : (input.boardStagesText as Prisma.InputJsonValue),
+        trackingCategoryId: trackingCategory.id,
         createdById: ctx.userId,
       },
       select: { id: true, number: true, name: true },
@@ -336,6 +375,16 @@ export async function update(ctx: OrgContext, id: string, input: ProjectInput) {
         startDate: input.startDate ? toDate(input.startDate) : null,
         endDate: input.endDate ? toDate(input.endDate) : null,
         storeId,
+        contractValue: input.contractValue != null ? new Decimal(input.contractValue) : null,
+        retentionPercent:
+          input.retentionPercent != null ? new Decimal(input.retentionPercent) : null,
+        retainerAmount: input.retainerAmount != null ? new Decimal(input.retainerAmount) : null,
+        budgetAmount: input.budgetAmount != null ? new Decimal(input.budgetAmount) : null,
+        currencyCode: input.currencyCode ?? null,
+        boardStages:
+          input.boardStagesText === null
+            ? Prisma.JsonNull
+            : (input.boardStagesText as Prisma.InputJsonValue),
       },
       select: { id: true, number: true, name: true },
     })
@@ -417,6 +466,8 @@ export async function listForPicker(ctx: OrgContext) {
       customerId: true,
       siteLocation: true,
       status: true,
+      trackingCategoryId: true,
+      currencyCode: true,
     },
     orderBy: [{ updatedAt: 'desc' }],
     take: 2000,
@@ -427,6 +478,8 @@ export async function listForPicker(ctx: OrgContext) {
     customerId: row.customerId,
     siteLocation: row.siteLocation,
     status: row.status,
+    trackingCategoryId: row.trackingCategoryId,
+    currencyCode: row.currencyCode,
   }))
 }
 

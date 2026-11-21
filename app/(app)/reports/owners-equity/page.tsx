@@ -16,7 +16,15 @@ export default async function OwnersEquityReportPage() {
     <>
       <PageHeader
         title="Owner&apos;s equity statement"
-        description="Capital, retained earnings, and recorded equity events."
+        description="Capital, retained earnings, and recorded equity events. Events post to statement accounts (capital, drawings, retained earnings)."
+        actions={
+          <a
+            href="/api/exports/equity-movement"
+            className="text-sm text-primary underline-offset-4 hover:underline"
+          >
+            Period movement CSV
+          </a>
+        }
       />
       <Card className="max-w-lg space-y-2 p-6 text-sm">
         <Row label="Owner's capital (3000 series)" amount={report.capitalBalance} currency={report.currency} />

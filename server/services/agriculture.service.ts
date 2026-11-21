@@ -9,7 +9,12 @@ import { db, type Tx } from '@/server/db'
 
 export async function seasonalCostReport(
   ctx: OrgContext,
-  options: { storeId?: string | null; originQuery?: string | null } = {},
+  options: {
+    storeId?: string | null
+    originQuery?: string | null
+    projectId?: string | null
+    trackingCategoryId?: string | null
+  } = {},
 ) {
   const farmStores = await db.store.findMany({
     where: {
@@ -36,6 +41,8 @@ export async function seasonalCostReport(
       id: true,
       lotNumber: true,
       originLabel: true,
+      trackingCategoryId: true,
+      projectId: true,
       itemId: true,
       item: { select: { name: true, trackLots: true } },
     },
@@ -73,6 +80,8 @@ export async function seasonalCostReport(
         lotId: lot.id,
         lotNumber: lot.lotNumber,
         originLabel: lot.originLabel,
+        projectId: lot.projectId,
+        trackingCategoryId: lot.trackingCategoryId,
         itemId: lot.itemId,
         itemName: lot.item.name,
         storeId: store.id,
@@ -90,4 +99,40 @@ export async function seasonalCostReport(
     farmStoreCount: farmStores.length,
     farmStores,
   }
+}
+
+/** Tag a harvest lot to a season project and/or class. */
+export async function linkLotSeason(
+  ctx: OrgContext,
+  input: { lotId: string; projectId?: string | null; trackingCategoryId?: string | null },
+) {
+  const lot = await db.itemLot.findFirst({
+    where: { id: input.lotId, orgId: ctx.orgId },
+    select: { id: true },
+  })
+  if (!lot) return null
+
+  if (input.projectId) {
+    const project = await db.project.findFirst({
+      where: { id: input.projectId, orgId: ctx.orgId },
+      select: { id: true },
+    })
+    if (!project) return null
+  }
+  if (input.trackingCategoryId) {
+    const cls = await db.trackingCategory.findFirst({
+      where: { id: input.trackingCategoryId, orgId: ctx.orgId, isActive: true },
+      select: { id: true },
+    })
+    if (!cls) return null
+  }
+
+  return db.itemLot.update({
+    where: { id: lot.id },
+    data: {
+      projectId: input.projectId || null,
+      trackingCategoryId: input.trackingCategoryId || null,
+    },
+    select: { id: true, projectId: true, trackingCategoryId: true },
+  })
 }

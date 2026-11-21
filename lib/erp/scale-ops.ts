@@ -9,3 +9,14 @@ export function partitionKeyForOrg(orgId: string): string {
 export function liveLedgerWindowYears(): number {
   return LIVE_FISCAL_YEARS
 }
+
+export const REPORT_PACK_LIVE_YEAR_WARNING =
+  'Scheduled report packs and KPI snapshots should target live fiscal years only. Archived years are not in the hot ledger.'
+
+export function liveYearWindowLabel(
+  liveFromYear: number,
+  currentFiscalYear: number,
+  windowYears: number = liveLedgerWindowYears(),
+): string {
+  return `FY ${liveFromYear}–${currentFiscalYear} (${windowYears}-year live window)`
+}

@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   experimental: {
     // `forbidden()` renders app/forbidden.tsx instead of the generic error page.
     authInterrupts: true,
+    // Tree-shake lucide (hundreds of icon imports) into per-icon chunks.
+    optimizePackageImports: ['lucide-react'],
     serverActions: {
       // Customer papers / logos stay under ~4 MB. Workspace Documents upload
       // straight to R2 via presigned PUT and never pass through this limit.

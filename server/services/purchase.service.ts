@@ -45,6 +45,7 @@ import { assignDocumentNumber, numberTaken } from '@/server/sequences'
 import { workbookRecords } from '@/server/services/workbook'
 import * as approvalService from '@/server/services/approval.service'
 import { resolveProjectId } from '@/server/services/project.service'
+import { poStillEncumbered } from '@/lib/erp/commitment-budget'
 import { requiresRestrictedFundClass } from '@/lib/erp/ngo-funds'
 import {
   orgHasRestrictedSpending,
@@ -910,7 +911,14 @@ async function createWithin(
   {
     const { vendor, offsetCustomerId } = await resolvePurchaseParty(tx, ctx, type, input)
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
-    const trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
+    let trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
+    if (!trackingCategoryId && projectId) {
+      const linked = await tx.project.findFirst({
+        where: { id: projectId, orgId: ctx.orgId },
+        select: { trackingCategoryId: true },
+      })
+      trackingCategoryId = linked?.trackingCategoryId ?? null
+    }
     const isDraft = input.saveAsDraft === true
     await assertRestrictedFundOnPurchase(tx, ctx.orgId, type, isDraft, trackingCategoryId)
     assertNamedPurchaseLines(isDraft, input.lines)
@@ -933,6 +941,41 @@ async function createWithin(
     // An expense is paid at once — from a money account, or against a customer.
     if (type === 'EXPENSE' && !isDraft) {
       await requireExpenseSettlement(tx, ctx, input.paymentAccountId, offsetCustomerId)
+    }
+
+    if (type === 'PURCHASE_ORDER' && !isDraft && ctx.features.budgetControlMode !== 'off') {
+      const { assertWithinBudget } = await import('@/server/services/budget.service')
+      const accountIds = [
+        ...new Set(
+          priced.lines
+            .map((line) => line.incomeAccountId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ]
+      const accounts = accountIds.length
+        ? await tx.ledgerAccount.findMany({
+            where: { orgId: ctx.orgId, id: { in: accountIds } },
+            select: { id: true, code: true, type: true },
+          })
+        : []
+      const byId = new Map(accounts.map((account) => [account.id, account]))
+      await assertWithinBudget(ctx, {
+        date: input.date,
+        acknowledgeBudgetOverspend: input.acknowledgeBudgetOverspend,
+        lines: priced.lines.flatMap((line) => {
+          if (!line.incomeAccountId) return []
+          const account = byId.get(line.incomeAccountId)
+          return [
+            {
+              accountId: line.incomeAccountId,
+              accountCode: account?.code,
+              accountType: account?.type ?? 'EXPENSE',
+              trackingCategoryId,
+              amount: line.amount.toFixed(4),
+            },
+          ]
+        }),
+      })
     }
 
     const number = await assignDocumentNumber(tx, ctx.orgId, SEQUENCE_FOR[type], input.number)
@@ -1056,7 +1099,14 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
 
     const { vendor, offsetCustomerId } = await resolvePurchaseParty(tx, ctx, existing.type, input)
     const projectId = await resolveProjectId(tx, ctx, input.projectId)
-    const trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
+    let trackingCategoryId = await resolveTrackingCategoryId(tx, ctx, input.trackingCategoryId)
+    if (!trackingCategoryId && projectId) {
+      const linked = await tx.project.findFirst({
+        where: { id: projectId, orgId: ctx.orgId },
+        select: { trackingCategoryId: true },
+      })
+      trackingCategoryId = linked?.trackingCategoryId ?? null
+    }
     await assertRestrictedFundOnPurchase(
       tx,
       ctx.orgId,
@@ -1073,6 +1123,45 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
     const lines = await resolveLines(tx, ctx, input.lines, vendor?.defaultExpenseAccountId ?? null)
     const taxCodes = await loadTaxCodes(tx, ctx, lines)
     const priced = priceDocument(lines, taxCodes, ctx.organization.baseCurrency)
+
+    if (
+      existing.type === 'PURCHASE_ORDER' &&
+      !input.saveAsDraft &&
+      ctx.features.budgetControlMode !== 'off'
+    ) {
+      const { assertWithinBudget } = await import('@/server/services/budget.service')
+      const accountIds = [
+        ...new Set(
+          priced.lines
+            .map((line) => line.incomeAccountId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ]
+      const accounts = accountIds.length
+        ? await tx.ledgerAccount.findMany({
+            where: { orgId: ctx.orgId, id: { in: accountIds } },
+            select: { id: true, code: true, type: true },
+          })
+        : []
+      const byId = new Map(accounts.map((account) => [account.id, account]))
+      await assertWithinBudget(ctx, {
+        date: input.date,
+        acknowledgeBudgetOverspend: input.acknowledgeBudgetOverspend,
+        lines: priced.lines.flatMap((line) => {
+          if (!line.incomeAccountId) return []
+          const account = byId.get(line.incomeAccountId)
+          return [
+            {
+              accountId: line.incomeAccountId,
+              accountCode: account?.code,
+              accountType: account?.type ?? 'EXPENSE',
+              trackingCategoryId,
+              amount: line.amount.toFixed(4),
+            },
+          ]
+        }),
+      })
+    }
 
     if (existing.type === 'BILL') await assertBillReference(tx, ctx, vendor?.id ?? null, input, id)
 
@@ -1638,6 +1727,15 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
     if (!document) throw notFound('Document')
     if (document.deletedAt) return { id, number: document.number }
 
+    const landed = await tx.landedCostBatch.count({
+      where: { orgId: ctx.orgId, billId: document.id },
+    })
+    if (landed > 0) {
+      throw precondition(
+        `${document.number} has landed cost allocated to stock. That allocation cannot be undone by deleting the bill.`,
+      )
+    }
+
     const applications = [...document.applications, ...document.creditsApplied]
     const touchedBillIds = [
       ...new Set(applications.map((application) => application.billId).filter((v) => v !== id)),
@@ -1660,6 +1758,13 @@ export async function remove(ctx: OrgContext, id: string, reason?: string | null
       where: { orgId: ctx.orgId, convertedFromId: id },
       data: { convertedFromId: null },
     })
+
+    if (document.type === 'PURCHASE_ORDER') {
+      await tx.purchaseDocument.update({
+        where: { id: document.id },
+        data: { encumbered: false },
+      })
+    }
 
     // Stock received goes back out. See the note in `sales.service.remove`.
     await reverseMovementsFor(tx, ctx, { sourceId: id })
@@ -1811,9 +1916,10 @@ async function restoreOrderQuantities(
   const anyReceived = refreshed.some((line) => !new Decimal(line.quantityReceived.toString()).isZero())
 
   if (order.status !== 'VOID' && order.status !== 'DRAFT') {
+    const status = outstanding.isZero() ? 'CLOSED' : anyReceived ? 'PARTIAL' : 'OPEN'
     await tx.purchaseDocument.update({
       where: { id: orderId },
-      data: { status: outstanding.isZero() ? 'CLOSED' : anyReceived ? 'PARTIAL' : 'OPEN' },
+      data: { status, encumbered: poStillEncumbered(status) },
     })
   }
 }
@@ -1888,9 +1994,10 @@ async function applyOrderQuantities(
   const anyReceived = refreshed.some((line) => !new Decimal(line.quantityReceived.toString()).isZero())
 
   if (order.status !== 'VOID' && order.status !== 'DRAFT') {
+    const status = outstanding.isZero() ? 'CLOSED' : anyReceived ? 'PARTIAL' : 'OPEN'
     await tx.purchaseDocument.update({
       where: { id: orderId },
-      data: { status: outstanding.isZero() ? 'CLOSED' : anyReceived ? 'PARTIAL' : 'OPEN' },
+      data: { status, encumbered: poStillEncumbered(status) },
     })
   }
 }
@@ -2179,7 +2286,10 @@ export async function receiveOrder(ctx: OrgContext, input: ReceiveOrderInput) {
     }, new Decimal(0))
 
     const status = outstanding.isZero() ? 'CLOSED' : 'PARTIAL'
-    await tx.purchaseDocument.update({ where: { id: order.id }, data: { status } })
+    await tx.purchaseDocument.update({
+      where: { id: order.id },
+      data: { status, encumbered: poStillEncumbered(status) },
+    })
 
     await writeAudit(
       tx,

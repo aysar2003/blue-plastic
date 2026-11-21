@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { ERP_CAPABILITIES } from '@/lib/erp/capabilities'
-import { assertTrustedExtension } from '@/lib/erp/extensions/registry'
+import { probeTrustedExtension } from '@/lib/erp/extensions/probe'
 import { db } from '@/server/db'
 import { requireApiKeyContext } from '@/server/auth/api-key-context'
 import { isAppError } from '@/server/errors'
@@ -17,16 +17,15 @@ export async function GET(request: Request) {
       where: { id: ctx.orgId },
       select: { trustedExtensions: true },
     })
-    if (extensionId) {
-      try {
-        assertTrustedExtension(extensionId, orgAllowlist?.trustedExtensions)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Untrusted extension.'
-        return NextResponse.json({ error: message }, { status: 400 })
-      }
+    const probe = extensionId
+      ? probeTrustedExtension(extensionId, orgAllowlist?.trustedExtensions)
+      : null
+    if (probe && !probe.trusted) {
+      return NextResponse.json({ error: probe.error ?? 'Untrusted extension.', probe }, { status: 400 })
     }
     return NextResponse.json({
       ok: true,
+      probe: probe ?? undefined,
       capabilities: ERP_CAPABILITIES.map((c) => ({
         id: c.id,
         title: c.title,

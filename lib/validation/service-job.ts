@@ -49,6 +49,17 @@ export const serviceJobSchema = z.object({
     .transform((v) => (v === '' ? null : v))
     .nullable()
     .optional(),
+  siteLocation: optionalText(200),
+  promisedWindowStart: z
+    .union([z.literal(''), z.coerce.date()])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+  promisedWindowEnd: z
+    .union([z.literal(''), z.coerce.date()])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
   memo: optionalText(1000),
   lines: z.array(serviceJobLineSchema).min(1, 'Add at least one line'),
 })

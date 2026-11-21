@@ -9,12 +9,19 @@ import { today } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { peekDocumentNumber } from '@/server/sequences'
+import * as projectService from '@/server/services/project.service'
 
 export const metadata: Metadata = { title: 'New service job' }
 
-export default async function NewServiceJobPage() {
+export default async function NewServiceJobPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const ctx = await requireOrgContext('invoice:create')
-  const [customers, items, vanStores, users, documentNumber] = await Promise.all([
+  const query = await searchParams
+  const requestedProject = typeof query.project === 'string' ? query.project : undefined
+  const [customers, items, vanStores, users, documentNumber, projects] = await Promise.all([
     db.customer.findMany({
       where: { orgId: ctx.orgId, isActive: true },
       select: { id: true, displayName: true },
@@ -38,8 +45,12 @@ export default async function NewServiceJobPage() {
       take: 100,
     }),
     peekDocumentNumber(db, ctx.orgId, 'SERVICE_JOB'),
+    projectService.listForPicker(ctx),
   ])
   const day = today(ctx.organization.timeZone)
+  const defaultProject = projects.find((project) => project.id === requestedProject)
+  const defaultProjectId = defaultProject?.id ?? ''
+  const defaultCustomerId = defaultProject?.customerId ?? ''
 
   return (
     <>
@@ -47,11 +58,19 @@ export default async function NewServiceJobPage() {
       <form action={createServiceJob} className="mx-auto max-w-lg space-y-3">
         <Input name="number" defaultValue={documentNumber} placeholder="Number" />
         <Input name="date" type="date" defaultValue={day} required />
-        <NativeSelect name="customerId" required>
+        <NativeSelect name="customerId" defaultValue={defaultCustomerId} required>
           <option value="">Customer…</option>
           {customers.map((c) => (
             <option key={c.id} value={c.id}>
               {c.displayName}
+            </option>
+          ))}
+        </NativeSelect>
+        <NativeSelect name="projectId" defaultValue={defaultProjectId}>
+          <option value="">Project (optional)</option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.label}
             </option>
           ))}
         </NativeSelect>
@@ -71,6 +90,15 @@ export default async function NewServiceJobPage() {
             </option>
           ))}
         </NativeSelect>
+        <Input name="siteLocation" placeholder="Site / customer location" />
+        <label className="block text-xs text-muted-foreground">
+          Promised window start
+          <Input name="promisedWindowStart" type="datetime-local" className="mt-1" />
+        </label>
+        <label className="block text-xs text-muted-foreground">
+          Promised window end
+          <Input name="promisedWindowEnd" type="datetime-local" className="mt-1" />
+        </label>
         <NativeSelect name="lineKind" defaultValue="LABOR">
           <option value="LABOR">Labour</option>
           <option value="TRAVEL">Travel</option>

@@ -259,6 +259,13 @@ export default async function BinsPage() {
               Labels CSV
             </Link>
             <Link
+              href={`/api/waves/${wave.id}/labels?format=packing`}
+              className={buttonVariants({ size: 'sm', variant: 'outline' })}
+              download
+            >
+              Packing CSV
+            </Link>
+            <Link
               href={`/api/waves/${wave.id}/labels`}
               className={buttonVariants({ size: 'sm', variant: 'ghost' })}
               target="_blank"

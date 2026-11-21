@@ -124,6 +124,7 @@ export async function vatReturnExport(
         purchaseNet: 0,
         purchaseTax: 0,
       }),
+      boxLabels: null,
       csv: '',
       json: '',
       disabled: true as const,
@@ -159,8 +160,11 @@ export async function vatReturnExport(
     purchaseTax,
   })
 
+  const boxLabels = pack?.vatBoxLabels ?? null
+
   return {
     boxes,
+    boxLabels,
     csv: vatReturnToCsv(boxes, pack?.vatBoxLabels),
     json: JSON.stringify(
       {

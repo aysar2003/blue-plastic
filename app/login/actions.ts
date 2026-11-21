@@ -12,12 +12,15 @@ import {
   sealPreAuth,
 } from '@/lib/login-ticket'
 import { WRONG_DOOR } from '@/lib/login-paths'
+import { parseEnforceTwoFactor, userMustEnrollTotp } from '@/lib/enforce-two-factor'
 import { signInSchema, twoFactorCodeSchema } from '@/lib/validation/auth'
 import { issueLoginTicket } from '@/server/auth/login-ticket-store'
 import { verifyCredentials, type VerifiedAudience } from '@/server/auth/verify-credentials'
 import { db } from '@/server/db'
 import {
   beginLoginOtp,
+  beginTotpSetupAfterPassword,
+  confirmTotpSetup,
   LOGIN_OTP_RESEND_COOLDOWN_MS,
   loginOtpResendWaitSeconds,
   verifyLoginSecondFactor,
@@ -51,6 +54,11 @@ export type DoorSignInState = {
   fieldErrors?: Record<string, string[]>
   /** Password OK — show the second-factor step. */
   needsTwoFactor?: boolean
+  /** Company enforce: must enroll authenticator before session (Odoo). */
+  needsTotpSetup?: boolean
+  totpSecret?: string
+  otpauthUrl?: string
+  qrDataUrl?: string
   /** Hint for the UI: authenticator, email code, or either. */
   twoFactorHint?: 'totp' | 'otp' | 'either'
   /** Masked destination for email OTP, e.g. a***@gmail.com */
@@ -94,6 +102,63 @@ async function doorSignIn(
     return { error: WRONG_DOOR[expected] }
   }
 
+  const enforce = verified.homeOrgId
+    ? parseEnforceTwoFactor(
+        (
+          await db.organization.findUnique({
+            where: { id: verified.homeOrgId },
+            select: { enforceTwoFactor: true },
+          })
+        )?.enforceTwoFactor,
+      )
+    : 'OFF'
+
+  if (
+    userMustEnrollTotp({
+      enforce,
+      totpEnabled: verified.totpEnabled,
+      audience: verified.audience,
+      role: verified.role,
+    })
+  ) {
+    try {
+      const setup = await beginTotpSetupAfterPassword(verified.userId)
+      const jar = await cookies()
+      jar.set(
+        PREAUTH_COOKIE,
+        sealPreAuth(
+          {
+            userId: verified.userId,
+            challengeId: 'setup',
+            audience: expected,
+            email: verified.email,
+            exp: Date.now() + PREAUTH_TTL_MS,
+            mode: 'setup',
+          },
+          env.AUTH_SECRET,
+        ),
+        {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+          path: '/',
+          maxAge: Math.floor(PREAUTH_TTL_MS / 1000),
+        },
+      )
+      return {
+        needsTotpSetup: true,
+        totpSecret: setup.secret,
+        otpauthUrl: setup.otpauthUrl,
+        qrDataUrl: setup.qrDataUrl,
+        info: 'This company requires an authenticator app. Scan the code, then enter the 6-digit code.',
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Could not start authenticator setup.'
+      return { error: message }
+    }
+  }
+
   if (verified.needsTwoFactor) {
     try {
       const { challengeId } = await beginLoginOtp(verified.userId)
@@ -104,6 +169,7 @@ async function doorSignIn(
           audience: expected,
           email: verified.email,
           exp: Date.now() + PREAUTH_TTL_MS,
+          mode: 'verify',
         },
         env.AUTH_SECRET,
       )
@@ -239,6 +305,116 @@ export async function cancelTwoFactorAction(): Promise<DoorSignInState> {
   const jar = await cookies()
   jar.delete(PREAUTH_COOKIE)
   return {}
+}
+
+/**
+ * Complete mandatory TOTP enrollment during login (company enforce).
+ * Then continue to normal 2FA verify if still required, else issue session.
+ */
+export async function completeTotpSetupLoginAction(
+  _prev: DoorSignInState,
+  formData: FormData,
+): Promise<DoorSignInState> {
+  const parsed = twoFactorCodeSchema.safeParse({ code: formData.get('code') })
+  if (!parsed.success) {
+    return {
+      needsTotpSetup: true,
+      fieldErrors: { code: parsed.error.issues.map((i) => i.message) },
+    }
+  }
+
+  const jar = await cookies()
+  const raw = jar.get(PREAUTH_COOKIE)?.value
+  if (!raw) {
+    return { error: 'Sign-in expired. Enter your email or mobile and password again.' }
+  }
+
+  const preauth = openPreAuth(raw, env.AUTH_SECRET)
+  if (!preauth || preauth.mode !== 'setup') {
+    jar.delete(PREAUTH_COOKIE)
+    return { error: 'Sign-in expired. Enter your email or mobile and password again.' }
+  }
+
+  try {
+    await confirmTotpSetup(preauth.userId, parsed.data.code)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'That code is not correct.'
+    return { needsTotpSetup: true, error: message }
+  }
+
+  const userFlags = await db.user.findUnique({
+    where: { id: preauth.userId },
+    select: { totpEnabledAt: true, otp2faEnabledAt: true, isSystemOwner: true },
+  })
+  const stillNeeds =
+    Boolean(userFlags?.isSystemOwner) ||
+    Boolean(userFlags?.otp2faEnabledAt) ||
+    Boolean(userFlags?.totpEnabledAt)
+
+  // After enrollment, TOTP is on — always need a verify step for the just-activated factor
+  // when system owner / email OTP also apply; otherwise issue session after one more TOTP check.
+  // Simplest Odoo-like path: if only TOTP, issue ticket now (code already proved possession).
+  if (userFlags?.isSystemOwner || userFlags?.otp2faEnabledAt) {
+    try {
+      const { challengeId } = await beginLoginOtp(preauth.userId)
+      jar.set(
+        PREAUTH_COOKIE,
+        sealPreAuth(
+          {
+            userId: preauth.userId,
+            challengeId,
+            audience: preauth.audience,
+            email: preauth.email,
+            exp: Date.now() + PREAUTH_TTL_MS,
+            mode: 'verify',
+          },
+          env.AUTH_SECRET,
+        ),
+        {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+          path: '/',
+          maxAge: Math.floor(PREAUTH_TTL_MS / 1000),
+        },
+      )
+      const twoFactorHint = hintFromFlags(userFlags)
+      return {
+        needsTwoFactor: true,
+        twoFactorHint,
+        emailHint: twoFactorHint === 'totp' ? undefined : maskEmail(preauth.email),
+        resendAfterSeconds:
+          twoFactorHint === 'totp' ? undefined : Math.ceil(LOGIN_OTP_RESEND_COOLDOWN_MS / 1000),
+        info: 'Authenticator is on. Enter a sign-in code to continue.',
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not continue sign-in.'
+      return { error: message }
+    }
+  }
+
+  if (!stillNeeds) {
+    // Should not happen — TOTP was just enabled.
+  }
+
+  const ticket = await issueLoginTicket({
+    userId: preauth.userId,
+    audience: preauth.audience,
+  })
+  jar.delete(PREAUTH_COOKIE)
+
+  try {
+    await signIn('credentials', {
+      loginTicket: ticket,
+      redirectTo: REDIRECT[preauth.audience],
+    })
+    return {}
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return { error: GENERIC }
+    }
+    throw error
+  }
 }
 
 /** Resend email OTP while the pre-auth cookie is still valid (Odoo/QBO-style). */

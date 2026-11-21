@@ -30,6 +30,7 @@ import type {
   OrganizationAccountingInput,
   OrganizationBrandingInput,
   OrganizationFeaturesInput,
+  OrganizationSecurityInput,
   OrganizationUpdateInput,
 } from '@/lib/validation/organization'
 import { requestMeta, writeAudit } from '@/server/audit'
@@ -43,6 +44,7 @@ const PROFILE_SELECT = {
   legalName: true,
   baseCurrency: true,
   fiscalYearStartMonth: true,
+  fiscalYearStartDay: true,
   taxRegistrationNumber: true,
   addressLine1: true,
   addressLine2: true,
@@ -53,8 +55,15 @@ const PROFILE_SELECT = {
   phone: true,
   email: true,
   website: true,
+  paymentBankName: true,
+  paymentAccountName: true,
+  paymentAccountNumber: true,
+  paymentInstructions: true,
   timeZone: true,
   localizationPackId: true,
+  idleLockSeconds: true,
+  sessionMaxHours: true,
+  enforceTwoFactor: true,
   brandMark: true,
   logoStorageKey: true,
   logoContentType: true,
@@ -77,6 +86,24 @@ export async function getTrustedExtensions(ctx: OrgContext) {
   })
   if (!org) throw notFound('Organisation')
   return org.trustedExtensions
+}
+
+export async function updateTrustedExtensions(ctx: OrgContext, trustedExtensions: unknown) {
+  const meta = await requestMeta()
+  return db.$transaction(async (tx) => {
+    const after = await tx.organization.update({
+      where: { id: ctx.orgId },
+      data: { trustedExtensions: trustedExtensions as Prisma.InputJsonValue },
+      select: TRUSTED_EXTENSIONS_SELECT,
+    })
+    await writeAudit(
+      tx,
+      ctx,
+      { entity: 'Organization', entityId: ctx.orgId, action: 'UPDATE', before: null, after },
+      meta,
+    )
+    return after.trustedExtensions
+  })
 }
 
 export async function getSignProvider(ctx: OrgContext) {
@@ -206,7 +233,8 @@ export async function updateAccountingSettings(
 
     const changing =
       before.baseCurrency !== input.baseCurrency ||
-      before.fiscalYearStartMonth !== input.fiscalYearStartMonth
+      before.fiscalYearStartMonth !== input.fiscalYearStartMonth ||
+      before.fiscalYearStartDay !== input.fiscalYearStartDay
 
     if (changing && (await hasLedgerActivity(ctx.orgId))) {
       throw precondition(
@@ -230,10 +258,39 @@ export async function updateAccountingSettings(
   })
 }
 
-/**
- * True once anything has been posted to the ledger. The journal tables arrive in
- * Phase 2; until then there is by definition no activity to protect.
- */
+export async function updateSecuritySettings(
+  ctx: OrgContext,
+  input: OrganizationSecurityInput,
+) {
+  const meta = await requestMeta()
+
+  return db.$transaction(async (tx) => {
+    const before = await tx.organization.findUnique({
+      where: { id: ctx.orgId },
+      select: PROFILE_SELECT,
+    })
+    if (!before) throw notFound('Organisation')
+
+    const after = await tx.organization.update({
+      where: { id: ctx.orgId },
+      data: {
+        idleLockSeconds: input.idleLockSeconds,
+        sessionMaxHours: input.sessionMaxHours,
+        enforceTwoFactor: input.enforceTwoFactor,
+      },
+      select: PROFILE_SELECT,
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      { entity: 'Organization', entityId: ctx.orgId, action: 'UPDATE', before, after },
+      meta,
+    )
+    return after
+  })
+}
+
 /**
  * Sign-in renders before there is a session, so it cannot use OrgContext. The
  * instance's first organisation decides whether the creator brand shows there.
@@ -283,6 +340,7 @@ export async function updateFeatureFlags(ctx: OrgContext, input: OrganizationFea
       creditLimitWarn: input.creditLimitWarn,
       payrollStandard: input.payrollStandard,
       closeHardGates: input.closeHardGates ?? previous.closeHardGates,
+      closeSecondApprover: input.closeSecondApprover ?? previous.closeSecondApprover,
       budgetControlMode: input.budgetControlMode ?? previous.budgetControlMode,
       grantedModules: previous.grantedModules,
       modules: modulesClampedToGrants(modulesFromFeaturesInput(input), previous.grantedModules),

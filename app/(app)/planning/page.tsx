@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { toCalendarDate } from '@/lib/date'
+import { addDays, toCalendarDate, toDate, type CalendarDate } from '@/lib/date'
 import { requireOrgContext } from '@/server/auth/context'
 import * as collab from '@/server/services/collab.service'
 
@@ -15,10 +15,15 @@ import { assignPlanning } from './actions'
 
 export const metadata: Metadata = { title: 'Planning' }
 
+function weekdayLabel(date: CalendarDate) {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short' }).format(toDate(date))
+}
+
 export default async function PlanningPage() {
   const ctx = await requireOrgContext('project:read')
   const week = await collab.planningWeek(ctx)
   const start = toCalendarDate(week.start)
+  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i))
 
   return (
     <>
@@ -111,6 +116,42 @@ export default async function PlanningPage() {
           </TableBody>
         </Table>
       </Card>
+      {week.assignments.length > 0 ? (
+        <Card className="mt-6 overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Person</TableHead>
+                {days.map((day) => (
+                  <TableHead key={day} className="text-right">
+                    {weekdayLabel(day)}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {week.employees.map((person) => (
+                <TableRow key={person.id}>
+                  <TableCell className="font-medium">{person.name}</TableCell>
+                  {days.map((day) => {
+                    const hours = week.assignments
+                      .filter(
+                        (row) =>
+                          row.employeeId === person.id && toCalendarDate(row.workDate) === day,
+                      )
+                      .reduce((sum, row) => sum + Number(row.hours), 0)
+                    return (
+                      <TableCell key={day} className="text-right tabular text-muted-foreground">
+                        {hours > 0 ? `${hours}h` : '—'}
+                      </TableCell>
+                    )
+                  })}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      ) : null}
       <p className="mt-3 text-xs text-muted-foreground">
         Timesheet entries this week: {week.time.length}
       </p>

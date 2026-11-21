@@ -34,9 +34,17 @@ export default async function EquityPage() {
         title="Equity"
         description="Shareholders register with ownership from shares, plus contributions, draws, and dividends."
         actions={
-          <Button asChild variant="outline" size="sm">
-            <Link href="/reports/owners-equity">Owner&apos;s equity statement</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/reports/owners-equity">Owner&apos;s equity statement</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <a href="/api/exports/equity-register">Shareholder CSV</a>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <a href="/api/exports/equity-movement">Period movement CSV</a>
+            </Button>
+          </div>
         }
       />
 
@@ -103,7 +111,13 @@ export default async function EquityPage() {
         <Card className="p-4">
           <h2 className="mb-3 font-medium">Patronage allocation</h2>
           <p className="text-muted-foreground mb-3 text-sm">
-            Cooperative stub: allocate % of year net to MEMBER shareholders by linked customer sales.
+            Allocate % of year net to MEMBER shareholders by linked customer purchases. Posts an
+            equity event per member.
+          </p>
+          <p className="mb-3">
+            <Link href="/api/equity/patronage" className="text-primary text-sm hover:underline">
+              Member patronage CSV
+            </Link>
           </p>
           <form action={allocatePatronage} className="mb-6 grid gap-2">
             <div>

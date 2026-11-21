@@ -15,13 +15,22 @@ export const metadata: Metadata = { title: 'MRP' }
 export default async function MrpPage({
   searchParams,
 }: {
-  searchParams: Promise<{ item?: string; qty?: string }>
+  searchParams: Promise<{ item?: string; qty?: string; fromDemand?: string }>
 }) {
   const ctx = await requireOrgContext('inventory:read')
   const query = await searchParams
   const assemblies = await assemblyBuildService.listAssemblies(ctx)
   const itemId = query.item && assemblies.some((row) => row.id === query.item) ? query.item : assemblies[0]?.id
-  const qty = query.qty && Number(query.qty) > 0 ? query.qty : '1'
+  const demand = itemId ? await assemblyBuildService.openSalesDemand(ctx, itemId) : null
+  const fromDemand = query.fromDemand === '1' && demand?.hasDemand
+  const qty =
+    fromDemand && demand
+      ? demand.quantity
+      : query.qty && Number(query.qty) > 0
+        ? query.qty
+        : demand?.hasDemand
+          ? demand.quantity
+          : '1'
   const plan = itemId ? await assemblyBuildService.materialsPlan(ctx, itemId, qty) : null
   const short = plan?.lines.filter((row) => row.isShort) ?? []
 
@@ -29,7 +38,7 @@ export default async function MrpPage({
     <>
       <PageHeader
         title="Materials plan"
-        description="Explode a bill of materials, see leaf shortages, then build or buy."
+        description="Explode a bill of materials from open sales demand or a manual qty, see leaf shortages, then build or buy."
         actions={
           itemId && short.length === 0 ? (
             <Button asChild size="sm">
@@ -42,7 +51,7 @@ export default async function MrpPage({
           )
         }
       />
-      <Card className="mb-6 max-w-xl p-4">
+      <Card className="mb-6 max-w-xl space-y-3 p-4">
         <form className="flex flex-wrap items-end gap-2">
           <NativeSelect name="item" defaultValue={itemId} className="min-w-[220px]">
             {assemblies.map((row) => (
@@ -55,7 +64,24 @@ export default async function MrpPage({
           <Button type="submit" size="sm">
             Plan
           </Button>
+          {itemId && demand?.hasDemand ? (
+            <Button asChild size="sm" variant="secondary">
+              <Link href={`/inventory/mrp?item=${itemId}&fromDemand=1`}>
+                Use open demand ({demand.quantity})
+              </Link>
+            </Button>
+          ) : null}
         </form>
+        {demand?.hasDemand ? (
+          <p className="text-muted-foreground text-xs">
+            Open sales demand: {demand.quantity} from {demand.sources.length} document
+            {demand.sources.length === 1 ? '' : 's'} (orders / accepted quotes).
+          </p>
+        ) : itemId ? (
+          <p className="text-muted-foreground text-xs">
+            No open sales-order or accepted-quote demand for this assembly.
+          </p>
+        ) : null}
       </Card>
       {plan ? (
         <Card className="overflow-hidden p-0">

@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { PageHeader } from '@/components/data/page-header'
+import { buttonVariants } from '@/components/ui/button'
 import { requireOrgContext } from '@/server/auth/context'
 import * as employeeService from '@/server/services/employee.service'
 import * as leaveService from '@/server/services/leave.service'
@@ -23,6 +25,11 @@ export default async function LeavePage() {
       <PageHeader
         title="Leave"
         description="Leave types, yearly allocations, requests, and approvals."
+        actions={
+          <Link href="/api/employees/hours?kind=leave" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+            Hours CSV
+          </Link>
+        }
       />
       <LeaveBoard
         types={types.map((t) => ({

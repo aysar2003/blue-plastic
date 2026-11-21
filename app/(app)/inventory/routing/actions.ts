@@ -46,3 +46,14 @@ export async function saveWorkCenterAction(formData: FormData) {
   revalidatePath('/inventory/routing')
   redirect('/inventory/routing')
 }
+
+export async function addHolidayAction(formData: FormData) {
+  const ctx = await requireOrgContext('inventory:adjust')
+  await routing.addWorkCenterException(ctx, {
+    workCenterId: String(formData.get('workCenterId') ?? ''),
+    date: String(formData.get('date') ?? ''),
+    notes: String(formData.get('notes') ?? '') || null,
+  })
+  revalidatePath('/inventory/routing')
+  redirect('/inventory/routing')
+}

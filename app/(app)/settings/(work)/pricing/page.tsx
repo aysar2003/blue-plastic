@@ -76,6 +76,14 @@ export default async function PricingSettingsPage() {
               <Label htmlFor="unitPrice">Unit price</Label>
               <Input id="unitPrice" name="unitPrice" placeholder="0.00" />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="startsOn">Active from</Label>
+              <Input id="startsOn" name="startsOn" type="date" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="endsOn">Active until</Label>
+              <Input id="endsOn" name="endsOn" type="date" />
+            </div>
             <Button type="submit" className="sm:col-span-2 w-fit">
               Create list
             </Button>
@@ -86,6 +94,11 @@ export default async function PricingSettingsPage() {
                 <span className="text-foreground">{list.name}</span> · {list.items.length} item
                 {list.items.length === 1 ? '' : 's'} · {list._count.customers} customer
                 {list._count.customers === 1 ? '' : 's'}
+                {list.startsOn || list.endsOn
+                  ? ` · ${list.startsOn ? list.startsOn.toISOString().slice(0, 10) : '…'} → ${
+                      list.endsOn ? list.endsOn.toISOString().slice(0, 10) : '…'
+                    }`
+                  : ''}
               </li>
             ))}
             {lists.length === 0 ? <li>No lists yet.</li> : null}

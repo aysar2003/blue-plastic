@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Card } from '@/components/ui/card'
 import { previewStatement, runStatementImport } from '@/app/(app)/banking/actions'
+import { STATEMENT_FORMAT_PACKS } from '@/lib/erp/statement-import-packs'
 
 /**
  * Importing a statement, then deciding what each line is.
@@ -28,6 +29,7 @@ export function StatementWorkbench({
 }) {
   const router = useRouter()
   const [csv, setCsv] = useState('')
+  const [packId, setPackId] = useState<'generic' | 'so' | 'ke'>('generic')
   const [preview, setPreview] = useState<{
     total: number
     ready: number
@@ -54,6 +56,23 @@ export function StatementWorkbench({
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div>
+            <label htmlFor="pack" className="mb-1.5 block text-sm font-medium">
+              Format pack
+            </label>
+            <NativeSelect
+              id="pack"
+              value={packId}
+              onChange={(event) => setPackId(event.target.value as 'generic' | 'so' | 'ke')}
+            >
+              {STATEMENT_FORMAT_PACKS.map((pack) => (
+                <option key={pack.id} value={pack.id}>
+                  {pack.label}
                 </option>
               ))}
             </NativeSelect>
@@ -139,7 +158,7 @@ export function StatementWorkbench({
               disabled={isPending || preview.ready === 0}
               onClick={() =>
                 startTransition(async () => {
-                  const result = await runStatementImport({ accountId, csv })
+                  const result = await runStatementImport({ accountId, csv, packId })
                   if (result.ok) {
                     toast.success(`${result.data.imported} lines imported.`)
                     setPreview(null)
@@ -160,7 +179,7 @@ export function StatementWorkbench({
               onClick={() =>
                 startTransition(async () => {
                   setError(null)
-                  const result = await previewStatement({ accountId, csv })
+                  const result = await previewStatement({ accountId, csv, packId })
                   if (result.ok) setPreview(result.data)
                   else setError(result.error.message)
                 })

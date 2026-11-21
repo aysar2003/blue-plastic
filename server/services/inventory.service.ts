@@ -33,7 +33,7 @@ import type { OrgContext } from '@/server/auth/context'
 import { db, type Tx } from '@/server/db'
 import type { StockAlertSummary } from '@/lib/stock-alert'
 import {
-  belowReorder,
+  belowReplenishTrigger,
   capReplenishmentBySource,
   suggestedReplenishmentQty,
 } from '@/lib/erp/replenishment'
@@ -1353,34 +1353,79 @@ export async function replenishmentSuggestions(ctx: OrgContext, toStoreId: strin
     stores.find((row) => row.id !== toStore.id) ??
     null
 
-  const items = await db.item.findMany({
-    where: {
-      orgId: ctx.orgId,
-      deletedAt: null,
-      isActive: true,
-      type: { in: ['INVENTORY', 'INVENTORY_ASSEMBLY'] },
-      reorderPoint: { not: null },
-    },
-    select: {
-      id: true,
-      name: true,
-      sku: true,
-      unitOfMeasure: true,
-      reorderPoint: true,
-    },
-    orderBy: { name: 'asc' },
-    take: 500,
-  })
+  const [items, storeLevels] = await Promise.all([
+    db.item.findMany({
+      where: {
+        orgId: ctx.orgId,
+        deletedAt: null,
+        isActive: true,
+        type: { in: ['INVENTORY', 'INVENTORY_ASSEMBLY'] },
+        OR: [{ reorderPoint: { not: null } }, { maxQty: { not: null } }],
+      },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        unitOfMeasure: true,
+        reorderPoint: true,
+        maxQty: true,
+      },
+      orderBy: { name: 'asc' },
+      take: 500,
+    }),
+    db.storeItemLevel.findMany({
+      where: { orgId: ctx.orgId, storeId: toStore.id },
+      select: { itemId: true, minQty: true, maxQty: true },
+    }),
+  ])
 
+  const extraLevelItemIds = storeLevels
+    .map((row) => row.itemId)
+    .filter((id) => !items.some((item) => item.id === id))
+  const extraItems =
+    extraLevelItemIds.length === 0
+      ? []
+      : await db.item.findMany({
+          where: {
+            orgId: ctx.orgId,
+            id: { in: extraLevelItemIds },
+            deletedAt: null,
+            isActive: true,
+            type: { in: ['INVENTORY', 'INVENTORY_ASSEMBLY'] },
+          },
+          select: {
+            id: true,
+            name: true,
+            sku: true,
+            unitOfMeasure: true,
+            reorderPoint: true,
+            maxQty: true,
+          },
+        })
+
+  const levelsByItem = new Map(storeLevels.map((row) => [row.itemId, row]))
+  const catalog = [...items, ...extraItems]
   const fromStoreId = fromStore?.id ?? ''
-  const suggestions = items
+  const suggestions = catalog
     .map((item) => {
+      const level = levelsByItem.get(item.id)
       const onHand = shelf.byItem[item.id]?.[toStore.id] ?? shelf.byItem[item.id]?.[''] ?? '0'
-      if (!belowReorder(item.reorderPoint, onHand)) return null
+      if (
+        !belowReplenishTrigger(onHand, {
+          storeMin: level?.minQty?.toString() ?? null,
+          itemReorder: item.reorderPoint?.toString() ?? null,
+        })
+      ) {
+        return null
+      }
       const sourceOnHand = fromStoreId
         ? (shelf.byItem[item.id]?.[fromStoreId] ?? '0')
         : '0'
-      const rawSuggest = suggestedReplenishmentQty(item.reorderPoint, onHand)
+      const rawSuggest = suggestedReplenishmentQty(item.reorderPoint, onHand, {
+        storeMin: level?.minQty?.toString() ?? null,
+        storeMax: level?.maxQty?.toString() ?? null,
+        itemMax: item.maxQty?.toString() ?? null,
+      })
       const suggestedQty = capReplenishmentBySource(rawSuggest, sourceOnHand)
       if (new Decimal(suggestedQty).lessThanOrEqualTo(0)) return null
       return {
@@ -1388,7 +1433,8 @@ export async function replenishmentSuggestions(ctx: OrgContext, toStoreId: strin
         name: item.name,
         sku: item.sku,
         unitOfMeasure: item.unitOfMeasure,
-        reorderPoint: item.reorderPoint!.toString(),
+        reorderPoint: (level?.minQty ?? item.reorderPoint)?.toString() ?? '0',
+        maxQty: (level?.maxQty ?? item.maxQty)?.toString() ?? null,
         onHand,
         sourceOnHand,
         suggestedQty,
@@ -1403,14 +1449,33 @@ export async function replenishmentSuggestions(ctx: OrgContext, toStoreId: strin
   }
 }
 
-/** Phase 41: plan draft transfers (status DRAFT, no stock movement). */
-export async function createDraftReplenishmentTransfers(
+/** Draft store transfers (no stock movement) from a named source to a destination. */
+export async function createDraftTransfersToStore(
   ctx: OrgContext,
-  input: { toStoreId: string; lines: { itemId: string; quantity: string }[] },
+  input: {
+    fromStoreId: string
+    toStoreId: string
+    memo: string
+    lines: { itemId: string; quantity: string }[]
+  },
 ) {
-  const plan = await replenishmentSuggestions(ctx, input.toStoreId)
-  if (!plan.fromStore) throw precondition('Add another store (office/DC) to replenish from.')
+  if (input.fromStoreId === input.toStoreId) {
+    throw validation('Choose a different store to send the stock to.')
+  }
   if (input.lines.length === 0) throw validation('Choose at least one line to transfer.')
+
+  const [fromStore, toStore] = await Promise.all([
+    db.store.findFirst({
+      where: { id: input.fromStoreId, orgId: ctx.orgId, isActive: true },
+      select: { id: true, name: true },
+    }),
+    db.store.findFirst({
+      where: { id: input.toStoreId, orgId: ctx.orgId, isActive: true },
+      select: { id: true, name: true },
+    }),
+  ])
+  if (!fromStore) throw notFound('From store')
+  if (!toStore) throw notFound('To store')
 
   const date = today(ctx.organization.timeZone)
   const created: { id: string; number: string; itemId: string }[] = []
@@ -1430,14 +1495,14 @@ export async function createDraftReplenishmentTransfers(
           orgId: ctx.orgId,
           number,
           date: toDate(date),
-          fromStoreId: plan.fromStore!.id,
-          toStoreId: plan.toStore.id,
+          fromStoreId: fromStore.id,
+          toStoreId: toStore.id,
           itemId: item.id,
           quantity: qty.toFixed(4),
           unitCost: '0',
           value: '0',
           status: 'DRAFT',
-          memo: `Replenishment draft → ${plan.toStore.name}`,
+          memo: input.memo,
           createdById: ctx.userId,
         },
         select: { id: true, number: true },
@@ -1447,6 +1512,60 @@ export async function createDraftReplenishmentTransfers(
   })
 
   return { count: created.length, transfers: created }
+}
+
+/** Phase 41: plan draft transfers (status DRAFT, no stock movement). */
+export async function createDraftReplenishmentTransfers(
+  ctx: OrgContext,
+  input: { toStoreId: string; lines: { itemId: string; quantity: string }[] },
+) {
+  const plan = await replenishmentSuggestions(ctx, input.toStoreId)
+  if (!plan.fromStore) throw precondition('Add another store (office/DC) to replenish from.')
+  return createDraftTransfersToStore(ctx, {
+    fromStoreId: plan.fromStore.id,
+    toStoreId: plan.toStore.id,
+    memo: `Replenishment draft → ${plan.toStore.name}`,
+    lines: input.lines,
+  })
+}
+
+export async function upsertStoreItemLevel(
+  ctx: OrgContext,
+  input: { storeId: string; itemId: string; minQty?: string | null; maxQty?: string | null },
+) {
+  const [store, item] = await Promise.all([
+    db.store.findFirst({
+      where: { id: input.storeId, orgId: ctx.orgId, isActive: true },
+      select: { id: true },
+    }),
+    db.item.findFirst({
+      where: { id: input.itemId, orgId: ctx.orgId, deletedAt: null },
+      select: { id: true },
+    }),
+  ])
+  if (!store) throw notFound('Store')
+  if (!item) throw notFound('Item')
+
+  const minQty = input.minQty && input.minQty !== '' ? new Decimal(input.minQty) : null
+  const maxQty = input.maxQty && input.maxQty !== '' ? new Decimal(input.maxQty) : null
+  if (minQty && minQty.lessThan(0)) throw validation('Min qty cannot be negative.')
+  if (maxQty && maxQty.lessThan(0)) throw validation('Max qty cannot be negative.')
+  if (minQty && maxQty && maxQty.lessThan(minQty)) {
+    throw validation('Max qty must be at least the min qty.')
+  }
+
+  return db.storeItemLevel.upsert({
+    where: { storeId_itemId: { storeId: store.id, itemId: item.id } },
+    create: {
+      orgId: ctx.orgId,
+      storeId: store.id,
+      itemId: item.id,
+      minQty,
+      maxQty,
+    },
+    update: { minQty, maxQty },
+    select: { id: true, storeId: true, itemId: true },
+  })
 }
 
 /** Draft replenishment transfers waiting to post for a destination store. */

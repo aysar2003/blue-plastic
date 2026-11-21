@@ -22,7 +22,10 @@ export default async function AccountingHubPage() {
   const apps = visibleHubApps(ACCOUNTING_HUB_APPS, ctx.permissions, ctx.features, 'accounting')
   const currency = ctx.organization.baseCurrency
   const now = today(ctx.organization.timeZone)
-  const month = resolvePeriod('this-month', now, ctx.organization.fiscalYearStartMonth)
+  const month = resolvePeriod('this-month', now, {
+    month: ctx.organization.fiscalYearStartMonth,
+    day: ctx.organization.fiscalYearStartDay,
+  })
 
   const [accounts, openPeriods, openInvoices, report] = await Promise.all([
     db.ledgerAccount.count({ where: { orgId: ctx.orgId, isActive: true } }),

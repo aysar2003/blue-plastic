@@ -16,6 +16,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { companyGroupLabel } from '@/lib/company-group'
+import { MONTHS } from '@/lib/constants'
 import { formatDate, formatDateTime } from '@/lib/date'
 import { ASSIGNABLE_ROLES, membershipStatusLabel, ROLE_LABELS } from '@/lib/roles'
 import { cn } from '@/lib/utils'
@@ -159,7 +160,7 @@ export default async function CompanyDatabasePage({
             <Detail label="Time zone" value={company.timeZone} />
             <Detail
               label="Fiscal year starts"
-              value={`Month ${company.fiscalYearStartMonth}`}
+              value={`${company.fiscalYearStartDay} ${MONTHS[company.fiscalYearStartMonth - 1]}`}
             />
             <Detail
               label="Negative stock"

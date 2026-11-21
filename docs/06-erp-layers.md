@@ -15,11 +15,11 @@ shipped the SME operating loops. From Phase 22 onward, progress means deepening
 | L2 | Master data — customers, vendors, items, tax | Account mappings drive posting | **complete** |
 | L3 | Order-to-cash / Procure-to-pay | Full document chains post correctly | **complete** (Phase 23 hard 3-way match) |
 | L4 | Inventory / WMS | Stock ledger agrees with Inventory Asset | **complete** + bin qty / putaway / waves (Phase 31); not robotics |
-| L5 | Manufacturing | Work orders / routings when needed | **complete** SME (BOM + MRP + assembly + work orders, Phase 28); not MES |
-| L6 | CRM / Projects | Pipeline + job costing usable | **complete** job P&L (Phase 25); CRM pipeline remains as shipped |
+| L5 | Manufacturing | Work orders / routings when needed | **complete** SME (BOM + MRP + assembly + work orders, Phase 28); MRP qty from open sales demand (2026-11-21); not MES |
+| L6 | CRM / Projects | Pipeline + job costing usable | **complete** job P&L (Phase 25); Won → draft estimate (2026-11-21) |
 | L7 | HR / Payroll | Operational payroll posts to GL | **complete** ops + statutory CSV/JSON (Phase 27) |
 | L8 | Reporting / close | Statements + close checklist | **complete** + snapshots (32) + close pack / hard gates (33); not a BI warehouse |
-| L9 | Integration / AI | Machine API + capability registry over services | **Phase 22** |
+| L9 | Integration / AI | Machine API + capability registry over services | **complete** (Phase 22 + Wave F invoices/jobs) |
 
 ## Rule of progress
 

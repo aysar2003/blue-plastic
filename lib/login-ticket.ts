@@ -50,13 +50,16 @@ export function newLoginTicketJti(): string {
 
 export const LOGIN_TICKET_TTL_MS = 5 * 60 * 1000
 
-/** Cookie holding a pending 2FA challenge after password OK. */
+/** Cookie holding a pending 2FA challenge or mandatory TOTP setup after password OK. */
 export type PreAuthPayload = {
   userId: string
+  /** LOGIN_OTP challenge id, or `setup` when company enforce requires TOTP enrollment. */
   challengeId: string
   audience: 'staff' | 'company' | 'portal'
   email: string
   exp: number
+  /** `setup` = must enroll authenticator before session (Odoo enforce). */
+  mode?: 'verify' | 'setup'
 }
 
 export function sealPreAuth(payload: PreAuthPayload, secret: string): string {
@@ -80,6 +83,7 @@ export function openPreAuth(token: string, secret: string): PreAuthPayload | nul
     const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as PreAuthPayload
     if (!parsed?.userId || !parsed.challengeId || !parsed.audience || !parsed.email) return null
     if (typeof parsed.exp !== 'number' || parsed.exp < Date.now()) return null
+    if (parsed.mode && parsed.mode !== 'verify' && parsed.mode !== 'setup') return null
     return parsed
   } catch {
     return null

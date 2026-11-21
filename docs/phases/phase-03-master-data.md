@@ -149,7 +149,10 @@ never bare `prisma migrate dev`, and check `pnpm db:verify` afterwards.
   applies it yet.
 - No stock movement or valuation — Phase 7. Inventory items declare their accounts;
   nothing moves through them.
-- Multiple ship-to addresses per customer. One billing and one shipping address are
-  embedded on the record, as QuickBooks does. A separate `addresses` table was
-  planned in `03-database-design.md`; embedding is simpler for a 1:1 relationship
-  and can be split later if a real need appears.
+## Wave A deepen — extra ship-to (2026-11-21)
+
+Customers keep the default shipping fields and can add extra `CustomerAddress`
+rows (warehouse, villa, job site). The sales document form picks a ship-to and
+fills `workSite`.
+
+Migration: `20261121180000_wave_a_landed_cost_ship_to` (apply with `pnpm db:deploy`).

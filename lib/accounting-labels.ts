@@ -119,6 +119,7 @@ export const JOURNAL_SOURCE_LABELS: Record<JournalSourceType, string> = {
   POS_TIP_PAYOUT: 'POS tip payout',
   PAYROLL: 'Payroll',
   PAYROLL_SETTLEMENT: 'Payroll settlement',
+  LANDED_COST: 'Landed cost',
 }
 
 export const PERIOD_STATUS_LABELS: Record<PeriodStatus, string> = {

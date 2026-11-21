@@ -1,4 +1,4 @@
-# Scale operations (LITE)
+# Scale operations
 
 Operator notes for multi-tenant SME ERP at higher volume.
 
@@ -11,6 +11,7 @@ Operator notes for multi-tenant SME ERP at higher volume.
 ## Live ledger window
 
 - Default **5** fiscal years stay in the hot ledger (`LIVE_FISCAL_YEARS` in `lib/year-archive.ts`).
+- Periods **Scale checklist** shows the live-year window, an archive-closed-year link, and a report-pack warning.
 - Older **closed** years: archive via **Periods → Archive & restore** (`year-archive.service`).
 - Restore is newest-first; bridge journal keeps the balance sheet coherent.
 

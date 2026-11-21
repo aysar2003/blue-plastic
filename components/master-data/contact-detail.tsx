@@ -15,6 +15,7 @@ type Contact = {
   shippingCity?: string | null
   shippingPostalCode?: string | null
   notes?: string | null
+  shipTos?: { id: string; label: string; line1?: string | null; city?: string | null }[]
 }
 
 export function ContactDetail({ contact, side }: { contact: Contact; side: 'customer' | 'vendor' }) {
@@ -65,6 +66,18 @@ export function ContactDetail({ contact, side }: { contact: Contact; side: 'cust
               ) : (
                 <p className="text-muted-foreground">Same as billing</p>
               )}
+              {contact.shipTos && contact.shipTos.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">Extra ship-to</p>
+                  {contact.shipTos.map((row) => (
+                    <p key={row.id}>
+                      <span className="font-medium">{row.label}</span>
+                      {row.line1 ? ` · ${row.line1}` : ''}
+                      {row.city ? ` · ${row.city}` : ''}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </CardContent>

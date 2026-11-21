@@ -19,6 +19,7 @@ const STARTS = [
   { href: '/reports/invoice-list', label: 'Invoice List' },
   { href: '/reports/bill-list', label: 'Bill List' },
   { href: '/reports/sales-by-customer', label: 'Sales by Customer' },
+  { href: '/reports/snapshot', label: 'Company Snapshot' },
   { href: '/reports/business-overview', label: 'Business overview' },
 ]
 

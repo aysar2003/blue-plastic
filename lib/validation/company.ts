@@ -8,6 +8,7 @@ import {
   type ModuleFlag,
 } from '@/lib/feature-flags'
 import { currencyCode, requiredText } from './common'
+import { refineFiscalYearStartDay } from './organization'
 
 const boolFlag = z
   .union([z.boolean(), z.literal('true'), z.literal('false'), z.literal('on')])
@@ -33,6 +34,7 @@ export const createCompanySchema = z
     name: requiredText('Company name', 200),
     baseCurrency: currencyCode.default('USD'),
     fiscalYearStartMonth: z.coerce.number().int().min(1).max(12).default(1),
+    fiscalYearStartDay: z.coerce.number().int().min(1).max(31).default(1),
     /** When true, load the default chart of accounts. */
     seedChart: z.boolean().default(true),
     /**
@@ -42,7 +44,10 @@ export const createCompanySchema = z
     parentOrgId: z.string().min(1).optional().nullable(),
     ...companyModulesFields,
   })
-  .superRefine(requireAtLeastOneApp)
+  .superRefine((v, ctx) => {
+    refineFiscalYearStartDay(v, ctx)
+    requireAtLeastOneApp(v, ctx)
+  })
 
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>
 

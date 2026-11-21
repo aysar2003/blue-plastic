@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { PortalPaymentProof } from '@/components/portal/portal-payment-proof'
 import { PortalPrintButton } from '@/components/portal/portal-print-button'
 import { MerchantInvoice } from '@/components/sales/merchant-invoice'
 import { buttonVariants } from '@/components/ui/button'
@@ -10,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { isAppError } from '@/server/errors'
 import { requirePortalContext } from '@/server/auth/context'
 import * as approvalService from '@/server/services/approval.service'
+import { listForSale } from '@/server/files/ledger-files'
 import * as organizationService from '@/server/services/organization.service'
 import * as portalService from '@/server/services/portal.service'
 
@@ -37,9 +39,11 @@ export default async function PortalInvoicePage({
     throw error
   }
 
-  const [organization, template] = await Promise.all([
+  const [organization, template, pay, proofs] = await Promise.all([
     organizationService.get(ctx),
     organizationService.getPrintTemplate(ctx),
+    portalService.orgPaymentInstructions(ctx),
+    listForSale(ctx, document.id),
   ])
   const config = byType(document.type)
   const approvals = await approvalService.latestApprovals(ctx.orgId, [document.id])
@@ -57,7 +61,9 @@ export default async function PortalInvoicePage({
           <h1 className="mt-1 text-xl font-semibold tracking-tight">
             Invoice {document.number}
           </h1>
-          <p className="text-sm text-muted-foreground">View only — you can print or download a PDF.</p>
+          <p className="text-sm text-muted-foreground">
+            Pay by bank using the instructions below, then upload proof. You can also print or download a PDF.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <PortalPrintButton />
@@ -70,6 +76,38 @@ export default async function PortalInvoicePage({
           </a>
         </div>
       </div>
+
+      {(pay.bankName || pay.accountNumber || pay.instructions) ? (
+        <section className="rounded-xl border border-border bg-card p-4 text-sm">
+          <h2 className="font-semibold">Pay by bank</h2>
+          <dl className="mt-2 grid gap-1 sm:grid-cols-2">
+            {pay.bankName ? (
+              <>
+                <dt className="text-muted-foreground">Bank</dt>
+                <dd>{pay.bankName}</dd>
+              </>
+            ) : null}
+            {pay.accountName ? (
+              <>
+                <dt className="text-muted-foreground">Account name</dt>
+                <dd>{pay.accountName}</dd>
+              </>
+            ) : null}
+            {pay.accountNumber ? (
+              <>
+                <dt className="text-muted-foreground">Account number</dt>
+                <dd className="tabular">{pay.accountNumber}</dd>
+              </>
+            ) : null}
+          </dl>
+          {pay.instructions ? <p className="mt-2 whitespace-pre-wrap">{pay.instructions}</p> : null}
+        </section>
+      ) : null}
+
+      <PortalPaymentProof
+        invoiceId={document.id}
+        files={proofs.map((file) => ({ id: file.id, originalName: file.originalName }))}
+      />
 
       <MerchantInvoice
         document={document}

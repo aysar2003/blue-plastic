@@ -2,12 +2,13 @@ import 'server-only'
 
 import type { CrmActivityKind, CrmOpportunityStage } from '@prisma/client'
 
-import { toDate, type CalendarDate } from '@/lib/date'
+import { toDate, today, type CalendarDate } from '@/lib/date'
 import { canMoveOpportunity, type CrmStage } from '@/lib/erp/crm-pipeline'
 import { Decimal } from '@/lib/money'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, precondition, validation } from '@/server/errors'
+import * as salesService from '@/server/services/sales.service'
 
 export async function listBoard(ctx: OrgContext) {
   assertPermission(ctx, 'customer:read')
@@ -79,17 +80,57 @@ export async function moveOpportunity(
   assertPermission(ctx, 'customer:update')
   const row = await db.crmOpportunity.findFirst({
     where: { id: input.id, orgId: ctx.orgId },
-    select: { id: true, stage: true },
+    select: {
+      id: true,
+      stage: true,
+      title: true,
+      amount: true,
+      customerId: true,
+      notes: true,
+    },
   })
   if (!row) throw notFound('Opportunity')
   if (!canMoveOpportunity(row.stage as CrmStage, input.stage as CrmStage)) {
     throw precondition(`Cannot move from ${row.stage} to ${input.stage}.`)
   }
-  return db.crmOpportunity.update({
+
+  let estimate: { id: string; number: string } | null = null
+  if (input.stage === 'WON' && ctx.permissions.has('invoice:create')) {
+    const created = await salesService.create(ctx, 'ESTIMATE', {
+      number: undefined,
+      customerId: row.customerId,
+      date: today(ctx.organization.timeZone),
+      saveAsDraft: true,
+      acknowledgeCreditLimit: false,
+      reference: `CRM-${row.id.slice(-8)}`,
+      memo: `From opportunity: ${row.title}`,
+      discountKind: 'percent',
+      lines: [
+        {
+          description: row.title,
+          quantity: '1',
+          unitPrice: row.amount ? row.amount.toString() : '0',
+        },
+      ],
+    })
+    estimate = { id: created.id, number: created.number }
+    const noteLine = `Draft estimate ${created.number} → ${created.id}`
+    const notes = row.notes?.includes(`Draft estimate ${created.number}`)
+      ? row.notes
+      : [row.notes?.trim(), noteLine].filter(Boolean).join('\n')
+    await db.crmOpportunity.update({
+      where: { id: row.id },
+      data: { stage: input.stage, notes },
+    })
+    return { id: row.id, stage: input.stage, estimate }
+  }
+
+  const updated = await db.crmOpportunity.update({
     where: { id: row.id },
     data: { stage: input.stage },
     select: { id: true, stage: true },
   })
+  return { ...updated, estimate }
 }
 
 export async function logActivity(

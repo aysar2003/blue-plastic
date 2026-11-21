@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/data/page-header'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatDate } from '@/lib/date'
+import { DEFAULT_VAT_BOX_LABELS } from '@/lib/localization/packs'
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
 import * as statutoryExport from '@/server/services/statutory-export.service'
@@ -37,6 +38,7 @@ export default async function VatReturnPage({
   const pack = await statutoryExport.vatReturnExport(ctx, settings.range)
   const currency = ctx.organization.baseCurrency
   const boxes = pack.boxes
+  const labels = pack.boxLabels ?? DEFAULT_VAT_BOX_LABELS
   const qs = `from=${settings.range.from}&to=${settings.range.to}`
 
   return (
@@ -76,23 +78,23 @@ export default async function VatReturnPage({
       <Card className="mt-4">
         <CardContent className="grid gap-3 p-4 sm:grid-cols-2">
           <div>
-            <p className="text-xs text-muted-foreground">Box 1 · Taxable supplies</p>
+            <p className="text-xs text-muted-foreground">{labels.box1}</p>
             <p className="tabular font-medium">{formatMoney(boxes.box1TaxableSupplies, currency)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Box 2 · Output VAT</p>
+            <p className="text-xs text-muted-foreground">{labels.box2}</p>
             <p className="tabular font-medium">{formatMoney(boxes.box2OutputVat, currency)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Box 3 · Taxable purchases</p>
+            <p className="text-xs text-muted-foreground">{labels.box3}</p>
             <p className="tabular font-medium">{formatMoney(boxes.box3TaxablePurchases, currency)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Box 4 · Input VAT</p>
+            <p className="text-xs text-muted-foreground">{labels.box4}</p>
             <p className="tabular font-medium">{formatMoney(boxes.box4InputVat, currency)}</p>
           </div>
           <div className="sm:col-span-2">
-            <p className="text-xs text-muted-foreground">Box 5 · Net VAT due</p>
+            <p className="text-xs text-muted-foreground">{labels.box5}</p>
             <p className="tabular text-lg font-semibold">
               {formatMoney(boxes.box5NetVatDue, currency)}
             </p>

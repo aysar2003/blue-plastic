@@ -24,6 +24,31 @@ export function scholarshipDiscountAmount(
   return ((base * pct) / 100).toFixed(4)
 }
 
+export type FeeInvoiceLine = {
+  itemId: string
+  quantity: string
+  unitPrice: string
+  description: string
+}
+
+/** Append a DISCOUNT fee-waiver line when the award amount is greater than zero. */
+export function feeInvoiceLinesWithWaiver(
+  lines: FeeInvoiceLine[],
+  waiver: { itemId: string; amount: string; description: string },
+): FeeInvoiceLine[] {
+  const amount = Number(waiver.amount)
+  if (!Number.isFinite(amount) || amount <= 0 || !waiver.itemId) return lines
+  return [
+    ...lines,
+    {
+      itemId: waiver.itemId,
+      quantity: '1',
+      unitPrice: amount.toFixed(4),
+      description: waiver.description,
+    },
+  ]
+}
+
 export function canBillEnrollment(input: {
   status: EnrollmentStatus
   salesDocumentId?: string | null
