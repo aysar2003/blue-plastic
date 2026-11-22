@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import {
   defaultOnboardingAnswers,
   recommendPackFromAnswers,
+  workspacePreview,
   type OnboardingAnswers,
 } from '@/lib/packs'
 import type { OnboardingState } from '@/server/services/onboarding.service'
@@ -36,6 +37,28 @@ const SECTORS: { id: OnboardingAnswers['sector']; label: string; hint: string }[
   { id: 'services', label: 'General services', hint: 'Little or no stock' },
   { id: 'mixed', label: 'Mixed / full ERP', hint: 'Almost everything on' },
 ]
+
+/** Confirm-step eyebrow follows the workspace (a school is not a company). */
+function setupKicker(packId: string | null | undefined): string {
+  switch (packId) {
+    case 'school':
+      return 'School setup'
+    case 'university':
+      return 'University setup'
+    case 'hospital_admin':
+      return 'Hospital setup'
+    case 'pharmacy':
+      return 'Pharmacy setup'
+    case 'restaurant':
+      return 'Restaurant setup'
+    case 'hotel':
+      return 'Hotel setup'
+    case 'ngo':
+      return 'Organisation setup'
+    default:
+      return 'Company setup'
+  }
+}
 
 function Toggle({
   label,
@@ -91,6 +114,11 @@ export function OnboardingWizard({
     return packs.find((pack) => pack.id === id) ?? null
   }, [packs, packId, recommendation.packId])
 
+  const preview = useMemo(
+    () => (selected ? workspacePreview(selected.id) : null),
+    [selected],
+  )
+
   function patchAnswers(partial: Partial<OnboardingAnswers>) {
     setAnswers((prev) => ({ ...prev, ...partial }))
     setPackId(null)
@@ -137,7 +165,7 @@ export function OnboardingWizard({
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
       <div>
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Company setup
+          {setupKicker(preselected || step === STEPS.length - 1 ? selected?.id : null)}
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">
           {preselected ? 'Confirm your workspace' : 'Set up for your business'}
@@ -371,18 +399,36 @@ export function OnboardingWizard({
           <CardHeader>
             <CardTitle className="text-base">Confirm {selected.label}</CardTitle>
             <CardDescription>
-              After confirm, Home shows Getting started for this workspace. Refine apps later in
-              Settings → Apps &amp; features or Marketplace.
+              {preselected
+                ? 'This is the workspace from registration. Finish to open Getting started on Home. The apps you chose stay as they are.'
+                : 'After confirm, Home shows Getting started for this workspace. Refine apps later in Settings → Apps & features or Marketplace.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <ul className="flex flex-wrap gap-2 text-xs">
-              {selected.modules.map((mod) => (
-                <li key={mod} className="rounded-full border px-2.5 py-1">
-                  {mod}
-                </li>
-              ))}
-            </ul>
+            {preview ? (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-semibold">
+                    {preview.packLabel} · {preview.hub.label}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{preview.blurb}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium">Day-to-day desk</p>
+                  <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                    {preview.daily.slice(0, 8).map((line) => (
+                      <li key={line}>· {line}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-xs font-medium">Books underneath</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {preview.underlyingLoops.map((loop) => loop.title).join(' · ') || 'Books'}
+                  </p>
+                </div>
+              </div>
+            ) : null}
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -391,8 +437,9 @@ export function OnboardingWizard({
               />
               Seed a default chart of accounts if this company has none yet
             </label>
-            <p className="text-muted-foreground">
-              Checklist preview: {selected.checklist.map((item) => item.label).join(' · ') || '—'}
+            <p className="text-xs text-muted-foreground">
+              Getting started:{' '}
+              {selected.checklist.map((item) => item.label).join(' · ') || '—'}
             </p>
           </CardContent>
         </Card>
@@ -417,7 +464,13 @@ export function OnboardingWizard({
             </Button>
           ) : (
             <Button type="button" disabled={pending || !selected} onClick={finish}>
-              {pending ? 'Installing…' : 'Install pack'}
+              {pending
+                ? preselected
+                  ? 'Finishing…'
+                  : 'Installing…'
+                : preselected
+                  ? 'Finish setup'
+                  : 'Install pack'}
             </Button>
           )}
         </div>

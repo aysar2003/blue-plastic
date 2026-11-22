@@ -4,10 +4,13 @@ import type { Prisma } from '@prisma/client'
 
 import { localizationPackIdForCountry } from '@/lib/localization/packs'
 import { getPack, INDUSTRY_PACKS, type PackId } from '@/lib/packs'
+import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
+import { seedDefaultOffice } from '@/server/accounting/default-office'
 import { can } from '@/server/auth/permissions'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { forbidden, notFound, validation } from '@/server/errors'
+import { ensureEducationBootstrap } from '@/server/services/education-bootstrap.service'
 import * as packService from '@/server/services/pack.service'
 
 function parseChecklistDone(raw: unknown): string[] {
@@ -90,6 +93,38 @@ export async function complete(
   const pack = getPack(input.packId)
   if (!pack) throw validation('Unknown industry pack.')
   // Planned packs still install module presets; UI shows an honest maturity note.
+
+  // Registration already applied this pack plus the needs the user toggled.
+  // Re-installing would reset apps back to the pack defaults and drop that choice.
+  if (ctx.organization.installedPackId === pack.id) {
+    const seedChart = input.seedChart ?? pack.seedChartDefault
+    const chartSeeded = await db.$transaction(async (tx) => {
+      let created = 0
+      if (seedChart) {
+        const seeded = await seedChartOfAccounts(tx, ctx.orgId)
+        created = seeded.created
+      }
+      await seedDefaultOffice(tx, ctx.orgId)
+      await ensureEducationBootstrap(tx, ctx.orgId, pack.id)
+      await tx.organization.update({
+        where: { id: ctx.orgId },
+        data: { onboardingCompletedAt: new Date() },
+      })
+      return created > 0
+    })
+
+    return {
+      orgId: ctx.orgId,
+      packId: pack.id,
+      packLabel: pack.label,
+      verticalStatus: pack.verticalStatus,
+      chartSeeded,
+      modulesOn: Object.entries(ctx.features.modules)
+        .filter(([, on]) => on)
+        .map(([key]) => key)
+        .sort(),
+    }
+  }
 
   // Wizard is an explicit institution choice — OWNER/ADMIN may set grants to the pack.
   const mayReplace =

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { coverageSummary, getPack, INDUSTRY_PACKS, modulesFromPack } from '@/lib/packs'
+import { coverageSummary, getPack, INDUSTRY_PACKS, modulesFromPack, workspacePreview } from '@/lib/packs'
 import {
   completeOnboardingSchema,
   skipOnboardingSchema,
@@ -37,6 +37,14 @@ describe('P7 onboarding validation', () => {
       expect(pack.setupChecklist.length, pack.id).toBeGreaterThan(0)
       expect(getPack(pack.id)?.id).toBe(pack.id)
     }
+  })
+
+  it('school confirm preview leads with the school desk', () => {
+    const preview = workspacePreview('school')
+    expect(preview?.packLabel).toBe('School')
+    expect(preview?.hub.label).toBe('Education')
+    expect(preview?.daily[0]).toMatch(/school year/i)
+    expect(preview?.daily.some((line) => /fee plans/i.test(line))).toBe(true)
   })
 
   it('retail checklist covers locale, apps hide, and reorder', () => {
