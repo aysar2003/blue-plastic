@@ -25,8 +25,24 @@ import { needsSetup } from '@/server/services/setup.service'
 
 export { isSelfServeApprovalRequired, isSelfServeEnabled }
 
-function flagsForSignup(modules: Record<ModuleFlag, boolean>) {
-  return featureFlagsWithModules(modules) as unknown as Prisma.InputJsonValue
+function flagsForSignup(
+  modules: Record<ModuleFlag, boolean>,
+  behavioral?: SetupInput['behavioral'],
+) {
+  const flags = featureFlagsWithModules(modules)
+  if (behavioral) {
+    if (typeof behavioral.enableTax === 'boolean') flags.enableTax = behavioral.enableTax
+    if (typeof behavioral.enableCustomerPortal === 'boolean') {
+      flags.enableCustomerPortal = behavioral.enableCustomerPortal
+    }
+    if (typeof behavioral.enableDocumentApprovals === 'boolean') {
+      flags.enableDocumentApprovals = behavioral.enableDocumentApprovals
+    }
+    if (typeof behavioral.payrollStandard === 'boolean') {
+      flags.payrollStandard = behavioral.payrollStandard
+    }
+  }
+  return flags as unknown as Prisma.InputJsonValue
 }
 
 export type RegisterResult =
@@ -70,6 +86,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
 
   const requestedModules = parseModulesSelection(input.requestedModules)
   const packId = input.packId ?? null
+  const behavioral = input.behavioral
 
   if (empty) {
     const passwordHash = await hashPassword(input.password)
@@ -80,7 +97,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
           baseCurrency: input.baseCurrency,
           fiscalYearStartMonth: input.fiscalYearStartMonth,
           fiscalYearStartDay: input.fiscalYearStartDay,
-          featureFlags: flagsForSignup(requestedModules),
+          featureFlags: flagsForSignup(requestedModules, behavioral),
           installedPackId: packId ?? undefined,
         },
         select: { id: true, name: true },
@@ -186,7 +203,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
         fiscalYearStartDay: input.fiscalYearStartDay,
         rentExpiresAt: trialEndsAt(),
         rentNote: 'Free trial',
-        featureFlags: flagsForSignup(requestedModules),
+        featureFlags: flagsForSignup(requestedModules, behavioral),
         installedPackId: packId ?? undefined,
       },
       select: { id: true, name: true },

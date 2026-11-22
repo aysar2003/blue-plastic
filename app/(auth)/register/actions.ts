@@ -31,6 +31,12 @@ export async function registerAction(
   if (formData.get('packId')) {
     raw.packId = String(formData.get('packId'))
   }
+  // Need_* checkboxes — include every need_* key from the form (on = true).
+  for (const [key, value] of formData.entries()) {
+    if (typeof key === 'string' && key.startsWith('need_')) {
+      raw[key] = value === 'true' || value === 'on' ? 'true' : 'false'
+    }
+  }
   const values = { ...raw, password: '', confirmPassword: '' }
 
   const parsed = setupSchema.safeParse(raw)

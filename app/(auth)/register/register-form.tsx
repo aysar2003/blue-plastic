@@ -15,9 +15,12 @@ import {
   PACK_FAMILIES,
   packsInFamily,
   workspacePreview,
+  needsForPack,
+  defaultNeedsSelection,
   type OnboardingAnswers,
   type PackFamilyId,
   type PackId,
+  type RegisterNeedId,
   defaultOnboardingAnswers,
   recommendPackFromAnswers,
 } from '@/lib/packs'
@@ -37,53 +40,124 @@ const SECTOR_BY_FAMILY: Record<PackFamilyId, OnboardingAnswers['sector']> = {
   everything: 'mixed',
 }
 
-const FAMILY_TOGGLES: Record<
-  PackFamilyId,
-  { key: keyof OnboardingAnswers; label: string; hint: string }[]
-> = {
-  trade: [
-    { key: 'usesPos', label: 'We use a till / Point of Sale', hint: 'Registers and receipts' },
-    { key: 'multiStore', label: 'More than one store / warehouse', hint: 'Transfers between sites' },
-    { key: 'needsTax', label: 'We charge sales / purchase tax', hint: 'Tax codes on documents' },
-    { key: 'needsPayroll', label: 'We run payroll', hint: 'Employees and payslips' },
-  ],
-  food_stay: [
-    { key: 'usesPos', label: 'We use POS / tables', hint: 'Till and kitchen tickets' },
-    { key: 'needsPayroll', label: 'We run payroll', hint: 'Staff and tips' },
-    { key: 'needsTax', label: 'We charge tax', hint: 'Tax on sales' },
-  ],
-  health: [
-    { key: 'usesPos', label: 'We sell at a counter / POS', hint: 'Pharmacy till' },
-    { key: 'needsApprovals', label: 'We want maker-checker approvals', hint: 'Bills wait for a checker' },
-    { key: 'needsPayroll', label: 'We run payroll', hint: 'Staff payslips' },
-    { key: 'tracksLots', label: 'We track lots or expiry', hint: 'Batch-style stock' },
-  ],
-  education: [
-    { key: 'needsPayroll', label: 'We run staff payroll', hint: 'Teachers and admin payslips' },
-    { key: 'needsTax', label: 'We charge tax on fees', hint: 'Usually off for schools' },
-  ],
-  services: [
-    { key: 'sellsServices', label: 'We sell services', hint: 'Invoices and projects' },
-    { key: 'needsApprovals', label: 'We want approvals', hint: 'Checker before posting' },
-    { key: 'needsPayroll', label: 'We run payroll', hint: 'Employees' },
-  ],
-  make_move: [
-    { key: 'manufactures', label: 'We manufacture or assemble', hint: 'Work orders / MRP' },
-    { key: 'tracksLots', label: 'We track lots or serials', hint: 'Batch stock' },
-    { key: 'multiStore', label: 'More than one warehouse', hint: 'Transfers and picks' },
-    { key: 'needsPayroll', label: 'We run payroll', hint: 'Shop-floor and office staff' },
-  ],
-  everything: [
-    { key: 'needsTax', label: 'We charge tax', hint: 'Tax codes' },
-    { key: 'needsApprovals', label: 'We want approvals', hint: 'Maker-checker' },
-    { key: 'needsPayroll', label: 'We run payroll', hint: 'Employees' },
-  ],
-}
-
 function stepClass(active: boolean, done: boolean) {
   if (active) return 'rounded-full bg-foreground px-3 py-1 text-background'
   if (done) return 'rounded-full bg-muted px-3 py-1 text-foreground'
   return 'rounded-full border px-3 py-1 text-muted-foreground'
+}
+
+type OrgCopy = {
+  section: string
+  nameLabel: string
+  placeholder: string
+  trialNote: string
+  pendingLabel: string
+}
+
+/** Confirm-step wording follows the chosen workspace (school ≠ company). */
+function orgCopyFor(packId: PackId | null, familyId: PackFamilyId | null): OrgCopy {
+  const byPack: Partial<Record<PackId, OrgCopy>> = {
+    school: {
+      section: 'Your school',
+      nameLabel: 'School name',
+      placeholder: 'e.g. Hodan Academy',
+      trialNote:
+        'Creating your school starts a 14-day free trial. You can sign in and open the books immediately.',
+      pendingLabel: 'Creating school…',
+    },
+    university: {
+      section: 'Your university',
+      nameLabel: 'University name',
+      placeholder: 'e.g. Hodan University',
+      trialNote:
+        'Creating your university starts a 14-day free trial. You can sign in and open the books immediately.',
+      pendingLabel: 'Creating university…',
+    },
+    hospital_admin: {
+      section: 'Your hospital',
+      nameLabel: 'Hospital name',
+      placeholder: 'e.g. Hodan Hospital',
+      trialNote:
+        'Creating your hospital starts a 14-day free trial. You can sign in and open the books immediately.',
+      pendingLabel: 'Creating hospital…',
+    },
+    pharmacy: {
+      section: 'Your pharmacy',
+      nameLabel: 'Pharmacy name',
+      placeholder: 'e.g. Hodan Pharmacy',
+      trialNote:
+        'Creating your pharmacy starts a 14-day free trial. You can sign in and open the books immediately.',
+      pendingLabel: 'Creating pharmacy…',
+    },
+    restaurant: {
+      section: 'Your restaurant',
+      nameLabel: 'Restaurant name',
+      placeholder: 'e.g. Hodan Cafe',
+      trialNote:
+        'Creating your restaurant starts a 14-day free trial. You can sign in and open the books immediately.',
+      pendingLabel: 'Creating restaurant…',
+    },
+    hotel: {
+      section: 'Your hotel',
+      nameLabel: 'Hotel name',
+      placeholder: 'e.g. Hodan Hotel',
+      trialNote:
+        'Creating your hotel starts a 14-day free trial. You can sign in and open the books immediately.',
+      pendingLabel: 'Creating hotel…',
+    },
+    ngo: {
+      section: 'Your organisation',
+      nameLabel: 'Organisation name',
+      placeholder: 'e.g. Hodan Foundation',
+      trialNote:
+        'Creating your organisation starts a 14-day free trial. You can sign in and open the books immediately.',
+      pendingLabel: 'Creating organisation…',
+    },
+  }
+
+  if (packId && byPack[packId]) return byPack[packId]!
+
+  if (familyId === 'education') {
+    return {
+      section: 'Your school',
+      nameLabel: 'School name',
+      placeholder: 'e.g. Hodan Academy',
+      trialNote:
+        'Creating your school starts a 14-day free trial. You can sign in and open the books immediately.',
+      pendingLabel: 'Creating school…',
+    }
+  }
+
+  if (familyId === 'health') {
+    return {
+      section: 'Your organisation',
+      nameLabel: 'Organisation name',
+      placeholder: 'e.g. Hodan Clinic',
+      trialNote:
+        'Creating your organisation starts a 14-day free trial. You can sign in and open the books immediately.',
+      pendingLabel: 'Creating organisation…',
+    }
+  }
+
+  if (familyId === 'services' || familyId === 'everything') {
+    return {
+      section: 'Your organisation',
+      nameLabel: 'Organisation name',
+      placeholder: 'e.g. Hodan Group',
+      trialNote:
+        'Creating your organisation starts a 14-day free trial. You can sign in and open the books immediately.',
+      pendingLabel: 'Creating organisation…',
+    }
+  }
+
+  return {
+    section: 'Your company',
+    nameLabel: 'Company name',
+    placeholder: 'e.g. Hodan Trading',
+    trialNote:
+      'Creating your company starts a 14-day free trial. You can sign in and open the books immediately.',
+    pendingLabel: 'Creating company…',
+  }
 }
 
 export function RegisterForm() {
@@ -94,6 +168,7 @@ export function RegisterForm() {
   const [familyId, setFamilyId] = useState<PackFamilyId | null>(null)
   const [packId, setPackId] = useState<PackId | null>((v.packId as PackId) || null)
   const [answers, setAnswers] = useState<OnboardingAnswers>(() => defaultOnboardingAnswers())
+  const [needSelection, setNeedSelection] = useState<Partial<Record<RegisterNeedId, boolean>>>({})
   const [stepError, setStepError] = useState<string | null>(null)
 
   const familyPacks = useMemo(
@@ -103,19 +178,36 @@ export function RegisterForm() {
 
   const recommendation = useMemo(() => recommendPackFromAnswers(answers), [answers])
 
+  const packNeeds = useMemo(() => (packId ? needsForPack(packId) : []), [packId])
+
   const preview = useMemo(
     () => (packId ? workspacePreview(packId) : null),
     [packId],
   )
 
+  const orgCopy = useMemo(() => orgCopyFor(packId, familyId), [packId, familyId])
+
   function selectFamily(id: PackFamilyId) {
     setFamilyId(id)
     setPackId(null)
+    setNeedSelection({})
     setAnswers((prev) => ({
       ...prev,
       sector: SECTOR_BY_FAMILY[id],
     }))
     setStepError(null)
+  }
+
+  function selectPack(id: PackId) {
+    setPackId(id)
+    setNeedSelection(defaultNeedsSelection(id))
+    setStepError(null)
+  }
+
+  function needChecked(id: RegisterNeedId, locked?: boolean, defaultOn?: boolean): boolean {
+    if (locked) return true
+    if (needSelection[id] !== undefined) return Boolean(needSelection[id])
+    return Boolean(defaultOn)
   }
 
   function goNext() {
@@ -127,13 +219,6 @@ export function RegisterForm() {
     if (step === 1 && !packId) {
       setStepError('Choose the workspace that fits your organisation.')
       return
-    }
-    if (step === 2) {
-      const recommended = recommendation.packId
-      const inFamily = familyPacks.some((pack) => pack.id === recommended)
-      if (inFamily && familyId) {
-        setPackId(recommended)
-      }
     }
     setStep((value) => Math.min(STEPS.length - 1, value + 1))
   }
@@ -166,6 +251,12 @@ export function RegisterForm() {
     <form action={formAction} className="space-y-5">
       <FormError message={state.error} />
       {packId ? <input type="hidden" name="packId" value={packId} /> : null}
+      {/* Needs must stay in the form on Confirm — step 2 UI unmounts. */}
+      {packNeeds.map((need) => {
+        const on = needChecked(need.id, need.locked, need.defaultOn)
+        if (!on) return null
+        return <input key={`persist_${need.id}`} type="hidden" name={`need_${need.id}`} value="true" />
+      })}
 
       <ol className="flex flex-wrap gap-2 text-xs">
         {STEPS.map((label, index) => (
@@ -231,10 +322,7 @@ export function RegisterForm() {
                 <button
                   key={pack.id}
                   type="button"
-                  onClick={() => {
-                    setPackId(pack.id)
-                    setStepError(null)
-                  }}
+                  onClick={() => selectPack(pack.id)}
                   className={
                     active
                       ? 'rounded-lg border-2 border-foreground bg-muted/40 p-3 text-left'
@@ -258,42 +346,57 @@ export function RegisterForm() {
       {step === 2 ? (
         <div className="space-y-3">
           <div>
-            <p className="text-sm font-semibold text-foreground">A few needs</p>
+            <p className="text-sm font-semibold text-foreground">What do you need?</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Optional refinements. Your workspace stays {packId ? workspacePreview(packId)?.packLabel : 'selected'}.
+              Turn on the work areas that matter for{' '}
+              {packId ? workspacePreview(packId)?.packLabel : 'your workspace'}. You can change apps
+              later in Settings.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(familyId ? FAMILY_TOGGLES[familyId] : []).map((toggle) => {
-              const checked = Boolean(answers[toggle.key])
+          <div className="grid max-h-[min(28rem,55vh)] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+            {packNeeds.map((need) => {
+              const checked = needChecked(need.id, need.locked, need.defaultOn)
               return (
                 <label
-                  key={toggle.key}
-                  className="flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-border/80 bg-background/60 px-3 py-2.5"
+                  key={need.id}
+                  className={
+                    need.locked
+                      ? 'flex cursor-default items-start justify-between gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 opacity-90'
+                      : 'flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-border/80 bg-background/60 px-3 py-2.5'
+                  }
                 >
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium">{toggle.label}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">{toggle.hint}</span>
+                    <span className="block text-sm font-medium">{need.label}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{need.hint}</span>
+                    {need.locked ? (
+                      <span className="mt-1 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Included in desk
+                      </span>
+                    ) : null}
                   </span>
                   <input
                     type="checkbox"
                     className="mt-1 size-4 rounded border-input"
                     checked={checked}
+                    disabled={need.locked}
                     onChange={(event) =>
-                      setAnswers((prev) => ({ ...prev, [toggle.key]: event.target.checked }))
+                      setNeedSelection((prev) => ({
+                        ...prev,
+                        [need.id]: event.target.checked,
+                      }))
                     }
                   />
                 </label>
               )
             })}
           </div>
-          {familyId && recommendation.packId !== packId ? (
+          {familyId && recommendation.packId !== packId && familyPacks.some((p) => p.id === recommendation.packId) ? (
             <p className="text-xs text-muted-foreground">
-              Suggestion from your answers:{' '}
+              Related workspace:{' '}
               <button
                 type="button"
                 className="font-medium text-primary underline"
-                onClick={() => setPackId(recommendation.packId)}
+                onClick={() => selectPack(recommendation.packId)}
               >
                 {recommendation.label}
               </button>
@@ -329,6 +432,17 @@ export function RegisterForm() {
                   {preview.underlyingLoops.map((loop) => loop.title).join(' · ') || 'Books'}
                 </p>
               </div>
+              {packNeeds.length > 0 ? (
+                <div>
+                  <p className="text-xs font-medium text-foreground">Selected needs</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {packNeeds
+                      .filter((need) => needChecked(need.id, need.locked, need.defaultOn))
+                      .map((need) => need.label)
+                      .join(' · ')}
+                  </p>
+                </div>
+              ) : null}
               {preview.outOfScope.length > 0 ? (
                 <div>
                   <p className="text-xs font-medium text-foreground">Not included</p>
@@ -356,19 +470,19 @@ export function RegisterForm() {
 
           <div className="space-y-4">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Your company
+              {orgCopy.section}
             </p>
 
             <Field
               name="organizationName"
-              label="Company name"
+              label={orgCopy.nameLabel}
               required
               error={state.fieldErrors?.organizationName}
             >
               <Input
                 {...fieldProps('organizationName', state.fieldErrors?.organizationName)}
                 defaultValue={v.organizationName ?? ''}
-                placeholder="e.g. Hodan Trading"
+                placeholder={orgCopy.placeholder}
                 autoFocus
                 required
               />
@@ -500,10 +614,7 @@ export function RegisterForm() {
             </div>
           </div>
 
-          <p className="text-xs text-muted-foreground">
-            Creating your company starts a 14-day free trial. You can sign in and open the books
-            immediately.
-          </p>
+          <p className="text-xs text-muted-foreground">{orgCopy.trialNote}</p>
         </div>
       ) : null}
 
@@ -520,7 +631,7 @@ export function RegisterForm() {
             Continue
           </Button>
         ) : (
-          <SubmitButton className="min-w-[10rem]" pendingLabel="Creating company…">
+          <SubmitButton className="min-w-[10rem]" pendingLabel={orgCopy.pendingLabel}>
             Start free trial
           </SubmitButton>
         )}

@@ -50,3 +50,12 @@ export {
   type PrimaryHub,
   type WorkspacePreview,
 } from './workspace'
+export {
+  needsForPack,
+  defaultNeedsSelection,
+  parseNeedsFromForm,
+  modulesWithNeeds,
+  behavioralWithNeeds,
+  type RegisterNeedId,
+  type RegisterNeedToggle,
+} from './register-needs'

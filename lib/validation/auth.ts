@@ -7,7 +7,15 @@ import {
   modulesFromFormValues,
   type ModuleFlag,
 } from '@/lib/feature-flags'
-import { PACK_IDS, getPack, modulesFromPack } from '@/lib/packs'
+import {
+  PACK_IDS,
+  getPack,
+  modulesWithNeeds,
+  parseNeedsFromForm,
+  behavioralWithNeeds,
+  defaultNeedsSelection,
+  type RegisterNeedId,
+} from '@/lib/packs'
 import { normalizePhone } from '@/lib/phone'
 
 import { refineFiscalYearStartDay } from './organization'
@@ -106,8 +114,15 @@ export const setupSchema = z
   })
   .transform((v) => {
     const pack = v.packId ? getPack(v.packId) : null
+    let selectedNeeds = pack ? parseNeedsFromForm(v as Record<string, unknown>) : []
+    // No need_* fields → keep pack defaults (legacy / incomplete clients).
+    if (pack && selectedNeeds.length === 0) {
+      selectedNeeds = Object.entries(defaultNeedsSelection(pack.id))
+        .filter(([, on]) => on)
+        .map(([id]) => id as RegisterNeedId)
+    }
     const modules = pack
-      ? modulesFromPack(pack)
+      ? modulesWithNeeds(pack.id, selectedNeeds)
       : modulesFromFormValues(v as Record<string, unknown>)
     const requestedModules = MODULE_FLAGS.reduce(
       (acc, key) => {
@@ -116,10 +131,13 @@ export const setupSchema = z
       },
       {} as Record<ModuleFlag, boolean>,
     )
+    const behavioral = pack ? behavioralWithNeeds(pack.id, selectedNeeds) : {}
     return {
       ...v,
       packId: pack?.id ?? null,
       requestedModules,
+      selectedNeeds,
+      behavioral,
     }
   })
 
