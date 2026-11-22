@@ -183,6 +183,7 @@ export async function authenticateApiKey(plainToken: string) {
           rentExpiresAt: true,
           maxUsers: true,
           rentNote: true,
+          onboardingCompletedAt: true,
         },
       },
       createdBy: {

@@ -529,6 +529,7 @@ export async function createDueForAllOrganizations(): Promise<{
             rentExpiresAt: true,
             maxUsers: true,
             rentNote: true,
+            onboardingCompletedAt: true,
           },
         },
       },
