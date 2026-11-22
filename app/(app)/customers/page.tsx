@@ -22,6 +22,7 @@ import { MONEY_BAR } from '@/lib/money-bar-bands'
 import { presetRange, readDatePreset } from '@/lib/list-filters'
 import { letterheadLines } from '@/lib/letterhead'
 import { formatMoney } from '@/lib/money'
+import { isEducationRegisterPack } from '@/lib/packs'
 import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
 import * as contactService from '@/server/services/contact.service'
@@ -403,6 +404,9 @@ export default async function CustomersPage({
       transactions={transactions}
       reports={[
         ...reports,
+        ...(customer && isEducationRegisterPack(ctx.organization.installedPackId)
+          ? [{ label: 'School history', href: `/education/students/${customer.id}` }]
+          : []),
         ...(customer?.linkedParty && canReport
           ? [
               { label: 'Linked supplier', href: customer.linkedParty.href },

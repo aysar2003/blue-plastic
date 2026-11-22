@@ -56,6 +56,19 @@ describe('academic year lifecycle', () => {
     expect(school.setupChecklist.some((row) => row.id === 'import')).toBe(true)
     expect(school.inScope.some((line) => /keep all history/i.test(line))).toBe(true)
     expect(school.inScope.some((line) => /multi-year history/i.test(line))).toBe(true)
+    expect(school.behavioral?.enableCustomerPortal).toBe(true)
     expect(getPack('university')?.setupChecklist.some((row) => row.id === 'years')).toBe(true)
+    expect(getPack('university')?.behavioral?.enableCustomerPortal).toBe(true)
+  })
+})
+
+describe('education bootstrap calendar', () => {
+  it('defaults include teaching terms and vacations for pack install seed', async () => {
+    const { defaultAcademicCalendar, termsToSeed } = await import('@/lib/packs/academic-year')
+    const cal = defaultAcademicCalendar(new Date('2026-03-01T00:00:00Z'))
+    const names = termsToSeed(cal).map((t) => t.name)
+    expect(names).toContain('2026 Term 1')
+    expect(names).toContain('2026 Term 2')
+    expect(names.some((n) => /vacation/i.test(n))).toBe(true)
   })
 })

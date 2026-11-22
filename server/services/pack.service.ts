@@ -10,6 +10,7 @@ import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { forbidden, notFound, validation } from '@/server/errors'
+import { ensureEducationBootstrap } from '@/server/services/education-bootstrap.service'
 
 export type InstallPackResult = {
   orgId: string
@@ -72,6 +73,7 @@ export async function installPack(
       chartSeeded = result.created > 0
     }
     await seedDefaultOffice(tx, ctx.orgId)
+    await ensureEducationBootstrap(tx, ctx.orgId, pack.id)
 
     await writeAudit(
       tx,

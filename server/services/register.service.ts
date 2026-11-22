@@ -12,78 +12,30 @@ import {
   type ModuleFlag,
 } from '@/lib/feature-flags'
 import { isSelfServeApprovalRequired, isSelfServeEnabled } from '@/lib/self-serve'
-import { toDate } from '@/lib/date'
 import {
   academicCalendarFromUnknown,
-  termsToSeed,
   type AcademicCalendarInput,
 } from '@/lib/packs'
 import type { SetupInput } from '@/lib/validation/auth'
 import type { ReviewSignupRequestInput } from '@/lib/validation/signup-request'
 import type { OrgContext } from '@/server/auth/context'
 import { hashPassword } from '@/server/auth/password'
-import { db, type Tx } from '@/server/db'
+import { db } from '@/server/db'
 import { conflict, forbidden, notFound } from '@/server/errors'
 import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
 import { seedDefaultOffice } from '@/server/accounting/default-office'
 import { createDefaultSequences } from '@/server/sequences'
+import { ensureEducationBootstrap } from '@/server/services/education-bootstrap.service'
 import { needsSetup } from '@/server/services/setup.service'
 
-async function seedAcademicYear(tx: Tx, orgId: string, calendar: AcademicCalendarInput | null) {
-  if (!calendar) return
-  const existingProgram = await tx.academicProgram.findFirst({
-    where: { orgId },
-    select: { id: true },
-  })
-  if (!existingProgram) {
-    await tx.academicProgram.create({
-      data: { orgId, name: 'General', code: 'GEN' },
-    })
-  }
-
-  const termRows = termsToSeed(calendar)
-  const startsOn = termRows.reduce(
-    (min, row) => (row.startsOn < min ? row.startsOn : min),
-    termRows[0]!.startsOn,
-  )
-  const endsOn = termRows.reduce(
-    (max, row) => (row.endsOn > max ? row.endsOn : max),
-    termRows[0]!.endsOn,
-  )
-
-  let year = await tx.academicYear.findFirst({
-    where: { orgId, label: calendar.academicYearLabel.trim() },
-    select: { id: true },
-  })
-  if (!year) {
-    year = await tx.academicYear.create({
-      data: {
-        orgId,
-        label: calendar.academicYearLabel.trim(),
-        startsOn: toDate(startsOn),
-        endsOn: toDate(endsOn),
-        status: 'OPEN',
-      },
-      select: { id: true },
-    })
-  }
-
-  for (const term of termRows) {
-    const exists = await tx.academicTerm.findFirst({
-      where: { orgId, name: term.name },
-      select: { id: true },
-    })
-    if (exists) continue
-    await tx.academicTerm.create({
-      data: {
-        orgId,
-        academicYearId: year.id,
-        name: term.name,
-        startsOn: toDate(term.startsOn),
-        endsOn: toDate(term.endsOn),
-      },
-    })
-  }
+async function seedAcademicYear(
+  tx: Parameters<typeof ensureEducationBootstrap>[0],
+  orgId: string,
+  packId: string | null,
+  calendar: AcademicCalendarInput | null,
+) {
+  if (!calendar && !packId) return
+  await ensureEducationBootstrap(tx, orgId, packId, calendar)
 }
 
 function signupModulesPayload(
@@ -205,7 +157,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
       await createDefaultSequences(tx, organization.id)
       await seedChartOfAccounts(tx, organization.id)
       await seedDefaultOffice(tx, organization.id)
-      await seedAcademicYear(tx, organization.id, academicCalendar)
+      await seedAcademicYear(tx, organization.id, packId, academicCalendar)
 
       await tx.auditLog.create({
         data: {
@@ -309,7 +261,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
     await createDefaultSequences(tx, organization.id)
     await seedChartOfAccounts(tx, organization.id)
     await seedDefaultOffice(tx, organization.id)
-    await seedAcademicYear(tx, organization.id, academicCalendar)
+    await seedAcademicYear(tx, organization.id, packId, academicCalendar)
 
     await tx.auditLog.create({
       data: {
@@ -487,7 +439,7 @@ export async function reviewSignupRequest(
     await createDefaultSequences(tx, organization.id)
     await seedChartOfAccounts(tx, organization.id)
     await seedDefaultOffice(tx, organization.id)
-    await seedAcademicYear(tx, organization.id, approvedCalendar)
+    await seedAcademicYear(tx, organization.id, approvedPackId, approvedCalendar)
 
     await tx.companySignupRequest.update({
       where: { id: request.id },

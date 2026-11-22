@@ -288,7 +288,7 @@ export const INDUSTRY_PACKS: readonly IndustryPack[] = [
         DELIVERY: false,
       },
     },
-    behavioral: { enableTax: false, payrollStandard: true },
+    behavioral: { enableTax: false, payrollStandard: true, enableCustomerPortal: true },
     setupChecklist: [
       { id: 'coa', label: 'Confirm chart of accounts', href: '/accounts' },
       { id: 'customers', label: 'Add students / guardians', href: '/customers' },
@@ -351,7 +351,7 @@ export const INDUSTRY_PACKS: readonly IndustryPack[] = [
       'projects',
       'calendar',
     ]),
-    behavioral: { enableTax: false, payrollStandard: true },
+    behavioral: { enableTax: false, payrollStandard: true, enableCustomerPortal: true },
     setupChecklist: [
       { id: 'coa', label: 'Confirm chart of accounts', href: '/accounts' },
       { id: 'customers', label: 'Add students', href: '/customers' },

@@ -14,13 +14,18 @@ import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toCalendarDate } from '@/lib/date'
 import { nextAcademicYearLabel } from '@/lib/erp/academic-year-lifecycle'
+import { db } from '@/server/db'
 import { requireOrgContext } from '@/server/auth/context'
+import { ensureEducationBootstrap } from '@/server/services/education-bootstrap.service'
 import * as education from '@/server/services/education.service'
 
 export const metadata: Metadata = { title: 'School years' }
 
 export default async function AcademicYearsPage() {
   const ctx = await requireOrgContext('invoice:read')
+  await db.$transaction((tx) =>
+    ensureEducationBootstrap(tx, ctx.orgId, ctx.organization.installedPackId),
+  )
   const years = await education.listAcademicYears(ctx)
   const openYear = years.find((y) => y.status === 'OPEN') ?? null
   const latestClosed = years.find((y) => y.status === 'CLOSED') ?? null
@@ -121,7 +126,15 @@ export default async function AcademicYearsPage() {
       {years.length === 0 ? (
         <EmptyState
           title="No school years yet"
-          description="Open the first year, or complete school register with Term 1 / Term 2 dates."
+          description="Open the first year below — Term 1 / Term 2 are created for you. Prior years stay forever once closed."
+          action={
+            <form action={openAcademicYearAction}>
+              <input type="hidden" name="label" value={suggestedLabel} />
+              <button type="submit" className={buttonVariants({ size: 'sm' })}>
+                Open {suggestedLabel}
+              </button>
+            </form>
+          }
         />
       ) : (
         <Table>

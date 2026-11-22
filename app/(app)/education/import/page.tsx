@@ -63,6 +63,15 @@ export default async function EducationImportPage({
             . For prior years include <code className="text-xs">year</code> +{' '}
             <code className="text-xs">term</code> so history is retained as CLOSED-year enrollments.
           </p>
+          <a
+            className="inline-block text-sm underline underline-offset-4"
+            href={`data:text/csv;charset=utf-8,${encodeURIComponent(
+              'displayName,email,phone,studentCode,program,term,year\nAmina Ali,amina@school.test,+252612345678,STU-001,General,2024 Term 1,2024\n',
+            )}`}
+            download="school-students-template.csv"
+          >
+            Download CSV template
+          </a>
           <form action={importStudentsCsvAction} className="space-y-3">
             <textarea
               name="csv"

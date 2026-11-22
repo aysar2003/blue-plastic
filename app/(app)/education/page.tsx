@@ -3,7 +3,9 @@ import Link from 'next/link'
 
 import { PageHeader } from '@/components/data/page-header'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { db } from '@/server/db'
 import { requireOrgContext } from '@/server/auth/context'
+import { ensureEducationBootstrap } from '@/server/services/education-bootstrap.service'
 import * as education from '@/server/services/education.service'
 import * as sis from '@/server/services/school-sis.service'
 
@@ -11,6 +13,9 @@ export const metadata: Metadata = { title: 'Education' }
 
 export default async function EducationHubPage() {
   const ctx = await requireOrgContext('invoice:read')
+  await db.$transaction((tx) =>
+    ensureEducationBootstrap(tx, ctx.orgId, ctx.organization.installedPackId),
+  )
   const [stats, outstanding, classes] = await Promise.all([
     education.hubStats(ctx),
     education.feesOutstandingByTerm(ctx),
