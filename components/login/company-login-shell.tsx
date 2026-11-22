@@ -45,12 +45,13 @@ export function CompanyLoginShell({
       </div>
 
       <div className="relative z-10 mx-auto grid w-full max-w-5xl flex-1 lg:grid-cols-2">
+        {/* Same surface as the form side — no separate dark panel. */}
         <aside
           className={cn(
             'hidden flex-col justify-between border-r p-10 lg:flex',
             dark
-              ? 'border-cyan-400/15 bg-[#0b1220]/90 text-white'
-              : 'border-cyan-200/70 bg-white/75 text-slate-900',
+              ? 'border-cyan-400/15 text-slate-100'
+              : 'border-cyan-200/60 text-slate-900',
           )}
         >
           <div>
