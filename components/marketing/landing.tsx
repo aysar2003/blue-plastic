@@ -4,8 +4,11 @@ import {
   Banknote,
   BookOpen,
   Boxes,
+  BriefcaseBusiness,
   ChartColumnIncreasing,
+  ClipboardCheck,
   Database,
+  Factory,
   LayoutGrid,
   Mail,
   MapPin,
@@ -15,6 +18,8 @@ import {
   Receipt,
   ShoppingCart,
   Store,
+  Users,
+  Warehouse,
 } from 'lucide-react'
 
 import { AiDemoPlayer } from '@/components/marketing/ai-demo-player'
@@ -35,58 +40,100 @@ import {
   PRODUCT_BUILDER,
   PRODUCT_KIND,
   PRODUCT_NAME,
-  PRODUCT_TAGLINE,
 } from '@/lib/product-brand'
 
 /**
- * Public marketing website (`/`) — separate from SOM ERP login doors
- * (`/login/staff`, `/login/company`, `/login/portal`).
- *
- * Colours follow Appearance → Website look:
- * - Match system: same tokens as the signed-in desk
- * - Product website: navy / cyan marketing skin
+ * Public marketing website (`/`) — SOM ERP product site.
+ * Colours lock to SOM system cyan (#0e7490) via WebsiteShell.
  */
+
+const WORK_LANES = [
+  {
+    title: 'Sell and collect',
+    body: 'Estimates, quotations, orders, invoices, delivery notes, receipts, customer payments, and subscriptions with dunning — every sale posts to the ledger.',
+  },
+  {
+    title: 'Buy and pay',
+    body: 'Purchase orders, bills, expenses, vendor credits, goods receipt, landed cost, and bill payments so payables stay tied to stock and cash.',
+  },
+  {
+    title: 'Stock and stores',
+    body: 'Products, multi-store quantity, transfers, adjustments, barcodes, bins, ASN/waves, replenish min/max, and expiry — inventory that feeds COGS.',
+  },
+  {
+    title: 'Counter and till',
+    body: 'POS registers, sessions, quotations, thermal receipts, till count vs expected, credit controls, and kitchen/hospitality flows when you need them.',
+  },
+  {
+    title: 'Bank and close',
+    body: 'Bank accounts, transfers, deposits, statement CSV import, reconciliation, FX payments, loans, insurance schedules, and period close without rewriting history.',
+  },
+  {
+    title: 'Jobs and people',
+    body: 'Projects, timesheets, WIP, contracts/SOV, service jobs, planning, employees, leave, attendance, payroll packs, sign, discuss, and appointments.',
+  },
+] as const
 
 const MODULES = [
   {
     icon: BookOpen,
-    name: 'Accounting',
-    body: 'Double-entry journals, chart of accounts, open periods, and an immutable posted ledger.',
+    name: 'Accounting & journals',
+    body: 'Chart of accounts, double-entry journals, open periods, budgets, equity, and an immutable posted ledger.',
   },
   {
     icon: Receipt,
     name: 'Sales & receivables',
-    body: 'Estimates, quotations, orders, invoices, receipts, delivery notes, and customer payments.',
+    body: 'Estimates through invoices, receipts, delivery, customer payments, batch tools, and aging.',
   },
   {
     icon: ShoppingCart,
     name: 'Purchases & payables',
-    body: 'Bills, purchase orders, vendor credits, expenses, goods receipt, and bill payments.',
+    body: 'POs, bills, expenses, vendor credits, goods receipt, landed cost, and vendor payments.',
   },
   {
     icon: Package,
-    name: 'Inventory & stores',
-    body: 'Stock on hand, multi-store transfers, adjustments, and product catalogues tied to the books.',
+    name: 'Inventory & warehouses',
+    body: 'Stock on hand, stores, transfers, adjustments, barcodes, bins, ASN, replenish, and MRP capacity.',
   },
   {
     icon: Store,
     name: 'Point of sale',
-    body: 'Registers, sessions, quotations, thermal receipts, and sales that post straight into the ledger.',
+    body: 'Registers, sessions, till P&L, reprint, credit block, and sales that post straight into the books.',
   },
   {
     icon: Banknote,
-    name: 'Banking',
-    body: 'Bank accounts, transfers, deposits, statement import, and reconciliation against posted lines.',
+    name: 'Banking & treasury',
+    body: 'Accounts, transfers, deposits, statement import, reconciliation, loans, and insurance registers.',
+  },
+  {
+    icon: BriefcaseBusiness,
+    name: 'Projects & service',
+    body: 'Jobs, tasks, Gantt, timesheets, WIP, retainers, contracts, SOV progress, and service van stock.',
+  },
+  {
+    icon: Users,
+    name: 'HR & collaboration',
+    body: 'Employees, recruitment, leave, attendance, payroll CSV, sign, discuss, planning, calendar, and surveys.',
   },
   {
     icon: ChartColumnIncreasing,
-    name: 'Reports',
-    body: 'P&L, balance sheet, cash flow, trial balance, aging, and drill-down into every account.',
+    name: 'Reports & control',
+    body: 'P&L, balance sheet, cash flow, trial balance, VAT packs, approvals, analytics, and drill-down.',
   },
   {
     icon: Database,
     name: 'Companies & backup',
-    body: 'Switch between company databases, control features per organisation, and restore full backups.',
+    body: 'Multi-company databases, feature switches per org, billing/rent, backup and restore.',
+  },
+  {
+    icon: ClipboardCheck,
+    name: 'Quality & compliance',
+    body: 'CAPA, localization packs (tax/VAT/payroll headers), e-invoice JSON, and portal payment proof.',
+  },
+  {
+    icon: Factory,
+    name: 'Vertical desks',
+    body: 'Optional NGO, education, hospital, agriculture, hospitality, marketplace, and co-op flows when you turn them on.',
   },
 ] as const
 
@@ -94,17 +141,17 @@ const WORKFLOW = [
   {
     step: '01',
     title: 'Open a company',
-    body: 'Create or switch into a company database. Chart of accounts and periods start clean.',
+    body: 'Create or switch a company database. Chart of accounts, periods, and apps start ready for your trade.',
   },
   {
     step: '02',
-    title: 'Record the day',
-    body: 'Invoices, bills, stock moves, and POS sales become journals the ledger can trust.',
+    title: 'Run the day',
+    body: 'Sell, buy, move stock, take POS, pay the bank — every move becomes a journal the ledger can audit.',
   },
   {
     step: '03',
-    title: 'Close with clarity',
-    body: 'Reconcile the bank, run statements, and close periods without rewriting history.',
+    title: 'Close with proof',
+    body: 'Reconcile, run statements, age receivables, close periods — history stays posted, not rewritten.',
   },
 ] as const
 
@@ -124,6 +171,7 @@ export function Landing({
       <SiteHeader signedIn={signedIn} enterHref={enterHref} enterLabel={enterLabel} />
       <main>
         <Hero enterHref={enterHref} enterLabel={enterLabel} />
+        <WorkPower />
         <Modules />
         <Workflow />
         <Pricing signedIn={signedIn} />
@@ -152,6 +200,9 @@ function SiteHeader({
         <ProductWordmark size="sm" />
 
         <nav className="hidden items-center gap-7 text-[14px] font-medium text-muted-foreground md:flex">
+          <a className="transition-colors hover:text-foreground" href="#power">
+            Capabilities
+          </a>
           <a className="transition-colors hover:text-foreground" href="#modules">
             Modules
           </a>
@@ -198,31 +249,28 @@ function Hero({ enterHref, enterLabel }: { enterHref: string; enterLabel: string
     <section className="relative overflow-hidden">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_80%_at_78%_-5%,color-mix(in_oklab,var(--success)_22%,transparent),transparent_55%),radial-gradient(70%_60%_at_8%_100%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_55%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_85%_0%,color-mix(in_oklab,var(--primary)_20%,transparent),transparent_55%),radial-gradient(60%_50%_at_0%_100%,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_50%)]"
       />
-      <div aria-hidden className="erp-grid pointer-events-none absolute inset-0 opacity-[0.35]" />
+      <div aria-hidden className="erp-ledger pointer-events-none absolute inset-0 opacity-40" />
 
-      <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14 lg:py-24">
-        <div className="erp-fade">
-          <h1 className="text-[clamp(2.4rem,5.5vw,3.75rem)] font-bold leading-[0.98] tracking-[-0.03em] text-foreground">
-            {PRODUCT_NAME}
-          </h1>
-          <p className="mt-2 text-[12px] font-semibold uppercase tracking-[0.22em] text-success">
+      <div className="relative mx-auto grid max-w-6xl items-end gap-10 px-5 pb-16 pt-14 sm:px-8 sm:pb-20 sm:pt-16 lg:grid-cols-[1fr_1.05fr] lg:gap-12 lg:pb-24 lg:pt-20">
+        <div className="erp-fade max-w-xl pb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary">
             {PRODUCT_KIND}
           </p>
-
-          <p className="mt-7 max-w-xl text-[1.55rem] font-semibold leading-[1.2] tracking-[-0.02em] text-foreground sm:text-[1.85rem]">
-            One system for books, stock, sales, and the counter.
+          <h1 className="erp-display mt-4 text-[clamp(2.75rem,7vw,4.35rem)] font-semibold leading-[0.92] tracking-[-0.04em] text-foreground">
+            {PRODUCT_NAME}
+          </h1>
+          <p className="mt-6 text-[1.35rem] font-semibold leading-snug tracking-[-0.02em] text-foreground sm:text-[1.55rem]">
+            One ledger for books, stock, sales, and the counter.
           </p>
-
-          <p className="mt-5 max-w-lg text-[17px] leading-[1.65] text-muted-foreground">
-            {PRODUCT_TAGLINE} — every invoice, bill, and POS sale lands in a ledger you can audit,
-            not a spreadsheet you hope is right.
+          <p className="mt-4 max-w-md text-[16px] leading-[1.65] text-muted-foreground">
+            Built so traders and service teams post every invoice, bill, and POS sale into books you
+            can audit — not a spreadsheet you hope is right.
           </p>
-
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-6 text-[15px] font-semibold text-primary-foreground shadow-[0_12px_36px_-14px_var(--glow)] transition-transform hover:-translate-y-0.5 hover:opacity-90"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-6 text-[15px] font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5 hover:opacity-90"
               href={enterHref}
             >
               {enterLabel}
@@ -230,9 +278,9 @@ function Hero({ enterHref, enterLabel }: { enterHref: string; enterLabel: string
             </Link>
             <a
               className="inline-flex h-11 items-center justify-center rounded-md border border-border bg-card px-6 text-[15px] font-medium text-foreground transition-colors hover:bg-secondary"
-              href="#modules"
+              href="#power"
             >
-              See what it does
+              See the full system
             </a>
           </div>
         </div>
@@ -245,38 +293,35 @@ function Hero({ enterHref, enterLabel }: { enterHref: string; enterLabel: string
 
 function HeroVisual() {
   return (
-    <div className="erp-float relative mx-auto w-full max-w-md lg:max-w-none">
+    <div className="erp-float relative w-full lg:translate-x-2">
       <div
         aria-hidden
-        className="absolute -inset-8 rounded-[40px] bg-[color-mix(in_oklab,var(--primary)_12%,transparent)] blur-3xl"
+        className="absolute -inset-6 rounded-[2rem] bg-[color-mix(in_oklab,var(--primary)_14%,transparent)] blur-3xl"
       />
-
-      <div className="relative overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-        <div className="flex items-center gap-2 border-b border-border bg-secondary/60 px-4 py-2.5">
+      <div className="relative overflow-hidden rounded-lg border border-border bg-card shadow-[0_24px_60px_-36px_rgba(14,116,144,0.45)]">
+        <div className="flex items-center gap-2 border-b border-border bg-secondary/70 px-4 py-2.5">
           <span className="size-2.5 rounded-full bg-destructive/70" />
           <span className="size-2.5 rounded-full bg-warning/80" />
-          <span className="size-2.5 rounded-full bg-success/70" />
+          <span className="size-2.5 rounded-full bg-primary/70" />
           <span className="ml-3 text-[12px] font-medium tracking-wide text-muted-foreground">
             {PRODUCT_NAME} · live books
           </span>
         </div>
-
-        <div className="grid grid-cols-[0.32fr_0.68fr]">
+        <div className="grid grid-cols-[0.34fr_0.66fr]">
           <aside className="space-y-1 border-r border-border bg-background p-2.5">
             {[
               { icon: LayoutGrid, label: 'Apps', on: true },
               { icon: Receipt, label: 'Sales' },
               { icon: ShoppingCart, label: 'Purchases' },
               { icon: Boxes, label: 'Inventory' },
+              { icon: Warehouse, label: 'Stores' },
               { icon: BookOpen, label: 'Accounting' },
               { icon: ChartColumnIncreasing, label: 'Reports' },
             ].map(({ icon: Icon, label, on }) => (
               <div
                 key={label}
                 className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] ${
-                  on
-                    ? 'bg-accent text-accent-foreground'
-                    : 'text-muted-foreground'
+                  on ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'
                 }`}
               >
                 <Icon className="size-3.5 shrink-0" />
@@ -284,28 +329,21 @@ function HeroVisual() {
               </div>
             ))}
           </aside>
-
           <div className="space-y-3 p-4">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  This month
-                </p>
-                <p className="mt-1 text-[1.45rem] font-bold tracking-tight text-foreground">
-                  Profit &amp; Loss
-                </p>
-              </div>
-              <span className="rounded-md bg-accent px-2 py-1 text-[11px] font-semibold text-accent-foreground">
-                Posted
-              </span>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                This month
+              </p>
+              <p className="mt-1 text-[1.4rem] font-bold tracking-tight text-foreground">
+                Profit &amp; Loss
+              </p>
             </div>
-
             <div className="space-y-2">
               {[
-                ['Income', '84%', 'var(--primary)'],
-                ['Cost of sales', '52%', 'var(--success)'],
-                ['Expenses', '31%', 'var(--muted-foreground)'],
-              ].map(([label, width, tone]) => (
+                ['Income', '84%'],
+                ['Cost of sales', '52%'],
+                ['Expenses', '31%'],
+              ].map(([label, width]) => (
                 <div key={label}>
                   <div className="mb-1 flex justify-between text-[12px] text-muted-foreground">
                     <span>{label}</span>
@@ -313,14 +351,13 @@ function HeroVisual() {
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
                     <div
-                      className="h-full rounded-full"
-                      style={{ width, background: `linear-gradient(90deg, ${tone}, transparent)` }}
+                      className="h-full rounded-full bg-primary"
+                      style={{ width }}
                     />
                   </div>
                 </div>
               ))}
             </div>
-
             <div className="grid grid-cols-2 gap-2 pt-1">
               {[
                 ['Open invoices', '24'],
@@ -328,9 +365,9 @@ function HeroVisual() {
                 ['Bank to reconcile', '2'],
                 ['Journals today', '18'],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-md border border-border bg-background px-3 py-2.5">
+                <div key={label} className="border border-border bg-background px-3 py-2.5">
                   <p className="text-[11px] text-muted-foreground">{label}</p>
-                  <p className="mt-0.5 text-[1.1rem] font-bold text-foreground">{value}</p>
+                  <p className="mt-0.5 text-[1.05rem] font-bold text-foreground">{value}</p>
                 </div>
               ))}
             </div>
@@ -352,14 +389,50 @@ function SectionHeading({
 }) {
   return (
     <div className="max-w-2xl">
-      <span className="text-[12px] font-semibold uppercase tracking-[0.18em] text-success">
+      <span className="text-[12px] font-semibold uppercase tracking-[0.18em] text-primary">
         {eyebrow}
       </span>
-      <h2 className="mt-3 text-[2rem] font-bold leading-tight tracking-[-0.02em] text-foreground sm:text-[2.35rem]">
+      <h2 className="erp-display mt-3 text-[2rem] font-semibold leading-tight tracking-[-0.03em] text-foreground sm:text-[2.45rem]">
         {title}
       </h2>
       <p className="mt-4 text-[16.5px] leading-[1.65] text-muted-foreground">{body}</p>
     </div>
+  )
+}
+
+function WorkPower() {
+  return (
+    <section id="power" className="scroll-mt-20 border-t border-border bg-secondary/50 py-20 sm:py-28">
+      <div className="mx-auto max-w-6xl px-5 sm:px-8">
+        <SectionHeading
+          eyebrow="System power"
+          title="Everything the company does — one posted trail."
+          body={`${PRODUCT_NAME} is not a pile of apps glued together. Sell, buy, stock, till, bank, jobs, and people all land in the same double-entry books so reports stay true.`}
+        />
+
+        <ol className="mt-14 divide-y divide-border border-y border-border">
+          {WORK_LANES.map(({ title, body }, index) => (
+            <li
+              key={title}
+              className="erp-lane grid gap-3 py-7 sm:grid-cols-[7rem_1fr] sm:gap-8"
+              style={{ animationDelay: `${index * 45}ms` }}
+            >
+              <span className="font-mono text-[12px] font-semibold uppercase tracking-[0.16em] text-primary">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <div>
+                <h3 className="text-[1.2rem] font-semibold tracking-tight text-foreground">
+                  {title}
+                </h3>
+                <p className="mt-2 max-w-3xl text-[15px] leading-[1.7] text-muted-foreground">
+                  {body}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
   )
 }
 
@@ -368,24 +441,26 @@ function Modules() {
     <section id="modules" className="scroll-mt-20 border-t border-border py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <SectionHeading
-          eyebrow="What the system does"
-          title="Every desk your company needs — one ledger underneath."
-          body="SOM ERP is not a pile of separate tools. Sales, purchases, stock, POS, banking, and reports all post into the same double-entry books."
+          eyebrow="Full module map"
+          title="Desks across the company — one cyan brand underneath."
+          body="Turn apps on or off per company. Core trade, stock, and books come ready; projects, HR, sign, and vertical desks open when you need them."
         />
 
-        <ul className="mt-14 grid gap-x-10 gap-y-10 sm:grid-cols-2">
+        <ul className="mt-14 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
           {MODULES.map(({ icon: Icon, name, body }, index) => (
             <li
               key={name}
               className="erp-module group grid grid-cols-[auto_1fr] gap-4 border-t border-border pt-6"
-              style={{ animationDelay: `${index * 40}ms` }}
+              style={{ animationDelay: `${index * 35}ms` }}
             >
               <span className="mt-0.5 grid size-10 place-items-center rounded-md bg-accent text-accent-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                 <Icon className="size-5" />
               </span>
               <div>
-                <h3 className="text-[1.15rem] font-semibold tracking-tight text-foreground">{name}</h3>
-                <p className="mt-2 text-[14.5px] leading-[1.65] text-muted-foreground">{body}</p>
+                <h3 className="text-[1.05rem] font-semibold tracking-tight text-foreground">
+                  {name}
+                </h3>
+                <p className="mt-2 text-[14px] leading-[1.65] text-muted-foreground">{body}</p>
               </div>
             </li>
           ))}
@@ -402,13 +477,13 @@ function Workflow() {
         <SectionHeading
           eyebrow="How work moves"
           title="From the counter to closed books."
-          body="The path is short on purpose: open the company, record what happened, and trust the statements that fall out of the ledger."
+          body="Short path on purpose: open the company, record what happened, trust the statements that fall out of the ledger."
         />
 
         <ol className="mt-14 grid gap-10 lg:grid-cols-3">
           {WORKFLOW.map(({ step, title, body }) => (
             <li key={step} className="relative">
-              <span className="text-[3rem] font-extrabold leading-none tracking-tight text-primary/20">
+              <span className="erp-display text-[3.25rem] font-semibold leading-none tracking-tight text-primary/25">
                 {step}
               </span>
               <h3 className="mt-3 text-[1.25rem] font-semibold text-foreground">{title}</h3>
@@ -427,24 +502,24 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <SectionHeading
           eyebrow="For companies"
-          title="Start with a free trial. Pay rent online when you are ready."
-          body="Create a company in minutes — 14 days free. After the trial, pick a plan and pay by EVC, Zaad, eDahab, or bank. No phone call required."
+          title="Start with a free trial. Pay rent when you are ready."
+          body="Create a company in minutes — 14 days free. After the trial, pick a plan and pay by EVC, Zaad, eDahab, or bank."
         />
 
         <div className="mt-12 grid gap-6 lg:grid-cols-[1fr_1.1fr]">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-            <article className="rounded-xl border border-primary/30 bg-card p-5 shadow-sm">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-success">
+            <article className="rounded-xl border border-primary/30 bg-card p-5">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-primary">
                 Free trial
               </p>
               <h3 className="mt-2 text-xl font-bold text-foreground">14 days</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Full company database — sales, purchases, inventory, POS, and reports. Sign in
-                right away after you create your company.
+                Full company database — sales, purchases, inventory, POS, projects, and reports.
+                Sign in right away after you create your company.
               </p>
               <ul className="mt-4 space-y-1.5 text-sm text-muted-foreground">
                 <li>· Separate books per company</li>
-                <li>· Invite your team</li>
+                <li>· Choose which apps you need</li>
                 <li>· Backup and restore</li>
               </ul>
               <div className="mt-5 flex flex-wrap gap-2">
@@ -471,9 +546,8 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
               </p>
               <h3 className="mt-2 text-xl font-bold text-foreground">Paid rent</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Choose a plan in Billing, pay by mobile money or bank, and submit your
-                transaction reference. When the system owner confirms, rent and seats extend
-                automatically.
+                Choose a plan in Billing, pay by mobile money or bank, and submit your transaction
+                reference. When the system owner confirms, rent and seats extend automatically.
               </p>
               {signedIn ? (
                 <div className="mt-5">
@@ -503,8 +577,8 @@ function Tutorials() {
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <SectionHeading
           eyebrow="Sida loo isticmaalo · AI videos"
-          title="Watch the AI demos. Then do the work."
-          body="Five short AI videos about SOM ERP — sign in, sell, buy, run the till, and close the month. Press Play on each one."
+          title="Watch the demos. Then run the desk."
+          body={`Five short AI videos about ${PRODUCT_NAME} — sign in, sell, buy, run the till, and close the month.`}
         />
         <AiDemoPlayer videos={AI_DEMO_VIDEOS} />
       </div>
@@ -548,23 +622,20 @@ function Contact({ contact }: { contact: MarketingContact }) {
         <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_90%_at_0%_0%,color-mix(in_oklab,var(--primary)_18%,transparent),transparent_55%),radial-gradient(60%_80%_at_100%_100%,color-mix(in_oklab,var(--success)_12%,transparent),transparent_50%)]"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_90%_at_0%_0%,color-mix(in_oklab,var(--primary)_18%,transparent),transparent_55%)]"
           />
-          <div
-            aria-hidden
-            className="erp-grid pointer-events-none absolute inset-0 opacity-20"
-          />
+          <div aria-hidden className="erp-ledger pointer-events-none absolute inset-0 opacity-25" />
 
           <div className="relative grid gap-10 px-6 py-10 sm:px-10 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:items-end lg:gap-14">
             <SectionHeading
               eyebrow="Contact · La soo xiriir"
               title={`${PRODUCT_NAME} support`}
-              body={`${contact.contactName} — help with SOM ERP, training, or a new company database. For the plumbing shop in Kismaayo, visit Al Furaat Plastic Center.`}
+              body={`${contact.contactName} — help with training, a new company database, or the full system. For the plumbing shop in Kismaayo, visit Al Furaat Plastic Center.`}
             />
 
             <div className="flex flex-wrap gap-3">
               <a
-                className="inline-flex h-12 items-center gap-2 rounded-lg bg-primary px-6 text-[15px] font-semibold text-primary-foreground shadow-[0_14px_40px_-16px_var(--glow)] transition-transform hover:-translate-y-0.5 hover:opacity-95"
+                className="inline-flex h-12 items-center gap-2 rounded-lg bg-primary px-6 text-[15px] font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5 hover:opacity-95"
                 href={waHref}
                 target="_blank"
                 rel="noreferrer"
@@ -590,40 +661,31 @@ function Contact({ contact }: { contact: MarketingContact }) {
           </div>
 
           <dl className="relative grid gap-3 border-t border-border bg-background/35 p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-3">
-            {rows.map(({ icon: Icon, term, detail, href, hint }, index) => {
-              const body = (
-                <>
-                  <span className="mt-0.5 grid size-11 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground ring-1 ring-primary/15">
-                    <Icon className="size-5" />
+            {rows.map(({ icon: Icon, term, detail, href, hint }, index) => (
+              <a
+                key={`${term}-${detail}`}
+                href={href}
+                target={href.startsWith('http') ? '_blank' : undefined}
+                rel={href.startsWith('http') ? 'noreferrer' : undefined}
+                className="erp-contact-card group flex items-start gap-3.5 rounded-xl border border-border/80 bg-card/90 px-4 py-4 transition-[transform,border-color,background-color] hover:-translate-y-0.5 hover:border-primary/45 hover:bg-accent/40"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                <span className="mt-0.5 grid size-11 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground ring-1 ring-primary/15">
+                  <Icon className="size-5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="flex items-center justify-between gap-2">
+                    <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      {term}
+                    </dt>
+                    <span className="text-[11px] text-primary/90">{hint}</span>
                   </span>
-                  <span className="min-w-0">
-                    <span className="flex items-center justify-between gap-2">
-                      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        {term}
-                      </dt>
-                      <span className="text-[11px] text-success/90">{hint}</span>
-                    </span>
-                    <dd className="mt-1.5 break-words text-[15px] font-semibold leading-snug tracking-tight text-foreground">
-                      {detail}
-                    </dd>
-                  </span>
-                </>
-              )
-              const className =
-                'erp-contact-card group flex items-start gap-3.5 rounded-xl border border-border/80 bg-card/90 px-4 py-4 shadow-[0_1px_0_color-mix(in_oklab,var(--foreground)_4%,transparent)] transition-[transform,border-color,background-color] hover:-translate-y-0.5 hover:border-primary/45 hover:bg-accent/40'
-              return (
-                <a
-                  key={`${term}-${detail}`}
-                  href={href}
-                  target={href.startsWith('http') ? '_blank' : undefined}
-                  rel={href.startsWith('http') ? 'noreferrer' : undefined}
-                  className={className}
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  {body}
-                </a>
-              )
-            })}
+                  <dd className="mt-1.5 break-words text-[15px] font-semibold leading-snug tracking-tight text-foreground">
+                    {detail}
+                  </dd>
+                </span>
+              </a>
+            ))}
           </dl>
         </div>
       </div>
@@ -637,18 +699,11 @@ function SignInDoors({ signedIn }: { signedIn: boolean }) {
   return (
     <section id="sign-in" className="border-t border-border py-20 sm:py-24">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
-        <div className="max-w-2xl">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-success">
-            SOM ERP login
-          </p>
-          <h2 className="mt-3 text-[2rem] font-bold tracking-[-0.02em] text-foreground sm:text-[2.3rem]">
-            Three doors — go straight to yours
-          </h2>
-          <p className="mt-4 text-[16px] leading-[1.65] text-muted-foreground">
-            The marketing site stays on this page. Sign-in lives on its own URLs so staff, company
-            users, and customers each open the right door without a detour.
-          </p>
-        </div>
+        <SectionHeading
+          eyebrow="SOM ERP login"
+          title="Three doors — go straight to yours"
+          body="Staff, company users, and customers each open their own login. The marketing site stays here."
+        />
 
         <div className="mt-10 grid gap-4 sm:grid-cols-3">
           {LOGIN_DOORS.map((door) => (
@@ -661,7 +716,7 @@ function SignInDoors({ signedIn }: { signedIn: boolean }) {
               <span className="mt-2 flex-1 text-[14px] leading-relaxed text-muted-foreground">
                 {door.description}
               </span>
-              <span className="mt-4 font-mono text-[12px] text-success">{door.path}</span>
+              <span className="mt-4 font-mono text-[12px] text-primary">{door.path}</span>
               <span className="mt-3 text-[13px] font-medium text-primary group-hover:underline">
                 Open {door.short.toLowerCase()} login →
               </span>
@@ -671,7 +726,7 @@ function SignInDoors({ signedIn }: { signedIn: boolean }) {
 
         <p className="mt-6 text-[13px] text-muted-foreground">
           All options:{' '}
-          <Link href={LOGIN_HUB} className="font-mono text-success hover:underline">
+          <Link href={LOGIN_HUB} className="font-mono text-primary hover:underline">
             {LOGIN_HUB}
           </Link>
         </p>
@@ -687,18 +742,18 @@ function Cta({ enterHref, enterLabel }: { enterHref: string; enterLabel: string 
         <div className="relative overflow-hidden rounded-lg border border-border bg-card px-7 py-14 sm:px-14">
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_100%_at_100%_0%,color-mix(in_oklab,var(--success)_18%,transparent),transparent_55%)]"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_100%_at_100%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_55%)]"
           />
           <div className="relative max-w-2xl">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-success">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-primary">
               Get started
             </p>
-            <h2 className="mt-3 text-[2rem] font-bold tracking-[-0.02em] text-foreground sm:text-[2.3rem]">
+            <h2 className="erp-display mt-3 text-[2rem] font-semibold tracking-[-0.03em] text-foreground sm:text-[2.4rem]">
               Start a company on {PRODUCT_NAME}.
             </h2>
             <p className="mt-4 text-[16px] leading-[1.65] text-muted-foreground">
-              Create your company, get 14 days free, and sign in immediately. Each company has its
-              own apps, settings, users, and ledger. After the trial, pay rent from Billing.
+              Create your company, get 14 days free, and open the full desk — sales, stock, POS,
+              projects, and books. After the trial, pay rent from Billing.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
@@ -715,11 +770,6 @@ function Cta({ enterHref, enterLabel }: { enterHref: string; enterLabel: string 
                 Company login
               </Link>
             </div>
-            <p className="mt-6 text-[13px] text-muted-foreground">
-              Create: <span className="font-mono text-success">/register</span>
-              <span className="mx-2 text-border">·</span>
-              Company: <span className="font-mono text-success">{LOGIN_COMPANY}</span>
-            </p>
           </div>
         </div>
       </div>
@@ -733,6 +783,9 @@ function SiteFooter({ contact }: { contact: MarketingContact }) {
       <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-5 sm:px-8 md:flex-row md:items-center">
         <ProductWordmark size="sm" />
         <div className="flex flex-wrap items-center gap-x-7 gap-y-2 text-[14px] text-muted-foreground">
+          <a className="transition-colors hover:text-foreground" href="#power">
+            Capabilities
+          </a>
           <a className="transition-colors hover:text-foreground" href="#tutorials">
             How to use
           </a>
@@ -768,33 +821,36 @@ function SiteFooter({ contact }: { contact: MarketingContact }) {
 
 const landingCss = `
   .erp-landing {
-    font-family: var(--font-odoo), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-marketing-sans), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   }
-  .erp-grid {
+  .erp-display {
+    font-family: var(--font-marketing-display), var(--font-geist-sans), ui-serif, Georgia, serif;
+  }
+  .erp-ledger {
     background-image:
-      linear-gradient(to right, color-mix(in oklab, var(--foreground) 6%, transparent) 1px, transparent 1px),
-      linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 6%, transparent) 1px, transparent 1px);
-    background-size: 64px 64px;
-    mask-image: radial-gradient(70% 60% at 50% 20%, black, transparent);
+      linear-gradient(to right, color-mix(in oklab, var(--primary) 14%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px);
+    background-size: 72px 48px;
+    mask-image: radial-gradient(75% 65% at 70% 15%, black, transparent);
   }
   @keyframes erp-fade-up {
-    from { opacity: 0; transform: translateY(16px); }
+    from { opacity: 0; transform: translateY(18px); }
     to { opacity: 1; transform: translateY(0); }
   }
   @keyframes erp-float {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
+    50% { transform: translateY(-7px); }
   }
   .erp-fade {
-    animation: erp-fade-up 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: erp-fade-up 750ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
   .erp-float {
-    animation: erp-float 7s ease-in-out infinite;
+    animation: erp-float 7.5s ease-in-out infinite;
   }
-  .erp-contact-card {
+  .erp-lane, .erp-module, .erp-contact-card {
     animation: erp-fade-up 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
   @media (prefers-reduced-motion: reduce) {
-    .erp-fade, .erp-float, .erp-contact-card { animation: none; }
+    .erp-fade, .erp-float, .erp-lane, .erp-module, .erp-contact-card { animation: none; }
   }
 `

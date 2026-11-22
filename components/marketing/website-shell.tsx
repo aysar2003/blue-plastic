@@ -5,38 +5,43 @@ import type { CSSProperties, ReactNode } from 'react'
 import { useBrowserStore } from '@/lib/browser-store'
 import { parseWebsiteLook, WEBSITE_LOOK_KEY } from '@/lib/website-look'
 
-/** Navy / cyan product-site tokens — scoped so they do not change the books desk. */
+/**
+ * SOM system desk colours on the public site (Appearance → Website look → brand).
+ * Matches html.som primary cyan so marketing and the signed-in books share one brand.
+ */
 const BRAND_VARS = {
-  '--background': '#070b14',
-  '--foreground': '#cbd5e1',
-  '--card': '#0b1220',
-  '--card-foreground': '#f8fafc',
-  '--popover': '#0b1220',
-  '--popover-foreground': '#f8fafc',
-  '--primary': '#22d3ee',
-  '--primary-foreground': '#070b14',
-  '--secondary': 'rgb(255 255 255 / 0.06)',
-  '--secondary-foreground': '#e2e8f0',
-  '--muted': 'rgb(255 255 255 / 0.08)',
-  '--muted-foreground': '#94a3b8',
-  '--accent': 'rgb(34 211 238 / 0.12)',
-  '--accent-foreground': '#67e8f9',
-  '--destructive': '#fb7185',
-  '--destructive-foreground': '#fff1f2',
-  '--success': '#67e8f9',
-  '--success-foreground': '#070b14',
-  '--warning': '#fbbf24',
-  '--warning-foreground': '#422006',
-  '--border': 'rgb(255 255 255 / 0.1)',
-  '--input': 'rgb(255 255 255 / 0.14)',
-  '--ring': '#22d3ee',
-  '--glow': 'rgba(34, 211, 238, 0.55)',
+  '--background': '#f4f8fb',
+  '--foreground': '#0f172a',
+  '--card': '#ffffff',
+  '--card-foreground': '#0f172a',
+  '--popover': '#ffffff',
+  '--popover-foreground': '#0f172a',
+  '--primary': '#0e7490',
+  '--primary-foreground': '#ffffff',
+  '--secondary': '#e8eef4',
+  '--secondary-foreground': '#0f172a',
+  '--muted': '#e8eef4',
+  '--muted-foreground': '#334155',
+  '--accent': '#cffafe',
+  '--accent-foreground': '#0e7490',
+  '--destructive': '#dc2626',
+  '--destructive-foreground': '#ffffff',
+  '--success': '#0e7490',
+  '--success-foreground': '#ffffff',
+  '--warning': '#b41309',
+  '--warning-foreground': '#fffbeb',
+  '--border': '#c5d4e0',
+  '--input': '#c5d4e0',
+  '--ring': '#0e7490',
+  '--glow': 'rgba(14, 116, 144, 0.28)',
+  '--band': '#dbe7f0',
+  '--stripe': '#e8eef4',
 } as CSSProperties
 
 /**
  * Applies Appearance → Website look to the marketing site and auth marketing
  * pages (register / setup). Login doors under `/login/*` use their own shells.
- * "system" inherits the active theme; "brand" restores the navy/cyan site.
+ * "system" inherits the active theme; "brand" locks SOM cyan desk colours.
  */
 export function WebsiteShell({
   children,
@@ -51,7 +56,8 @@ export function WebsiteShell({
     <div
       className={className}
       data-website-shell={look}
-      style={look === 'brand' ? BRAND_VARS : undefined}
+      /* Always SOM cyan desk tokens so the public site matches system colour. */
+      style={BRAND_VARS}
     >
       {children}
     </div>

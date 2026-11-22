@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next"
 import Script from "next/script"
-import { Geist, Geist_Mono, Inter, Source_Sans_3 } from "next/font/google"
+import { Fraunces, Geist, Geist_Mono, Inter, Plus_Jakarta_Sans, Source_Sans_3 } from "next/font/google"
 
 import { Providers } from "@/components/providers"
 import { PRODUCT_DESCRIPTION, PRODUCT_NAME } from "@/lib/product-brand"
@@ -14,6 +14,17 @@ const mono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] })
 const inter = Inter({ variable: "--font-odoo", subsets: ["latin"], preload: false })
 /** QuickBooks Online report typeface — used when report style is QuickBooks. */
 const sourceSans = Source_Sans_3({ variable: "--font-quickbooks", subsets: ["latin"], preload: false })
+/** Marketing site display + body — SOM product website only. */
+const marketingDisplay = Fraunces({
+  variable: "--font-marketing-display",
+  subsets: ["latin"],
+  preload: false,
+})
+const marketingSans = Plus_Jakarta_Sans({
+  variable: "--font-marketing-sans",
+  subsets: ["latin"],
+  preload: false,
+})
 
 export const metadata: Metadata = {
   metadataBase: resolveSiteUrl(),
@@ -45,7 +56,9 @@ export default function RootLayout({
       data-font-size="md"
       data-font-style="default"
     >
-      <body className={`${sans.variable} ${mono.variable} ${inter.variable} ${sourceSans.variable} antialiased`}>
+      <body
+        className={`${sans.variable} ${mono.variable} ${inter.variable} ${sourceSans.variable} ${marketingDisplay.variable} ${marketingSans.variable} antialiased`}
+      >
         {/*
           Cursor's built-in browser stamps data-cursor-ref on DOM nodes before
           React hydrates, which Next.js reports as a hydration mismatch. Strip
