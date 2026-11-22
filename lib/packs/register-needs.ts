@@ -483,7 +483,11 @@ const BY_PACK: Partial<Record<PackId, readonly RegisterNeedToggle[]>> = {
 } as const satisfies Record<PackId, readonly RegisterNeedToggle[]>
 
 export function needsForPack(packId: PackId): RegisterNeedToggle[] {
-  return [...BY_PACK[packId]]
+  const needs = BY_PACK[packId]
+  if (!needs) {
+    throw new Error(`No register needs defined for pack: ${packId}`)
+  }
+  return [...needs]
 }
 
 export function defaultNeedsSelection(packId: PackId): Record<RegisterNeedId, boolean> {
