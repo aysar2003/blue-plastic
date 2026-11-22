@@ -17,6 +17,8 @@ import {
   workspacePreview,
   needsForPack,
   defaultNeedsSelection,
+  packNeedsAcademicYear,
+  defaultAcademicCalendar,
   type OnboardingAnswers,
   type PackFamilyId,
   type PackId,
@@ -170,6 +172,9 @@ export function RegisterForm() {
   const [answers, setAnswers] = useState<OnboardingAnswers>(() => defaultOnboardingAnswers())
   const [needSelection, setNeedSelection] = useState<Partial<Record<RegisterNeedId, boolean>>>({})
   const [stepError, setStepError] = useState<string | null>(null)
+  const [termCount, setTermCount] = useState<2 | 3>(2)
+  const academicDefaults = useMemo(() => defaultAcademicCalendar(), [])
+  const showAcademicYear = packNeedsAcademicYear(packId)
 
   const familyPacks = useMemo(
     () => (familyId ? packsInFamily(familyId) : []),
@@ -488,62 +493,235 @@ export function RegisterForm() {
               />
             </Field>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field
-                name="baseCurrency"
-                label="Base currency"
-                hint="Ledger reporting currency. Locked after the first posted transaction."
-                error={state.fieldErrors?.baseCurrency}
+            <Field
+              name="baseCurrency"
+              label="Base currency"
+              hint="Ledger reporting currency. Locked after the first posted transaction."
+              error={state.fieldErrors?.baseCurrency}
+            >
+              <select
+                {...fieldProps('baseCurrency', state.fieldErrors?.baseCurrency, true)}
+                defaultValue={v.baseCurrency ?? 'USD'}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
               >
-                <select
-                  {...fieldProps('baseCurrency', state.fieldErrors?.baseCurrency, true)}
-                  defaultValue={v.baseCurrency ?? 'USD'}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                >
-                  {CURRENCIES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.code} — {c.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+                {CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
-              <Field
-                name="fiscalYearStartMonth"
-                label="Fiscal year month"
-                error={state.fieldErrors?.fiscalYearStartMonth}
-              >
-                <select
-                  {...fieldProps('fiscalYearStartMonth', state.fieldErrors?.fiscalYearStartMonth)}
-                  defaultValue={v.fiscalYearStartMonth ?? '1'}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                >
-                  {MONTHS.map((m, i) => (
-                    <option key={m} value={i + 1}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+            {showAcademicYear ? (
+              <div className="space-y-4 rounded-md border border-border/80 bg-muted/20 p-4">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    School year
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Set Term 1, Term 2, and vacations. You can adjust dates later under Education →
+                    Terms.
+                  </p>
+                </div>
 
-              <Field
-                name="fiscalYearStartDay"
-                label="Fiscal year day"
-                error={state.fieldErrors?.fiscalYearStartDay}
-              >
-                <select
-                  {...fieldProps('fiscalYearStartDay', state.fieldErrors?.fiscalYearStartDay)}
-                  defaultValue={v.fiscalYearStartDay ?? '1'}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                {state.fieldErrors?.academicYearLabel ? (
+                  <p className="text-sm text-destructive">{state.fieldErrors.academicYearLabel}</p>
+                ) : null}
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field name="academicYearLabel" label="School year label" required>
+                    <Input
+                      name="academicYearLabel"
+                      defaultValue={
+                        (v.academicYearLabel as string | undefined) ??
+                        academicDefaults.academicYearLabel
+                      }
+                      placeholder="e.g. 2026"
+                      required
+                    />
+                  </Field>
+                  <Field name="termCount" label="How many terms?">
+                    <select
+                      name="termCount"
+                      value={termCount}
+                      onChange={(e) => setTermCount(Number(e.target.value) === 3 ? 3 : 2)}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                    >
+                      <option value={2}>2 terms</option>
+                      <option value={3}>3 terms</option>
+                    </select>
+                  </Field>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field name="term1StartsOn" label="Term 1 starts" required>
+                    <Input
+                      name="term1StartsOn"
+                      type="date"
+                      required
+                      defaultValue={
+                        (v.term1StartsOn as string | undefined) ?? academicDefaults.term1StartsOn
+                      }
+                    />
+                  </Field>
+                  <Field name="term1EndsOn" label="Term 1 ends" required>
+                    <Input
+                      name="term1EndsOn"
+                      type="date"
+                      required
+                      defaultValue={
+                        (v.term1EndsOn as string | undefined) ?? academicDefaults.term1EndsOn
+                      }
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field name="midVacationStartsOn" label="Mid-year vacation starts">
+                    <Input
+                      name="midVacationStartsOn"
+                      type="date"
+                      defaultValue={
+                        (v.midVacationStartsOn as string | undefined) ??
+                        academicDefaults.midVacationStartsOn ??
+                        ''
+                      }
+                    />
+                  </Field>
+                  <Field name="midVacationEndsOn" label="Mid-year vacation ends">
+                    <Input
+                      name="midVacationEndsOn"
+                      type="date"
+                      defaultValue={
+                        (v.midVacationEndsOn as string | undefined) ??
+                        academicDefaults.midVacationEndsOn ??
+                        ''
+                      }
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field name="term2StartsOn" label="Term 2 starts" required>
+                    <Input
+                      name="term2StartsOn"
+                      type="date"
+                      required
+                      defaultValue={
+                        (v.term2StartsOn as string | undefined) ?? academicDefaults.term2StartsOn
+                      }
+                    />
+                  </Field>
+                  <Field name="term2EndsOn" label="Term 2 ends" required>
+                    <Input
+                      name="term2EndsOn"
+                      type="date"
+                      required
+                      defaultValue={
+                        (v.term2EndsOn as string | undefined) ?? academicDefaults.term2EndsOn
+                      }
+                    />
+                  </Field>
+                </div>
+
+                {termCount === 3 ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field name="term3StartsOn" label="Term 3 starts" required>
+                      <Input
+                        name="term3StartsOn"
+                        type="date"
+                        required
+                        defaultValue={
+                          (v.term3StartsOn as string | undefined) ??
+                          academicDefaults.term3StartsOn ??
+                          ''
+                        }
+                      />
+                    </Field>
+                    <Field name="term3EndsOn" label="Term 3 ends" required>
+                      <Input
+                        name="term3EndsOn"
+                        type="date"
+                        required
+                        defaultValue={
+                          (v.term3EndsOn as string | undefined) ??
+                          academicDefaults.term3EndsOn ??
+                          ''
+                        }
+                      />
+                    </Field>
+                  </div>
+                ) : null}
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field name="endVacationStartsOn" label="End-of-year vacation starts">
+                    <Input
+                      name="endVacationStartsOn"
+                      type="date"
+                      defaultValue={
+                        (v.endVacationStartsOn as string | undefined) ??
+                        academicDefaults.endVacationStartsOn ??
+                        ''
+                      }
+                    />
+                  </Field>
+                  <Field name="endVacationEndsOn" label="End-of-year vacation ends">
+                    <Input
+                      name="endVacationEndsOn"
+                      type="date"
+                      defaultValue={
+                        (v.endVacationEndsOn as string | undefined) ??
+                        academicDefaults.endVacationEndsOn ??
+                        ''
+                      }
+                    />
+                  </Field>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground">
+                  Books year (ledger) follows Term 1 start — you do not set a separate fiscal calendar
+                  here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  name="fiscalYearStartMonth"
+                  label="Fiscal year month"
+                  error={state.fieldErrors?.fiscalYearStartMonth}
                 >
-                  {MONTH_DAYS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
+                  <select
+                    {...fieldProps('fiscalYearStartMonth', state.fieldErrors?.fiscalYearStartMonth)}
+                    defaultValue={v.fiscalYearStartMonth ?? '1'}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                  >
+                    {MONTHS.map((m, i) => (
+                      <option key={m} value={i + 1}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field
+                  name="fiscalYearStartDay"
+                  label="Fiscal year day"
+                  error={state.fieldErrors?.fiscalYearStartDay}
+                >
+                  <select
+                    {...fieldProps('fiscalYearStartDay', state.fieldErrors?.fiscalYearStartDay)}
+                    defaultValue={v.fiscalYearStartDay ?? '1'}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                  >
+                    {MONTH_DAYS.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+            )}
           </div>
 
           <Separator />

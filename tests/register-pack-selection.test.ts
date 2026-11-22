@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { modulesFromPack, getPack } from '@/lib/packs'
+import { defaultAcademicCalendar, modulesFromPack, getPack } from '@/lib/packs'
 import { setupSchema } from '@/lib/validation/auth'
 
 describe('register pack selection (setupSchema)', () => {
@@ -16,14 +16,37 @@ describe('register pack selection (setupSchema)', () => {
     confirmPassword: 'secret1',
   }
 
+  const schoolYear = defaultAcademicCalendar(new Date('2026-03-01T00:00:00Z'))
+
   it('accepts school packId and derives school modules (no Apps wall)', () => {
-    const parsed = setupSchema.parse({ ...base, packId: 'school' })
+    const parsed = setupSchema.parse({
+      ...base,
+      packId: 'school',
+      academicYearLabel: schoolYear.academicYearLabel,
+      termCount: String(schoolYear.termCount),
+      term1StartsOn: schoolYear.term1StartsOn,
+      term1EndsOn: schoolYear.term1EndsOn,
+      term2StartsOn: schoolYear.term2StartsOn,
+      term2EndsOn: schoolYear.term2EndsOn,
+      midVacationStartsOn: schoolYear.midVacationStartsOn,
+      midVacationEndsOn: schoolYear.midVacationEndsOn,
+      endVacationStartsOn: schoolYear.endVacationStartsOn,
+      endVacationEndsOn: schoolYear.endVacationEndsOn,
+    })
     expect(parsed.packId).toBe('school')
     const pack = getPack('school')!
     expect(parsed.requestedModules).toEqual(modulesFromPack(pack))
     expect(parsed.requestedModules.sales).toBe(true)
     expect(parsed.requestedModules.pos).toBe(false)
     expect(parsed.requestedModules.employees).toBe(true)
+    expect(parsed.academicCalendar?.term1StartsOn).toBe(schoolYear.term1StartsOn)
+    expect(parsed.fiscalYearStartMonth).toBe(1)
+    expect(parsed.fiscalYearStartDay).toBe(15)
+  })
+
+  it('requires school year dates for school pack', () => {
+    const result = setupSchema.safeParse({ ...base, packId: 'school' })
+    expect(result.success).toBe(false)
   })
 
   it('refuses submit with no pack and no modules', () => {

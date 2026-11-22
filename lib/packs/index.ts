@@ -59,3 +59,17 @@ export {
   type RegisterNeedId,
   type RegisterNeedToggle,
 } from './register-needs'
+export {
+  EDUCATION_REGISTER_PACKS,
+  isEducationRegisterPack,
+  packNeedsAcademicYear,
+  defaultAcademicCalendar,
+  parseAcademicCalendarFromForm,
+  academicCalendarFromUnknown,
+  validateAcademicCalendar,
+  fiscalStartFromAcademic,
+  termsToSeed,
+  type AcademicCalendarInput,
+  type EducationRegisterPack,
+  type SeedTermRow,
+} from './academic-year'

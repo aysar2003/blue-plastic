@@ -12,16 +12,62 @@ import {
   type ModuleFlag,
 } from '@/lib/feature-flags'
 import { isSelfServeApprovalRequired, isSelfServeEnabled } from '@/lib/self-serve'
+import { toDate } from '@/lib/date'
+import {
+  academicCalendarFromUnknown,
+  termsToSeed,
+  type AcademicCalendarInput,
+} from '@/lib/packs'
 import type { SetupInput } from '@/lib/validation/auth'
 import type { ReviewSignupRequestInput } from '@/lib/validation/signup-request'
 import type { OrgContext } from '@/server/auth/context'
 import { hashPassword } from '@/server/auth/password'
-import { db } from '@/server/db'
+import { db, type Tx } from '@/server/db'
 import { conflict, forbidden, notFound } from '@/server/errors'
 import { seedChartOfAccounts } from '@/server/accounting/chart-of-accounts'
 import { seedDefaultOffice } from '@/server/accounting/default-office'
 import { createDefaultSequences } from '@/server/sequences'
 import { needsSetup } from '@/server/services/setup.service'
+
+async function seedAcademicYear(tx: Tx, orgId: string, calendar: AcademicCalendarInput | null) {
+  if (!calendar) return
+  const existingProgram = await tx.academicProgram.findFirst({
+    where: { orgId },
+    select: { id: true },
+  })
+  if (!existingProgram) {
+    await tx.academicProgram.create({
+      data: { orgId, name: 'General', code: 'GEN' },
+    })
+  }
+  for (const term of termsToSeed(calendar)) {
+    const exists = await tx.academicTerm.findFirst({
+      where: { orgId, name: term.name },
+      select: { id: true },
+    })
+    if (exists) continue
+    await tx.academicTerm.create({
+      data: {
+        orgId,
+        name: term.name,
+        startsOn: toDate(term.startsOn),
+        endsOn: toDate(term.endsOn),
+      },
+    })
+  }
+}
+
+function signupModulesPayload(
+  requestedModules: Record<ModuleFlag, boolean>,
+  packId: string | null,
+  academicCalendar: AcademicCalendarInput | null,
+) {
+  return {
+    ...requestedModules,
+    ...(packId ? { _packId: packId } : {}),
+    ...(academicCalendar ? { _academicCalendar: academicCalendar } : {}),
+  } as Prisma.InputJsonValue
+}
 
 export { isSelfServeApprovalRequired, isSelfServeEnabled }
 
@@ -87,6 +133,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
   const requestedModules = parseModulesSelection(input.requestedModules)
   const packId = input.packId ?? null
   const behavioral = input.behavioral
+  const academicCalendar = input.academicCalendar ?? null
 
   if (empty) {
     const passwordHash = await hashPassword(input.password)
@@ -129,6 +176,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
       await createDefaultSequences(tx, organization.id)
       await seedChartOfAccounts(tx, organization.id)
       await seedDefaultOffice(tx, organization.id)
+      await seedAcademicYear(tx, organization.id, academicCalendar)
 
       await tx.auditLog.create({
         data: {
@@ -181,10 +229,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
         ownerName: input.name.trim(),
         email,
         passwordHash,
-        requestedModules: {
-          ...requestedModules,
-          ...(packId ? { _packId: packId } : {}),
-        } as Prisma.InputJsonValue,
+        requestedModules: signupModulesPayload(requestedModules, packId, academicCalendar),
         status: 'PENDING',
         note: packId ? `Industry pack: ${packId}` : undefined,
       },
@@ -235,6 +280,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
     await createDefaultSequences(tx, organization.id)
     await seedChartOfAccounts(tx, organization.id)
     await seedDefaultOffice(tx, organization.id)
+    await seedAcademicYear(tx, organization.id, academicCalendar)
 
     await tx.auditLog.create({
       data: {
@@ -362,13 +408,15 @@ export async function reviewSignupRequest(
   const data = input as Record<string, unknown>
   const hasOverride = MODULE_FLAGS.some((key) => data[MODULE_FORM_KEYS[key]] !== undefined)
   const modules = hasOverride ? modulesFromFormValues(data) : requested
-  const rawPack =
+  const requestModulesBag =
     request.requestedModules &&
     typeof request.requestedModules === 'object' &&
     !Array.isArray(request.requestedModules)
-      ? (request.requestedModules as Record<string, unknown>)._packId
+      ? (request.requestedModules as Record<string, unknown>)
       : null
+  const rawPack = requestModulesBag?._packId
   const approvedPackId = typeof rawPack === 'string' ? rawPack : null
+  const approvedCalendar = academicCalendarFromUnknown(requestModulesBag?._academicCalendar)
 
   const created = await db.$transaction(async (tx) => {
     const organization = await tx.organization.create({
@@ -410,6 +458,7 @@ export async function reviewSignupRequest(
     await createDefaultSequences(tx, organization.id)
     await seedChartOfAccounts(tx, organization.id)
     await seedDefaultOffice(tx, organization.id)
+    await seedAcademicYear(tx, organization.id, approvedCalendar)
 
     await tx.companySignupRequest.update({
       where: { id: request.id },

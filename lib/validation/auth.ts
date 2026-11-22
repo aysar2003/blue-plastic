@@ -14,12 +14,22 @@ import {
   parseNeedsFromForm,
   behavioralWithNeeds,
   defaultNeedsSelection,
+  packNeedsAcademicYear,
+  parseAcademicCalendarFromForm,
+  validateAcademicCalendar,
+  fiscalStartFromAcademic,
   type RegisterNeedId,
 } from '@/lib/packs'
 import { normalizePhone } from '@/lib/phone'
 
 import { refineFiscalYearStartDay } from './organization'
 import { currencyCode, email, password, requiredText } from './common'
+
+const optionalIsoDate = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null))
 
 const packIdSchema = z.enum(PACK_IDS as unknown as [string, ...string[]])
 
@@ -84,6 +94,19 @@ export const setupSchema = z
     confirmPassword: z.string(),
     /** Industry pack from the ERP selection wizard (preferred). */
     packId: packIdSchema.optional(),
+    /** School / university Confirm — academic year structure. */
+    academicYearLabel: z.string().trim().max(40).optional(),
+    termCount: z.coerce.number().int().min(2).max(3).optional(),
+    term1StartsOn: optionalIsoDate,
+    term1EndsOn: optionalIsoDate,
+    term2StartsOn: optionalIsoDate,
+    term2EndsOn: optionalIsoDate,
+    term3StartsOn: optionalIsoDate,
+    term3EndsOn: optionalIsoDate,
+    midVacationStartsOn: optionalIsoDate,
+    midVacationEndsOn: optionalIsoDate,
+    endVacationStartsOn: optionalIsoDate,
+    endVacationEndsOn: optionalIsoDate,
     // Legacy module checkboxes — used only when packId is absent.
     ...setupModuleFields,
   })
@@ -92,7 +115,27 @@ export const setupSchema = z
     path: ['confirmPassword'],
   })
   .superRefine((v, ctx) => {
-    refineFiscalYearStartDay(v, ctx)
+    if (packNeedsAcademicYear(v.packId ?? null)) {
+      const cal = parseAcademicCalendarFromForm(v as Record<string, unknown>)
+      if (!cal) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['academicYearLabel'],
+          message: 'Fill school year: Term 1, Term 2, and vacation dates.',
+        })
+      } else {
+        const err = validateAcademicCalendar(cal)
+        if (err) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['academicYearLabel'],
+            message: err,
+          })
+        }
+      }
+    } else {
+      refineFiscalYearStartDay(v, ctx)
+    }
     if (v.packId) {
       if (!getPack(v.packId)) {
         ctx.addIssue({
@@ -132,12 +175,20 @@ export const setupSchema = z
       {} as Record<ModuleFlag, boolean>,
     )
     const behavioral = pack ? behavioralWithNeeds(pack.id, selectedNeeds) : {}
+    const academicCalendar =
+      pack && packNeedsAcademicYear(pack.id)
+        ? parseAcademicCalendarFromForm(v as Record<string, unknown>)
+        : null
+    const fiscal = academicCalendar ? fiscalStartFromAcademic(academicCalendar) : null
     return {
       ...v,
       packId: pack?.id ?? null,
       requestedModules,
       selectedNeeds,
       behavioral,
+      academicCalendar,
+      fiscalYearStartMonth: fiscal?.fiscalYearStartMonth ?? v.fiscalYearStartMonth,
+      fiscalYearStartDay: fiscal?.fiscalYearStartDay ?? v.fiscalYearStartDay,
     }
   })
 
