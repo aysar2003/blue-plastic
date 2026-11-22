@@ -7,10 +7,13 @@ import {
   modulesFromFormValues,
   type ModuleFlag,
 } from '@/lib/feature-flags'
+import { PACK_IDS, getPack, modulesFromPack } from '@/lib/packs'
 import { normalizePhone } from '@/lib/phone'
 
 import { refineFiscalYearStartDay } from './organization'
 import { currencyCode, email, password, requiredText } from './common'
+
+const packIdSchema = z.enum(PACK_IDS as unknown as [string, ...string[]])
 
 /** Optional mobile on register / profile — stored as E.164 when present. */
 export const optionalPhone = z
@@ -59,7 +62,7 @@ const setupModuleFields = Object.fromEntries(
   MODULE_FLAGS.map((key) => [MODULE_FORM_KEYS[key], boolFlag.default(false)]),
 ) as Record<(typeof MODULE_FORM_KEYS)[ModuleFlag], z.ZodDefault<z.ZodType<boolean>>>
 
-/** First-run setup / public register: company, owner, and which apps they need. */
+/** First-run setup / public register: company, owner, industry pack (ERP selection). */
 export const setupSchema = z
   .object({
     organizationName: requiredText('Organisation name', 200),
@@ -71,7 +74,9 @@ export const setupSchema = z
     phone: optionalPhone,
     password,
     confirmPassword: z.string(),
-    // Unchecked boxes are omitted from FormData — treat missing as off.
+    /** Industry pack from the ERP selection wizard (preferred). */
+    packId: packIdSchema.optional(),
+    // Legacy module checkboxes — used only when packId is absent.
     ...setupModuleFields,
   })
   .refine((v) => v.password === v.confirmPassword, {
@@ -80,17 +85,30 @@ export const setupSchema = z
   })
   .superRefine((v, ctx) => {
     refineFiscalYearStartDay(v, ctx)
+    if (v.packId) {
+      if (!getPack(v.packId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['packId'],
+          message: 'Choose a valid industry pack.',
+        })
+      }
+      return
+    }
     const modules = modulesFromFormValues(v as Record<string, unknown>)
     if (!hasAnyModuleEnabled(modules)) {
       ctx.addIssue({
         code: 'custom',
-        path: ['moduleSales'],
-        message: 'Choose at least one app to use.',
+        path: ['packId'],
+        message: 'Choose your industry so we can set up the right workspace.',
       })
     }
   })
   .transform((v) => {
-    const modules = modulesFromFormValues(v as Record<string, unknown>)
+    const pack = v.packId ? getPack(v.packId) : null
+    const modules = pack
+      ? modulesFromPack(pack)
+      : modulesFromFormValues(v as Record<string, unknown>)
     const requestedModules = MODULE_FLAGS.reduce(
       (acc, key) => {
         acc[key] = modules[key]
@@ -98,7 +116,11 @@ export const setupSchema = z
       },
       {} as Record<ModuleFlag, boolean>,
     )
-    return { ...v, requestedModules }
+    return {
+      ...v,
+      packId: pack?.id ?? null,
+      requestedModules,
+    }
   })
 
 export type SetupInput = z.infer<typeof setupSchema>

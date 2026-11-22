@@ -68,15 +68,18 @@ export function OnboardingWizard({
   packs,
   completed,
   packLabel,
+  installedPackId = null,
 }: {
   packs: PackRow[]
   completed: boolean
   packLabel: string | null
+  installedPackId?: string | null
 }) {
   const router = useRouter()
-  const [step, setStep] = useState(0)
+  const preselected = installedPackId && packs.some((pack) => pack.id === installedPackId)
+  const [step, setStep] = useState(preselected ? STEPS.length - 1 : 0)
   const [answers, setAnswers] = useState<OnboardingAnswers>(() => defaultOnboardingAnswers())
-  const [packId, setPackId] = useState<string | null>(null)
+  const [packId, setPackId] = useState<string | null>(installedPackId)
   const [seedChart, setSeedChart] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -105,7 +108,7 @@ export function OnboardingWizard({
         setError(result.error.message)
         return
       }
-      router.replace('/settings/setup')
+      router.replace('/dashboard')
       router.refresh()
     })
   }
@@ -118,7 +121,7 @@ export function OnboardingWizard({
         setError(result.error.message)
         return
       }
-      router.replace('/')
+      router.replace('/dashboard')
       router.refresh()
     })
   }
@@ -136,30 +139,35 @@ export function OnboardingWizard({
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Company setup
         </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Set up for your business</h1>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+          {preselected ? 'Confirm your workspace' : 'Set up for your business'}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Answer a few questions. We recommend the best institution pack, then install apps you can
-          refine later in Settings → Apps &amp; features.
+          {preselected
+            ? `You chose ${packLabel ?? 'a workspace'} at registration. Confirm to finish setup and open Getting started on Home.`
+            : 'Answer a few questions. We recommend the best institution pack, then install apps you can refine later in Settings → Apps & features.'}
           {completed && packLabel ? ` Current pack: ${packLabel}.` : null}
         </p>
       </div>
 
-      <ol className="flex flex-wrap gap-2 text-xs">
-        {STEPS.map((label, index) => (
-          <li
-            key={label}
-            className={
-              index === step
-                ? 'rounded-full bg-foreground px-3 py-1 text-background'
-                : index < step
-                  ? 'rounded-full bg-muted px-3 py-1 text-foreground'
-                  : 'rounded-full border px-3 py-1 text-muted-foreground'
-            }
-          >
-            {index + 1}. {label}
-          </li>
-        ))}
-      </ol>
+      {preselected ? null : (
+        <ol className="flex flex-wrap gap-2 text-xs">
+          {STEPS.map((label, index) => (
+            <li
+              key={label}
+              className={
+                index === step
+                  ? 'rounded-full bg-foreground px-3 py-1 text-background'
+                  : index < step
+                    ? 'rounded-full bg-muted px-3 py-1 text-foreground'
+                    : 'rounded-full border px-3 py-1 text-muted-foreground'
+              }
+            >
+              {index + 1}. {label}
+            </li>
+          ))}
+        </ol>
+      )}
 
       {error ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -363,8 +371,8 @@ export function OnboardingWizard({
           <CardHeader>
             <CardTitle className="text-base">Confirm {selected.label}</CardTitle>
             <CardDescription>
-              After install you get a setup checklist in Settings → Setup. Turn any work area on or
-              off later under Settings → Apps &amp; features.
+              After confirm, Home shows Getting started for this workspace. Refine apps later in
+              Settings → Apps &amp; features or Marketplace.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
@@ -398,7 +406,7 @@ export function OnboardingWizard({
           <Button
             type="button"
             variant="outline"
-            disabled={pending || step === 0}
+            disabled={pending || step === 0 || Boolean(preselected)}
             onClick={() => setStep((value) => Math.max(0, value - 1))}
           >
             Back

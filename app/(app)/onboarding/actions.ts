@@ -49,6 +49,7 @@ export const toggleSetupChecklistItem = action
     const result = await onboardingService.toggleChecklistItem(ctx, input)
     revalidatePath('/settings/setup')
     revalidatePath('/onboarding')
+    revalidatePath('/dashboard')
     return result
   })
 

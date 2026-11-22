@@ -60,6 +60,8 @@ export type OrgContext = {
     rentNote: string | null
     /** Null until the org finishes (or skips) the first-run wizard. */
     onboardingCompletedAt: Date | null
+    /** Industry pack chosen at register / onboarding (drives primary desk). */
+    installedPackId?: string | null
   }
   user: {
     id: string
@@ -126,6 +128,7 @@ const ORGANIZATION_SELECT = {
   maxUsers: true,
   rentNote: true,
   onboardingCompletedAt: true,
+  installedPackId: true,
 } as const
 
 export const getOrgContext = cache(async (): Promise<OrgContext | null> => {

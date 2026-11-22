@@ -20,6 +20,15 @@
 - Settings → Setup checklist + re-run wizard; hub entry under Company.
 - OWNER/ADMIN may replace grants when installing a pack for their own org.
 
+## ERP-standard selection (register) — 2026-11-22
+
+- `/register` uses a 4-step industry wizard (family → pack → needs → confirm workspace + account), not a flat Apps checkbox wall.
+- `packId` seeds `featureFlags` via `modulesFromPack` and sets `installedPackId`.
+- Catalog helpers in `lib/packs/workspace.ts` (hubs, preview, add-ons, families).
+- Home shows Getting started from pack checklist; Education / Hospital / Hospitality launcher tiles are pack-aware.
+- Post-login onboarding skips the interview when a pack was chosen at register; finishes to `/dashboard`.
+- Marketplace surfaces suggested add-ons for the installed pack.
+
 ## Verify
 
 ```bash

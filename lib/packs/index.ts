@@ -33,3 +33,20 @@ export type {
   PackInstallOptions,
 } from './types'
 export type { CoverageRow } from './coverage'
+export {
+  PACK_FAMILIES,
+  packsInFamily,
+  familyForPack,
+  primaryHubForPack,
+  primaryHubKeyForPack,
+  workspacePreview,
+  suggestedAddOnsForPack,
+  verticalLauncherVisible,
+  orderHomeAppsForPack,
+  assertPackCatalogComplete,
+  VERTICAL_LAUNCHER_KEYS,
+  type PackFamilyId,
+  type PackFamily,
+  type PrimaryHub,
+  type WorkspacePreview,
+} from './workspace'

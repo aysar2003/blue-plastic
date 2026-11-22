@@ -1,4 +1,5 @@
 import { isModuleEnabled } from '@/lib/feature-flags'
+import { verticalLauncherVisible } from '@/lib/packs'
 import { ROLE_LABELS } from '@/lib/roles'
 import type { OrgContext } from '@/server/auth/context'
 import { LAUNCHER_APPS } from './launcher-apps'
@@ -45,9 +46,11 @@ export async function AppShell({
   const permissions = [...ctx.permissions]
   // Apps switched off in Settings → Configuration. Plain strings, not a filter
   // function: this crosses into a client component.
-  const hiddenApps = LAUNCHER_APPS.filter((app) => !isModuleEnabled(ctx.features, app.key)).map(
-    (app) => app.key,
-  )
+  const packId = ctx.organization.installedPackId
+  const hiddenApps = LAUNCHER_APPS.filter(
+    (app) =>
+      !isModuleEnabled(ctx.features, app.key) || !verticalLauncherVisible(app.key, packId),
+  ).map((app) => app.key)
   const canSwitch = ctx.isSystemOwner || ctx.canConnect
   const companies = databases.map((row) => ({
     id: row.id,

@@ -647,6 +647,10 @@ export const MODULE_KEY_TO_FLAG: Record<string, ModuleFlag | null> = {
   dashboard: null,
   settings: null,
   help: null,
+  /** Vertical desks share the sales grant (fees / visits / folio → AR). */
+  education: 'sales',
+  hospital: 'sales',
+  hospitality: 'sales',
   pos: 'pos',
   sales: 'sales',
   projects: 'projects',

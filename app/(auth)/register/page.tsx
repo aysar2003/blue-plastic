@@ -25,13 +25,13 @@ export default async function RegisterPage() {
     }
 
     return (
-      <div className="flex w-full max-w-lg flex-col gap-4">
+      <div className="flex w-full max-w-xl flex-col gap-4">
         <Card className="w-full border-border bg-card text-card-foreground shadow-sm">
           <CardHeader>
             <CardTitle>Start your company</CardTitle>
             <CardDescription>
-              Create a company on {PRODUCT_NAME}. You get a 14-day free trial and can sign in right
-              away. After the trial, pay rent from Billing (EVC, Zaad, or bank).
+              Tell us what you do — {PRODUCT_NAME} sets up the right workspace (school, shop,
+              hospital, and more). 14-day free trial; pay rent later from Billing.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -17,13 +17,35 @@ export default async function EducationHubPage() {
     sis.listClasses(ctx),
   ])
   const outstandingTotal = outstanding.reduce((sum, row) => sum + Number(row.outstanding), 0)
+  const isUniversity = ctx.organization.installedPackId === 'university'
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">
       <PageHeader
-        title="School management"
-        description="Full school desk: fees & ledger, classroom SIS, timetable, assignments, transport, hostel, announcements, and discipline."
+        title={isUniversity ? 'University management' : 'School management'}
+        description={
+          isUniversity
+            ? 'Tuition & ledger, programs, classes, attendance, grades, and portal report cards.'
+            : 'Full school desk: fees & ledger, classroom SIS, timetable, assignments, transport, hostel, announcements, and discipline.'
+        }
       />
+
+      {stats.programs === 0 ? (
+        <Card className="border-foreground/20">
+          <CardHeader>
+            <CardTitle className="text-base">Next step</CardTitle>
+            <CardDescription>
+              Set up programs and terms first, then fee plans and enrollments. Fee bills create
+              invoices in the books — you work from this Education desk.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/education/programs" className="text-sm font-medium underline underline-offset-4">
+              Set programs &amp; terms
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

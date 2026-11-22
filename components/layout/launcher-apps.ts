@@ -60,6 +60,39 @@ export type LauncherApp = {
 
 export const LAUNCHER_APPS: LauncherApp[] = [
   {
+    key: 'education',
+    label: 'Education',
+    href: '/education',
+    icon: 'book',
+    glyph: 'projects',
+    permission: 'invoice:read',
+    accent: '#0369A1',
+    wash: '#E0F2FE',
+    blurb: 'Fees, classes, school desk',
+  },
+  {
+    key: 'hospital',
+    label: 'Hospital',
+    href: '/hospital',
+    icon: 'building',
+    glyph: 'customers',
+    permission: 'invoice:read',
+    accent: '#BE123C',
+    wash: '#FFE4E6',
+    blurb: 'Visits, charges, claims',
+  },
+  {
+    key: 'hospitality',
+    label: 'Hospitality',
+    href: '/hospitality',
+    icon: 'building',
+    glyph: 'stores',
+    permission: 'invoice:read',
+    accent: '#0369A1',
+    wash: '#E0F2FE',
+    blurb: 'Rooms, stays, folio',
+  },
+  {
     key: 'pos',
     label: 'Point of Sale',
     href: '/pos',
@@ -456,7 +489,7 @@ export const LAUNCHER_FOLDERS: LauncherFolderDef[] = [
     id: 'sales',
     label: 'Sales',
     blurb: 'Sell and get paid',
-    appKeys: ['sales', 'pos', 'projects', 'customers', 'payments'],
+    appKeys: ['education', 'hospital', 'hospitality', 'sales', 'pos', 'projects', 'customers', 'payments'],
   },
   {
     id: 'purchases-stock',

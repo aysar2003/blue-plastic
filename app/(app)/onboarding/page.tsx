@@ -16,6 +16,7 @@ export default async function OnboardingPage() {
       packs={state.packs}
       completed={state.completed}
       packLabel={state.packLabel}
+      installedPackId={state.installedPackId}
     />
   )
 }

@@ -24,9 +24,12 @@ export async function registerAction(
   formData: FormData,
 ): Promise<RegisterState> {
   const raw = Object.fromEntries(formData) as Record<string, string>
-  // Unchecked app boxes omit the key — force false so Zod does not keep stale defaults.
+  // Legacy module boxes (usually absent when packId is set) — force false when omitted.
   for (const key of MODULE_FORM_KEY_LIST) {
     raw[key] = formData.get(key) === 'true' || formData.get(key) === 'on' ? 'true' : 'false'
+  }
+  if (formData.get('packId')) {
+    raw.packId = String(formData.get('packId'))
   }
   const values = { ...raw, password: '', confirmPassword: '' }
 

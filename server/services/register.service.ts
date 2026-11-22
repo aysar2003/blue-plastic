@@ -69,6 +69,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
   }
 
   const requestedModules = parseModulesSelection(input.requestedModules)
+  const packId = input.packId ?? null
 
   if (empty) {
     const passwordHash = await hashPassword(input.password)
@@ -80,6 +81,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
           fiscalYearStartMonth: input.fiscalYearStartMonth,
           fiscalYearStartDay: input.fiscalYearStartDay,
           featureFlags: flagsForSignup(requestedModules),
+          installedPackId: packId ?? undefined,
         },
         select: { id: true, name: true },
       })
@@ -162,8 +164,12 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
         ownerName: input.name.trim(),
         email,
         passwordHash,
-        requestedModules,
+        requestedModules: {
+          ...requestedModules,
+          ...(packId ? { _packId: packId } : {}),
+        } as Prisma.InputJsonValue,
         status: 'PENDING',
+        note: packId ? `Industry pack: ${packId}` : undefined,
       },
       select: { id: true, email: true },
     })
@@ -181,6 +187,7 @@ export async function registerCompany(input: SetupInput): Promise<RegisterResult
         rentExpiresAt: trialEndsAt(),
         rentNote: 'Free trial',
         featureFlags: flagsForSignup(requestedModules),
+        installedPackId: packId ?? undefined,
       },
       select: { id: true, name: true },
     })
@@ -338,6 +345,13 @@ export async function reviewSignupRequest(
   const data = input as Record<string, unknown>
   const hasOverride = MODULE_FLAGS.some((key) => data[MODULE_FORM_KEYS[key]] !== undefined)
   const modules = hasOverride ? modulesFromFormValues(data) : requested
+  const rawPack =
+    request.requestedModules &&
+    typeof request.requestedModules === 'object' &&
+    !Array.isArray(request.requestedModules)
+      ? (request.requestedModules as Record<string, unknown>)._packId
+      : null
+  const approvedPackId = typeof rawPack === 'string' ? rawPack : null
 
   const created = await db.$transaction(async (tx) => {
     const organization = await tx.organization.create({
@@ -349,6 +363,7 @@ export async function reviewSignupRequest(
         rentExpiresAt: trialEndsAt(),
         rentNote: 'Free trial',
         featureFlags: flagsForSignup(modules),
+        installedPackId: approvedPackId ?? undefined,
       },
       select: { id: true, name: true },
     })
