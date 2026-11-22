@@ -22,7 +22,7 @@ export default async function EducationHubPage() {
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">
       <PageHeader
         title="School management"
-        description="Fees and ledger, plus classes, attendance, grades, and report cards. Not a full LMS (no assignments or content)."
+        description="Full school desk: fees & ledger, classroom SIS, timetable, assignments, transport, hostel, announcements, and discipline."
       />
 
       <Card>
@@ -76,6 +76,35 @@ export default async function EducationHubPage() {
               </Link>
               <Link href="/education/grades" className="underline underline-offset-4">
                 Grades
+              </Link>
+              <Link href="/education/subjects" className="underline underline-offset-4">
+                Subjects
+              </Link>
+              <Link href="/education/timetable" className="underline underline-offset-4">
+                Timetable
+              </Link>
+              <Link href="/education/assignments" className="underline underline-offset-4">
+                Assignments
+              </Link>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Campus ops
+            </p>
+            <div className="flex flex-wrap gap-4">
+              <Link href="/education/transport" className="underline underline-offset-4">
+                Transport
+              </Link>
+              <Link href="/education/hostel" className="underline underline-offset-4">
+                Hostel
+              </Link>
+              <Link href="/education/announcements" className="underline underline-offset-4">
+                Announcements
+              </Link>
+              <Link href="/education/discipline" className="underline underline-offset-4">
+                Discipline
               </Link>
             </div>
           </div>

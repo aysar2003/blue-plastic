@@ -90,6 +90,9 @@ export default async function PortalHomePage() {
         <Link href="/portal/report-cards" className={cn(buttonVariants({ variant: 'outline' }))}>
           Report cards
         </Link>
+        <Link href="/portal/school" className={cn(buttonVariants({ variant: 'outline' }))}>
+          School
+        </Link>
       </div>
     </div>
   )

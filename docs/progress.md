@@ -57,6 +57,7 @@
 | 47 — NGO fund restrict | ✅ Complete (FULL) | 2026-11-21 · Wave E grant BvA by class + pledge receipt note + donor CSV · [detail](./phases/phase-47-ngo-fund-restrict.md) · migration `20261121201000_wave_e_deepen` |
 | 48 — Scholarship summary | ✅ Complete (FULL) | 2026-11-21 · Wave E award → fee-waiver line on term invoice · [detail](./phases/phase-48-education-scholarship.md) |
 | 48b — School SIS deepen | ✅ Complete (FULL) | 2026-11-22 · Classes, roster, attendance, grades, report cards + portal · [detail](./phases/phase-48b-school-sis-deepen.md) · migration `20261122140000_school_sis_deepen` |
+| 48c — School ops full | ✅ Complete (FULL) | 2026-11-22 · Subjects, timetable, assignments, transport, hostel, announcements, discipline + portal school hub · [detail](./phases/phase-48c-school-ops-full.md) · migration `20261122180000_school_ops_full` |
 | 49 — Hospital claims batch | ✅ Complete (FULL) | 2026-11-21 · Wave E claim submitted/paid/denied + remittance to visit AR · [detail](./phases/phase-49-hospital-claims-batch.md) · migration `20261121201000_wave_e_deepen` |
 | 50 — Agriculture pack | ✅ Complete (FULL) | 2026-11-21 · Wave E season = project/class filter on seasonal cost · [detail](./phases/phase-50-agriculture.md) · migration `20261121201000_wave_e_deepen` |
 | 51 — Franchise | ✅ Complete (FULL) | 2026-11-14 · Wave D 2026-11-21 royalty statement CSV + brand P&L · [detail](./phases/phase-51-franchise.md) · catalog push + royalty accrual · migration `20261121200000_wave_d_deepen` |

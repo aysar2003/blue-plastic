@@ -16,8 +16,6 @@ Turn education from fee-only into a practical school management desk for a princ
 6. Portal: `/portal/report-cards` for guardians/students.
 7. School + university packs updated (checklist + inScope).
 
-## Still out of scope
+## Follow-on
 
-- LMS / SCORM content and assignments
-- Timetable builder
-- Transport / hostel
+Timetable, assignments, transport, hostel, announcements, and discipline shipped in [phase-48c-school-ops-full.md](./phase-48c-school-ops-full.md).

@@ -16,4 +16,4 @@ None (logic only). Wave E reuses `student_enrollments.scholarshipPercent`.
 
 ## Follow-on
 
-Classroom SIS (classes / attendance / grades / report cards) shipped as [phase-48b-school-sis-deepen.md](./phase-48b-school-sis-deepen.md).
+Classroom SIS (classes / attendance / grades / report cards) shipped as [phase-48b-school-sis-deepen.md](./phase-48b-school-sis-deepen.md). School ops (timetable / assignments / transport / hostel / notices) as [phase-48c-school-ops-full.md](./phase-48c-school-ops-full.md).
