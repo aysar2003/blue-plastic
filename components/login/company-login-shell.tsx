@@ -47,23 +47,35 @@ export function CompanyLoginShell({
       <div className="relative z-10 mx-auto grid w-full max-w-5xl flex-1 lg:grid-cols-2">
         <aside
           className={cn(
-            'hidden flex-col justify-between p-10 text-white lg:flex',
+            'hidden flex-col justify-between border-r p-10 lg:flex',
             dark
-              ? 'border-r border-cyan-400/15 bg-[#0b1220]/90'
-              : 'bg-[#0b1220]',
+              ? 'border-cyan-400/15 bg-[#0b1220]/90 text-white'
+              : 'border-cyan-200/70 bg-white/75 text-slate-900',
           )}
         >
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300/90">
+            <p
+              className={cn(
+                'text-xs font-bold uppercase tracking-[0.2em]',
+                dark ? 'text-cyan-300/90' : 'text-cyan-800',
+              )}
+            >
               {PRODUCT_NAME}
             </p>
             <h1 className="mt-6 text-3xl font-semibold tracking-tight">Company books</h1>
-            <p className="mt-3 max-w-sm text-sm leading-relaxed text-slate-300">
+            <p
+              className={cn(
+                'mt-3 max-w-sm text-sm leading-relaxed',
+                dark ? 'text-slate-300' : 'text-slate-600',
+              )}
+            >
               Sign in to the company you work for — invoices, stock, purchases, and banking on one
               ledger.
             </p>
           </div>
-          <p className="text-xs text-cyan-200/60">{PRODUCT_TAGLINE}</p>
+          <p className={cn('text-xs', dark ? 'text-cyan-200/60' : 'text-cyan-800/70')}>
+            {PRODUCT_TAGLINE}
+          </p>
         </aside>
 
         <main className="flex flex-col items-center justify-center px-4 py-12 sm:px-10">
