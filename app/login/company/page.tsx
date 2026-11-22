@@ -8,7 +8,7 @@ import { creatorBrandVisibleBeforeSignIn } from '@/server/services/organization.
 import { isSelfServeEnabled } from '@/server/services/register.service'
 import { needsSetup } from '@/server/services/setup.service'
 import { companySignInAction } from '../actions'
-import { LoginForm } from '../login-form'
+import { CompanyLoginForm } from './company-login-form'
 
 export const metadata: Metadata = { title: 'Company login' }
 export const dynamic = 'force-dynamic'
@@ -30,10 +30,9 @@ export default async function CompanyLoginPage({
 
     return (
       <CompanyLoginShell showBrand={showBrand} canRegister={canRegister}>
-        <LoginForm
+        <CompanyLoginForm
           action={companySignInAction}
           submitLabel="Sign in to your company"
-          labelClassName="bg-cyan-400 text-[#070b14] hover:bg-cyan-300"
         />
       </CompanyLoginShell>
     )
