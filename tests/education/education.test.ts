@@ -52,5 +52,6 @@ describe('education packs', () => {
     expect(getPack('school')?.setupChecklist.some((row) => row.id === 'enroll')).toBe(true)
     expect(getPack('school')?.setupChecklist.some((row) => row.id === 'outstanding')).toBe(true)
     expect(getPack('school')?.inScope.some((line) => /fees outstanding/i.test(line))).toBe(true)
+    expect(getPack('school')?.inScope.some((line) => /attendance/i.test(line))).toBe(true)
   })
 })

@@ -872,6 +872,11 @@ model Organization {
   academicTerms        AcademicTerm[]
   feePlans             FeePlan[]
   studentEnrollments   StudentEnrollment[]
+  schoolClasses        SchoolClass[]
+  schoolClassMembers   SchoolClassMember[]
+  studentAttendanceDays StudentAttendanceDay[]
+  gradeItems           GradeItem[]
+  gradeEntries         GradeEntry[]
   patientVisits        PatientVisit[]
   donorPledges         DonorPledge[]
   routingSteps         RoutingStep[]
@@ -7087,6 +7092,7 @@ model AcademicProgram {
   organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   feePlans     FeePlan[]
   enrollments  StudentEnrollment[]
+  classes      SchoolClass[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
@@ -7106,6 +7112,7 @@ model AcademicTerm {
 
   organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   enrollments  StudentEnrollment[]
+  classes      SchoolClass[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive, startsOn])
@@ -7177,12 +7184,130 @@ model StudentEnrollment {
   term          AcademicTerm   @relation(fields: [termId], references: [id], onDelete: Restrict)
   feePlan       FeePlan?       @relation(fields: [feePlanId], references: [id], onDelete: SetNull)
   salesDocument SalesDocument? @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
+  classMembers  SchoolClassMember[]
+  attendanceDays StudentAttendanceDay[]
+  gradeEntries  GradeEntry[]
 
   @@unique([orgId, customerId, programId, termId])
   @@index([orgId, status, enrolledAt(sort: Desc)])
   @@index([termId, status])
   @@index([customerId])
   @@map("student_enrollments")
+}
+
+/// School SIS deepen — classroom section for a program + term.
+enum AttendanceMark {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+model SchoolClass {
+  id          String  @id @default(cuid())
+  orgId       String
+  programId   String
+  termId      String
+  name        String
+  code        String?
+  teacherName String?
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  program      AcademicProgram      @relation(fields: [programId], references: [id], onDelete: Restrict)
+  term         AcademicTerm         @relation(fields: [termId], references: [id], onDelete: Restrict)
+  members      SchoolClassMember[]
+  attendance   StudentAttendanceDay[]
+  gradeItems   GradeItem[]
+
+  @@unique([orgId, termId, name])
+  @@index([orgId, isActive, termId])
+  @@index([programId])
+  @@map("school_classes")
+}
+
+model SchoolClassMember {
+  id           String @id @default(cuid())
+  orgId        String
+  classId      String
+  enrollmentId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  schoolClass  SchoolClass      @relation(fields: [classId], references: [id], onDelete: Cascade)
+  enrollment   StudentEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, enrollmentId])
+  @@index([orgId, classId])
+  @@index([enrollmentId])
+  @@map("school_class_members")
+}
+
+model StudentAttendanceDay {
+  id           String         @id @default(cuid())
+  orgId        String
+  classId      String
+  enrollmentId String
+  onDate       DateTime       @db.Date
+  mark         AttendanceMark @default(PRESENT)
+  note         String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  schoolClass  SchoolClass      @relation(fields: [classId], references: [id], onDelete: Cascade)
+  enrollment   StudentEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, enrollmentId, onDate])
+  @@index([orgId, classId, onDate])
+  @@index([enrollmentId, onDate])
+  @@map("student_attendance_days")
+}
+
+model GradeItem {
+  id           String    @id @default(cuid())
+  orgId        String
+  classId      String
+  name         String
+  maxScore     Decimal   @default(100) @db.Decimal(19, 4)
+  weightPercent Decimal  @default(100) @db.Decimal(7, 4)
+  dueOn        DateTime? @db.Date
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  schoolClass  SchoolClass  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  entries      GradeEntry[]
+
+  @@unique([classId, name])
+  @@index([orgId, classId])
+  @@map("grade_items")
+}
+
+model GradeEntry {
+  id           String  @id @default(cuid())
+  orgId        String
+  gradeItemId  String
+  enrollmentId String
+  score        Decimal @db.Decimal(19, 4)
+  comment      String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  gradeItem    GradeItem        @relation(fields: [gradeItemId], references: [id], onDelete: Cascade)
+  enrollment   StudentEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([gradeItemId, enrollmentId])
+  @@index([orgId, enrollmentId])
+  @@map("grade_entries")
 }
 
 /// Hospital billing admin only — not a clinical chart / EMR.
