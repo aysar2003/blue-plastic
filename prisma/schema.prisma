@@ -382,6 +382,8 @@ enum SystemAccountKey {
   IC_ELIMINATION_DEBIT
   /// Intercompany elimination credit (Wave D memo pair).
   IC_ELIMINATION_CREDIT
+  /// Statutory withholding tax held on vendor bills (Wave G).
+  WITHHOLDING_TAX_PAYABLE
 }
 
 /// How an item behaves. The distinction drives which accounts it must map to and
@@ -869,6 +871,7 @@ model Organization {
   folios               Folio[]
   itemLots             ItemLot[]
   academicPrograms     AcademicProgram[]
+  academicYears        AcademicYear[]
   academicTerms        AcademicTerm[]
   feePlans             FeePlan[]
   studentEnrollments   StudentEnrollment[]
@@ -3375,6 +3378,7 @@ model CustomerPayment {
   depositLines   DepositLine[]
   donorPledges   DonorPledge[]
   claimRemittances PatientVisit[] @relation("VisitClaimRemittance")
+  matchedImports ImportedTransaction[] @relation("ImportMatchedPayment")
 
   @@unique([orgId, number])
   @@unique([id, orgId])
@@ -3486,6 +3490,11 @@ model PurchaseDocument {
   /// Vendor retention held on this bill (Phase 38 lite — stored; release via journal).
   retentionAmount Decimal? @db.Decimal(19, 4)
   retentionReleasedAt DateTime? @db.Timestamptz(6)
+
+  /// Wave G: statutory WHT % on bill base (e.g. 2 Ethiopia / 5 Kenya).
+  withholdPercent Decimal? @db.Decimal(7, 4)
+  /// Computed withhold amount (liability to tax authority, reduces net AP).
+  withholdAmount  Decimal? @db.Decimal(19, 4)
 
   /// Optional job this purchase belongs to (Projects app).
   projectId String?
@@ -3835,10 +3844,19 @@ model ImportedTransaction {
   /// importing the same line twice.
   externalId String?
 
+  /// Wave G: MSISDN / Till / Paybill / merchant code from mobile-money CSVs.
+  partyRef String?
+
   status ImportedTransactionStatus @default(PENDING)
 
   matchedJournalLineId String?
   matchedAt            DateTime? @db.Timestamptz(6)
+
+  /// Wave G: customer payment created when matching an invoice from the feed.
+  matchedCustomerPaymentId String?
+  /// Best suggested open invoice (score stored for UI).
+  suggestedInvoiceId String?
+  matchScore         Decimal? @db.Decimal(5, 2)
 
   /// Chosen on the feed before the line is posted. Not a ledger entry.
   categoryAccountId String?
@@ -3854,10 +3872,12 @@ model ImportedTransaction {
   vendor             Vendor?         @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   customer           Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
   matchedJournalLine JournalLine?    @relation(fields: [matchedJournalLineId], references: [id], onDelete: SetNull)
+  matchedCustomerPayment CustomerPayment? @relation("ImportMatchedPayment", fields: [matchedCustomerPaymentId], references: [id], onDelete: SetNull)
   files              LedgerFile[]
 
   @@unique([orgId, accountId, externalId])
   @@index([orgId, accountId, status, date])
+  @@index([orgId, suggestedInvoiceId])
   @@map("imported_transactions")
 }
 
@@ -7091,6 +7111,12 @@ enum EnrollmentStatus {
   COMPLETED
 }
 
+/// School / university academic year lifecycle. CLOSED years stay readable forever.
+enum AcademicYearStatus {
+  OPEN
+  CLOSED
+}
+
 model AcademicProgram {
   id       String  @id @default(cuid())
   orgId    String
@@ -7111,23 +7137,46 @@ model AcademicProgram {
   @@map("academic_programs")
 }
 
-model AcademicTerm {
-  id       String   @id @default(cuid())
+model AcademicYear {
+  id       String             @id @default(cuid())
   orgId    String
-  name     String
-  startsOn DateTime @db.Date
-  endsOn   DateTime @db.Date
-  isActive Boolean  @default(true)
+  label    String
+  startsOn DateTime           @db.Date
+  endsOn   DateTime           @db.Date
+  status   AcademicYearStatus @default(OPEN)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  terms        AcademicTerm[]
+
+  @@unique([orgId, label])
+  @@index([orgId, status, startsOn])
+  @@map("academic_years")
+}
+
+model AcademicTerm {
+  id             String   @id @default(cuid())
+  orgId          String
+  academicYearId String
+  name           String
+  startsOn       DateTime @db.Date
+  endsOn         DateTime @db.Date
+  isActive       Boolean  @default(true)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear        @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
   enrollments  StudentEnrollment[]
   classes      SchoolClass[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive, startsOn])
+  @@index([orgId, academicYearId])
+  @@index([academicYearId])
   @@map("academic_terms")
 }
 

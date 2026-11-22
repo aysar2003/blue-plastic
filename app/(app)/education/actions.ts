@@ -26,9 +26,60 @@ export async function saveTerm(formData: FormData) {
     name: String(formData.get('name') ?? ''),
     startsOn: String(formData.get('startsOn') ?? ''),
     endsOn: String(formData.get('endsOn') ?? ''),
+    academicYearId: String(formData.get('academicYearId') || '') || null,
   })
   revalidatePath(PATH)
   redirect(`${PATH}/terms`)
+}
+
+export async function openAcademicYearAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await education.openAcademicYear(ctx, {
+    label: String(formData.get('label') ?? '') || undefined,
+    copyFromYearId: String(formData.get('copyFromYearId') || '') || null,
+    cloneFeePlans: formData.get('cloneFeePlans') === '1',
+  })
+  revalidatePath(PATH)
+  redirect(`${PATH}/years`)
+}
+
+export async function closeAcademicYearAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await education.closeAcademicYear(ctx, String(formData.get('yearId') ?? ''))
+  revalidatePath(PATH)
+  redirect(`${PATH}/years`)
+}
+
+export async function promoteEnrollmentsAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await education.promoteEnrollments(ctx, {
+    fromYearId: String(formData.get('fromYearId') ?? ''),
+    toTermId: String(formData.get('toTermId') ?? ''),
+    cloneClasses: formData.get('cloneClasses') === '1',
+  })
+  revalidatePath(PATH)
+  redirect(`${PATH}/enrollments`)
+}
+
+export async function completeEnrollmentAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await education.completeEnrollment(ctx, String(formData.get('enrollmentId') ?? ''))
+  revalidatePath(PATH)
+  redirect(`${PATH}/enrollments`)
+}
+
+export async function importStudentsCsvAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  const csv = String(formData.get('csv') ?? '')
+  const result = await education.importStudentsCsv(ctx, csv)
+  revalidatePath(PATH)
+  const q = new URLSearchParams({
+    createdStudents: String(result.createdStudents),
+    createdEnrollments: String(result.createdEnrollments),
+    skippedEnrollments: String(result.skippedEnrollments),
+    errors: String(result.errors.length),
+  })
+  redirect(`${PATH}/import?${q.toString()}`)
 }
 
 export async function saveFeePlan(formData: FormData) {

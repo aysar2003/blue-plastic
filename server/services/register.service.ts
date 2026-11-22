@@ -40,7 +40,35 @@ async function seedAcademicYear(tx: Tx, orgId: string, calendar: AcademicCalenda
       data: { orgId, name: 'General', code: 'GEN' },
     })
   }
-  for (const term of termsToSeed(calendar)) {
+
+  const termRows = termsToSeed(calendar)
+  const startsOn = termRows.reduce(
+    (min, row) => (row.startsOn < min ? row.startsOn : min),
+    termRows[0]!.startsOn,
+  )
+  const endsOn = termRows.reduce(
+    (max, row) => (row.endsOn > max ? row.endsOn : max),
+    termRows[0]!.endsOn,
+  )
+
+  let year = await tx.academicYear.findFirst({
+    where: { orgId, label: calendar.academicYearLabel.trim() },
+    select: { id: true },
+  })
+  if (!year) {
+    year = await tx.academicYear.create({
+      data: {
+        orgId,
+        label: calendar.academicYearLabel.trim(),
+        startsOn: toDate(startsOn),
+        endsOn: toDate(endsOn),
+        status: 'OPEN',
+      },
+      select: { id: true },
+    })
+  }
+
+  for (const term of termRows) {
     const exists = await tx.academicTerm.findFirst({
       where: { orgId, name: term.name },
       select: { id: true },
@@ -49,6 +77,7 @@ async function seedAcademicYear(tx: Tx, orgId: string, calendar: AcademicCalenda
     await tx.academicTerm.create({
       data: {
         orgId,
+        academicYearId: year.id,
         name: term.name,
         startsOn: toDate(term.startsOn),
         endsOn: toDate(term.endsOn),

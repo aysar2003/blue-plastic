@@ -12,6 +12,17 @@ import {
   scholarshipDiscountAmount,
   type EnrollmentStatus,
 } from '@/lib/erp/education'
+import {
+  assertEducationRetentionSafe,
+  buildNextYearTerms,
+  canCloseAcademicYear,
+  canCompleteEnrollment,
+  canOpenSiblingYear,
+  canPromoteEnrollment,
+  nextAcademicYearLabel,
+} from '@/lib/erp/academic-year-lifecycle'
+import { parseCsv } from '@/lib/csv'
+import { toCalendarDate } from '@/lib/date'
 import { scholarshipSummaryTotals } from '@/lib/erp/scholarship-summary'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
@@ -46,16 +57,49 @@ export async function upsertProgram(
   }
 }
 
-export async function listTerms(ctx: OrgContext) {
+export async function listAcademicYears(ctx: OrgContext) {
+  return db.academicYear.findMany({
+    where: { orgId: ctx.orgId },
+    orderBy: { startsOn: 'desc' },
+    include: {
+      _count: { select: { terms: true } },
+    },
+  })
+}
+
+export async function getOpenAcademicYear(ctx: OrgContext) {
+  return db.academicYear.findFirst({
+    where: { orgId: ctx.orgId, status: 'OPEN' },
+    orderBy: { startsOn: 'desc' },
+  })
+}
+
+export async function listTerms(
+  ctx: OrgContext,
+  opts?: { academicYearId?: string; includeInactive?: boolean },
+) {
   return db.academicTerm.findMany({
-    where: { orgId: ctx.orgId, isActive: true },
+    where: {
+      orgId: ctx.orgId,
+      ...(opts?.academicYearId ? { academicYearId: opts.academicYearId } : {}),
+      ...(opts?.includeInactive ? {} : { isActive: true }),
+    },
+    include: {
+      academicYear: { select: { id: true, label: true, status: true } },
+    },
     orderBy: { startsOn: 'desc' },
   })
 }
 
 export async function upsertTerm(
   ctx: OrgContext,
-  input: { id?: string; name: string; startsOn: string; endsOn: string },
+  input: {
+    id?: string
+    name: string
+    startsOn: string
+    endsOn: string
+    academicYearId?: string | null
+  },
 ) {
   const name = input.name.trim()
   if (!name) throw validation('Term name is required.')
@@ -69,15 +113,216 @@ export async function upsertTerm(
   }
 
   if (input.id) {
+    const existing = await db.academicTerm.findFirst({
+      where: { id: input.id, orgId: ctx.orgId },
+      include: { academicYear: { select: { status: true } } },
+    })
+    if (!existing) throw notFound('Term')
+    if (existing.academicYear.status === 'CLOSED') {
+      throw precondition('Closed-year terms are read-only. Open a new school year to change dates.')
+    }
     return db.academicTerm.update({ where: { id: input.id }, data })
   }
+
+  let academicYearId = input.academicYearId?.trim() || null
+  if (!academicYearId) {
+    const open = await getOpenAcademicYear(ctx)
+    if (!open) throw validation('Open a school year before adding terms.')
+    academicYearId = open.id
+  } else {
+    const year = await db.academicYear.findFirst({
+      where: { id: academicYearId, orgId: ctx.orgId },
+      select: { id: true, status: true },
+    })
+    if (!year) throw notFound('School year')
+    if (year.status === 'CLOSED') {
+      throw precondition('Cannot add terms to a closed school year.')
+    }
+  }
+
   try {
     return await db.academicTerm.create({
-      data: { orgId: ctx.orgId, ...data },
+      data: { orgId: ctx.orgId, academicYearId, ...data },
     })
   } catch {
     throw conflict('Another term already uses that name.')
   }
+}
+
+/**
+ * Close a school year: deactivate its terms, complete remaining enrollments.
+ * Never deletes education history.
+ */
+export async function closeAcademicYear(ctx: OrgContext, yearId: string) {
+  assertEducationRetentionSafe('close academic year')
+  const year = await db.academicYear.findFirst({
+    where: { id: yearId, orgId: ctx.orgId },
+    include: { terms: { select: { id: true } } },
+  })
+  if (!year) throw notFound('School year')
+  if (!canCloseAcademicYear(year.status)) {
+    throw precondition('That school year is already closed.')
+  }
+
+  const termIds = year.terms.map((t) => t.id)
+  return db.$transaction(async (tx) => {
+    await tx.academicYear.update({
+      where: { id: year.id },
+      data: { status: 'CLOSED' },
+    })
+    if (termIds.length) {
+      await tx.academicTerm.updateMany({
+        where: { orgId: ctx.orgId, id: { in: termIds } },
+        data: { isActive: false },
+      })
+      await tx.studentEnrollment.updateMany({
+        where: { orgId: ctx.orgId, termId: { in: termIds }, status: 'ENROLLED' },
+        data: { status: 'COMPLETED' },
+      })
+    }
+    return tx.academicYear.findUniqueOrThrow({ where: { id: year.id } })
+  })
+}
+
+/**
+ * Open the next school year, cloning term/vacation structure from the latest closed
+ * (or provided) year. Does not delete prior years.
+ */
+export async function openAcademicYear(
+  ctx: OrgContext,
+  input?: {
+    label?: string
+    copyFromYearId?: string | null
+    cloneFeePlans?: boolean
+  },
+) {
+  assertEducationRetentionSafe('open academic year')
+  const openCount = await db.academicYear.count({
+    where: { orgId: ctx.orgId, status: 'OPEN' },
+  })
+  if (!canOpenSiblingYear(openCount)) {
+    throw precondition('Close the current school year before opening another.')
+  }
+
+  const source =
+    (input?.copyFromYearId
+      ? await db.academicYear.findFirst({
+          where: { id: input.copyFromYearId, orgId: ctx.orgId },
+          include: { terms: { orderBy: { startsOn: 'asc' } } },
+        })
+      : null) ??
+    (await db.academicYear.findFirst({
+      where: { orgId: ctx.orgId },
+      orderBy: { startsOn: 'desc' },
+      include: { terms: { orderBy: { startsOn: 'asc' } } },
+    }))
+
+  const label = (input?.label?.trim() ||
+    (source ? nextAcademicYearLabel(source.label) : String(new Date().getUTCFullYear()))).slice(
+    0,
+    40,
+  )
+
+  const existingLabel = await db.academicYear.findFirst({
+    where: { orgId: ctx.orgId, label },
+    select: { id: true },
+  })
+  if (existingLabel) throw conflict('A school year with that label already exists.')
+
+  const template = source
+    ? source.terms.map((t) => ({
+        name: t.name,
+        startsOn: toCalendarDate(t.startsOn),
+        endsOn: toCalendarDate(t.endsOn),
+      }))
+    : []
+  const nextTerms = source
+    ? buildNextYearTerms(template, source.label, label)
+    : [
+        {
+          name: `${label} Term 1`,
+          startsOn: `${label.match(/\d{4}/)?.[0] ?? new Date().getUTCFullYear()}-01-15`,
+          endsOn: `${label.match(/\d{4}/)?.[0] ?? new Date().getUTCFullYear()}-05-31`,
+        },
+        {
+          name: `${label} Term 2`,
+          startsOn: `${label.match(/\d{4}/)?.[0] ?? new Date().getUTCFullYear()}-08-01`,
+          endsOn: `${label.match(/\d{4}/)?.[0] ?? new Date().getUTCFullYear()}-11-30`,
+        },
+      ]
+
+  for (const term of nextTerms) {
+    const err = assertTermDates(term.startsOn, term.endsOn)
+    if (err) throw validation(err)
+  }
+
+  const yearStarts = nextTerms.reduce(
+    (min, t) => (t.startsOn < min ? t.startsOn : min),
+    nextTerms[0]!.startsOn,
+  )
+  const yearEnds = nextTerms.reduce(
+    (max, t) => (t.endsOn > max ? t.endsOn : max),
+    nextTerms[0]!.endsOn,
+  )
+
+  const created = await db.$transaction(async (tx) => {
+    const year = await tx.academicYear.create({
+      data: {
+        orgId: ctx.orgId,
+        label,
+        startsOn: toDate(yearStarts),
+        endsOn: toDate(yearEnds),
+        status: 'OPEN',
+      },
+    })
+    for (const term of nextTerms) {
+      await tx.academicTerm.create({
+        data: {
+          orgId: ctx.orgId,
+          academicYearId: year.id,
+          name: term.name,
+          startsOn: toDate(term.startsOn),
+          endsOn: toDate(term.endsOn),
+          isActive: true,
+        },
+      })
+    }
+
+    if (input?.cloneFeePlans) {
+      const plans = await tx.feePlan.findMany({
+        where: { orgId: ctx.orgId, isActive: true },
+        include: { lines: { orderBy: { sortOrder: 'asc' } } },
+      })
+      for (const plan of plans) {
+        const newName = `${label} · ${plan.name}`.slice(0, 200)
+        const clash = await tx.feePlan.findFirst({
+          where: { orgId: ctx.orgId, name: newName },
+          select: { id: true },
+        })
+        if (clash) continue
+        await tx.feePlan.create({
+          data: {
+            orgId: ctx.orgId,
+            programId: plan.programId,
+            name: newName,
+            lines: {
+              create: plan.lines.map((line, index) => ({
+                itemId: line.itemId,
+                description: line.description,
+                quantity: line.quantity,
+                unitPrice: line.unitPrice,
+                sortOrder: line.sortOrder ?? index,
+              })),
+            },
+          },
+        })
+      }
+    }
+
+    return year
+  })
+
+  return created
 }
 
 export async function listFeePlans(ctx: OrgContext) {
@@ -625,4 +870,399 @@ export async function awardScholarship(
     data: { scholarshipPercent },
     select: { id: true, scholarshipPercent: true, salesDocumentId: true },
   })
+}
+
+export async function completeEnrollment(ctx: OrgContext, enrollmentId: string) {
+  assertEducationRetentionSafe('complete enrollment')
+  const enrollment = await db.studentEnrollment.findFirst({
+    where: { id: enrollmentId, orgId: ctx.orgId },
+    select: { id: true, status: true },
+  })
+  if (!enrollment) throw notFound('Enrollment')
+  if (!canCompleteEnrollment(enrollment.status)) {
+    throw precondition('Only an active enrollment can be marked completed.')
+  }
+  return db.studentEnrollment.update({
+    where: { id: enrollment.id },
+    data: { status: 'COMPLETED' },
+  })
+}
+
+/**
+ * Re-enroll students from a closed (or prior) year into a target term on the OPEN year.
+ * Prior enrollment rows stay forever.
+ */
+export async function promoteEnrollments(
+  ctx: OrgContext,
+  input: {
+    fromYearId: string
+    toTermId: string
+    enrollmentIds?: string[]
+    cloneClasses?: boolean
+  },
+) {
+  assertEducationRetentionSafe('promote enrollments')
+  const [fromYear, toTerm] = await Promise.all([
+    db.academicYear.findFirst({
+      where: { id: input.fromYearId, orgId: ctx.orgId },
+      include: { terms: { select: { id: true } } },
+    }),
+    db.academicTerm.findFirst({
+      where: { id: input.toTermId, orgId: ctx.orgId },
+      include: { academicYear: { select: { id: true, status: true } } },
+    }),
+  ])
+  if (!fromYear) throw notFound('Source school year')
+  if (!toTerm) throw notFound('Target term')
+  if (toTerm.academicYear.status !== 'OPEN') {
+    throw precondition('Promote only into a term on the open school year.')
+  }
+
+  const fromTermIds = fromYear.terms.map((t) => t.id)
+  if (!fromTermIds.length) return { created: 0, skipped: 0 }
+
+  const source = await db.studentEnrollment.findMany({
+    where: {
+      orgId: ctx.orgId,
+      termId: { in: fromTermIds },
+      ...(input.enrollmentIds?.length ? { id: { in: input.enrollmentIds } } : {}),
+      status: { in: ['ENROLLED', 'COMPLETED'] },
+    },
+    include: {
+      classMembers: { select: { classId: true, schoolClass: { select: { name: true, code: true, teacherName: true, programId: true } } } },
+    },
+    take: 5000,
+  })
+
+  let created = 0
+  let skipped = 0
+  const classMap = new Map<string, string>()
+
+  for (const row of source) {
+    if (!canPromoteEnrollment(row.status)) {
+      skipped += 1
+      continue
+    }
+    const exists = await db.studentEnrollment.findFirst({
+      where: {
+        orgId: ctx.orgId,
+        customerId: row.customerId,
+        programId: row.programId,
+        termId: toTerm.id,
+      },
+      select: { id: true },
+    })
+    if (exists) {
+      skipped += 1
+      continue
+    }
+
+    if (row.status === 'ENROLLED') {
+      await db.studentEnrollment.update({
+        where: { id: row.id },
+        data: { status: 'COMPLETED' },
+      })
+    }
+
+    const enrollment = await db.studentEnrollment.create({
+      data: {
+        orgId: ctx.orgId,
+        customerId: row.customerId,
+        programId: row.programId,
+        termId: toTerm.id,
+        feePlanId: row.feePlanId,
+        scholarshipPercent: row.scholarshipPercent,
+        notes: row.notes,
+        status: 'ENROLLED',
+      },
+    })
+    created += 1
+
+    if (input.cloneClasses) {
+      for (const member of row.classMembers) {
+        const sourceClass = member.schoolClass
+        let newClassId = classMap.get(member.classId)
+        if (!newClassId) {
+          const className = sourceClass.name
+          const existingClass = await db.schoolClass.findFirst({
+            where: { orgId: ctx.orgId, termId: toTerm.id, name: className },
+            select: { id: true },
+          })
+          if (existingClass) {
+            newClassId = existingClass.id
+          } else {
+            const createdClass = await db.schoolClass.create({
+              data: {
+                orgId: ctx.orgId,
+                programId: sourceClass.programId,
+                termId: toTerm.id,
+                name: className,
+                code: sourceClass.code,
+                teacherName: sourceClass.teacherName,
+              },
+              select: { id: true },
+            })
+            newClassId = createdClass.id
+          }
+          classMap.set(member.classId, newClassId)
+        }
+        await db.schoolClassMember.create({
+          data: {
+            orgId: ctx.orgId,
+            classId: newClassId,
+            enrollmentId: enrollment.id,
+          },
+        }).catch(() => undefined)
+      }
+    }
+  }
+
+  return { created, skipped }
+}
+
+/** Full student history across all school years (retained forever). */
+export async function studentHistory(ctx: OrgContext, customerId: string) {
+  const customer = await db.customer.findFirst({
+    where: { id: customerId, orgId: ctx.orgId },
+    select: {
+      id: true,
+      displayName: true,
+      email: true,
+      phone: true,
+      mobile: true,
+      notes: true,
+    },
+  })
+  if (!customer) throw notFound('Student')
+
+  const enrollments = await db.studentEnrollment.findMany({
+    where: { orgId: ctx.orgId, customerId },
+    include: {
+      program: { select: { id: true, name: true } },
+      term: {
+        select: {
+          id: true,
+          name: true,
+          startsOn: true,
+          endsOn: true,
+          academicYear: { select: { id: true, label: true, status: true } },
+        },
+      },
+      feePlan: { select: { id: true, name: true } },
+      salesDocument: {
+        select: { id: true, number: true, total: true, status: true },
+      },
+      attendanceDays: {
+        select: { onDate: true, mark: true },
+        orderBy: { onDate: 'desc' },
+        take: 40,
+      },
+      gradeEntries: {
+        select: {
+          score: true,
+          gradeItem: { select: { name: true, maxScore: true } },
+        },
+        take: 40,
+      },
+      classMembers: {
+        select: { schoolClass: { select: { name: true } } },
+      },
+    },
+    orderBy: { enrolledAt: 'desc' },
+  })
+
+  return { customer, enrollments }
+}
+
+/**
+ * Import students (customers) + optional prior-year enrollments from CSV.
+ * Idempotent by studentCode (stored in notes), email, phone/mobile, or displayName.
+ * Never overwrites posted fee invoices.
+ */
+export async function importStudentsCsv(ctx: OrgContext, csv: string) {
+  assertEducationRetentionSafe('import students csv')
+  const { rows } = parseCsv(csv)
+  if (!rows.length) throw validation('CSV has no data rows.')
+
+  let createdStudents = 0
+  let updatedStudents = 0
+  let createdEnrollments = 0
+  let skippedEnrollments = 0
+  const errors: string[] = []
+
+  for (const [index, row] of rows.entries()) {
+    const line = index + 2
+    const displayName = (row.displayname || row.name || row.studentname || '').trim()
+    const email = (row.email || '').trim().toLowerCase() || null
+    const phone = (row.phone || row.mobile || '').trim() || null
+    const studentCode = (row.studentcode || row.code || '').trim() || null
+    const programName = (row.program || row.programname || '').trim()
+    const termName = (row.term || row.termname || '').trim()
+    const yearLabel = (row.year || row.schoolyear || row.academicyear || '').trim()
+
+    if (!displayName && !email && !phone && !studentCode) {
+      errors.push(`Line ${line}: need displayName, email, phone, or studentCode.`)
+      continue
+    }
+
+    let customer =
+      (studentCode
+        ? await db.customer.findFirst({
+            where: { orgId: ctx.orgId, notes: studentCode, isActive: true },
+            select: { id: true },
+          })
+        : null) ??
+      (email
+        ? await db.customer.findFirst({
+            where: { orgId: ctx.orgId, email, isActive: true },
+            select: { id: true },
+          })
+        : null) ??
+      (phone
+        ? await db.customer.findFirst({
+            where: {
+              orgId: ctx.orgId,
+              isActive: true,
+              OR: [{ phone }, { mobile: phone }],
+            },
+            select: { id: true },
+          })
+        : null) ??
+      (displayName
+        ? await db.customer.findFirst({
+            where: { orgId: ctx.orgId, displayName, isActive: true },
+            select: { id: true },
+          })
+        : null)
+
+    if (!customer) {
+      if (!displayName) {
+        errors.push(`Line ${line}: new student needs a displayName.`)
+        continue
+      }
+      try {
+        customer = await db.customer.create({
+          data: {
+            orgId: ctx.orgId,
+            displayName,
+            email,
+            phone,
+            mobile: phone,
+            notes: studentCode,
+          },
+          select: { id: true },
+        })
+        createdStudents += 1
+      } catch {
+        errors.push(`Line ${line}: could not create student ${displayName}.`)
+        continue
+      }
+    } else {
+      updatedStudents += 1
+    }
+
+    if (!termName && !programName) continue
+
+    let programId: string | null = null
+    if (programName) {
+      let program = await db.academicProgram.findFirst({
+        where: { orgId: ctx.orgId, name: programName },
+        select: { id: true },
+      })
+      if (!program) {
+        program = await db.academicProgram.create({
+          data: { orgId: ctx.orgId, name: programName },
+          select: { id: true },
+        })
+      }
+      programId = program.id
+    } else {
+      const fallback = await db.academicProgram.findFirst({
+        where: { orgId: ctx.orgId, isActive: true },
+        select: { id: true },
+        orderBy: { name: 'asc' },
+      })
+      programId = fallback?.id ?? null
+    }
+    if (!programId) {
+      errors.push(`Line ${line}: no program available for enrollment.`)
+      continue
+    }
+
+    let term = termName
+      ? await db.academicTerm.findFirst({
+          where: { orgId: ctx.orgId, name: termName },
+          select: { id: true },
+        })
+      : null
+
+    if (!term && termName && yearLabel) {
+      let year = await db.academicYear.findFirst({
+        where: { orgId: ctx.orgId, label: yearLabel },
+        select: { id: true },
+      })
+      if (!year) {
+        const y = yearLabel.match(/\d{4}/)?.[0] ?? String(new Date().getUTCFullYear())
+        year = await db.academicYear.create({
+          data: {
+            orgId: ctx.orgId,
+            label: yearLabel,
+            startsOn: toDate(`${y}-01-01`),
+            endsOn: toDate(`${y}-12-31`),
+            status: 'CLOSED',
+          },
+          select: { id: true },
+        })
+      }
+      term = await db.academicTerm.create({
+        data: {
+          orgId: ctx.orgId,
+          academicYearId: year.id,
+          name: termName,
+          startsOn: toDate(`${yearLabel.match(/\d{4}/)?.[0] ?? '2020'}-01-01`),
+          endsOn: toDate(`${yearLabel.match(/\d{4}/)?.[0] ?? '2020'}-12-31`),
+          isActive: false,
+        },
+        select: { id: true },
+      })
+    }
+
+    if (!term) {
+      errors.push(`Line ${line}: term "${termName}" not found (add year column for prior years).`)
+      continue
+    }
+
+    const exists = await db.studentEnrollment.findFirst({
+      where: {
+        orgId: ctx.orgId,
+        customerId: customer.id,
+        programId,
+        termId: term.id,
+      },
+      select: { id: true, salesDocumentId: true },
+    })
+    if (exists) {
+      skippedEnrollments += 1
+      continue
+    }
+
+    await db.studentEnrollment.create({
+      data: {
+        orgId: ctx.orgId,
+        customerId: customer.id,
+        programId,
+        termId: term.id,
+        status: 'COMPLETED',
+      },
+    })
+    createdEnrollments += 1
+  }
+
+  return {
+    createdStudents,
+    updatedStudents,
+    createdEnrollments,
+    skippedEnrollments,
+    errors,
+  }
 }

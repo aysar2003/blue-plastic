@@ -35,13 +35,13 @@ export default async function EducationHubPage() {
           <CardHeader>
             <CardTitle className="text-base">Next step</CardTitle>
             <CardDescription>
-              Set up programs and terms first, then fee plans and enrollments. Fee bills create
-              invoices in the books — you work from this Education desk.
+              Review the school year, programs and terms, then fee plans and enrollments. Closed
+              years stay on file forever.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/education/programs" className="text-sm font-medium underline underline-offset-4">
-              Set programs &amp; terms
+            <Link href="/education/years" className="text-sm font-medium underline underline-offset-4">
+              Open school year
             </Link>
           </CardContent>
         </Card>
@@ -64,6 +64,9 @@ export default async function EducationHubPage() {
               Fees & billing
             </p>
             <div className="flex flex-wrap gap-4">
+              <Link href="/education/years" className="underline underline-offset-4">
+                School years
+              </Link>
               <Link href="/education/programs" className="underline underline-offset-4">
                 Programs
               </Link>
@@ -78,6 +81,9 @@ export default async function EducationHubPage() {
               </Link>
               <Link href="/education/fees-outstanding" className="underline underline-offset-4">
                 Fees outstanding
+              </Link>
+              <Link href="/education/import" className="underline underline-offset-4">
+                Import students
               </Link>
               <Link href="/customers" className="underline underline-offset-4">
                 Students (customers)

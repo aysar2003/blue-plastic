@@ -5,6 +5,7 @@ import {
   awardScholarshipAction,
   billEnrollmentAction,
   billTermEnrollmentsAction,
+  completeEnrollmentAction,
   enrollAndBill,
   withdrawEnrollmentAction,
 } from '@/app/(app)/education/actions'
@@ -184,7 +185,14 @@ export default async function EducationEnrollmentsPage({
           <TableBody>
             {enrollments.map((row) => (
               <TableRow key={row.id}>
-                <TableCell className="font-medium">{row.customer.displayName}</TableCell>
+                <TableCell className="font-medium">
+                  <Link
+                    href={`/education/students/${row.customerId}`}
+                    className="underline underline-offset-4"
+                  >
+                    {row.customer.displayName}
+                  </Link>
+                </TableCell>
                 <TableCell className="text-sm">
                   {row.program.name}
                   <span className="text-muted-foreground"> · {row.term.name}</span>
@@ -233,6 +241,17 @@ export default async function EducationEnrollmentsPage({
                         <input type="hidden" name="enrollmentId" value={row.id} />
                         <button type="submit" className={buttonVariants({ size: 'sm' })}>
                           Invoice
+                        </button>
+                      </form>
+                    ) : null}
+                    {row.status === 'ENROLLED' ? (
+                      <form action={completeEnrollmentAction}>
+                        <input type="hidden" name="enrollmentId" value={row.id} />
+                        <button
+                          type="submit"
+                          className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                        >
+                          Complete
                         </button>
                       </form>
                     ) : null}

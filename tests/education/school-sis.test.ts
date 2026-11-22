@@ -48,6 +48,6 @@ describe('school pack', () => {
     expect(pack?.setupChecklist.some((row) => row.id === 'classes')).toBe(true)
     expect(pack?.setupChecklist.some((row) => row.id === 'grades')).toBe(true)
     expect(pack?.inScope.some((line) => /attendance/i.test(line))).toBe(true)
-    expect(pack?.outOfScope.some((line) => /LMS/i.test(line))).toBe(true)
+    expect(pack?.outOfScope.some((line) => /SCORM|Moodle|LMS/i.test(line))).toBe(true)
   })
 })
