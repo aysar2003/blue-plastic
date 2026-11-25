@@ -90,6 +90,12 @@ export default async function EducationHubPage() {
               <Link href="/education/import" className="underline underline-offset-4">
                 Import students
               </Link>
+              <Link href="/education/admissions" className="underline underline-offset-4">
+                Admissions
+              </Link>
+              <Link href="/education/campuses" className="underline underline-offset-4">
+                Campuses
+              </Link>
               <Link href="/customers" className="underline underline-offset-4">
                 Students (customers)
               </Link>
@@ -107,6 +113,9 @@ export default async function EducationHubPage() {
               <Link href="/education/attendance" className="underline underline-offset-4">
                 Attendance
               </Link>
+              <Link href="/education/attendance/report" className="underline underline-offset-4">
+                Attendance report
+              </Link>
               <Link href="/education/grades" className="underline underline-offset-4">
                 Grades
               </Link>
@@ -115,6 +124,9 @@ export default async function EducationHubPage() {
               </Link>
               <Link href="/education/timetable" className="underline underline-offset-4">
                 Timetable
+              </Link>
+              <Link href="/education/exams" className="underline underline-offset-4">
+                Exams
               </Link>
               <Link href="/education/assignments" className="underline underline-offset-4">
                 Assignments

@@ -1,8 +1,10 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
+import { sendFeeRemindersAction } from '@/app/(app)/education/actions'
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
+import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -46,6 +48,11 @@ export default async function FeesOutstandingPage() {
             >
               Scholarship CSV
             </a>
+            <form action={sendFeeRemindersAction}>
+              <Button type="submit" variant="outline" size="sm">
+                Send fee reminders
+              </Button>
+            </form>
           </div>
         }
       />

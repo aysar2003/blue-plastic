@@ -1,18 +1,54 @@
 import 'server-only'
 
+import { canPromoteEnrollment } from '@/lib/erp/academic-year-lifecycle'
+import { addDays, toCalendarDate, toDate, today } from '@/lib/date'
 import { Decimal } from '@/lib/money'
-import { toDate, today } from '@/lib/date'
+import { sendTextNotification } from '@/lib/notify-gateway'
 import {
   assertScoreInRange,
   attendanceSummary,
   isAttendanceMark,
   letterFromPercent,
+  letterFromPercentHorn,
+  rankStudents,
   weightedGradePercent,
   type AttendanceMark,
 } from '@/lib/erp/school-sis'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
+
+async function notifyPhone(phone: string | null | undefined, text: string) {
+  if (!phone?.trim()) return { ok: false as const, reason: 'no_phone' as const }
+  const wa = await sendTextNotification('whatsapp', phone, text)
+  if (wa.ok) return wa
+  return sendTextNotification('sms', phone, text)
+}
+
+function guardianPhoneOf(row: {
+  guardianPhone?: string | null
+  customer?: { phone?: string | null; mobile?: string | null } | null
+  billingCustomer?: { phone?: string | null; mobile?: string | null } | null
+}): string | null {
+  return (
+    row.guardianPhone?.trim() ||
+    row.billingCustomer?.mobile?.trim() ||
+    row.billingCustomer?.phone?.trim() ||
+    row.customer?.mobile?.trim() ||
+    row.customer?.phone?.trim() ||
+    null
+  )
+}
+
+async function assertEmployeeTeacher(ctx: OrgContext, employeeId: string | null | undefined) {
+  if (!employeeId) return null
+  const employee = await db.employee.findFirst({
+    where: { id: employeeId, orgId: ctx.orgId, active: true },
+    select: { id: true, name: true },
+  })
+  if (!employee) throw notFound('Teacher employee')
+  return employee
+}
 
 export async function listClasses(ctx: OrgContext, termId?: string) {
   return db.schoolClass.findMany({
@@ -24,6 +60,7 @@ export async function listClasses(ctx: OrgContext, termId?: string) {
     include: {
       program: { select: { id: true, name: true } },
       term: { select: { id: true, name: true } },
+      teacherEmployee: { select: { id: true, name: true } },
       _count: { select: { members: true } },
     },
     orderBy: [{ term: { startsOn: 'desc' } }, { name: 'asc' }],
@@ -36,6 +73,7 @@ export async function getClass(ctx: OrgContext, classId: string) {
     include: {
       program: { select: { id: true, name: true } },
       term: { select: { id: true, name: true, startsOn: true, endsOn: true } },
+      teacherEmployee: { select: { id: true, name: true } },
       members: {
         include: {
           enrollment: {
@@ -46,7 +84,7 @@ export async function getClass(ctx: OrgContext, classId: string) {
         },
         orderBy: { createdAt: 'asc' },
       },
-      gradeItems: { orderBy: { createdAt: 'asc' } },
+      gradeItems: { include: { subject: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } },
     },
   })
   if (!row) throw notFound('Class')
@@ -60,6 +98,8 @@ export async function upsertClass(
     name: string
     code?: string | null
     teacherName?: string | null
+    teacherEmployeeId?: string | null
+    campusId?: string | null
     programId: string
     termId: string
   },
@@ -76,11 +116,23 @@ export async function upsertClass(
     select: { id: true },
   })
   if (!term) throw notFound('Term')
+  const teacher = await assertEmployeeTeacher(ctx, input.teacherEmployeeId)
+  let campusId: string | null = null
+  if (input.campusId) {
+    const campus = await db.schoolCampus.findFirst({
+      where: { id: input.campusId, orgId: ctx.orgId },
+      select: { id: true },
+    })
+    if (!campus) throw notFound('Campus')
+    campusId = campus.id
+  }
 
   const data = {
     name,
     code: input.code?.trim() || null,
-    teacherName: input.teacherName?.trim() || null,
+    teacherName: input.teacherName?.trim() || teacher?.name || null,
+    teacherEmployeeId: teacher?.id ?? null,
+    campusId,
     programId: input.programId,
     termId: input.termId,
   }
@@ -215,11 +267,102 @@ export async function listAttendanceForClass(
   }
 }
 
+export async function attendanceRegister(
+  ctx: OrgContext,
+  classId: string,
+  fromDate: string,
+  toDate: string,
+) {
+  const from = fromDate.slice(0, 10)
+  const to = toDate.slice(0, 10)
+  if (from > to) throw validation('Start date must be on or before the end date.')
+
+  const schoolClass = await getClass(ctx, classId)
+  const dates: string[] = []
+  let cursor = from
+  while (cursor <= to) {
+    dates.push(cursor)
+    cursor = addDays(cursor, 1)
+    if (dates.length > 366) throw validation('Attendance register range cannot exceed 366 days.')
+  }
+
+  const rows = await db.studentAttendanceDay.findMany({
+    where: {
+      orgId: ctx.orgId,
+      classId,
+      onDate: { gte: toDate(from), lte: toDate(to) },
+    },
+  })
+  const byKey = new Map(rows.map((row) => [`${row.enrollmentId}:${toCalendarDate(row.onDate)}`, row]))
+
+  return {
+    schoolClass,
+    fromDate: from,
+    toDate: to,
+    dates,
+    rows: schoolClass.members.map((member) => {
+      const marks = dates.map((date) => {
+        const hit = byKey.get(`${member.enrollmentId}:${date}`)
+        return {
+          onDate: date,
+          mark: (hit?.mark ?? null) as AttendanceMark | null,
+          note: hit?.note ?? '',
+        }
+      })
+      const summary = attendanceSummary(
+        marks.map((row) => row.mark).filter((mark): mark is AttendanceMark => mark != null),
+      )
+      return {
+        enrollmentId: member.enrollmentId,
+        studentName: member.enrollment.customer.displayName,
+        marks,
+        summary,
+      }
+    }),
+  }
+}
+
+export async function notifyAbsences(ctx: OrgContext, classId: string, onDate: string) {
+  const schoolClass = await db.schoolClass.findFirst({
+    where: { id: classId, orgId: ctx.orgId },
+    select: { id: true, name: true },
+  })
+  if (!schoolClass) throw notFound('Class')
+  const date = onDate.slice(0, 10)
+  const absences = await db.studentAttendanceDay.findMany({
+    where: { orgId: ctx.orgId, classId, onDate: toDate(date), mark: 'ABSENT' },
+    include: {
+      enrollment: {
+        select: {
+          guardianPhone: true,
+          guardianName: true,
+          customer: { select: { displayName: true, phone: true, mobile: true } },
+          billingCustomer: { select: { phone: true, mobile: true } },
+        },
+      },
+    },
+  })
+
+  let sent = 0
+  let skipped = 0
+  for (const row of absences) {
+    const phone = guardianPhoneOf(row.enrollment)
+    const studentName = row.enrollment.customer.displayName
+    const text = `${ctx.organization.name}: ${studentName} was marked absent in ${schoolClass.name} on ${date}.`
+    const result = await notifyPhone(phone, text)
+    if (result.ok) sent += 1
+    else skipped += 1
+  }
+
+  return { classId, onDate: date, absences: absences.length, sent, skipped }
+}
+
 export async function upsertGradeItem(
   ctx: OrgContext,
   input: {
     id?: string
     classId: string
+    subjectId?: string | null
     name: string
     maxScore: string
     weightPercent?: string
@@ -240,9 +383,17 @@ export async function upsertGradeItem(
     select: { id: true },
   })
   if (!schoolClass) throw notFound('Class')
+  if (input.subjectId) {
+    const subject = await db.schoolSubject.findFirst({
+      where: { id: input.subjectId, orgId: ctx.orgId },
+      select: { id: true },
+    })
+    if (!subject) throw notFound('Subject')
+  }
 
   const data = {
     name,
+    subjectId: input.subjectId || null,
     maxScore: new Decimal(maxScore),
     weightPercent: new Decimal(weightPercent),
     dueOn: input.dueOn ? toDate(input.dueOn.slice(0, 10)) : null,
@@ -322,7 +473,7 @@ export async function classGradebook(ctx: OrgContext, classId: string) {
   const schoolClass = await getClass(ctx, classId)
   const items = await db.gradeItem.findMany({
     where: { orgId: ctx.orgId, classId },
-    include: { entries: true },
+    include: { entries: true, subject: { select: { id: true, name: true } } },
     orderBy: { createdAt: 'asc' },
   })
 
@@ -333,6 +484,8 @@ export async function classGradebook(ctx: OrgContext, classId: string) {
       return {
         gradeItemId: item.id,
         name: item.name,
+        subjectId: item.subjectId,
+        subjectName: item.subject?.name ?? null,
         score: entry ? Number(entry.score) : null,
         maxScore: Number(item.maxScore),
         weightPercent: Number(item.weightPercent),
@@ -369,7 +522,15 @@ export async function studentReportCard(ctx: OrgContext, enrollmentId: string) {
       term: { select: { id: true, name: true } },
       classMembers: {
         include: {
-          schoolClass: { select: { id: true, name: true, teacherName: true } },
+          schoolClass: {
+            select: {
+              id: true,
+              name: true,
+              teacherName: true,
+              teacherEmployeeId: true,
+              members: { select: { enrollmentId: true } },
+            },
+          },
         },
       },
     },
@@ -381,8 +542,9 @@ export async function studentReportCard(ctx: OrgContext, enrollmentId: string) {
     db.gradeItem.findMany({
       where: { orgId: ctx.orgId, classId: { in: classIds } },
       include: {
-        entries: { where: { enrollmentId } },
+        entries: true,
         schoolClass: { select: { id: true, name: true } },
+        subject: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'asc' },
     }),
@@ -392,13 +554,25 @@ export async function studentReportCard(ctx: OrgContext, enrollmentId: string) {
     }),
   ])
 
+  type GradeRow = {
+    name: string
+    score: number
+    maxScore: number
+    weightPercent: number
+    subjectId: string | null
+    subjectName: string
+  }
+
   const byClass = new Map<
     string,
     {
       classId: string
       className: string
       teacherName: string | null
-      rows: { name: string; score: number; maxScore: number; weightPercent: number }[]
+      teacherEmployeeId: string | null
+      classSize: number
+      memberIds: string[]
+      rowsByEnrollment: Map<string, GradeRow[]>
     }
   >()
 
@@ -407,29 +581,66 @@ export async function studentReportCard(ctx: OrgContext, enrollmentId: string) {
       classId: member.classId,
       className: member.schoolClass.name,
       teacherName: member.schoolClass.teacherName,
-      rows: [],
+      teacherEmployeeId: member.schoolClass.teacherEmployeeId,
+      classSize: member.schoolClass.members.length,
+      memberIds: member.schoolClass.members.map((m) => m.enrollmentId),
+      rowsByEnrollment: new Map(),
     })
   }
 
   for (const item of items) {
-    const entry = item.entries[0]
-    if (!entry) continue
     const bucket = byClass.get(item.classId)
     if (!bucket) continue
-    bucket.rows.push({
-      name: item.name,
-      score: Number(entry.score),
-      maxScore: Number(item.maxScore),
-      weightPercent: Number(item.weightPercent),
-    })
+    for (const entry of item.entries) {
+      const list = bucket.rowsByEnrollment.get(entry.enrollmentId) ?? []
+      list.push({
+        name: item.name,
+        score: Number(entry.score),
+        maxScore: Number(item.maxScore),
+        weightPercent: Number(item.weightPercent),
+        subjectId: item.subjectId,
+        subjectName: item.subject?.name ?? 'General',
+      })
+      bucket.rowsByEnrollment.set(entry.enrollmentId, list)
+    }
   }
 
   const classes = [...byClass.values()].map((block) => {
-    const averagePercent = weightedGradePercent(block.rows)
+    const percents = block.memberIds.map((id) => weightedGradePercent(block.rowsByEnrollment.get(id) ?? []))
+    const ranks = rankStudents(percents)
+    const selfIndex = block.memberIds.indexOf(enrollmentId)
+    const selfRows = block.rowsByEnrollment.get(enrollmentId) ?? []
+    const bySubject = new Map<string, { subjectId: string | null; subjectName: string; rows: GradeRow[] }>()
+    for (const row of selfRows) {
+      const key = row.subjectId ?? '__general'
+      const group = bySubject.get(key) ?? {
+        subjectId: row.subjectId,
+        subjectName: row.subjectName,
+        rows: [],
+      }
+      group.rows.push(row)
+      bySubject.set(key, group)
+    }
+    const subjects = [...bySubject.values()].map((group) => {
+      const averagePercent = weightedGradePercent(group.rows)
+      return {
+        ...group,
+        averagePercent,
+        letter: letterFromPercentHorn(averagePercent),
+      }
+    })
+    const averagePercent = weightedGradePercent(selfRows)
     return {
-      ...block,
+      classId: block.classId,
+      className: block.className,
+      teacherName: block.teacherName,
+      teacherEmployeeId: block.teacherEmployeeId,
+      subjects,
+      rows: selfRows,
       averagePercent,
-      letter: letterFromPercent(averagePercent),
+      letter: letterFromPercentHorn(averagePercent),
+      classRank: selfIndex >= 0 ? ranks[selfIndex] ?? null : null,
+      classSize: block.classSize,
     }
   })
 
@@ -441,6 +652,7 @@ export async function studentReportCard(ctx: OrgContext, enrollmentId: string) {
       status: enrollment.status,
       studentName: enrollment.customer.displayName,
       customerId: enrollment.customer.id,
+      admissionNumber: enrollment.admissionNumber,
       programName: enrollment.program.name,
       termName: enrollment.term.name,
     },
@@ -461,6 +673,86 @@ export async function portalReportCardsForCustomer(ctx: OrgContext, customerId: 
     cards.push(await studentReportCard(ctx, row.id))
   }
   return cards
+}
+
+export async function promoteEnrollment(
+  ctx: OrgContext,
+  input: {
+    enrollmentId: string
+    termId: string
+    programId?: string | null
+    feePlanId?: string | null
+  },
+) {
+  const source = await db.studentEnrollment.findFirst({
+    where: { id: input.enrollmentId, orgId: ctx.orgId },
+  })
+  if (!source) throw notFound('Enrollment')
+  if (!canPromoteEnrollment(source.status)) {
+    throw precondition('Only an enrolled or completed student can be promoted.')
+  }
+
+  const term = await db.academicTerm.findFirst({
+    where: { id: input.termId, orgId: ctx.orgId, isActive: true },
+    select: { id: true },
+  })
+  if (!term) throw notFound('Term')
+
+  const programId = input.programId || source.programId
+  const program = await db.academicProgram.findFirst({
+    where: { id: programId, orgId: ctx.orgId, isActive: true },
+    select: { id: true },
+  })
+  if (!program) throw notFound('Program')
+
+  const feePlanId = input.feePlanId === undefined ? source.feePlanId : input.feePlanId
+  if (feePlanId) {
+    const plan = await db.feePlan.findFirst({
+      where: { id: feePlanId, orgId: ctx.orgId, isActive: true },
+      select: { id: true },
+    })
+    if (!plan) throw notFound('Fee plan')
+  }
+
+  const exists = await db.studentEnrollment.findFirst({
+    where: {
+      orgId: ctx.orgId,
+      customerId: source.customerId,
+      programId,
+      termId: term.id,
+    },
+    select: { id: true },
+  })
+  if (exists) throw conflict('This student is already enrolled in that program for the term.')
+
+  if (source.status === 'ENROLLED') {
+    await db.studentEnrollment.update({
+      where: { id: source.id },
+      data: { status: 'COMPLETED' },
+    })
+  }
+
+  const created = await db.studentEnrollment.create({
+    data: {
+      orgId: ctx.orgId,
+      customerId: source.customerId,
+      billingCustomerId: source.billingCustomerId,
+      programId,
+      termId: term.id,
+      feePlanId,
+      campusId: source.campusId,
+      scholarshipPercent: source.scholarshipPercent,
+      dateOfBirth: source.dateOfBirth,
+      gender: source.gender,
+      guardianName: source.guardianName,
+      guardianPhone: source.guardianPhone,
+      photoUrl: source.photoUrl,
+      notes: source.notes,
+      status: 'ENROLLED',
+    },
+  })
+
+  return { fromEnrollmentId: source.id, enrollmentId: created.id }
 }
 
 export async function enrollmentsEligibleForClass(ctx: OrgContext, classId: string) {

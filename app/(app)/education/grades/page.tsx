@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { requireOrgContext } from '@/server/auth/context'
+import * as ops from '@/server/services/school-ops.service'
 import * as sis from '@/server/services/school-sis.service'
 
 export const metadata: Metadata = { title: 'Grades' }
@@ -21,7 +22,7 @@ export default async function EducationGradesPage({
   const params = await searchParams
   const classId = typeof params.classId === 'string' ? params.classId : ''
   const gradeItemId = typeof params.gradeItemId === 'string' ? params.gradeItemId : ''
-  const classes = await sis.listClasses(ctx)
+  const [classes, subjects] = await Promise.all([sis.listClasses(ctx), ops.listSubjects(ctx)])
   const activeClassId = classId || classes[0]?.id || ''
   const book = activeClassId ? await sis.classGradebook(ctx, activeClassId) : null
   const activeItem =
@@ -72,6 +73,21 @@ export default async function EducationGradesPage({
             <CardContent>
               <form action={saveGradeItemAction} className="flex flex-wrap items-end gap-3">
                 <input type="hidden" name="classId" value={book.schoolClass.id} />
+                <label className="text-sm">
+                  Subject
+                  <select
+                    name="subjectId"
+                    className="mt-1 block h-9 w-44 rounded-md border border-input bg-background px-2 text-sm"
+                    defaultValue=""
+                  >
+                    <option value="">General</option>
+                    {subjects.map((subject) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="text-sm">
                   Name
                   <Input name="name" required className="mt-1 w-48" placeholder="Midterm" />

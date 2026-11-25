@@ -9,7 +9,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { requireOrgContext } from '@/server/auth/context'
+import { db } from '@/server/db'
 import * as education from '@/server/services/education.service'
+import * as ops from '@/server/services/school-ops.service'
 import * as sis from '@/server/services/school-sis.service'
 
 export const metadata: Metadata = { title: 'Classes' }
@@ -22,10 +24,17 @@ export default async function EducationClassesPage({
   const ctx = await requireOrgContext('invoice:read')
   const params = await searchParams
   const termId = typeof params.termId === 'string' ? params.termId : ''
-  const [classes, programs, terms] = await Promise.all([
+  const [classes, programs, terms, campuses, teachers] = await Promise.all([
     sis.listClasses(ctx, termId || undefined),
     education.listPrograms(ctx),
     education.listTerms(ctx),
+    ops.listCampuses(ctx),
+    db.employee.findMany({
+      where: { orgId: ctx.orgId, active: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+      take: 300,
+    }),
   ])
 
   return (
@@ -52,8 +61,38 @@ export default async function EducationClassesPage({
               <Input name="code" className="mt-1 w-24" placeholder="3A" />
             </label>
             <label className="text-sm">
-              Teacher
+              Teacher name
               <Input name="teacherName" className="mt-1 w-40" placeholder="Optional" />
+            </label>
+            <label className="text-sm">
+              Teacher (employee)
+              <select
+                name="teacherEmployeeId"
+                className="mt-1 block h-9 w-48 rounded-md border border-input bg-background px-2 text-sm"
+                defaultValue=""
+              >
+                <option value="">None</option>
+                {teachers.map((teacher) => (
+                  <option key={teacher.id} value={teacher.id}>
+                    {teacher.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm">
+              Campus
+              <select
+                name="campusId"
+                className="mt-1 block h-9 w-40 rounded-md border border-input bg-background px-2 text-sm"
+                defaultValue=""
+              >
+                <option value="">None</option>
+                {campuses.map((campus) => (
+                  <option key={campus.id} value={campus.id}>
+                    {campus.name}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="text-sm">
               Program

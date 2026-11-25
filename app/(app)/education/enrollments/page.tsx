@@ -32,7 +32,7 @@ export default async function EducationEnrollmentsPage({
 }) {
   const ctx = await requireOrgContext('invoice:read')
   const query = await searchParams
-  const [enrollments, programs, terms, plans, customers] = await Promise.all([
+  const [enrollments, programs, terms, plans, customers, campuses] = await Promise.all([
     education.listEnrollments(ctx, query.termId || undefined),
     education.listPrograms(ctx),
     education.listTerms(ctx),
@@ -42,6 +42,11 @@ export default async function EducationEnrollmentsPage({
       select: { id: true, displayName: true },
       orderBy: { displayName: 'asc' },
       take: 500,
+    }),
+    db.schoolCampus.findMany({
+      where: { orgId: ctx.orgId, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
     }),
   ])
   const currency = ctx.organization.baseCurrency
@@ -148,6 +153,48 @@ export default async function EducationEnrollmentsPage({
             <label className="text-sm">
               Scholarship %
               <Input name="scholarshipPercent" defaultValue="0" className="mt-1" />
+            </label>
+            <label className="text-sm">
+              Admission no.
+              <Input name="admissionNumber" className="mt-1" placeholder="Optional" />
+            </label>
+            <label className="text-sm">
+              Guardian name
+              <Input name="guardianName" className="mt-1" />
+            </label>
+            <label className="text-sm">
+              Guardian phone
+              <Input name="guardianPhone" className="mt-1" />
+            </label>
+            <label className="text-sm">
+              Gender
+              <Input name="gender" className="mt-1" placeholder="Optional" />
+            </label>
+            <label className="text-sm">
+              Date of birth
+              <Input name="dateOfBirth" type="date" className="mt-1" />
+            </label>
+            <label className="text-sm">
+              Bill guardian (optional)
+              <NativeSelect name="billingCustomerId" className="mt-1">
+                <option value="">Same as student</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.displayName}
+                  </option>
+                ))}
+              </NativeSelect>
+            </label>
+            <label className="text-sm">
+              Campus
+              <NativeSelect name="campusId" className="mt-1">
+                <option value="">None</option>
+                {campuses.map((campus) => (
+                  <option key={campus.id} value={campus.id}>
+                    {campus.name}
+                  </option>
+                ))}
+              </NativeSelect>
             </label>
             <label className="text-sm sm:col-span-2">
               Notes

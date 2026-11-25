@@ -17,6 +17,10 @@ Add the remaining school needs previously listed as out of scope: timetable, pra
 7. Portal `/portal/school` (assignments, notices, transport, hostel).
 8. Packs + helpers tests.
 
+## Follow-on
+
+Desk deepen (admissions, teachers, exams, PDF, SMS, installments) shipped as [phase-48d-school-deepen-desk.md](./phase-48d-school-deepen-desk.md).
+
 ## Still out of scope
 
 - SCORM / Moodle content packages

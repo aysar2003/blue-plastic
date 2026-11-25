@@ -75,6 +75,10 @@ export default async function EducationFeesPage() {
               </NativeSelect>
             </label>
             <label className="text-sm">
+              Installments (1–6)
+              <Input name="installmentCount" type="number" min={1} max={6} defaultValue="1" className="mt-1" />
+            </label>
+            <label className="text-sm">
               Quantity
               <Input name="quantity" defaultValue="1" className="mt-1" />
             </label>

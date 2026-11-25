@@ -1,7 +1,10 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
+import { portalSubmitHomeworkAction } from '@/app/(portal)/portal/school/actions'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { buttonVariants } from '@/components/ui/button'
 import { requirePortalContext } from '@/server/auth/context'
 import * as ops from '@/server/services/school-ops.service'
@@ -18,7 +21,7 @@ export default async function PortalSchoolPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">School</h1>
           <p className="text-sm text-muted-foreground">
-            Assignments, announcements, transport, and hostel for this account.
+            Assignments, exams, announcements, transport, and hostel for this account.
           </p>
         </div>
         <div className="flex gap-2">
@@ -54,22 +57,61 @@ export default async function PortalSchoolPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Assignments</CardTitle>
+          <CardTitle className="text-base">Upcoming exams</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
+          {home.exams.length === 0 ? (
+            <p className="text-muted-foreground">No exam slots yet.</p>
+          ) : (
+            home.exams.map((row) => (
+              <div key={row.id} className="flex flex-wrap justify-between gap-2 border-b border-border py-2 last:border-0">
+                <div>
+                  <p className="font-medium">
+                    {row.exam.title}
+                    {row.subject ? ` · ${row.subject.name}` : ''}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {row.schoolClass.name} · {row.onDate.toISOString().slice(0, 10)} · {row.startsAt}–
+                    {row.endsAt}
+                    {row.room ? ` · ${row.room}` : ''}
+                  </p>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Assignments</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
           {home.assignments.length === 0 ? (
             <p className="text-muted-foreground">No assignments linked yet.</p>
           ) : (
             home.assignments.map((row) => (
-              <div key={row.id} className="flex flex-wrap justify-between gap-2 border-b border-border py-2 last:border-0">
-                <div>
-                  <p className="font-medium">{row.assignment.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {row.assignment.schoolClass.name}
-                    {row.assignment.subject ? ` · ${row.assignment.subject.name}` : ''}
-                  </p>
+              <div key={row.id} className="space-y-2 border-b border-border pb-3 last:border-0">
+                <div className="flex flex-wrap justify-between gap-2">
+                  <div>
+                    <p className="font-medium">{row.assignment.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {row.assignment.schoolClass.name}
+                      {row.assignment.subject ? ` · ${row.assignment.subject.name}` : ''}
+                    </p>
+                  </div>
+                  <p className="text-xs font-medium">{row.status}</p>
                 </div>
-                <p className="text-xs font-medium">{row.status}</p>
+                {row.status === 'ASSIGNED' || row.status === 'SUBMITTED' ? (
+                  <form action={portalSubmitHomeworkAction} className="grid gap-2 sm:grid-cols-3">
+                    <input type="hidden" name="submissionId" value={row.id} />
+                    <Input name="attachmentUrl" placeholder="File URL" defaultValue={row.attachmentUrl ?? ''} />
+                    <Input name="portalNote" placeholder="Note" defaultValue={row.portalNote ?? ''} />
+                    <Button type="submit" size="sm">
+                      Submit
+                    </Button>
+                  </form>
+                ) : null}
               </div>
             ))
           )}

@@ -29,15 +29,25 @@ export default async function EducationReportCardPage({
     <>
       <PageHeader
         title={`Report card · ${card.enrollment.studentName}`}
-        description={`${card.enrollment.programName} · ${card.enrollment.termName}`}
+        description={`${card.enrollment.programName} · ${card.enrollment.termName}${
+          card.enrollment.admissionNumber ? ` · Adm ${card.enrollment.admissionNumber}` : ''
+        }`}
         actions={
-          <Link href="/education" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Education hub
-          </Link>
+          <div className="flex flex-wrap gap-2 print:hidden">
+            <a
+              href={`/api/education/report-cards/${enrollmentId}/pdf`}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
+              Download PDF
+            </a>
+            <Link href="/education" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              Education hub
+            </Link>
+          </div>
         }
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-4">
+      <div className="mb-6 grid gap-4 sm:grid-cols-4 print:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Present</CardTitle>
@@ -91,12 +101,52 @@ export default async function EducationReportCardPage({
                       ? '—'
                       : `${block.averagePercent.toFixed(2)}% (${block.letter})`}
                   </span>
+                  {block.classRank != null ? (
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      · Rank {block.classRank}/{block.classSize}
+                    </span>
+                  ) : null}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                {block.rows.length === 0 ? (
+              <CardContent className="space-y-4">
+                {(block.subjects ?? []).length === 0 && (block.rows ?? []).length === 0 ? (
                   <p className="text-sm text-muted-foreground">No scores yet.</p>
-                ) : (
+                ) : null}
+                {(block.subjects ?? []).map((subject) => (
+                  <div key={subject.subjectId ?? subject.subjectName}>
+                    <p className="mb-2 text-sm font-medium">
+                      {subject.subjectName}
+                      <span className="ml-2 text-muted-foreground tabular-nums">
+                        {subject.averagePercent == null
+                          ? '—'
+                          : `${subject.averagePercent.toFixed(2)}% (${subject.letter})`}
+                      </span>
+                    </p>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Assessment</TableHead>
+                          <TableHead className="text-right">Score</TableHead>
+                          <TableHead className="text-right">Max</TableHead>
+                          <TableHead className="text-right">Weight %</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {subject.rows.map((row) => (
+                          <TableRow key={`${subject.subjectName}-${row.name}`}>
+                            <TableCell>{row.name}</TableCell>
+                            <TableCell className="text-right tabular-nums">{row.score}</TableCell>
+                            <TableCell className="text-right tabular-nums">{row.maxScore}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {row.weightPercent}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+                {(block.subjects ?? []).length === 0 && (block.rows ?? []).length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -117,7 +167,7 @@ export default async function EducationReportCardPage({
                       ))}
                     </TableBody>
                   </Table>
-                )}
+                ) : null}
               </CardContent>
             </Card>
           ))}

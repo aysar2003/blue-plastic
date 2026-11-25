@@ -15,6 +15,8 @@ export async function saveClassAction(formData: FormData) {
     name: String(formData.get('name') ?? ''),
     code: String(formData.get('code') ?? ''),
     teacherName: String(formData.get('teacherName') ?? ''),
+    teacherEmployeeId: String(formData.get('teacherEmployeeId') || '') || null,
+    campusId: String(formData.get('campusId') || '') || null,
     programId: String(formData.get('programId') ?? ''),
     termId: String(formData.get('termId') ?? ''),
   })
@@ -48,6 +50,9 @@ export async function saveAttendanceAction(formData: FormData) {
     note: String(formData.get(`note_${enrollmentId}`) ?? ''),
   }))
   await sis.saveAttendanceDay(ctx, { classId, onDate, rows })
+  if (formData.get('notifyAbsences') === '1') {
+    await sis.notifyAbsences(ctx, classId, onDate)
+  }
   revalidatePath(PATH)
   redirect(`${PATH}/attendance?classId=${encodeURIComponent(classId)}&onDate=${encodeURIComponent(onDate)}`)
 }
@@ -62,6 +67,7 @@ export async function saveGradeItemAction(formData: FormData) {
     maxScore: String(formData.get('maxScore') ?? '100'),
     weightPercent: String(formData.get('weightPercent') ?? '100'),
     dueOn: String(formData.get('dueOn') || '') || null,
+    subjectId: String(formData.get('subjectId') || '') || null,
   })
   revalidatePath(PATH)
   redirect(`${PATH}/grades?classId=${encodeURIComponent(classId)}`)
@@ -89,4 +95,16 @@ export async function saveGradeScoresAction(formData: FormData) {
   redirect(
     `${PATH}/grades?classId=${encodeURIComponent(classId)}&gradeItemId=${encodeURIComponent(gradeItemId)}`,
   )
+}
+
+export async function promoteEnrollmentAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await sis.promoteEnrollment(ctx, {
+    enrollmentId: String(formData.get('enrollmentId') ?? ''),
+    termId: String(formData.get('termId') ?? ''),
+    programId: String(formData.get('programId') || '') || null,
+    feePlanId: String(formData.get('feePlanId') || '') || null,
+  })
+  revalidatePath(PATH)
+  redirect(`${PATH}/enrollments`)
 }

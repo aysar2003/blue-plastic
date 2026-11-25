@@ -24,10 +24,46 @@ import {
 import { parseCsv } from '@/lib/csv'
 import { toCalendarDate } from '@/lib/date'
 import { scholarshipSummaryTotals } from '@/lib/erp/scholarship-summary'
+import { isAdmissionStatus } from '@/lib/erp/school-ops'
+import { sendTextNotification } from '@/lib/notify-gateway'
 import type { OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { conflict, notFound, precondition, validation } from '@/server/errors'
 import * as salesService from '@/server/services/sales.service'
+
+async function notifyPhone(phone: string | null | undefined, text: string) {
+  if (!phone?.trim()) return { ok: false as const, reason: 'no_phone' as const }
+  const wa = await sendTextNotification('whatsapp', phone, text)
+  if (wa.ok) return wa
+  return sendTextNotification('sms', phone, text)
+}
+
+function splitFeeLinesByInstallments(
+  lines: { itemId: string; quantity: string; unitPrice: string; description: string }[],
+  installmentCount: number,
+) {
+  const count =
+    Number.isInteger(installmentCount) && installmentCount >= 1 && installmentCount <= 6
+      ? installmentCount
+      : 1
+  if (count <= 1) return lines
+  const out: { itemId: string; quantity: string; unitPrice: string; description: string }[] = []
+  for (const line of lines) {
+    const unit = new Decimal(line.unitPrice)
+    const each = unit.div(count).toDecimalPlaces(4)
+    let allocated = new Decimal(0)
+    for (let k = 1; k <= count; k += 1) {
+      const part = k === count ? unit.minus(allocated) : each
+      if (k < count) allocated = allocated.plus(part)
+      out.push({
+        ...line,
+        unitPrice: part.toFixed(4),
+        description: `${line.description} · Installment ${k}/${count}`,
+      })
+    }
+  }
+  return out
+}
 
 export async function listPrograms(ctx: OrgContext) {
   return db.academicProgram.findMany({
@@ -305,6 +341,7 @@ export async function openAcademicYear(
             orgId: ctx.orgId,
             programId: plan.programId,
             name: newName,
+            installmentCount: plan.installmentCount,
             lines: {
               create: plan.lines.map((line, index) => ({
                 itemId: line.itemId,
@@ -345,12 +382,17 @@ export async function upsertFeePlan(
     id?: string
     name: string
     programId?: string | null
+    installmentCount?: number
     lines: { itemId: string; description?: string; quantity: string; unitPrice?: string | null }[]
   },
 ) {
   const name = input.name.trim()
   if (!name) throw validation('Fee plan name is required.')
   if (!input.lines.length) throw validation('Add at least one fee line.')
+  const installmentCount = input.installmentCount ?? 1
+  if (!Number.isInteger(installmentCount) || installmentCount < 1 || installmentCount > 6) {
+    throw validation('Installment count must be between 1 and 6.')
+  }
 
   if (input.programId) {
     const program = await db.academicProgram.findFirst({
@@ -392,6 +434,7 @@ export async function upsertFeePlan(
         data: {
           name,
           programId: input.programId || null,
+          installmentCount,
           lines: { create: lineRows },
         },
         include: { lines: true },
@@ -405,6 +448,7 @@ export async function upsertFeePlan(
         orgId: ctx.orgId,
         name,
         programId: input.programId || null,
+        installmentCount,
         lines: { create: lineRows },
       },
       include: { lines: true },
@@ -439,6 +483,14 @@ export async function enrollStudent(
     programId: string
     termId: string
     feePlanId?: string | null
+    billingCustomerId?: string | null
+    campusId?: string | null
+    admissionNumber?: string | null
+    dateOfBirth?: string | null
+    gender?: string | null
+    guardianName?: string | null
+    guardianPhone?: string | null
+    photoUrl?: string | null
     scholarshipPercent?: string | number
     notes?: string | null
     billNow?: boolean
@@ -470,8 +522,23 @@ export async function enrollStudent(
     })
     if (!plan) throw notFound('Fee plan')
   }
+  if (input.billingCustomerId) {
+    const billTo = await db.customer.findFirst({
+      where: { id: input.billingCustomerId, orgId: ctx.orgId, isActive: true },
+      select: { id: true },
+    })
+    if (!billTo) throw notFound('Billing customer')
+  }
+  if (input.campusId) {
+    const campus = await db.schoolCampus.findFirst({
+      where: { id: input.campusId, orgId: ctx.orgId, isActive: true },
+      select: { id: true },
+    })
+    if (!campus) throw notFound('Campus')
+  }
 
   const scholarshipPercent = normalizeScholarshipPercent(input.scholarshipPercent)
+  const admissionNumber = input.admissionNumber?.trim() || null
 
   let enrollment
   try {
@@ -479,21 +546,235 @@ export async function enrollStudent(
       data: {
         orgId: ctx.orgId,
         customerId: customer.id,
+        billingCustomerId: input.billingCustomerId || null,
         programId: program.id,
         termId: term.id,
         feePlanId,
+        campusId: input.campusId || null,
+        admissionNumber,
+        dateOfBirth: input.dateOfBirth ? toDate(input.dateOfBirth.slice(0, 10)) : null,
+        gender: input.gender?.trim() || null,
+        guardianName: input.guardianName?.trim() || null,
+        guardianPhone: input.guardianPhone?.trim() || null,
+        photoUrl: input.photoUrl?.trim() || null,
         scholarshipPercent,
         notes: input.notes?.trim() || null,
       },
     })
   } catch {
-    throw conflict('This student is already enrolled in that program for the term.')
+    throw conflict('This student is already enrolled in that program for the term (or admission number is taken).')
   }
 
   if (input.billNow) {
     return billEnrollment(ctx, enrollment.id)
   }
   return { enrollmentId: enrollment.id, invoiceId: null as string | null, invoiceNumber: null as string | null }
+}
+
+export async function updateEnrollmentProfile(
+  ctx: OrgContext,
+  input: {
+    enrollmentId: string
+    billingCustomerId?: string | null
+    campusId?: string | null
+    admissionNumber?: string | null
+    dateOfBirth?: string | null
+    gender?: string | null
+    guardianName?: string | null
+    guardianPhone?: string | null
+    photoUrl?: string | null
+    notes?: string | null
+  },
+) {
+  const enrollment = await db.studentEnrollment.findFirst({
+    where: { id: input.enrollmentId, orgId: ctx.orgId },
+    select: { id: true },
+  })
+  if (!enrollment) throw notFound('Enrollment')
+  try {
+    return await db.studentEnrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        billingCustomerId: input.billingCustomerId || null,
+        campusId: input.campusId || null,
+        admissionNumber: input.admissionNumber?.trim() || null,
+        dateOfBirth: input.dateOfBirth ? toDate(input.dateOfBirth.slice(0, 10)) : null,
+        gender: input.gender?.trim() || null,
+        guardianName: input.guardianName?.trim() || null,
+        guardianPhone: input.guardianPhone?.trim() || null,
+        photoUrl: input.photoUrl?.trim() || null,
+        notes: input.notes?.trim() || null,
+      },
+    })
+  } catch {
+    throw conflict('Admission number is already in use.')
+  }
+}
+
+export async function listAdmissions(ctx: OrgContext, status?: string) {
+  return db.schoolAdmission.findMany({
+    where: {
+      orgId: ctx.orgId,
+      ...(status && isAdmissionStatus(status) ? { status } : {}),
+    },
+    include: {
+      program: { select: { id: true, name: true } },
+      term: { select: { id: true, name: true } },
+      feePlan: { select: { id: true, name: true } },
+      customer: { select: { id: true, displayName: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 200,
+  })
+}
+
+export async function createAdmission(
+  ctx: OrgContext,
+  input: {
+    applicantName: string
+    phone?: string | null
+    email?: string | null
+    programId?: string | null
+    termId?: string | null
+    feePlanId?: string | null
+    notes?: string | null
+    status?: string
+  },
+) {
+  const applicantName = input.applicantName.trim()
+  if (!applicantName) throw validation('Applicant name is required.')
+  const status = input.status || 'APPLIED'
+  if (!isAdmissionStatus(status)) throw validation('Invalid admission status.')
+  return db.schoolAdmission.create({
+    data: {
+      orgId: ctx.orgId,
+      applicantName,
+      phone: input.phone?.trim() || null,
+      email: input.email?.trim() || null,
+      programId: input.programId || null,
+      termId: input.termId || null,
+      feePlanId: input.feePlanId || null,
+      notes: input.notes?.trim() || null,
+      status,
+    },
+  })
+}
+
+export async function updateAdmissionStatus(
+  ctx: OrgContext,
+  input: { admissionId: string; status: string },
+) {
+  if (!isAdmissionStatus(input.status)) throw validation('Invalid admission status.')
+  const row = await db.schoolAdmission.findFirst({
+    where: { id: input.admissionId, orgId: ctx.orgId },
+    select: { id: true },
+  })
+  if (!row) throw notFound('Admission')
+  return db.schoolAdmission.update({
+    where: { id: row.id },
+    data: { status: input.status },
+  })
+}
+
+/** Accept admission → ensure customer + enroll (optionally bill). */
+export async function acceptAdmission(
+  ctx: OrgContext,
+  input: { admissionId: string; billNow?: boolean; admissionNumber?: string | null },
+) {
+  const admission = await db.schoolAdmission.findFirst({
+    where: { id: input.admissionId, orgId: ctx.orgId },
+  })
+  if (!admission) throw notFound('Admission')
+  if (admission.status === 'ENROLLED') throw precondition('Already enrolled.')
+  if (admission.status === 'REJECTED') throw precondition('Rejected applications cannot be enrolled.')
+  if (!admission.programId || !admission.termId) {
+    throw validation('Set program and term before accepting.')
+  }
+
+  let customerId = admission.customerId
+  if (!customerId) {
+    const created = await db.customer.create({
+      data: {
+        orgId: ctx.orgId,
+        displayName: admission.applicantName,
+        phone: admission.phone,
+        email: admission.email,
+        isActive: true,
+      },
+    })
+    customerId = created.id
+    await db.schoolAdmission.update({
+      where: { id: admission.id },
+      data: { customerId },
+    })
+  }
+
+  const enrolled = await enrollStudent(ctx, {
+    customerId,
+    programId: admission.programId,
+    termId: admission.termId,
+    feePlanId: admission.feePlanId,
+    admissionNumber: input.admissionNumber,
+    guardianPhone: admission.phone,
+    billNow: input.billNow,
+  })
+
+  await db.schoolAdmission.update({
+    where: { id: admission.id },
+    data: { status: 'ENROLLED', customerId },
+  })
+
+  return enrolled
+}
+
+export async function rejectAdmission(ctx: OrgContext, admissionId: string) {
+  return updateAdmissionStatus(ctx, { admissionId, status: 'REJECTED' })
+}
+
+export async function sendFeeReminders(ctx: OrgContext, termId?: string) {
+  const enrollments = await db.studentEnrollment.findMany({
+    where: {
+      orgId: ctx.orgId,
+      status: 'ENROLLED',
+      salesDocumentId: { not: null },
+      ...(termId ? { termId } : {}),
+      salesDocument: { status: { in: ['OPEN', 'PARTIAL'] }, deletedAt: null },
+    },
+    include: {
+      customer: { select: { displayName: true, phone: true, mobile: true } },
+      salesDocument: { select: { id: true, number: true } },
+      term: { select: { name: true } },
+    },
+    take: 500,
+  })
+  const docIds = enrollments
+    .map((row) => row.salesDocument?.id)
+    .filter((id): id is string => Boolean(id))
+  const balances = await salesService.outstandingBalances(db, docIds, ctx.orgId)
+  let sent = 0
+  let skipped = 0
+  for (const enrollment of enrollments) {
+    if (!enrollment.salesDocument) {
+      skipped += 1
+      continue
+    }
+    const due = balances.get(enrollment.salesDocument.id) ?? new Decimal(0)
+    if (due.lte(0)) {
+      skipped += 1
+      continue
+    }
+    const phone =
+      enrollment.guardianPhone ||
+      enrollment.customer.mobile ||
+      enrollment.customer.phone
+    const result = await notifyPhone(
+      phone,
+      `Fee reminder: ${enrollment.customer.displayName} has ${due.toFixed(2)} ${ctx.organization.baseCurrency} open on ${enrollment.salesDocument.number} (${enrollment.term.name}).`,
+    )
+    if (result.ok) sent += 1
+    else skipped += 1
+  }
+  return { sent, skipped }
 }
 
 export async function billEnrollment(ctx: OrgContext, enrollmentId: string) {
@@ -511,6 +792,25 @@ export async function billEnrollment(ctx: OrgContext, enrollmentId: string) {
       program: { select: { name: true } },
       term: { select: { name: true } },
       customer: { select: { displayName: true } },
+      transportRiders: {
+        include: {
+          route: {
+            include: { feeItem: { select: { id: true, name: true, salesPrice: true } } },
+          },
+        },
+      },
+      hostelAllocations: {
+        where: { checkedOutAt: null },
+        include: {
+          room: {
+            include: {
+              block: {
+                include: { feeItem: { select: { id: true, name: true, salesPrice: true } } },
+              },
+            },
+          },
+        },
+      },
     },
   })
   if (!enrollment) throw notFound('Enrollment')
@@ -530,7 +830,7 @@ export async function billEnrollment(ctx: OrgContext, enrollmentId: string) {
     throw validation('Assign a fee plan with at least one line before billing.')
   }
 
-  const lines = enrollment.feePlan.lines.map((line) => {
+  let lines = enrollment.feePlan.lines.map((line) => {
     const unitPrice =
       line.unitPrice?.toString() ??
       line.item.salesPrice?.toString() ??
@@ -544,6 +844,29 @@ export async function billEnrollment(ctx: OrgContext, enrollmentId: string) {
         `${line.item.name} · ${enrollment.program.name} · ${enrollment.term.name}`,
     }
   })
+
+  for (const rider of enrollment.transportRiders) {
+    const item = rider.route.feeItem
+    if (!item) continue
+    lines.push({
+      itemId: item.id,
+      quantity: '1',
+      unitPrice: item.salesPrice?.toString() ?? '0',
+      description: `Transport · ${rider.route.name}`,
+    })
+  }
+  for (const allocation of enrollment.hostelAllocations) {
+    const item = allocation.room.block.feeItem
+    if (!item) continue
+    lines.push({
+      itemId: item.id,
+      quantity: '1',
+      unitPrice: item.salesPrice?.toString() ?? '0',
+      description: `Hostel · ${allocation.room.block.name} / ${allocation.room.name}`,
+    })
+  }
+
+  lines = splitFeeLinesByInstallments(lines, enrollment.feePlan.installmentCount)
 
   const scholarship = normalizeScholarshipPercent(enrollment.scholarshipPercent.toString())
   const feeSubtotal = lines.reduce((sum, line) => {
@@ -559,9 +882,11 @@ export async function billEnrollment(ctx: OrgContext, enrollmentId: string) {
       })
     : lines
 
+  const billToCustomerId = enrollment.billingCustomerId || enrollment.customerId
+
   const invoice = await salesService.create(ctx, 'INVOICE', {
     number: undefined,
-    customerId: enrollment.customerId,
+    customerId: billToCustomerId,
     date: today(ctx.organization.timeZone),
     lines: invoiceLines,
     saveAsDraft: false,

@@ -19,6 +19,9 @@ export type SchoolAudience = (typeof SCHOOL_AUDIENCES)[number]
 export const DISCIPLINE_SEVERITIES = ['NOTE', 'WARNING', 'DETENTION', 'SUSPENSION'] as const
 export type DisciplineSeverity = (typeof DISCIPLINE_SEVERITIES)[number]
 
+export const ADMISSION_STATUSES = ['APPLIED', 'OFFERED', 'ACCEPTED', 'REJECTED', 'ENROLLED'] as const
+export type AdmissionStatus = (typeof ADMISSION_STATUSES)[number]
+
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 
 export function assertDayOfWeek(day: number): string | null {
@@ -58,4 +61,16 @@ export function isSchoolAudience(value: string): value is SchoolAudience {
 
 export function isDisciplineSeverity(value: string): value is DisciplineSeverity {
   return (DISCIPLINE_SEVERITIES as readonly string[]).includes(value)
+}
+
+export function isAdmissionStatus(value: string): value is AdmissionStatus {
+  return (ADMISSION_STATUSES as readonly string[]).includes(value)
+}
+
+/** Two clock-time windows clash when they overlap (touching endpoints do not). */
+export function slotsOverlap(
+  a: { startsAt: string; endsAt: string },
+  b: { startsAt: string; endsAt: string },
+): boolean {
+  return a.startsAt < b.endsAt && b.startsAt < a.endsAt
 }

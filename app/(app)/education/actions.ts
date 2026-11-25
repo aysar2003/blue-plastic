@@ -106,6 +106,7 @@ export async function saveFeePlan(formData: FormData) {
     id: String(formData.get('id') || '') || undefined,
     name: String(formData.get('name') ?? ''),
     programId: String(formData.get('programId') || '') || null,
+    installmentCount: Number(formData.get('installmentCount') || '1'),
     lines,
   })
   revalidatePath(PATH)
@@ -119,6 +120,13 @@ export async function enrollAndBill(formData: FormData) {
     programId: String(formData.get('programId') ?? ''),
     termId: String(formData.get('termId') ?? ''),
     feePlanId: String(formData.get('feePlanId') || '') || null,
+    billingCustomerId: String(formData.get('billingCustomerId') || '') || null,
+    campusId: String(formData.get('campusId') || '') || null,
+    admissionNumber: String(formData.get('admissionNumber') || '') || null,
+    dateOfBirth: String(formData.get('dateOfBirth') || '') || null,
+    gender: String(formData.get('gender') || '') || null,
+    guardianName: String(formData.get('guardianName') || '') || null,
+    guardianPhone: String(formData.get('guardianPhone') || '') || null,
     scholarshipPercent: String(formData.get('scholarshipPercent') ?? '0'),
     notes: String(formData.get('notes') ?? ''),
     billNow: formData.get('billNow') === '1',
@@ -159,4 +167,48 @@ export async function awardScholarshipAction(formData: FormData) {
   })
   revalidatePath(PATH)
   redirect(`${PATH}/enrollments`)
+}
+
+export async function createAdmissionAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await education.createAdmission(ctx, {
+    applicantName: String(formData.get('applicantName') ?? ''),
+    phone: String(formData.get('phone') ?? ''),
+    email: String(formData.get('email') ?? ''),
+    programId: String(formData.get('programId') || '') || null,
+    termId: String(formData.get('termId') || '') || null,
+    feePlanId: String(formData.get('feePlanId') || '') || null,
+    notes: String(formData.get('notes') ?? ''),
+  })
+  revalidatePath(PATH)
+  redirect(`${PATH}/admissions`)
+}
+
+export async function acceptAdmissionAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  const result = await education.acceptAdmission(ctx, {
+    admissionId: String(formData.get('admissionId') ?? ''),
+    admissionNumber: String(formData.get('admissionNumber') || '') || null,
+    billNow: formData.get('billNow') === '1',
+  })
+  revalidatePath(PATH)
+  if ('invoiceId' in result && result.invoiceId) {
+    redirect(`/sales/invoices/${result.invoiceId}`)
+  }
+  redirect(`${PATH}/admissions`)
+}
+
+export async function rejectAdmissionAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  await education.rejectAdmission(ctx, String(formData.get('admissionId') ?? ''))
+  revalidatePath(PATH)
+  redirect(`${PATH}/admissions`)
+}
+
+export async function sendFeeRemindersAction(formData: FormData) {
+  const ctx = await requireOrgContext('invoice:create')
+  const termId = String(formData.get('termId') || '') || undefined
+  await education.sendFeeReminders(ctx, termId)
+  revalidatePath(PATH)
+  redirect(`${PATH}/fees-outstanding`)
 }

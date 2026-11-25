@@ -875,6 +875,8 @@ model Organization {
   academicTerms        AcademicTerm[]
   feePlans             FeePlan[]
   studentEnrollments   StudentEnrollment[]
+  schoolCampuses       SchoolCampus[]
+  schoolAdmissions     SchoolAdmission[]
   schoolClasses        SchoolClass[]
   schoolClassMembers   SchoolClassMember[]
   studentAttendanceDays StudentAttendanceDay[]
@@ -885,6 +887,8 @@ model Organization {
   timetableSlots       TimetableSlot[]
   schoolAssignments    SchoolAssignment[]
   assignmentSubmissions AssignmentSubmission[]
+  schoolExams          SchoolExam[]
+  schoolExamSlots      SchoolExamSlot[]
   transportRoutes      TransportRoute[]
   transportRiders      TransportRider[]
   hostelBlocks         HostelBlock[]
@@ -2049,6 +2053,8 @@ model Customer {
   crmActivities    CrmActivity[]
   stays            Stay[]
   studentEnrollments StudentEnrollment[]
+  billedEnrollments  StudentEnrollment[] @relation("EnrollmentBillingCustomer")
+  schoolAdmissions   SchoolAdmission[]
   patientVisits    PatientVisit[]
   donorPledges     DonorPledge[]
   serviceJobs      ServiceJob[]
@@ -2355,6 +2361,8 @@ model Item {
   folioLines       FolioLine[]
   lots             ItemLot[]
   feePlanLines     FeePlanLine[]
+  transportRouteFees TransportRoute[] @relation("TransportRouteFeeItem")
+  hostelBlockFees    HostelBlock[] @relation("HostelBlockFeeItem")
   visitCharges     VisitCharge[]
   routingSteps     RoutingStep[]
   asnShipmentLines AsnShipmentLine[]
@@ -2998,7 +3006,10 @@ model ProjectTimeEntry {
   projectId String
   taskId    String?
 
-  userId String
+  /// Login user who logged the time. Optional when planning assigns an employee without a login.
+  userId String?
+  /// HR employee card (Wave H). Set when planning creates labour without a user login.
+  employeeId String?
   workDate DateTime @db.Date
   hours    Decimal  @db.Decimal(19, 4)
   description String?
@@ -3006,7 +3017,7 @@ model ProjectTimeEntry {
   billable     Boolean  @default(true)
   /// Charge-out rate in organisation base currency (per hour).
   billableRate Decimal? @db.Decimal(19, 4)
-  /// Internal labour cost per hour (Job P&L). Null falls back to billableRate in reports.
+  /// Internal labour cost per hour (Job P&L). Shown separately from billableRate (charge).
   costRate Decimal? @db.Decimal(19, 4)
 
   /// When set, this entry was pulled onto an invoice line and must not be billed again.
@@ -3018,12 +3029,14 @@ model ProjectTimeEntry {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task         ProjectTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  user         User         @relation("ProjectTimeEntryUser", fields: [userId], references: [id], onDelete: Restrict)
+  user         User?        @relation("ProjectTimeEntryUser", fields: [userId], references: [id], onDelete: Restrict)
+  employee     Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   billedInvoiceLine SalesDocumentLine? @relation("BillableTimeInvoice")
   planningAssignments PlanningAssignment[]
 
   @@index([orgId, projectId, workDate(sort: Desc)])
   @@index([orgId, billable, invoicedAt])
+  @@index([orgId, employeeId])
   @@map("project_time_entries")
 }
 
@@ -5075,7 +5088,11 @@ model Employee {
   applicants       Applicant[]
   appraisals       Appraisal[]
   planningAssignments PlanningAssignment[]
+  projectTimeEntries  ProjectTimeEntry[]
   trainingEnrollments TrainingEnrollment[]
+  schoolClassesTaught SchoolClass[] @relation("SchoolClassTeacher")
+  schoolClassSubjectsTaught SchoolClassSubject[] @relation("SchoolClassSubjectTeacher")
+  timetableSlotsTaught TimetableSlot[] @relation("TimetableSlotTeacher")
 
   @@unique([orgId, userId])
   @@index([orgId, active])
@@ -7130,6 +7147,7 @@ model AcademicProgram {
   organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   feePlans     FeePlan[]
   enrollments  StudentEnrollment[]
+  admissions   SchoolAdmission[]
   classes      SchoolClass[]
 
   @@unique([orgId, name])
@@ -7171,7 +7189,9 @@ model AcademicTerm {
   organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   academicYear AcademicYear        @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
   enrollments  StudentEnrollment[]
+  admissions   SchoolAdmission[]
   classes      SchoolClass[]
+  exams        SchoolExam[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive, startsOn])
@@ -7181,11 +7201,13 @@ model AcademicTerm {
 }
 
 model FeePlan {
-  id        String  @id @default(cuid())
-  orgId     String
-  programId String?
-  name      String
-  isActive  Boolean @default(true)
+  id               String  @id @default(cuid())
+  orgId            String
+  programId        String?
+  name             String
+  isActive         Boolean @default(true)
+  /// Split each fee line into N installment lines on one invoice (1–6).
+  installmentCount Int     @default(1)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -7194,6 +7216,7 @@ model FeePlan {
   program      AcademicProgram?    @relation(fields: [programId], references: [id], onDelete: SetNull)
   lines        FeePlanLine[]
   enrollments  StudentEnrollment[]
+  admissions   SchoolAdmission[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
@@ -7226,12 +7249,21 @@ model StudentEnrollment {
   id                  String           @id @default(cuid())
   orgId               String
   customerId          String
+  /// Bill this customer when set (guardian); otherwise bill customerId.
+  billingCustomerId   String?
   programId           String
   termId              String
   feePlanId           String?
+  campusId            String?
   status              EnrollmentStatus @default(ENROLLED)
   /// Scholarship / grant as percent off the fee invoice (0–100).
   scholarshipPercent  Decimal          @default(0) @db.Decimal(7, 4)
+  admissionNumber     String?
+  dateOfBirth         DateTime?        @db.Date
+  gender              String?
+  guardianName        String?
+  guardianPhone       String?
+  photoUrl            String?
   salesDocumentId     String?          @unique
   notes               String?
   enrolledAt          DateTime         @default(now()) @db.Timestamptz(6)
@@ -7239,25 +7271,84 @@ model StudentEnrollment {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  program       AcademicProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
-  term          AcademicTerm   @relation(fields: [termId], references: [id], onDelete: Restrict)
-  feePlan       FeePlan?       @relation(fields: [feePlanId], references: [id], onDelete: SetNull)
-  salesDocument SalesDocument? @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
-  classMembers  SchoolClassMember[]
-  attendanceDays StudentAttendanceDay[]
-  gradeEntries  GradeEntry[]
+  organization    Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer        Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  billingCustomer Customer?       @relation("EnrollmentBillingCustomer", fields: [billingCustomerId], references: [id], onDelete: SetNull)
+  program         AcademicProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+  term            AcademicTerm    @relation(fields: [termId], references: [id], onDelete: Restrict)
+  feePlan         FeePlan?        @relation(fields: [feePlanId], references: [id], onDelete: SetNull)
+  campus          SchoolCampus?   @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  salesDocument   SalesDocument?  @relation(fields: [salesDocumentId], references: [id], onDelete: SetNull)
+  classMembers    SchoolClassMember[]
+  attendanceDays  StudentAttendanceDay[]
+  gradeEntries    GradeEntry[]
   assignmentSubmissions AssignmentSubmission[]
   transportRiders TransportRider[]
   hostelAllocations HostelAllocation[]
   disciplineRecords DisciplineRecord[]
 
   @@unique([orgId, customerId, programId, termId])
+  @@unique([orgId, admissionNumber])
   @@index([orgId, status, enrolledAt(sort: Desc)])
   @@index([termId, status])
   @@index([customerId])
+  @@index([billingCustomerId])
+  @@index([campusId])
   @@map("student_enrollments")
+}
+
+enum AdmissionStatus {
+  APPLIED
+  OFFERED
+  ACCEPTED
+  REJECTED
+  ENROLLED
+}
+
+model SchoolCampus {
+  id       String  @id @default(cuid())
+  orgId    String
+  name     String
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  enrollments  StudentEnrollment[]
+  classes      SchoolClass[]
+  transportRoutes TransportRoute[]
+  hostelBlocks HostelBlock[]
+
+  @@unique([orgId, name])
+  @@index([orgId, isActive])
+  @@map("school_campuses")
+}
+
+model SchoolAdmission {
+  id            String          @id @default(cuid())
+  orgId         String
+  applicantName String
+  phone         String?
+  email         String?
+  programId     String?
+  termId        String?
+  feePlanId     String?
+  customerId    String?
+  status        AdmissionStatus @default(APPLIED)
+  notes         String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  program      AcademicProgram? @relation(fields: [programId], references: [id], onDelete: SetNull)
+  term         AcademicTerm?    @relation(fields: [termId], references: [id], onDelete: SetNull)
+  feePlan      FeePlan?         @relation(fields: [feePlanId], references: [id], onDelete: SetNull)
+  customer     Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status, createdAt(sort: Desc)])
+  @@map("school_admissions")
 }
 
 /// School SIS deepen — classroom section for a program + term.
@@ -7269,31 +7360,40 @@ enum AttendanceMark {
 }
 
 model SchoolClass {
-  id          String  @id @default(cuid())
-  orgId       String
-  programId   String
-  termId      String
-  name        String
-  code        String?
-  teacherName String?
-  isActive    Boolean @default(true)
+  id                String  @id @default(cuid())
+  orgId             String
+  programId         String
+  termId            String
+  campusId          String?
+  name              String
+  code              String?
+  teacherName       String?
+  teacherEmployeeId String?
+  isActive          Boolean @default(true)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  organization Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  program      AcademicProgram      @relation(fields: [programId], references: [id], onDelete: Restrict)
-  term         AcademicTerm         @relation(fields: [termId], references: [id], onDelete: Restrict)
-  members      SchoolClassMember[]
-  attendance   StudentAttendanceDay[]
-  gradeItems   GradeItem[]
-  subjects     SchoolClassSubject[]
-  timetable    TimetableSlot[]
-  assignments  SchoolAssignment[]
+  organization    Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  program         AcademicProgram      @relation(fields: [programId], references: [id], onDelete: Restrict)
+  term            AcademicTerm         @relation(fields: [termId], references: [id], onDelete: Restrict)
+  campus          SchoolCampus?        @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  teacherEmployee Employee?            @relation("SchoolClassTeacher", fields: [teacherEmployeeId], references: [id], onDelete: SetNull)
+  members         SchoolClassMember[]
+  attendance      StudentAttendanceDay[]
+  gradeItems      GradeItem[]
+  subjects        SchoolClassSubject[]
+  timetable       TimetableSlot[]
+  assignments     SchoolAssignment[]
+  announcements   SchoolAnnouncement[]
+  exams           SchoolExam[]
+  examSlots       SchoolExamSlot[]
 
   @@unique([orgId, termId, name])
   @@index([orgId, isActive, termId])
   @@index([programId])
+  @@index([campusId])
+  @@index([teacherEmployeeId])
   @@map("school_classes")
 }
 
@@ -7338,23 +7438,26 @@ model StudentAttendanceDay {
 }
 
 model GradeItem {
-  id           String    @id @default(cuid())
-  orgId        String
-  classId      String
-  name         String
-  maxScore     Decimal   @default(100) @db.Decimal(19, 4)
-  weightPercent Decimal  @default(100) @db.Decimal(7, 4)
-  dueOn        DateTime? @db.Date
+  id            String    @id @default(cuid())
+  orgId         String
+  classId       String
+  subjectId     String?
+  name          String
+  maxScore      Decimal   @default(100) @db.Decimal(19, 4)
+  weightPercent Decimal   @default(100) @db.Decimal(7, 4)
+  dueOn         DateTime? @db.Date
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  schoolClass  SchoolClass  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  schoolClass  SchoolClass   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject      SchoolSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   entries      GradeEntry[]
 
   @@unique([classId, name])
   @@index([orgId, classId])
+  @@index([subjectId])
   @@map("grade_items")
 }
 
@@ -7414,6 +7517,8 @@ model SchoolSubject {
   classLinks   SchoolClassSubject[]
   timetable    TimetableSlot[]
   assignments  SchoolAssignment[]
+  gradeItems   GradeItem[]
+  examSlots    SchoolExamSlot[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
@@ -7421,44 +7526,51 @@ model SchoolSubject {
 }
 
 model SchoolClassSubject {
-  id          String  @id @default(cuid())
-  orgId       String
-  classId     String
-  subjectId   String
-  teacherName String?
+  id                String  @id @default(cuid())
+  orgId             String
+  classId           String
+  subjectId         String
+  teacherName       String?
+  teacherEmployeeId String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  schoolClass  SchoolClass  @relation(fields: [classId], references: [id], onDelete: Cascade)
-  subject      SchoolSubject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  organization    Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  schoolClass     SchoolClass   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject         SchoolSubject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  teacherEmployee Employee?     @relation("SchoolClassSubjectTeacher", fields: [teacherEmployeeId], references: [id], onDelete: SetNull)
 
   @@unique([classId, subjectId])
   @@index([orgId, classId])
+  @@index([teacherEmployeeId])
   @@map("school_class_subjects")
 }
 
 model TimetableSlot {
-  id          String  @id @default(cuid())
-  orgId       String
-  classId     String
-  subjectId   String?
+  id                String  @id @default(cuid())
+  orgId             String
+  classId           String
+  subjectId         String?
+  teacherEmployeeId String?
   /// 0 = Sunday … 6 = Saturday
-  dayOfWeek   Int
-  periodIndex Int
-  startsAt    String
-  endsAt      String
-  room        String?
+  dayOfWeek         Int
+  periodIndex       Int
+  startsAt          String
+  endsAt            String
+  room              String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  schoolClass  SchoolClass   @relation(fields: [classId], references: [id], onDelete: Cascade)
-  subject      SchoolSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  organization    Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  schoolClass     SchoolClass    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject         SchoolSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  teacherEmployee Employee?      @relation("TimetableSlotTeacher", fields: [teacherEmployeeId], references: [id], onDelete: SetNull)
 
   @@unique([classId, dayOfWeek, periodIndex])
   @@index([orgId, classId, dayOfWeek])
+  @@index([orgId, teacherEmployeeId, dayOfWeek])
+  @@index([orgId, room, dayOfWeek])
   @@map("timetable_slots")
 }
 
@@ -7485,14 +7597,16 @@ model SchoolAssignment {
 }
 
 model AssignmentSubmission {
-  id           String                     @id @default(cuid())
-  orgId        String
-  assignmentId String
-  enrollmentId String
-  status       AssignmentSubmissionStatus @default(ASSIGNED)
-  submittedAt  DateTime?                  @db.Timestamptz(6)
-  score        Decimal?                   @db.Decimal(19, 4)
-  note         String?
+  id            String                     @id @default(cuid())
+  orgId         String
+  assignmentId  String
+  enrollmentId  String
+  status        AssignmentSubmissionStatus @default(ASSIGNED)
+  submittedAt   DateTime?                  @db.Timestamptz(6)
+  score         Decimal?                   @db.Decimal(19, 4)
+  note          String?
+  attachmentUrl String?
+  portalNote    String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -7506,21 +7620,71 @@ model AssignmentSubmission {
   @@map("assignment_submissions")
 }
 
+model SchoolExam {
+  id      String @id @default(cuid())
+  orgId   String
+  termId  String
+  classId String
+  title   String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  term         AcademicTerm    @relation(fields: [termId], references: [id], onDelete: Restrict)
+  schoolClass  SchoolClass     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  slots        SchoolExamSlot[]
+
+  @@index([orgId, termId, classId])
+  @@map("school_exams")
+}
+
+model SchoolExamSlot {
+  id              String   @id @default(cuid())
+  orgId           String
+  examId          String
+  classId         String
+  subjectId       String?
+  onDate          DateTime @db.Date
+  startsAt        String
+  endsAt          String
+  room            String?
+  invigilatorName String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  exam         SchoolExam    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  schoolClass  SchoolClass   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject      SchoolSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, examId, onDate])
+  @@index([classId, onDate])
+  @@map("school_exam_slots")
+}
+
 model TransportRoute {
   id          String  @id @default(cuid())
   orgId       String
+  campusId    String?
   name        String
   vehicleNote String?
+  feeItemId   String?
   isActive    Boolean @default(true)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  campus       SchoolCampus?    @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  feeItem      Item?            @relation("TransportRouteFeeItem", fields: [feeItemId], references: [id], onDelete: SetNull)
   riders       TransportRider[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
+  @@index([campusId])
+  @@index([feeItemId])
   @@map("transport_routes")
 }
 
@@ -7544,28 +7708,35 @@ model TransportRider {
 }
 
 model HostelBlock {
-  id       String  @id @default(cuid())
-  orgId    String
-  name     String
-  isActive Boolean @default(true)
+  id        String  @id @default(cuid())
+  orgId     String
+  campusId  String?
+  name      String
+  feeItemId String?
+  isActive  Boolean @default(true)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  campus       SchoolCampus? @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  feeItem      Item?         @relation("HostelBlockFeeItem", fields: [feeItemId], references: [id], onDelete: SetNull)
   rooms        HostelRoom[]
 
   @@unique([orgId, name])
   @@index([orgId, isActive])
+  @@index([campusId])
+  @@index([feeItemId])
   @@map("hostel_blocks")
 }
 
 model HostelRoom {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   orgId    String
   blockId  String
   name     String
-  capacity Int    @default(4)
+  capacity Int     @default(4)
+  gender   String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -7580,11 +7751,12 @@ model HostelRoom {
 }
 
 model HostelAllocation {
-  id           String  @id @default(cuid())
+  id           String    @id @default(cuid())
   orgId        String
   roomId       String
   enrollmentId String
   bedLabel     String?
+  checkedOutAt DateTime? @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
@@ -7592,25 +7764,29 @@ model HostelAllocation {
   room         HostelRoom       @relation(fields: [roomId], references: [id], onDelete: Cascade)
   enrollment   StudentEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 
-  @@unique([enrollmentId])
+  @@index([enrollmentId])
   @@index([orgId, roomId])
   @@map("hostel_allocations")
 }
 
 model SchoolAnnouncement {
-  id          String         @id @default(cuid())
-  orgId       String
-  title       String
-  body        String
-  audience    SchoolAudience @default(ALL)
-  publishedOn DateTime       @db.Date
+  id            String         @id @default(cuid())
+  orgId         String
+  classId       String?
+  title         String
+  body          String
+  audience      SchoolAudience @default(ALL)
+  publishedOn   DateTime       @db.Date
+  notifyParents Boolean        @default(false)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  schoolClass  SchoolClass? @relation(fields: [classId], references: [id], onDelete: SetNull)
 
   @@index([orgId, publishedOn(sort: Desc)])
+  @@index([classId])
   @@map("school_announcements")
 }
 

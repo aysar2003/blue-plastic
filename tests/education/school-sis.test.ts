@@ -5,6 +5,8 @@ import {
   attendanceSummary,
   isAttendanceMark,
   letterFromPercent,
+  letterFromPercentHorn,
+  rankStudents,
   weightedGradePercent,
 } from '@/lib/erp/school-sis'
 import { getPack } from '@/lib/packs'
@@ -26,6 +28,13 @@ describe('school SIS helpers', () => {
     ).toBe(85)
     expect(letterFromPercent(85)).toBe('B')
     expect(letterFromPercent(null)).toBe('—')
+    expect(letterFromPercentHorn(80)).toBe('Distinction')
+    expect(letterFromPercentHorn(65)).toBe('Credit')
+    expect(letterFromPercentHorn(50)).toBe('Pass')
+    expect(letterFromPercentHorn(49.99)).toBe('Fail')
+    expect(letterFromPercentHorn(null)).toBe('—')
+    expect(rankStudents([90, 80, 80, 70])).toEqual([1, 2, 2, 4])
+    expect(rankStudents([null, 55, undefined])).toEqual([null, 1, null])
   })
 
   it('summarizes attendance', () => {
