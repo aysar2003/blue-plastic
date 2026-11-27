@@ -4271,49 +4271,7 @@ html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table
   color: #fb7185 !important;
 }
 
-@media print {
-  html.luxury [data-report-root],
-  html[data-report-style='luxury'] [data-report-root] {
-    --report-head-bg: #e8dcc8;
-    --report-head-fg: #1a1410;
-    --report-section-bg: #e8dcc8;
-    --report-section-fg: #1a1410;
-    --report-body-fg: #1a1410;
-    --report-muted-fg: #4a3d2e;
-    --report-row-odd: #fbf7f0;
-    --report-row-even: #f3eee6;
-    --report-border: #d4c4a8;
-  }
-
-  html.luxury [data-report-root] :is(table, [data-slot='table']),
-  html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) {
-    color: #1a1410;
-    background-color: #fbf7f0;
-  }
-
-  html.luxury [data-report-root] table > thead th,
-  html[data-report-style='luxury'] [data-report-root] table > thead th {
-    background: #e8dcc8;
-    color: #1a1410;
-    border-bottom-color: #d4c4a8;
-  }
-
-  html.luxury [data-report-root] table > tbody td,
-  html[data-report-style='luxury'] [data-report-root] table > tbody td {
-    color: #1a1410;
-    border-color: #d4c4a8;
-  }
-
-  html.luxury [data-report-root] :is(table, [data-slot='table']) .text-success,
-  html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) .text-success {
-    color: #0f6b43 !important;
-  }
-
-  html.luxury [data-report-root] :is(table, [data-slot='table']) .text-destructive,
-  html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) .text-destructive {
-    color: #b42318 !important;
-  }
-}
+/* Print cream tokens are in the system-wide Luxury print pack below. */
 
 html[data-report-style='ai'] [data-report-root] {
   --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
@@ -5211,31 +5169,7 @@ html[data-report-style='luxury'] .report-sheet-header__contact {
   color: #c4b8a8 !important;
 }
 
-@media print {
-  html.luxury .report-sheet-header,
-  html[data-report-style='luxury'] .report-sheet-header {
-    --rsh-fg: #1a1410;
-    --rsh-muted: #4a3d2e;
-    border-color: #d4c4a8 !important;
-    background: linear-gradient(180deg, #fbf7f0 0%, #f3eee6 100%) !important;
-    color: #1a1410 !important;
-    box-shadow: none;
-  }
-
-  html.luxury .report-sheet-header__title,
-  html[data-report-style='luxury'] .report-sheet-header__title,
-  html.luxury .report-sheet-header__company,
-  html[data-report-style='luxury'] .report-sheet-header__company {
-    color: #1a1410 !important;
-  }
-
-  html.luxury .report-sheet-header__subtitle,
-  html.luxury .report-sheet-header__contact,
-  html[data-report-style='luxury'] .report-sheet-header__subtitle,
-  html[data-report-style='luxury'] .report-sheet-header__contact {
-    color: #4a3d2e !important;
-  }
-}
+/* Print masthead cream is in the system-wide Luxury print pack below. */
 
 /* Helper copy under filters stays champagne — not paper brown. */
 html.luxury [data-report-root] > p.text-muted-foreground {
@@ -5907,5 +5841,165 @@ html[data-font-style='custom'] [data-report-root] {
   .snapshot-fade-in,
   .snapshot-bar {
     animation: none;
+  }
+}
+
+/*
+ * Luxury VIP — clean print / PDF paper (system-wide).
+ * Screen stays espresso; Print and headless PDF (?look=luxury / html.luxury)
+ * force cream sheet + dark ink so every page is readable.
+ */
+@media print {
+  html.luxury,
+  html[data-report-style='luxury'],
+  html[data-print-look='luxury'] {
+    --background: #fbf7f0 !important;
+    --foreground: #1a1410 !important;
+    --card: #fbf7f0 !important;
+    --card-foreground: #1a1410 !important;
+    --muted: #f3eee6 !important;
+    --muted-foreground: #4a3d2e !important;
+    --border: #d4c4a8 !important;
+    --primary: #c4a574 !important;
+    --primary-foreground: #0a090c !important;
+    background: #fbf7f0 !important;
+    color: #1a1410 !important;
+  }
+
+  html.luxury :is(body, .app-surface, .sales-surface, [data-portal-shell]),
+  html[data-report-style='luxury'] :is(body, .app-surface, .sales-surface, [data-portal-shell]),
+  html[data-print-look='luxury'] :is(body, .app-surface, .sales-surface, [data-portal-shell]) {
+    background: #fbf7f0 !important;
+    color: #1a1410 !important;
+  }
+
+  html.luxury .report-sheet-header,
+  html[data-report-style='luxury'] .report-sheet-header,
+  html[data-print-look='luxury'] .report-sheet-header {
+    --rsh-accent: #c4a574;
+    --rsh-fg: #1a1410;
+    --rsh-muted: #4a3d2e;
+    border-color: #d4c4a8 !important;
+    background: linear-gradient(180deg, #fbf7f0 0%, #f3eee6 100%) !important;
+    color: #1a1410 !important;
+    box-shadow: none !important;
+  }
+
+  html.luxury .report-sheet-header__mark,
+  html[data-report-style='luxury'] .report-sheet-header__mark,
+  html[data-print-look='luxury'] .report-sheet-header__mark {
+    background: #c4a574 !important;
+    color: #0a090c !important;
+  }
+
+  html.luxury :is(.report-sheet-header__company, .report-sheet-header__title),
+  html[data-report-style='luxury'] :is(.report-sheet-header__company, .report-sheet-header__title),
+  html[data-print-look='luxury'] :is(.report-sheet-header__company, .report-sheet-header__title) {
+    color: #1a1410 !important;
+  }
+
+  html.luxury :is(.report-sheet-header__subtitle, .report-sheet-header__contact),
+  html[data-report-style='luxury'] :is(.report-sheet-header__subtitle, .report-sheet-header__contact),
+  html[data-print-look='luxury'] :is(.report-sheet-header__subtitle, .report-sheet-header__contact) {
+    color: #4a3d2e !important;
+  }
+
+  html.luxury [data-report-root],
+  html[data-report-style='luxury'] [data-report-root],
+  html[data-print-look='luxury'] [data-report-root] {
+    --report-head-bg: #e8dcc8 !important;
+    --report-head-fg: #1a1410 !important;
+    --report-section-bg: #e8dcc8 !important;
+    --report-section-fg: #1a1410 !important;
+    --report-body-fg: #1a1410 !important;
+    --report-muted-fg: #4a3d2e !important;
+    --report-row-odd: #fbf7f0 !important;
+    --report-row-even: #f3eee6 !important;
+    --report-border: #d4c4a8 !important;
+    --report-accent: #c4a574 !important;
+    background: #fbf7f0 !important;
+    color: #1a1410 !important;
+  }
+
+  html.luxury [data-report-root] :is(table, [data-slot='table'], .bg-card, [data-slot='card']),
+  html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table'], .bg-card, [data-slot='card']),
+  html[data-print-look='luxury'] [data-report-root] :is(table, [data-slot='table'], .bg-card, [data-slot='card']) {
+    background-color: #fbf7f0 !important;
+    color: #1a1410 !important;
+    border-color: #d4c4a8 !important;
+  }
+
+  html.luxury [data-report-root] table > thead th,
+  html[data-report-style='luxury'] [data-report-root] table > thead th,
+  html[data-print-look='luxury'] [data-report-root] table > thead th {
+    background: #e8dcc8 !important;
+    color: #1a1410 !important;
+    border-bottom-color: #d4c4a8 !important;
+  }
+
+  html.luxury [data-report-root] table > tbody td,
+  html[data-report-style='luxury'] [data-report-root] table > tbody td,
+  html[data-print-look='luxury'] [data-report-root] table > tbody td {
+    color: #1a1410 !important;
+    border-color: #d4c4a8 !important;
+  }
+
+  html.luxury [data-report-root] table > tbody > tr,
+  html[data-report-style='luxury'] [data-report-root] table > tbody > tr,
+  html[data-print-look='luxury'] [data-report-root] table > tbody > tr {
+    background-color: #fbf7f0 !important;
+    color: #1a1410 !important;
+  }
+
+  html.luxury [data-report-root][data-template='standard'] table > tbody > tr:nth-child(even),
+  html.luxury [data-report-root][data-template='compact'] table > tbody > tr:nth-child(even),
+  html[data-report-style='luxury'] [data-report-root][data-template='standard'] table > tbody > tr:nth-child(even),
+  html[data-report-style='luxury'] [data-report-root][data-template='compact'] table > tbody > tr:nth-child(even),
+  html[data-print-look='luxury'] [data-report-root][data-template='standard'] table > tbody > tr:nth-child(even),
+  html[data-print-look='luxury'] [data-report-root][data-template='compact'] table > tbody > tr:nth-child(even) {
+    background-color: #f3eee6 !important;
+  }
+
+  html.luxury [data-report-root] table > tbody > tr[class*='bg-muted'],
+  html.luxury [data-report-root] table > tbody > tr.ledger-head,
+  html.luxury [data-report-root] table > tbody > tr.pointer-events-none,
+  html[data-report-style='luxury'] [data-report-root] table > tbody > tr[class*='bg-muted'],
+  html[data-report-style='luxury'] [data-report-root] table > tbody > tr.ledger-head,
+  html[data-report-style='luxury'] [data-report-root] table > tbody > tr.pointer-events-none,
+  html[data-print-look='luxury'] [data-report-root] table > tbody > tr[class*='bg-muted'],
+  html[data-print-look='luxury'] [data-report-root] table > tbody > tr.ledger-head,
+  html[data-print-look='luxury'] [data-report-root] table > tbody > tr.pointer-events-none {
+    background-color: #e8dcc8 !important;
+    color: #1a1410 !important;
+  }
+
+  html.luxury [data-report-root] :is(table, [data-slot='table']) .text-success,
+  html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) .text-success,
+  html[data-print-look='luxury'] [data-report-root] :is(table, [data-slot='table']) .text-success {
+    color: #0f6b43 !important;
+  }
+
+  html.luxury [data-report-root] :is(table, [data-slot='table']) .text-destructive,
+  html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) .text-destructive,
+  html[data-print-look='luxury'] [data-report-root] :is(table, [data-slot='table']) .text-destructive {
+    color: #b42318 !important;
+  }
+
+  html.luxury [data-report-root] a.report-drill-link,
+  html[data-report-style='luxury'] [data-report-root] a.report-drill-link,
+  html[data-print-look='luxury'] [data-report-root] a.report-drill-link {
+    color: #1a1410 !important;
+  }
+
+  html.luxury :is(.merchant-invoice, .invoice-sheet),
+  html[data-print-look='luxury'] :is(.merchant-invoice, .invoice-sheet) {
+    background-color: #fbf7f0 !important;
+    color: #2a2118 !important;
+  }
+
+  html.luxury :is(.merchant-invoice, .invoice-sheet) :is(.bg-primary, [class*='bg-primary']),
+  html[data-print-look='luxury'] :is(.merchant-invoice, .invoice-sheet) :is(.bg-primary, [class*='bg-primary']) {
+    background-color: #c4a574 !important;
+    color: #0a090c !important;
   }
 }

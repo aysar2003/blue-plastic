@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { letterheadOf } from '@/lib/letterhead'
 import { parsePrintInk } from '@/lib/print-ink'
+import { parsePrintLook } from '@/lib/print-look'
 import { purchaseByType } from '@/lib/purchase-types'
 import { getOrgContext } from '@/server/auth/context'
 import { forbidden, isAppError, unauthenticated } from '@/server/errors'
@@ -25,12 +26,14 @@ export async function GET(
     if (!ctx) throw unauthenticated()
     if (ctx.portalCustomerId || !ctx.permissions.has('bill:read')) throw forbidden()
 
-    const ink = parsePrintInk(new URL(request.url).searchParams.get('ink'))
+    const query = new URL(request.url).searchParams
+    const ink = parsePrintInk(query.get('ink'))
+    const look = parsePrintLook(query.get('look'))
 
     const [rows, org, template] = await Promise.all([
       purchaseService.getMany(ctx, [id]),
       organizationService.get(ctx),
-      organizationService.getPrintTemplate(ctx, new URL(request.url).searchParams.get('paper')),
+      organizationService.getPrintTemplate(ctx, query.get('paper')),
     ])
     const document = rows[0]
     if (!document) {
@@ -42,7 +45,8 @@ export async function GET(
     // Same URL the user prints — ink + paper cookie so PDF matches the screen.
     const printUrl = new URL(`${origin}/purchases/${config.slug}/${id}/print`)
     printUrl.searchParams.set('ink', ink)
-    const paper = new URL(request.url).searchParams.get('paper')
+    if (look === 'luxury') printUrl.searchParams.set('look', 'luxury')
+    const paper = query.get('paper')
     if (paper === 'trade' || paper === 'merchant') printUrl.searchParams.set('paper', paper)
     const screen = await renderAuthenticatedPagePdf(
       printUrl.toString(),
@@ -69,6 +73,7 @@ export async function GET(
 
     const bytes = renderSalesDocumentPdf({
       ink,
+      look,
       template,
       partyLabel: 'Vendor',
       paper: 'vendor',
