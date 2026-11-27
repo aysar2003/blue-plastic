@@ -4221,20 +4221,20 @@ html[data-report-style='odoo'] [data-report-root] {
   font-size: 0.8rem;
 }
 
-/* Luxury VIP paper — cream sheet + champagne bands + gold marks.
- * Near-black ink on cream (≥12:1) so names/codes stay sharp; desk chrome
- * still uses cream. Night --success mint must not paint the ledger. */
+/* Luxury VIP sheet — espresso rows + champagne head (screen).
+ * Print keeps cream paper further below. */
+html.luxury [data-report-root],
 html[data-report-style='luxury'] [data-report-root] {
   --report-font: var(--font-marketing-sans), system-ui, sans-serif;
-  --report-head-bg: #e8dcc8;
-  --report-head-fg: #1a1410;
-  --report-section-bg: #e8dcc8;
-  --report-section-fg: #1a1410;
-  --report-body-fg: #1a1410;
-  --report-muted-fg: #4a3d2e;
-  --report-row-odd: #fbf7f0;
-  --report-row-even: #f3eee6;
-  --report-border: #d4c4a8;
+  --report-head-bg: #1a161f;
+  --report-head-fg: #e4d0a8;
+  --report-section-bg: #16131c;
+  --report-section-fg: #f3eee6;
+  --report-body-fg: #f3eee6;
+  --report-muted-fg: #c4b8a8;
+  --report-row-odd: #100e14;
+  --report-row-even: #0a090e;
+  --report-border: rgb(196 165 116 / 22%);
   --report-row-pad-y: 0.42rem;
   --report-head-tracking: 0.08em;
   --report-head-transform: uppercase;
@@ -4242,19 +4242,77 @@ html[data-report-style='luxury'] [data-report-root] {
   --report-accent: #c4a574;
 }
 
+html.luxury [data-report-root] :is(table, [data-slot='table']),
 html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) {
-  color: #1a1410;
-  background-color: #fbf7f0;
+  color: #f3eee6;
+  background-color: #100e14;
 }
 
+html.luxury [data-report-root] table > thead th,
 html[data-report-style='luxury'] [data-report-root] table > thead th {
-  background: #e8dcc8;
-  color: #1a1410;
-  border-bottom-color: #d4c4a8;
+  background: #1a161f;
+  color: #e4d0a8;
+  border-bottom-color: rgb(196 165 116 / 28%);
 }
 
+html.luxury [data-report-root] table > tbody td,
 html[data-report-style='luxury'] [data-report-root] table > tbody td {
-  color: #1a1410;
+  color: #f3eee6;
+  border-color: rgb(196 165 116 / 16%);
+}
+
+html.luxury [data-report-root] :is(table, [data-slot='table']) .text-success,
+html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) .text-success {
+  color: #3ecf8e !important;
+}
+
+html.luxury [data-report-root] :is(table, [data-slot='table']) .text-destructive,
+html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) .text-destructive {
+  color: #fb7185 !important;
+}
+
+@media print {
+  html.luxury [data-report-root],
+  html[data-report-style='luxury'] [data-report-root] {
+    --report-head-bg: #e8dcc8;
+    --report-head-fg: #1a1410;
+    --report-section-bg: #e8dcc8;
+    --report-section-fg: #1a1410;
+    --report-body-fg: #1a1410;
+    --report-muted-fg: #4a3d2e;
+    --report-row-odd: #fbf7f0;
+    --report-row-even: #f3eee6;
+    --report-border: #d4c4a8;
+  }
+
+  html.luxury [data-report-root] :is(table, [data-slot='table']),
+  html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) {
+    color: #1a1410;
+    background-color: #fbf7f0;
+  }
+
+  html.luxury [data-report-root] table > thead th,
+  html[data-report-style='luxury'] [data-report-root] table > thead th {
+    background: #e8dcc8;
+    color: #1a1410;
+    border-bottom-color: #d4c4a8;
+  }
+
+  html.luxury [data-report-root] table > tbody td,
+  html[data-report-style='luxury'] [data-report-root] table > tbody td {
+    color: #1a1410;
+    border-color: #d4c4a8;
+  }
+
+  html.luxury [data-report-root] :is(table, [data-slot='table']) .text-success,
+  html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) .text-success {
+    color: #0f6b43 !important;
+  }
+
+  html.luxury [data-report-root] :is(table, [data-slot='table']) .text-destructive,
+  html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) .text-destructive {
+    color: #b42318 !important;
+  }
 }
 
 html[data-report-style='ai'] [data-report-root] {
@@ -4637,7 +4695,6 @@ html:is(
   [data-report-style='sap'],
   [data-report-style='dynamics'],
   [data-report-style='netsuite'],
-  [data-report-style='luxury'],
   [data-report-style='slate'],
   [data-report-style='emerald'],
   [data-report-style='sand'],
@@ -4652,6 +4709,7 @@ html:is(
  * Signed amounts (SignedMoney) use theme --success / --destructive.
  * Night desks paint those mint/pink for dark chrome — unreadable on cream
  * or white paper. Lock deep forest / brick so balances stay ≥4.5:1.
+ * Luxury/AI sheets are dark — they keep mint/rose (not in this list).
  */
 html:is(
   [data-report-style='quickbooks'],
@@ -4664,7 +4722,6 @@ html:is(
   [data-report-style='sap'],
   [data-report-style='dynamics'],
   [data-report-style='netsuite'],
-  [data-report-style='luxury'],
   [data-report-style='slate'],
   [data-report-style='emerald'],
   [data-report-style='sand'],
@@ -4687,7 +4744,6 @@ html:is(
   [data-report-style='sap'],
   [data-report-style='dynamics'],
   [data-report-style='netsuite'],
-  [data-report-style='luxury'],
   [data-report-style='slate'],
   [data-report-style='emerald'],
   [data-report-style='sand'],
@@ -4711,7 +4767,6 @@ html:is(
   [data-report-style='sap'],
   [data-report-style='dynamics'],
   [data-report-style='netsuite'],
-  [data-report-style='luxury'],
   [data-report-style='slate'],
   [data-report-style='emerald'],
   [data-report-style='sand'],
@@ -4733,7 +4788,6 @@ html:is(
   [data-report-style='sap'],
   [data-report-style='dynamics'],
   [data-report-style='netsuite'],
-  [data-report-style='luxury'],
   [data-report-style='slate'],
   [data-report-style='emerald'],
   [data-report-style='sand'],
@@ -4746,6 +4800,16 @@ html:is(
     var(--report-accent, var(--primary)) 40%,
     var(--report-body-fg, #111111)
   ) !important;
+}
+
+html.luxury [data-report-root] a.report-drill-link,
+html[data-report-style='luxury'] [data-report-root] a.report-drill-link {
+  color: #f3eee6 !important;
+}
+
+html.luxury [data-report-root] a.report-drill-link:hover,
+html[data-report-style='luxury'] [data-report-root] a.report-drill-link:hover {
+  color: #e4d0a8 !important;
 }
 
 html[data-report-style] [data-report-root] table > thead {
@@ -5109,21 +5173,19 @@ html[data-report-style='quickbooks'] .report-sheet-header__mark {
 }
 
 /*
- * Luxury VIP masthead — cream paper + ink type.
- * Key off System look (html.luxury) as well as report paper, so Chart of
- * Accounts / list letterheads never keep the dark desk card wash.
+ * Luxury VIP masthead — espresso ink + cream/gold type (screen).
+ * Matches the dark desk; print (@media below) keeps cream paper for ink.
  */
 html.luxury .report-sheet-header,
 html[data-report-style='luxury'] .report-sheet-header {
   --rsh-accent: #c4a574;
-  /* Near-black on cream — accent gold on title was ~2.5:1 (unsafe). */
-  --rsh-fg: #1a1410;
-  --rsh-muted: #4a3d2e;
-  border-color: #d4c4a8 !important;
-  background: linear-gradient(180deg, #fbf7f0 0%, #f3eee6 100%) !important;
+  --rsh-fg: #f3eee6;
+  --rsh-muted: #c4b8a8;
+  border-color: rgb(196 165 116 / 28%) !important;
+  background: linear-gradient(165deg, #16131c 0%, #100e14 48%, #0a090e 100%) !important;
   font-family: var(--font-marketing-display), Georgia, serif;
-  color: #1a1410 !important;
-  box-shadow: 0 1px 0 rgb(196 165 116 / 18%);
+  color: #f3eee6 !important;
+  box-shadow: 0 1px 0 rgb(196 165 116 / 12%);
 }
 
 html.luxury .report-sheet-header__mark,
@@ -5132,26 +5194,47 @@ html[data-report-style='luxury'] .report-sheet-header__mark {
   color: #0a090c !important;
 }
 
-/* Title follows paper ink; gold stays on the mark + underline only. */
 html.luxury .report-sheet-header__title,
 html[data-report-style='luxury'] .report-sheet-header__title {
-  color: #1a1410 !important;
+  color: #c4a574 !important;
 }
 
 html.luxury .report-sheet-header__company,
-html.luxury .report-sheet-header__subtitle,
-html.luxury .report-sheet-header__contact,
-html[data-report-style='luxury'] .report-sheet-header__company,
-html[data-report-style='luxury'] .report-sheet-header__subtitle,
-html[data-report-style='luxury'] .report-sheet-header__contact {
-  color: #1a1410 !important;
+html[data-report-style='luxury'] .report-sheet-header__company {
+  color: #f7f2ea !important;
 }
 
 html.luxury .report-sheet-header__subtitle,
 html.luxury .report-sheet-header__contact,
 html[data-report-style='luxury'] .report-sheet-header__subtitle,
 html[data-report-style='luxury'] .report-sheet-header__contact {
-  color: #4a3d2e !important;
+  color: #c4b8a8 !important;
+}
+
+@media print {
+  html.luxury .report-sheet-header,
+  html[data-report-style='luxury'] .report-sheet-header {
+    --rsh-fg: #1a1410;
+    --rsh-muted: #4a3d2e;
+    border-color: #d4c4a8 !important;
+    background: linear-gradient(180deg, #fbf7f0 0%, #f3eee6 100%) !important;
+    color: #1a1410 !important;
+    box-shadow: none;
+  }
+
+  html.luxury .report-sheet-header__title,
+  html[data-report-style='luxury'] .report-sheet-header__title,
+  html.luxury .report-sheet-header__company,
+  html[data-report-style='luxury'] .report-sheet-header__company {
+    color: #1a1410 !important;
+  }
+
+  html.luxury .report-sheet-header__subtitle,
+  html.luxury .report-sheet-header__contact,
+  html[data-report-style='luxury'] .report-sheet-header__subtitle,
+  html[data-report-style='luxury'] .report-sheet-header__contact {
+    color: #4a3d2e !important;
+  }
 }
 
 /* Helper copy under filters stays champagne — not paper brown. */
