@@ -2,6 +2,11 @@ import 'server-only'
 
 import nodemailer from 'nodemailer'
 
+import {
+  authOtpEmailHtml,
+  authOtpEmailSubject,
+  authOtpEmailText,
+} from '@/lib/auth-otp-email'
 import { env } from '@/lib/env'
 import { PRODUCT_NAME } from '@/lib/product-brand'
 import { openSecret } from '@/lib/sealed-secret'
@@ -85,8 +90,9 @@ async function orgSmtpTransport(): Promise<SmtpTransport | null> {
  * (Settings → Organisation) — typically AL FURAAT Gmail App Password.
  */
 export async function sendAuthEmailOtp(to: string, code: string): Promise<void> {
-  const subject = `${PRODUCT_NAME} sign-in code`
-  const text = `Your ${PRODUCT_NAME} verification code is ${code}. It expires in 10 minutes.\n\nIf you did not request this, you can ignore this email.`
+  const subject = authOtpEmailSubject(code)
+  const text = authOtpEmailText(code)
+  const html = authOtpEmailHtml(code)
 
   // Always surface the code in local/dev so owner/staff can sign in even if mail lags.
   if (env.NODE_ENV !== 'production') {
@@ -106,7 +112,7 @@ export async function sendAuthEmailOtp(to: string, code: string): Promise<void> 
   try {
     // Gmail App Password often needs 10–20s from cold; 8s was aborting delivery.
     await Promise.race([
-      smtp.transport.sendMail({ from: smtp.from, to, subject, text }),
+      smtp.transport.sendMail({ from: smtp.from, to, subject, text, html }),
       new Promise<never>((_, reject) => {
         setTimeout(() => reject(new Error('Auth SMTP timed out after 25s.')), 25_000)
       }),
