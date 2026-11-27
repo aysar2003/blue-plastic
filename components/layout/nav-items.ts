@@ -160,7 +160,7 @@ export const MODULES: NavModule[] = [
     href: '/banking',
     icon: BanknoteIcon,
     permission: 'bank:read',
-    owns: ['/banking'],
+    owns: ['/banking', '/insurance'],
     tabs: [
       // Reconciling starts from an account rather than from a list, so there is
       // no /banking/reconcile index to link to — only a reconciliation in
@@ -171,7 +171,12 @@ export const MODULES: NavModule[] = [
       { label: 'New deposit', href: '/banking/deposits/new', permission: 'bank:transact' },
       { label: 'Import a statement', href: '/banking/import', permission: 'bank:import' },
       { label: 'Loans', href: '/banking/loans', permission: 'customer:read' },
-      { label: 'Insurance', href: '/insurance/policies', permission: 'customer:read' },
+      {
+        label: 'Insurance',
+        href: '/insurance/policies',
+        permission: 'customer:read',
+        also: ['/insurance', '/banking/insurance'],
+      },
       { label: 'Reports', href: '/banking/reports', permission: 'report:read' },
     ],
   },

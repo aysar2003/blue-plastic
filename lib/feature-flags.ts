@@ -584,6 +584,7 @@ export const MODULE_PATH_PREFIXES: readonly { prefix: string; module: ModuleFlag
   { prefix: '/purchases', module: 'purchases' },
   { prefix: '/vendors', module: 'vendors' },
   { prefix: '/banking', module: 'banking' },
+  { prefix: '/insurance', module: 'banking' },
   { prefix: '/payments', module: 'payments' },
   { prefix: '/bill-payments', module: 'bill-payments' },
   { prefix: '/inventory', module: 'inventory' },

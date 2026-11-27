@@ -12,17 +12,23 @@ export async function createPolicy(formData: FormData) {
   const recurring = String(formData.get('recurringTemplateId') ?? '').trim()
   const coverStart = String(formData.get('coverStart') ?? '').trim()
   const coverEnd = String(formData.get('coverEnd') ?? '').trim()
+  const startDate = String(formData.get('startDate') ?? '').trim()
+  const endDate = String(formData.get('endDate') ?? '').trim()
+  if (!startDate || !endDate || !coverStart || !coverEnd) {
+    throw new Error('Start, end, and cover dates are required.')
+  }
   await insurance.createPolicy(ctx, {
     customerId: String(formData.get('customerId') ?? ''),
     policyNumber: String(formData.get('policyNumber') ?? ''),
     premium: String(formData.get('premium') ?? '0'),
-    startDate: String(formData.get('startDate') ?? ''),
-    endDate: String(formData.get('endDate') ?? ''),
-    coverStart: coverStart || null,
-    coverEnd: coverEnd || null,
+    startDate,
+    endDate,
+    coverStart,
+    coverEnd,
     recurringTemplateId: recurring || null,
   })
   revalidatePath(PATH)
+  revalidatePath('/banking/loans')
 }
 
 export async function registerClaim(formData: FormData) {

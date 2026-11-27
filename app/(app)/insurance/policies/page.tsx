@@ -4,10 +4,12 @@ import { PageHeader } from '@/components/data/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate, today } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { requireOrgContext } from '@/server/auth/context'
+import * as contactService from '@/server/services/contact.service'
 import * as insurance from '@/server/services/insurance.service'
 
 import { createPolicy, createPremiumRecurringAction, registerClaim } from './actions'
@@ -16,55 +18,82 @@ export const metadata: Metadata = { title: 'Insurance policies' }
 
 export default async function InsurancePoliciesPage() {
   const ctx = await requireOrgContext('customer:read')
-  const policies = await insurance.listPolicies(ctx)
+  const [policies, customers] = await Promise.all([
+    insurance.listPolicies(ctx),
+    contactService.listCustomers(ctx, { page: 1, pageSize: 200, dir: 'asc' }, { sort: 'name', dir: 'asc' }),
+  ])
   const currency = ctx.organization.baseCurrency
   const todayStr = today(ctx.organization.timeZone)
+  const canCreate = ctx.permissions.has('customer:create')
+  const customerRows = customers.rows
 
   return (
     <>
-      <PageHeader title="Insurance policies" description="Policy register with optional recurring template link." />
+      <PageHeader
+        organization={ctx.organization}
+        title="Insurance policies"
+        description="Policy register with optional recurring template link."
+      />
 
-      <form action={createPolicy} className="mb-8 grid max-w-lg gap-2 rounded-md border p-4">
-        <p className="text-sm font-medium">New policy</p>
-        <h2 className="sr-only">Policy details</h2>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="customerId">Customer id</Label>
-            <Input id="customerId" name="customerId" required />
+      {canCreate ? (
+        <form action={createPolicy} className="mb-8 grid max-w-lg gap-2 rounded-md border p-4">
+          <p className="text-sm font-medium">New policy</p>
+          <h2 className="sr-only">Policy details</h2>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Label htmlFor="customerId">Customer</Label>
+              <NativeSelect id="customerId" name="customerId" required defaultValue="">
+                <option value="" disabled>
+                  Choose a customer
+                </option>
+                {customerRows.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.displayName}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+            <div>
+              <Label htmlFor="policyNumber">Policy #</Label>
+              <Input id="policyNumber" name="policyNumber" required />
+            </div>
+            <div>
+              <Label htmlFor="premium">Premium</Label>
+              <Input id="premium" name="premium" defaultValue="0" />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="recurringTemplateId">Recurring template id (optional)</Label>
+              <Input id="recurringTemplateId" name="recurringTemplateId" />
+            </div>
+            <div>
+              <Label htmlFor="startDate">Start</Label>
+              <Input id="startDate" name="startDate" type="date" defaultValue={todayStr} required />
+            </div>
+            <div>
+              <Label htmlFor="endDate">End</Label>
+              <Input id="endDate" name="endDate" type="date" required />
+            </div>
+            <div>
+              <Label htmlFor="coverStart">Cover start</Label>
+              <Input id="coverStart" name="coverStart" type="date" defaultValue={todayStr} required />
+            </div>
+            <div>
+              <Label htmlFor="coverEnd">Cover end</Label>
+              <Input id="coverEnd" name="coverEnd" type="date" required />
+            </div>
           </div>
-          <div>
-            <Label htmlFor="policyNumber">Policy #</Label>
-            <Input id="policyNumber" name="policyNumber" required />
-          </div>
-          <div>
-            <Label htmlFor="premium">Premium</Label>
-            <Input id="premium" name="premium" defaultValue="0" />
-          </div>
-          <div>
-            <Label htmlFor="recurringTemplateId">Recurring template id</Label>
-            <Input id="recurringTemplateId" name="recurringTemplateId" />
-          </div>
-          <div>
-            <Label htmlFor="startDate">Start</Label>
-            <Input id="startDate" name="startDate" type="date" defaultValue={todayStr} />
-          </div>
-          <div>
-            <Label htmlFor="endDate">End</Label>
-            <Input id="endDate" name="endDate" type="date" />
-          </div>
-          <div>
-            <Label htmlFor="coverStart">Cover start</Label>
-            <Input id="coverStart" name="coverStart" type="date" defaultValue={todayStr} />
-          </div>
-          <div>
-            <Label htmlFor="coverEnd">Cover end</Label>
-            <Input id="coverEnd" name="coverEnd" type="date" />
-          </div>
-        </div>
-        <Button type="submit" size="sm">
-          Save policy
-        </Button>
-      </form>
+          <Button type="submit" size="sm">
+            Save policy
+          </Button>
+          {customerRows.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Add a customer first under Customers.</p>
+          ) : null}
+        </form>
+      ) : (
+        <p className="mb-6 text-sm text-muted-foreground">
+          You can view policies here. Creating a policy needs customer create permission.
+        </p>
+      )}
 
       <Table>
         <TableHeader>
@@ -80,6 +109,13 @@ export default async function InsurancePoliciesPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
+          {policies.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={8} className="text-muted-foreground">
+                No policies yet.
+              </TableCell>
+            </TableRow>
+          ) : null}
           {policies.map((row: (typeof policies)[number]) => (
             <TableRow key={row.id}>
               <TableCell>{row.policyNumber}</TableCell>
@@ -106,7 +142,7 @@ export default async function InsurancePoliciesPage() {
                 )}
               </TableCell>
               <TableCell>
-                {ctx.permissions.has('customer:create') ? (
+                {canCreate ? (
                   <form action={registerClaim} className="flex flex-wrap gap-1">
                     <input type="hidden" name="policyId" value={row.id} />
                     <Input name="amount" placeholder="Amount" className="h-8 w-20" required />
@@ -116,8 +152,10 @@ export default async function InsurancePoliciesPage() {
                       Claim
                     </Button>
                   </form>
+                ) : row.claims?.length ? (
+                  `${row.claims.length}`
                 ) : (
-                  row.claims?.length ? `${row.claims.length}` : '—'
+                  '—'
                 )}
               </TableCell>
             </TableRow>
