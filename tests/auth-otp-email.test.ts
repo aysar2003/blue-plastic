@@ -44,6 +44,8 @@ describe('authOtpEmailHtml', () => {
     expect(html).toContain('863641')
     expect(html).toContain('will never ask for this code')
     expect(html).toContain('Sign-in verification')
+    expect(html).toContain('Copy code')
+    expect(html).toContain('user-select:all')
     expect(html).not.toContain('<script')
     // Each digit rendered in its own cell
     for (const digit of '863641') {

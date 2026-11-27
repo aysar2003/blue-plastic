@@ -121,9 +121,24 @@ export function authOtpEmailHtml(
               <table role="presentation" class="otp-digit" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
                 <tr>${digitCells}</tr>
               </table>
-              <!-- Fallback for clients that mangle nested cells: keep selectable plain code -->
-              <p style="margin:18px 0 0;font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:22px;font-weight:700;letter-spacing:0.35em;color:#e8d5a8;">
-                ${safeDigits}
+              <!--
+                Email clients block JavaScript clipboard APIs.
+                One click/tap selects the whole code (user-select:all) so Copy is one shortcut away.
+              -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px auto 0;max-width:280px;">
+                <tr>
+                  <td align="center" style="background:#121a2a;border:1px solid #c9a66b;border-radius:12px;padding:14px 22px;">
+                    <p style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.24em;text-transform:uppercase;color:#c9a66b;">
+                      Copy code
+                    </p>
+                    <p style="margin:0;font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:26px;font-weight:700;letter-spacing:0.28em;color:#f5efe6;-webkit-user-select:all;user-select:all;-moz-user-select:all;ms-user-select:all;">
+                      ${safeDigits}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+              <p class="otp-muted" style="margin:12px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.45;color:#64748b;">
+                Click or tap the code once to select it, then copy (Ctrl+C / ⌘C).
               </p>
             </td>
           </tr>
