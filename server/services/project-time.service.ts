@@ -40,6 +40,7 @@ export async function listForProject(ctx: OrgContext, projectId: string) {
       taskId: true,
       task: { select: { id: true, name: true } },
       user: { select: { id: true, name: true } },
+      employee: { select: { id: true, name: true } },
     },
   })
 
@@ -50,6 +51,10 @@ export async function listForProject(ctx: OrgContext, projectId: string) {
     billableRate: row.billableRate?.toString() ?? null,
     costRate: row.costRate?.toString() ?? null,
     invoicedAt: row.invoicedAt?.toISOString() ?? null,
+    user: row.user ?? {
+      id: row.employee?.id ?? 'staff',
+      name: row.employee?.name ?? 'Staff',
+    },
   }))
 }
 
@@ -101,11 +106,13 @@ export async function listBillableForCustomer(ctx: OrgContext, customerId: strin
       workDate: true,
       project: { select: { id: true, number: true, name: true } },
       user: { select: { name: true } },
+      employee: { select: { name: true } },
     },
   })
   return rows.map((row) => {
     const hours = new Decimal(row.hours.toString())
     const rate = new Decimal(row.billableRate?.toString() ?? 0)
+    const workerName = row.user?.name ?? row.employee?.name ?? 'Staff'
     return {
       id: row.id,
       projectId: row.project.id,
@@ -116,7 +123,7 @@ export async function listBillableForCustomer(ctx: OrgContext, customerId: strin
       amount: hours.times(rate).toFixed(4),
       description:
         row.description?.trim() ||
-        `Time · ${row.user.name} · ${toCalendarDate(row.workDate)}`,
+        `Time · ${workerName} · ${toCalendarDate(row.workDate)}`,
     }
   })
 }

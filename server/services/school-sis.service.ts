@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { canPromoteEnrollment } from '@/lib/erp/academic-year-lifecycle'
-import { addDays, toCalendarDate, toDate, today } from '@/lib/date'
+import { addDays, toCalendarDate, toDate as toJsDate, today } from '@/lib/date'
 import { Decimal } from '@/lib/money'
 import { sendTextNotification } from '@/lib/notify-gateway'
 import {
@@ -208,7 +208,7 @@ export async function saveAttendanceDay(
   })
   if (!schoolClass) throw notFound('Class')
 
-  const onDate = toDate(input.onDate.slice(0, 10))
+  const onDate = toJsDate(input.onDate.slice(0, 10))
   const members = await db.schoolClassMember.findMany({
     where: { classId: input.classId, orgId: ctx.orgId },
     select: { enrollmentId: true },
@@ -250,7 +250,7 @@ export async function listAttendanceForClass(
   onDate: string,
 ) {
   const schoolClass = await getClass(ctx, classId)
-  const date = toDate(onDate.slice(0, 10))
+  const date = toJsDate(onDate.slice(0, 10))
   const existing = await db.studentAttendanceDay.findMany({
     where: { orgId: ctx.orgId, classId, onDate: date },
   })
@@ -290,7 +290,7 @@ export async function attendanceRegister(
     where: {
       orgId: ctx.orgId,
       classId,
-      onDate: { gte: toDate(from), lte: toDate(to) },
+      onDate: { gte: toJsDate(from), lte: toJsDate(to) },
     },
   })
   const byKey = new Map(rows.map((row) => [`${row.enrollmentId}:${toCalendarDate(row.onDate)}`, row]))
@@ -330,7 +330,7 @@ export async function notifyAbsences(ctx: OrgContext, classId: string, onDate: s
   if (!schoolClass) throw notFound('Class')
   const date = onDate.slice(0, 10)
   const absences = await db.studentAttendanceDay.findMany({
-    where: { orgId: ctx.orgId, classId, onDate: toDate(date), mark: 'ABSENT' },
+    where: { orgId: ctx.orgId, classId, onDate: toJsDate(date), mark: 'ABSENT' },
     include: {
       enrollment: {
         select: {
@@ -396,7 +396,7 @@ export async function upsertGradeItem(
     subjectId: input.subjectId || null,
     maxScore: new Decimal(maxScore),
     weightPercent: new Decimal(weightPercent),
-    dueOn: input.dueOn ? toDate(input.dueOn.slice(0, 10)) : null,
+    dueOn: input.dueOn ? toJsDate(input.dueOn.slice(0, 10)) : null,
   }
 
   if (input.id) {

@@ -747,10 +747,15 @@ export async function allocateHostelBed(
   })
   if (!enrollment) throw notFound('Enrollment')
 
-  const existing = await db.hostelAllocation.findUnique({
-    where: { enrollmentId: input.enrollmentId },
+  const existing = await db.hostelAllocation.findFirst({
+    where: { orgId: ctx.orgId, enrollmentId: input.enrollmentId, checkedOutAt: null },
   })
-  if (existing && !existing.checkedOutAt) throw conflict('Student already has a hostel bed.')
+  if (existing) throw conflict('Student already has a hostel bed.')
+
+  const prior = await db.hostelAllocation.findFirst({
+    where: { orgId: ctx.orgId, enrollmentId: input.enrollmentId },
+    orderBy: { createdAt: 'desc' },
+  })
 
   const data = {
     roomId: input.roomId,
@@ -759,8 +764,8 @@ export async function allocateHostelBed(
     checkedOutAt: null as Date | null,
   }
 
-  if (existing) {
-    return db.hostelAllocation.update({ where: { id: existing.id }, data })
+  if (prior) {
+    return db.hostelAllocation.update({ where: { id: prior.id }, data })
   }
 
   return db.hostelAllocation.create({

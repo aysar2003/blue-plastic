@@ -72,17 +72,25 @@ export async function utilizationReport(
     where: { orgId: ctx.orgId },
     select: {
       userId: true,
+      employeeId: true,
       hours: true,
       billable: true,
       user: { select: { name: true, email: true } },
+      employee: { select: { name: true } },
     },
     take: 5000,
   })
 
   const byUser = new Map<string, { name: string; billable: number; total: number }>()
   for (const entry of entries) {
-    const prior = byUser.get(entry.userId) ?? {
-      name: entry.user.name || entry.user.email || entry.userId,
+    const workerId = entry.userId ?? entry.employeeId
+    if (!workerId) continue
+    const prior = byUser.get(workerId) ?? {
+      name:
+        entry.user?.name ||
+        entry.user?.email ||
+        entry.employee?.name ||
+        workerId,
       billable: 0,
       total: 0,
     }
@@ -90,7 +98,7 @@ export async function utilizationReport(
     if (!Number.isFinite(hours) || hours <= 0) continue
     prior.total += hours
     if (entry.billable) prior.billable += hours
-    byUser.set(entry.userId, prior)
+    byUser.set(workerId, prior)
   }
 
   return [...byUser.entries()].map(([userId, row]) => {
