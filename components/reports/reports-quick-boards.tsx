@@ -60,7 +60,7 @@ export function ReportsQuickBoards({
           >
             <span
               aria-hidden
-              className="absolute inset-x-0 top-0 h-1"
+              className="app-chroma-bar absolute inset-x-0 top-0 h-1"
               style={{ background: board.accent }}
             />
             <p className="text-sm font-semibold text-foreground group-hover:text-primary">

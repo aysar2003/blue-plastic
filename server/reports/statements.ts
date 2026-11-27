@@ -475,20 +475,42 @@ const SECTION_FOR: Record<AccountSubtype, CashFlowSection> = {
   UNDEPOSITED_FUNDS: 'operating',
 }
 
-export type CashFlowLine = { accountId: string; label: string; amount: Decimal }
+export type CashFlowLine = {
+  accountId: string
+  label: string
+  amount: Decimal
+  comparison?: Decimal
+}
+
+export type CashFlowSectionGroup = {
+  lines: CashFlowLine[]
+  total: Decimal
+  comparisonTotal?: Decimal
+}
+
+export type CashFlowComparison = {
+  netIncome: Decimal
+  operatingTotal: Decimal
+  investingTotal: Decimal
+  financingTotal: Decimal
+  netChange: Decimal
+  openingCash: Decimal
+  closingCash: Decimal
+}
 
 export type CashFlow = {
   range: ReportRange
   netIncome: Decimal
-  operating: { lines: CashFlowLine[]; total: Decimal }
-  investing: { lines: CashFlowLine[]; total: Decimal }
-  financing: { lines: CashFlowLine[]; total: Decimal }
+  operating: CashFlowSectionGroup
+  investing: CashFlowSectionGroup
+  financing: CashFlowSectionGroup
   netChange: Decimal
   openingCash: Decimal
   closingCash: Decimal
   /** The statement's own check: does it explain the actual movement in cash? */
   reconciles: boolean
   difference: Decimal
+  comparison?: CashFlowComparison
 }
 
 /**
@@ -511,6 +533,61 @@ export type CashFlow = {
  * indirect method.
  */
 export async function cashFlow(
+  orgId: string,
+  range: ReportRange,
+  options: {
+    client?: Tx
+    filters?: ReportEntityFilters
+    /** Prior period for a QBO-style comparison column. */
+    comparison?: ReportRange
+  } = {},
+): Promise<CashFlow> {
+  const primary = await buildCashFlow(orgId, range, options)
+  if (!options.comparison) return primary
+
+  const compared = await buildCashFlow(orgId, options.comparison, {
+    client: options.client,
+    filters: options.filters,
+  })
+
+  return {
+    ...primary,
+    operating: {
+      lines: withLineComparison(primary.operating.lines, compared.operating.lines),
+      total: primary.operating.total,
+      comparisonTotal: compared.operating.total,
+    },
+    investing: {
+      lines: withLineComparison(primary.investing.lines, compared.investing.lines),
+      total: primary.investing.total,
+      comparisonTotal: compared.investing.total,
+    },
+    financing: {
+      lines: withLineComparison(primary.financing.lines, compared.financing.lines),
+      total: primary.financing.total,
+      comparisonTotal: compared.financing.total,
+    },
+    comparison: {
+      netIncome: compared.netIncome,
+      operatingTotal: compared.operating.total,
+      investingTotal: compared.investing.total,
+      financingTotal: compared.financing.total,
+      netChange: compared.netChange,
+      openingCash: compared.openingCash,
+      closingCash: compared.closingCash,
+    },
+  }
+}
+
+function withLineComparison(current: CashFlowLine[], previous: CashFlowLine[]): CashFlowLine[] {
+  const byId = new Map(previous.map((line) => [line.accountId, line.amount]))
+  return current.map((line) => ({
+    ...line,
+    comparison: byId.get(line.accountId) ?? ZERO,
+  }))
+}
+
+async function buildCashFlow(
   orgId: string,
   range: ReportRange,
   options: { client?: Tx; filters?: ReportEntityFilters } = {},

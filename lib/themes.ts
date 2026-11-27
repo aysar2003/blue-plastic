@@ -18,6 +18,7 @@ export type ThemeId =
   | 'ai'
   | 'dark'
   | 'ink'
+  | 'luxury'
 
 export type ThemeOption = {
   id: ThemeId
@@ -26,7 +27,9 @@ export type ThemeOption = {
   /** Preview chips, in order: ground, accent, ink. */
   swatches: [string, string, string]
   /** Optional group label for the appearance picker. */
-  group?: 'som' | 'odoo' | 'color' | 'night'
+  group?: 'som' | 'odoo' | 'color' | 'night' | 'vip'
+  /** Highlight as a premium / VIP skin in the picker. */
+  vip?: boolean
 }
 
 export const THEMES: ThemeOption[] = [
@@ -69,9 +72,10 @@ export const THEMES: ThemeOption[] = [
   {
     id: 'ai',
     label: 'AI',
-    blurb: 'Cool machine desk: mist #e8eef6, electric blue #1d4ed8 CTAs, slate ink',
-    swatches: ['#e8eef6', '#1d4ed8', '#0f172a'],
-    group: 'color',
+    blurb: 'Neural midnight #060910, electric azure #3b82f6, cyan aurora glow — signature machine skin',
+    swatches: ['#060910', '#3b82f6', '#22d3ee'],
+    group: 'vip',
+    vip: true,
   },
   { id: 'dark', label: 'Dark', blurb: 'Night ground, light text', swatches: ['#12202b', '#7dd3fc', '#e8f1f8'], group: 'night' },
   {
@@ -80,6 +84,14 @@ export const THEMES: ThemeOption[] = [
     blurb: 'Black ground, white type, gray panels',
     swatches: ['#000000', '#ededed', '#2e2e2e'],
     group: 'night',
+  },
+  {
+    id: 'luxury',
+    label: 'Luxury',
+    blurb: 'VIP champagne gold #c4a574 on deep ink #07060a — exclusive skin matching the public site',
+    swatches: ['#07060a', '#c4a574', '#f3eee6'],
+    group: 'vip',
+    vip: true,
   },
 ]
 
@@ -99,7 +111,16 @@ export const THEME_GROUPS: { id: ThemeOption['group']; title: string; hint: stri
   {
     id: 'color',
     title: 'Colour shells',
-    hint: 'Day-only workspaces with a different accent (including AI blue). For night work use SOM Dark, Odoo Dark, Dark, or Ink.',
+    hint: 'Day-only workspaces with a different accent. For night work use SOM Dark, Odoo Dark, Dark, or Ink. AI and Luxury live in VIP.',
   },
-  { id: 'night', title: 'Night', hint: 'Low-light desks.' },
+  {
+    id: 'night',
+    title: 'Night',
+    hint: 'Low-light desks for focused work after hours.',
+  },
+  {
+    id: 'vip',
+    title: 'VIP',
+    hint: 'Exclusive skins — Luxury champagne gold, or AI neural midnight with electric azure aurora.',
+  },
 ]

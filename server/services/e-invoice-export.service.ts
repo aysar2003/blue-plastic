@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { toCalendarDate } from '@/lib/date'
-import { buildEInvoiceStub } from '@/lib/localization/packs'
+import { buildEInvoicePayload } from '@/lib/localization/e-invoice-adapter'
 import { assertPermission, type OrgContext } from '@/server/auth/context'
 import { db } from '@/server/db'
 import { notFound, precondition } from '@/server/errors'
@@ -46,7 +46,7 @@ export async function buildPostedInvoiceEInvoice(ctx: OrgContext, documentId: st
     },
   })
 
-  const json = buildEInvoiceStub(
+  const payload = buildEInvoicePayload(
     {
       name: org.name,
       taxRegistrationNumber: org.taxRegistrationNumber,
@@ -87,5 +87,10 @@ export async function buildPostedInvoiceEInvoice(ctx: OrgContext, documentId: st
       })),
     },
   )
-  return { json, packId: org.localizationPackId, filename: `e-invoice-${document.number}.json` }
+  return {
+    json: payload.json,
+    packId: org.localizationPackId,
+    mode: payload.mode,
+    filename: `e-invoice-${document.number}.json`,
+  }
 }

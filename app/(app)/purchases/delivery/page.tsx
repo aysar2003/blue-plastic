@@ -111,7 +111,7 @@ export default async function DeliveryHubPage() {
                 className="flex h-full flex-col rounded-xl border bg-card p-4 transition-colors hover:bg-muted/40"
               >
                 <span
-                  className="mb-3 inline-flex size-9 items-center justify-center rounded-lg"
+                  className="app-chroma-chip mb-3 inline-flex size-9 items-center justify-center rounded-lg"
                   style={{ background: app.wash, color: app.accent }}
                 >
                   <PackageIcon className="size-4" />
@@ -185,7 +185,7 @@ function Insight({
     <Link href={href} className="block transition-opacity hover:opacity-90">
       <Card tone={tone} className="h-full">
         <CardContent className="flex items-start gap-3 p-4">
-          <span className="mt-0.5 rounded-md bg-black/5 p-2 dark:bg-white/10">{icon}</span>
+          <span className="app-chroma-chip mt-0.5 rounded-md bg-muted p-2 text-foreground">{icon}</span>
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wider">{label}</p>
             <p className="tabular mt-0.5 text-lg font-semibold">{value}</p>

@@ -26,16 +26,21 @@ export function PlatformConsoleHome({
 
   return (
     <div className="space-y-5">
-      <div className="overflow-hidden rounded-2xl border border-indigo-500/15 bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 text-white shadow-sm">
-        <div className="flex flex-col gap-6 px-5 py-6 sm:flex-row sm:items-end sm:justify-between sm:px-7 sm:py-7">
+      <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-[#0a090c] text-[#f3eee6] shadow-sm">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_12%_-10%,rgb(196_165_116/0.28),transparent_55%),radial-gradient(70%_50%_at_90%_110%,rgb(95_184_168/0.12),transparent_50%)]"
+        />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#e8d5a8]/70 to-transparent" />
+        <div className="relative flex flex-col gap-6 px-5 py-6 sm:flex-row sm:items-end sm:justify-between sm:px-7 sm:py-7">
           <div className="min-w-0">
-            <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-indigo-200/90">
+            <p className="text-[0.65rem] font-bold uppercase tracking-[0.22em] text-[#c4a574]">
               Operations
             </p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-[1.75rem]">
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[#f7f2ea] sm:text-[1.75rem]">
               Platform console
             </h1>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-indigo-100/85">
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#c4b8a8]">
               Create and open companies, review signup and rent requests, and control access for
               this installation — separate from day-to-day company books.
             </p>
@@ -45,7 +50,7 @@ export function PlatformConsoleHome({
               href="/databases?create=1"
               className={cn(
                 buttonVariants({ size: 'sm' }),
-                'border-0 bg-white text-indigo-950 hover:bg-indigo-50',
+                'border-0 bg-[#c4a574] text-[#0a090c] hover:bg-[#e8d5a8]',
               )}
             >
               <PlusIcon />
@@ -55,7 +60,7 @@ export function PlatformConsoleHome({
               href="/databases?import=1"
               className={cn(
                 buttonVariants({ size: 'sm', variant: 'outline' }),
-                'border-white/25 bg-white/5 text-white hover:bg-white/10 hover:text-white',
+                'border-[#c4a574]/30 bg-[#c4a574]/10 text-[#f3eee6] hover:bg-[#c4a574]/18 hover:text-[#f7f2ea]',
               )}
             >
               <UploadIcon />
@@ -65,7 +70,7 @@ export function PlatformConsoleHome({
               href="/databases/apps"
               className={cn(
                 buttonVariants({ size: 'sm', variant: 'outline' }),
-                'border-white/25 bg-white/5 text-white hover:bg-white/10 hover:text-white',
+                'border-[#c4a574]/30 bg-[#c4a574]/10 text-[#f3eee6] hover:bg-[#c4a574]/18 hover:text-[#f7f2ea]',
               )}
             >
               <LayoutGridIcon />
@@ -75,7 +80,7 @@ export function PlatformConsoleHome({
               href="/databases/billing"
               className={cn(
                 buttonVariants({ size: 'sm', variant: 'outline' }),
-                'border-white/25 bg-white/5 text-white hover:bg-white/10 hover:text-white',
+                'border-[#c4a574]/30 bg-[#c4a574]/10 text-[#f3eee6] hover:bg-[#c4a574]/18 hover:text-[#f7f2ea]',
               )}
             >
               <CreditCardIcon />
@@ -146,13 +151,15 @@ function StatCard({
       className={cn(
         'rounded-xl border bg-card px-4 py-3 shadow-sm transition-colors hover:bg-muted/40',
         highlight
-          ? 'border-indigo-500/35 ring-1 ring-indigo-500/15'
+          ? 'border-primary/40 ring-1 ring-primary/20'
           : 'border-border/80',
       )}
     >
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <Icon className="size-3.5 text-muted-foreground" aria-hidden />
+        <span className="grid size-7 place-items-center rounded-md bg-primary/10 text-primary">
+          <Icon className="size-3.5" aria-hidden />
+        </span>
       </div>
       <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
         {value}

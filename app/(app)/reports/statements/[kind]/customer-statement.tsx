@@ -429,8 +429,8 @@ function paidLabel(entry: PaperEntry, money: (value: Decimal.Value) => string): 
  * wash under light ink (pastel hover:bg-*-100 erased row text on SOM/dark).
  */
 const KIND_TINT: Record<string, string> = {
-  INVOICE: 'bg-sky-50 hover:bg-[var(--band)] dark:bg-sky-950/45',
-  BILL: 'bg-indigo-50 hover:bg-[var(--band)] dark:bg-indigo-950/45',
+  INVOICE: 'bg-primary/10 hover:bg-[var(--band)]',
+  BILL: 'bg-secondary hover:bg-[var(--band)]',
   PAYMENT: 'bg-emerald-50 hover:bg-[var(--band)] dark:bg-emerald-950/40',
   CREDIT_MEMO: 'bg-amber-50 hover:bg-[var(--band)] dark:bg-amber-950/40',
   VENDOR_CREDIT: 'bg-orange-50 hover:bg-[var(--band)] dark:bg-orange-950/40',

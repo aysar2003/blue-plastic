@@ -185,6 +185,7 @@ export function TimesheetPanel({
                       ? 'Invoiced'
                       : `Billable${entry.billableRate ? ` @ ${entry.billableRate}` : ''}`
                     : 'Non-billable'}
+                  {entry.costRate ? ` · Cost @ ${entry.costRate}` : ''}
                 </p>
               </div>
               {canEdit && !entry.invoicedAt ? (

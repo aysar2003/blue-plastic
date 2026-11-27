@@ -11,6 +11,7 @@ import {
   accentWashRgb,
   merchantAccent,
   merchantPdfInk,
+  merchantPdfAccentForLook,
   merchantPdfLetterhead,
   merchantPdfMuted,
   merchantPdfTableHead,
@@ -38,6 +39,8 @@ export type SalesDocumentPdfInput = {
   number: string
   date: Date | string
   ink?: PrintInk
+  /** VIP champagne letterhead when desk System look is Luxury. */
+  look?: import('@/lib/print-look').PrintLook
   createdAt?: Date | null
   timeZone?: string
   dueDate?: Date | string | null
@@ -121,10 +124,14 @@ export function renderSalesDocumentPdf(input: SalesDocumentPdfInput): Uint8Array
 function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   const template = input.template ?? DEFAULT_DOCUMENT_TEMPLATE
   if (template.paperStyle === 'trade') return tradeDocumentPdfRows(input)
-  const accent = merchantAccent(template, input.paper ?? 'customer')
+  const look = input.look ?? 'default'
+  const accent = merchantPdfAccentForLook(
+    look,
+    merchantAccent(template, input.paper ?? 'customer'),
+  )
   const wash = accentWashRgb(accent)
-  const ink = merchantPdfInk()
-  const muted = merchantPdfMuted()
+  const ink = merchantPdfInk(look)
+  const muted = merchantPdfMuted(look)
   const money = (value: string) => formatMoney(value, input.currency)
   const rows: PdfRow[] = []
   const foot: PdfRow[] = []
@@ -325,6 +332,7 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
         { text: 'Amount', x: COL.amount, align: 'right' },
       ],
       accent,
+      look,
     ),
   )
 
@@ -363,31 +371,36 @@ function salesDocumentPdfRows(input: SalesDocumentPdfInput): PdfRow[] {
   }
 
   const totals: typeof foot = []
-  totals.push(merchantPdfTotalBand('Subtotal', money(input.subtotal), accent))
+  totals.push(merchantPdfTotalBand('Subtotal', money(input.subtotal), accent, look))
   if (Number(input.discountAmount) > 0) {
-    totals.push(merchantPdfTotalBand('Discount', money(input.discountAmount), accent))
+    totals.push(merchantPdfTotalBand('Discount', money(input.discountAmount), accent, look))
   }
   if (Number(input.taxTotal) > 0) {
-    totals.push(merchantPdfTotalBand('Tax', money(input.taxTotal), accent))
+    totals.push(merchantPdfTotalBand('Tax', money(input.taxTotal), accent, look))
   }
   if (hasPreviousQuotations(input.previousQuotationsTotal)) {
     const prior = input.previousQuotationsTotal as string
-    totals.push(merchantPdfTotalBand('This quotation', money(input.total), accent))
-    totals.push(merchantPdfTotalBand('Previous quotations', money(prior), accent))
+    totals.push(merchantPdfTotalBand('This quotation', money(input.total), accent, look))
+    totals.push(merchantPdfTotalBand('Previous quotations', money(prior), accent, look))
     totals.push(
-      merchantPdfTotalBand('Grand total', money(ZERO.plus(prior).plus(input.total).toFixed(4)), accent),
+      merchantPdfTotalBand(
+        'Grand total',
+        money(ZERO.plus(prior).plus(input.total).toFixed(4)),
+        accent,
+        look,
+      ),
     )
   } else {
-    totals.push(merchantPdfTotalBand('Grand total', money(input.total), accent))
+    totals.push(merchantPdfTotalBand('Grand total', money(input.total), accent, look))
   }
   if (!input.hideAccountBalance) {
     if (input.amountApplied && Number(input.amountApplied) > 0) {
       totals.push(
-        merchantPdfTotalBand('Amount paid', `−${money(input.amountApplied)}`, accent),
+        merchantPdfTotalBand('Amount paid', `−${money(input.amountApplied)}`, accent, look),
       )
     }
     if (input.balance != null && input.balance !== '') {
-      totals.push(merchantPdfTotalBand('Balance due', money(input.balance), accent))
+      totals.push(merchantPdfTotalBand('Balance due', money(input.balance), accent, look))
     }
   }
   // Keep Subtotal → Grand total / Balance on one page (no orphaned last band).

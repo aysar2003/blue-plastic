@@ -129,7 +129,10 @@ function ReportIconLink({
       className={cn('flex items-center gap-2.5 px-3 hover:bg-muted', dense ? 'py-1' : 'py-1.5')}
     >
       <span
-        className="grid size-6 shrink-0 place-items-center rounded-md"
+        className={cn(
+          'grid size-6 shrink-0 place-items-center rounded-md',
+          item.wash && item.accent && 'app-chroma-chip',
+        )}
         style={
           item.wash && item.accent
             ? { backgroundColor: item.wash, color: item.accent }

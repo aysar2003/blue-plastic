@@ -210,7 +210,9 @@ describe('app icon bar', () => {
     expect(document.querySelector('#app-side-rail [data-side-expanded]')).toBeNull()
 
     await act(async () => {
+      // happy-dom + React: pointerover drives enter; pointerenter alone is unreliable.
       rail!.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+      rail!.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
     })
     expect(rail?.getAttribute('data-mode')).toBe('overlay')
     expect(document.querySelector('#app-side-rail [data-side-expanded]')).not.toBeNull()
@@ -219,10 +221,13 @@ describe('app icon bar', () => {
       rail!.dispatchEvent(
         new PointerEvent('pointerout', { bubbles: true, relatedTarget: document.body }),
       )
+      rail!.dispatchEvent(
+        new PointerEvent('pointerleave', { bubbles: true, relatedTarget: document.body }),
+      )
     })
-    // Side rail keeps overlay for 1s after leave so a slip onto a panel does not collapse it.
+    // Side rail keeps overlay briefly after leave so a slip onto a panel does not collapse it.
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1100))
+      await new Promise((resolve) => setTimeout(resolve, 350))
     })
     expect(rail?.getAttribute('data-mode')).toBe('icons')
 

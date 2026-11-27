@@ -10,6 +10,11 @@ type Anchor = {
   top: number
   left: number
   zIndex: number
+  /** Cap width so a right-side flyout never slides back over the rail. */
+  maxWidth?: number
+  /** Explicit height so inner lists can flex-scroll without clipping off-screen. */
+  height?: number
+  maxHeight?: number
 }
 
 /**
@@ -44,6 +49,7 @@ export function PortaledFloatingPanel({
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null)
   const leaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const measuringRef = React.useRef(false)
   const [anchor, setAnchor] = React.useState<Anchor>()
 
   const clearLeaveTimer = React.useCallback(() => {
@@ -81,41 +87,90 @@ export function PortaledFloatingPanel({
     [isInsideHoverZone, scheduleLeaveClose],
   )
 
+  const measureContentHeight = React.useCallback(() => {
+    const panel = panelRef.current
+    if (!panel) return 240
+    measuringRef.current = true
+    const prevH = panel.style.height
+    const prevMax = panel.style.maxHeight
+    panel.style.height = 'auto'
+    panel.style.maxHeight = 'none'
+    const h = Math.max(panel.scrollHeight, panel.offsetHeight, 120)
+    panel.style.height = prevH
+    panel.style.maxHeight = prevMax
+    // Let layout settle before ResizeObserver may fire again.
+    queueMicrotask(() => {
+      measuringRef.current = false
+    })
+    return h
+  }, [])
+
   const place = React.useCallback(() => {
+    if (measuringRef.current) return
     const rect = anchorRef.current?.getBoundingClientRect()
     if (!rect) return
     const margin = 8
-    const panelWidth = panelRef.current?.offsetWidth || Math.max(rect.width, 176)
-    const rawHeight = panelRef.current?.scrollHeight || panelRef.current?.offsetHeight || 240
+    const panel = panelRef.current
+    const panelWidth = panel?.offsetWidth || Math.max(rect.width, 176)
+    const rawHeight = measureContentHeight()
     const availableH = Math.max(120, window.innerHeight - margin * 2)
-    const panelHeight = Math.min(rawHeight, availableH)
     let left: number
     let top: number
+    let maxWidth: number | undefined
+    let maxHeight = availableH
+
     if (placement === 'right') {
-      left = Math.min(Math.max(margin, rect.right + 8), window.innerWidth - panelWidth - margin)
-      top = Math.min(Math.max(margin, rect.top), window.innerHeight - panelHeight - margin)
+      // Sit clear of the whole side rail so Settings/Help never cover labels.
+      const rail = document.getElementById('app-side-rail')
+      const railRight = rail?.getBoundingClientRect().right ?? rect.right
+      const openAt = Math.max(rect.right, railRight) + 8
+      left = Math.max(margin, openAt)
+      maxWidth = Math.max(160, window.innerWidth - left - margin)
+
+      // Fit entirely in the viewport — shift up when the trigger is low so the
+      // bottom of a long Settings list is never chopped off-screen.
+      const desiredH = Math.min(rawHeight, availableH)
+      top = rect.top
+      if (top + desiredH > window.innerHeight - margin) {
+        top = window.innerHeight - margin - desiredH
+      }
+      top = Math.max(margin, top)
+      maxHeight = Math.max(120, window.innerHeight - top - margin)
     } else {
       left =
         align === 'end'
           ? Math.min(Math.max(margin, rect.right - panelWidth), window.innerWidth - panelWidth - margin)
           : Math.min(Math.max(margin, rect.left), window.innerWidth - panelWidth - margin)
       const spaceBelow = window.innerHeight - rect.bottom - margin
+      const panelHeight = Math.min(rawHeight, availableH)
       top =
         rawHeight > spaceBelow && rect.top - margin > spaceBelow
           ? Math.max(margin, rect.top - panelHeight - 4)
           : rect.bottom + 4
+      maxHeight = Math.max(120, window.innerHeight - top - margin)
     }
+
+    const height = rawHeight > maxHeight ? maxHeight : undefined
     const next = {
       top,
       left,
       zIndex: floatingPanelZIndex(),
+      maxWidth,
+      height,
+      maxHeight,
     }
     setAnchor((prev) =>
-      prev && prev.top === next.top && prev.left === next.left && prev.zIndex === next.zIndex
+      prev &&
+      prev.top === next.top &&
+      prev.left === next.left &&
+      prev.zIndex === next.zIndex &&
+      prev.maxWidth === next.maxWidth &&
+      prev.height === next.height &&
+      prev.maxHeight === next.maxHeight
         ? prev
         : next,
     )
-  }, [align, anchorRef, placement])
+  }, [align, anchorRef, measureContentHeight, placement])
 
   React.useEffect(() => {
     if (!open) {
@@ -142,21 +197,28 @@ export function PortaledFloatingPanel({
 
     place()
     let observer: ResizeObserver | null = null
+    const rail = document.getElementById('app-side-rail')
     const watch = () => {
       place()
       if (typeof ResizeObserver === 'undefined') return
       observer?.disconnect()
-      observer = new ResizeObserver(() => place())
+      observer = new ResizeObserver(() => {
+        if (measuringRef.current) return
+        place()
+      })
       if (anchorRef.current) observer.observe(anchorRef.current)
       if (panelRef.current) observer.observe(panelRef.current)
+      if (rail) observer.observe(rail)
     }
     const frame = requestAnimationFrame(watch)
+    const followUp = window.setTimeout(place, 220)
     document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKey)
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', place)
     return () => {
       cancelAnimationFrame(frame)
+      window.clearTimeout(followUp)
       observer?.disconnect()
       clearLeaveTimer()
       document.removeEventListener('pointerdown', onPointerDown)
@@ -196,10 +258,12 @@ export function PortaledFloatingPanel({
         top: anchor.top,
         left: anchor.left,
         zIndex: anchor.zIndex,
-        maxHeight: 'calc(100vh - 1rem)',
-        overflowY: 'auto',
+        maxWidth: anchor.maxWidth,
+        height: anchor.height,
+        maxHeight: anchor.maxHeight ?? 'calc(100vh - 1rem)',
+        overflow: 'hidden',
       }}
-      className={cn(className)}
+      className={cn('flex flex-col', className)}
     >
       {children}
     </div>,

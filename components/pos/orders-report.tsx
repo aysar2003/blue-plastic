@@ -8,7 +8,7 @@ import {
   type InteractiveRow,
 } from '@/components/data/interactive-grid'
 import { OrderDateField } from '@/components/pos/order-date-field'
-import { ODOO } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 import { DATE_PRESETS, listHref } from '@/lib/list-filters'
 import type { CalendarDate } from '@/lib/date'
 import { posOrderPresetParams, type PosOrderReportQuery } from '@/lib/pos-order-report'
@@ -89,6 +89,7 @@ export function PosOrdersReport({
   currency,
   timeZone,
 }: PosOrdersReportProps) {
+  const ODOO = usePosBrand()
   const filtered = query.preset !== '' || Boolean(query.registerId || query.paymentMethodId)
   const recentOnly = !query.from && !query.to && !query.registerId && !query.paymentMethodId
 
@@ -199,7 +200,7 @@ export function PosOrdersReport({
           <button
             type="submit"
             className="inline-flex h-10 items-center rounded-md px-4 text-sm font-semibold"
-            style={{ background: ODOO.cta, color: '#fff' }}
+            style={{ background: ODOO.cta, color: ODOO.ctaInk }}
           >
             Apply
           </button>
@@ -247,9 +248,12 @@ export function PosOrdersReport({
                   key={wallet.methodId}
                   className={cn(
                     'on-dark min-w-0 rounded-xl border p-4',
-                    selected ? 'border-[#8fd4d7]' : 'border-white/10',
+                    selected ? undefined : 'border-white/10',
                   )}
-                  style={{ background: ODOO.surface }}
+                  style={{
+                    background: ODOO.surface,
+                    ...(selected ? { borderColor: ODOO.tealSoft } : undefined),
+                  }}
                 >
                   <p className="text-xs font-medium uppercase leading-snug tracking-wide text-white/50">
                     {wallet.name}

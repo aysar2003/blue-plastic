@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest'
 import { skuFromName } from '@/lib/sku'
 import { localizationPackById } from '@/lib/localization/packs'
 import { formatShipToWorkSite } from '@/lib/postal-address'
-import { shouldHealReorderPoint, SETUP_HEALTH_GAP_HEADERS, type SetupHealthGapRow } from '@/lib/setup-heal'
+import {
+  categorizeHealItemName,
+  shouldHealReorderPoint,
+  SETUP_HEALTH_GAP_HEADERS,
+  type SetupHealthGapRow,
+} from '@/lib/setup-heal'
 import { setupHealthGapsCsv } from '@/server/services/setup-health.service'
 
 describe('master-data heal helpers', () => {
@@ -39,6 +44,13 @@ describe('master-data heal helpers', () => {
     expect(csv).toContain('item_missing_sku')
     expect(csv).toContain('Pipe')
     expect(csv).toContain('stock_missing_reorder')
+  })
+
+  it('categorizeHealItemName buckets hardware catalog names', () => {
+    expect(categorizeHealItemName('2WAY ANGLE VALVE 1/2')).toBe('Plumbing / Pipes')
+    expect(categorizeHealItemName('AIR CONDITION UNIT SPLIT 1200')).toBe('HVAC / AC')
+    expect(categorizeHealItemName('A4 PHOTO COPY PAPERS')).toBe('Office Supplies')
+    expect(categorizeHealItemName('RANDOM WIDGET XYZ')).toBe('Other')
   })
 
   it('formats extra ship-to as work site', () => {

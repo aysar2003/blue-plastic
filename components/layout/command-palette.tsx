@@ -13,7 +13,7 @@ import {
   type OrgFeatureFlags,
 } from '@/lib/feature-flags'
 import { addLineFromKeyboard, focusNextInGrid, moveInLineGrid, moveListRow, saveFromKeyboard } from '@/lib/keyboard'
-import { formatKeys, SHORTCUTS, type Shortcut } from '@/lib/shortcuts'
+import { formatKeys, sequenceGroupLabel, SHORTCUTS, type Shortcut } from '@/lib/shortcuts'
 import { cn } from '@/lib/utils'
 import { MODULES } from './nav-items'
 import { startNavigationProgress } from './navigation-progress'
@@ -121,7 +121,20 @@ export function CommandPalette({
       keys: shortcut.keys,
     }))
 
-    return [...creates, ...navigation]
+    const opens: Command[] = SHORTCUTS.filter(
+      (shortcut) =>
+        shortcut.group === 'Open' &&
+        permitted(shortcut.permission) &&
+        pathAllowed(shortcut.href),
+    ).map((shortcut) => ({
+      id: `open:${shortcut.href}`,
+      label: shortcut.label,
+      group: 'Open',
+      href: shortcut.href,
+      keys: shortcut.keys,
+    }))
+
+    return [...creates, ...opens, ...navigation]
   }, [allowed, pathAllowed])
 
   const needle = query.trim()
@@ -434,10 +447,10 @@ export function CommandPalette({
         <div
           role="status"
           style={{ zIndex: floatingPanelZIndex() }}
-          className="fixed inset-x-3 bottom-4 mx-auto flex max-w-3xl flex-wrap items-center gap-1.5 rounded-lg border border-primary/20 bg-white/95 p-2 shadow-lg backdrop-blur-md print:hidden"
+          className="fixed inset-x-3 bottom-4 mx-auto flex max-w-3xl flex-wrap items-center gap-1.5 rounded-lg border border-primary/20 bg-card/95 p-2 text-foreground shadow-lg backdrop-blur-md print:hidden"
         >
           <span className="px-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
-            {pending === 'c' ? 'Create' : 'Go to'}
+            {sequenceGroupLabel(pending)}
           </span>
           {waiting.map((shortcut) => (
             <button
@@ -448,7 +461,7 @@ export function CommandPalette({
                 setPending(null)
                 go(shortcut.href)
               }}
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-1 text-xs text-slate-700 hover:bg-primary/20"
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20"
             >
               <kbd className="rounded bg-primary px-1 py-0.5 text-[0.625rem] font-semibold text-primary-foreground">
                 {shortcut.keys[1]?.toUpperCase()}

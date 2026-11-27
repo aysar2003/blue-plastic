@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ODOO } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 import { CASHIER_PIN_MAX, CASHIER_PIN_MESSAGE, isCashierPin } from '@/lib/pos-pin'
 
 export function SessionOpenForm({
@@ -30,6 +30,7 @@ export function SessionOpenForm({
   const [pin, setPin] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const ODOO = usePosBrand()
 
   function submit() {
     setError(null)
@@ -99,7 +100,7 @@ export function SessionOpenForm({
           disabled={pending}
           onClick={submit}
           className="mt-4 hover:opacity-95"
-          style={{ background: ODOO.cta, color: '#fff' }}
+          style={{ background: ODOO.cta, color: ODOO.ctaInk }}
         >
           {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
           Open register

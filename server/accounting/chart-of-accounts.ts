@@ -140,6 +140,14 @@ export const DEFAULT_CHART: SeedAccount[] = [
     systemKey: 'RETENTION_PAYABLE',
     description: 'Vendor retention held on subcontractor bills until release.',
   },
+  {
+    code: '2340',
+    name: 'Withholding Tax Payable',
+    type: 'LIABILITY',
+    subtype: 'OTHER_CURRENT_LIABILITY',
+    systemKey: 'WITHHOLDING_TAX_PAYABLE',
+    description: 'Statutory WHT withheld on vendor bills — remitted to the tax authority.',
+  },
   { code: '2500', name: 'Long-Term Loans', type: 'LIABILITY', subtype: 'LONG_TERM_LIABILITY' },
   {
     code: '1350',

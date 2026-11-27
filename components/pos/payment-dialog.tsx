@@ -2,7 +2,7 @@
 
 import { Loader2Icon } from 'lucide-react'
 
-import { ODOO } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 import { formatMoney } from '@/lib/money'
 
 export type PosPaymentMethodField = { id: string; name: string; isCash: boolean }
@@ -35,6 +35,7 @@ export function PosPaymentForm(props: {
   onCancel: () => void
   onValidate: () => void
 }) {
+  const ODOO = usePosBrand()
   const muted = props.dark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.55)'
   const text = props.dark ? '#f3f3f3' : '#1f1f23'
   const border = props.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
@@ -129,7 +130,7 @@ export function PosPaymentForm(props: {
           onClick={props.onValidate}
           disabled={props.pending || !props.canValidate || Boolean(props.error)}
           className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-40"
-          style={{ background: ODOO.cta, color: '#fff' }}
+          style={{ background: ODOO.cta, color: ODOO.ctaInk }}
         >
           {props.pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
           Validate

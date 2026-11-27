@@ -2,6 +2,7 @@
  * Pharmacy dispense rules — pure helpers (no I/O).
  */
 
+import { CONTROLLED_MOVEMENT_HEADERS } from '@/lib/erp/export-headers'
 import { Decimal } from '@/lib/money'
 
 export type PharmacyItemFlags = {
@@ -85,15 +86,7 @@ export type ControlledMovementExportRow = {
 }
 
 export function controlledMovementsToCsv(rows: ControlledMovementExportRow[]): string {
-  const header = [
-    'date',
-    'itemName',
-    'sku',
-    'lotNumber',
-    'type',
-    'quantity',
-    'journalNumber',
-  ]
+  const header = [...CONTROLLED_MOVEMENT_HEADERS]
   const escape = (value: string | null) => {
     const raw = value ?? ''
     if (/[",\n]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`

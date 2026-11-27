@@ -9,7 +9,7 @@ import { ReportEntityFilters } from '@/components/reports/report-entity-filters'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate } from '@/lib/date'
-import { formatMoney, type Money } from '@/lib/money'
+import { formatMoney, type Money, ZERO } from '@/lib/money'
 import { REPORT_DRILL_LINK } from '@/lib/report-drill'
 import { requireOrgContext } from '@/server/auth/context'
 import { FigureChart, INCOME_COLOR, NET_COLOR } from '@/components/reports/figure-chart'
@@ -17,7 +17,12 @@ import type { ReportFilterKind } from '@/server/reports/catalogue'
 import { cashFlow, type CashFlowLine } from '@/server/reports/statements'
 import { loadFilterOptions } from '../filter-options'
 import { ReportControls } from '../report-controls'
-import { readEntityFilters, readSettings, type SearchParams } from '../params'
+import {
+  COMPARISON_LABELS,
+  readEntityFilters,
+  readSettings,
+  type SearchParams,
+} from '../params'
 
 const CF_FILTERS: ReportFilterKind[] = ['customer', 'vendor', 'item', 'account', 'store']
 
@@ -32,14 +37,21 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
   const filtered = Boolean(
     filters.customerId || filters.vendorId || filters.itemId || filters.accountId || filters.storeId,
   )
+  const compared = settings.comparison !== 'none' && Boolean(settings.comparisonRange)
+  const comparisonLabel = compared ? COMPARISON_LABELS[settings.comparison] : undefined
+  const columns = compared ? 3 : 2
 
   const [report, filterOptions] = await Promise.all([
-    cashFlow(ctx.orgId, settings.range, { filters }),
+    cashFlow(ctx.orgId, settings.range, {
+      filters,
+      comparison: settings.comparisonRange,
+    }),
     loadFilterOptions(ctx.orgId, CF_FILTERS),
   ])
   const detail = (accountId: string) =>
     `/reports/transaction-detail?account=${accountId}&period=custom&from=${settings.range.from}&to=${settings.range.to}&back=/reports/cash-flow`
   const profitAndLoss = `/reports/profit-loss?period=custom&from=${settings.range.from}&to=${settings.range.to}`
+  const previous = report.comparison
 
   return (
     <>
@@ -63,7 +75,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
         asOf={settings.asOf}
         basis={settings.basis}
         comparison={settings.comparison}
-        controls={{ mode: 'range', exportAs: 'cash-flow' }}
+        controls={{ mode: 'range', comparison: true, exportAs: 'cash-flow' }}
       />
 
       <ReportEntityFilters kinds={CF_FILTERS} values={filters} options={filterOptions} />
@@ -91,39 +103,97 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
             <TableHeader>
               <TableRow>
                 <TableHead>Movement</TableHead>
-                <TableHead className="numeric w-44">Amount</TableHead>
+                <TableHead className="numeric w-36">Amount</TableHead>
+                {comparisonLabel ? (
+                  <TableHead className="numeric w-36">{comparisonLabel}</TableHead>
+                ) : null}
+                {comparisonLabel ? <TableHead className="numeric w-36">Change</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
-              <Section label="Operating activities" lines={report.operating.lines} currency={currency} detail={detail}>
-                <Row label="Net income" amount={report.netIncome} currency={currency} indent href={profitAndLoss} />
+              <Section
+                label="Operating activities"
+                lines={report.operating.lines}
+                currency={currency}
+                detail={detail}
+                columns={columns}
+                compared={compared}
+              >
+                <Row
+                  label="Net income"
+                  amount={report.netIncome}
+                  comparison={previous?.netIncome}
+                  currency={currency}
+                  indent
+                  href={profitAndLoss}
+                  compared={compared}
+                />
               </Section>
-              <Total label="Cash from operating activities" amount={report.operating.total} currency={currency} />
+              <Total
+                label="Cash from operating activities"
+                amount={report.operating.total}
+                comparison={report.operating.comparisonTotal ?? previous?.operatingTotal}
+                currency={currency}
+                compared={compared}
+              />
 
-              <Section label="Investing activities" lines={report.investing.lines} currency={currency} detail={detail} />
-              <Total label="Cash from investing activities" amount={report.investing.total} currency={currency} />
+              <Section
+                label="Investing activities"
+                lines={report.investing.lines}
+                currency={currency}
+                detail={detail}
+                columns={columns}
+                compared={compared}
+              />
+              <Total
+                label="Cash from investing activities"
+                amount={report.investing.total}
+                comparison={report.investing.comparisonTotal ?? previous?.investingTotal}
+                currency={currency}
+                compared={compared}
+              />
 
-              <Section label="Financing activities" lines={report.financing.lines} currency={currency} detail={detail} />
-              <Total label="Cash from financing activities" amount={report.financing.total} currency={currency} />
+              <Section
+                label="Financing activities"
+                lines={report.financing.lines}
+                currency={currency}
+                detail={detail}
+                columns={columns}
+                compared={compared}
+              />
+              <Total
+                label="Cash from financing activities"
+                amount={report.financing.total}
+                comparison={report.financing.comparisonTotal ?? previous?.financingTotal}
+                currency={currency}
+                compared={compared}
+              />
 
-              <TableRow className="bg-muted/60 hover:bg-muted/60">
-                <TableCell className="font-semibold">Net change in cash</TableCell>
-                <TableCell className="numeric tabular font-semibold">
-                  {formatMoney(report.netChange, currency)}
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="pl-6 text-muted-foreground">Cash at the start of the period</TableCell>
-                <TableCell className="numeric tabular text-muted-foreground">
-                  {formatMoney(report.openingCash, currency)}
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="font-semibold">Cash at the end of the period</TableCell>
-                <TableCell className="numeric tabular font-semibold">
-                  {formatMoney(report.closingCash, currency)}
-                </TableCell>
-              </TableRow>
+              <MoneyRow
+                label="Net change in cash"
+                amount={report.netChange}
+                comparison={previous?.netChange}
+                currency={currency}
+                compared={compared}
+                emphasis
+              />
+              <MoneyRow
+                label="Cash at the start of the period"
+                amount={report.openingCash}
+                comparison={previous?.openingCash}
+                currency={currency}
+                compared={compared}
+                muted
+                indent
+              />
+              <MoneyRow
+                label="Cash at the end of the period"
+                amount={report.closingCash}
+                comparison={previous?.closingCash}
+                currency={currency}
+                compared={compared}
+                emphasis
+              />
             </TableBody>
           </Table>
 
@@ -159,24 +229,28 @@ function Section({
   currency,
   detail,
   children,
+  columns,
+  compared,
 }: {
   label: string
   lines: CashFlowLine[]
   currency: string
   detail: (accountId: string) => string
   children?: React.ReactNode
+  columns: number
+  compared: boolean
 }) {
   return (
     <>
       <TableRow className="bg-muted/40 hover:bg-muted/40">
-        <TableCell colSpan={2} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <TableCell colSpan={columns} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </TableCell>
       </TableRow>
       {children}
       {lines.length === 0 && !children ? (
         <TableRow>
-          <TableCell colSpan={2} className="py-3 pl-6 text-sm text-muted-foreground">
+          <TableCell colSpan={columns} className="py-3 pl-6 text-sm text-muted-foreground">
             No movement.
           </TableCell>
         </TableRow>
@@ -186,9 +260,11 @@ function Section({
             key={line.accountId}
             label={line.label}
             amount={line.amount}
+            comparison={line.comparison}
             currency={currency}
             indent
             href={detail(line.accountId)}
+            compared={compared}
           />
         ))
       )}
@@ -199,17 +275,22 @@ function Section({
 function Row({
   label,
   amount,
+  comparison,
   currency,
   indent,
   href,
+  compared,
 }: {
   label: string
   amount: Money
+  comparison?: Money
   currency: string
   indent?: boolean
   href?: string
+  compared: boolean
 }) {
   const figure = formatMoney(amount, currency)
+  const prior = comparison ?? ZERO
   return (
     <ClickableRow href={href} title={href ? 'Open transactions for this account' : undefined}>
       <TableCell className={indent ? 'pl-6' : ''}>
@@ -230,15 +311,85 @@ function Row({
           figure
         )}
       </TableCell>
+      {compared ? (
+        <TableCell className="numeric tabular text-muted-foreground">
+          {formatMoney(prior, currency)}
+        </TableCell>
+      ) : null}
+      {compared ? (
+        <TableCell className="numeric tabular">
+          {formatMoney(amount.minus(prior), currency)}
+        </TableCell>
+      ) : null}
     </ClickableRow>
   )
 }
 
-function Total({ label, amount, currency }: { label: string; amount: Money; currency: string }) {
+function Total({
+  label,
+  amount,
+  comparison,
+  currency,
+  compared,
+}: {
+  label: string
+  amount: Money
+  comparison?: Money
+  currency: string
+  compared: boolean
+}) {
   return (
-    <TableRow className="border-t">
-      <TableCell className="font-medium">{label}</TableCell>
-      <TableCell className="numeric tabular font-medium">{formatMoney(amount, currency)}</TableCell>
+    <MoneyRow
+      label={label}
+      amount={amount}
+      comparison={comparison}
+      currency={currency}
+      compared={compared}
+      medium
+    />
+  )
+}
+
+function MoneyRow({
+  label,
+  amount,
+  comparison,
+  currency,
+  compared,
+  emphasis,
+  medium,
+  muted,
+  indent,
+}: {
+  label: string
+  amount: Money
+  comparison?: Money
+  currency: string
+  compared: boolean
+  emphasis?: boolean
+  medium?: boolean
+  muted?: boolean
+  indent?: boolean
+}) {
+  const prior = comparison ?? ZERO
+  const weight = emphasis ? 'font-semibold' : medium ? 'font-medium' : ''
+  const tone = muted ? 'text-muted-foreground' : ''
+  return (
+    <TableRow className={emphasis ? 'bg-muted/60 hover:bg-muted/60' : medium ? 'border-t' : undefined}>
+      <TableCell className={`${weight} ${tone} ${indent ? 'pl-6' : ''}`}>{label}</TableCell>
+      <TableCell className={`numeric tabular ${weight} ${tone}`}>
+        {formatMoney(amount, currency)}
+      </TableCell>
+      {compared ? (
+        <TableCell className={`numeric tabular text-muted-foreground ${weight}`}>
+          {formatMoney(prior, currency)}
+        </TableCell>
+      ) : null}
+      {compared ? (
+        <TableCell className={`numeric tabular ${weight}`}>
+          {formatMoney(amount.minus(prior), currency)}
+        </TableCell>
+      ) : null}
     </TableRow>
   )
 }

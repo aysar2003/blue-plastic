@@ -47,6 +47,7 @@ import { DocumentActions } from '@/components/print/document-actions'
 import { documentEmailBody, documentEmailSubject } from '@/lib/document-email'
 import { PartyInfo } from '@/components/forms/party-info'
 import { LockedNumber } from '@/components/forms/locked-number'
+import { DocumentActionBar } from '@/components/forms/document-action-bar'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { CustomerBalancePanel } from '@/components/sales/customer-balance-panel'
@@ -1350,7 +1351,7 @@ export function DocumentForm({
         />
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+      <DocumentActionBar status="Draft" statusTone="draft">
         <Button type="button" variant="outline" onClick={() => router.push(`/sales/${config.slug}`)}>
           Close
         </Button>
@@ -1367,7 +1368,8 @@ export function DocumentForm({
             saveAsDraft.current = true
           }}
         >
-          Save as draft
+          <span className="dab-label dab-label-full">Save as draft</span>
+          <span className="dab-label dab-label-short">Save</span>
         </SubmitButton>
         <SubmitButton
           variant="outline"
@@ -1404,7 +1406,7 @@ export function DocumentForm({
         >
           Save and new
         </SubmitButton>
-      </div>
+      </DocumentActionBar>
 
     </form>
   )
@@ -1478,7 +1480,7 @@ function TemplatePicker({
               className={cn(
                 'rounded-xl border px-3 py-3 text-left transition',
                 active
-                  ? 'border-primary bg-sky-50 ring-2 ring-primary/20'
+                  ? 'border-primary bg-primary/10 ring-2 ring-primary/20'
                   : 'border-slate-200 bg-slate-50/70 hover:border-slate-300 hover:bg-white',
               )}
             >

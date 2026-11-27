@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  addLaborCharge,
   addLaborCost,
   addPurchaseCost,
   addSalesIncome,
@@ -19,18 +20,29 @@ describe('project profitability', () => {
     slice = addPurchaseCost(slice, 'VENDOR_CREDIT', '20')
     slice = addStockCost(slice, '-120') // COGS movement value
     slice = addLaborCost(slice, '10', '15') // 150
+    slice = addLaborCharge(slice, '10', '40') // 400 charge-out
 
-    // Income 950, purchases 180, stock 120, labor 150 → profit 500
+    // Income 950, purchases 180, stock 120, labor cost 150 → profit 500
     expect(slice.income.toFixed(0)).toBe('950')
     expect(slice.purchaseCost.toFixed(0)).toBe('180')
     expect(slice.stockCost.toFixed(0)).toBe('120')
     expect(slice.laborCost.toFixed(0)).toBe('150')
+    expect(slice.laborCharge.toFixed(0)).toBe('400')
     expect(profitOf(slice).toFixed(0)).toBe('500')
   })
 
   it('skips labor when no rate', () => {
     const slice = addLaborCost(emptySlice(), '8', null)
     expect(slice.laborCost.equals(0)).toBe(true)
+  })
+
+  it('keeps cost and charge separate', () => {
+    let slice = emptySlice()
+    slice = addLaborCost(slice, '2', '10')
+    slice = addLaborCharge(slice, '2', '50')
+    expect(slice.laborCost.toFixed(0)).toBe('20')
+    expect(slice.laborCharge.toFixed(0)).toBe('100')
+    expect(profitOf(slice).toFixed(0)).toBe('-20')
   })
 
   it('converts foreign subtotals to org base using exchangeRate', () => {

@@ -8,8 +8,9 @@ import type { HeaderMenuItem } from './header-app-menus'
 import { LAUNCHER_ICONS } from './launcher-icon-map'
 
 /**
- * QuickBooks Online–style destinations list: icon mark + label for each
- * existing app destination. Used when a side-rail app icon is opened.
+ * Modern destinations flyout: icon mark + label for each app destination.
+ * Opens beside the side rail when hovering Sales (and other apps).
+ * Height comes from the portaled shell — the list scrolls inside, nothing clips.
  */
 export function AppDestinationsPanel({
   appLabel,
@@ -26,22 +27,27 @@ export function AppDestinationsPanel({
     <div
       role="menu"
       aria-label={`${appLabel} apps`}
-      className="max-h-[calc(100vh-1rem)] w-[17.5rem] overflow-y-auto overscroll-contain rounded-xl border border-border bg-popover text-popover-foreground shadow-[0_8px_28px_-8px_rgba(15,23,42,0.28)] ring-1 ring-black/5"
+      className="flex h-full min-h-0 max-h-[inherit] w-[18rem] max-w-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-popover text-popover-foreground shadow-[0_16px_40px_-16px_rgba(15,23,42,0.45)] ring-1 ring-black/5"
     >
-      <div className="sticky top-0 z-10 border-b border-border bg-popover px-3 py-2">
+      <div className="shrink-0 border-b border-border/70 bg-gradient-to-b from-muted/40 to-popover px-3.5 py-3">
         <Link
           href={appHref}
           role="menuitem"
           onClick={onDone}
-          className="flex items-center gap-2 text-xs font-bold text-foreground hover:underline"
+          className="group flex items-center gap-2.5 rounded-xl px-1 py-0.5 text-foreground transition-colors hover:bg-muted/60"
         >
-          <span className="grid size-6 place-items-center rounded-md bg-primary/10 text-primary">
+          <span className="grid size-8 place-items-center rounded-lg bg-primary/12 text-primary shadow-sm ring-1 ring-primary/15 transition-transform group-hover:scale-[1.03]">
             <LayoutGridIcon className="size-3.5" aria-hidden />
           </span>
-          <span className="truncate">{appLabel} home</span>
+          <span className="min-w-0">
+            <span className="block truncate text-[0.8125rem] font-semibold tracking-tight">
+              {appLabel}
+            </span>
+            <span className="block text-[0.65rem] text-muted-foreground">Open home</span>
+          </span>
         </Link>
       </div>
-      <ul className="overflow-y-auto overscroll-contain py-1.5">
+      <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
         {items.map((item) => (
           <li key={`${item.href ?? item.label}-${item.label}`}>
             <DestinationRow item={item} fallbackHref={appHref} onDone={onDone} />
@@ -70,15 +76,16 @@ export function DestinationRow({
       role="menuitem"
       onClick={onDone}
       className={cn(
-        'flex items-center gap-2.5 px-3 hover:bg-muted',
+        'flex items-center gap-2.5 rounded-xl px-2.5 transition-colors hover:bg-muted/80',
         dense ? 'py-1.5' : 'py-2',
       )}
     >
       <span
         className={cn(
-          'grid shrink-0 place-items-center rounded-md',
-          dense ? 'size-6' : 'size-7',
+          'grid shrink-0 place-items-center rounded-lg shadow-sm ring-1 ring-black/5',
+          dense ? 'size-6' : 'size-8',
           !item.wash && 'bg-muted text-muted-foreground',
+          item.wash && item.accent && 'app-chroma-chip',
         )}
         style={
           item.wash && item.accent

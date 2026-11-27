@@ -3,6 +3,7 @@
 import { DownloadIcon, PrinterIcon } from 'lucide-react'
 
 import { Button, buttonVariants } from '@/components/ui/button'
+import { withDeskPrintLook } from '@/lib/print-look'
 
 /**
  * Print and export, for a list.
@@ -19,7 +20,7 @@ export function TableToolbar({ exportHref, iconsOnly = false }: { exportHref?: s
     <div className="flex items-center gap-1 print:hidden">
       {exportHref ? (
         <a
-          href={exportHref}
+          href={withDeskPrintLook(exportHref)}
           download
           className={buttonVariants({ variant: 'ghost', size: iconsOnly ? 'icon-sm' : 'sm' })}
           title="Every row matching the current filter, as Excel with company header"

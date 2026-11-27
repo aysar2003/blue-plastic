@@ -21,7 +21,7 @@ function NativeSelect({ className, ...props }: React.ComponentProps<'select'>) {
         'focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25',
         'aria-invalid:border-destructive aria-invalid:ring-destructive/20',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        '[&>option]:bg-white [&>option]:text-[#1f1f23]',
+        '[&>option]:bg-card [&>option]:text-foreground',
         className,
       )}
       {...props}

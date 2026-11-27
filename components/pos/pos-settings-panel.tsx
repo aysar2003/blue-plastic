@@ -9,7 +9,7 @@ import { idleState } from '@/components/forms/action-state'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { isCashMethodName } from '@/lib/pos-payment'
-import { ODOO } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 import { cn } from '@/lib/utils'
 
 type Overview = {
@@ -59,6 +59,7 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
   )
   const [editingMethodId, setEditingMethodId] = useState<string | null>(null)
   const [editingRegisterId, setEditingRegisterId] = useState<string | null>(null)
+  const ODOO = usePosBrand()
 
   const editingMethod = data.methods.find((method) => method.id === editingMethodId) ?? null
   const editingRegister =
@@ -206,7 +207,7 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
                 type="submit"
                 disabled={methodPending}
                 className="rounded-md px-4 py-2 text-sm font-semibold sm:col-span-2 disabled:opacity-50"
-                style={{ background: ODOO.cta, color: '#fff' }}
+                style={{ background: ODOO.cta, color: ODOO.ctaInk }}
               >
                 {methodPending ? 'Saving…' : 'Save changes'}
               </button>
@@ -271,7 +272,7 @@ export function PosSettingsPanel({ data }: { data: Overview }) {
               type="submit"
               disabled={methodPending}
               className="rounded-md px-4 py-2 text-sm font-semibold sm:col-span-2 disabled:opacity-50"
-              style={{ background: ODOO.cta, color: '#fff' }}
+              style={{ background: ODOO.cta, color: ODOO.ctaInk }}
             >
               Add payment method
             </button>
@@ -410,6 +411,7 @@ function FormMessage({
 }: {
   state: { status: string; message?: string | null; fieldErrors?: Record<string, string[]> }
 }) {
+  const ODOO = usePosBrand()
   const fieldText = state.fieldErrors
     ? [...new Set(Object.values(state.fieldErrors).flat())].join(' ')
     : ''

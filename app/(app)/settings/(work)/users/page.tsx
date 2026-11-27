@@ -1,25 +1,20 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { Suspense } from 'react'
 import { UsersIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/data/empty-state'
 import { PageHeader } from '@/components/data/page-header'
-import { Pagination } from '@/components/data/pagination'
-import { SearchInput } from '@/components/data/search-input'
-import { Card } from '@/components/ui/card'
-import { formatDateTime } from '@/lib/date'
-import { appsOpenFor } from '@/lib/member-apps'
-import { readSort } from '@/components/data/sortable-header'
+import { parsePerformanceDays } from '@/lib/user-performance'
 import { parseListQuery } from '@/lib/validation/common'
 import { requireOrgContext } from '@/server/auth/context'
-import { ASSIGNABLE_ROLES, membershipStatusLabel, ROLE_LABELS } from '@/lib/roles'
-import { effectivePermissions, permissionsFor } from '@/server/auth/permissions'
+import { ASSIGNABLE_ROLES } from '@/lib/roles'
+import { permissionsFor } from '@/server/auth/permissions'
 import * as membershipService from '@/server/services/membership.service'
+import * as userPerformanceService from '@/server/services/user-performance.service'
 import { InviteUserDialog } from './invite-user-dialog'
-import { UsersTable, type UsersTableRow } from './users-table'
-import type { Role } from '@prisma/client'
-
-const SORTABLE = ['name', 'role', 'status', 'lastSeen'] as const
+import { mapMemberRow } from './map-member-row'
+import { UsersWorkspace } from './users-workspace'
 
 const ROLE_TEMPLATES = Object.fromEntries(
   ASSIGNABLE_ROLES.map((role) => [role, [...permissionsFor(role)]]),
@@ -35,116 +30,53 @@ export default async function UsersPage({
   const ctx = await requireOrgContext('user:read')
   const params = await searchParams
   const query = parseListQuery(params)
-  const sort = readSort(params, SORTABLE, { sort: 'name', dir: 'asc' })
-  const linkParams = { q: query.q, sort: sort.sort, dir: sort.dir }
-  const { rows: members, total } = await membershipService.list(ctx, query)
-
-  const direction = sort.dir === 'asc' ? 1 : -1
-  const sorted = [...members].sort((a, b) => {
-    switch (sort.sort) {
-      case 'role':
-        return direction * a.role.localeCompare(b.role) || a.user.name.localeCompare(b.user.name)
-      case 'status':
-        return direction * a.status.localeCompare(b.status) || a.user.name.localeCompare(b.user.name)
-      case 'lastSeen':
-        return (
-          direction *
-          ((a.user.lastLoginAt?.getTime() ?? 0) - (b.user.lastLoginAt?.getTime() ?? 0))
-        )
-      default:
-        return direction * a.user.name.localeCompare(b.user.name)
-    }
-  })
+  const memberRaw = params.member
+  const selectedId = (Array.isArray(memberRaw) ? memberRaw[0] : memberRaw)?.trim() || null
+  const daysRaw = params.days
+  const days = parsePerformanceDays(Array.isArray(daysRaw) ? daysRaw[0] : daysRaw)
+  const [{ rows: members, total }, performanceByUserId] = await Promise.all([
+    membershipService.list(ctx, query),
+    userPerformanceService.performanceSummaryByUserId(ctx, days),
+  ])
 
   const canInvite = ctx.permissions.has('user:invite')
   const canUpdate = ctx.permissions.has('user:update')
   const canRemove = ctx.permissions.has('user:remove')
 
-  const rows: UsersTableRow[] = sorted.map((member) => {
-    const isSelf = member.user.id === ctx.userId
-    const isOwner = member.role === 'OWNER'
-    const perms = effectivePermissions(member.role as Role, member.permissionsOverride)
-    const apps = appsOpenFor(perms)
-    const canManageRow = (canUpdate || canRemove) && !isOwner && !isSelf
-    const customCount = member.permissionsOverride.length
-    const hasCustom =
-      customCount > 0 || member.role === 'CUSTOM'
-
-    return {
-      id: member.id,
-      role: member.role,
-      status: member.status,
-      permissionsOverride: member.permissionsOverride,
-      canConnect: member.canConnect,
-      isSelf,
-      isOwner,
-      canManageRow,
-      showConnectToggle: ctx.isSystemOwner && member.role === 'ADMIN',
-      name: member.user.name,
-      email: member.user.email,
-      userId: member.user.id,
-      roleLabel: ROLE_LABELS[member.role],
-      statusLabel: membershipStatusLabel(member.status),
-      statusVariant:
-        member.status === 'ACTIVE'
-          ? 'success'
-          : member.status === 'SUSPENDED'
-            ? 'destructive'
-            : 'warning',
-      customPermissionNote: hasCustom
-        ? `${customCount} custom permission${customCount === 1 ? '' : 's'}`
-        : null,
-      canConnectNote: member.canConnect && member.role === 'ADMIN',
-      apps,
-      lastLoginLabel: member.user.lastLoginAt
-        ? formatDateTime(member.user.lastLoginAt, ctx.organization.timeZone)
-        : '—',
-    }
-  })
+  const rows = members
+    .slice()
+    .sort((a, b) => a.user.name.localeCompare(b.user.name))
+    .map((member) => mapMemberRow(member, ctx, canUpdate, canRemove))
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="Company users"
-        description={
-          ctx.isSystemOwner
-            ? 'People in this company only. Connect can be given only to an admin. To see every login on the installation, open System users under Databases.'
-            : 'People in this company. Assign a role or tick which apps each person may open — the same apps on the home screen. You can reset a work password; the old one is never shown.'
-        }
+        description="Select a member to manage profile, role, apps, status, and security."
         actions={
           canInvite ? (
             <InviteUserDialog roles={[...ASSIGNABLE_ROLES]} roleTemplates={ROLE_TEMPLATES} />
           ) : undefined
         }
       />
-      {ctx.isSystemOwner ? (
-        <p className="-mt-2 text-sm text-muted-foreground">
-          <Link href="/databases/users" className="font-medium text-primary underline">
+      <p className="-mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        {ctx.isSystemOwner ? (
+          <Link href="/databases/users" className="font-medium text-primary hover:underline">
             System users
-          </Link>{' '}
-          — every login across all companies (owner only).
-        </p>
-      ) : null}
-      {ctx.permissions.has('org:update') ? (
-        <p className="-mt-2 text-sm text-muted-foreground">
-          To turn an app off for everyone, use{' '}
-          <Link href="/settings/features" className="font-medium text-primary underline">
-            Settings → Configuration
           </Link>
-          .
-        </p>
-      ) : null}
-      <p className="-mt-2 text-sm text-muted-foreground">
-        Sign-in, sign-out, and work for the last year:{' '}
-        <Link href="/settings/user-history" className="font-medium text-primary underline">
-          Settings → User history
+        ) : null}
+        {ctx.permissions.has('org:update') ? (
+          <Link href="/settings/features" className="font-medium text-primary hover:underline">
+            Configuration
+          </Link>
+        ) : null}
+        <Link href="/settings/user-performance" className="font-medium text-primary hover:underline">
+          Team performance
         </Link>
-        .
+        <Link href="/settings/user-history" className="font-medium text-primary hover:underline">
+          User history
+        </Link>
       </p>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchInput placeholder="Search by name or email" />
-      </div>
 
       {total === 0 ? (
         <EmptyState
@@ -162,18 +94,18 @@ export default async function UsersPage({
           }
         />
       ) : (
-        <Card className="overflow-hidden p-0">
-          <UsersTable
+        <Suspense fallback={<div className="h-80 animate-pulse rounded-2xl bg-muted/40" />}>
+          <UsersWorkspace
             rows={rows}
-            sort={sort}
-            linkParams={linkParams}
             roles={[...ASSIGNABLE_ROLES]}
             roleTemplates={ROLE_TEMPLATES}
             canUpdate={canUpdate}
             canRemove={canRemove}
+            selectedId={selectedId}
+            days={days}
+            performanceByUserId={performanceByUserId}
           />
-          <Pagination total={total} />
-        </Card>
+        </Suspense>
       )}
     </div>
   )

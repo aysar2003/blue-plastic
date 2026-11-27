@@ -1,6 +1,8 @@
 # Full-system deepen waves plan
 
-> **Shipped 2026-11-21:** Waves **A–F** all executed. Migrations `20261121180000` … `20261121202000_wave_f_deepen`. Most phases in `docs/progress.md` are now **Complete (FULL)**; 27/40 remain **Toward FULL** (no Peppol by design).
+> **Shipped 2026-11-21:** Waves **A–F** all executed. Migrations `20261121180000` … `20261121202000_wave_f_deepen`.  
+> **Shipped 2026-11-22:** **Wave G** Horn cash & statutory — migration `20261122210000_wave_g_deepen` (MM match, WHT, pack PAYE, e-invoice adapters). Phases 27/40 stay Toward FULL only for live government submit / Peppol (by design).  
+> **Shipped 2026-11-25:** **Wave H** stub close — migration `20261125120000_wave_h_stub_close` (planning timesheets without login, job P&L cost vs charge).
 
 **Goal:** Ka saar `(LITE)` status-ka phase-yada ee `docs/progress.md` iyadoo la sameynayo **deepen waves** (code + tests + phase doc → `Complete` / `Complete (FULL)`).
 
@@ -46,7 +48,7 @@
 
 ---
 
-## Wave B — Warehouse, site, quality, projects money — **in progress 2026-11-21** (`20261121190000_wave_b_deepen`)
+## Wave B — Warehouse, site, quality, projects money — **shipped 2026-11-21** (`20261121190000_wave_b_deepen`) · job costRate vs charge closed in Wave H
 
 | Item | Size | FULL exit |
 | --- | --- | --- |
@@ -120,6 +122,33 @@
 | **55 Scale checklist** | S | Periods card: live-year window, archive closed year, pack warning |
 
 **Duplicate timestamp `20261119200000_*`:** both folders remain. They were already applied (later 2026-11-21 Wave A/B/C migrations exist on this tree and the live database is in use). Prisma records the **full folder name** in `_prisma_migrations`; renaming `20261119200000_fiscal_year_start_day` or `20261119200000_project_task_tree_gantt` to `20261119200001_*` would break `prisma migrate deploy` for any database that already has those names. Lexical order is fiscal-year-start-day, then project-task-tree. **Do not rename.** CI for `pnpm verify` remains optional.
+
+---
+
+## Wave G — Horn cash & statutory — **shipped 2026-11-22** (`20261122210000_wave_g_deepen`)
+
+| Item | Size | FULL exit |
+| --- | --- | --- |
+| **Mobile money AR** | M | Statement packs `mm`/`et` + `partyRef`; suggest invoice by amount+ref/MSISDN; match posts `MOBILE_MONEY` payment |
+| **WHT on bills** | M | `withholdPercent`/`Amount`; post Cr WHT payable; remittance CSV |
+| **Pack PAYE** | M | SO/KE/ET/DJ slabs → Standard `TAX` (+ ET pension rules); Setup action |
+| **E-invoice adapter** | S | Pluggable stub / KE TIMS-shaped / ET-shaped JSON (offline only) |
+
+**Verify:** `tests/wave-g-deepen.test.ts`. Detail: [phase-wave-g-horn-cash-statutory.md](./phases/phase-wave-g-horn-cash-statutory.md).
+
+---
+
+## Wave H — Stub close — **shipped 2026-11-25** (`20261125120000_wave_h_stub_close`)
+
+| Item | Size | FULL exit |
+| --- | --- | --- |
+| **16 Planning timesheets** | M | Always create `ProjectTimeEntry`; `employeeId` when no login; no `TIMESHEET_STUB` |
+| **25 Job cost vs charge** | S | Report + project strip: labour cost and labour charge; profit uses cost |
+| **45 Labels** | S | CSV shipping labels documented (JSON retained for machines) |
+| **59 Sign outbound** | S | Clarify real POST+HMAC; failures `{ ok: false }` |
+| **Docs truth** | S | Phase 9 note, phase 53 title, Wave B shipped, 27/40 terminal Toward FULL |
+
+**Verify:** `tests/wave-h-stub-close.test.ts`, `lib/project-profitability.test.ts`. Detail: [phase-wave-h-stub-close.md](./phases/phase-wave-h-stub-close.md).
 
 ---
 

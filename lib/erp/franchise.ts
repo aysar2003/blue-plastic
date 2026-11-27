@@ -1,3 +1,4 @@
+import { ROYALTY_HEADERS } from '@/lib/erp/export-headers'
 import { Decimal, ZERO } from '@/lib/money'
 
 /** Royalty = child sales × royalty % / 100. */
@@ -20,11 +21,14 @@ export type RoyaltyStatementRow = {
   royaltyDue: string
 }
 
+export function royaltyStatementTableRows(rows: RoyaltyStatementRow[]): string[][] {
+  return rows.map((row) => [row.name, row.royaltyPercent, row.sales, row.royaltyDue])
+}
+
 export function royaltyStatementCsv(rows: RoyaltyStatementRow[]): string {
-  const header = 'franchisee,royaltyPercent,sales,royaltyDue'
-  const body = rows.map(
-    (row) =>
-      `${csvEscape(row.name)},${row.royaltyPercent},${row.sales},${row.royaltyDue}`,
+  const header = ROYALTY_HEADERS.join(',')
+  const body = royaltyStatementTableRows(rows).map(
+    (cells) => `${csvEscape(cells[0]!)},${cells[1]},${cells[2]},${cells[3]}`,
   )
   return [header, ...body].join('\n')
 }

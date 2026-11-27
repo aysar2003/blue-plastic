@@ -97,9 +97,9 @@ export function AgingExplorer({
 
       <div className="scroll-mt-4">
         {activeSegment ? (
-          <p className="mb-2 text-sm text-slate-800">
+          <p className="mb-2 text-sm text-foreground">
             <span className="font-semibold">{activeSegment.label}</span>
-            <span className="text-slate-600">
+            <span className="text-muted-foreground">
               {' '}
               — {shownRows.length}{' '}
               {shownRows.length === 1 ? rowNoun : `${rowNoun}s`} in the report below

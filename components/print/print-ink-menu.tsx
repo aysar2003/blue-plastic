@@ -22,6 +22,7 @@ import {
   withPrintInk,
   type PrintInk,
 } from '@/lib/print-ink'
+import { withDeskPrintLook } from '@/lib/print-look'
 import { cn } from '@/lib/utils'
 
 const INK_OPTIONS: { ink: PrintInk; label: string; hint: string }[] = [
@@ -127,7 +128,9 @@ export function PdfInkMenu({
       onFallbackPrint?.(ink)
       return
     }
-    const href = withPaperMetaHidden(withPrintInk(pdfHref, ink), readStoredPaperMetaHidden())
+    const href = withDeskPrintLook(
+      withPaperMetaHidden(withPrintInk(pdfHref, ink), readStoredPaperMetaHidden()),
+    )
     setBusy(true)
     try {
       const ok = await downloadPdfFile(href, name)
@@ -157,7 +160,7 @@ export function PdfMenuDownload({ href }: { href: string }) {
     <DropdownMenuItem
       onSelect={(event) => {
         event.preventDefault()
-        void downloadPdfFile(withPrintInk(href, 'color'))
+        void downloadPdfFile(withDeskPrintLook(withPrintInk(href, 'color')))
       }}
     >
       PDF

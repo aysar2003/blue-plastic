@@ -1,4 +1,4 @@
-# Phase 53 — Public sector commitments LITE
+# Phase 53 — Public sector commitments
 
 **Status:** Complete (FULL)
 

@@ -694,7 +694,7 @@ export async function upsertItemBinDefault(
   })
 }
 
-/** Phase 45: JSON stub for wave shipping labels (orders, ship-to, carrier). */
+/** Phase 45 / Wave H: wave shipping labels (orders, ship-to, carrier). CSV via `?format=csv`. */
 export async function waveLabelExport(ctx: OrgContext, waveId: string) {
   const wave = await db.pickWave.findFirst({
     where: { id: waveId, orgId: ctx.orgId },

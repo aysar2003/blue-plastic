@@ -13,16 +13,55 @@ export default async function ShortcutsPage() {
   const available = SHORTCUTS.filter(
     (shortcut) => !shortcut.permission || ctx.permissions.has(shortcut.permission),
   )
-  const groups = ['Go to', 'Create'] as const
+  const groups = ['Go to', 'Open', 'Create'] as const
 
   return (
     <>
       <PageHeader
         title="Keyboard shortcuts"
-        description="Press g, then a letter, to go somewhere. Press c, then a letter, to create something. On an invoice or bill, Tab walks the form from the name field; Ctrl+S saves without the mouse."
+        description="Press g, then a letter, to go somewhere. Press o, then a letter, to open a board. Press c, then a letter, to create something. On an invoice or bill, Tab walks the form; Ctrl+S saves without the mouse."
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <Card className="mb-4">
+        <CardContent className="space-y-2 p-4 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Sida loo isticmaalo (Somali)</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              Guji <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">Ctrl</kbd>+
+              <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">K</kbd> — raadso
+              bog, customer, invoice, ama document kasta.
+            </li>
+            <li>
+              Guji <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">G</kbd> ka
+              dibna xaraf — u gudub bog (tusaale <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">G</kbd> then{' '}
+              <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">I</kbd> = invoices).
+            </li>
+            <li>
+              Guji <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">O</kbd> ka
+              dibna xaraf — fur board (Snapshot, Inventory, POS, Analytics…).
+            </li>
+            <li>
+              Guji <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">C</kbd> ka
+              dibna xaraf — abuuro document cusub (invoice, bill, journal…).
+            </li>
+            <li>
+              Guji <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">?</kbd> —
+              soo fur liiskan shortcuts.
+            </li>
+            <li>
+              Forms: <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">Tab</kbd>{' '}
+              u gudub field-ka xiga ·{' '}
+              <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">Ctrl</kbd>+
+              <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">S</kbd> kaydi ·{' '}
+              <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">Ctrl</kbd>+
+              <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[0.6875rem]">L</kbd> ku dar
+              line.
+            </li>
+          </ul>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent className="p-0">
             <p className="border-b px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -52,7 +91,7 @@ export default async function ShortcutsPage() {
                   .filter((shortcut) => shortcut.group === group)
                   .map((shortcut) => (
                     <li
-                      key={shortcut.href}
+                      key={`${shortcut.group}:${shortcut.href}`}
                       className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
                     >
                       <span className="min-w-0 truncate text-muted-foreground">{shortcut.label}</span>

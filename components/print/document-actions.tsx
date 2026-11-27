@@ -30,6 +30,7 @@ import { readStoredPaperMetaHidden, withPaperMetaHidden } from '@/lib/paper-meta
 import { paperChoiceCookie } from '@/lib/paper-choice'
 import type { PaperStyle } from '@/lib/document-template'
 import { readStoredPrintInk, withPrintInk } from '@/lib/print-ink'
+import { withDeskPrintLook } from '@/lib/print-look'
 import { cn } from '@/lib/utils'
 
 type AttachFormat = 'pdf' | 'excel'
@@ -146,7 +147,7 @@ export function DocumentActions({
         setNote('Excel is not available for this document.')
         return null
       }
-      const response = await fetch(excelHref)
+      const response = await fetch(withDeskPrintLook(excelHref))
       if (!response.ok) {
         setNote('The Excel file could not be prepared.')
         return null
@@ -181,7 +182,9 @@ export function DocumentActions({
     }
     if (!blob && pdfHref) {
       const response = await fetch(
-        withPaperMetaHidden(withPrintInk(pdfHref, ink), readStoredPaperMetaHidden()),
+        withDeskPrintLook(
+          withPaperMetaHidden(withPrintInk(pdfHref, ink), readStoredPaperMetaHidden()),
+        ),
       )
       if (!response.ok) {
         setNote('The PDF could not be prepared.')
@@ -380,7 +383,10 @@ export function DocumentActions({
           <PrintInkMenu printHref={printHref} />
           <PdfInkMenu pdfHref={pdfHref} filename={`${baseName}.pdf`} matchPrintPaper={pdfMatchesPrint} />
           {excelHref ? (
-            <a href={excelHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            <a
+              href={withDeskPrintLook(excelHref)}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
               <FileSpreadsheetIcon /> Excel
             </a>
           ) : null}

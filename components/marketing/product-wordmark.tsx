@@ -29,15 +29,15 @@ export function ProductWordmark({
   return (
     <Link href={href} className={`group inline-flex items-center gap-3 ${className ?? ''}`}>
       <span
-        className={`grid shrink-0 place-items-center rounded-md bg-primary font-bold tracking-wide text-primary-foreground shadow-[0_10px_28px_-12px_var(--glow)] ${mark}`}
+        className={`grid shrink-0 place-items-center rounded-sm bg-primary font-bold tracking-wide text-primary-foreground shadow-[0_12px_32px_-14px_var(--glow)] ${mark}`}
       >
         {PRODUCT_MARK}
       </span>
       <span className="min-w-0 text-left leading-tight">
-        <span className={`block font-bold tracking-[-0.03em] text-foreground ${name}`}>
+        <span className={`block font-semibold tracking-[-0.03em] text-foreground ${name}`}>
           {PRODUCT_NAME}
         </span>
-        <span className={`mt-0.5 block font-semibold uppercase text-success ${kind}`}>
+        <span className={`mt-0.5 block font-medium uppercase text-primary/85 ${kind}`}>
           {PRODUCT_KIND}
         </span>
       </span>

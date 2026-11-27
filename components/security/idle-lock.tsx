@@ -24,6 +24,8 @@ export const IDLE_LOCK_MS = DEFAULT_IDLE_LOCK_SECONDS * 1000
 
 const STORAGE_KEY = 'som-idle-screen-locked'
 const LAST_ACTIVE_KEY = 'som-idle-last-active'
+/** Ties idle-lock storage to the current auth session so a fresh login never inherits a stale lock. */
+const LOGIN_AT_KEY = 'som-idle-login-at'
 
 type UnlockMethod = 'password' | 'pin'
 
@@ -48,6 +50,27 @@ function readLastActive(): number {
 function writeLastActive(at: number) {
   if (typeof window === 'undefined') return
   window.sessionStorage.setItem(LAST_ACTIVE_KEY, String(at))
+}
+
+function clearIdleStorage() {
+  if (typeof window === 'undefined') return
+  window.sessionStorage.removeItem(STORAGE_KEY)
+  window.sessionStorage.removeItem(LAST_ACTIVE_KEY)
+  window.sessionStorage.removeItem(LOGIN_AT_KEY)
+}
+
+/**
+ * Drop lock / last-active leftovers from a previous sign-in in this tab.
+ * Without this, logging in again immediately shows "Screen locked".
+ */
+function alignStorageToLogin(loginAt: number | null | undefined) {
+  if (typeof window === 'undefined') return
+  if (loginAt == null || !Number.isFinite(loginAt)) return
+  const stored = Number(window.sessionStorage.getItem(LOGIN_AT_KEY))
+  if (stored === loginAt) return
+  writeLocked(false)
+  writeLastActive(Date.now())
+  window.sessionStorage.setItem(LOGIN_AT_KEY, String(loginAt))
 }
 
 /**
@@ -105,7 +128,7 @@ export function IdleLock({
 
   const signOut = useCallback(() => {
     setSigningOut(true)
-    writeLocked(false)
+    clearIdleStorage()
     void signOutWithHistory('/login/company').catch(() => {
       setSigningOut(false)
       router.push('/login/company')
@@ -127,6 +150,9 @@ export function IdleLock({
   }, [armTimer])
 
   useEffect(() => {
+    // New sign-in must not reuse a prior tab's lock / idle timestamp.
+    alignStorageToLogin(loginAt)
+
     // Restore lock across refresh, or lock if idle already exceeded while away.
     const wasLocked = readLocked()
     const idleFor = Date.now() - readLastActive()
@@ -155,7 +181,7 @@ export function IdleLock({
       for (const name of events) window.removeEventListener(name, onActivity, opts)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [armTimer, clearTimer, idleMs, lockNow, noteActivity])
+  }, [armTimer, clearTimer, idleMs, lockNow, loginAt, noteActivity])
 
   // Absolute session logout from login time (company setting).
   useEffect(() => {

@@ -51,7 +51,7 @@ export function PortalSignInForm({
           />
         </Field>
         <SubmitButton
-          className="w-full !bg-sky-400 !text-[#070b14] hover:!bg-sky-300"
+          className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
           pendingLabel="Looking up…"
         >
           Continue
@@ -90,7 +90,7 @@ export function PortalSignInForm({
       </Field>
 
       <SubmitButton
-        className="w-full !bg-sky-400 !text-[#070b14] hover:!bg-sky-300"
+        className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
         pendingLabel="Signing in…"
       >
         Sign in to portal

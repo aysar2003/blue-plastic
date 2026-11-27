@@ -1839,7 +1839,8 @@ const projectProfitability: TableReport = {
         { key: 'income', label: 'Income', format: 'money', width: 'w-28' },
         { key: 'purchases', label: 'Purchases', format: 'money', width: 'w-28' },
         { key: 'stock', label: 'Stock', format: 'money', width: 'w-28' },
-        { key: 'labor', label: 'Labour', format: 'money', width: 'w-28' },
+        { key: 'laborCost', label: 'Labour cost', format: 'money', width: 'w-28' },
+        { key: 'laborCharge', label: 'Labour charge', format: 'money', width: 'w-28' },
         { key: 'profit', label: 'Profit', format: 'money', width: 'w-28' },
       ],
       rows: built.map((row) => ({
@@ -1851,7 +1852,8 @@ const projectProfitability: TableReport = {
           income: money(row.income),
           purchases: money(row.purchaseCost),
           stock: money(row.stockCost),
-          labor: money(row.laborCost),
+          laborCost: money(row.laborCost),
+          laborCharge: money(row.laborCharge),
           profit: money(row.profit),
         },
       })),
@@ -1860,12 +1862,13 @@ const projectProfitability: TableReport = {
         income: money(totals.income),
         purchases: money(totals.purchaseCost),
         stock: money(totals.stockCost),
-        labor: money(totals.laborCost),
+        laborCost: money(totals.laborCost),
+        laborCharge: money(totals.laborCharge),
         profit: money(totals.profit),
       },
       empty: 'No project activity in this period.',
       note:
-        'Income is posted invoices and receipts net of credits (ex-tax). Purchases are bills and expenses net of vendor credits. Stock is COGS from inventory issued on those sales. Labour is timesheet hours × billable rate.',
+        'Income is posted invoices and receipts net of credits (ex-tax). Purchases are bills and expenses net of vendor credits. Stock is COGS from inventory issued on those sales. Labour cost is hours × costRate (falls back to billableRate). Labour charge is hours × billableRate and is not subtracted from profit.',
     }
   },
 }

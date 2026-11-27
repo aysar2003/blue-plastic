@@ -190,7 +190,8 @@ async function companyBackup(orgId) {
   }
 }
 
-const downloads = join(homedir(), 'Downloads')
+// Default: Downloads. Override: BACKUP_DIR=C:\path\to\folder
+const downloads = process.env.BACKUP_DIR?.trim() || join(homedir(), 'Downloads')
 mkdirSync(downloads, { recursive: true })
 const day = new Date().toISOString().slice(0, 10)
 

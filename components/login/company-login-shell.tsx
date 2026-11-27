@@ -1,14 +1,16 @@
 'use client'
 
+import type { CSSProperties } from 'react'
 import Link from 'next/link'
 
 import { LoginThemeToggle } from '@/components/login/login-theme-toggle'
 import { loginSurfaceClass, useLoginDark } from '@/components/login/login-mode'
 import { LOGIN_HUB, LOGIN_PORTAL, LOGIN_STAFF } from '@/lib/login-paths'
 import { PRODUCT_CREDIT, PRODUCT_NAME } from '@/lib/product-brand'
+import { LOGIN_LUXURY_STYLE, useLoginLuxury } from '@/lib/use-login-luxury'
 import { cn } from '@/lib/utils'
 
-/** Company door — same latest staff login style (indigo card). */
+/** Company door — cyan/sky (distinct from staff indigo and portal navy-sky). */
 export function CompanyLoginShell({
   children,
   showBrand,
@@ -19,24 +21,32 @@ export function CompanyLoginShell({
   canRegister: boolean
 }) {
   const dark = useLoginDark()
+  const luxury = useLoginLuxury()
 
   return (
     <div
       suppressHydrationWarning
       data-login-mode={dark ? 'dark' : 'light'}
+      style={luxury ? (LOGIN_LUXURY_STYLE as CSSProperties) : undefined}
       className={cn(
-        'relative flex min-h-svh items-center justify-center overflow-hidden px-4 py-12',
+        'login-company relative flex min-h-svh items-center justify-center overflow-hidden px-4 py-12',
         loginSurfaceClass(dark),
-        dark ? 'bg-[#07041a] text-white' : 'bg-indigo-50 text-slate-900',
+        luxury
+          ? 'bg-[#07060a] text-[#f3eee6]'
+          : dark
+            ? 'bg-[#041018] text-white'
+            : 'bg-cyan-50 text-slate-900',
       )}
     >
       <div
         aria-hidden
         className={cn(
           'pointer-events-none absolute inset-0',
-          dark
-            ? 'bg-[radial-gradient(ellipse_70%_50%_at_20%_20%,rgba(99,102,241,0.4),transparent),radial-gradient(ellipse_60%_45%_at_85%_75%,rgba(139,92,246,0.35),transparent)]'
-            : 'bg-[radial-gradient(ellipse_60%_50%_at_20%_10%,rgba(99,102,241,0.2),transparent),radial-gradient(ellipse_50%_40%_at_90%_80%,rgba(139,92,246,0.15),transparent)]',
+          luxury
+            ? 'bg-[radial-gradient(ellipse_70%_50%_at_80%_15%,rgba(196,165,116,0.3),transparent),radial-gradient(ellipse_60%_45%_at_15%_85%,rgba(196,165,116,0.22),transparent)]'
+            : dark
+              ? 'bg-[radial-gradient(ellipse_70%_50%_at_20%_20%,rgba(34,211,238,0.35),transparent),radial-gradient(ellipse_60%_45%_at_85%_75%,rgba(14,165,233,0.3),transparent)]'
+              : 'bg-[radial-gradient(ellipse_60%_50%_at_20%_10%,rgba(34,211,238,0.22),transparent),radial-gradient(ellipse_50%_40%_at_90%_80%,rgba(14,165,233,0.14),transparent)]',
         )}
       />
 
@@ -49,7 +59,7 @@ export function CompanyLoginShell({
           <p
             className={cn(
               'text-[0.65rem] font-bold uppercase tracking-[0.25em]',
-              dark ? 'text-indigo-300' : 'text-indigo-700',
+              luxury ? 'text-primary' : dark ? 'text-cyan-300' : 'text-cyan-800',
             )}
           >
             {PRODUCT_NAME}
@@ -57,12 +67,17 @@ export function CompanyLoginShell({
           <h1
             className={cn(
               'mt-2 text-2xl font-semibold tracking-tight',
-              dark ? 'text-white' : 'text-slate-900',
+              luxury ? 'text-[#f3eee6]' : dark ? 'text-white' : 'text-slate-900',
             )}
           >
             Company login
           </h1>
-          <p className={cn('mt-2 text-sm', dark ? 'text-indigo-100' : 'text-slate-600')}>
+          <p
+            className={cn(
+              'mt-2 text-sm',
+              luxury ? 'text-muted-foreground' : dark ? 'text-cyan-100' : 'text-slate-600',
+            )}
+          >
             Sign in to the company you work for — invoices, stock, and banking.
           </p>
         </div>
@@ -70,9 +85,11 @@ export function CompanyLoginShell({
         <div
           className={cn(
             'rounded-2xl border p-6 backdrop-blur-xl',
-            dark
-              ? 'border-white/10 bg-white/10 shadow-[0_25px_60px_-20px_rgba(99,102,241,0.55)]'
-              : 'border-indigo-200 bg-white shadow-[0_20px_50px_-28px_rgba(79,70,229,0.4)]',
+            luxury
+              ? 'border-[rgb(196_165_116/0.18)] bg-[#100e14] shadow-[0_25px_60px_-20px_rgba(196,165,116,0.38)]'
+              : dark
+                ? 'border-white/10 bg-white/10 shadow-[0_25px_60px_-20px_rgba(34,211,238,0.45)]'
+                : 'border-cyan-200 bg-white shadow-[0_20px_50px_-28px_rgba(8,145,178,0.35)]',
           )}
         >
           {children}
@@ -81,7 +98,7 @@ export function CompanyLoginShell({
         <div
           className={cn(
             'mt-6 space-y-2 text-center text-sm',
-            dark ? 'text-indigo-200' : 'text-slate-500',
+            luxury ? 'text-muted-foreground' : dark ? 'text-cyan-200' : 'text-slate-500',
           )}
         >
           <p>
@@ -90,7 +107,7 @@ export function CompanyLoginShell({
               href={LOGIN_STAFF}
               className={cn(
                 'font-medium hover:underline',
-                dark ? 'text-violet-300' : 'text-indigo-700',
+                luxury ? 'text-primary' : dark ? 'text-violet-300' : 'text-indigo-700',
               )}
             >
               Staff login
@@ -102,7 +119,7 @@ export function CompanyLoginShell({
               href={LOGIN_PORTAL}
               className={cn(
                 'font-medium hover:underline',
-                dark ? 'text-violet-300' : 'text-indigo-700',
+                luxury ? 'text-primary' : dark ? 'text-sky-300' : 'text-sky-800',
               )}
             >
               Portal login
@@ -115,7 +132,7 @@ export function CompanyLoginShell({
                 href="/register"
                 className={cn(
                   'font-medium hover:underline',
-                  dark ? 'text-violet-300' : 'text-indigo-700',
+                  luxury ? 'text-primary' : dark ? 'text-cyan-300' : 'text-cyan-800',
                 )}
               >
                 Create your company
@@ -127,17 +144,17 @@ export function CompanyLoginShell({
               href={LOGIN_HUB}
               className={cn(
                 'text-xs hover:underline',
-                dark ? 'text-indigo-200' : 'text-slate-400',
+                luxury ? 'text-muted-foreground hover:text-primary' : dark ? 'text-cyan-200' : 'text-slate-400',
               )}
             >
               All sign-in options
             </Link>
-            <span className={dark ? 'text-indigo-300' : 'text-slate-300'}>·</span>
+            <span className={luxury ? 'text-border' : dark ? 'text-cyan-300' : 'text-slate-300'}>·</span>
             <Link
               href="/"
               className={cn(
                 'text-xs hover:underline',
-                dark ? 'text-indigo-200' : 'text-slate-400',
+                luxury ? 'text-muted-foreground hover:text-primary' : dark ? 'text-cyan-200' : 'text-slate-400',
               )}
             >
               Website
@@ -148,10 +165,15 @@ export function CompanyLoginShell({
         <p
           className={cn(
             'mt-8 text-center text-[0.65rem] tracking-wide',
-            dark ? 'text-indigo-200' : 'text-slate-400',
+            luxury ? 'text-muted-foreground' : dark ? 'text-cyan-200' : 'text-slate-400',
           )}
         >
-          <span className={cn('font-medium', dark ? 'text-indigo-100' : 'text-slate-600')}>
+          <span
+            className={cn(
+              'font-medium',
+              luxury ? 'text-[#f3eee6]' : dark ? 'text-cyan-100' : 'text-slate-600',
+            )}
+          >
             {PRODUCT_NAME}
           </span>
           {showBrand ? (

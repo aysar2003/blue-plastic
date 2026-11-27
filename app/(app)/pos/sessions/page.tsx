@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/data/page-header'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ODOO } from '@/lib/odoo-brand'
+import { readPosBrand } from '@/lib/odoo-brand'
 import { requireOrgContext } from '@/server/auth/context'
 import * as posService from '@/server/services/pos.service'
 
@@ -14,6 +14,7 @@ export const metadata: Metadata = { title: 'POS Sessions' }
 export default async function PosSessionsPage() {
   const ctx = await requireOrgContext('pos:read')
   const sessions = await posService.listSessions(ctx)
+  const ODOO = readPosBrand()
 
   return (
     <div>

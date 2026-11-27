@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { MenuIcon, PinIcon, PinOffIcon } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 
@@ -12,9 +12,13 @@ import { HeaderApps } from './header-apps'
  * QuickBooks Online left nav:
  * - icons stay in the layout
  * - hover (or the menu button) opens names over the page, without shifting it
+ * - leave collapses again (and closes any open app flyout)
  * - pin docks the wide menu so the page moves aside and it stays open
  */
 export const SIDE_APPS_PIN_KEY = 'bp.apps-side.pinned'
+
+/** Grace before collapse — long enough to reach a flyout, short enough to feel snappy. */
+const LEAVE_MS = 280
 
 function readPinned(): boolean {
   try {
@@ -55,6 +59,7 @@ export function SideAppsRail({
   const [holdShut, setHoldShut] = useState(false)
   const hoverLocked = useRef(false)
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pinnedRef = useRef(false)
   const [closeSignal, setCloseSignal] = useState(0)
   const [canHover, setCanHover] = useState(true)
   const [path, setPath] = useState(pathname)
@@ -65,6 +70,16 @@ export function SideAppsRail({
     leaveTimerRef.current = null
   }
 
+  function scheduleCollapse() {
+    clearLeaveTimer()
+    leaveTimerRef.current = setTimeout(() => {
+      leaveTimerRef.current = null
+      setPeek(false)
+      if (!pinnedRef.current) setLatched(false)
+      setCloseSignal((n) => n + 1)
+    }, LEAVE_MS)
+  }
+
   if (path !== pathname) {
     setPath(pathname)
     setLatched(false)
@@ -72,13 +87,19 @@ export function SideAppsRail({
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate after mount so server and client markup match
-    setPinned(readPinned())
+    const next = readPinned()
+    pinnedRef.current = next
+    setPinned(next)
     const mq = window.matchMedia('(hover: none), (pointer: coarse)')
     const apply = () => setCanHover(!mq.matches)
     apply()
     mq.addEventListener('change', apply)
     return () => mq.removeEventListener('change', apply)
   }, [])
+
+  useEffect(() => {
+    pinnedRef.current = pinned
+  }, [pinned])
 
   useEffect(() => {
     if (!latched) return
@@ -100,6 +121,34 @@ export function SideAppsRail({
     }
   }, [latched])
 
+  // Flyouts are portaled outside the rail — treat them as part of the hover zone
+  // so moving onto Sales (etc.) does not collapse the menu.
+  useEffect(() => {
+    function isFlyout(node: EventTarget | null) {
+      return node instanceof Element && !!node.closest('[data-slot="portaled-floating-panel"]')
+    }
+    function onDocEnter(event: PointerEvent) {
+      if (!isFlyout(event.target)) return
+      clearLeaveTimer()
+      hoverLocked.current = false
+      setHoldShut(false)
+      setPeek(true)
+    }
+    function onDocLeave(event: PointerEvent) {
+      if (!isFlyout(event.target)) return
+      if (isFlyout(event.relatedTarget)) return
+      if (railRef.current?.contains(event.relatedTarget as Node)) return
+      // Left both the flyout and the rail — collapse like a normal rail leave.
+      scheduleCollapse()
+    }
+    document.addEventListener('pointerenter', onDocEnter, true)
+    document.addEventListener('pointerleave', onDocLeave, true)
+    return () => {
+      document.removeEventListener('pointerenter', onDocEnter, true)
+      document.removeEventListener('pointerleave', onDocLeave, true)
+    }
+  }, [])
+
   const expanded = !holdShut && (pinned || latched || peek || menuOpen)
   const docked = pinned && !holdShut
 
@@ -116,6 +165,7 @@ export function SideAppsRail({
     clearLeaveTimer()
     hoverLocked.current = true
     setHoldShut(true)
+    pinnedRef.current = false
     setPinned(false)
     writePinned(false)
     setLatched(false)
@@ -133,6 +183,7 @@ export function SideAppsRail({
     clearLeaveTimer()
     hoverLocked.current = false
     setHoldShut(false)
+    pinnedRef.current = next
     setPinned(next)
     writePinned(next)
     if (next) setLatched(false)
@@ -145,15 +196,13 @@ export function SideAppsRail({
     setPeek(true)
   }
 
-  function onPointerLeave() {
-    // 1s grace so a slip off the rail (or a move onto a destination panel)
-    // does not collapse immediately. menuOpen still keeps the rail expanded
-    // while a panel is open even after peek clears.
-    clearLeaveTimer()
-    leaveTimerRef.current = setTimeout(() => {
-      leaveTimerRef.current = null
-      setPeek(false)
-    }, 1000)
+  function onPointerLeave(event: ReactPointerEvent<HTMLElement>) {
+    // Moving onto a destination flyout is not a real leave.
+    const next = event.relatedTarget
+    if (next instanceof Element && next.closest('[data-slot="portaled-floating-panel"]')) {
+      return
+    }
+    scheduleCollapse()
     queueMicrotask(() => {
       hoverLocked.current = false
     })
@@ -176,6 +225,8 @@ export function SideAppsRail({
         data-menu-open={menuOpen ? 'true' : undefined}
         onPointerEnter={onPointerEnter}
         onPointerLeave={onPointerLeave}
+        onMouseEnter={onPointerEnter}
+        onMouseLeave={onPointerLeave}
         className={cn(
           'shell-apps flex h-svh flex-col overflow-hidden border-r border-border/70 bg-card print:hidden',
           'transition-[width] duration-200 ease-out motion-reduce:transition-none',

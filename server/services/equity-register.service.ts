@@ -154,29 +154,31 @@ export async function postEquityEvent(
   })
 }
 
-export async function shareholderRegisterExport(ctx: OrgContext) {
+export async function shareholderRegisterRows(ctx: OrgContext) {
   assertPermission(ctx, 'account:read')
   const rows = await db.shareholder.findMany({
     where: { orgId: ctx.orgId },
     orderBy: { name: 'asc' },
     include: { capitalAccount: { select: { code: true, name: true } } },
   })
-  return shareholderRegisterCsv(
-    rows.map((row) => ({
-      name: row.name,
-      shares: row.shares.toString(),
-      ownershipPercent: row.ownershipPercent.toString(),
-      capitalAccount: row.capitalAccount
-        ? `${row.capitalAccount.code} ${row.capitalAccount.name}`
-        : '',
-    })),
-  )
+  return rows.map((row) => ({
+    name: row.name,
+    shares: row.shares.toString(),
+    ownershipPercent: row.ownershipPercent.toString(),
+    capitalAccount: row.capitalAccount
+      ? `${row.capitalAccount.code} ${row.capitalAccount.name}`
+      : '',
+  }))
 }
 
-export async function periodEquityMovementExport(
+export async function shareholderRegisterExport(ctx: OrgContext) {
+  return shareholderRegisterCsv(await shareholderRegisterRows(ctx))
+}
+
+export async function periodEquityMovementRows(
   ctx: OrgContext,
   range?: { from?: CalendarDate | null; to?: CalendarDate | null },
-) {
+): Promise<EquityMovementRow[]> {
   assertPermission(ctx, 'account:read')
   const from = range?.from ? toDate(range.from) : undefined
   const to = range?.to ? toDate(range.to) : undefined
@@ -198,7 +200,7 @@ export async function periodEquityMovementExport(
     },
     orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
   })
-  const rows: EquityMovementRow[] = events.map((row) => ({
+  return events.map((row) => ({
     date: toCalendarDate(row.date),
     kind: row.kind,
     shareholder: row.shareholder?.name ?? '',
@@ -206,5 +208,11 @@ export async function periodEquityMovementExport(
     memo: row.memo ?? '',
     equityAccount: `${row.equityAccount.code} ${row.equityAccount.name}`,
   }))
-  return equityMovementCsv(rows)
+}
+
+export async function periodEquityMovementExport(
+  ctx: OrgContext,
+  range?: { from?: CalendarDate | null; to?: CalendarDate | null },
+) {
+  return equityMovementCsv(await periodEquityMovementRows(ctx, range))
 }

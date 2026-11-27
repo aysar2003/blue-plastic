@@ -3,6 +3,7 @@ import 'server-only'
 import {
   addMonths,
   endOfMonth,
+  isCalendarDate,
   startOfMonth,
   toCalendarDate,
   toDate,
@@ -193,12 +194,20 @@ export function looksLikeId(value: string | undefined | null): value is string {
 
 export async function loadCompanySnapshot(
   ctx: OrgContext,
-  options: { tab?: string | null; customerId?: string | null } = {},
+  options: {
+    tab?: string | null
+    customerId?: string | null
+    /** Point-in-time for balances and MTD windows. Defaults to org today. */
+    asOf?: CalendarDate | string | null
+  } = {},
 ): Promise<CompanySnapshot> {
   assertPermission(ctx, 'report:overview')
 
   const tab: SnapshotTab = isSnapshotTab(options.tab) ? options.tab : 'company'
-  const asOf = today(ctx.organization.timeZone)
+  const asOf =
+    options.asOf && isCalendarDate(options.asOf)
+      ? options.asOf
+      : today(ctx.organization.timeZone)
   const customerId = looksLikeId(options.customerId) ? options.customerId : null
 
   const pulse = await safeWidget('pulse', () => loadPulse(ctx, asOf))

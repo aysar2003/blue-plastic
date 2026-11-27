@@ -80,6 +80,18 @@ export const purchaseDocumentSchema = z.object({
   acknowledgeDuplicate: z.coerce.boolean().optional(),
   /** Budget control warn mode: clerk confirmed overspend. */
   acknowledgeBudgetOverspend: z.coerce.boolean().optional(),
+  /** Wave G: WHT percent on bill subtotal (e.g. 2). Blank clears. */
+  withholdPercent: z
+    .union([
+      z.literal(''),
+      calculatedDecimal(/^\d{1,3}(\.\d{1,4})?$/, 'Enter a percent').refine(
+        (v) => Number(v) <= 100,
+        'At most 100%',
+      ),
+    ])
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
   lines: z.array(purchaseLineSchema).min(1, 'Add at least one line').max(200),
 })
 

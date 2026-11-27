@@ -8,11 +8,17 @@ import {
   DEFAULT_VENDOR_ACCENT,
   type DocumentTemplate,
 } from '@/lib/document-template'
+import { LUXURY_PDF } from '@/lib/odoo-brand'
 import { PDF_PAGE, type PdfRgb, type PdfRow, type PdfRun } from '@/lib/pdf-text'
+import type { PrintLook } from '@/lib/print-look'
 
 const WHITE = [1, 1, 1] as const
 const INK = [0.12, 0.16, 0.2] as const
 const MUTED = [0.36, 0.42, 0.48] as const
+const LUXURY_INK = LUXURY_PDF.ink
+const LUXURY_MUTED = LUXURY_PDF.muted
+const LUXURY_ACCENT = LUXURY_PDF.teal
+const LUXURY_ON_ACCENT = [0.039, 0.035, 0.047] as const
 
 export function hexToPdfRgb(hex: string): PdfRgb {
   const raw = hex.trim().replace(/^#/, '')
@@ -106,7 +112,9 @@ export function merchantPdfLetterhead(input: {
 export function merchantPdfTableHead(
   cells: { text: string; x: number; align?: PdfRun['align'] }[],
   accent: PdfRgb,
+  look: PrintLook = 'default',
 ): PdfRow {
+  const onAccent = look === 'luxury' ? LUXURY_ON_ACCENT : WHITE
   return {
     size: 8,
     height: 16,
@@ -117,7 +125,7 @@ export function merchantPdfTableHead(
       x: cell.x,
       align: cell.align ?? 'left',
       bold: true,
-      color: WHITE,
+      color: onAccent,
     })),
   }
 }
@@ -125,7 +133,13 @@ export function merchantPdfTableHead(
 /** Right-column totals only — same band width as MerchantInvoice print. */
 const TOTAL_FROM = 360
 
-export function merchantPdfTotalBand(label: string, value: string, accent: PdfRgb): PdfRow {
+export function merchantPdfTotalBand(
+  label: string,
+  value: string,
+  accent: PdfRgb,
+  look: PrintLook = 'default',
+): PdfRow {
+  const onAccent = look === 'luxury' ? LUXURY_ON_ACCENT : WHITE
   return {
     size: 10,
     height: 16,
@@ -134,18 +148,27 @@ export function merchantPdfTotalBand(label: string, value: string, accent: PdfRg
     fillTo: PDF_PAGE.right + 0,
     // Extend a hair past the content edge so the band meets the page margin look.
     runs: [
-      { text: label.toUpperCase(), x: TOTAL_FROM + 8, bold: true, color: WHITE },
-      { text: value, x: PDF_PAGE.right, align: 'right', bold: true, color: WHITE },
+      { text: label.toUpperCase(), x: TOTAL_FROM + 8, bold: true, color: onAccent },
+      { text: value, x: PDF_PAGE.right, align: 'right', bold: true, color: onAccent },
     ],
   }
 }
 
-export function merchantPdfInk(): PdfRgb {
-  return INK
+export function merchantPdfInk(look: PrintLook = 'default'): PdfRgb {
+  return look === 'luxury' ? LUXURY_INK : INK
 }
 
-export function merchantPdfMuted(): PdfRgb {
-  return MUTED
+export function merchantPdfMuted(look: PrintLook = 'default'): PdfRgb {
+  return look === 'luxury' ? LUXURY_MUTED : MUTED
+}
+
+/** Champagne gold when Luxury desk requests VIP PDF letterhead. */
+export function merchantPdfAccentForLook(
+  look: PrintLook,
+  templateAccent?: PdfRgb,
+): PdfRgb {
+  if (look === 'luxury') return LUXURY_ACCENT
+  return templateAccent ?? hexToPdfRgb(DEFAULT_DOCUMENT_TEMPLATE.accent)
 }
 
 function cleanLine(value: string): string {

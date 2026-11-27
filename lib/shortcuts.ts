@@ -7,9 +7,10 @@ import type { Permission } from '@/server/auth/permissions'
  * shortcut cannot work but be undocumented, or be documented but not work.
  *
  * The scheme is two-key sequences with a verb prefix — `g` to go somewhere, `c`
- * to create something — which is what people who use a keyboard already expect
- * and which leaves single letters free for the page itself. Nothing is bound to
- * a bare modifier chord except the palette.
+ * to create something, `o` to open a board or secondary module — which is what
+ * people who use a keyboard already expect and which leaves single letters free
+ * for the page itself. Nothing is bound to a bare modifier chord except the
+ * palette.
  */
 export type Shortcut = {
   /** The keys pressed in order, e.g. ['g', 'i']. */
@@ -17,10 +18,11 @@ export type Shortcut = {
   label: string
   href: string
   permission?: Permission
-  group: 'Go to' | 'Create'
+  group: 'Go to' | 'Create' | 'Open'
 }
 
 export const SHORTCUTS: Shortcut[] = [
+  // --- Go to (core day-to-day) ---------------------------------------------
   { keys: ['g', 'd'], label: 'Apps', href: '/dashboard', group: 'Go to' },
   { keys: ['g', 'x'], label: 'Sales', href: '/sales', permission: 'invoice:read', group: 'Go to' },
   { keys: ['g', 'i'], label: 'Invoices', href: '/sales/invoices?status=open', permission: 'invoice:read', group: 'Go to' },
@@ -47,6 +49,19 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: ['g', 's'], label: 'Settings', href: '/settings', permission: 'org:read', group: 'Go to' },
   { keys: ['g', 'h'], label: 'Help', href: '/help', group: 'Go to' },
 
+  // --- Open (boards & secondary modules) ----------------------------------
+  { keys: ['o', 'i'], label: 'Inventory', href: '/inventory', permission: 'item:read', group: 'Open' },
+  { keys: ['o', 't'], label: 'Stock on hand', href: '/inventory/stock', permission: 'inventory:read', group: 'Open' },
+  { keys: ['o', 's'], label: 'Company Snapshot', href: '/reports/snapshot', permission: 'report:overview', group: 'Open' },
+  { keys: ['o', 'b'], label: 'Business overview', href: '/reports/business-overview', permission: 'report:overview', group: 'Open' },
+  { keys: ['o', 'a'], label: 'Analytics', href: '/analytics', permission: 'report:overview', group: 'Open' },
+  { keys: ['o', 'c'], label: 'Cash Flow', href: '/reports/cash-flow', permission: 'report:read', group: 'Open' },
+  { keys: ['o', 'r'], label: 'A/R Aging', href: '/reports/ar-aging', permission: 'report:read', group: 'Open' },
+  { keys: ['o', 'p'], label: 'Point of Sale', href: '/pos', permission: 'pos:read', group: 'Open' },
+  { keys: ['o', 'k'], label: 'Calendar', href: '/calendar', permission: 'calendar:read', group: 'Open' },
+  { keys: ['o', 'h'], label: 'Keyboard shortcuts', href: '/help/shortcuts', group: 'Open' },
+
+  // --- Create --------------------------------------------------------------
   { keys: ['c', 'i'], label: 'New invoice', href: '/sales/invoices/new', permission: 'invoice:create', group: 'Create' },
   { keys: ['c', 'r'], label: 'New sales receipt', href: '/sales/sales-receipts/new', permission: 'invoice:create', group: 'Create' },
   { keys: ['c', 'q'], label: 'New quotation', href: '/sales/quotations/new', permission: 'invoice:create', group: 'Create' },
@@ -71,14 +86,25 @@ export const GLOBAL_KEYS: { keys: string; label: string }[] = [
   { keys: 'Ctrl K', label: 'Search the whole system' },
   { keys: '?', label: 'Show keyboard shortcuts' },
   { keys: '/', label: 'Jump to the search box on the page' },
+  { keys: 'g then …', label: 'Go to a page (second key chooses which)' },
+  { keys: 'c then …', label: 'Create a document (second key chooses which)' },
+  { keys: 'o then …', label: 'Open a board or module (Inventory, Snapshot, POS…)' },
   { keys: 'Ctrl S', label: 'Save and close (invoice, bill, and every other form)' },
   { keys: 'Ctrl Shift S', label: 'Save and start another blank form' },
   { keys: 'Ctrl L', label: 'Add a line on the document you are filling in' },
   { keys: 'Enter', label: 'Accept a name in a picker, then move to the next field on the line' },
   { keys: '↑ ↓', label: 'Move through the rows of a list or a picker' },
+  { keys: 'j / k', label: 'Move down / up a list without the mouse' },
   { keys: 'Esc', label: 'Leave a field, or close a dialog' },
   { keys: 'Tab', label: 'Accept the highlighted name and move to the next field' },
 ]
 
 /** How a key sequence is written on screen. */
 export const formatKeys = (keys: string[]) => keys.map((key) => key.toUpperCase()).join(' then ')
+
+/** Label shown in the bottom hint bar while a two-key sequence is open. */
+export function sequenceGroupLabel(prefix: string | null): string {
+  if (prefix === 'c') return 'Create'
+  if (prefix === 'o') return 'Open'
+  return 'Go to'
+}

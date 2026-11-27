@@ -132,7 +132,7 @@ function ReportColumns({
             >
               <span
                 aria-hidden
-                className="mt-1.5 size-2 shrink-0 rounded-full"
+                className="app-chroma-dot mt-1.5 size-2 shrink-0 rounded-full"
                 style={{ background: app.accent ?? '#64748b' }}
               />
               <div className="min-w-0 flex-1">

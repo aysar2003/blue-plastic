@@ -134,7 +134,10 @@ export function verifySignWebhookSignature(secret: string, body: string, header:
   }
 }
 
-/** POST stub; returns external id when webhook accepts. Failures do not throw. */
+/**
+ * Outbound sign webhook POST (Phase 59). Returns external id when the provider
+ * accepts; failures are returned as `{ ok: false }` and do not throw.
+ */
 export async function dispatchSignWebhook(
   config: SignProviderConfig,
   payload: SignWebhookPayload,

@@ -1,5 +1,3 @@
-import { Decimal } from '@/lib/money'
-
 /** Weekly capacity from explicit total or weekday minutes (Mon–Sun). */
 export function effectiveWeeklyCapacity(
   capacityMinutesPerWeek: string | number,

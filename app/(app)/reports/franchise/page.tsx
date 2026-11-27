@@ -37,7 +37,13 @@ export default async function FranchiseReportPage() {
               href={`/api/reports/franchise/export?month=${month}`}
               className="text-sm text-primary underline-offset-4 hover:underline"
             >
-              Royalty CSV
+              Royalty Excel
+            </a>
+            <a
+              href={`/api/reports/franchise/export?month=${month}&format=csv`}
+              className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+            >
+              CSV
             </a>
             <Link href="/reports/companies" className="text-sm text-primary underline-offset-4 hover:underline">
               Company group

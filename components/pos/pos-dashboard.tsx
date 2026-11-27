@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/data/page-header'
 import { SessionOpenForm } from '@/components/pos/session-open-form'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { ODOO } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 import { cn } from '@/lib/utils'
 
 export type DashboardRegister = {
@@ -47,6 +47,7 @@ export function PosDashboard({
   initialOpenRegisterId?: string | null
 }) {
   const router = useRouter()
+  const ODOO = usePosBrand()
   const [openingId, setOpeningId] = useState<string | null>(initialOpenRegisterId)
   const [transferId, setTransferId] = useState<string | null>(null)
   const [transferNote, setTransferNote] = useState<string | null>(null)
@@ -158,7 +159,7 @@ export function PosDashboard({
                           setContinuingId(register.id)
                         }}
                         className={cn(buttonVariants({ size: 'sm' }), 'shadow-sm hover:opacity-95')}
-                        style={{ background: ODOO.cta, color: '#fff' }}
+                        style={{ background: ODOO.cta, color: ODOO.ctaInk }}
                       >
                         Continue Selling
                       </button>
@@ -166,7 +167,7 @@ export function PosDashboard({
                       <Link
                         href={`/pos/${register.id}`}
                         className={cn(buttonVariants({ size: 'sm' }), 'shadow-sm hover:opacity-95')}
-                        style={{ background: ODOO.cta, color: '#fff' }}
+                        style={{ background: ODOO.cta, color: ODOO.ctaInk }}
                       >
                         Continue Selling
                       </Link>
@@ -185,7 +186,7 @@ export function PosDashboard({
                       setOpeningId(register.id)
                     }}
                     className={cn(buttonVariants({ size: 'sm' }), 'shadow-sm hover:opacity-95')}
-                    style={{ background: ODOO.cta, color: '#fff' }}
+                    style={{ background: ODOO.cta, color: ODOO.ctaInk }}
                   >
                     Open Register
                   </button>

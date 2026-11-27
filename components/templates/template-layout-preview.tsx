@@ -1,3 +1,4 @@
+import type { TemplateLook } from '@/lib/template-look'
 import { cn } from '@/lib/utils'
 
 /** Visual mock of a sales / report / receipt layout — for Settings → Templates. */
@@ -21,35 +22,57 @@ export function TemplateLayoutPreview({
   accent = '#1eb8ae',
   className,
   size = 'thumb',
+  look,
 }: {
   kind: string
   accent?: string
   className?: string
   size?: 'thumb' | 'stage'
+  /** When set, preview honours style overrides (font, header, density, etc.). */
+  look?: Partial<TemplateLook>
 }) {
   const resolved = resolveKind(kind)
   const tall = size === 'stage'
+  const colour = look?.accent ?? accent
+  const radius = look?.radius ?? 8
+  const borderWidth = look?.borderWidth
+  const borderColor = look?.borderColor
 
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-lg border border-border bg-white text-slate-800 shadow-sm',
+        'relative overflow-hidden bg-white text-slate-800 shadow-sm',
+        look ? null : 'rounded-lg border border-border',
         tall ? 'min-h-[22rem] w-full max-w-md' : 'h-20 w-full',
         className,
       )}
+      style={
+        look
+          ? {
+              borderRadius: radius,
+              border:
+                borderWidth != null && borderColor
+                  ? `${borderWidth}px solid ${borderColor}`
+                  : '1px solid #e2e8f0',
+              fontFamily: look.fontFamily,
+              fontSize: look.fontSize,
+              fontWeight: look.fontWeight,
+            }
+          : undefined
+      }
       aria-hidden
     >
-      {resolved === 'sheet' ? <SheetMock accent={accent} tall={tall} /> : null}
+      {resolved === 'sheet' ? <SheetMock accent={colour} tall={tall} look={look} /> : null}
       {resolved === 'invoice' ? <OfficeMock tall={tall} /> : null}
       {resolved === 'classic' ? <ClassicMock tall={tall} /> : null}
-      {resolved === 'service' ? <ServiceMock accent={accent} tall={tall} /> : null}
-      {resolved === 'modern' ? <ModernMock accent={accent} tall={tall} /> : null}
+      {resolved === 'service' ? <ServiceMock accent={colour} tall={tall} /> : null}
+      {resolved === 'modern' ? <ModernMock accent={colour} tall={tall} /> : null}
       {resolved === 'standard' || resolved === 'compact' || resolved === 'plain' ? (
         <ReportMock kind={resolved} tall={tall} />
       ) : null}
       {resolved === '80' || resolved === '58' ? <ReceiptMock width={resolved} tall={tall} /> : null}
-      {resolved === 'document' ? <DocumentMock accent={accent} tall={tall} /> : null}
-      {resolved === 'trade' ? <TradeMock tall={tall} /> : null}
+      {resolved === 'document' ? <DocumentMock accent={colour} tall={tall} look={look} /> : null}
+      {resolved === 'trade' ? <TradeMock tall={tall} look={look} /> : null}
       {resolved === 'generic' ? <GenericMock tall={tall} /> : null}
     </div>
   )
@@ -73,14 +96,33 @@ function resolveKind(kind: string): TemplatePreviewKind {
   return (known.includes(kind as TemplatePreviewKind) ? kind : 'generic') as TemplatePreviewKind
 }
 
-function SheetMock({ accent, tall }: { accent: string; tall: boolean }) {
+function SheetMock({
+  accent,
+  tall,
+  look,
+}: {
+  accent: string
+  tall: boolean
+  look?: Partial<TemplateLook>
+}) {
+  const pad = look?.density === 'compact' ? (tall ? 'p-3' : 'p-1.5') : tall ? 'p-4' : 'p-2'
   return (
-    <div className={cn('relative flex h-full flex-col bg-white', tall ? 'p-4' : 'p-2')}>
-      <span className="absolute left-0 top-0" style={{ width: tall ? 56 : 28, height: tall ? 40 : 20, background: '#3DDC97' }} />
-      <span className={cn('ml-auto font-semibold', tall ? 'text-sm' : 'text-[9px]')} style={{ color: '#1B3A4B' }}>
-        INVOICE
+    <div className={cn('relative flex h-full flex-col bg-white', pad)}>
+      {look?.showLogo !== false ? (
+        <span
+          className="absolute left-0 top-0"
+          style={{ width: tall ? 56 : 28, height: tall ? 40 : 20, background: accent }}
+        />
+      ) : null}
+      <span className={cn('ml-auto font-semibold', tall ? 'text-sm' : 'text-[9px]')} style={{ color: accent }}>
+        {look?.title || 'INVOICE'}
       </span>
-      <span className={cn('mt-2 block', tall ? 'h-1' : 'h-0.5')} style={{ background: '#1B3A4B' }} />
+      {look?.headerStyle !== 'plain' ? (
+        <span
+          className={cn('mt-2 block', look?.headerStyle === 'band' ? (tall ? 'h-2' : 'h-1') : tall ? 'h-1' : 'h-0.5')}
+          style={{ background: accent }}
+        />
+      ) : null}
       {tall ? (
         <>
           <div className="mt-4 grid grid-cols-2 gap-3 text-[11px]">
@@ -236,12 +278,23 @@ function ReceiptMock({ width, tall }: { width: '80' | '58'; tall: boolean }) {
   )
 }
 
-function TradeMock({ tall }: { tall: boolean }) {
+function TradeMock({ tall, look }: { tall: boolean; look?: Partial<TemplateLook> }) {
+  const pad = look?.density === 'compact' ? (tall ? 'p-3' : 'p-1.5') : tall ? 'p-4' : 'p-2'
+  const accent = look?.accent ?? '#1eb8ae'
   return (
-    <div className={cn('flex h-full flex-col bg-white text-slate-800', tall ? 'p-4' : 'p-2')}>
+    <div className={cn('flex h-full flex-col bg-white text-slate-800', pad)}>
       <p className={cn('font-semibold', tall ? 'text-xs' : 'text-[8px]')}>Company</p>
-      <span className={cn('mt-1 border-b border-slate-300', tall ? 'mb-2' : 'mb-1')} />
-      <p className={cn('font-semibold', tall ? 'text-sm' : 'text-[9px]')}>Purchase order #PO-1</p>
+      {look?.headerStyle !== 'plain' ? (
+        <span
+          className={cn('mt-1 block', look?.headerStyle === 'band' ? (tall ? 'h-2 mb-2' : 'h-1 mb-1') : tall ? 'mb-2 border-b' : 'mb-1 border-b')}
+          style={look?.headerStyle === 'band' ? { background: accent } : { borderColor: accent }}
+        />
+      ) : (
+        <span className={cn(tall ? 'mb-2' : 'mb-1')} />
+      )}
+      <p className={cn('font-semibold', tall ? 'text-sm' : 'text-[9px]')}>
+        {look?.title || 'Purchase order #PO-1'}
+      </p>
       <div className={cn('mt-2 grid grid-cols-4 border-b border-slate-400 text-[8px] font-semibold', tall ? 'py-1' : '')}>
         <span className="col-span-2">Description</span>
         <span className="text-right">Qty</span>
@@ -261,31 +314,83 @@ function TradeMock({ tall }: { tall: boolean }) {
   )
 }
 
-function DocumentMock({ accent, tall }: { accent: string; tall: boolean }) {
+function DocumentMock({
+  accent,
+  tall,
+  look,
+}: {
+  accent: string
+  tall: boolean
+  look?: Partial<TemplateLook>
+}) {
+  const pad = look?.density === 'compact' ? (tall ? 'p-3' : 'p-1.5') : tall ? 'p-4' : 'p-2'
+  const showLogo = look?.showLogo !== false
+  const showBanks = look?.showBanks !== false
+  const showTerms = look?.showTerms !== false
+  const headerStyle = look?.headerStyle ?? 'line'
+  const title = look?.title || 'INVOICE'
+
   return (
-    <div className={cn('flex h-full flex-col', tall ? 'p-4' : 'p-2')}>
-      <div className={cn('flex items-center justify-between', tall ? 'mb-3' : 'mb-1')}>
-        <span
-          className={cn('grid place-items-center rounded border border-dashed text-[9px] text-slate-400', tall ? 'size-12' : 'size-6')}
+    <div className={cn('flex h-full flex-col', pad)}>
+      {headerStyle === 'band' ? (
+        <div
+          className={cn('mb-2 flex items-center justify-between text-white', tall ? '-mx-1 mb-3 rounded-md px-3 py-2' : 'rounded px-1 py-0.5')}
+          style={{ background: accent }}
         >
-          Logo
-        </span>
-        <span className={cn('font-bold', tall ? 'text-sm' : 'text-[9px]')} style={{ color: accent }}>
-          INVOICE
-        </span>
-      </div>
-      <span className={cn('block rounded', tall ? 'h-2' : 'h-1')} style={{ background: accent }} />
+          {showLogo ? (
+            <span
+              className={cn(
+                'grid place-items-center rounded border border-dashed border-white/50 text-[9px] text-white/80',
+                tall ? 'size-10' : 'size-5',
+              )}
+            >
+              Logo
+            </span>
+          ) : (
+            <span />
+          )}
+          <span className={cn('font-bold', tall ? 'text-sm' : 'text-[9px]')}>{title}</span>
+        </div>
+      ) : (
+        <div className={cn('flex items-center justify-between', tall ? 'mb-3' : 'mb-1')}>
+          {showLogo ? (
+            <span
+              className={cn(
+                'grid place-items-center rounded border border-dashed text-[9px] text-slate-400',
+                tall ? 'size-12' : 'size-6',
+              )}
+              style={{ borderColor: look?.borderColor ?? '#cbd5e1' }}
+            >
+              Logo
+            </span>
+          ) : (
+            <span />
+          )}
+          <span className={cn('font-bold', tall ? 'text-sm' : 'text-[9px]')} style={{ color: accent }}>
+            {title}
+          </span>
+        </div>
+      )}
+      {headerStyle === 'line' ? (
+        <span className={cn('block rounded', tall ? 'h-2' : 'h-1')} style={{ background: accent }} />
+      ) : null}
       {tall ? (
         <>
-          <div className="mt-3 space-y-1 text-[11px]">
-            <p className="font-semibold">Bank lines</p>
-            <p className="text-slate-500">Hormud · 615</p>
-          </div>
-          <div className="mt-4 flex-1 rounded border border-slate-200 p-2 text-[11px]">
+          {showBanks ? (
+            <div className="mt-3 space-y-1 text-[11px]">
+              <p className="font-semibold">Bank lines</p>
+              <p className="text-slate-500">Hormud · 615</p>
+            </div>
+          ) : null}
+          <div
+            className={cn('mt-4 flex-1 p-2 text-[11px]', look?.borderWidth === 0 ? 'bg-slate-50' : 'rounded border border-slate-200')}
+          >
             <p className="font-semibold">Line items</p>
             <p className="text-slate-500">Sample goods · 1,000.00</p>
           </div>
-          <p className="mt-2 text-[10px] text-slate-500">Terms printed under the totals</p>
+          {showTerms ? (
+            <p className="mt-2 text-[10px] text-slate-500">Terms printed under the totals</p>
+          ) : null}
         </>
       ) : (
         <span className="mt-2 h-1.5 w-3/4 rounded bg-slate-200" />

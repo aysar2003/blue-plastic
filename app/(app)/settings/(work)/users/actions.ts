@@ -7,6 +7,7 @@ import { formValues, toFormState, type FormState } from '@/components/forms/acti
 import { cuid } from '@/lib/validation/common'
 import {
   adminDisableMemberTwoFactorSchema,
+  adminUpdateMemberIdentitySchema,
   inviteUserSchema,
   resetMemberPasswordSchema,
   updateMemberRoleSchema,
@@ -15,12 +16,17 @@ import { action } from '@/server/action'
 import * as auth2fa from '@/server/services/auth-2fa.service'
 import * as membershipService from '@/server/services/membership.service'
 
+function revalidateMemberPaths(membershipId?: string) {
+  revalidatePath('/settings/users')
+  if (membershipId) revalidatePath(`/settings/users/${membershipId}`)
+}
+
 export const inviteUser = action
   .requires('user:invite')
   .input(inviteUserSchema)
   .handler(async (ctx, input) => {
     const member = await membershipService.invite(ctx, input)
-    revalidatePath('/settings/users')
+    revalidateMemberPaths(member.id)
     return { id: member.id }
   })
 
@@ -29,7 +35,7 @@ export const updateMemberAccess = action
   .input(updateMemberRoleSchema)
   .handler(async (ctx, input) => {
     await membershipService.updateAccess(ctx, input)
-    revalidatePath('/settings/users')
+    revalidateMemberPaths(input.membershipId)
     return { id: input.membershipId }
   })
 
@@ -41,7 +47,7 @@ export const setMemberStatus = action
   .input(z.object({ membershipId: cuid, status: z.enum(['ACTIVE', 'INVITED', 'SUSPENDED']) }))
   .handler(async (ctx, input) => {
     await membershipService.setStatus(ctx, input.membershipId, input.status)
-    revalidatePath('/settings/users')
+    revalidateMemberPaths(input.membershipId)
     return { id: input.membershipId }
   })
 
@@ -50,7 +56,7 @@ export const setMemberConnect = action
   .input(z.object({ membershipId: cuid, canConnect: z.boolean() }))
   .handler(async (ctx, input) => {
     await membershipService.setCanConnect(ctx, input.membershipId, input.canConnect)
-    revalidatePath('/settings/users')
+    revalidateMemberPaths(input.membershipId)
     return { id: input.membershipId }
   })
 
@@ -59,7 +65,7 @@ export const removeMember = action
   .input(z.object({ membershipId: cuid }))
   .handler(async (ctx, input) => {
     await membershipService.remove(ctx, input.membershipId)
-    revalidatePath('/settings/users')
+    revalidateMemberPaths(input.membershipId)
     return { id: input.membershipId }
   })
 
@@ -68,7 +74,7 @@ export const resetMemberPassword = action
   .input(resetMemberPasswordSchema)
   .handler(async (ctx, input) => {
     const result = await membershipService.resetMemberPassword(ctx, input)
-    revalidatePath('/settings/users')
+    revalidateMemberPaths(input.membershipId)
     return result
   })
 
@@ -77,7 +83,26 @@ export const adminDisableMemberTwoFactor = action
   .input(adminDisableMemberTwoFactorSchema)
   .handler(async (ctx, input) => {
     const result = await auth2fa.adminDisableMemberTwoFactor(ctx, input.membershipId)
-    revalidatePath('/settings/users')
+    revalidateMemberPaths(input.membershipId)
+    return result
+  })
+
+export const forceSignOutMember = action
+  .requires('user:update')
+  .input(z.object({ membershipId: cuid }))
+  .handler(async (ctx, input) => {
+    const result = await membershipService.forceSignOutMember(ctx, input.membershipId)
+    revalidateMemberPaths(input.membershipId)
+    return result
+  })
+
+export const adminUpdateMemberIdentity = action
+  .requires('user:update')
+  .input(adminUpdateMemberIdentitySchema)
+  .handler(async (ctx, input) => {
+    const result = await membershipService.adminUpdateMemberIdentity(ctx, input)
+    revalidateMemberPaths(input.membershipId)
+    revalidatePath('/settings/user-performance')
     return result
   })
 

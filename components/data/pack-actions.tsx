@@ -14,6 +14,7 @@ import {
   singleDocumentPdfHref,
 } from '@/lib/document-pack'
 import { downloadPdfFile, withPrintInk } from '@/lib/print-ink'
+import { withDeskPrintLook } from '@/lib/print-look'
 import { cn } from '@/lib/utils'
 
 export type PackOne = {
@@ -58,7 +59,7 @@ export function PackActions({
       <PackLink href={links.printHref} disabled={!links.canPack} label="Print" icon={PrinterIcon} />
       <PackLink href={links.pdfHref} disabled={!links.canPack} label="PDF" icon={FileTextIcon} downloadPdf />
       <a
-        href={links.excelHref}
+        href={withDeskPrintLook(links.excelHref)}
         download
         className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
         title={
@@ -102,7 +103,7 @@ function PackLink({
         type="button"
         className={className}
         title="Download PDF"
-        onClick={() => void downloadPdfFile(withPrintInk(href, 'color'))}
+        onClick={() => void downloadPdfFile(withDeskPrintLook(withPrintInk(href, 'color')))}
       >
         <Icon />
         {label}

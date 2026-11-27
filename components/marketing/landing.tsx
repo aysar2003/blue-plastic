@@ -38,13 +38,12 @@ import {
 import { LOGIN_COMPANY, LOGIN_DOORS, LOGIN_HUB } from '@/lib/login-paths'
 import {
   PRODUCT_BUILDER,
-  PRODUCT_KIND,
   PRODUCT_NAME,
 } from '@/lib/product-brand'
 
 /**
- * Advanced public product site — navy field + SOM cyan.
- * Not a white SaaS template: full-bleed hero, ledger rails, deep capability map.
+ * Public product site — dark ink + champagne luxury.
+ * Brand-first full-bleed hero, quiet sections, restrained brass accents.
  */
 
 const WORK_LANES = [
@@ -195,10 +194,10 @@ function SiteHeader({
   enterLabel: string
 }) {
   return (
-    <header className="sticky top-0 z-50 border-b border-border/80 bg-[#05080f]/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-6 px-5 sm:px-8">
+    <header className="sticky top-0 z-50 border-b border-border/60 bg-[#07060a]/85 backdrop-blur-xl">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 px-5 sm:px-8">
         <ProductWordmark size="sm" />
-        <nav className="hidden items-center gap-7 text-[13px] font-medium text-muted-foreground md:flex">
+        <nav className="hidden items-center gap-8 text-[13px] font-medium tracking-wide text-muted-foreground md:flex">
           <a className="transition-colors hover:text-primary" href="#power">
             Capabilities
           </a>
@@ -223,14 +222,14 @@ function SiteHeader({
         <div className="flex items-center gap-2">
           {!signedIn ? (
             <Link
-              className="hidden h-9 items-center px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+              className="hidden h-10 items-center px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
               href={LOGIN_COMPANY}
             >
               Company login
             </Link>
           ) : null}
           <Link
-            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-[13px] font-bold text-primary-foreground transition-opacity hover:opacity-90"
+            className="inline-flex h-10 items-center gap-1.5 rounded-sm bg-primary px-5 text-[13px] font-semibold tracking-wide text-primary-foreground transition-opacity hover:opacity-90"
             href={enterHref}
           >
             {enterLabel}
@@ -247,36 +246,33 @@ function Hero({ enterHref, enterLabel }: { enterHref: string; enterLabel: string
     <section className="relative min-h-[min(92svh,920px)] overflow-hidden">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_70%_-10%,rgba(34,211,238,0.28),transparent_55%),radial-gradient(ellipse_50%_45%_at_0%_90%,rgba(14,116,144,0.22),transparent_50%),linear-gradient(180deg,#05080f_0%,#070b14_55%,#05080f_100%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_75%_55%_at_72%_8%,rgba(196,165,116,0.16),transparent_58%),radial-gradient(ellipse_45%_40%_at_8%_88%,rgba(196,165,116,0.07),transparent_52%),linear-gradient(180deg,#07060a_0%,#0c0b10_50%,#07060a_100%)]"
       />
-      <div aria-hidden className="erp-scan pointer-events-none absolute inset-0 opacity-50" />
-      <div aria-hidden className="erp-beam pointer-events-none absolute -right-24 top-10 h-[70%] w-[55%] rotate-[-8deg]" />
+      <div aria-hidden className="erp-grain pointer-events-none absolute inset-0 opacity-40" />
+      <div aria-hidden className="erp-veil pointer-events-none absolute -right-16 top-0 h-[75%] w-[50%]" />
 
-      <div className="relative mx-auto grid max-w-6xl gap-12 px-5 pb-16 pt-16 sm:px-8 sm:pb-20 sm:pt-20 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-10 lg:pb-24 lg:pt-24">
+      <div className="relative mx-auto grid max-w-6xl gap-14 px-5 pb-16 pt-16 sm:px-8 sm:pb-20 sm:pt-20 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12 lg:pb-24 lg:pt-24">
         <div className="erp-fade relative z-10 max-w-xl">
-          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-primary">
-            {PRODUCT_KIND}
-          </p>
-          <h1 className="erp-display mt-5 text-[clamp(3rem,8vw,5rem)] font-semibold leading-[0.9] tracking-[-0.045em] text-foreground">
+          <h1 className="erp-display text-[clamp(3.25rem,9vw,5.5rem)] font-semibold leading-[0.88] tracking-[-0.04em] text-foreground">
             {PRODUCT_NAME}
           </h1>
-          <p className="mt-7 max-w-md text-[1.25rem] font-medium leading-snug tracking-[-0.02em] text-slate-200 sm:text-[1.4rem]">
+          <p className="mt-7 max-w-md text-[1.2rem] font-medium leading-snug tracking-[-0.015em] text-[#ebe4d8] sm:text-[1.35rem]">
             One advanced ledger for books, stock, sales, and the counter.
           </p>
-          <p className="mt-4 max-w-md text-[15px] leading-[1.7] text-muted-foreground">
+          <p className="mt-4 max-w-md text-[15px] leading-[1.75] text-muted-foreground">
             Traders and service teams post every invoice, bill, and POS sale into books you can
             audit — not a spreadsheet you hope is right.
           </p>
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-primary px-7 text-[15px] font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 hover:opacity-95"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-sm bg-primary px-8 text-[15px] font-semibold tracking-wide text-primary-foreground transition-transform hover:-translate-y-0.5 hover:opacity-95"
               href={enterHref}
             >
               {enterLabel}
               <ArrowRight className="size-4" />
             </Link>
             <a
-              className="inline-flex h-12 items-center justify-center rounded-md border border-primary/35 bg-primary/5 px-7 text-[15px] font-medium text-primary transition-colors hover:bg-primary/10"
+              className="inline-flex h-12 items-center justify-center rounded-sm border border-primary/40 bg-transparent px-8 text-[15px] font-medium text-primary transition-colors hover:bg-primary/10"
               href="#power"
             >
               Explore the system
@@ -295,19 +291,19 @@ function HeroVisual() {
     <div className="erp-float relative z-10 w-full">
       <div
         aria-hidden
-        className="absolute -inset-10 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.22),transparent_65%)] blur-2xl"
+        className="absolute -inset-12 bg-[radial-gradient(circle_at_center,rgba(196,165,116,0.14),transparent_68%)] blur-2xl"
       />
-      <div className="relative overflow-hidden rounded-xl border border-primary/25 bg-[#0b1220]/90 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_40px_80px_-40px_rgba(34,211,238,0.55)] backdrop-blur-sm">
-        <div className="flex items-center gap-2 border-b border-border bg-[#070b14]/90 px-4 py-2.5">
-          <span className="size-2 rounded-full bg-rose-400/80" />
-          <span className="size-2 rounded-full bg-amber-400/80" />
-          <span className="size-2 rounded-full bg-primary/90" />
-          <span className="ml-3 font-mono text-[11px] tracking-wide text-primary/80">
+      <div className="relative overflow-hidden border border-primary/20 bg-[#100e14]/95 shadow-[0_40px_90px_-48px_rgba(196,165,116,0.4)] backdrop-blur-sm">
+        <div className="flex items-center gap-2 border-b border-border/80 bg-[#0a090e]/95 px-4 py-3">
+          <span className="size-1.5 rounded-full bg-primary/50" />
+          <span className="size-1.5 rounded-full bg-primary/35" />
+          <span className="size-1.5 rounded-full bg-primary/70" />
+          <span className="ml-3 text-[11px] tracking-[0.14em] text-primary/75">
             {PRODUCT_NAME} · live books
           </span>
         </div>
         <div className="grid grid-cols-[0.34fr_0.66fr]">
-          <aside className="space-y-1 border-r border-border bg-[#070b14]/70 p-2.5">
+          <aside className="space-y-1 border-r border-border/70 bg-[#0a090e]/80 p-2.5">
             {[
               { icon: LayoutGrid, label: 'Apps', on: true },
               { icon: Receipt, label: 'Sales' },
@@ -319,8 +315,8 @@ function HeroVisual() {
             ].map(({ icon: Icon, label, on }) => (
               <div
                 key={label}
-                className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] ${
-                  on ? 'bg-primary/15 text-primary' : 'text-slate-400'
+                className={`flex items-center gap-2 px-2 py-1.5 text-[12px] ${
+                  on ? 'bg-primary/12 text-primary' : 'text-[#9a9186]'
                 }`}
               >
                 <Icon className="size-3.5 shrink-0" />
@@ -330,10 +326,10 @@ function HeroVisual() {
           </aside>
           <div className="space-y-3 p-4">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/70">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-primary/70">
                 This month
               </p>
-              <p className="mt-1 text-[1.35rem] font-semibold tracking-tight text-foreground">
+              <p className="erp-display mt-1 text-[1.35rem] font-semibold tracking-tight text-foreground">
                 Profit &amp; Loss
               </p>
             </div>
@@ -344,12 +340,12 @@ function HeroVisual() {
                 ['Expenses', '31%'],
               ].map(([label, width]) => (
                 <div key={label}>
-                  <div className="mb-1 flex justify-between text-[11px] text-slate-400">
+                  <div className="mb-1 flex justify-between text-[11px] text-[#9a9186]">
                     <span>{label}</span>
-                    <span className="tabular-nums text-slate-200">{width}</span>
+                    <span className="tabular-nums text-[#ebe4d8]">{width}</span>
                   </div>
-                  <div className="h-1 overflow-hidden rounded-full bg-slate-800">
-                    <div className="h-full rounded-full bg-primary" style={{ width }} />
+                  <div className="h-px overflow-hidden bg-[#1c191f]">
+                    <div className="h-full bg-primary" style={{ width }} />
                   </div>
                 </div>
               ))}
@@ -363,9 +359,9 @@ function HeroVisual() {
               ].map(([label, value]) => (
                 <div
                   key={label}
-                  className="border border-border/80 bg-[#070b14]/60 px-3 py-2.5"
+                  className="border border-border/60 bg-[#0a090e]/70 px-3 py-2.5"
                 >
-                  <p className="text-[10px] text-slate-500">{label}</p>
+                  <p className="text-[10px] text-[#7a7368]">{label}</p>
                   <p className="mt-0.5 text-[1.05rem] font-semibold text-foreground">{value}</p>
                 </div>
               ))}
@@ -388,20 +384,20 @@ function SectionHeading({
 }) {
   return (
     <div className="max-w-2xl">
-      <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
+      <span className="text-[11px] font-medium uppercase tracking-[0.26em] text-primary">
         {eyebrow}
       </span>
       <h2 className="erp-display mt-3 text-[2rem] font-semibold leading-[1.05] tracking-[-0.035em] text-foreground sm:text-[2.55rem]">
         {title}
       </h2>
-      <p className="mt-4 text-[16px] leading-[1.7] text-muted-foreground">{body}</p>
+      <p className="mt-4 text-[16px] leading-[1.75] text-muted-foreground">{body}</p>
     </div>
   )
 }
 
 function WorkPower() {
   return (
-    <section id="power" className="scroll-mt-20 border-t border-border/70 py-20 sm:py-28">
+    <section id="power" className="scroll-mt-20 border-t border-border/50 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <SectionHeading
           eyebrow="System power"
@@ -413,14 +409,14 @@ function WorkPower() {
           {WORK_LANES.map(({ title, body }, index) => (
             <li
               key={title}
-              className="erp-lane group grid gap-3 border-t border-border/70 py-8 sm:grid-cols-[6.5rem_1fr] sm:gap-10"
+              className="erp-lane group grid gap-3 border-t border-border/50 py-8 sm:grid-cols-[6.5rem_1fr] sm:gap-10"
               style={{ animationDelay: `${index * 40}ms` }}
             >
-              <span className="font-mono text-[12px] font-bold tracking-[0.2em] text-primary/80 transition-colors group-hover:text-primary">
+              <span className="text-[12px] font-medium tracking-[0.22em] text-primary/75 transition-colors group-hover:text-primary">
                 {String(index + 1).padStart(2, '0')}
               </span>
               <div>
-                <h3 className="text-[1.25rem] font-semibold tracking-tight text-foreground">
+                <h3 className="text-[1.25rem] font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary/95">
                   {title}
                 </h3>
                 <p className="mt-2 max-w-3xl text-[15px] leading-[1.75] text-muted-foreground">
@@ -429,7 +425,7 @@ function WorkPower() {
               </div>
             </li>
           ))}
-          <div className="border-t border-border/70" />
+          <div className="border-t border-border/50" />
         </ol>
       </div>
     </section>
@@ -440,23 +436,23 @@ function Modules() {
   return (
     <section
       id="modules"
-      className="scroll-mt-20 border-t border-border/70 bg-[#070b14]/80 py-20 sm:py-28"
+      className="scroll-mt-20 border-t border-border/50 bg-[#0a090e]/80 py-20 sm:py-28"
     >
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <SectionHeading
           eyebrow="Full module map"
-          title="Every desk — one cyan signal underneath."
+          title="Every desk — one ledger underneath."
           body="Turn apps on or off per company. Core trade, stock, and books come ready; projects, HR, sign, and vertical desks open when you need them."
         />
 
-        <ul className="mt-14 grid gap-px overflow-hidden rounded-xl border border-border/70 bg-border/40 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-14 grid gap-px overflow-hidden border border-border/50 bg-border/25 sm:grid-cols-2 lg:grid-cols-3">
           {MODULES.map(({ icon: Icon, name, body }, index) => (
             <li
               key={name}
-              className="erp-module bg-[#0b1220] p-6 transition-colors hover:bg-[#0e1628]"
+              className="erp-module bg-[#100e14] p-6 transition-colors hover:bg-[#14111a]"
               style={{ animationDelay: `${index * 30}ms` }}
             >
-              <span className="inline-flex size-9 items-center justify-center rounded-md border border-primary/25 bg-primary/10 text-primary">
+              <span className="inline-flex size-9 items-center justify-center border border-primary/25 bg-primary/8 text-primary">
                 <Icon className="size-4" />
               </span>
               <h3 className="mt-4 text-[1.05rem] font-semibold tracking-tight text-foreground">
@@ -473,7 +469,7 @@ function Modules() {
 
 function Workflow() {
   return (
-    <section id="how" className="scroll-mt-20 border-t border-border/70 py-20 sm:py-28">
+    <section id="how" className="scroll-mt-20 border-t border-border/50 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <SectionHeading
           eyebrow="How work moves"
@@ -482,8 +478,8 @@ function Workflow() {
         />
         <ol className="mt-14 grid gap-8 lg:grid-cols-3">
           {WORKFLOW.map(({ step, title, body }) => (
-            <li key={step} className="relative border-l-2 border-primary/40 pl-5">
-              <span className="erp-display text-[2.75rem] font-semibold leading-none tracking-tight text-primary/35">
+            <li key={step} className="relative border-l border-primary/35 pl-5">
+              <span className="erp-display text-[2.75rem] font-semibold leading-none tracking-tight text-primary/30">
                 {step}
               </span>
               <h3 className="mt-3 text-[1.2rem] font-semibold text-foreground">{title}</h3>
@@ -500,7 +496,7 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
   return (
     <section
       id="pricing"
-      className="scroll-mt-20 border-t border-border/70 bg-[#070b14]/60 py-20 sm:py-28"
+      className="scroll-mt-20 border-t border-border/50 bg-[#0a090e]/60 py-20 sm:py-28"
     >
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <SectionHeading
@@ -512,14 +508,14 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
         <div className="mt-12 grid gap-6 lg:grid-cols-[1fr_1.1fr]">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
             <article className="border border-primary/30 bg-primary/5 p-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">
+              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-primary">
                 Free trial
               </p>
-              <h3 className="mt-2 text-2xl font-semibold text-foreground">14 days</h3>
+              <h3 className="erp-display mt-2 text-2xl font-semibold text-foreground">14 days</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                 Full company database — sales, purchases, inventory, POS, projects, and reports.
               </p>
-              <ul className="mt-4 space-y-1.5 text-sm text-slate-400">
+              <ul className="mt-4 space-y-1.5 text-sm text-muted-foreground">
                 <li>· Separate books per company</li>
                 <li>· Choose which apps you need</li>
                 <li>· Backup and restore</li>
@@ -527,14 +523,14 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
               <div className="mt-6 flex flex-wrap gap-2">
                 <Link
                   href={signedIn ? '/databases?create=1' : '/register'}
-                  className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-bold text-primary-foreground hover:opacity-90"
+                  className="inline-flex h-10 items-center rounded-sm bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90"
                 >
                   {signedIn ? 'Create company' : 'Start free trial'}
                 </Link>
                 {!signedIn ? (
                   <Link
                     href={LOGIN_COMPANY}
-                    className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium text-foreground hover:border-primary/40"
+                    className="inline-flex h-10 items-center rounded-sm border border-border px-4 text-sm font-medium text-foreground hover:border-primary/40"
                   >
                     Company login
                   </Link>
@@ -542,11 +538,11 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
               </div>
             </article>
 
-            <article className="border border-border/80 bg-[#0b1220] p-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+            <article className="border border-border/70 bg-[#100e14] p-6">
+              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-[#7a7368]">
                 After trial
               </p>
-              <h3 className="mt-2 text-2xl font-semibold text-foreground">Paid rent</h3>
+              <h3 className="erp-display mt-2 text-2xl font-semibold text-foreground">Paid rent</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                 Choose a plan in Billing, pay by mobile money or bank, submit your reference. Rent
                 and seats extend when confirmed.
@@ -555,7 +551,7 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
                 <div className="mt-6">
                   <Link
                     href="/billing"
-                    className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium text-foreground hover:border-primary/40"
+                    className="inline-flex h-10 items-center rounded-sm border border-border px-4 text-sm font-medium text-foreground hover:border-primary/40"
                   >
                     Open Billing
                   </Link>
@@ -572,12 +568,12 @@ function Pricing({ signedIn }: { signedIn: boolean }) {
 
 function Tutorials() {
   return (
-    <section id="tutorials" className="scroll-mt-20 border-t border-border/70 py-20 sm:py-28">
+    <section id="tutorials" className="scroll-mt-20 border-t border-border/50 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <SectionHeading
-          eyebrow="Sida loo isticmaalo · AI videos"
-          title="Watch the demos. Then run the desk."
-          body={`Five short AI videos about ${PRODUCT_NAME} — sign in, sell, buy, run the till, and close the month.`}
+          eyebrow="Sida loo isticmaalo · Live system"
+          title="Watch the steps. Then open the real desk."
+          body={`Five practice lessons in the live ${PRODUCT_NAME} system — sign in, sell, buy, run the till, and close the month.`}
         />
         <AiDemoPlayer videos={AI_DEMO_VIDEOS} />
       </div>
@@ -616,12 +612,12 @@ function Contact({ contact }: { contact: MarketingContact }) {
   ]
 
   return (
-    <section id="contact" className="scroll-mt-20 border-t border-border/70 py-20 sm:py-28">
+    <section id="contact" className="scroll-mt-20 border-t border-border/50 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
-        <div className="relative overflow-hidden border border-primary/20 bg-[#0b1220]">
+        <div className="relative overflow-hidden border border-primary/20 bg-[#100e14]">
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_80%_at_0%_0%,rgba(34,211,238,0.16),transparent_55%)]"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_80%_at_0%_0%,rgba(196,165,116,0.12),transparent_55%)]"
           />
           <div className="relative grid gap-10 px-6 py-10 sm:px-10 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
             <SectionHeading
@@ -631,7 +627,7 @@ function Contact({ contact }: { contact: MarketingContact }) {
             />
             <div className="flex flex-wrap gap-3">
               <a
-                className="inline-flex h-12 items-center gap-2 rounded-md bg-primary px-6 text-[15px] font-bold text-primary-foreground transition-transform hover:-translate-y-0.5"
+                className="inline-flex h-12 items-center gap-2 rounded-sm bg-primary px-6 text-[15px] font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
                 href={waHref}
                 target="_blank"
                 rel="noreferrer"
@@ -640,14 +636,14 @@ function Contact({ contact }: { contact: MarketingContact }) {
                 WhatsApp
               </a>
               <a
-                className="inline-flex h-12 items-center gap-2 rounded-md border border-border px-6 text-[15px] font-medium text-foreground hover:border-primary/40"
+                className="inline-flex h-12 items-center gap-2 rounded-sm border border-border px-6 text-[15px] font-medium text-foreground hover:border-primary/40"
                 href={telUrl(contact.phone)}
               >
                 <Phone className="size-4" />
                 Call
               </a>
               <Link
-                className="inline-flex h-12 items-center gap-2 rounded-md border border-border px-6 text-[15px] font-medium text-foreground hover:border-primary/40"
+                className="inline-flex h-12 items-center gap-2 rounded-sm border border-border px-6 text-[15px] font-medium text-foreground hover:border-primary/40"
                 href={STORE_PATH}
               >
                 <MapPin className="size-4" />
@@ -655,21 +651,21 @@ function Contact({ contact }: { contact: MarketingContact }) {
               </Link>
             </div>
           </div>
-          <dl className="relative grid gap-px border-t border-border/70 bg-border/30 sm:grid-cols-3">
+          <dl className="relative grid gap-px border-t border-border/50 bg-border/20 sm:grid-cols-3">
             {rows.map(({ icon: Icon, term, detail, href, hint }) => (
               <a
                 key={`${term}-${detail}`}
                 href={href}
                 target={href.startsWith('http') ? '_blank' : undefined}
                 rel={href.startsWith('http') ? 'noreferrer' : undefined}
-                className="flex items-start gap-3.5 bg-[#0b1220] px-5 py-5 transition-colors hover:bg-[#0e1628]"
+                className="flex items-start gap-3.5 bg-[#100e14] px-5 py-5 transition-colors hover:bg-[#14111a]"
               >
-                <span className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-md border border-primary/25 bg-primary/10 text-primary">
+                <span className="mt-0.5 grid size-10 shrink-0 place-items-center border border-primary/25 bg-primary/8 text-primary">
                   <Icon className="size-4" />
                 </span>
                 <span className="min-w-0">
                   <span className="flex items-center justify-between gap-2">
-                    <dt className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                    <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#7a7368]">
                       {term}
                     </dt>
                     <span className="text-[11px] text-primary/80">{hint}</span>
@@ -691,7 +687,7 @@ function SignInDoors({ signedIn }: { signedIn: boolean }) {
   if (signedIn) return null
 
   return (
-    <section id="sign-in" className="border-t border-border/70 py-20 sm:py-24">
+    <section id="sign-in" className="border-t border-border/50 py-20 sm:py-24">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <SectionHeading
           eyebrow="SOM ERP login"
@@ -703,13 +699,13 @@ function SignInDoors({ signedIn }: { signedIn: boolean }) {
             <Link
               key={door.href}
               href={door.href}
-              className="group flex flex-col border border-border/80 bg-[#0b1220] p-5 transition-colors hover:border-primary/40"
+              className="group flex flex-col border border-border/60 bg-[#100e14] p-5 transition-colors hover:border-primary/40"
             >
               <span className="text-[15px] font-semibold text-foreground">{door.title}</span>
               <span className="mt-2 flex-1 text-[14px] leading-relaxed text-muted-foreground">
                 {door.description}
               </span>
-              <span className="mt-4 font-mono text-[12px] text-primary">{door.path}</span>
+              <span className="mt-4 text-[12px] tracking-wide text-primary">{door.path}</span>
               <span className="mt-3 text-[13px] font-medium text-primary group-hover:underline">
                 Open {door.short.toLowerCase()} login →
               </span>
@@ -718,7 +714,7 @@ function SignInDoors({ signedIn }: { signedIn: boolean }) {
         </div>
         <p className="mt-6 text-[13px] text-muted-foreground">
           All options:{' '}
-          <Link href={LOGIN_HUB} className="font-mono text-primary hover:underline">
+          <Link href={LOGIN_HUB} className="text-primary hover:underline">
             {LOGIN_HUB}
           </Link>
         </p>
@@ -729,34 +725,34 @@ function SignInDoors({ signedIn }: { signedIn: boolean }) {
 
 function Cta({ enterHref, enterLabel }: { enterHref: string; enterLabel: string }) {
   return (
-    <section className="border-t border-border/70 py-20 sm:py-24">
+    <section className="border-t border-border/50 py-20 sm:py-24">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
-        <div className="relative overflow-hidden border border-primary/25 bg-[#0b1220] px-7 py-14 sm:px-14">
+        <div className="relative overflow-hidden border border-primary/25 bg-[#100e14] px-7 py-14 sm:px-14">
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_100%_at_100%_0%,rgba(34,211,238,0.18),transparent_55%)]"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_100%_at_100%_0%,rgba(196,165,116,0.14),transparent_55%)]"
           />
           <div className="relative max-w-2xl">
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
+            <p className="text-[11px] font-medium uppercase tracking-[0.26em] text-primary">
               Get started
             </p>
             <h2 className="erp-display mt-3 text-[2.1rem] font-semibold tracking-[-0.035em] text-foreground sm:text-[2.6rem]">
               Start a company on {PRODUCT_NAME}.
             </h2>
-            <p className="mt-4 text-[16px] leading-[1.7] text-muted-foreground">
+            <p className="mt-4 text-[16px] leading-[1.75] text-muted-foreground">
               Create your company, get 14 days free, and open the full desk — sales, stock, POS,
               projects, and books.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-primary px-7 text-[15px] font-bold text-primary-foreground hover:opacity-90"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-sm bg-primary px-7 text-[15px] font-semibold text-primary-foreground hover:opacity-90"
                 href={enterHref}
               >
                 {enterLabel}
                 <ArrowRight className="size-4" />
               </Link>
               <Link
-                className="inline-flex h-12 items-center justify-center rounded-md border border-border px-7 text-[15px] font-medium text-foreground hover:border-primary/40"
+                className="inline-flex h-12 items-center justify-center rounded-sm border border-border px-7 text-[15px] font-medium text-foreground hover:border-primary/40"
                 href={LOGIN_COMPANY}
               >
                 Company login
@@ -771,7 +767,7 @@ function Cta({ enterHref, enterLabel }: { enterHref: string; enterLabel: string 
 
 function SiteFooter({ contact }: { contact: MarketingContact }) {
   return (
-    <footer className="border-t border-border/70 py-10">
+    <footer className="border-t border-border/50 py-10">
       <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-5 sm:px-8 md:flex-row md:items-center">
         <ProductWordmark size="sm" />
         <div className="flex flex-wrap items-center gap-x-7 gap-y-2 text-[13px] text-muted-foreground">
@@ -797,11 +793,11 @@ function SiteFooter({ contact }: { contact: MarketingContact }) {
             {contact.phone}
           </a>
         </div>
-        <p className="text-[12px] text-slate-500">
+        <p className="text-[12px] text-[#7a7368]">
           &copy; {new Date().getFullYear()} {PRODUCT_NAME}
-          <span className="mx-1.5 text-slate-700">·</span>
+          <span className="mx-1.5 text-[#3a3530]">·</span>
           {PRODUCT_BUILDER}
-          <span className="mx-1.5 text-slate-700">·</span>
+          <span className="mx-1.5 text-[#3a3530]">·</span>
           <Link href={STORE_PATH} className="hover:text-primary">
             Al Furaat shop
           </Link>
@@ -819,28 +815,31 @@ const landingCss = `
   .erp-display {
     font-family: var(--font-marketing-display), ui-serif, Georgia, serif;
   }
-  .erp-scan {
+  .erp-grain {
     background-image:
-      linear-gradient(to right, rgba(34,211,238,0.07) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(148,163,184,0.05) 1px, transparent 1px);
-    background-size: 64px 40px;
-    mask-image: radial-gradient(80% 70% at 75% 20%, black, transparent);
+      linear-gradient(to right, rgba(196,165,116,0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(243,238,230,0.03) 1px, transparent 1px);
+    background-size: 72px 48px;
+    mask-image: radial-gradient(75% 65% at 78% 18%, black, transparent);
   }
-  .erp-beam {
-    background: linear-gradient(180deg, rgba(34,211,238,0.14), transparent 70%);
-    filter: blur(40px);
+  .erp-veil {
+    background: linear-gradient(185deg, rgba(196,165,116,0.1), transparent 72%);
+    filter: blur(48px);
   }
   @keyframes erp-fade-up {
-    from { opacity: 0; transform: translateY(22px); }
+    from { opacity: 0; transform: translateY(18px); }
     to { opacity: 1; transform: translateY(0); }
   }
   @keyframes erp-float {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
+    50% { transform: translateY(-8px); }
   }
-  .erp-fade { animation: erp-fade-up 800ms cubic-bezier(0.22, 1, 0.36, 1) both; }
-  .erp-float { animation: erp-float 8s ease-in-out infinite; }
-  .erp-lane, .erp-module { animation: erp-fade-up 700ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .erp-fade { animation: erp-fade-up 900ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .erp-float { animation: erp-float 10s ease-in-out infinite; }
+  .erp-lane, .erp-module { animation: erp-fade-up 750ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .erp-lane { transition: border-color 220ms ease; }
+  .erp-lane:hover { border-color: rgb(196 165 116 / 0.35); }
+  .erp-module { transition: border-color 220ms ease, background-color 220ms ease; }
   @media (prefers-reduced-motion: reduce) {
     .erp-fade, .erp-float, .erp-lane, .erp-module { animation: none; }
   }

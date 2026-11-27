@@ -50,7 +50,7 @@ describe('pharmacy lot helpers', () => {
         journalNumber: null,
       },
     ])
-    expect(csv).toContain('date,itemName,sku')
+    expect(csv).toContain('Date,Item,SKU')
     expect(csv).toContain('2026-11-01,Amox,AMX,L1,SALE,-2')
   })
 

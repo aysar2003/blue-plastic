@@ -1,5 +1,4 @@
 import { assertTermDates } from '@/lib/erp/education'
-import type { PackId } from './types'
 
 /** Packs that collect academic year structure at register Confirm. */
 export const EDUCATION_REGISTER_PACKS = ['school', 'university'] as const

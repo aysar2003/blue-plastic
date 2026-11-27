@@ -14,6 +14,7 @@ import {
 import { documentOverdueOr, isCollectionOverdue, overdueClock, partyFromContact } from '@/lib/invoice-overdue'
 import { Decimal, parseMoneyInput, toMoneyString, ZERO } from '@/lib/money'
 import { evaluateThreeWayMatch } from '@/lib/purchase-three-way-match'
+import { computeWithholdAmount } from '@/lib/erp/withholding'
 import { dueDateFor } from '@/lib/payment-terms'
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import {
@@ -81,10 +82,29 @@ const CONVERTIBLE_SOURCES: PurchaseDocumentType[] = ['PURCHASE_REQUEST', 'RFQ']
 export const PURCHASE_CONVERT_TARGETS = ['RFQ', 'PURCHASE_ORDER'] as const
 export type PurchaseConvertTarget = (typeof PURCHASE_CONVERT_TARGETS)[number]
 
+function withholdFieldsForBill(
+  type: PurchaseDocumentType,
+  subtotal: Decimal,
+  percent: string | null | undefined,
+) {
+  if (type !== 'BILL') {
+    return { withholdPercent: null as string | null, withholdAmount: null as string | null }
+  }
+  if (percent == null || percent === '') {
+    return { withholdPercent: null as string | null, withholdAmount: null as string | null }
+  }
+  const held = computeWithholdAmount(subtotal, percent)
+  return {
+    withholdPercent: percent,
+    withholdAmount: held.gt(0) ? held.toFixed(4) : null,
+  }
+}
+
 const DOCUMENT_SELECT = {
   id: true, type: true, number: true, date: true, dueDate: true, expiryDate: true, createdAt: true, createdById: true,
   status: true, reference: true, inRef: true, memo: true,
   subtotal: true, taxTotal: true, total: true,
+  withholdPercent: true, withholdAmount: true,
   currencyCode: true, paymentAccountId: true, offsetCustomerId: true, journalId: true, version: true,
   voidedAt: true, voidReason: true, convertedFromId: true, paymentTermId: true,
   matchVarianceNote: true, matchVarianceApproved: true, matchApprovedAt: true,
@@ -1014,6 +1034,7 @@ async function createWithin(
         offsetCustomerId,
         projectId,
         trackingCategoryId,
+        ...withholdFieldsForBill(type, priced.subtotal, input.withholdPercent),
         createdById: ctx.userId,
         lines: {
           create: priced.lines.map((line) => ({
@@ -1223,6 +1244,7 @@ export async function update(ctx: OrgContext, id: string, input: PurchaseDocumen
         offsetCustomerId,
         projectId,
         trackingCategoryId,
+        ...withholdFieldsForBill(existing.type, priced.subtotal, input.withholdPercent),
         journalId: null,
         version: { increment: 1 },
         status: input.saveAsDraft ? 'DRAFT' : holdForApproval ? 'PENDING_APPROVAL' : 'OPEN',
@@ -1301,6 +1323,7 @@ export async function postDocument(
       id: true, type: true, number: true, date: true, memo: true, vendorId: true,
       status: true, paymentAccountId: true, offsetCustomerId: true, journalId: true,
       trackingCategoryId: true, convertedFromId: true, matchVarianceApproved: true,
+      withholdAmount: true, withholdPercent: true,
       lines: {
         orderBy: { lineNumber: 'asc' },
         select: {
@@ -1387,6 +1410,13 @@ export async function postDocument(
     throw precondition(`${document.number} needs a vendor before it can be posted.`)
   }
 
+  const withholdRaw = new Decimal(document.withholdAmount?.toString() ?? '0')
+  const withholdAmount =
+    document.type === 'BILL' && withholdRaw.gt(0) ? withholdRaw : null
+  if (withholdAmount && withholdAmount.gte(priced.total) && priced.total.gt(0)) {
+    throw precondition('Withholding tax must be less than the bill total.')
+  }
+
   const input: PurchaseJournalInput = {
     date: toCalendarDate(document.date),
     number: document.number,
@@ -1401,6 +1431,10 @@ export async function postDocument(
       : null,
     fallbackExpenseAccountId: await systemAccountId(tx, ctx.orgId, 'UNCATEGORISED_EXPENSE'),
     memo: document.memo,
+    withholdAmount,
+    withholdAccountId: withholdAmount
+      ? await systemAccountId(tx, ctx.orgId, 'WITHHOLDING_TAX_PAYABLE')
+      : null,
   }
 
   // Receiving tracked stock values it and adds it to the inventory asset, in the

@@ -7,9 +7,17 @@ import { parseFeatureFlags } from '@/lib/feature-flags'
 import { getPack } from '@/lib/packs'
 import {
   SETUP_HEALTH_GAP_HEADERS,
+  categorizeHealItemName,
   type SetupHealthGapRow,
 } from '@/lib/setup-heal'
-import { toCsv } from '@/server/reports/csv'
+import { skuFromName } from '@/lib/sku'
+import { toCsv, type CsvCell } from '@/server/reports/csv'
+import {
+  renderMultiSheetXlsx,
+  type ListXlsxColumn,
+  type ListXlsxSheet,
+  xlsxResponse,
+} from '@/server/reports/list-xlsx'
 
 export type SetupHealth = {
   installedPackId: string | null
@@ -224,4 +232,207 @@ export function setupHealthGapsCsv(gaps: SetupHealthGapRow[]): string {
     row.id ?? '',
     row.detail,
   ])])
+}
+
+function ofKind(gaps: SetupHealthGapRow[], kind: string) {
+  return gaps.filter((row) => row.kind === kind)
+}
+
+/**
+ * Prepared multi-sheet heal workbook: summary, suggested SKUs / reorder / country,
+ * category view, plus the raw gap list.
+ */
+export async function setupHealthGapsXlsx(
+  ctx: OrgContext,
+  gaps: SetupHealthGapRow[],
+): Promise<Uint8Array> {
+  const missingSku = ofKind(gaps, 'item_missing_sku')
+  const missingReorder = ofKind(gaps, 'stock_missing_reorder')
+  const missingTax = ofKind(gaps, 'item_missing_tax')
+  const missingCountry = ofKind(gaps, 'customer_missing_country')
+  const orgGap = ofKind(gaps, 'org_missing_country')
+  const suggestedCountry = ctx.organization.country?.trim() || 'SO'
+
+  const taken = new Set<string>()
+  const skuPrepared = missingSku.map((item, index) => {
+    const suggested = skuFromName(item.name, taken)
+    taken.add(suggested.toLowerCase())
+    const category = categorizeHealItemName(item.name)
+    return {
+      index: index + 1,
+      name: item.name,
+      category,
+      suggested,
+      id: item.id ?? '',
+    }
+  })
+
+  const categoryCounts = new Map<string, number>()
+  for (const row of skuPrepared) {
+    categoryCounts.set(row.category, (categoryCounts.get(row.category) ?? 0) + 1)
+  }
+
+  const summaryCols: ListXlsxColumn[] = [
+    { header: 'Gap / Category', width: 32 },
+    { header: 'Count', width: 12, kind: 'number' },
+    { header: 'How to fix', width: 56 },
+  ]
+  const summaryRows: CsvCell[][] = [
+    ['Items missing SKU', missingSku.length, 'Setup → Generate missing SKUs, or edit Suggested SKU sheet'],
+    ['Stock missing reorder point', missingReorder.length, 'Setup → Set missing reorder points (default 1)'],
+    ['Items missing tax', missingTax.length, 'Setup → Apply pack tax to items'],
+    ['Customers missing country', missingCountry.length, 'Setup → Customer countries from org'],
+    ['Org missing country', orgGap.length, 'Setup → Country from pack'],
+    ['', '', ''],
+    ['Item category (from name)', '', 'Use for SKU prefixes / aisle planning'],
+    ...[...categoryCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([category, count]) => [category, count, ''] as CsvCell[]),
+  ]
+
+  const sheets: ListXlsxSheet[] = [
+    {
+      name: 'Summary',
+      title: 'Setup heal — summary',
+      subtitle: `${gaps.length} remaining gaps`,
+      columns: summaryCols,
+      rows: summaryRows,
+    },
+    {
+      name: 'Missing SKUs',
+      title: 'Items missing SKU',
+      subtitle: 'Suggested SKU matches the heal button; edit Your SKU if you prefer another code',
+      columns: [
+        { header: '#', width: 6, kind: 'number' },
+        { header: 'Name', width: 40 },
+        { header: 'Category', width: 20 },
+        { header: 'Suggested SKU', width: 28 },
+        { header: 'Id', width: 26 },
+        { header: 'Your SKU (edit)', width: 18 },
+        { header: 'Note', width: 28 },
+      ],
+      rows: skuPrepared.map(
+        (row) =>
+          [
+            row.index,
+            row.name,
+            row.category,
+            row.suggested,
+            row.id,
+            '',
+            'Review then keep or edit',
+          ] as CsvCell[],
+      ),
+    },
+    {
+      name: 'Missing Reorder',
+      title: 'Stock missing reorder point',
+      columns: [
+        { header: '#', width: 6, kind: 'number' },
+        { header: 'Name', width: 40 },
+        { header: 'Current SKU', width: 20 },
+        { header: 'Suggested Reorder', width: 16, kind: 'number' },
+        { header: 'Id', width: 26 },
+        { header: 'Note', width: 36 },
+      ],
+      rows: missingReorder.map(
+        (item, index) =>
+          [
+            index + 1,
+            item.name,
+            item.sku?.trim() || '(none — fix SKU first)',
+            1,
+            item.id ?? '',
+            'Heal sets reorderPoint = 1 when blank',
+          ] as CsvCell[],
+      ),
+    },
+    {
+      name: 'Missing Tax',
+      title: 'Items missing tax codes',
+      columns: [
+        { header: '#', width: 6, kind: 'number' },
+        { header: 'Name', width: 40 },
+        { header: 'Current SKU', width: 20 },
+        { header: 'Detail', width: 32 },
+        { header: 'Id', width: 26 },
+        { header: 'Note', width: 40 },
+      ],
+      rows: missingTax.map(
+        (item, index) =>
+          [
+            index + 1,
+            item.name,
+            item.sku?.trim() || '(none — fix SKU first)',
+            item.detail,
+            item.id ?? '',
+            'Heal applies pack default sales + purchase tax',
+          ] as CsvCell[],
+      ),
+    },
+    {
+      name: 'Customers no country',
+      title: 'Customers missing billing country',
+      columns: [
+        { header: '#', width: 6, kind: 'number' },
+        { header: 'Customer', width: 36 },
+        { header: 'Id', width: 26 },
+        { header: 'Suggested Country', width: 16 },
+        { header: 'Note', width: 48 },
+      ],
+      rows: missingCountry.map(
+        (item, index) =>
+          [
+            index + 1,
+            item.name,
+            item.id ?? '',
+            suggestedCountry,
+            'Heal copies org country; change if the customer is abroad',
+          ] as CsvCell[],
+      ),
+    },
+    {
+      name: 'By Category',
+      title: 'Missing SKUs by category',
+      columns: [
+        { header: 'Category', width: 20 },
+        { header: 'Name', width: 40 },
+        { header: 'Suggested SKU', width: 28 },
+        { header: 'Id', width: 26 },
+      ],
+      rows: skuPrepared
+        .slice()
+        .sort(
+          (a, b) =>
+            a.category.localeCompare(b.category) || a.name.localeCompare(b.name),
+        )
+        .map((row) => [row.category, row.name, row.suggested, row.id] as CsvCell[]),
+    },
+    {
+      name: 'All gaps (raw)',
+      title: 'All remaining gaps',
+      columns: [
+        { header: 'Kind', width: 24 },
+        { header: 'Name', width: 40 },
+        { header: 'SKU', width: 16 },
+        { header: 'Id', width: 26 },
+        { header: 'Detail', width: 40 },
+      ],
+      rows: gaps.map(
+        (row) =>
+          [row.kind, row.name, row.sku ?? '', row.id ?? '', row.detail] as CsvCell[],
+      ),
+    },
+  ]
+
+  return renderMultiSheetXlsx({
+    org: ctx.organization,
+    title: 'Setup heal report',
+    subtitle: `${gaps.length} remaining gaps`,
+    sheets,
+  })
+}
+
+export function setupHealthXlsxResponse(body: Uint8Array): Response {
+  return xlsxResponse('setup-heal-report.xlsx', body)
 }

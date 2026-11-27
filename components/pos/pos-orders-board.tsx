@@ -4,7 +4,7 @@ import { ChevronLeftIcon, ChevronRightIcon, InfoIcon, SearchIcon, ShoppingCartIc
 import Link from 'next/link'
 import { useMemo, useState, type KeyboardEvent } from 'react'
 
-import { ODOO } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 import { formatQty } from '@/lib/quantity'
 
 const PAGE_SIZE = 7
@@ -40,6 +40,7 @@ export function PosOrdersBoard({
   onOpen: (id: string) => void
   onDelete: (id: string) => void
 }) {
+  const ODOO = usePosBrand()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'active' | 'paid'>('active')
   const [page, setPage] = useState(0)
@@ -190,7 +191,7 @@ export function PosOrdersBoard({
                       <span className="min-w-0">
                         <span
                           className="block text-sm font-medium"
-                          style={{ color: order.day === 'Today' ? (dark ? '#8fd0c8' : ODOO.tealDark) : text }}
+                          style={{ color: order.day === 'Today' ? (dark ? ODOO.tealSoft : ODOO.tealDark) : text }}
                         >
                           {order.day}
                         </span>

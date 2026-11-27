@@ -4,7 +4,10 @@ export type ProjectProfitSlice = {
   income: Decimal
   purchaseCost: Decimal
   stockCost: Decimal
+  /** Internal labour cost (hours × costRate). */
   laborCost: Decimal
+  /** Charge-out labour (hours × billableRate). */
+  laborCharge: Decimal
 }
 
 export function emptySlice(): ProjectProfitSlice {
@@ -13,6 +16,7 @@ export function emptySlice(): ProjectProfitSlice {
     purchaseCost: ZERO,
     stockCost: ZERO,
     laborCost: ZERO,
+    laborCharge: ZERO,
   }
 }
 
@@ -64,7 +68,8 @@ export function addStockCost(slice: ProjectProfitSlice, movementValue: Decimal.V
 }
 
 /**
- * Labor at hours × rate. Prefer internal costRate; callers pass costRate ?? billableRate.
+ * Internal labour cost at hours × costRate.
+ * When costRate is missing, falls back to billableRate so older entries still hit Job P&L.
  */
 export function addLaborCost(
   slice: ProjectProfitSlice,
@@ -76,11 +81,23 @@ export function addLaborCost(
   return { ...slice, laborCost: slice.laborCost.plus(new Decimal(hours).times(hourly)) }
 }
 
+/** Charge-out labour at hours × billableRate (shown beside cost; not subtracted from profit). */
+export function addLaborCharge(
+  slice: ProjectProfitSlice,
+  hours: Decimal.Value,
+  billableRate: Decimal.Value | null | undefined,
+): ProjectProfitSlice {
+  const hourly = new Decimal(billableRate?.toString() ?? '0')
+  if (hourly.isZero()) return slice
+  return { ...slice, laborCharge: slice.laborCharge.plus(new Decimal(hours).times(hourly)) }
+}
+
 export function mergeSlices(a: ProjectProfitSlice, b: ProjectProfitSlice): ProjectProfitSlice {
   return {
     income: a.income.plus(b.income),
     purchaseCost: a.purchaseCost.plus(b.purchaseCost),
     stockCost: a.stockCost.plus(b.stockCost),
     laborCost: a.laborCost.plus(b.laborCost),
+    laborCharge: a.laborCharge.plus(b.laborCharge),
   }
 }

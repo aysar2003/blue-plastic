@@ -45,8 +45,8 @@ describe('hospital billing helpers', () => {
       },
     ]
     const csv = claimsToCsv(rows)
-    expect(csv).toContain('visitId,patientName,openedAt')
-    expect(csv).toContain('exportBatchId,claimsExportedAt')
+    expect(csv).toContain('Visit Id,Patient,Opened')
+    expect(csv).toContain('Export batch Id,Claims exported at')
     expect(csv).toContain('CLM-ABC')
     expect(csv).toContain('v1,Amina Ali')
     expect(csv).toContain('CONSULT,Consultation,1,25.0000,25.0000')

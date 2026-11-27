@@ -48,7 +48,10 @@ async function sessionUserFromId(userId: string) {
   const membership = user.memberships.find((row) => row.orgId === homeId)
   if (!membership) return null
 
-  await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
+  await db.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date(), lastSeenAt: new Date() },
+  })
   await recordEvent({
     orgId: membership.orgId,
     actorId: user.id,
@@ -165,7 +168,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const membership = user.memberships.find((row) => row.orgId === homeId)
         if (!membership) return null
 
-        await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
+        await db.user.update({
+          where: { id: user.id },
+          data: { lastLoginAt: new Date(), lastSeenAt: new Date() },
+        })
         await recordEvent({
           orgId: membership.orgId,
           actorId: user.id,

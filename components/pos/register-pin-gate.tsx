@@ -6,7 +6,7 @@ import { useState, useTransition } from 'react'
 
 import { unlockPosRegister } from '@/app/(app)/pos/actions'
 import { CashierPinPrompt } from '@/components/pos/cashier-pin-prompt'
-import { ODOO } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 
 /** Shown on the till itself when this browser has not entered the cashier PIN. */
 export function RegisterPinGate({
@@ -19,6 +19,7 @@ export function RegisterPinGate({
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const ODOO = usePosBrand()
 
   return (
     <div

@@ -212,16 +212,18 @@ export async function franchiseSummary(parentCtx: OrgContext, asOfMonth: string)
   return { asOfMonth, children: rows }
 }
 
-export async function royaltyStatementCsvExport(parentCtx: OrgContext, asOfMonth: string) {
+export async function royaltyStatementRows(parentCtx: OrgContext, asOfMonth: string) {
   const summary = await franchiseSummary(parentCtx, asOfMonth)
-  return royaltyStatementCsv(
-    summary.children.map((row) => ({
-      name: row.name,
-      royaltyPercent: row.royaltyPercent ?? '',
-      sales: row.sales,
-      royaltyDue: row.royaltyDue,
-    })),
-  )
+  return summary.children.map((row) => ({
+    name: row.name,
+    royaltyPercent: row.royaltyPercent ?? '',
+    sales: row.sales,
+    royaltyDue: row.royaltyDue,
+  }))
+}
+
+export async function royaltyStatementCsvExport(parentCtx: OrgContext, asOfMonth: string) {
+  return royaltyStatementCsv(await royaltyStatementRows(parentCtx, asOfMonth))
 }
 
 /** Brand P&L for children that carry a franchise royalty %. */

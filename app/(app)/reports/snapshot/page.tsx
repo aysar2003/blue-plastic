@@ -4,13 +4,14 @@ import Link from 'next/link'
 import { CompanyTab } from '@/components/snapshots/company-tab'
 import { CustomerTab } from '@/components/snapshots/customer-tab'
 import { PaymentsTab } from '@/components/snapshots/payments-tab'
+import { SnapshotAsOf } from '@/components/snapshots/snapshot-as-of'
 import { SnapshotPulseStrip } from '@/components/snapshots/pulse-strip'
 import { AccessDenied } from '@/components/system/access-denied'
 import {
   canViewBusinessOverview,
   COMPANY_SNAPSHOT_HREF,
 } from '@/lib/business-overview-access'
-import { formatDate } from '@/lib/date'
+import { formatDate, today } from '@/lib/date'
 import { cn } from '@/lib/utils'
 import { requireOrgContext } from '@/server/auth/context'
 import {
@@ -18,6 +19,8 @@ import {
   loadCompanySnapshot,
   type SnapshotTab,
 } from '@/server/services/company-snapshot.service'
+
+import { readSettings, settingsToQueryObject } from '../params'
 
 export const metadata: Metadata = { title: 'Company Snapshot' }
 
@@ -27,10 +30,24 @@ const TABS: { key: SnapshotTab; label: string; blurb: string }[] = [
   { key: 'customer', label: 'Customer', blurb: '360° one customer' },
 ]
 
+function snapshotHref(
+  tab: SnapshotTab,
+  dateQuery: Record<string, string>,
+  customerId?: string | null,
+) {
+  const params = new URLSearchParams({ ...dateQuery, tab })
+  if (tab === 'customer' && customerId) {
+    params.set('customerId', customerId)
+  } else {
+    params.delete('customerId')
+  }
+  return `${COMPANY_SNAPSHOT_HREF}?${params.toString()}`
+}
+
 export default async function CompanySnapshotPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; customerId?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const ctx = await requireOrgContext()
   if (!canViewBusinessOverview(ctx.permissions)) {
@@ -38,10 +55,20 @@ export default async function CompanySnapshotPage({
   }
 
   const query = await searchParams
-  const tab: SnapshotTab = isSnapshotTab(query.tab) ? query.tab : 'company'
+  const tab: SnapshotTab = isSnapshotTab(
+    typeof query.tab === 'string' ? query.tab : undefined,
+  )
+    ? (query.tab as SnapshotTab)
+    : 'company'
+  const settings = readSettings(query, ctx.organization, 'today')
+  const customerId = typeof query.customerId === 'string' ? query.customerId : undefined
+  const dateQuery = settingsToQueryObject(settings)
+  const orgToday = today(ctx.organization.timeZone)
+
   const snapshot = await loadCompanySnapshot(ctx, {
     tab,
-    customerId: query.customerId,
+    customerId,
+    asOf: settings.asOf,
   })
 
   return (
@@ -81,6 +108,10 @@ export default async function CompanySnapshotPage({
       </div>
 
       <div className="mb-5">
+        <SnapshotAsOf period={settings.period} asOf={settings.asOf} orgToday={orgToday} />
+      </div>
+
+      <div className="mb-5">
         <SnapshotPulseStrip pulse={snapshot.pulse} currency={snapshot.currency} />
       </div>
 
@@ -90,10 +121,7 @@ export default async function CompanySnapshotPage({
       >
         {TABS.map((item) => {
           const on = item.key === snapshot.tab
-          const href =
-            item.key === 'customer' && snapshot.customerId
-              ? `${COMPANY_SNAPSHOT_HREF}?tab=customer&customerId=${encodeURIComponent(snapshot.customerId)}`
-              : `${COMPANY_SNAPSHOT_HREF}?tab=${item.key}`
+          const href = snapshotHref(item.key, dateQuery, snapshot.customerId)
           return (
             <Link
               key={item.key}

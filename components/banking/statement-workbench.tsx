@@ -29,7 +29,7 @@ export function StatementWorkbench({
 }) {
   const router = useRouter()
   const [csv, setCsv] = useState('')
-  const [packId, setPackId] = useState<'generic' | 'so' | 'ke'>('generic')
+  const [packId, setPackId] = useState<'generic' | 'so' | 'ke' | 'et' | 'mm'>('generic')
   const [preview, setPreview] = useState<{
     total: number
     ready: number
@@ -68,7 +68,9 @@ export function StatementWorkbench({
             <NativeSelect
               id="pack"
               value={packId}
-              onChange={(event) => setPackId(event.target.value as 'generic' | 'so' | 'ke')}
+              onChange={(event) =>
+                setPackId(event.target.value as 'generic' | 'so' | 'ke' | 'et' | 'mm')
+              }
             >
               {STATEMENT_FORMAT_PACKS.map((pack) => (
                 <option key={pack.id} value={pack.id}>

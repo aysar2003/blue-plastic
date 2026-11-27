@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react'
 import { Loader2Icon } from 'lucide-react'
 
 import { closePosSession } from '@/app/(app)/pos/actions'
-import { ODOO } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 
 export function SessionCloseForm({
   sessionId,
@@ -20,6 +20,7 @@ export function SessionCloseForm({
   const [closingCash, setClosingCash] = useState('0.00')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const ODOO = usePosBrand()
 
   function submit() {
     setError(null)

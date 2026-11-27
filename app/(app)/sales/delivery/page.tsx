@@ -285,7 +285,7 @@ function Insight({
     >
       <Card tone={tone}>
         <CardContent className="flex items-start gap-3 p-4">
-          <span className="mt-0.5 rounded-md bg-black/5 p-2 dark:bg-white/10">{icon}</span>
+          <span className="app-chroma-chip mt-0.5 rounded-md bg-muted p-2 text-foreground">{icon}</span>
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
             <p className="mt-0.5 text-2xl font-semibold tabular">{value}</p>

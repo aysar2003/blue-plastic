@@ -39,7 +39,7 @@ export function authOtpEmailText(
 }
 
 /**
- * Luxury transactional OTP — deep navy, champagne accent, digit boxes.
+ * Luxury transactional OTP — VIP ink shell, champagne accent, digit boxes.
  * Table + inline CSS for Gmail / Outlook / Apple Mail. No remote images.
  */
 export function authOtpEmailHtml(
@@ -57,7 +57,7 @@ export function authOtpEmailHtml(
     .map((digit, index) => {
       const gap = index === mid ? 'padding-left:10px;' : ''
       return `<td style="padding:0 3px;${gap}">
-        <div style="width:40px;height:52px;line-height:52px;text-align:center;font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:26px;font-weight:700;letter-spacing:0;color:#f5efe6;background:#121a2a;border:1px solid #2a3548;border-radius:8px;">${escapeHtml(digit)}</div>
+        <div style="width:40px;height:52px;line-height:52px;text-align:center;font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:26px;font-weight:700;letter-spacing:0;color:#f5efe6;background:#15131a;border:1px solid rgb(196 165 116 / 0.18);border-radius:8px;">${escapeHtml(digit)}</div>
       </td>`
     })
     .join('')
@@ -76,42 +76,42 @@ export function authOtpEmailHtml(
 <style>
   :root { color-scheme: light dark; }
   @media (prefers-color-scheme: dark) {
-    .otp-shell { background:#05080f !important; }
-    .otp-card { background:#0b1220 !important; border-color:#1e293b !important; }
-    .otp-muted { color:#94a3b8 !important; }
+    .otp-shell { background:#07060a !important; }
+    .otp-card { background:#100e14 !important; border-color:rgb(196 165 116 / 0.18) !important; }
+    .otp-muted { color:#c4b8a8 !important; }
   }
   @media only screen and (max-width: 480px) {
     .otp-digit div { width:34px !important; height:46px !important; line-height:46px !important; font-size:22px !important; }
   }
 </style>
 </head>
-<body style="margin:0;padding:0;background:#05080f;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<body style="margin:0;padding:0;background:#07060a;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
   <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">
     ${escapeHtml(preheader)}
   </div>
-  <table role="presentation" class="otp-shell" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#05080f;padding:40px 16px;">
+  <table role="presentation" class="otp-shell" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#07060a;padding:40px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" class="otp-card" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#0b1220;border:1px solid #1e293b;border-radius:16px;">
+        <table role="presentation" class="otp-card" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#100e14;border:1px solid rgb(196 165 116 / 0.18);border-radius:16px;">
           <tr>
-            <td style="padding:0;height:3px;background:linear-gradient(90deg,#c9a66b 0%,#e8d5a8 50%,#c9a66b 100%);font-size:0;line-height:0;">&nbsp;</td>
+            <td style="padding:0;height:3px;background:linear-gradient(90deg,#c4a574 0%,#e8d5a8 50%,#c4a574 100%);font-size:0;line-height:0;">&nbsp;</td>
           </tr>
           <tr>
             <td style="padding:36px 36px 12px;text-align:center;">
-              <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:13px;font-weight:400;letter-spacing:0.28em;text-transform:uppercase;color:#c9a66b;">
+              <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:13px;font-weight:400;letter-spacing:0.28em;text-transform:uppercase;color:#c4a574;">
                 ${name}
               </p>
             </td>
           </tr>
           <tr>
             <td style="padding:8px 36px 0;text-align:center;">
-              <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:#64748b;">
+              <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:#c4b8a8;">
                 Sign-in verification
               </p>
               <h1 style="margin:14px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:400;line-height:1.25;color:#f5efe6;">
                 Your sign-in code
               </h1>
-              <p class="otp-muted" style="margin:14px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;color:#94a3b8;">
+              <p class="otp-muted" style="margin:14px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;color:#c4b8a8;">
                 Enter this code to finish signing in to ${name}. It expires in ${expiryMinutes} minutes.
               </p>
             </td>
@@ -127,8 +127,8 @@ export function authOtpEmailHtml(
               -->
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px auto 0;max-width:280px;">
                 <tr>
-                  <td align="center" style="background:#121a2a;border:1px solid #c9a66b;border-radius:12px;padding:14px 22px;">
-                    <p style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.24em;text-transform:uppercase;color:#c9a66b;">
+                  <td align="center" style="background:#15131a;border:1px solid rgb(196 165 116 / 0.35);border-radius:12px;padding:14px 22px;">
+                    <p style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.24em;text-transform:uppercase;color:#c4a574;">
                       Copy code
                     </p>
                     <p style="margin:0;font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:26px;font-weight:700;letter-spacing:0.28em;color:#f5efe6;-webkit-user-select:all;user-select:all;-moz-user-select:all;ms-user-select:all;">
@@ -137,17 +137,17 @@ export function authOtpEmailHtml(
                   </td>
                 </tr>
               </table>
-              <p class="otp-muted" style="margin:12px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.45;color:#64748b;">
+              <p class="otp-muted" style="margin:12px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.45;color:#c4b8a8;">
                 Click or tap the code once to select it, then copy (Ctrl+C / ⌘C).
               </p>
             </td>
           </tr>
           <tr>
             <td style="padding:20px 36px 8px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#121a2a;border:1px solid #2a3548;border-radius:10px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#15131a;border:1px solid rgb(196 165 116 / 0.18);border-radius:10px;">
                 <tr>
-                  <td style="padding:14px 18px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#cbd5e1;">
-                    <strong style="color:#e8d5a8;">Security:</strong>
+                  <td style="padding:14px 18px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#c4b8a8;">
+                    <strong style="color:#e4d0a8;">Security:</strong>
                     ${name} will never ask for this code by phone, chat, or email. Do not share it with anyone.
                   </td>
                 </tr>
@@ -156,13 +156,13 @@ export function authOtpEmailHtml(
           </tr>
           <tr>
             <td style="padding:18px 36px 36px;text-align:center;">
-              <p class="otp-muted" style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#64748b;">
+              <p class="otp-muted" style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#c4b8a8;">
                 If you did not request this, you can safely ignore this email.
               </p>
             </td>
           </tr>
         </table>
-        <p style="margin:24px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#475569;">
+        <p style="margin:24px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a7d6e;">
           ${name} · Secure access
         </p>
       </td>

@@ -17,6 +17,13 @@ Tailwind CSS, shadcn/ui and TanStack Query. Product brand: **SOM ERP**.
 | [06-erp-layers.md](./06-erp-layers.md) | World-ERP layer model (L0–L9) and how phases deepen them |
 | [07-universal-coverage-roadmap.md](./07-universal-coverage-roadmap.md) | Jadwal: every business / industry via core + packs (Phases 34–60) |
 | [progress.md](./progress.md) | Live status board — updated at the end of every phase |
+| [ops/scale.md](./ops/scale.md) | Multi-tenant scale ops (live years, archive, replicas) |
+| [ops/disaster-recovery-plan.md](./ops/disaster-recovery-plan.md) | Full backup / DR plan (3-2-1-1-0, RPO/RTO, steps) |
+| [ops/backup-weekly-checklist.md](./ops/backup-weekly-checklist.md) | Weekly JSON backup checklist + log |
+| [ops/supabase-pitr-steps.md](./ops/supabase-pitr-steps.md) | Supabase daily backup / PITR dashboard steps |
+| [ops/large-backup-import.md](./ops/large-backup-import.md) | Import/restore 45–500 MB+ from disk (CLI) |
+| [ops/go-live-process.md](./ops/go-live-process.md) | Process: ERP operating-ready / go-live (5 phases) |
+| [ops/uat-results-2026-11-26.md](./ops/uat-results-2026-11-26.md) | UAT run log (cycle + Playwright + readiness) |
 | [decisions/](./decisions/) | Architecture Decision Records (ADRs) |
 | [phases/](./phases/) | Task breakdown per phase |
 

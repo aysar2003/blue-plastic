@@ -1,6 +1,6 @@
 import { normaliseHeader } from '@/lib/csv'
 
-export type StatementPackId = 'generic' | 'so' | 'ke'
+export type StatementPackId = 'generic' | 'so' | 'ke' | 'et' | 'mm'
 
 export type StatementFormatPack = {
   id: StatementPackId
@@ -40,6 +40,11 @@ export const STATEMENT_FORMAT_PACKS: StatementFormatPack[] = [
       refno: 'reference',
       chequeno: 'reference',
       trxno: 'externalId',
+      msisdn: 'partyRef',
+      phonenumber: 'partyRef',
+      mobile: 'partyRef',
+      evcref: 'externalId',
+      zaadref: 'externalId',
     },
   },
   {
@@ -61,6 +66,54 @@ export const STATEMENT_FORMAT_PACKS: StatementFormatPack[] = [
       receiptno: 'externalId',
       transactionid: 'externalId',
       receiptnumber: 'externalId',
+      msisdn: 'partyRef',
+      phonenumber: 'partyRef',
+      mobile: 'partyRef',
+      tillnumber: 'partyRef',
+      paybill: 'partyRef',
+    },
+  },
+  {
+    id: 'et',
+    label: 'Ethiopia (CBE / Awash / Telebirr)',
+    columns: {
+      valuedate: 'date',
+      transdate: 'date',
+      postingdate: 'date',
+      narration: 'description',
+      particulars: 'description',
+      details: 'description',
+      debit: 'debit',
+      credit: 'credit',
+      withdrawal: 'debit',
+      deposit: 'credit',
+      refno: 'reference',
+      trxno: 'externalId',
+      msisdn: 'partyRef',
+      phonenumber: 'partyRef',
+    },
+  },
+  {
+    id: 'mm',
+    label: 'Mobile money (EVC / Zaad / M-Pesa / eDahab)',
+    columns: {
+      completiontime: 'date',
+      transactiondate: 'date',
+      transdate: 'date',
+      details: 'description',
+      transactiondetails: 'description',
+      narration: 'description',
+      paidin: 'credit',
+      moneyin: 'credit',
+      withdrawn: 'debit',
+      moneyout: 'debit',
+      receiptno: 'externalId',
+      transactionid: 'externalId',
+      msisdn: 'partyRef',
+      phonenumber: 'partyRef',
+      mobile: 'partyRef',
+      sender: 'partyRef',
+      till: 'partyRef',
     },
   },
 ]

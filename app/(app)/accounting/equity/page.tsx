@@ -39,10 +39,12 @@ export default async function EquityPage() {
               <Link href="/reports/owners-equity">Owner&apos;s equity statement</Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <a href="/api/exports/equity-register">Shareholder CSV</a>
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- file download */}
+              <a href="/api/exports/equity-register">Shareholder Excel</a>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <a href="/api/exports/equity-movement">Period movement CSV</a>
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- file download */}
+              <a href="/api/exports/equity-movement">Period movement Excel</a>
             </Button>
           </div>
         }

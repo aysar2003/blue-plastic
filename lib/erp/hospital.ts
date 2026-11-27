@@ -2,6 +2,8 @@
  * Hospital billing-admin helpers — pure (no I/O). Not clinical / EMR.
  */
 
+import { CLAIMS_HEADERS } from '@/lib/erp/export-headers'
+
 export const PATIENT_VISIT_STATUSES = ['OPEN', 'CLOSED', 'CANCELLED'] as const
 export type PatientVisitStatus = (typeof PATIENT_VISIT_STATUSES)[number]
 
@@ -67,24 +69,7 @@ export type ClaimExportRow = {
 }
 
 export function claimsToCsv(rows: ClaimExportRow[]): string {
-  const header = [
-    'visitId',
-    'patientName',
-    'openedAt',
-    'closedAt',
-    'payerName',
-    'payerRef',
-    'department',
-    'invoiceNumber',
-    'exportBatchId',
-    'claimsExportedAt',
-    'claimStatus',
-    'billCode',
-    'description',
-    'quantity',
-    'unitPrice',
-    'amount',
-  ]
+  const header = [...CLAIMS_HEADERS]
   const escape = (value: string | null | undefined) => {
     const raw = value ?? ''
     if (/[",\n]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`

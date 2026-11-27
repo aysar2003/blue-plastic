@@ -168,3 +168,13 @@ the trigger for revisiting them.
 - No budgets or variance — nothing to compare against yet.
 - No drill-down from a cash-flow line; the statements drill through to the
   account ledger, which is where the detail actually is.
+
+## ERP parity polish (Xero / QBO / Odoo-class)
+
+Closed against mid-market peers without building a report designer or BI layer:
+
+- Cash flow accepts a comparison period; screen and Excel show Comparison + Change.
+- Statement Excel (P&L / BS / CF) adds a Change column whenever Comparison is on.
+- Catalogue / aging / business Excel exports are Cover + Data multi-sheet packs.
+- `GET /api/reports/[report]?format=csv|xlsx` (default xlsx); CSV uses the same
+  human headers as Excel Summary (statements) or Data (tables).

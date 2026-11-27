@@ -1,14 +1,15 @@
 import 'server-only'
 
-import type { Prisma } from '@prisma/client'
+import type { Prisma, Role } from '@prisma/client'
 
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type { ResetSystemUserPasswordInput } from '@/lib/validation/user'
 import { requestMeta, writeAudit } from '@/server/audit'
 import type { OrgContext } from '@/server/auth/context'
 import { hashPassword, verifyPassword } from '@/server/auth/password'
+import { sanitizePermissions } from '@/server/auth/permissions'
 import { db } from '@/server/db'
-import { forbidden, notFound, precondition, validation } from '@/server/errors'
+import { conflict, forbidden, notFound, precondition, validation } from '@/server/errors'
 
 export async function updateProfile(
   ctx: OrgContext,
@@ -142,10 +143,14 @@ const SYSTEM_USER_SELECT = {
   email: true,
   isSystemOwner: true,
   lastLoginAt: true,
+  lastSeenAt: true,
   createdAt: true,
   homeOrgId: true,
+  totpEnabledAt: true,
+  otp2faEnabledAt: true,
+  // Include CUSTOMER rows too — the console splits staff vs portal so
+  // portal-only logins are not mislabeled “No company”.
   memberships: {
-    where: { role: { not: 'CUSTOMER' } },
     select: {
       id: true,
       role: true,
@@ -386,4 +391,242 @@ export async function deleteSystemUser(ctx: OrgContext, userId: string) {
 
     return { id: user.id, name: user.name, email: user.email }
   })
+}
+
+export async function listAssignableCompanies(ctx: OrgContext) {
+  if (!ctx.isSystemOwner) {
+    throw forbidden('Only the system owner can assign people across companies.')
+  }
+  return db.organization.findMany({
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
+/** End every open session for this login (all companies). */
+export async function forceSignOutUser(ctx: OrgContext, userId: string) {
+  if (!ctx.isSystemOwner) {
+    throw forbidden('Only the system owner can force sign-out across companies.')
+  }
+  if (userId === ctx.userId) {
+    throw precondition('You cannot force sign-out your own session from here.')
+  }
+
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, email: true },
+  })
+  if (!user) throw notFound('User')
+
+  const meta = await requestMeta()
+  await db.$transaction(async (tx) => {
+    await tx.membership.updateMany({
+      where: { userId },
+      data: { version: { increment: 1 } },
+    })
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'User',
+        entityId: userId,
+        action: 'UPDATE',
+        after: { forcedSignOut: true, email: user.email },
+      },
+      meta,
+    )
+  })
+
+  return { id: user.id, name: user.name, email: user.email }
+}
+
+export async function adminDisableUserTwoFactor(ctx: OrgContext, userId: string) {
+  if (!ctx.isSystemOwner) {
+    throw forbidden('Only the system owner can turn off two-factor across companies.')
+  }
+  if (userId === ctx.userId) {
+    throw precondition('Turn off your own two-factor under Settings → Your profile.')
+  }
+
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      isSystemOwner: true,
+      totpEnabledAt: true,
+      otp2faEnabledAt: true,
+    },
+  })
+  if (!user) throw notFound('User')
+  if (user.isSystemOwner) {
+    throw forbidden('Cannot turn off two-factor for another system owner from here.')
+  }
+  if (!user.totpEnabledAt && !user.otp2faEnabledAt) {
+    throw precondition('Two-factor is not on for this login.')
+  }
+
+  const meta = await requestMeta()
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        totpEnabledAt: null,
+        totpSecretSealed: null,
+        otp2faEnabledAt: null,
+      },
+    })
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'User',
+        entityId: userId,
+        action: 'UPDATE',
+        after: { twoFactorDisabledByAdmin: true, email: user.email },
+      },
+      meta,
+    )
+  })
+
+  return { id: user.id, name: user.name, email: user.email }
+}
+
+/**
+ * Put an existing login into a company as staff (system owner console).
+ * Does not create a new password — they keep the one they already have.
+ */
+export async function addUserToCompany(
+  ctx: OrgContext,
+  input: { userId: string; orgId: string; role: Role },
+) {
+  if (!ctx.isSystemOwner) {
+    throw forbidden('Only the system owner can add people to any company.')
+  }
+  if (input.role === 'OWNER' || input.role === 'CUSTOMER') {
+    throw validation('Choose a staff role, not Owner or Customer portal.')
+  }
+
+  const [user, org] = await Promise.all([
+    db.user.findUnique({
+      where: { id: input.userId },
+      select: { id: true, name: true, email: true, homeOrgId: true },
+    }),
+    db.organization.findUnique({
+      where: { id: input.orgId },
+      select: { id: true, name: true, maxUsers: true },
+    }),
+  ])
+  if (!user) throw notFound('User')
+  if (!org) throw notFound('Company')
+
+  const existing = await db.membership.findUnique({
+    where: { orgId_userId: { orgId: org.id, userId: user.id } },
+    select: { id: true, role: true },
+  })
+  if (existing) {
+    throw conflict(
+      existing.role === 'CUSTOMER'
+        ? 'That login is already a customer portal user on this company.'
+        : 'That person is already a member of this company.',
+    )
+  }
+
+  if (org.maxUsers != null && org.maxUsers > 0) {
+    const activeUsers = await db.membership.count({
+      where: { orgId: org.id, status: 'ACTIVE' },
+    })
+    if (activeUsers >= org.maxUsers) {
+      throw precondition(`This company is limited to ${org.maxUsers} users.`)
+    }
+  }
+
+  const meta = await requestMeta()
+  const role = input.role
+  const permissionsOverride = sanitizePermissions([])
+
+  return db.$transaction(async (tx) => {
+    if (!user.homeOrgId) {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { homeOrgId: org.id },
+      })
+    }
+
+    const membership = await tx.membership.create({
+      data: {
+        orgId: org.id,
+        userId: user.id,
+        role,
+        permissionsOverride,
+        status: 'ACTIVE',
+        invitedById: ctx.userId,
+        invitedAt: new Date(),
+        acceptedAt: new Date(),
+      },
+      select: { id: true },
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Membership',
+        entityId: membership.id,
+        action: 'CREATE',
+        after: { email: user.email, role, orgId: org.id, orgName: org.name },
+      },
+      meta,
+    )
+
+    return {
+      membershipId: membership.id,
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      orgId: org.id,
+      orgName: org.name,
+      role,
+    }
+  })
+}
+
+/**
+ * Delete leftover logins with no company staff membership and no portal access.
+ * System owners are never removed. Used to clean the platform console.
+ */
+export async function deleteUnusedSystemUsers(ctx: OrgContext) {
+  if (!ctx.isSystemOwner) {
+    throw forbidden('Only the system owner can clean unused logins.')
+  }
+
+  const candidates = await db.user.findMany({
+    where: {
+      id: { not: ctx.userId },
+      isSystemOwner: false,
+      memberships: { none: {} },
+    },
+    select: { id: true, name: true, email: true },
+    orderBy: { name: 'asc' },
+  })
+
+  const deleted: { id: string; name: string; email: string }[] = []
+  const skipped: { id: string; name: string; email: string; reason: string }[] = []
+
+  for (const candidate of candidates) {
+    try {
+      const result = await deleteSystemUser(ctx, candidate.id)
+      deleted.push(result)
+    } catch (error) {
+      skipped.push({
+        id: candidate.id,
+        name: candidate.name,
+        email: candidate.email,
+        reason: error instanceof Error ? error.message : 'Could not delete.',
+      })
+    }
+  }
+
+  return { deleted, skipped }
 }

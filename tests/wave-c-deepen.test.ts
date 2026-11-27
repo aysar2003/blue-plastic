@@ -54,7 +54,7 @@ describe('phase 15 HRIS hire + hours', () => {
       { date: '2026-04-01', employee: 'Amina', kind: 'leave', hours: '8.0000', note: 'Annual' },
       { date: '2026-04-02', employee: 'Amina', kind: 'attendance', hours: '7.5000' },
     ])
-    expect(csv.split('\r\n')[0]).toBe('date,employee,kind,hours,note')
+    expect(csv.split('\r\n')[0]).toBe('Date,Employee,Kind,Hours,Note')
     expect(csv).toContain('leave')
     expect(csv).toContain('7.5000')
   })
@@ -83,7 +83,7 @@ describe('phase 15 HRIS hire + hours', () => {
   })
 })
 
-describe('phase 16 collab overlap + planning stub', () => {
+describe('phase 16 collab overlap + planning', () => {
   it('refuses overlapping appointment slots', () => {
     const a0 = new Date('2026-11-21T09:00:00Z')
     const a1 = new Date('2026-11-21T10:00:00Z')

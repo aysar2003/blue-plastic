@@ -1,4 +1,5 @@
 import { type ConsolCompanyRow, minorityInterest, ownedShare, rollupWithOwnership } from '@/lib/erp/consolidation-ownership'
+import { PORTFOLIO_HEADERS } from '@/lib/erp/export-headers'
 import { Decimal, ZERO } from '@/lib/money'
 
 export type PortfolioRow = {
@@ -38,11 +39,14 @@ export function portfolioRowsFromConsol(rows: ConsolCompanyRow[], names: Map<str
     }))
 }
 
+export function portfolioTableRows(rows: PortfolioRow[]): string[][] {
+  return rows.map((r) => [r.orgId, r.name, r.ownershipPercent, r.netIncome, r.nci])
+}
+
 export function portfolioCsv(rows: PortfolioRow[]): string {
-  const header = 'orgId,name,ownershipPercent,rolledNetIncome,nci'
-  const body = rows.map(
-    (r) =>
-      `${r.orgId},${csvEscape(r.name)},${r.ownershipPercent},${r.netIncome},${r.nci}`,
+  const header = PORTFOLIO_HEADERS.join(',')
+  const body = portfolioTableRows(rows).map((cells) =>
+    cells.map((cell, index) => (index === 1 ? csvEscape(cell) : cell)).join(','),
   )
   return [header, ...body].join('\n')
 }

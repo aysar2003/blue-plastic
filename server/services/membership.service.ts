@@ -3,6 +3,7 @@ import type { Prisma, Role } from '@prisma/client'
 
 import { type ListQuery, paged, paginate } from '@/lib/validation/common'
 import type {
+  AdminUpdateMemberIdentityInput,
   InviteUserInput,
   ResetMemberPasswordInput,
   UpdateMemberRoleInput,
@@ -28,8 +29,10 @@ const MEMBER_SELECT = {
       id: true,
       name: true,
       email: true,
+      phone: true,
       image: true,
       lastLoginAt: true,
+      lastSeenAt: true,
       isSystemOwner: true,
     },
   },
@@ -79,6 +82,15 @@ export async function list(ctx: OrgContext, query: ListQuery) {
   ])
 
   return paged(rows, total, query)
+}
+
+export async function get(ctx: OrgContext, membershipId: string) {
+  const member = await db.membership.findFirst({
+    where: { id: membershipId, orgId: ctx.orgId, role: { not: 'CUSTOMER' } },
+    select: MEMBER_SELECT,
+  })
+  if (!member) throw notFound('Member')
+  return member
 }
 
 export async function invite(ctx: OrgContext, input: InviteUserInput) {
@@ -455,6 +467,141 @@ export async function resetMemberPassword(ctx: OrgContext, input: ResetMemberPas
       email: membership.user.email,
       name: membership.user.name,
     }
+  })
+}
+
+/** Admin edits name, email (Gmail/login), and phone for a company member. */
+export async function adminUpdateMemberIdentity(
+  ctx: OrgContext,
+  input: AdminUpdateMemberIdentityInput,
+) {
+  const meta = await requestMeta()
+  const email = input.email.trim().toLowerCase()
+  const phone = input.phone ?? null
+
+  return db.$transaction(async (tx) => {
+    const membership = await tx.membership.findFirst({
+      where: { id: input.membershipId, orgId: ctx.orgId, role: { not: 'CUSTOMER' } },
+      select: MEMBER_SELECT,
+    })
+    if (!membership) throw notFound('Member')
+
+    if (membership.role === 'OWNER') {
+      throw forbidden('Owner identity cannot be changed here. Transfer ownership instead.')
+    }
+    if (membership.user.id === ctx.userId) {
+      throw precondition('Change your own name and phone under Settings → Your profile.')
+    }
+    if (membership.user.isSystemOwner && !ctx.isSystemOwner) {
+      throw forbidden('Only the system owner can edit that login.')
+    }
+
+    const emailTaken = await tx.user.findFirst({
+      where: { email, NOT: { id: membership.user.id } },
+      select: { id: true },
+    })
+    if (emailTaken) {
+      throw validation('That email is already used on another login.', {
+        email: ['That email is already used on another login.'],
+      })
+    }
+
+    if (phone) {
+      const phoneTaken = await tx.user.findFirst({
+        where: { phone, NOT: { id: membership.user.id } },
+        select: { id: true },
+      })
+      if (phoneTaken) {
+        throw validation('That mobile number is already used on another login.', {
+          phone: ['That mobile number is already used on another login.'],
+        })
+      }
+    }
+
+    const before = {
+      id: membership.user.id,
+      name: membership.user.name,
+      email: membership.user.email,
+      phone: membership.user.phone,
+    }
+
+    const emailChanged = before.email !== email
+
+    const after = await tx.user.update({
+      where: { id: membership.user.id },
+      data: {
+        name: input.name,
+        email,
+        phone,
+      },
+      select: { id: true, name: true, email: true, phone: true },
+    })
+
+    if (emailChanged) {
+      await tx.membership.update({
+        where: { id: membership.id },
+        data: { version: { increment: 1 } },
+      })
+    }
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'User',
+        entityId: membership.user.id,
+        action: 'UPDATE',
+        before,
+        after,
+      },
+      meta,
+    )
+
+    return {
+      membershipId: membership.id,
+      id: after.id,
+      name: after.name,
+      email: after.email,
+      phone: after.phone,
+    }
+  })
+}
+
+/** End this member’s open sessions for this company only. */
+export async function forceSignOutMember(ctx: OrgContext, membershipId: string) {
+  const meta = await requestMeta()
+
+  return db.$transaction(async (tx) => {
+    const membership = await tx.membership.findFirst({
+      where: { id: membershipId, orgId: ctx.orgId, role: { not: 'CUSTOMER' } },
+      select: MEMBER_SELECT,
+    })
+    if (!membership) throw notFound('Member')
+    if (membership.user.id === ctx.userId) {
+      throw precondition('You cannot force sign-out your own session from here.')
+    }
+    if (membership.user.isSystemOwner && !ctx.isSystemOwner) {
+      throw forbidden('Only the system owner can force sign-out that login.')
+    }
+
+    await tx.membership.update({
+      where: { id: membership.id },
+      data: { version: { increment: 1 } },
+    })
+
+    await writeAudit(
+      tx,
+      ctx,
+      {
+        entity: 'Membership',
+        entityId: membership.id,
+        action: 'UPDATE',
+        after: { forcedSignOut: true, email: membership.user.email },
+      },
+      meta,
+    )
+
+    return { id: membership.id, name: membership.user.name, email: membership.user.email }
   })
 }
 

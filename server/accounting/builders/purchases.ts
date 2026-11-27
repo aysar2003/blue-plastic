@@ -50,6 +50,12 @@ export type PurchaseJournalInput = {
    * will not balance. Positive means the books cost more than the credit.
    */
   stockCostDifference?: Decimal
+  /**
+   * Wave G: statutory WHT withheld from the vendor — reduces AP, credits
+   * WITHHOLDING_TAX_PAYABLE. Amount must be > 0 and ≤ bill total.
+   */
+  withholdAmount?: Decimal | null
+  withholdAccountId?: string | null
 }
 
 /**
@@ -57,25 +63,37 @@ export type PurchaseJournalInput = {
  *
  *   Dr Expense / Asset (per line)   net
  *   Dr Tax recoverable              tax, one line per rate
- *     Cr Accounts Payable             total   (carrying the vendor)
+ *     Cr Accounts Payable             total − WHT   (carrying the vendor)
+ *     Cr Withholding tax payable      WHT           (when withholdAmount set)
  */
 export function buildBillJournal(input: PurchaseJournalInput): DraftJournal {
+  const withhold = input.withholdAmount && input.withholdAmount.gt(0) ? input.withholdAmount : null
+  const payable = withhold ? input.priced.total.minus(withhold) : input.priced.total
+  const lines: DraftLine[] = [
+    ...expenseLines(input, 'debit'),
+    ...stockLines(input, 'debit'),
+    ...taxLines(input, 'debit'),
+    {
+      accountId: input.payableAccountId,
+      credit: payable,
+      vendorId: input.vendorId,
+      description: `Bill ${input.number}`,
+    },
+  ]
+  if (withhold && input.withholdAccountId) {
+    lines.push({
+      accountId: input.withholdAccountId,
+      credit: withhold,
+      vendorId: input.vendorId,
+      description: `WHT · Bill ${input.number}`,
+    })
+  }
   return {
     date: input.date,
     memo: input.memo ?? `Bill ${input.number}`,
     sourceType: 'BILL',
     sourceId: input.documentId,
-    lines: [
-      ...expenseLines(input, 'debit'),
-      ...stockLines(input, 'debit'),
-      ...taxLines(input, 'debit'),
-      {
-        accountId: input.payableAccountId,
-        credit: input.priced.total,
-        vendorId: input.vendorId,
-        description: `Bill ${input.number}`,
-      },
-    ],
+    lines,
   }
 }
 

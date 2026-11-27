@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { letterheadOf } from '@/lib/letterhead'
 import { parsePaperMetaHidden } from '@/lib/paper-meta-fields'
 import { parsePrintInk } from '@/lib/print-ink'
+import { parsePrintLook } from '@/lib/print-look'
 import { byType } from '@/lib/sales-types'
 import { getOrgContext } from '@/server/auth/context'
 import { isAppError, unauthenticated } from '@/server/errors'
@@ -28,6 +29,7 @@ export async function GET(
 
     const query = new URL(request.url).searchParams
     const ink = parsePrintInk(query.get('ink'))
+    const look = parsePrintLook(query.get('look'))
     const hiddenMeta = parsePaperMetaHidden(query.get('meta'))
 
     const [document, org, template] = await Promise.all([
@@ -44,6 +46,7 @@ export async function GET(
     // Same URL the user prints — ink + paper cookie so PDF matches the screen.
     const printUrl = new URL(`${origin}/sales/${config.slug}/${id}/print`)
     printUrl.searchParams.set('ink', ink)
+    if (look === 'luxury') printUrl.searchParams.set('look', 'luxury')
     const paper = query.get('paper')
     if (paper === 'trade' || paper === 'merchant') printUrl.searchParams.set('paper', paper)
     const screen = await renderAuthenticatedPagePdf(
@@ -71,6 +74,7 @@ export async function GET(
 
     const bytes = renderSalesDocumentPdf({
       ink,
+      look,
       template,
       orgName: company.name,
       orgAddress: company.address ? [company.address] : [],

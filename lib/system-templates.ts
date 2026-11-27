@@ -56,7 +56,7 @@ export const SYSTEM_TEMPLATES: SystemTemplateEntry[] = [
   {
     id: 'report-paper',
     label: 'Report paper style',
-    blurb: 'SOM ERP, QuickBooks, or Odoo banding on P&L and other reports.',
+    blurb: 'SOM ERP plus world clones (Xero, Sage, Wave, …) or custom banding on P&L and other reports.',
     managedHere: true,
   },
   {

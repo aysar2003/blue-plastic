@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  ActivityIcon,
   Building2Icon,
   CreditCardIcon,
   LayoutDashboardIcon,
@@ -26,7 +27,15 @@ const NAV = [
       (path.startsWith('/databases/') &&
         !path.startsWith('/databases/users') &&
         !path.startsWith('/databases/billing') &&
-        !path.startsWith('/databases/apps')),
+        !path.startsWith('/databases/apps') &&
+        !path.startsWith('/databases/activity')),
+  },
+  {
+    href: '/databases/activity',
+    label: 'Activity',
+    hint: 'Usage & user motion',
+    icon: ActivityIcon,
+    match: (path: string) => path.startsWith('/databases/activity'),
   },
   {
     href: '/databases/apps',
@@ -53,7 +62,7 @@ const NAV = [
 
 /**
  * System-owner control plane for /databases — distinct from the company ERP desk.
- * Slate + indigo, dense SaaS-admin chrome (no Sales Create / apps rail / stock bells).
+ * Modern luxury chrome: espresso ink + champagne accents (no neon indigo).
  */
 export function PlatformConsoleChrome({
   user,
@@ -74,16 +83,16 @@ export function PlatformConsoleChrome({
   const pathname = usePathname()
 
   return (
-    <div className="platform-console relative flex min-h-svh bg-[#f4f5f8] text-slate-900 dark:bg-[#07090f] dark:text-slate-100">
+    <div className="platform-console relative flex min-h-svh bg-background text-foreground">
       <NavigationProgress />
 
-      <aside className="relative z-20 flex w-[15.5rem] shrink-0 flex-col border-r border-indigo-950/10 bg-[#0b1020] text-slate-100 dark:border-white/10">
-        <div className="border-b border-white/10 px-4 py-4">
-          <p className="text-[0.65rem] font-bold uppercase tracking-[0.22em] text-indigo-300/90">
+      <aside className="relative z-20 flex w-[15.5rem] shrink-0 flex-col border-r border-primary/15 bg-[#0a090c] text-[#f3eee6]">
+        <div className="border-b border-primary/15 px-4 py-4">
+          <p className="text-[0.65rem] font-bold uppercase tracking-[0.22em] text-[#c4a574]">
             {PRODUCT_NAME}
           </p>
-          <p className="mt-1 text-sm font-semibold tracking-tight text-white">Platform</p>
-          <p className="mt-0.5 text-[0.7rem] text-slate-400">Installation control</p>
+          <p className="mt-1 text-sm font-semibold tracking-tight text-[#f7f2ea]">Platform</p>
+          <p className="mt-0.5 text-[0.7rem] text-[#c4b8a8]">Installation control</p>
         </div>
 
         <nav className="flex flex-1 flex-col gap-1 p-2" aria-label="Platform console">
@@ -97,37 +106,48 @@ export function PlatformConsoleChrome({
                 className={cn(
                   'flex items-start gap-2.5 rounded-lg px-3 py-2.5 transition-colors',
                   active
-                    ? 'bg-indigo-500/20 text-white ring-1 ring-indigo-400/30'
-                    : 'text-slate-300 hover:bg-white/5 hover:text-white',
+                    ? 'bg-[#c4a574]/15 text-[#f7f2ea] ring-1 ring-[#c4a574]/35'
+                    : 'text-[#ebe4d8] hover:bg-[#c4a574]/10 hover:text-[#f7f2ea]',
                 )}
               >
-                <Icon className="mt-0.5 size-4 shrink-0 opacity-90" aria-hidden />
+                <span
+                  className={cn(
+                    'mt-0.5 grid size-7 shrink-0 place-items-center rounded-md',
+                    active
+                      ? 'bg-[#c4a574]/20 text-[#e8d5a8]'
+                      : 'bg-white/5 text-[#c4a574]',
+                  )}
+                >
+                  <Icon className="size-3.5" aria-hidden />
+                </span>
                 <span className="min-w-0 leading-tight">
                   <span className="block text-sm font-medium">{item.label}</span>
-                  <span className="mt-0.5 block text-[0.65rem] text-slate-400">{item.hint}</span>
+                  <span className="mt-0.5 block text-[0.65rem] text-[#c4b8a8]">{item.hint}</span>
                 </span>
               </Link>
             )
           })}
 
-          <div className="my-2 border-t border-white/10" />
+          <div className="my-2 border-t border-primary/15" />
 
           <Link
             href="/dashboard"
-            className="flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+            className="flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-[#ebe4d8] transition-colors hover:bg-[#c4a574]/10 hover:text-[#f7f2ea]"
           >
-            <Building2Icon className="mt-0.5 size-4 shrink-0 opacity-90" aria-hidden />
+            <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md bg-white/5 text-[#c4a574]">
+              <Building2Icon className="size-3.5" aria-hidden />
+            </span>
             <span className="min-w-0 leading-tight">
               <span className="block text-sm font-medium">Open books</span>
-              <span className="mt-0.5 block truncate text-[0.65rem] text-slate-400">
+              <span className="mt-0.5 block truncate text-[0.65rem] text-[#c4b8a8]">
                 {currentCompanyName?.trim() || 'Current company'}
               </span>
             </span>
           </Link>
         </nav>
 
-        <div className="border-t border-white/10 px-4 py-3 text-[0.65rem] leading-relaxed text-slate-500">
-          <span className="font-medium text-slate-400">{PRODUCT_NAME}</span>
+        <div className="border-t border-primary/15 px-4 py-3 text-[0.65rem] leading-relaxed text-[#a89f92]">
+          <span className="font-medium text-[#c4b8a8]">{PRODUCT_NAME}</span>
           {showCreatorBrand ? (
             <>
               <span className="mx-1 opacity-50">·</span>
@@ -138,18 +158,18 @@ export function PlatformConsoleChrome({
       </aside>
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-md dark:border-white/10 dark:bg-[#0c1018]/90 sm:px-6">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border/80 bg-card/90 px-4 backdrop-blur-md sm:px-6">
           <div className="min-w-0 leading-tight">
-            <p className="truncate text-sm font-semibold tracking-tight text-slate-900 dark:text-white">
+            <p className="truncate text-sm font-semibold tracking-tight text-foreground">
               {PRODUCT_NAME} Platform
             </p>
-            <p className="truncate text-[0.65rem] text-slate-500 dark:text-slate-400">
+            <p className="truncate text-[0.65rem] text-muted-foreground">
               Manage companies, access, and billing for this installation
             </p>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <span className="hidden rounded-full bg-indigo-500/10 px-2.5 py-1 text-[0.65rem] font-medium text-indigo-700 ring-1 ring-indigo-500/20 dark:text-indigo-200 sm:inline">
+            <span className="hidden rounded-full bg-primary/12 px-2.5 py-1 text-[0.65rem] font-medium text-primary ring-1 ring-primary/25 sm:inline">
               System owner
             </span>
             <UserMenu
@@ -162,7 +182,14 @@ export function PlatformConsoleChrome({
         </header>
 
         <main className="relative min-w-0 flex-1 px-[clamp(1rem,2vw,2rem)] py-[clamp(1rem,1.8vw,1.75rem)]">
-          <div className="mx-auto w-full max-w-6xl">{children}</div>
+          <div
+            className={cn(
+              'mx-auto w-full',
+              pathname.startsWith('/databases/activity') ? 'max-w-7xl' : 'max-w-6xl',
+            )}
+          >
+            {children}
+          </div>
         </main>
       </div>
     </div>

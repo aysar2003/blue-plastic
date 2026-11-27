@@ -2,6 +2,7 @@ import 'server-only'
 
 import { toDate, type CalendarDate } from '@/lib/date'
 import {
+  addLaborCharge,
   addLaborCost,
   addPurchaseCost,
   addSalesIncome,
@@ -27,12 +28,13 @@ export type ProjectProfitRow = {
   purchaseCost: Decimal
   stockCost: Decimal
   laborCost: Decimal
+  laborCharge: Decimal
   profit: Decimal
 }
 
 /**
  * Job P&amp;L for a date range: posted sales income, purchase cost, COGS from
- * stock issued on those sales, and timesheet labor at billable rate.
+ * stock issued on those sales, and timesheet labour at costRate vs billableRate.
  */
 export async function profitabilityByRange(
   ctx: OrgContext,
@@ -128,14 +130,13 @@ export async function profitabilityByRange(
 
   for (const entry of timeEntries) {
     const prior = byProject.get(entry.projectId) ?? emptySlice()
-    byProject.set(
-      entry.projectId,
-      addLaborCost(
-        prior,
-        entry.hours.toString(),
-        entry.costRate?.toString() ?? entry.billableRate?.toString() ?? null,
-      ),
-    )
+    const hours = entry.hours.toString()
+    const cost =
+      entry.costRate?.toString() ?? entry.billableRate?.toString() ?? null
+    const charge = entry.billableRate?.toString() ?? null
+    let next = addLaborCost(prior, hours, cost)
+    next = addLaborCharge(next, hours, charge)
+    byProject.set(entry.projectId, next)
   }
 
   const rows: ProjectProfitRow[] = []
@@ -148,7 +149,8 @@ export async function profitabilityByRange(
       slice.income.isZero() &&
       slice.purchaseCost.isZero() &&
       slice.stockCost.isZero() &&
-      slice.laborCost.isZero()
+      slice.laborCost.isZero() &&
+      slice.laborCharge.isZero()
     ) {
       continue
     }
@@ -162,6 +164,7 @@ export async function profitabilityByRange(
       purchaseCost: slice.purchaseCost,
       stockCost: slice.stockCost,
       laborCost: slice.laborCost,
+      laborCharge: slice.laborCharge,
       profit: profitOf(slice),
     })
   }

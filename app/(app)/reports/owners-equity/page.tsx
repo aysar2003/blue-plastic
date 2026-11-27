@@ -18,12 +18,15 @@ export default async function OwnersEquityReportPage() {
         title="Owner&apos;s equity statement"
         description="Capital, retained earnings, and recorded equity events. Events post to statement accounts (capital, drawings, retained earnings)."
         actions={
-          <a
-            href="/api/exports/equity-movement"
-            className="text-sm text-primary underline-offset-4 hover:underline"
-          >
-            Period movement CSV
-          </a>
+          <>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- file download */}
+            <a
+              href="/api/exports/equity-movement"
+              className="text-sm text-primary underline-offset-4 hover:underline"
+            >
+              Period movement CSV
+            </a>
+          </>
         }
       />
       <Card className="max-w-lg space-y-2 p-6 text-sm">

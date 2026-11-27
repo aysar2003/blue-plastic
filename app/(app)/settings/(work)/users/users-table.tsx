@@ -12,23 +12,25 @@ import { ConnectToggle } from './connect-toggle'
 import { ManageAccessButton } from './manage-access-button'
 import { MemberActions } from './member-actions'
 
-type ColumnId = 'member' | 'role' | 'apps' | 'status' | 'lastSeen'
+type ColumnId = 'member' | 'role' | 'apps' | 'status' | 'presence' | 'lastSeen'
 
 const COLUMNS: { id: ColumnId; label: string }[] = [
   { id: 'member', label: 'Member' },
   { id: 'role', label: 'Role' },
   { id: 'apps', label: 'Apps open' },
   { id: 'status', label: 'Status' },
+  { id: 'presence', label: 'Presence' },
   { id: 'lastSeen', label: 'Last signed in' },
 ]
 
 /** Fixed layout so the sheet uses the full width; leftover space splits across open columns. */
 const COLUMN_WIDTH: Record<ColumnId, string> = {
-  member: 'w-[22%]',
-  role: 'w-[12%]',
+  member: 'w-[20%]',
+  role: 'w-[11%]',
   apps: '',
   status: 'w-[9%]',
-  lastSeen: 'w-[14%]',
+  presence: 'w-[11%]',
+  lastSeen: 'w-[13%]',
 }
 
 const SORT_COLUMN: Partial<Record<ColumnId, string>> = {
@@ -50,6 +52,7 @@ export type UsersTableRow = {
   showConnectToggle: boolean
   name: string
   email: string
+  phone: string | null
   userId: string
   roleLabel: string
   statusLabel: string
@@ -57,6 +60,9 @@ export type UsersTableRow = {
   customPermissionNote: string | null
   canConnectNote: boolean
   apps: { id: string; label: string }[]
+  online: boolean
+  presenceLabel: 'Online' | 'Offline'
+  lastActiveLabel: string
   lastLoginLabel: string
 }
 
@@ -186,6 +192,27 @@ export function UsersTable({
                     return (
                       <TableCell key={col.id}>
                         <Badge variant={member.statusVariant}>{member.statusLabel}</Badge>
+                      </TableCell>
+                    )
+                  case 'presence':
+                    return (
+                      <TableCell key={col.id}>
+                        <span className="inline-flex items-center gap-1.5 text-sm">
+                          <span
+                            className={
+                              member.online
+                                ? 'size-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgb(52_211_153/0.25)]'
+                                : 'size-2 shrink-0 rounded-full bg-zinc-400/75'
+                            }
+                            aria-hidden
+                          />
+                          <span className={member.online ? 'font-medium text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}>
+                            {member.presenceLabel}
+                          </span>
+                        </span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {member.lastActiveLabel}
+                        </span>
                       </TableCell>
                     )
                   case 'lastSeen':

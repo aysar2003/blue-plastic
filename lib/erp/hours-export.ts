@@ -1,3 +1,4 @@
+import { HOURS_HEADERS } from '@/lib/erp/export-headers'
 import { Decimal, ZERO } from '@/lib/money'
 
 export type HoursCsvRow = {
@@ -15,17 +16,20 @@ export function leaveDaysToHours(days: Decimal.Value, hoursPerDay: Decimal.Value
   return hours.toFixed(4)
 }
 
+export function hoursFileTableRows(rows: HoursCsvRow[]): string[][] {
+  return rows.map((row) => [row.date, row.employee, row.kind, row.hours, row.note ?? ''])
+}
+
 export function hoursFileCsv(rows: HoursCsvRow[]): string {
-  const header = ['date', 'employee', 'kind', 'hours', 'note']
-  const lines = [header.join(',')]
-  for (const row of rows) {
+  const lines = [[...HOURS_HEADERS].join(',')]
+  for (const cells of hoursFileTableRows(rows)) {
     lines.push(
       [
-        row.date,
-        csvEscape(row.employee),
-        row.kind,
-        row.hours,
-        csvEscape(row.note ?? ''),
+        cells[0]!,
+        csvEscape(cells[1]!),
+        cells[2]!,
+        cells[3]!,
+        csvEscape(cells[4] ?? ''),
       ].join(','),
     )
   }

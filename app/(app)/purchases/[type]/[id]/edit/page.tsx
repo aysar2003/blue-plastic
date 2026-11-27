@@ -86,6 +86,8 @@ export default async function EditPurchasePage({
           reference: document.reference,
           inRef: document.inRef,
           memo: document.memo,
+          withholdPercent:
+            document.withholdPercent == null ? null : String(document.withholdPercent),
           paymentTermId: document.paymentTerm?.id ?? null,
           paymentAccountId: document.paymentAccount?.id ?? null,
           offsetCustomerId: document.offsetCustomer?.id ?? null,

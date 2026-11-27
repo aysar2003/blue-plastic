@@ -177,7 +177,7 @@ export default async function InventoryExpiryPage({
             href="/api/inventory/controlled-movements"
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
           >
-            Download CSV
+            Download Excel
           </Link>
         }
       />

@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { Eye, Pencil } from 'lucide-react'
 
 import { updateDocumentTemplateForm } from '@/app/(app)/settings/(work)/organization/actions'
@@ -9,6 +9,7 @@ import { Field, fieldProps } from '@/components/forms/field'
 import { FormStatus } from '@/components/forms/form-status'
 import { SubmitButton } from '@/components/forms/submit-button'
 import { TemplateLayoutPreview } from '@/components/templates/template-layout-preview'
+import { TemplateLookEditor } from '@/components/templates/template-look-editor'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -19,19 +20,61 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { writeBrowserStore } from '@/lib/browser-store'
 import { PAPER_STYLE_OPTIONS, parseDocumentTemplate, type DocumentTemplate } from '@/lib/document-template'
+import {
+  parseTemplateLook,
+  serializeTemplateLook,
+  templateLookStorageKey,
+  type TemplateLook,
+} from '@/lib/template-look'
 
 const SLOTS = [1, 2, 3, 4, 5, 6]
+const DOCUMENT_LOOK_CATALOG = 'document-paper'
 
 export function TemplateForm({ template, canEdit }: { template: DocumentTemplate; canEdit: boolean }) {
   const [state, formAction] = useActionState(updateDocumentTemplateForm, idleState)
   const [draft, setDraft] = useState(template)
   const [uploadNote, setUploadNote] = useState<string | null>(null)
   const [viewOpen, setViewOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [look, setLook] = useState<TemplateLook>(() => parseTemplateLook(null, template.accent))
+  const [draftLook, setDraftLook] = useState<TemplateLook | null>(null)
   const e = state.fieldErrors
   const editing = canEdit
+  const previewKind = draft.paperStyle === 'trade' ? 'trade' : 'document'
+  const lookKey = templateLookStorageKey(DOCUMENT_LOOK_CATALOG, draft.paperStyle)
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(lookKey)
+      // Browser look is an external system — sync after paper / accent changes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage hydrate
+      setLook(parseTemplateLook(raw, draft.accent))
+    } catch {
+      setLook(parseTemplateLook(null, draft.accent))
+    }
+  }, [lookKey, draft.accent])
 
   const banks = Array.from({ length: 6 }, (_, index) => draft.banks[index] ?? { name: '', account: '' })
+  const liveLook: TemplateLook = { ...look, accent: draft.accent }
+
+  function openEdit() {
+    setViewOpen(false)
+    setDraftLook({ ...look, accent: draft.accent })
+    setEditOpen(true)
+  }
+
+  function saveLook() {
+    if (!draftLook) return
+    writeBrowserStore(lookKey, serializeTemplateLook(draftLook))
+    setLook(draftLook)
+    if (draftLook.accent !== draft.accent) {
+      setDraft({ ...draft, accent: draftLook.accent })
+    }
+    setEditOpen(false)
+    setDraftLook(null)
+  }
 
   return (
     <form action={formAction} className="space-y-4">
@@ -50,9 +93,9 @@ export function TemplateForm({ template, canEdit }: { template: DocumentTemplate
                 <Eye className="size-3.5" />
                 View
               </Button>
-              <Button type="button" size="sm" variant="default" disabled={!canEdit}>
+              <Button type="button" size="sm" variant="default" disabled={!canEdit} onClick={openEdit}>
                 <Pencil className="size-3.5" />
-                Edit
+                Edit style
               </Button>
             </div>
           </div>
@@ -224,12 +267,13 @@ export function TemplateForm({ template, canEdit }: { template: DocumentTemplate
             </div>
 
             <aside className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Live preview</p>
-              <TemplateLayoutPreview
-                kind={draft.paperStyle === 'trade' ? 'trade' : 'document'}
-                accent={draft.accent}
-                size="stage"
-              />
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Live preview</p>
+                <p className="text-[10px] capitalize text-muted-foreground">
+                  {liveLook.presetId === 'custom' ? 'Custom' : liveLook.presetId}
+                </p>
+              </div>
+              <TemplateLayoutPreview kind={previewKind} look={liveLook} size="stage" />
               {draft.banks.some((bank) => bank.name || bank.account) ? (
                 <ul className="space-y-1 text-[11px] text-muted-foreground">
                   {draft.banks
@@ -245,6 +289,12 @@ export function TemplateForm({ template, canEdit }: { template: DocumentTemplate
               ) : null}
               {draft.terms ? (
                 <p className="line-clamp-3 text-[11px] text-muted-foreground">{draft.terms}</p>
+              ) : null}
+              {canEdit ? (
+                <Button type="button" size="sm" variant="outline" className="w-full" onClick={openEdit}>
+                  <Pencil className="size-3.5" />
+                  Edit style &amp; presets
+                </Button>
               ) : null}
             </aside>
           </div>
@@ -284,16 +334,19 @@ export function TemplateForm({ template, canEdit }: { template: DocumentTemplate
       {uploadNote ? <p className="text-sm text-muted-foreground">{uploadNote}</p> : null}
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent size="lg">
           <DialogHeader>
-            <DialogTitle>View · Invoice & statement paper</DialogTitle>
-            <DialogDescription>Sida template-kan u muuqdo with your colour, banks, and terms.</DialogDescription>
+            <DialogTitle>View · Invoice &amp; statement paper</DialogTitle>
+            <DialogDescription>
+              Sida template-kan u muuqdo with your colour, banks, and style (
+              {liveLook.presetId === 'custom' ? 'custom' : liveLook.presetId}).
+            </DialogDescription>
           </DialogHeader>
           <TemplateLayoutPreview
-            kind={draft.paperStyle === 'trade' ? 'trade' : 'document'}
-            accent={draft.accent}
+            kind={previewKind}
+            look={liveLook}
             size="stage"
-            className="mx-auto"
+            className="mx-auto max-w-md"
           />
           {draft.banks.some((bank) => bank.name || bank.account) ? (
             <ul className="space-y-1 text-sm text-muted-foreground">
@@ -308,6 +361,59 @@ export function TemplateForm({ template, canEdit }: { template: DocumentTemplate
             </ul>
           ) : null}
           {draft.terms ? <p className="text-sm text-muted-foreground">{draft.terms}</p> : null}
+          {canEdit ? (
+            <Button type="button" onClick={openEdit}>
+              <Pencil className="size-3.5" />
+              Edit style
+            </Button>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={editOpen && draftLook != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditOpen(false)
+            setDraftLook(null)
+          }
+        }}
+      >
+        <DialogContent size="xl" className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit style · Invoice &amp; statement paper</DialogTitle>
+            <DialogDescription>
+              Dooro style type (Professional, Modern, Minimal…), then edit font, colour, header, border, logo, banks,
+              and terms. Saved on this browser for this paper.
+            </DialogDescription>
+          </DialogHeader>
+          {draftLook ? (
+            <TemplateLookEditor
+              layoutId={previewKind}
+              layoutLabel={draft.paperStyle === 'trade' ? 'Trade' : 'Invoice'}
+              look={draftLook}
+              onChange={setDraftLook}
+              onReset={() => {
+                writeBrowserStore(lookKey, null)
+                setLook(parseTemplateLook(null, draft.accent))
+              }}
+            />
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={saveLook}>
+              Save style
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setEditOpen(false)
+                setDraftLook(null)
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </form>

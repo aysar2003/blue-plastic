@@ -652,7 +652,7 @@ export async function assignPlanning(
   assertPermission(ctx, 'project:create')
   const employee = await db.employee.findFirst({
     where: { id: input.employeeId, orgId: ctx.orgId, active: true },
-    select: { id: true, userId: true, name: true },
+    select: { id: true, userId: true, name: true, wageType: true, wageAmount: true },
   })
   if (!employee) throw notFound('Employee')
   const hours = new Decimal(input.hours || 0)
@@ -660,32 +660,30 @@ export async function assignPlanning(
   if (hours.greaterThan(24)) throw validation('Hours cannot exceed 24 in one day.')
 
   let projectTimeEntryId: string | null = null
-  let notes = input.notes?.trim() || null
+  const notes = input.notes?.trim() || null
   if (input.taskId) {
     const task = await db.projectTask.findFirst({
       where: { id: input.taskId, orgId: ctx.orgId },
       select: { id: true, name: true, projectId: true },
     })
     if (!task) throw notFound('Task')
-    if (employee.userId) {
-      const entry = await db.projectTimeEntry.create({
-        data: {
-          orgId: ctx.orgId,
-          projectId: task.projectId,
-          taskId: task.id,
-          userId: employee.userId,
-          workDate: toDate(input.workDate),
-          hours: hours.toFixed(4),
-          description: notes || `Planning · ${employee.name} · ${task.name}`,
-          billable: true,
-        },
-        select: { id: true },
-      })
-      projectTimeEntryId = entry.id
-    } else {
-      const stub = `TIMESHEET_STUB project:${task.projectId} task:${task.id}`
-      notes = notes ? `${notes} · ${stub}` : stub
-    }
+    const costRate = hourlyCostFromWage(employee.wageType, employee.wageAmount?.toString())
+    const entry = await db.projectTimeEntry.create({
+      data: {
+        orgId: ctx.orgId,
+        projectId: task.projectId,
+        taskId: task.id,
+        userId: employee.userId ?? null,
+        employeeId: employee.id,
+        workDate: toDate(input.workDate),
+        hours: hours.toFixed(4),
+        description: notes || `Planning · ${employee.name} · ${task.name}`,
+        billable: true,
+        costRate: costRate?.toFixed(4) ?? null,
+      },
+      select: { id: true },
+    })
+    projectTimeEntryId = entry.id
   }
 
   return db.planningAssignment.create({
@@ -700,6 +698,19 @@ export async function assignPlanning(
     },
     select: { id: true, projectTimeEntryId: true },
   })
+}
+
+/** Derive an internal hourly cost from the employee wage card (Wave H). */
+function hourlyCostFromWage(
+  wageType: string | null | undefined,
+  wageAmount: string | null | undefined,
+): Decimal | null {
+  const amount = new Decimal(wageAmount ?? 0)
+  if (amount.lessThanOrEqualTo(ZERO)) return null
+  if (wageType === 'HOURLY') return amount
+  if (wageType === 'DAILY') return amount.div(8)
+  if (wageType === 'MONTHLY') return amount.div(176)
+  return null
 }
 
 function startOfWeek(now: Date) {

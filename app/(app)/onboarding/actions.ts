@@ -84,6 +84,18 @@ export const seedLocalizationTax = action
     return result
   })
 
+/** Wave G: pack PAYE slabs → Standard salary structure TAX rule. */
+export const applyLocalizationPaye = action
+  .input(z.object({ force: z.boolean().optional() }).optional())
+  .handler(async (ctx, input) => {
+    const payroll = await import('@/server/services/payroll-standard.service')
+    const result = await payroll.applyLocalizationPaye(ctx, { force: input?.force })
+    revalidatePath('/settings/setup')
+    revalidatePath('/employees/payroll')
+    revalidatePath('/employees/structures')
+    return result
+  })
+
 export const healMissingItemSkus = action.handler(async (ctx) => {
   const result = await setupHealService.healMissingItemSkus(ctx)
   revalidatePath('/settings/setup')

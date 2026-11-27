@@ -164,6 +164,13 @@ export const SYSTEM_ACCOUNT_ROLES: SystemAccountRole[] = [
     subtypes: ['OTHER_CURRENT_LIABILITY'],
   },
   {
+    key: 'WITHHOLDING_TAX_PAYABLE',
+    label: 'Withholding tax payable',
+    used: 'Statutory WHT withheld on vendor bills until remitted to the tax authority.',
+    types: ['LIABILITY'],
+    subtypes: ['OTHER_CURRENT_LIABILITY', 'SALES_TAX_PAYABLE'],
+  },
+  {
     key: 'LOAN_RECEIVABLE',
     label: 'Loans receivable',
     used: 'Customer loan principal balance and collections.',

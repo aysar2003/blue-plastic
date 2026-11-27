@@ -196,6 +196,7 @@ const STATIC_MENUS: Record<string, HeaderMenuItem[]> = {
   calendar: [row('Month view', '/calendar', 'calendar', 'calendar:read', '#0369A1', '#E0F2FE')],
   databases: [
     row('All databases', '/databases', 'database', 'org:update', '#0F766E', '#CCFBF1'),
+    row('Activity', '/databases/activity', 'trending', 'org:update', '#0E7490', '#CFFAFE'),
     row('Apps', '/databases/apps', 'sliders', 'org:update', '#0369A1', '#E0F2FE'),
     row('System users', '/databases/users', 'users', 'org:update', '#4338CA', '#E0E7FF'),
     row('Create company', '/databases?create=1', 'building', 'org:update', '#0F766E', '#CCFBF1'),

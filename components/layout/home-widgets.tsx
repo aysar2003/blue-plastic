@@ -66,7 +66,7 @@ export function HomeWidgets({
           <Tile label="Invoices still open" value={invoicesDue} hint={`${invoiceCount} open`} href="/sales/invoices" />
         ) : null}
         {shown.includes('banks') ? (
-          <div className="rounded-xl border border-primary/15 bg-white/80 p-4 shadow-sm">
+          <div className="rounded-xl border border-primary/15 bg-card/90 p-4 shadow-sm">
             <p className="text-xs font-medium text-primary">Bank balances</p>
             <ul className="mt-2 space-y-1">
               {banks.length === 0 ? <li className="text-sm text-muted-foreground">No bank accounts yet.</li> : null}
@@ -88,7 +88,7 @@ export function HomeWidgets({
 
 function Tile({ label, value, href, hint }: { label: string; value: string; href: string; hint?: string }) {
   return (
-    <Link href={href} className="rounded-xl border border-primary/15 bg-white/80 p-4 shadow-sm transition-colors hover:border-primary/40">
+    <Link href={href} className="rounded-xl border border-primary/15 bg-card/90 p-4 shadow-sm transition-colors hover:border-primary/40">
       <p className="text-xs font-medium text-primary">{label}</p>
       <p className="tabular mt-1 text-xl font-semibold tracking-tight">{value}</p>
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}

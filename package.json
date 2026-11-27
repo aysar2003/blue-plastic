@@ -26,7 +26,11 @@
     "postinstall": "prisma generate && node -e \"require('fs').copyFileSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs','public/pdf.worker.min.mjs')\"",
     "db:verify": "tsx scripts/verify-db.ts",
     "db:harden": "tsx scripts/harden-db.ts",
-    "db:new-migration": "tsx scripts/create-migration.ts"
+    "db:new-migration": "tsx scripts/create-migration.ts",
+    "backup:json": "node scripts/save-backups-to-downloads.mjs",
+    "backup:env-check": "node scripts/env-health-check.mjs",
+    "backup:from-file": "node --import tsx scripts/run-import-backup-file.mjs",
+    "uat:cycle": "node scripts/run-db-tests.mjs tests/uat-operating-cycle.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

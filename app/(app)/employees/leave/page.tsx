@@ -27,7 +27,7 @@ export default async function LeavePage() {
         description="Leave types, yearly allocations, requests, and approvals."
         actions={
           <Link href="/api/employees/hours?kind=leave" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
-            Hours CSV
+            Hours Excel
           </Link>
         }
       />

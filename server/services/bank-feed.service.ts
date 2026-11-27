@@ -214,7 +214,7 @@ export async function openInvoices(ctx: OrgContext) {
       number: true,
       date: true,
       customerId: true,
-      customer: { select: { displayName: true } },
+      customer: { select: { displayName: true, phone: true, mobile: true } },
     },
     orderBy: { date: 'asc' },
     take: 200,
@@ -229,9 +229,61 @@ export async function openInvoices(ctx: OrgContext) {
       date: toCalendarDate(doc.date),
       customerId: doc.customerId,
       name: doc.customer.displayName,
+      partyRef: doc.customer.mobile ?? doc.customer.phone ?? null,
       outstanding: (balances.get(doc.id) ?? new Decimal(0)).toFixed(2),
     }))
     .filter((doc) => Number(doc.outstanding) > 0)
+}
+
+/** Wave G: score open invoices for one pending statement line and persist the top hint. */
+export async function suggestInvoiceMatchesForImport(ctx: OrgContext, importedId: string) {
+  const row = await db.importedTransaction.findFirst({
+    where: { id: importedId, orgId: ctx.orgId },
+    select: {
+      id: true,
+      amount: true,
+      description: true,
+      reference: true,
+      externalId: true,
+      partyRef: true,
+      status: true,
+    },
+  })
+  if (!row) throw notFound('Statement line')
+  if (row.status !== 'PENDING') return { suggestions: [] as const }
+
+  const { suggestInvoiceMatches } = await import('@/lib/erp/mobile-money-match')
+  const invoices = await openInvoices(ctx)
+  const suggestions = suggestInvoiceMatches(
+    {
+      amount: row.amount.toString(),
+      description: row.description,
+      reference: row.reference,
+      externalId: row.externalId,
+      partyRef: row.partyRef,
+    },
+    invoices.map((inv) => ({
+      id: inv.id,
+      number: inv.number,
+      customerId: inv.customerId,
+      outstanding: inv.outstanding,
+      partyRef: inv.partyRef,
+    })),
+  )
+
+  const top = suggestions[0]
+  if (top) {
+    await db.importedTransaction.update({
+      where: { id: row.id },
+      data: {
+        suggestedInvoiceId: top.invoiceId,
+        matchScore: top.score,
+        customerId: top.customerId,
+      },
+    })
+  }
+
+  return { suggestions }
 }
 
 export async function openBills(ctx: OrgContext) {
@@ -384,14 +436,22 @@ export async function matchInvoice(ctx: OrgContext, importedId: string, invoiceI
   })
   if (!invoice) throw notFound('Invoice')
 
+  const { isMobileMoneyStatement } = await import('@/lib/erp/mobile-money-match')
+  const method = isMobileMoneyStatement({
+    description: row.description,
+    partyRef: row.partyRef,
+  })
+    ? 'MOBILE_MONEY'
+    : 'BANK_TRANSFER'
+
   const payment = await paymentService.create(ctx, {
     number: undefined,
     customerId: invoice.customerId,
     date: toCalendarDate(row.date),
     amount: amount.toFixed(2),
-    method: 'BANK_TRANSFER',
+    method,
     depositAccountId: row.accountId,
-    reference: row.reference,
+    reference: row.reference ?? row.externalId,
     memo: row.description,
     applications: [{ invoiceId: invoice.id, amount: amount.toFixed(2) }],
   })
@@ -399,9 +459,13 @@ export async function matchInvoice(ctx: OrgContext, importedId: string, invoiceI
   await importService.match(ctx, row.id, lineId)
   await db.importedTransaction.update({
     where: { id: row.id },
-    data: { customerId: invoice.customerId },
+    data: {
+      customerId: invoice.customerId,
+      matchedCustomerPaymentId: payment.id,
+      suggestedInvoiceId: invoice.id,
+    },
   })
-  return { number: payment.number }
+  return { number: payment.number, method }
 }
 
 export async function matchBill(ctx: OrgContext, importedId: string, billId: string) {

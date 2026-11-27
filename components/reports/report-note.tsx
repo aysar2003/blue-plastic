@@ -31,7 +31,7 @@ export function ReportNote({ reportKey, initial }: { reportKey: 'profit-loss' | 
         onChange={(event) => setBody(event.target.value)}
         rows={2}
         maxLength={2000}
-        className="mt-1 w-full resize-y rounded-md border bg-white/80 px-2 py-1.5 text-sm"
+        className="mt-1 w-full resize-y rounded-md border bg-card px-2 py-1.5 text-sm text-foreground"
         placeholder="A reminder for the next time you open this report."
       />
       <div className="mt-2 flex justify-end">

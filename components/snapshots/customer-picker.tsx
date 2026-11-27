@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 import { COMPANY_SNAPSHOT_HREF } from '@/lib/business-overview-access'
 
@@ -13,6 +13,7 @@ export function CustomerPicker({
   selectedId: string | null
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [pending, startTransition] = useTransition()
   const [query, setQuery] = useState('')
 
@@ -23,11 +24,12 @@ export function CustomerPicker({
   }, [customers, query])
 
   const go = (id: string) => {
-    const href = id
-      ? `${COMPANY_SNAPSHOT_HREF}?tab=customer&customerId=${encodeURIComponent(id)}`
-      : `${COMPANY_SNAPSHOT_HREF}?tab=customer`
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', 'customer')
+    if (id) params.set('customerId', id)
+    else params.delete('customerId')
     startTransition(() => {
-      router.push(href)
+      router.push(`${COMPANY_SNAPSHOT_HREF}?${params.toString()}`)
     })
   }
 

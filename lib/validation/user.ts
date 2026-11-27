@@ -107,6 +107,16 @@ export const updateProfileSchema = z.object({
   phone: optionalPhone,
 })
 
+/** Company admin edits a member’s name, email (login), and phone. */
+export const adminUpdateMemberIdentitySchema = z.object({
+  membershipId: cuid,
+  name: requiredText('Name', 120),
+  email,
+  phone: optionalPhone,
+})
+
+export type AdminUpdateMemberIdentityInput = z.infer<typeof adminUpdateMemberIdentitySchema>
+
 export const twoFactorCodeOnlySchema = z.object({
   code: z
     .string()

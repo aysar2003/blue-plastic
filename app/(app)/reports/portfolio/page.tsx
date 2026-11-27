@@ -26,11 +26,19 @@ export default async function PortfolioPage() {
             <Link href="/reports/consolidation" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
               Consolidation
             </Link>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- file download */}
             <a
               href="/api/reports/portfolio/export"
               className={buttonVariants({ variant: 'default', size: 'sm' })}
             >
-              Export CSV
+              Export Excel
+            </a>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- file download */}
+            <a
+              href="/api/reports/portfolio/export?format=csv"
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
+              CSV
             </a>
           </>
         }

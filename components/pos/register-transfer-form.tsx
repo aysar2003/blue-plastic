@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { transferPosRegister } from '@/app/(app)/pos/actions'
-import { ODOO } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 
 export type TransferDestination = { id: string; code: string; name: string }
 
@@ -32,6 +32,7 @@ export function RegisterTransferForm({
   const [memo, setMemo] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const ODOO = usePosBrand()
 
   const text = dark ? '#f4f4f5' : undefined
   const muted = dark ? 'rgba(255,255,255,0.78)' : undefined
@@ -116,7 +117,7 @@ export function RegisterTransferForm({
           <button
             type="button"
             className="text-xs font-medium underline"
-            style={{ color: dark ? '#8fd4d7' : ODOO.teal }}
+            style={{ color: dark ? ODOO.tealSoft : ODOO.teal }}
             onClick={() => setAmount(balanceRaw)}
           >
             Use full balance

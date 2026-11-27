@@ -386,13 +386,16 @@ function FolderTile({ folder, onOpen }: { folder: LauncherFolder; onOpen: () => 
           return (
             <span
               key={app.key}
-              className="grid size-full place-items-center overflow-hidden rounded-md"
+              className="app-chroma-chip grid size-full place-items-center overflow-hidden rounded-md"
               style={{ backgroundColor: app.wash }}
             >
               {glyph ? (
                 <AppGlyph name={glyph} className="size-4 sm:size-[1.15rem]" />
               ) : (
-                <span className="size-1.5 rounded-full" style={{ backgroundColor: app.accent }} />
+                <span
+                  className="app-chroma-dot size-1.5 rounded-full"
+                  style={{ backgroundColor: app.accent }}
+                />
               )}
             </span>
           )
@@ -473,7 +476,10 @@ function AppTile({ app, odoo = false }: { app: LauncherTile; odoo?: boolean }) {
           )}
         >
           <span
-            className={cn('grid place-items-center rounded-lg', odoo ? 'size-9 sm:size-10' : 'size-11 sm:size-12')}
+            className={cn(
+              'app-chroma-chip grid place-items-center rounded-lg',
+              odoo ? 'size-9 sm:size-10' : 'size-11 sm:size-12',
+            )}
             style={{ backgroundColor: app.wash, color: app.accent }}
           >
             <Icon className={odoo ? 'size-5 sm:size-6' : 'size-6 sm:size-7'} strokeWidth={1.75} aria-hidden />

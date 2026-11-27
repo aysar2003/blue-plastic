@@ -112,14 +112,8 @@ export function FormLayoutPicker({
                   {active ? <CheckIcon className="size-4 shrink-0 text-primary" aria-hidden /> : null}
                 </span>
                 <span className="mt-1 block text-xs leading-snug text-muted-foreground">{option.blurb}</span>
-                <div
-                  className="mt-3 overflow-hidden rounded-lg"
-                  style={{
-                    border: `${look.borderWidth}px solid ${look.borderColor}`,
-                    fontFamily: look.fontFamily,
-                  }}
-                >
-                  <TemplateLayoutPreview kind={option.id} accent={look.accent} />
+                <div className="mt-3 overflow-hidden" style={{ borderRadius: look.radius }}>
+                  <TemplateLayoutPreview kind={option.id} look={look} />
                 </div>
               </button>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -148,20 +142,28 @@ export function FormLayoutPicker({
       <p className="text-xs text-muted-foreground">{persistHint}</p>
 
       <Dialog open={viewOption != null} onOpenChange={(open) => !open && setViewId(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>View · {viewOption?.label}</DialogTitle>
-            <DialogDescription>Sida template-kan u muuqdo — how this layout looks.</DialogDescription>
+            <DialogDescription>
+              Sida template-kan u muuqdo — style type, colour, and frame for this layout.
+            </DialogDescription>
           </DialogHeader>
           {viewOption ? (
             <TemplateLayoutPreview
               kind={viewOption.id}
-              accent={(looks[viewOption.id] ?? parseTemplateLook(null, accent)).accent}
+              look={looks[viewOption.id] ?? parseTemplateLook(null, accent)}
               size="stage"
               className="mx-auto"
             />
           ) : null}
           <p className="text-xs text-muted-foreground">{viewOption?.blurb}</p>
+          {viewOption ? (
+            <Button type="button" onClick={() => openEdit(viewOption)}>
+              <Pencil className="size-3.5" />
+              Edit style
+            </Button>
+          ) : null}
         </DialogContent>
       </Dialog>
 
@@ -174,11 +176,12 @@ export function FormLayoutPicker({
           }
         }}
       >
-        <DialogContent className="max-w-3xl">
+        <DialogContent size="xl" className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit · {editOption?.label}</DialogTitle>
             <DialogDescription>
-              Size, font type, style colour, logo frame, and border — saved on this browser for this template.
+              Dooro style type (Professional, Modern, Minimal…), then edit font, colour, header, border, and content —
+              saved on this browser for this template.
             </DialogDescription>
           </DialogHeader>
           {editOption && draftLook ? (

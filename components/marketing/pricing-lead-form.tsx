@@ -13,7 +13,7 @@ export function PricingLeadForm() {
   const [state, formAction] = useActionState(submitMarketingLeadForm, idleState)
 
   return (
-    <form action={formAction} className="space-y-3 rounded-xl border border-border bg-card/80 p-5">
+    <form action={formAction} className="space-y-3 border border-border/70 bg-card/80 p-5">
       <div>
         <p className="text-sm font-semibold text-foreground">Need help?</p>
         <p className="mt-1 text-xs text-muted-foreground">

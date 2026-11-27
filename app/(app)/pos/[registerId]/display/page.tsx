@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
-import { ODOO } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 import { PRODUCT_NAME } from '@/lib/product-brand'
 import { formatQty } from '@/lib/quantity'
 
@@ -17,6 +17,7 @@ type DisplayState = {
  * Second-screen customer display — listens to the till via BroadcastChannel.
  */
 export default function PosCustomerDisplayPage() {
+  const ODOO = usePosBrand()
   const [state, setState] = useState<DisplayState>({
     orgName: 'Point of Sale',
     customerName: null,

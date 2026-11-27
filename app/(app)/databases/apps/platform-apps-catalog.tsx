@@ -72,31 +72,40 @@ export function PlatformAppsCatalog({
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-2xl border border-indigo-500/15 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white shadow-sm">
-        <div className="flex flex-col gap-5 px-5 py-6 sm:flex-row sm:items-end sm:justify-between sm:px-7 sm:py-7">
+      <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-[#0a090c] text-[#f3eee6] shadow-sm">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_12%_-10%,rgb(196_165_116/0.26),transparent_55%),radial-gradient(70%_50%_at_88%_120%,rgb(126_159_196/0.12),transparent_50%)]"
+        />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#e8d5a8]/70 to-transparent" />
+        <div className="relative flex flex-col gap-5 px-5 py-6 sm:flex-row sm:items-end sm:justify-between sm:px-7 sm:py-7">
           <div className="min-w-0">
-            <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-indigo-200/90">
+            <p className="text-[0.65rem] font-bold uppercase tracking-[0.22em] text-[#c4a574]">
               App store
             </p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-[1.75rem]">Apps</h1>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-indigo-100/85">
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[#f7f2ea] sm:text-[1.75rem]">
+              Apps
+            </h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#c4b8a8]">
               Browse every module this installation can grant. Companies only open what you grant
               here — create, Limits, or approve a request. They can still turn granted apps off under
               Settings → Apps & features.
             </p>
           </div>
           <div className="flex flex-wrap gap-3 text-sm">
-            <div className="rounded-xl bg-white/10 px-3 py-2 ring-1 ring-white/15">
-              <p className="text-[0.65rem] uppercase tracking-wide text-indigo-200/80">Modules</p>
-              <p className="mt-0.5 text-lg font-semibold tabular-nums">{apps.length}</p>
+            <div className="rounded-xl bg-[#c4a574]/10 px-3 py-2 ring-1 ring-[#c4a574]/25">
+              <p className="text-[0.65rem] uppercase tracking-wide text-[#c4a574]">Modules</p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums text-[#f7f2ea]">{apps.length}</p>
             </div>
-            <div className="rounded-xl bg-white/10 px-3 py-2 ring-1 ring-white/15">
-              <p className="text-[0.65rem] uppercase tracking-wide text-indigo-200/80">Companies</p>
-              <p className="mt-0.5 text-lg font-semibold tabular-nums">{companyTotal}</p>
+            <div className="rounded-xl bg-[#c4a574]/10 px-3 py-2 ring-1 ring-[#c4a574]/25">
+              <p className="text-[0.65rem] uppercase tracking-wide text-[#c4a574]">Companies</p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums text-[#f7f2ea]">{companyTotal}</p>
             </div>
-            <div className="rounded-xl bg-white/10 px-3 py-2 ring-1 ring-white/15">
-              <p className="text-[0.65rem] uppercase tracking-wide text-indigo-200/80">Requests</p>
-              <p className="mt-0.5 text-lg font-semibold tabular-nums">{pendingRequests.length}</p>
+            <div className="rounded-xl bg-[#c4a574]/10 px-3 py-2 ring-1 ring-[#c4a574]/25">
+              <p className="text-[0.65rem] uppercase tracking-wide text-[#c4a574]">Requests</p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums text-[#f7f2ea]">
+                {pendingRequests.length}
+              </p>
             </div>
           </div>
         </div>
@@ -157,7 +166,7 @@ export function PlatformAppsCatalog({
                   className={cn(
                     'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
                     active
-                      ? 'bg-indigo-500/10 font-medium text-indigo-900 ring-1 ring-indigo-500/25 dark:text-indigo-100'
+                      ? 'bg-primary/10 font-medium text-primary ring-1 ring-primary/25'
                       : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
                   )}
                 >
@@ -196,11 +205,11 @@ export function PlatformAppsCatalog({
                   return (
                     <article
                       key={app.key}
-                      className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-sm transition-colors hover:border-indigo-500/30 hover:bg-muted/20"
+                      className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-sm transition-colors hover:border-primary/30 hover:bg-muted/20"
                     >
                       <div className="flex items-start gap-3">
                         <div
-                          className="grid size-12 shrink-0 place-items-center rounded-xl ring-1 ring-black/5"
+                          className="app-chroma-chip grid size-12 shrink-0 place-items-center rounded-xl ring-1 ring-black/5"
                           style={{ backgroundColor: app.wash }}
                         >
                           {app.glyph && isAppGlyph(app.glyph) ? (
@@ -232,7 +241,7 @@ export function PlatformAppsCatalog({
                           </div>
                           <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                             <div
-                              className="h-full rounded-full bg-indigo-500/80 transition-[width]"
+                              className="h-full rounded-full bg-primary/80 transition-[width]"
                               style={{ width: `${coverage}%` }}
                             />
                           </div>
@@ -344,7 +353,7 @@ function ViewTab({
       className={cn(
         'rounded-md px-3 py-1.5 text-sm transition-colors',
         active
-          ? 'bg-indigo-600 text-white shadow-sm'
+          ? 'bg-primary text-primary-foreground shadow-sm'
           : 'text-muted-foreground hover:text-foreground',
       )}
     >

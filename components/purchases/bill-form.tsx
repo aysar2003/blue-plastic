@@ -25,6 +25,7 @@ import { Field, fieldProps } from '@/components/forms/field'
 import { FormCustomizePanel } from '@/components/forms/form-customize-panel'
 import { LockedNumber } from '@/components/forms/locked-number'
 import { useDuplicatePrompt } from '@/components/forms/duplicate-prompt'
+import { DocumentActionBar } from '@/components/forms/document-action-bar'
 import { FormStatus } from '@/components/forms/form-status'
 import { RecordNav } from '@/components/forms/record-nav'
 import { neighborHrefs } from '@/lib/record-nav'
@@ -249,6 +250,7 @@ export function BillForm({
     reference: string | null
     inRef?: string | null
     memo: string | null
+    withholdPercent?: string | null
     paymentTermId: string | null
     paymentAccountId: string | null
     offsetCustomerId?: string | null
@@ -366,6 +368,7 @@ export function BillForm({
   const [reference, setReference] = useState(document?.reference ?? '')
   const [inRef, setInRef] = useState(document?.inRef ?? '')
   const [memo, setMemo] = useState(document?.memo ?? '')
+  const [withholdPercent, setWithholdPercent] = useState(document?.withholdPercent ?? '')
   const [paymentTermId, setPaymentTermId] = useState(document?.paymentTermId ?? '')
   const [paymentSource, setPaymentSource] = useState<'bank' | 'customer'>(() =>
     document?.offsetCustomerId ? 'customer' : 'bank',
@@ -697,6 +700,7 @@ export function BillForm({
       reference,
       inRef,
       memo,
+      withholdPercent: config.type === 'BILL' ? withholdPercent : '',
       paymentTermId,
       paymentAccountId: config.needsPaymentAccount && !payFromCustomer ? paymentAccountId : '',
       offsetCustomerId: payFromCustomer ? offsetCustomerId : '',
@@ -1520,14 +1524,31 @@ export function BillForm({
       ) : null}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
-        <Field name="memo" label="Memo" error={state.fieldErrors?.memo}>
-          <Input
-            {...fieldProps('memo', state.fieldErrors?.memo)}
-            value={memo}
-            onChange={(event) => setMemo(event.target.value)}
-            placeholder="Internal note"
-          />
-        </Field>
+        <div className="space-y-4">
+          <Field name="memo" label="Memo" error={state.fieldErrors?.memo}>
+            <Input
+              {...fieldProps('memo', state.fieldErrors?.memo)}
+              value={memo}
+              onChange={(event) => setMemo(event.target.value)}
+              placeholder="Internal note"
+            />
+          </Field>
+          {config.type === 'BILL' ? (
+            <Field
+              name="withholdPercent"
+              label="WHT %"
+              error={state.fieldErrors?.withholdPercent}
+            >
+              <Input
+                {...fieldProps('withholdPercent', state.fieldErrors?.withholdPercent)}
+                value={withholdPercent}
+                onChange={(event) => setWithholdPercent(event.target.value)}
+                placeholder="e.g. 2"
+                inputMode="decimal"
+              />
+            </Field>
+          ) : null}
+        </div>
         <dl className="space-y-1 text-sm">
           <div className="flex justify-between gap-6">
             <dt className="text-muted-foreground">Subtotal</dt>
@@ -1557,7 +1578,7 @@ export function BillForm({
         />
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <DocumentActionBar status="Draft" statusTone="draft">
         <Button type="button" variant="outline" onClick={() => router.push(`/purchases/${config.slug}`)}>
           Close
         </Button>
@@ -1574,7 +1595,8 @@ export function BillForm({
             saveAsDraft.current = true
           }}
         >
-          Save as draft
+          <span className="dab-label dab-label-full">Save as draft</span>
+          <span className="dab-label dab-label-short">Save</span>
         </SubmitButton>
         <SubmitButton
           variant="outline"
@@ -1611,7 +1633,7 @@ export function BillForm({
         >
           Save and new
         </SubmitButton>
-      </div>
+      </DocumentActionBar>
 
     </form>
   )

@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server'
 
 import { letterheadOf } from '@/lib/letterhead'
+import { parsePrintLook } from '@/lib/print-look'
 import { byType } from '@/lib/sales-types'
 import { getOrgContext } from '@/server/auth/context'
 import { isAppError, unauthenticated } from '@/server/errors'
 import { renderDocumentXlsx } from '@/server/reports/document-xlsx'
+import {
+  runWithXlsxLookAsync,
+  xlsxLookFor,
+} from '@/server/reports/list-xlsx'
 import * as organizationService from '@/server/services/organization.service'
 import * as portalService from '@/server/services/portal.service'
 import * as salesService from '@/server/services/sales.service'
@@ -13,13 +18,14 @@ export const dynamic = 'force-dynamic'
 
 /** Sales document as a downloadable Excel workbook (.xlsx). */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params
     const ctx = await getOrgContext()
     if (!ctx) throw unauthenticated()
+    const luxury = parsePrintLook(new URL(request.url).searchParams.get('look')) === 'luxury'
 
     const [document, org] = await Promise.all([
       salesService.get(ctx, id),
@@ -32,50 +38,52 @@ export async function GET(
     const company = letterheadOf(org)
     const currency = document.currencyCode || ctx.organization.baseCurrency
 
-    const bytes = await renderDocumentXlsx({
-      orgName: company.name,
-      orgAddress: company.address ? [company.address] : [],
-      orgPhone: company.phone,
-      orgEmail: company.email,
-      title: config.singular,
-      documentType: document.type,
-      number: document.number,
-      date: document.date,
-      createdAt: document.createdAt,
-      timeZone: org.timeZone,
-      dueDate: document.dueDate,
-      customerName: document.customer.displayName,
-      customerAddress: [
-        document.customer.billingLine1,
-        document.customer.billingLine2,
-        document.customer.billingCity,
-        document.customer.billingRegion,
-      ].filter((part): part is string => Boolean(part)),
-      customerEmail: document.customer.email,
-      customerPhone: document.customer.phone,
-      reference: document.reference,
-      paymentTerm: document.paymentTerm?.name ?? null,
-      workScope: document.workScope,
-      workSite: document.workSite || document.project?.siteLocation || null,
-      status: document.status,
-      createdByName: document.createdByName,
-      currency,
-      lines: document.lines.map((line) => ({
-        quantity: line.quantity,
-        sku: line.item?.sku ?? null,
-        description: line.description ?? line.item?.name ?? 'Line',
-        unitPrice: line.unitPrice,
-        amount: line.amount,
-        unitOfMeasure: line.item?.unitOfMeasure ?? null,
-      })),
-      subtotal: document.subtotal,
-      discountAmount: document.discountAmount,
-      taxTotal: document.taxTotal,
-      total: document.total,
-      amountApplied: document.amountApplied,
-      balance: document.balance,
-      message: document.customerMessage,
-    })
+    const bytes = await runWithXlsxLookAsync(xlsxLookFor(luxury), () =>
+      renderDocumentXlsx({
+        orgName: company.name,
+        orgAddress: company.address ? [company.address] : [],
+        orgPhone: company.phone,
+        orgEmail: company.email,
+        title: config.singular,
+        documentType: document.type,
+        number: document.number,
+        date: document.date,
+        createdAt: document.createdAt,
+        timeZone: org.timeZone,
+        dueDate: document.dueDate,
+        customerName: document.customer.displayName,
+        customerAddress: [
+          document.customer.billingLine1,
+          document.customer.billingLine2,
+          document.customer.billingCity,
+          document.customer.billingRegion,
+        ].filter((part): part is string => Boolean(part)),
+        customerEmail: document.customer.email,
+        customerPhone: document.customer.phone,
+        reference: document.reference,
+        paymentTerm: document.paymentTerm?.name ?? null,
+        workScope: document.workScope,
+        workSite: document.workSite || document.project?.siteLocation || null,
+        status: document.status,
+        createdByName: document.createdByName,
+        currency,
+        lines: document.lines.map((line) => ({
+          quantity: line.quantity,
+          sku: line.item?.sku ?? null,
+          description: line.description ?? line.item?.name ?? 'Line',
+          unitPrice: line.unitPrice,
+          amount: line.amount,
+          unitOfMeasure: line.item?.unitOfMeasure ?? null,
+        })),
+        subtotal: document.subtotal,
+        discountAmount: document.discountAmount,
+        taxTotal: document.taxTotal,
+        total: document.total,
+        amountApplied: document.amountApplied,
+        balance: document.balance,
+        message: document.customerMessage,
+      }),
+    )
 
     const filename = `${config.slug.replace(/s$/, '')}-${document.number
       .toLowerCase()

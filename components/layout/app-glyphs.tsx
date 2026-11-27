@@ -4,8 +4,11 @@ import type { ReactNode, SVGProps } from 'react'
  * Flat, multi-colour geometric marks for the app tiles (home grid, Apps menu).
  * Drawn for this app on a 48x48 grid: simple overlapping shapes in a small
  * shared palette, so they stay crisp from 20px to 60px and read on the dark tile.
+ *
+ * Fills use CSS variables so Appearance → Luxury (and any future skin) can
+ * recolour every mark without rewriting the shapes. Defaults live in globals.css.
  */
-export const GLYPH_COLORS = {
+export const GLYPH_COLOR_DEFAULTS = {
   orange: '#F97E3E',
   amber: '#FDBA35',
   plum: '#9B4F86',
@@ -16,6 +19,19 @@ export const GLYPH_COLORS = {
   pink: '#F06A9B',
   red: '#EE5D5D',
   paper: '#F4F1EE',
+} as const
+
+export const GLYPH_COLORS = {
+  orange: 'var(--glyph-orange)',
+  amber: 'var(--glyph-amber)',
+  plum: 'var(--glyph-plum)',
+  plumDeep: 'var(--glyph-plum-deep)',
+  teal: 'var(--glyph-teal)',
+  tealDeep: 'var(--glyph-teal-deep)',
+  blue: 'var(--glyph-blue)',
+  pink: 'var(--glyph-pink)',
+  red: 'var(--glyph-red)',
+  paper: 'var(--glyph-paper)',
 } as const
 
 const C = GLYPH_COLORS

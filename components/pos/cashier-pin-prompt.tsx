@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Loader2Icon } from 'lucide-react'
 
-import { ODOO } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 import { CASHIER_PIN_MAX } from '@/lib/pos-pin'
 
 /**
@@ -26,6 +26,7 @@ export function CashierPinPrompt({
   onCancel?: () => void
 }) {
   const [pin, setPin] = useState('')
+  const ODOO = usePosBrand()
 
   return (
     <form
@@ -69,7 +70,7 @@ export function CashierPinPrompt({
           type="submit"
           disabled={pending}
           className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
-          style={{ background: ODOO.cta, color: '#fff' }}
+          style={{ background: ODOO.cta, color: ODOO.ctaInk }}
         >
           {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
           {submitLabel}

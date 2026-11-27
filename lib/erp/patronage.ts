@@ -1,3 +1,4 @@
+import { PATRONAGE_HEADERS } from '@/lib/erp/export-headers'
 import { Decimal, ZERO } from '@/lib/money'
 
 export type PatronageMember = {
@@ -44,13 +45,13 @@ export function allocatePatronage(
 
 export function patronageMemberCsvRows(shares: PatronageShare[]): string[][] {
   return [
-    ['shareholderId', 'name', 'weight', 'allocation'],
+    [...PATRONAGE_HEADERS],
     ...shares.map((s) => [s.shareholderId, s.name, s.weight, s.amount]),
   ]
 }
 
 export function patronageCsv(shares: PatronageShare[]): string {
-  const header = 'shareholderId,name,weight,allocation'
+  const header = PATRONAGE_HEADERS.join(',')
   const body = shares.map(
     (s) => `${s.shareholderId},${csvEscape(s.name)},${s.weight},${s.amount}`,
   )

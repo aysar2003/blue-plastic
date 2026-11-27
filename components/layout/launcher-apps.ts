@@ -460,6 +460,7 @@ export const APP_ALSO: Record<string, string[]> = {
   inventory: ['/items', '/barcodes', '/stores'],
   barcodes: ['/barcodes/print'],
   accounting: ['/accounts', '/journals', '/periods'],
+  calendar: ['/appointments'],
   databases: ['/settings/backup'],
 }
 

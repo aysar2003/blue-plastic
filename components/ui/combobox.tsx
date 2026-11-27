@@ -425,9 +425,10 @@ export function Combobox({
       {name ? <input type="hidden" name={name} value={value ?? ''} /> : null}
 
       <div
+        data-slot="combobox"
         data-invalid={aria['aria-invalid'] ? 'true' : undefined}
         className={cn(
-          'flex min-h-8 w-full items-stretch rounded-md border border-input bg-card transition-[color,box-shadow]',
+          'flex min-h-8 w-full items-stretch rounded-md border border-input bg-card text-foreground transition-[color,box-shadow]',
           'focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25',
           'data-[invalid=true]:border-destructive data-[invalid=true]:ring-destructive/20',
           disabled && 'cursor-not-allowed opacity-50',
@@ -464,7 +465,7 @@ export function Combobox({
           onFocus={openList}
           onClick={openList}
           onKeyDown={onKeyDown}
-          className="h-8 min-w-0 flex-1 truncate bg-transparent px-2.5 text-[0.8125rem] outline-none placeholder:text-muted-foreground"
+          className="h-8 min-w-0 flex-1 truncate bg-transparent px-2.5 text-[0.8125rem] text-foreground outline-none placeholder:text-muted-foreground caret-foreground"
         />
 
         <button

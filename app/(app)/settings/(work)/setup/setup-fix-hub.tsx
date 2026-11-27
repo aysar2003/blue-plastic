@@ -13,6 +13,7 @@ import {
   healMissingReorderPoints,
   healOrgCountryFromPack,
   seedLocalizationTax,
+  applyLocalizationPaye,
 } from '@/app/(app)/onboarding/actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -214,6 +215,32 @@ export function SetupFixHub({
               variant="outline"
               disabled={pending}
               onClick={() =>
+                run(
+                  'Locale PAYE',
+                  () => applyLocalizationPaye({ force: false }),
+                  (data) => {
+                    const d = data as {
+                      applied: boolean
+                      reason?: string
+                      packId?: string
+                      label?: string
+                    }
+                    if (d.applied) return `TAX → ${d.label ?? d.packId}`
+                    if (d.reason === 'already-custom') return 'TAX already has custom slabs'
+                    if (d.reason === 'no-pack') return 'set localization pack first'
+                    return d.reason ?? 'skipped'
+                  },
+                )
+              }
+            >
+              Apply pack PAYE slabs
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
                 run('SKUs', () => healMissingItemSkus(undefined), (data) => {
                   const d = data as { healed: number }
                   return `${d.healed} filled`
@@ -284,9 +311,12 @@ export function SetupFixHub({
           </div>
         ) : null}
 
-        <p>
-          <Link href="/api/setup-health/csv" className="text-xs underline underline-offset-4">
-            Download remaining-gaps CSV
+        <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+          <Link href="/api/setup-health/xlsx" className="underline underline-offset-4">
+            Download prepared Excel (multi-sheet)
+          </Link>
+          <Link href="/api/setup-health/csv" className="underline underline-offset-4 text-muted-foreground">
+            Raw CSV
           </Link>
         </p>
       </CardContent>

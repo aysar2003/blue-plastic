@@ -48,7 +48,7 @@ export type DepositInput = z.infer<typeof depositSchema>
 export const importStatementSchema = z.object({
   accountId: cuid,
   csv: z.string().min(1, 'Upload a statement first').max(4_000_000),
-  packId: z.enum(['generic', 'so', 'ke']).optional().default('generic'),
+  packId: z.enum(['generic', 'so', 'ke', 'et', 'mm']).optional().default('generic'),
 })
 
 export const matchTransactionSchema = z.object({

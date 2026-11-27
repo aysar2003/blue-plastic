@@ -1,5 +1,6 @@
 'use client'
 
+import type { CSSProperties } from 'react'
 import Link from 'next/link'
 import { Building2Icon, ShieldIcon, UsersIcon } from 'lucide-react'
 
@@ -7,6 +8,7 @@ import { LoginThemeToggle } from '@/components/login/login-theme-toggle'
 import { loginSurfaceClass, useLoginDark } from '@/components/login/login-mode'
 import { LOGIN_COMPANY, LOGIN_PORTAL, LOGIN_STAFF } from '@/lib/login-paths'
 import { PRODUCT_NAME } from '@/lib/product-brand'
+import { LOGIN_LUXURY_STYLE, useLoginLuxury } from '@/lib/use-login-luxury'
 import { cn } from '@/lib/utils'
 
 const DOORS = [
@@ -19,6 +21,8 @@ const DOORS = [
     accentLight: 'from-violet-500 to-indigo-500',
     linkDark: 'text-violet-300 group-hover:text-white',
     linkLight: 'text-indigo-700',
+    luxuryIcon:
+      'bg-gradient-to-br from-[#8f7858] via-[#b8a078] to-[#c4a574]',
   },
   {
     href: LOGIN_COMPANY,
@@ -29,6 +33,8 @@ const DOORS = [
     accentLight: 'from-cyan-500 to-sky-500',
     linkDark: 'text-cyan-300 group-hover:text-white',
     linkLight: 'text-cyan-800',
+    luxuryIcon:
+      'bg-gradient-to-tr from-[#a89268] via-[#c4a574] to-[#e0cfa0]',
   },
   {
     href: LOGIN_PORTAL,
@@ -39,29 +45,39 @@ const DOORS = [
     accentLight: 'from-sky-400 to-blue-500',
     linkDark: 'text-sky-300 group-hover:text-white',
     linkLight: 'text-sky-800',
+    luxuryIcon:
+      'bg-gradient-to-bl from-[#968060] via-[#c4a574] to-[#dcc9a0]',
   },
 ] as const
 
 export function HubLoginShell() {
   const dark = useLoginDark()
+  const luxury = useLoginLuxury()
 
   return (
     <div
       suppressHydrationWarning
       data-login-mode={dark ? 'dark' : 'light'}
+      style={luxury ? (LOGIN_LUXURY_STYLE as CSSProperties) : undefined}
       className={cn(
         'relative flex min-h-svh flex-col items-center justify-center overflow-hidden px-4 py-12',
         loginSurfaceClass(dark),
-        dark ? 'bg-[#070b14] text-white' : 'bg-[#eef6fb] text-slate-900',
+        luxury
+          ? 'bg-[#07060a] text-[#f3eee6]'
+          : dark
+            ? 'bg-[#070b14] text-white'
+            : 'bg-[#eef6fb] text-slate-900',
       )}
     >
       <div
         aria-hidden
         className={cn(
           'pointer-events-none absolute inset-0',
-          dark
-            ? 'bg-[radial-gradient(ellipse_75%_55%_at_50%_-15%,rgba(34,211,238,0.28),transparent),radial-gradient(ellipse_45%_40%_at_100%_100%,rgba(99,102,241,0.22),transparent)]'
-            : 'bg-[radial-gradient(ellipse_70%_50%_at_50%_-10%,rgba(34,211,238,0.18),transparent),radial-gradient(ellipse_50%_40%_at_90%_90%,rgba(56,189,248,0.14),transparent)]',
+          luxury
+            ? 'bg-[radial-gradient(ellipse_75%_55%_at_50%_-15%,rgba(196,165,116,0.28),transparent),radial-gradient(ellipse_45%_40%_at_100%_100%,rgba(196,165,116,0.18),transparent)]'
+            : dark
+              ? 'bg-[radial-gradient(ellipse_75%_55%_at_50%_-15%,rgba(34,211,238,0.28),transparent),radial-gradient(ellipse_45%_40%_at_100%_100%,rgba(99,102,241,0.22),transparent)]'
+              : 'bg-[radial-gradient(ellipse_70%_50%_at_50%_-10%,rgba(34,211,238,0.18),transparent),radial-gradient(ellipse_50%_40%_at_90%_90%,rgba(56,189,248,0.14),transparent)]',
         )}
       />
 
@@ -74,7 +90,7 @@ export function HubLoginShell() {
           <p
             className={cn(
               'text-xs font-semibold uppercase tracking-[0.2em]',
-              dark ? 'text-cyan-300/90' : 'text-cyan-800',
+              luxury ? 'text-primary' : dark ? 'text-cyan-300/90' : 'text-cyan-800',
             )}
           >
             {PRODUCT_NAME}
@@ -82,7 +98,7 @@ export function HubLoginShell() {
           <h1
             className={cn(
               'mt-3 text-3xl font-semibold tracking-tight sm:text-4xl',
-              dark ? 'text-white' : 'text-slate-900',
+              luxury ? 'text-[#f3eee6]' : dark ? 'text-white' : 'text-slate-900',
             )}
           >
             Choose how you sign in
@@ -90,7 +106,7 @@ export function HubLoginShell() {
           <p
             className={cn(
               'mx-auto mt-3 max-w-md text-sm',
-              dark ? 'text-slate-300' : 'text-slate-600',
+              luxury ? 'text-muted-foreground' : dark ? 'text-slate-300' : 'text-slate-600',
             )}
           >
             Three separate doors — staff, company, and customers each use their own login.
@@ -106,15 +122,19 @@ export function HubLoginShell() {
                 href={door.href}
                 className={cn(
                   'group relative flex flex-col rounded-2xl border p-5 backdrop-blur-md transition',
-                  dark
-                    ? 'border-white/10 bg-white/5 shadow-[0_0_40px_-12px_rgba(34,211,238,0.35)] hover:bg-white/10'
-                    : 'border-slate-200 bg-white shadow-sm hover:border-cyan-300 hover:shadow-md',
+                  luxury
+                    ? 'border-[rgb(196_165_116/0.18)] bg-[#100e14] shadow-[0_0_40px_-12px_rgba(196,165,116,0.35)] hover:bg-white/5'
+                    : dark
+                      ? 'border-white/10 bg-white/5 shadow-[0_0_40px_-12px_rgba(34,211,238,0.35)] hover:bg-white/10'
+                      : 'border-slate-200 bg-white shadow-sm hover:border-cyan-300 hover:shadow-md',
                 )}
               >
                 <span
                   className={cn(
-                    'mb-4 grid size-11 place-items-center rounded-xl bg-gradient-to-br shadow-lg',
-                    dark ? door.accentDark : door.accentLight,
+                    'mb-4 grid size-11 place-items-center rounded-xl shadow-lg',
+                    luxury
+                      ? door.luxuryIcon
+                      : cn('bg-gradient-to-br', dark ? door.accentDark : door.accentLight),
                   )}
                 >
                   <Icon className="size-5 text-white" />
@@ -123,7 +143,7 @@ export function HubLoginShell() {
                 <span
                   className={cn(
                     'mt-2 text-xs leading-relaxed',
-                    dark ? 'text-slate-300' : 'text-slate-500',
+                    luxury ? 'text-muted-foreground' : dark ? 'text-slate-300' : 'text-slate-500',
                   )}
                 >
                   {door.description}
@@ -131,7 +151,11 @@ export function HubLoginShell() {
                 <span
                   className={cn(
                     'mt-4 text-xs font-medium',
-                    dark ? door.linkDark : door.linkLight,
+                    luxury
+                      ? 'text-primary group-hover:text-[#f3eee6]'
+                      : dark
+                        ? door.linkDark
+                        : door.linkLight,
                   )}
                 >
                   Continue →
@@ -144,10 +168,15 @@ export function HubLoginShell() {
         <p
           className={cn(
             'mt-10 text-center text-xs',
-            dark ? 'text-slate-400' : 'text-slate-500',
+            luxury ? 'text-muted-foreground' : dark ? 'text-slate-400' : 'text-slate-500',
           )}
         >
-          <Link href="/" className={dark ? 'hover:text-cyan-100' : 'hover:text-slate-800'}>
+          <Link
+            href="/"
+            className={
+              luxury ? 'text-primary hover:text-[#f3eee6]' : dark ? 'hover:text-cyan-100' : 'hover:text-slate-800'
+            }
+          >
             ← Back to website
           </Link>
         </p>

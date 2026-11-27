@@ -10,8 +10,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ODOO } from '@/lib/odoo-brand'
 import type { Permission } from '@/lib/permissions-catalog'
+import { usePosBrand } from '@/lib/use-pos-brand'
 import { cn } from '@/lib/utils'
 
 type NavChild = {
@@ -117,6 +117,7 @@ export function PosShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const brand = usePosBrand()
   const nav = visiblePosNav(permissions)
   const hideChrome =
     pathname.includes('/lock') ||
@@ -134,7 +135,7 @@ export function PosShell({
         >
           <span
             className="inline-flex size-7 items-center justify-center rounded-md text-white"
-            style={{ background: ODOO.purple }}
+            style={{ background: brand.purple, color: brand.ctaInk }}
           >
             <ShoppingBagIcon className="size-3.5" />
           </span>
@@ -156,7 +157,7 @@ export function PosShell({
           ) : null}
           <span
             className="inline-flex size-7 items-center justify-center rounded-full text-xs font-bold text-white"
-            style={{ background: ODOO.danger }}
+            style={{ background: brand.danger }}
           >
             {(orgName.trim()[0] ?? 'P').toUpperCase()}
           </span>

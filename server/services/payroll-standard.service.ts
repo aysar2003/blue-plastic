@@ -123,6 +123,109 @@ export async function ensureStandardStructure(ctx: OrgContext) {
   return created.id
 }
 
+/**
+ * Wave G: apply localization pack PAYE slabs onto the Standard structure TAX rule.
+ * Does not overwrite if the clerk already set SLABS with custom rates (force=false).
+ */
+export async function applyLocalizationPaye(
+  ctx: OrgContext,
+  options: { force?: boolean } = {},
+) {
+  const packId = ctx.organization.localizationPackId
+  const { payePackById } = await import('@/lib/erp/paye-packs')
+  const pack = payePackById(packId)
+  if (!pack) {
+    return { applied: false as const, reason: 'no-pack' as const }
+  }
+
+  const structureId = await ensureStandardStructure(ctx)
+  const taxRule = await db.salaryRule.findFirst({
+    where: { structureId, code: 'TAX' },
+    select: { id: true, calc: true, slabs: true },
+  })
+  if (!taxRule) return { applied: false as const, reason: 'no-tax-rule' as const }
+
+  const hasCustomSlabs =
+    taxRule.calc === 'SLABS' && Array.isArray(taxRule.slabs) && (taxRule.slabs as unknown[]).length > 0
+  if (hasCustomSlabs && !options.force) {
+    return { applied: false as const, reason: 'already-custom' as const, packId }
+  }
+
+  await db.salaryRule.update({
+    where: { id: taxRule.id },
+    data: {
+      name: pack.label,
+      calc: 'SLABS',
+      amount: 0,
+      slabs: pack.slabs,
+    },
+  })
+
+  // Ethiopia: ensure employee pension deduction + employer contribution rules exist.
+  if (pack.employeePensionPercent != null) {
+    await upsertPackPercentRule(ctx.orgId, structureId, {
+      code: 'PENSION_EE',
+      name: 'Employee pension',
+      kind: 'DEDUCTION',
+      percent: pack.employeePensionPercent,
+      sortOrder: 11,
+    })
+  }
+  if (pack.employerPensionPercent != null) {
+    await upsertPackPercentRule(ctx.orgId, structureId, {
+      code: 'PENSION_ER',
+      name: 'Employer pension',
+      kind: 'EMPLOYER',
+      percent: pack.employerPensionPercent,
+      sortOrder: 21,
+    })
+  }
+
+  return { applied: true as const, packId, label: pack.label }
+}
+
+async function upsertPackPercentRule(
+  orgId: string,
+  structureId: string,
+  rule: {
+    code: string
+    name: string
+    kind: 'DEDUCTION' | 'EMPLOYER'
+    percent: number
+    sortOrder: number
+  },
+) {
+  const existing = await db.salaryRule.findFirst({
+    where: { structureId, code: rule.code },
+    select: { id: true },
+  })
+  if (existing) {
+    await db.salaryRule.update({
+      where: { id: existing.id },
+      data: {
+        name: rule.name,
+        kind: rule.kind,
+        calc: 'PERCENT',
+        amount: rule.percent,
+        sortOrder: rule.sortOrder,
+      },
+    })
+    return
+  }
+  await db.salaryRule.create({
+    data: {
+      orgId,
+      structureId,
+      code: rule.code,
+      name: rule.name,
+      kind: rule.kind,
+      calc: 'PERCENT',
+      amount: rule.percent,
+      sortOrder: rule.sortOrder,
+    },
+  })
+}
+
 async function ensureMissingStandardRules(orgId: string, structureId: string) {
   const have = await db.salaryRule.findMany({
     where: { structureId },

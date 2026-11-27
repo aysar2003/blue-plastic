@@ -269,6 +269,29 @@ suite('cash flow', () => {
       }
     })
   })
+
+  it('returns comparison totals when a prior period is requested', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const fixture = await makeOrg(tx)
+      await seedBooks(tx, fixture)
+
+      const report = await cashFlow(
+        fixture.ctx.orgId,
+        { from: '2026-02-01', to: '2026-02-28' },
+        {
+          client: tx,
+          comparison: { from: '2026-01-01', to: '2026-01-31' },
+        },
+      )
+
+      expect(report.comparison).toBeDefined()
+      expect(report.comparison?.netChange).toBeDefined()
+      expect(report.comparison?.openingCash).toBeDefined()
+      expect(report.comparison?.closingCash).toBeDefined()
+      expect(report.operating.comparisonTotal).toBeDefined()
+      expect(report.reconciles).toBe(true)
+    })
+  })
 })
 
 suite('cash basis', () => {

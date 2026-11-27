@@ -45,7 +45,7 @@ describe('phase 14 equity CSV + statement accounts', () => {
     const register = shareholderRegisterCsv([
       { name: 'Amina', shares: '60', ownershipPercent: '60.0000', capitalAccount: '3000 Capital' },
     ])
-    expect(register.split('\n')[0]).toBe('name,shares,ownershipPercent,capitalAccount')
+    expect(register.split('\n')[0]).toBe('Name,Shares,Ownership %,Capital account')
     expect(register).toContain('Amina')
     const movement = equityMovementCsv([
       {

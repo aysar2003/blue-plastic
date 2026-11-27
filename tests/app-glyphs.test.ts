@@ -21,10 +21,14 @@ describe('app glyphs', () => {
       expect(html).toContain('viewBox="0 0 48 48"')
       expect(html).toContain('aria-hidden="true"')
       expect(html).not.toMatch(/<(image|use|text)\b|href=/)
-      const colours = [...html.matchAll(/(?:fill|stroke)="(#[0-9a-fA-F]{6})"/g)].map((m) => m[1].toLowerCase())
+      const colours = [...html.matchAll(/(?:fill|stroke)="([^"]+)"/g)]
+        .map((m) => m[1]!.toLowerCase())
+        .filter((c) => c !== 'none')
       expect(colours.length, app.key).toBeGreaterThan(1)
       for (const colour of colours) expect(palette.has(colour), `${app.key} ${colour}`).toBe(true)
       expect(new Set(colours).size, `${app.key} is multi-colour`).toBeGreaterThan(1)
+      // Theme skins (Luxury) remap via --glyph-* variables in globals.css.
+      expect(colours.every((c) => c.startsWith('var(--glyph-')), app.key).toBe(true)
     }
   })
 

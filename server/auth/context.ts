@@ -62,6 +62,8 @@ export type OrgContext = {
     onboardingCompletedAt: Date | null
     /** Industry pack chosen at register / onboarding (drives primary desk). */
     installedPackId?: string | null
+    /** Country/locale pack (tax / PAYE slabs). */
+    localizationPackId?: string | null
   }
   user: {
     id: string
@@ -129,6 +131,7 @@ const ORGANIZATION_SELECT = {
   rentNote: true,
   onboardingCompletedAt: true,
   installedPackId: true,
+  localizationPackId: true,
 } as const
 
 export const getOrgContext = cache(async (): Promise<OrgContext | null> => {

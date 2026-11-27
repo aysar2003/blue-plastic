@@ -35,7 +35,14 @@ export type StatementPreview = {
  * a description and an amount. Two conventions cover nearly all of them: a single
  * signed `amount`, or separate money-in and money-out columns.
  */
-function readRow(row: CsvRow): { date: string; description: string; amount: Decimal; reference: string; externalId: string } | null {
+function readRow(row: CsvRow): {
+  date: string
+  description: string
+  amount: Decimal
+  reference: string
+  externalId: string
+  partyRef: string
+} | null {
   const date = pick(row, 'date', 'transactionDate', 'postedDate', 'valueDate')
   if (!date) return null
 
@@ -66,6 +73,7 @@ function readRow(row: CsvRow): { date: string; description: string; amount: Deci
     amount,
     reference: pick(row, 'reference', 'ref', 'chequeNumber', 'transactionId'),
     externalId: pick(row, 'externalId', 'fitid', 'transactionId', 'id'),
+    partyRef: pick(row, 'partyRef', 'msisdn', 'phoneNumber', 'mobile', 'sender', 'till', 'paybill'),
   }
 }
 
@@ -190,6 +198,7 @@ export async function importStatement(
         reference: row.reference || null,
         amount: row.amount.toFixed(4),
         externalId: row.externalId || null,
+        partyRef: row.partyRef || null,
         importedById: ctx.userId,
       })),
       skipDuplicates: true,

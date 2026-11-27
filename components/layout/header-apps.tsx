@@ -84,12 +84,15 @@ function readableAccent(accent: string, wash: string): string {
 /**
  * The apps, in the top bar (or left rail), so any screen can open one directly.
  *
- * Top bar always shows every permitted top-level app as a colorful tile.
- * One click on a chip opens its destination list; pick an item from there.
- * Nothing opens on hover. Apps with no children still go straight to the hub.
- * The Apps button opens the full app list the same way.
+ * Top bar: colorful tiles; click opens the destination list (nothing on hover).
+ * Side rail: hover expands labels in the rail; hovering an app opens its
+ * destination flyout; leaving the rail/flyout closes everything.
+ * Apps with no children still go straight to the hub.
  * Turn apps on/off in Settings → Apps & features.
  */
+
+/** Side-rail flyout leave grace — matches the rail collapse timing. */
+const SIDE_FLYOUT_LEAVE_MS = 280
 export function HeaderApps({
   permissions,
   hidden,
@@ -182,6 +185,9 @@ export function HeaderApps({
           aria-label="Apps"
           title={side && !showSideLabels ? undefined : 'Apps'}
           onClick={() => setMenuKey(openKey === '__apps__' ? null : '__apps__')}
+          onPointerEnter={() => {
+            if (side) setMenuKey('__apps__')
+          }}
           className={cn(
             side
               ? showSideLabels
@@ -223,7 +229,7 @@ export function HeaderApps({
           onClose={closeMenus}
           placement={panelPlacement}
           scrollIsolate={side}
-          closeOnPointerLeaveDelayMs={side ? 1000 : undefined}
+          closeOnPointerLeaveDelayMs={side ? SIDE_FLYOUT_LEAVE_MS : undefined}
           className="min-w-[14rem]"
         >
           <ul
@@ -269,6 +275,7 @@ export function HeaderApps({
             features={features}
             open={openKey === app.key}
             onClose={closeMenus}
+            onOpen={() => setMenuKey(app.key)}
             onToggle={() => setMenuKey(openKey === app.key ? null : app.key)}
             variant={variant}
             panelPlacement={panelPlacement}
@@ -292,6 +299,7 @@ export function HeaderApps({
               features={features}
               open={openKey === app.key}
               onClose={closeMenus}
+              onOpen={() => setMenuKey(app.key)}
               onToggle={() => setMenuKey(openKey === app.key ? null : app.key)}
               variant={variant}
               panelPlacement={panelPlacement}
@@ -311,6 +319,7 @@ function HeaderAppChip({
   features,
   open,
   onClose,
+  onOpen,
   onToggle,
   variant = 'top',
   panelPlacement = 'bottom',
@@ -322,6 +331,7 @@ function HeaderAppChip({
   features?: OrgFeatureFlags
   open: boolean
   onClose: () => void
+  onOpen: () => void
   onToggle: () => void
   variant?: 'top' | 'side'
   panelPlacement?: 'bottom' | 'right'
@@ -329,6 +339,7 @@ function HeaderAppChip({
 }) {
   const triggerRef = useRef<HTMLElement | null>(null)
   const Icon = ICONS[app.icon]
+  const glyph = isAppGlyph(app.glyph) ? app.glyph : null
   const current = appIsCurrent(pathname, app.href, APP_ALSO[app.key])
   const children = menuForApp(app.key, permissions, features)
   const hasMenu = children.length > 0
@@ -342,6 +353,12 @@ function HeaderAppChip({
         side && 'shrink-0',
         sideExpanded && 'w-full',
       )}
+      onPointerEnter={() => {
+        // Side rail: hovering Sales (etc.) opens its modern destination flyout.
+        if (!side) return
+        if (hasMenu) onOpen()
+        else onClose()
+      }}
     >
       <AppChipLink
         app={app}
@@ -353,16 +370,23 @@ function HeaderAppChip({
         onDone={onClose}
         variant={variant}
         sideExpanded={sideExpanded}
+        preferGlyph={Boolean(glyph)}
       >
         {side ? (
           sideExpanded ? (
             <>
-              <span
-                className="grid size-6 shrink-0 place-items-center rounded-md"
-                style={{ backgroundColor: app.wash, color: app.accent }}
-              >
-                <Icon className="size-3.5" strokeWidth={2} aria-hidden />
-              </span>
+              {glyph ? (
+                <span className="app-glyph-tile grid size-6 shrink-0 place-items-center rounded-md">
+                  <AppGlyph name={glyph} className="size-[0.95rem]" />
+                </span>
+              ) : (
+                <span
+                  className="app-chroma-chip grid size-6 shrink-0 place-items-center rounded-md"
+                  style={{ backgroundColor: app.wash, color: app.accent }}
+                >
+                  <Icon className="size-3.5" strokeWidth={2} aria-hidden />
+                </span>
+              )}
               <span className="min-w-0 flex-1 truncate text-left text-xs font-semibold text-foreground">
                 {app.label}
               </span>
@@ -370,17 +394,29 @@ function HeaderAppChip({
           ) : (
             <>
               <span className="sr-only">{app.label}</span>
-              <Icon className="size-4" strokeWidth={2} aria-hidden />
+              {glyph ? (
+                <span className="app-glyph-tile grid size-7 place-items-center rounded-lg">
+                  <AppGlyph name={glyph} className="size-[1.05rem]" />
+                </span>
+              ) : (
+                <Icon className="size-4" strokeWidth={2} aria-hidden />
+              )}
             </>
           )
         ) : (
           <>
-            <span
-              className="grid size-7 shrink-0 place-items-center rounded-md shadow-sm ring-1 ring-black/5"
-              style={{ backgroundColor: app.wash, color: app.accent }}
-            >
-              <Icon className="size-3.5" strokeWidth={2} aria-hidden />
-            </span>
+            {glyph ? (
+              <span className="app-glyph-tile grid size-7 shrink-0 place-items-center rounded-md shadow-sm">
+                <AppGlyph name={glyph} className="size-[1.05rem]" />
+              </span>
+            ) : (
+              <span
+                className="app-chroma-chip grid size-7 shrink-0 place-items-center rounded-md shadow-sm ring-1 ring-black/5"
+                style={{ backgroundColor: app.wash, color: app.accent }}
+              >
+                <Icon className="size-3.5" strokeWidth={2} aria-hidden />
+              </span>
+            )}
             <span className="max-w-[7.5rem] truncate">{app.label}</span>
             {hasMenu ? (
               <ChevronDownIcon
@@ -401,7 +437,7 @@ function HeaderAppChip({
           onClose={onClose}
           placement={panelPlacement}
           scrollIsolate={side || app.key === 'reports'}
-          closeOnPointerLeaveDelayMs={side ? 1000 : undefined}
+          closeOnPointerLeaveDelayMs={side ? SIDE_FLYOUT_LEAVE_MS : undefined}
           className={cn(side ? undefined : 'min-w-[13.5rem]', app.key === 'reports' && !side && 'min-w-[18rem]')}
         >
           {side ? (
@@ -523,6 +559,7 @@ function AppChipLink({
   children,
   variant = 'top',
   sideExpanded = false,
+  preferGlyph = false,
 }: {
   app: LauncherApp
   current: boolean
@@ -534,20 +571,23 @@ function AppChipLink({
   children: ReactNode
   variant?: 'top' | 'side'
   sideExpanded?: boolean
+  /** Multi-colour glyph tiles already paint themselves — skip wash fills. */
+  preferGlyph?: boolean
 }) {
   const side = variant === 'side'
   const activeClass = side
     ? sideExpanded
       ? (current || open) && 'bg-muted ring-1 ring-border'
-      : (current || open) && 'ring-2 ring-foreground/25 ring-offset-1 ring-offset-background'
+      : (current || open) && 'ring-2 ring-primary/35 ring-offset-1 ring-offset-background'
     : (current || open) &&
       'bg-card text-foreground shadow-sm ring-1 ring-border dark:text-foreground'
   const className = side
     ? cn(sideExpanded ? sideChipExpandedClass : sideChipClass, activeClass)
     : cn(chipClass, activeClass)
   // Side icon chips: wash tile + accent ink — keep accent dark enough to read.
+  // Glyph marks sit on their own jewelry tile, so no pastel wash behind them.
   const sideStyle =
-    side && !sideExpanded
+    side && !sideExpanded && !preferGlyph
       ? { backgroundColor: app.wash, color: readableAccent(app.accent, app.wash) }
       : undefined
 
@@ -562,7 +602,7 @@ function AppChipLink({
         aria-label={app.label}
         title={side && !sideExpanded ? undefined : side ? app.label : `Open ${app.label} list`}
         onClick={onToggleMenu}
-        className={className}
+        className={cn(className, sideStyle && 'app-chroma-surface')}
         style={sideStyle}
       >
         {children}
@@ -579,7 +619,7 @@ function AppChipLink({
       aria-label={app.label}
       title={side && !sideExpanded ? undefined : app.label}
       onClick={onDone}
-      className={className}
+      className={cn(className, sideStyle && 'app-chroma-surface')}
       style={sideStyle}
     >
       {children}
@@ -656,7 +696,7 @@ function AppsMenuRow({ app, onDone }: { app: LauncherApp; onDone: () => void }) 
           </span>
         ) : (
           <span
-            className="grid size-5 shrink-0 place-items-center rounded"
+            className="app-chroma-chip grid size-5 shrink-0 place-items-center rounded"
             style={{ backgroundColor: app.wash, color: app.accent }}
           >
             <Icon className="size-3" strokeWidth={2} aria-hidden />

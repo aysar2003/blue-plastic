@@ -1,3 +1,4 @@
+import { EQUITY_MOVEMENT_HEADERS, SHAREHOLDER_REGISTER_HEADERS } from '@/lib/erp/export-headers'
 import { Decimal, ZERO } from '@/lib/money'
 
 export type EquityEventKindKey = 'CONTRIBUTION' | 'DRAW' | 'DIVIDEND' | 'PATRONAGE'
@@ -22,11 +23,15 @@ export type ShareholderRegisterRow = {
   capitalAccount?: string | null
 }
 
+export function shareholderRegisterTableRows(rows: ShareholderRegisterRow[]): string[][] {
+  return rows.map((row) => [row.name, row.shares, row.ownershipPercent, row.capitalAccount ?? ''])
+}
+
 export function shareholderRegisterCsv(rows: ShareholderRegisterRow[]): string {
-  const header = 'name,shares,ownershipPercent,capitalAccount'
-  const body = rows.map(
-    (row) =>
-      `${csvEscape(row.name)},${row.shares},${row.ownershipPercent},${csvEscape(row.capitalAccount ?? '')}`,
+  const header = SHAREHOLDER_REGISTER_HEADERS.join(',')
+  const body = shareholderRegisterTableRows(rows).map(
+    (cells) =>
+      `${csvEscape(cells[0]!)},${cells[1]},${cells[2]},${csvEscape(cells[3] ?? '')}`,
   )
   return [header, ...body].join('\n')
 }
@@ -40,11 +45,22 @@ export type EquityMovementRow = {
   equityAccount: string
 }
 
+export function equityMovementTableRows(rows: EquityMovementRow[]): string[][] {
+  return rows.map((row) => [
+    row.date,
+    row.kind,
+    row.shareholder,
+    row.amount,
+    row.memo,
+    row.equityAccount,
+  ])
+}
+
 export function equityMovementCsv(rows: EquityMovementRow[]): string {
-  const header = 'date,kind,shareholder,amount,memo,equityAccount'
-  const body = rows.map(
-    (row) =>
-      `${row.date},${csvEscape(row.kind)},${csvEscape(row.shareholder)},${row.amount},${csvEscape(row.memo)},${csvEscape(row.equityAccount)}`,
+  const header = EQUITY_MOVEMENT_HEADERS.join(',')
+  const body = equityMovementTableRows(rows).map(
+    (cells) =>
+      `${cells[0]},${csvEscape(cells[1]!)},${csvEscape(cells[2]!)},${cells[3]},${csvEscape(cells[4]!)},${csvEscape(cells[5]!)}`,
   )
   return [header, ...body].join('\n')
 }

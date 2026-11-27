@@ -1,7 +1,9 @@
 /**
- * AI-generated product demo reels for the public marketing site.
- * Each reel is a timed sequence of frames + captions about SOM ERP.
+ * Live system practice lessons for the marketing site.
+ * Previews show the real product UI; each lesson opens the live desk to practice.
  */
+
+import { LOGIN_COMPANY, LOGIN_HUB } from '@/lib/login-paths'
 
 export type AiDemoFrame = {
   src: string
@@ -14,6 +16,9 @@ export type AiDemoVideo = {
   title: string
   durationLabel: string
   summary: string
+  /** Live route to open so the learner practices in the real system. */
+  openHref: string
+  openLabel: string
   frames: AiDemoFrame[]
 }
 
@@ -23,22 +28,24 @@ export const AI_DEMO_VIDEOS: AiDemoVideo[] = [
   {
     id: 'sign-in',
     title: 'Sign in and open the books',
-    durationLabel: '28 sec',
-    summary: 'AI walkthrough — login, open Apps, reach the right company.',
+    durationLabel: 'Practice',
+    summary: 'Open the real company login, sign in, then land on Apps for your company.',
+    openHref: LOGIN_COMPANY,
+    openLabel: 'Open company login',
     frames: [
       {
         src: FRAME('som-erp-00-title.jpg'),
-        caption: 'SOM ERP — how to use the system',
-        seconds: 3,
+        caption: 'Start at /login — pick Company books when you work inside one company.',
+        seconds: 4,
       },
       {
         src: FRAME('som-erp-01-signin.jpg'),
-        caption: 'Open /login and sign in with your company email.',
-        seconds: 5,
+        caption: 'Sign in on /login/company with your company email or mobile.',
+        seconds: 6,
       },
       {
         src: FRAME('som-erp-01b-apps.jpg'),
-        caption: 'Land on Apps — Sales, Purchases, Inventory, Accounting, POS.',
+        caption: 'After sign-in you reach Apps — Sales, Purchases, Inventory, Accounting, POS.',
         seconds: 5,
       },
       {
@@ -51,14 +58,11 @@ export const AI_DEMO_VIDEOS: AiDemoVideo[] = [
   {
     id: 'sales',
     title: 'Sell: invoice to payment',
-    durationLabel: '32 sec',
-    summary: 'AI walkthrough — raise an invoice and collect payment.',
+    durationLabel: 'Practice',
+    summary: 'Raise a real invoice and collect payment inside the live Sales desk.',
+    openHref: '/sales/invoices/new',
+    openLabel: 'Open new invoice',
     frames: [
-      {
-        src: FRAME('som-erp-00-title.jpg'),
-        caption: 'Sales in SOM ERP',
-        seconds: 3,
-      },
       {
         src: FRAME('som-erp-02-invoice.jpg'),
         caption: 'Sales → Invoices → New. Add customer and lines, then post.',
@@ -79,14 +83,11 @@ export const AI_DEMO_VIDEOS: AiDemoVideo[] = [
   {
     id: 'purchases',
     title: 'Buy: bill and receive stock',
-    durationLabel: '30 sec',
-    summary: 'AI walkthrough — vendor bills and inventory on the shelf.',
+    durationLabel: 'Practice',
+    summary: 'Enter a vendor bill and receive stock in the live Purchases desk.',
+    openHref: '/purchases/bills/new',
+    openLabel: 'Open new bill',
     frames: [
-      {
-        src: FRAME('som-erp-00-title.jpg'),
-        caption: 'Purchases & stock in SOM ERP',
-        seconds: 3,
-      },
       {
         src: FRAME('som-erp-03-bill.jpg'),
         caption: 'Purchases → Bills → New. Enter vendor and goods lines.',
@@ -107,14 +108,11 @@ export const AI_DEMO_VIDEOS: AiDemoVideo[] = [
   {
     id: 'pos',
     title: 'Point of sale at the counter',
-    durationLabel: '28 sec',
-    summary: 'AI walkthrough — register sales that post to the books.',
+    durationLabel: 'Practice',
+    summary: 'Open a live POS register and take a sale that posts to the books.',
+    openHref: '/pos',
+    openLabel: 'Open POS',
     frames: [
-      {
-        src: FRAME('som-erp-00-title.jpg'),
-        caption: 'POS in SOM ERP',
-        seconds: 3,
-      },
       {
         src: FRAME('som-erp-04-pos.jpg'),
         caption: 'Open a register session. Add items to the cart.',
@@ -135,14 +133,11 @@ export const AI_DEMO_VIDEOS: AiDemoVideo[] = [
   {
     id: 'reports',
     title: 'Reports and month close',
-    durationLabel: '32 sec',
-    summary: 'AI walkthrough — P&L, bank reconcile, close the period.',
+    durationLabel: 'Practice',
+    summary: 'Read Profit & Loss and reconcile bank in the live Reports desk.',
+    openHref: '/reports/profit-loss',
+    openLabel: 'Open Profit & Loss',
     frames: [
-      {
-        src: FRAME('som-erp-00-title.jpg'),
-        caption: 'Reports & close in SOM ERP',
-        seconds: 3,
-      },
       {
         src: FRAME('som-erp-05-reports.jpg'),
         caption: 'Reports → Profit and Loss. Read income, costs, and net.',
@@ -161,3 +156,6 @@ export const AI_DEMO_VIDEOS: AiDemoVideo[] = [
     ],
   },
 ]
+
+/** Hub entry used when the learner is not signed in yet. */
+export const PRACTICE_START_HREF = LOGIN_HUB

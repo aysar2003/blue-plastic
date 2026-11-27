@@ -137,7 +137,7 @@ describe('phase 54 patronage equity CSV', () => {
       '10',
     )
     expect(result.shares[0]?.amount).toBe('75.0000')
-    expect(patronageMemberCsvRows(result.shares)[0]?.[0]).toBe('shareholderId')
+    expect(patronageMemberCsvRows(result.shares)[0]?.[0]).toBe('Shareholder Id')
     expect(patronageMemberCsvRows(result.shares)[1]?.[3]).toBe('75.0000')
   })
 })
@@ -193,7 +193,7 @@ describe('phase 49 hospital claim remittance', () => {
       },
     ]
     const csv = claimsToCsv(rows)
-    expect(csv).toContain('claimStatus')
+    expect(csv).toContain('Claim status')
     expect(csv).toContain('SUBMITTED')
   })
 })

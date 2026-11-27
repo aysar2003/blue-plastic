@@ -1361,6 +1361,16 @@ export const SETTINGS_HUB_APPS: HubApp[] = [
     blurb: 'Roles, apps & who can sign in',
   },
   {
+    key: 'user-performance',
+    label: 'Team performance',
+    href: '/settings/user-performance',
+    icon: 'trending',
+    permission: 'user:read',
+    accent: '#0E7490',
+    wash: '#CFFAFE',
+    blurb: 'Hard workers, low activity & ranking',
+  },
+  {
     key: 'api-keys',
     label: 'API keys',
     href: '/settings/api-keys',
@@ -1455,7 +1465,7 @@ export const SETTINGS_HUB_SECTIONS: { label: string; blurb: string; keys: string
   {
     label: 'People & access',
     blurb: 'Who works in this company and your own login.',
-    keys: ['users', 'api-keys', 'extensions', 'user-history', 'profile'],
+    keys: ['users', 'user-performance', 'api-keys', 'extensions', 'user-history', 'profile'],
   },
   {
     label: 'Data & companies',

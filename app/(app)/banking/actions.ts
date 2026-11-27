@@ -147,6 +147,15 @@ export const matchFeedInvoice = action
     return result
   })
 
+export const suggestFeedInvoiceMatches = action
+  .requires('bank:import')
+  .input(z.object({ importedId: cuid }))
+  .handler(async (ctx, input) => {
+    const result = await feedService.suggestInvoiceMatchesForImport(ctx, input.importedId)
+    revalidatePath('/banking/import')
+    return result
+  })
+
 export const matchFeedBill = action
   .requires('bank:import')
   .input(matchFeedBillSchema)

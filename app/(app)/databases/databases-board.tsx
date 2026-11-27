@@ -275,6 +275,38 @@ export function DatabasesBoard({
   const onPickFiles = async (list: FileList | null) => {
     if (!list?.length) return
     const next = [...list]
+
+    // Full-system bundle = Drive/USB archive only (too large for browser upload).
+    // Single-company files over ~45 MB also fail on typical hosts — refuse with a clear tip.
+    const MAX_IMPORT_BYTES = 45 * 1024 * 1024
+    const bundle = next.filter((file) => file.name.toLowerCase().startsWith('databases-backup'))
+    const tooBig = next.filter(
+      (file) =>
+        !file.name.toLowerCase().startsWith('databases-backup') && file.size > MAX_IMPORT_BYTES,
+    )
+    if (bundle.length > 0) {
+      toast.error(
+        'databases-backup-*.json waa kaydinta dhammaan systemka (Drive/USB). Import/Restore: dooro file shirkad keliya — tusaale al-furaat-materials-… ama blue-plastic-center-…',
+        { duration: 14_000 },
+      )
+      setFiles([])
+      setInspected(null)
+      if (fileRef.current) fileRef.current.value = ''
+      return
+    }
+    if (tooBig.length > 0) {
+      const names = tooBig.map((f) => f.name).join(', ')
+      const mb = Math.round(tooBig[0]!.size / (1024 * 1024))
+      toast.error(
+        `“${names}” (~${mb} MB) aad buu u weyn yahay browser. Isticmaal: pnpm backup:from-file (docs/ops/large-backup-import.md).`,
+        { duration: 14_000 },
+      )
+      setFiles([])
+      setInspected(null)
+      if (fileRef.current) fileRef.current.value = ''
+      return
+    }
+
     setFiles(next)
     setBusy(true)
     try {
@@ -286,6 +318,9 @@ export function DatabasesBoard({
       const companies = data.companies ?? []
       setInspected(companies)
       setSelected(new Set(companies.filter((c) => c.status === 'missing').map((c) => c.key)))
+      if (companies.length > 0 && companies.every((c) => c.status === 'present')) {
+        toast.message('Dhammaan shirkadaha horey ayay u jiraan. Isticmaal Restore shirkad kasta.')
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not read the backup.')
       setInspected(null)
@@ -793,9 +828,10 @@ export function DatabasesBoard({
                 Import backup
               </h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Choose one or more backup files. “Not on list” can be imported as a new company.
-                “Already here” can be Restored — that replaces the live books with the backup
-                (point in time).
+                Dooro file <strong>shirkad keliya</strong> (maaha{' '}
+                <code className="text-[0.7rem]">databases-backup-*.json</code>). “Not on list” =
+                Import company cusub. “Already here” = Restore (wuxuu beddelaa buugaagta hadda).
+                Bundle-ka weyn waa kaydin Drive/USB oo keliya.
               </p>
             </div>
             <Button

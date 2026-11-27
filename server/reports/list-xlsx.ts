@@ -29,6 +29,67 @@ export const XLSX_LOOK = {
   font: 'Calibri',
 } as const
 
+/** VIP champagne letterhead for Luxury System look exports. */
+export const XLSX_LOOK_LUXURY = {
+  brand: 'FFC4A574',
+  brandSoft: 'FFF3EEE6',
+  ink: 'FF2A2118',
+  muted: 'FF6B5A45',
+  line: 'FFD4C4A8',
+  grid: 'FFE8DCC8',
+  stripe: 'FFFBF7F0',
+  /** Espresso type on the gold band (not cream-on-gold). */
+  white: 'FF0A090C',
+  font: 'Calibri',
+} as const
+
+export type XlsxLook = {
+  brand: string
+  brandSoft: string
+  ink: string
+  muted: string
+  line: string
+  grid: string
+  stripe: string
+  white: string
+  font: string
+}
+
+export function xlsxLookFor(preferLuxury?: boolean): XlsxLook {
+  return preferLuxury ? XLSX_LOOK_LUXURY : XLSX_LOOK
+}
+
+/** Request-scoped look for paint helpers (set by export routes). */
+let activeXlsxLook: XlsxLook = XLSX_LOOK
+
+export function runWithXlsxLook<T>(look: XlsxLook, run: () => T): T {
+  const previous = activeXlsxLook
+  activeXlsxLook = look
+  try {
+    return run()
+  } finally {
+    activeXlsxLook = previous
+  }
+}
+
+export async function runWithXlsxLookAsync<T>(look: XlsxLook, run: () => Promise<T>): Promise<T> {
+  const previous = activeXlsxLook
+  activeXlsxLook = look
+  try {
+    return await run()
+  } finally {
+    activeXlsxLook = previous
+  }
+}
+
+export function getXlsxLook(): XlsxLook {
+  return activeXlsxLook
+}
+
+function look(): XlsxLook {
+  return activeXlsxLook
+}
+
 export type ListXlsxColumn = {
   header: string
   /** Approximate character width for the column. */
@@ -166,7 +227,7 @@ function thin(argb: string): Partial<Borders> {
 }
 
 function font(partial: Partial<Font> = {}): Partial<Font> {
-  return { name: XLSX_LOOK.font, size: 11, ...partial }
+  return { name: look().font, size: 11, ...partial }
 }
 
 /**
@@ -185,12 +246,12 @@ export function paintCompanyBand(
 
   const brand = sheet.getCell(row, 1)
   brand.value = block.name || 'Company'
-  brand.font = font({ bold: true, size: 16, color: { argb: XLSX_LOOK.white } })
-  brand.fill = solid(XLSX_LOOK.brand)
+  brand.font = font({ bold: true, size: 16, color: { argb: look().white } })
+  brand.fill = solid(look().brand)
   brand.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
   if (span > 1) sheet.mergeCells(row, 1, row, span)
   for (let c = 2; c <= span; c++) {
-    sheet.getCell(row, c).fill = solid(XLSX_LOOK.brand)
+    sheet.getCell(row, c).fill = solid(look().brand)
   }
   sheet.getRow(row).height = 28
   row += 1
@@ -203,12 +264,12 @@ export function paintCompanyBand(
   if (contactBits.length > 0) {
     const contact = sheet.getCell(row, 1)
     contact.value = contactBits.join('  ·  ')
-    contact.font = font({ size: 9, color: { argb: XLSX_LOOK.muted } })
-    contact.fill = solid(XLSX_LOOK.brandSoft)
+    contact.font = font({ size: 9, color: { argb: look().muted } })
+    contact.fill = solid(look().brandSoft)
     contact.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
     if (span > 1) sheet.mergeCells(row, 1, row, span)
     for (let c = 2; c <= span; c++) {
-      sheet.getCell(row, c).fill = solid(XLSX_LOOK.brandSoft)
+      sheet.getCell(row, c).fill = solid(look().brandSoft)
     }
     sheet.getRow(row).height = 20
     row += 1
@@ -235,7 +296,7 @@ function fillSheet(
 
   const titleCell = sheet.getCell(row, 1)
   titleCell.value = input.title
-  titleCell.font = font({ bold: true, size: 14, color: { argb: XLSX_LOOK.ink } })
+  titleCell.font = font({ bold: true, size: 14, color: { argb: look().ink } })
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' }
   if (colCount > 1) sheet.mergeCells(row, 1, row, colCount)
   sheet.getRow(row).height = 22
@@ -244,7 +305,7 @@ function fillSheet(
   if (input.subtitle?.trim()) {
     const subtitleCell = sheet.getCell(row, 1)
     subtitleCell.value = input.subtitle.trim()
-    subtitleCell.font = font({ size: 10, color: { argb: XLSX_LOOK.muted } })
+    subtitleCell.font = font({ size: 10, color: { argb: look().muted } })
     subtitleCell.alignment = { vertical: 'middle', horizontal: 'center' }
     if (colCount > 1) sheet.mergeCells(row, 1, row, colCount)
     row += 1
@@ -256,16 +317,16 @@ function fillSheet(
   else meta.push(`Exported ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`)
   const metaCell = sheet.getCell(row, 1)
   metaCell.value = meta.join('  ·  ')
-  metaCell.font = font({ size: 9, color: { argb: XLSX_LOOK.muted } })
+  metaCell.font = font({ size: 9, color: { argb: look().muted } })
   metaCell.alignment = { vertical: 'middle', horizontal: 'center' }
   if (colCount > 1) sheet.mergeCells(row, 1, row, colCount)
   row += 1
 
   // Accent rule under the report head.
   const rule = sheet.getCell(row, 1)
-  rule.fill = solid(XLSX_LOOK.brand)
+  rule.fill = solid(look().brand)
   if (colCount > 1) sheet.mergeCells(row, 1, row, colCount)
-  for (let c = 2; c <= colCount; c++) sheet.getCell(row, c).fill = solid(XLSX_LOOK.brand)
+  for (let c = 2; c <= colCount; c++) sheet.getCell(row, c).fill = solid(look().brand)
   sheet.getRow(row).height = 3
   row += 2
 
@@ -274,15 +335,15 @@ function fillSheet(
     const column = input.columns[c]
     const cell = sheet.getCell(headerRowIndex, c + 1)
     cell.value = moneyHeaderLabel(column.header, column.kind, currencyCode)
-    cell.font = font({ bold: true, size: 10, color: { argb: XLSX_LOOK.white } })
-    cell.fill = solid(XLSX_LOOK.brand)
+    cell.font = font({ bold: true, size: 10, color: { argb: look().white } })
+    cell.fill = solid(look().brand)
     cell.alignment = {
       vertical: 'middle',
       horizontal: column.kind === 'money' || column.kind === 'number' ? 'right' : 'left',
       wrapText: false,
       indent: 1,
     }
-    cell.border = thin(XLSX_LOOK.brand)
+    cell.border = thin(look().brand)
   }
   sheet.getRow(headerRowIndex).height = 24
   row += 1
@@ -298,11 +359,11 @@ function fillSheet(
       const cell = sheet.getCell(excelRow, c + 1)
       // Always write every column cell so values never shift sideways.
       writeCell(cell, data[c] ?? '', column.kind ?? 'text', currencyCode)
-      if (stripe) cell.fill = solid(XLSX_LOOK.stripe)
-      cell.border = thin(XLSX_LOOK.grid)
+      if (stripe) cell.fill = solid(look().stripe)
+      cell.border = thin(look().grid)
       cell.font = font({
         size: 10,
-        color: { argb: XLSX_LOOK.ink },
+        color: { argb: look().ink },
         ...(cell.font ?? {}),
       })
       const horizontal =
@@ -327,7 +388,7 @@ function fillSheet(
   if (currencyCode) footBits.push(`Amounts in ${currencyCode}`)
   const foot = sheet.getCell(row, 1)
   foot.value = footBits.join('  ·  ')
-  foot.font = font({ size: 8, italic: true, color: { argb: XLSX_LOOK.muted } })
+  foot.font = font({ size: 8, italic: true, color: { argb: look().muted } })
   foot.alignment = { vertical: 'middle', horizontal: 'center' }
   if (colCount > 1) sheet.mergeCells(row, 1, row, colCount)
 

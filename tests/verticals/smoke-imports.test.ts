@@ -28,7 +28,7 @@ describe('vertical module smoke imports', () => {
       payerName: null, payerRef: null, department: null, invoiceNumber: null,
       exportBatchId: null, claimsExportedAt: null,
       billCode: null, description: 'd', quantity: '1', unitPrice: '1', amount: '1',
-    }])).toContain('visitId')
+    }])).toContain('Visit Id')
     expect(packs.getPack('hospital_admin')?.verticalStatus).toBe('ready')
   })
 

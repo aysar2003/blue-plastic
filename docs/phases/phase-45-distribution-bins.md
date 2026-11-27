@@ -11,6 +11,7 @@
 3. Bins UI “Label JSON” per wave; `upsertItemBinDefault` service.
 4. **Deepen (2026-11-15)** — Wave labels CSV download; missing default-bin warning.
 5. **FULL (2026-11-21)** — Dock calendar from ASN `dockName`/`dockAt`; wave packing-list CSV (`?format=packing`); ASN vs PO discrepancy table + CSV.
+6. **Wave H (2026-11-25)** — Shipping-label CSV (`?format=csv`) confirmed as the clerk path; JSON payload kept for machines (no longer called a stub).
 
 ## Migration
 

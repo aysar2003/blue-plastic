@@ -1170,6 +1170,8 @@ model User {
   otp2faEnabledAt  DateTime? @db.Timestamptz(6)
 
   lastLoginAt DateTime? @db.Timestamptz(6)
+  /// Last presence heartbeat from an open desk session. Used for online/offline.
+  lastSeenAt  DateTime? @db.Timestamptz(6)
 
   /// Owns this installation. Sees every company database and the consolidated
   /// reports. Everyone else is sent to `homeOrgId` and does not see the others.
@@ -1231,6 +1233,7 @@ model User {
   serviceJobsAssigned       ServiceJob[]     @relation("ServiceJobAssignee")
   capaNotesOwned            CapaNote[]       @relation("CapaNoteOwner")
 
+  @@index([lastSeenAt])
   @@map("users")
 }
 

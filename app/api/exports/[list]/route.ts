@@ -11,8 +11,11 @@ import { purchaseBySlug } from '@/lib/purchase-types'
 import { requireOrgContext } from '@/server/auth/context'
 import { isAppError } from '@/server/errors'
 import type { CsvCell } from '@/server/reports/csv'
+import { parsePrintLook } from '@/lib/print-look'
 import {
   renderListXlsx,
+  runWithXlsxLookAsync,
+  xlsxLookFor,
   xlsxResponse,
   type ListXlsxColumn,
 } from '@/server/reports/list-xlsx'
@@ -42,22 +45,26 @@ async function workbook(
   filename: string,
   columns: ListXlsxColumn[],
   bodyRows: CsvCell[][],
+  luxury = false,
 ) {
-  const bytes = await renderListXlsx({
-    org: ctx.organization,
-    title,
-    currency: ctx.organization.baseCurrency,
-    exportedAt: today(ctx.organization.timeZone),
-    sheetName: title,
-    columns,
-    rows: bodyRows,
-  })
+  const bytes = await runWithXlsxLookAsync(xlsxLookFor(luxury), () =>
+    renderListXlsx({
+      org: ctx.organization,
+      title,
+      currency: ctx.organization.baseCurrency,
+      exportedAt: today(ctx.organization.timeZone),
+      sheetName: title,
+      columns,
+      rows: bodyRows,
+    }),
+  )
   return xlsxResponse(filename, bytes)
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ list: string }> }) {
   try {
     const { list } = await params
+    const luxury = parsePrintLook(new URL(request.url).searchParams.get('look')) === 'luxury'
     const url = new URL(request.url)
     const q = url.searchParams.get('q') ?? undefined
     const status = url.searchParams.get('status') ?? undefined
@@ -114,7 +121,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
           account ? `${account.code} ${account.name}` : '',
         ]
       })
-      return workbook(ctx, salesConfig.plural, `${salesConfig.slug}.xlsx`, columns, body)
+      return workbook(ctx, salesConfig.plural, `${salesConfig.slug}.xlsx`, columns, body, luxury)
     }
 
     const purchaseConfig = purchaseBySlug(list)
@@ -149,7 +156,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
         row.total,
         row.balance,
       ])
-      return workbook(ctx, purchaseConfig.plural, `${purchaseConfig.slug}.xlsx`, columns, body)
+      return workbook(ctx, purchaseConfig.plural, `${purchaseConfig.slug}.xlsx`, columns, body, luxury)
     }
 
     switch (list) {
@@ -175,7 +182,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
           row.status,
           row.total,
         ])
-        return workbook(ctx, 'Journal entries', 'journal-entries.xlsx', columns, body)
+        return workbook(ctx, 'Journal entries', 'journal-entries.xlsx', columns, body, luxury)
       }
 
       case 'payments': {
@@ -198,7 +205,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
           row.amount,
           row.unapplied,
         ])
-        return workbook(ctx, 'Customer payments', 'customer-payments.xlsx', columns, body)
+        return workbook(ctx, 'Customer payments', 'customer-payments.xlsx', columns, body, luxury)
       }
 
       case 'bill-payments': {
@@ -219,7 +226,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
           row.status,
           row.amount,
         ])
-        return workbook(ctx, 'Bill payments', 'bill-payments.xlsx', columns, body)
+        return workbook(ctx, 'Bill payments', 'bill-payments.xlsx', columns, body, luxury)
       }
 
       case 'customers':
@@ -277,7 +284,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
               row.isActive ? 'Yes' : 'No',
             ]
           })
-          return workbook(ctx, 'Customers', 'customers.xlsx', columns, body)
+          return workbook(ctx, 'Customers', 'customers.xlsx', columns, body, luxury)
         }
 
         const owing =
@@ -331,7 +338,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
             row.isActive ? 'Yes' : 'No',
           ]
         })
-        return workbook(ctx, 'Vendors', 'vendors.xlsx', columns, body)
+        return workbook(ctx, 'Vendors', 'vendors.xlsx', columns, body, luxury)
       }
 
       case 'items': {
@@ -380,7 +387,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
             row.isActive ? 'Yes' : 'No',
           ]
         })
-        return workbook(ctx, 'Products & services', 'products-and-services.xlsx', columns, body)
+        return workbook(ctx, 'Products & services', 'products-and-services.xlsx', columns, body, luxury)
       }
 
       case 'accounts': {
@@ -401,7 +408,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ list
           account.hasChildren ? '' : account.balance,
           account.isActive ? 'Yes' : 'No',
         ])
-        return workbook(ctx, 'Chart of accounts', 'chart-of-accounts.xlsx', columns, body)
+        return workbook(ctx, 'Chart of accounts', 'chart-of-accounts.xlsx', columns, body, luxury)
       }
 
       default:

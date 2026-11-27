@@ -119,8 +119,7 @@ export function StatusPie({
 }) {
   const p = new Decimal(paid)
   const u = new Decimal(unpaid)
-  const o = new Decimal(overdue)
-  // Unpaid ring uses unpaid; overdue is a portion callout, not a third pie slice of the same money.
+  // Unpaid ring uses unpaid; overdue is a portion callout in the legend, not a third pie slice.
   const total = p.plus(u)
   if (total.isZero()) {
     return <p className="py-8 text-center text-sm text-muted-foreground">No invoice activity.</p>
@@ -195,20 +194,23 @@ export function ExpenseDonut({
   const r = 54
   const stroke = 22
   const c = 2 * Math.PI * r
-  let offset = c / 4
+  const slices = rows.reduce<
+    { row: (typeof rows)[number]; index: number; len: number; dashoffset: number }[]
+  >((acc, row, index) => {
+    const share = absTotal.isZero()
+      ? 0
+      : new Decimal(row.amount).abs().dividedBy(absTotal).toNumber()
+    const len = share * c
+    const dashoffset = acc.length === 0 ? c / 4 : acc[acc.length - 1]!.dashoffset - acc[acc.length - 1]!.len
+    acc.push({ row, index, len, dashoffset })
+    return acc
+  }, [])
 
   return (
     <div className="flex flex-col items-center gap-4 sm:flex-row">
       <svg viewBox={`0 0 ${size} ${size}`} className="size-36 shrink-0" role="img" aria-label="Expense breakdown">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeOpacity={0.08} strokeWidth={stroke} />
-        {rows.map((row, index) => {
-          const share = absTotal.isZero()
-            ? 0
-            : new Decimal(row.amount).abs().dividedBy(absTotal).toNumber()
-          const len = share * c
-          const dashoffset = offset
-          offset -= len
-          return (
+        {slices.map(({ row, index, len, dashoffset }) => (
             <circle
               key={row.id}
               cx={size / 2}
@@ -220,8 +222,7 @@ export function ExpenseDonut({
               strokeDasharray={`${len} ${c - len}`}
               strokeDashoffset={dashoffset}
             />
-          )
-        })}
+        ))}
       </svg>
       <ul className="max-h-40 w-full space-y-1 overflow-y-auto text-sm">
         {rows.map((row, index) => (

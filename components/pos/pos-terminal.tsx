@@ -47,7 +47,8 @@ import { RegisterTransferForm, type TransferDestination } from '@/components/pos
 import { RegisterLock, useClientReady, useRegisterLocked, writeRegisterLocked } from '@/components/pos/register-lock'
 import { StockWarningNote } from '@/components/inventory/stock-warning'
 import { useBrowserStore, writeBrowserStore } from '@/lib/browser-store'
-import { ODOO } from '@/lib/odoo-brand'
+import { readPosBrand } from '@/lib/odoo-brand'
+import { usePosBrand } from '@/lib/use-pos-brand'
 import { usePropState } from '@/lib/use-prop-state'
 import { minorUnits, formatMoney } from '@/lib/money'
 import { chooseLineStore } from '@/lib/pos-line-store'
@@ -166,13 +167,14 @@ const THEME_KEY = 'pos-till-theme'
 const EMPTY_CART: CartLine[] = []
 
 function orderTabStyle(selected: boolean, dark: boolean, border: string, text: string) {
+  const brand = readPosBrand()
   if (!selected) {
     return { border: `1px solid ${border}`, color: text, background: 'transparent' }
   }
   return {
     background: dark ? 'transparent' : '#d1e7dd',
-    border: `1px solid ${ODOO.teal}`,
-    color: dark ? '#ffffff' : ODOO.tealDark,
+    border: `1px solid ${brand.teal}`,
+    color: dark ? '#ffffff' : brand.tealDark,
   }
 }
 
@@ -264,6 +266,7 @@ export function PosTerminal(props: {
    */
   usualPaymentMethodId?: string | null
 }) {
+  const ODOO = usePosBrand()
   const router = useRouter()
   const [query, setQuery] = useState('')
   // No window during the server render, so the till starts from a blank
@@ -1385,7 +1388,7 @@ export function PosTerminal(props: {
                 setMenu('transfer')
               }}
               className="hidden shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold sm:inline disabled:opacity-40"
-              style={{ background: `${ODOO.teal}22`, color: dark ? '#9fe0e3' : ODOO.tealDark }}
+              style={{ background: `${ODOO.teal}22`, color: dark ? ODOO.tealSoft : ODOO.tealDark }}
             >
               Till {props.tillBalance.balance}
             </button>
@@ -1407,7 +1410,7 @@ export function PosTerminal(props: {
           className="mx-3 mt-2 flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-sm"
           style={{
             background: !tillOnline ? `${ODOO.danger}18` : `${ODOO.teal}22`,
-            color: !tillOnline ? (dark ? '#fca5a5' : ODOO.danger) : dark ? '#9fe0e3' : ODOO.tealDark,
+            color: !tillOnline ? (dark ? '#fca5a5' : ODOO.danger) : dark ? ODOO.tealSoft : ODOO.tealDark,
           }}
         >
           {!tillOnline ? <CloudOffIcon className="size-4 shrink-0" /> : <WifiIcon className="size-4 shrink-0" />}
@@ -1437,7 +1440,7 @@ export function PosTerminal(props: {
       {toast ? (
         <div
           className="mx-3 mt-2 flex flex-wrap items-center gap-3 rounded-md px-3 py-2 text-sm"
-          style={{ background: `${ODOO.teal}22`, color: dark ? '#9fe0e3' : ODOO.tealDark }}
+          style={{ background: `${ODOO.teal}22`, color: dark ? ODOO.tealSoft : ODOO.tealDark }}
         >
           <span>{toast}</span>
           {lastReceiptDocumentId ? (
@@ -1725,7 +1728,7 @@ export function PosTerminal(props: {
                 <Link
                   href="/items"
                   className="rounded-lg px-4 py-2 text-sm font-semibold"
-                  style={{ background: ODOO.cta, color: '#fff' }}
+                  style={{ background: ODOO.cta, color: ODOO.ctaInk }}
                 >
                   Create Product
                 </Link>
@@ -1789,7 +1792,7 @@ export function PosTerminal(props: {
                   })()}
                   <span
                     className="mt-auto pt-2 text-sm font-semibold"
-                    style={{ color: dark ? '#9fe0e3' : ODOO.teal }}
+                    style={{ color: dark ? ODOO.tealSoft : ODOO.teal }}
                   >
                     {formatMoney(customerUnitPrice(product, customerId), props.currency)}
                   </span>
@@ -2097,7 +2100,7 @@ export function PosTerminal(props: {
               disabled={pending}
               onClick={submitCashMove}
               className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold"
-              style={{ background: ODOO.cta, color: '#fff' }}
+              style={{ background: ODOO.cta, color: ODOO.ctaInk }}
             >
               {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
               Confirm
@@ -2256,7 +2259,7 @@ export function PosTerminal(props: {
           <button
             type="button"
             className="mt-3 rounded-lg px-4 py-2 text-sm font-semibold"
-            style={{ background: ODOO.cta, color: '#fff' }}
+            style={{ background: ODOO.cta, color: ODOO.ctaInk }}
             onClick={() => setMenu(null)}
           >
             Done
@@ -2366,7 +2369,7 @@ export function PosTerminal(props: {
               disabled={pending}
               onClick={saveQuotation}
               className="mb-4 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
-              style={{ background: ODOO.cta, color: '#fff' }}
+              style={{ background: ODOO.cta, color: ODOO.ctaInk }}
             >
               {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
               Save current cart as quotation
@@ -2508,7 +2511,7 @@ export function PosTerminal(props: {
                   disabled={pending}
                   onClick={submitRefund}
                   className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold"
-                  style={{ background: ODOO.cta, color: '#fff' }}
+                  style={{ background: ODOO.cta, color: ODOO.ctaInk }}
                 >
                   {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
                   Validate refund
@@ -2573,6 +2576,7 @@ function Modal({
   onClose: () => void
   children: React.ReactNode
 }) {
+  const ODOO = readPosBrand()
   return (
     <div
       className="fixed inset-0 flex items-end justify-center bg-black/55 p-3 sm:items-center"
@@ -2618,6 +2622,7 @@ function ActionTile({
   danger?: boolean
   disabled?: boolean
 }) {
+  const ODOO = readPosBrand()
   return (
     <button
       type="button"

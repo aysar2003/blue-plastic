@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 
 import { PlatformConsoleChrome } from '@/components/layout/platform-console-chrome'
 import { ShellChrome } from '@/components/layout/shell-chrome'
+import { PresenceHeartbeat } from '@/components/presence/presence-heartbeat'
 import { IdleLock } from '@/components/security/idle-lock'
 import type { OrgFeatureFlags } from '@/lib/feature-flags'
 import type { LetterheadSource } from '@/lib/letterhead'
@@ -71,6 +72,7 @@ export function ShellGate({
   if (isSystemOwner && onPlatformRoutes) {
     return (
       <>
+        <PresenceHeartbeat />
         <PlatformConsoleChrome
           user={props.user}
           roleLabel={props.roleLabel}
@@ -87,6 +89,7 @@ export function ShellGate({
 
   return (
     <>
+      <PresenceHeartbeat />
       <ShellChrome {...props} />
       {lock}
     </>

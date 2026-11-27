@@ -1,7 +1,25 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.som-dark *, .dark *, .ink *, .odoo-dark *, .quick-dark *));
+@custom-variant dark (&:is(.som-dark *, .dark *, .ink *, .luxury *, .ai *, .odoo-dark *, .quick-dark *));
+
+/*
+ * App glyph palette — defaults match the multi-colour tile marks.
+ * html.luxury remaps these to champagne bronze so every icon follows the skin.
+ * html.ai remaps to cool electric blues / cyan steel.
+ */
+:root {
+  --glyph-orange: #f97e3e;
+  --glyph-amber: #fdba35;
+  --glyph-plum: #9b4f86;
+  --glyph-plum-deep: #6e3a63;
+  --glyph-teal: #1fb5a8;
+  --glyph-teal-deep: #118c82;
+  --glyph-blue: #3da5f4;
+  --glyph-pink: #f06a9b;
+  --glyph-red: #ee5d5d;
+  --glyph-paper: #f4f1ee;
+}
 
 /*
  * Login doors keep their own light/dark tokens. Without this, night themes
@@ -51,6 +69,44 @@
   --border: rgb(255 255 255 / 12%);
   --input: rgb(255 255 255 / 14%);
   --ring: #22d3ee;
+}
+
+/* Company door — cyan (books / day-to-day work). Default login tokens are already cyan. */
+.login-dark.login-company {
+  --primary: #22d3ee;
+  --primary-foreground: #041018;
+  --accent: rgb(34 211 238 / 14%);
+  --accent-foreground: #67e8f9;
+  --ring: #22d3ee;
+  --border: rgb(34 211 238 / 18%);
+}
+
+.login-light.login-company {
+  --primary: #0e7490;
+  --primary-foreground: #ffffff;
+  --accent: #ecfeff;
+  --accent-foreground: #155e75;
+  --ring: #06b6d4;
+  --border: #a5f3fc;
+}
+
+/* Staff door — indigo/violet (installation / Databases). */
+.login-dark.login-staff {
+  --primary: #818cf8;
+  --primary-foreground: #07041a;
+  --accent: rgb(129 140 248 / 16%);
+  --accent-foreground: #c7d2fe;
+  --ring: #818cf8;
+  --border: rgb(129 140 248 / 20%);
+}
+
+.login-light.login-staff {
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --accent: #eef2ff;
+  --accent-foreground: #3730a3;
+  --ring: #6366f1;
+  --border: #c7d2fe;
 }
 
 /* Portal door — sky primary on the same navy desk. */
@@ -507,44 +563,60 @@ html.sand {
 }
 
 /*
- * AI — cool mist desk with electric blue actions (not purple).
+ * AI — neural midnight desk with electric azure + cyan aurora (not purple).
+ * Signature skin: deep cool ground, glass cards, luminous blue actions.
  */
 html.ai {
-  --radius: 0.5rem;
-  --background: #e8eef6;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #1d4ed8;
-  --primary-foreground: #ffffff;
-  --secondary: #dbe4f0;
-  --secondary-foreground: #0f172a;
-  --muted: #dbe4f0;
-  --muted-foreground: #334155;
-  --accent: #dbeafe;
-  --accent-foreground: #1e40af;
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --success: #0284c7;
-  --success-foreground: #ffffff;
-  --warning: #b41309;
-  --warning-foreground: #fffbeb;
-  --border: #c5d0e0;
-  --input: #b8c5d6;
-  --ring: #1d4ed8;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0f172a;
-  --sidebar-accent: #dbeafe;
-  --sidebar-accent-foreground: #1e40af;
-  --sidebar-border: #c5d0e0;
-  --glow: rgba(29, 78, 216, 0.22);
-  --stripe: #e8eef6;
-  --band: #dbe4f0;
-  --chart-income: #1d4ed8;
-  --chart-expense: #dc2626;
-  --chart-net: #0284c7;
+  --radius: 0.625rem;
+  --background: #060910;
+  --foreground: #e8eef8;
+  --card: #0b1220;
+  --card-foreground: #f1f5ff;
+  --popover: #0e1628;
+  --popover-foreground: #f1f5ff;
+  --primary: #3b82f6;
+  --primary-foreground: #f8fbff;
+  --secondary: #101a2e;
+  --secondary-foreground: #dbe7f8;
+  --muted: #0e1728;
+  /* #9eb6d4 on #060910 ≈ 8:1 — secondary labels stay readable. */
+  --muted-foreground: #9eb6d4;
+  --accent: rgb(56 189 248 / 14%);
+  --accent-foreground: #7dd3fc;
+  --destructive: #fb7185;
+  --destructive-foreground: #fff1f2;
+  --success: #22d3ee;
+  --success-foreground: #042f2e;
+  --warning: #fbbf24;
+  --warning-foreground: #422006;
+  --border: rgb(96 165 250 / 18%);
+  --input: rgb(96 165 250 / 24%);
+  --ring: #38bdf8;
+  --sidebar: #04070e;
+  --sidebar-foreground: #e8eef8;
+  --sidebar-accent: rgb(59 130 246 / 16%);
+  --sidebar-accent-foreground: #93c5fd;
+  --sidebar-border: rgb(96 165 250 / 14%);
+  --glow: rgba(59, 130, 246, 0.42);
+  --stripe: #080e1a;
+  --band: #121c30;
+  --chart-income: #3b82f6;
+  --chart-expense: #fb7185;
+  --chart-net: #22d3ee;
+  /*
+   * Glyph marks — cool instrument panel.
+   * Azure + cyan dominate; soft steel / teal keep each mark distinct.
+   */
+  --glyph-orange: #7dd3fc;
+  --glyph-amber: #93c5fd;
+  --glyph-plum: #8ba3c7;
+  --glyph-plum-deep: #4a6288;
+  --glyph-teal: #2dd4bf;
+  --glyph-teal-deep: #0f766e;
+  --glyph-blue: #60a5fa;
+  --glyph-pink: #a5b4fc;
+  --glyph-red: #f87171;
+  --glyph-paper: #eef4ff;
 }
 
 
@@ -707,6 +779,66 @@ html.ink {
   --glow: rgba(255, 255, 255, 0.06);
   --stripe: #0d0d0d;
   --band: #171717;
+}
+
+/*
+ * Luxury — deep ink + champagne gold. Same skin as the public marketing site
+ * so the ERP desk and the website read as one brand. Muted cream is lifted
+ * above marketing’s softer gray so dense ledger labels stay ≥4.5:1.
+ */
+html.luxury {
+  --radius: 0.5rem;
+  --background: #07060a;
+  --foreground: #f3eee6;
+  --card: #100e14;
+  --card-foreground: #f7f2ea;
+  --popover: #14121a;
+  --popover-foreground: #f7f2ea;
+  --primary: #c4a574;
+  --primary-foreground: #0a090c;
+  --secondary: #16131c;
+  --secondary-foreground: #ebe4d8;
+  --muted: #15131a;
+  /* #c4b8a8 on #07060a ≈ 9:1 — secondary labels must not vanish. */
+  --muted-foreground: #c4b8a8;
+  --accent: rgb(196 165 116 / 14%);
+  --accent-foreground: #e4d0a8;
+  --destructive: #fb7185;
+  --destructive-foreground: #fff1f2;
+  /* Emerald stays semantic — gold alone cannot mean “cleared”. */
+  --success: #3ecf8e;
+  --success-foreground: #052e1a;
+  --warning: #d4b483;
+  --warning-foreground: #2a2114;
+  --border: rgb(196 165 116 / 18%);
+  --input: rgb(196 165 116 / 22%);
+  --ring: #c4a574;
+  --sidebar: #050408;
+  --sidebar-foreground: #f3eee6;
+  --sidebar-accent: rgb(196 165 116 / 14%);
+  --sidebar-accent-foreground: #e4d0a8;
+  --sidebar-border: rgb(196 165 116 / 14%);
+  --glow: rgba(196, 165, 116, 0.35);
+  --stripe: #0a090e;
+  --band: #16131c;
+  --chart-income: #c4a574;
+  --chart-expense: #fb7185;
+  --chart-net: #e4d0a8;
+  /*
+   * Glyph marks — modern luxury jewelry box.
+   * Gold + champagne stay dominant; jade, steel, rose-gold give each mark
+   * real colour without neon clash on the ink desk.
+   */
+  --glyph-orange: #e2a85a;
+  --glyph-amber: #f0d48a;
+  --glyph-plum: #b08a96;
+  --glyph-plum-deep: #6e4d58;
+  --glyph-teal: #5fb8a8;
+  --glyph-teal-deep: #3a7d74;
+  --glyph-blue: #7e9fc4;
+  --glyph-pink: #d4a0ae;
+  --glyph-red: #d08a72;
+  --glyph-paper: #faf6ef;
 }
 
 @theme inline {
@@ -872,6 +1004,9 @@ html:has(.app-surface) {
 }
 
 /* System-wide type size (Settings → Appearance, and report / chart toolbars). */
+html[data-font-size='xs']:has(.app-surface) {
+  font-size: clamp(10px, 0.22vw + 8.5px, 13.5px);
+}
 html[data-font-size='sm']:has(.app-surface) {
   font-size: clamp(11px, 0.28vw + 9.5px, 15px);
 }
@@ -884,10 +1019,19 @@ html[data-font-size='lg']:has(.app-surface) {
 html[data-font-size='xl']:has(.app-surface) {
   font-size: clamp(15.5px, 0.45vw + 12.5px, 22px);
 }
+html[data-font-size='2xl']:has(.app-surface) {
+  font-size: clamp(17px, 0.5vw + 13.5px, 24px);
+}
+html[data-font-size='custom']:has(.app-surface) {
+  font-size: var(--ui-font-px, 14px);
+}
 
 @media print {
   html:has(.app-surface) {
     font-size: 11pt;
+  }
+  html[data-font-size='xs']:has(.app-surface) {
+    font-size: 9.5pt;
   }
   html[data-font-size='sm']:has(.app-surface) {
     font-size: 10pt;
@@ -900,6 +1044,12 @@ html[data-font-size='xl']:has(.app-surface) {
   }
   html[data-font-size='xl']:has(.app-surface) {
     font-size: 13pt;
+  }
+  html[data-font-size='2xl']:has(.app-surface) {
+    font-size: 14pt;
+  }
+  html[data-font-size='custom']:has(.app-surface) {
+    font-size: var(--ui-font-px, 11pt);
   }
 }
 
@@ -970,6 +1120,22 @@ html[data-font-style='source-sans'] .app-surface,
 html[data-font-style='source-sans'] .sales-surface {
   font-family: var(--font-quickbooks), Arial, Helvetica, sans-serif;
 }
+html[data-font-style='jakarta'] .app-surface,
+html[data-font-style='jakarta'] .sales-surface {
+  font-family: var(--font-marketing-sans), system-ui, sans-serif;
+}
+html[data-font-style='fraunces'] .app-surface,
+html[data-font-style='fraunces'] .sales-surface {
+  font-family: var(--font-marketing-display), Georgia, serif;
+}
+html[data-font-style='mono'] .app-surface,
+html[data-font-style='mono'] .sales-surface {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+html[data-font-style='georgia'] .app-surface,
+html[data-font-style='georgia'] .sales-surface {
+  font-family: Georgia, 'Times New Roman', Times, serif;
+}
 html[data-font-style='system'] .app-surface,
 html[data-font-style='system'] .sales-surface {
   font-family:
@@ -982,6 +1148,10 @@ html[data-font-style='system'] .sales-surface {
     Arial,
     sans-serif;
 }
+html[data-font-style='custom'] .app-surface,
+html[data-font-style='custom'] .sales-surface {
+  font-family: var(--ui-font-family, system-ui, sans-serif);
+}
 
 html.som-dark .app-surface,
 html.som-dark .sales-surface,
@@ -989,6 +1159,10 @@ html.dark .app-surface,
 html.dark .sales-surface,
 html.ink .app-surface,
 html.ink .sales-surface,
+html.luxury .app-surface,
+html.luxury .sales-surface,
+html.ai .app-surface,
+html.ai .sales-surface,
 html.odoo-dark .app-surface,
 html.odoo-dark .sales-surface,
 html.quick-dark .app-surface,
@@ -999,7 +1173,8 @@ html.quick-dark .sales-surface,
 }
 
 html.som .app-atmosphere,
-html.som-dark .app-atmosphere {
+html.som-dark .app-atmosphere,
+html.luxury .app-atmosphere {
   display: none !important;
 }
 
@@ -1037,6 +1212,47 @@ html.som-dark .shell-topbar .shell-brand-mark {
 html.som-dark .shell-topbar .shell-brand-mark {
   background: #22d3ee !important;
   color: #070b14 !important;
+}
+
+html.luxury .shell-topbar {
+  background: #100e14 !important;
+  border-bottom: 1px solid rgb(196 165 116 / 18%) !important;
+  color: #f3eee6;
+  backdrop-filter: none;
+  min-height: 46px;
+}
+
+html.luxury .shell-topbar .shell-brand-label,
+html.luxury .shell-topbar .shell-brand-mark {
+  color: #f7f2ea;
+}
+
+html.luxury .shell-topbar .shell-brand-mark {
+  background: #c4a574 !important;
+  color: #0a090c !important;
+}
+
+html.ai .shell-topbar {
+  background:
+    linear-gradient(180deg, rgb(14 22 40 / 96%) 0%, rgb(8 14 26 / 98%) 100%) !important;
+  border-bottom: 1px solid rgb(96 165 250 / 20%) !important;
+  color: #e8eef8;
+  backdrop-filter: blur(12px);
+  min-height: 46px;
+  box-shadow: 0 0 40px -18px rgb(59 130 246 / 45%);
+}
+
+html.ai .shell-topbar .shell-brand-label,
+html.ai .shell-topbar .shell-brand-mark {
+  color: #f1f5ff;
+}
+
+html.ai .shell-topbar .shell-brand-mark {
+  background: linear-gradient(145deg, #60a5fa 0%, #3b82f6 55%, #2563eb 100%) !important;
+  color: #f8fbff !important;
+  box-shadow:
+    0 0 0 1px rgb(125 211 252 / 35%),
+    0 0 18px -4px rgb(59 130 246 / 70%);
 }
 
 /*
@@ -1134,6 +1350,16 @@ html.ink .shell-topbar {
   --accent: rgb(255 255 255 / 8%);
   --accent-foreground: #f8fafc;
   --card: #0d1524;
+}
+
+html.luxury .shell-topbar {
+  --foreground: #f3eee6;
+  --muted-foreground: #c4b8a8;
+  --border: rgb(196 165 116 / 18%);
+  --input: rgb(196 165 116 / 22%);
+  --accent: rgb(196 165 116 / 12%);
+  --accent-foreground: #e4d0a8;
+  --card: #100e14;
 }
 
 html.odoo .shell-topbar {
@@ -1848,6 +2074,147 @@ html.odoo .app-surface .page-header h1 {
   font-weight: 400;
 }
 
+/*
+ * Document form action bar — plain row on SOM; Odoo control-panel strip
+ * (status chip left, dense actions right) when Appearance → Odoo is on.
+ */
+.document-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.document-action-bar-status {
+  display: none;
+}
+
+.document-action-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* Short Odoo labels stay hidden until the Odoo skin is active. */
+.document-action-bar .dab-label-short {
+  display: none;
+}
+
+html.odoo .document-action-bar,
+html.odoo-dark .document-action-bar {
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+  background: #f8f9fa;
+}
+
+html.odoo-dark .document-action-bar {
+  border-color: rgb(243 243 243 / 12%);
+  background: #2a2a2e;
+}
+
+html.odoo .document-action-bar-status,
+html.odoo-dark .document-action-bar-status {
+  display: inline-flex;
+  align-items: center;
+  height: 1.5rem;
+  padding: 0 0.55rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  border: 1px solid transparent;
+}
+
+html.odoo .document-action-bar-status[data-tone='draft'],
+html.odoo-dark .document-action-bar-status[data-tone='draft'] {
+  background: #e7ebed;
+  color: #495057;
+  border-color: #ced4da;
+}
+
+html.odoo-dark .document-action-bar-status[data-tone='draft'] {
+  background: #3a3a40;
+  color: #c2c2c7;
+  border-color: #4a4a4a;
+}
+
+html.odoo .document-action-bar-status[data-tone='open'],
+html.odoo-dark .document-action-bar-status[data-tone='open'] {
+  background: #e6f2f3;
+  color: #01585c;
+  border-color: #017e84;
+}
+
+html.odoo .document-action-bar-status[data-tone='void'],
+html.odoo-dark .document-action-bar-status[data-tone='void'] {
+  background: #f8d7da;
+  color: #842029;
+  border-color: #f1aeb5;
+}
+
+html.odoo .document-action-bar-status[data-tone='neutral'],
+html.odoo-dark .document-action-bar-status[data-tone='neutral'] {
+  background: #e7ebed;
+  color: #212529;
+  border-color: #ced4da;
+}
+
+html.odoo .document-action-bar-actions,
+html.odoo-dark .document-action-bar-actions {
+  gap: 0.375rem;
+}
+
+html.odoo .document-action-bar-actions :is(button, a)[data-slot='button'],
+html.odoo-dark .document-action-bar-actions :is(button, a)[data-slot='button'] {
+  border-radius: 0.375rem;
+  font-weight: 500;
+  min-height: 2rem;
+  padding-inline: 0.75rem;
+}
+
+html.odoo .document-action-bar-actions :is(button, a)[data-slot='button']:not(.bg-primary),
+html.odoo-dark .document-action-bar-actions :is(button, a)[data-slot='button']:not(.bg-primary) {
+  background: #ffffff;
+  border-color: #ced4da;
+  color: #212529;
+}
+
+html.odoo .document-action-bar-actions :is(button, a)[data-slot='button']:not(.bg-primary):hover,
+html.odoo-dark .document-action-bar-actions :is(button, a)[data-slot='button']:not(.bg-primary):hover {
+  background: #e7ebed !important;
+  color: #212529 !important;
+}
+
+html.odoo-dark .document-action-bar-actions :is(button, a)[data-slot='button']:not(.bg-primary) {
+  background: #1f1f23;
+  border-color: #4a4a4a;
+  color: #f3f3f3;
+}
+
+html.odoo-dark .document-action-bar-actions :is(button, a)[data-slot='button']:not(.bg-primary):hover {
+  background: #3a3a40 !important;
+  color: #f3f3f3 !important;
+}
+
+/* Odoo short labels: "Save as draft" → "Save". */
+html.odoo .document-action-bar .dab-label-full,
+html.odoo-dark .document-action-bar .dab-label-full {
+  display: none;
+}
+
+html.odoo .document-action-bar .dab-label-short,
+html.odoo-dark .document-action-bar .dab-label-short {
+  display: inline;
+}
+
 /* Register / list toolbars flat white. */
 html.odoo .app-surface .rounded-xl.border.bg-card,
 html.odoo .sales-surface .rounded-xl.border.bg-card {
@@ -1925,14 +2292,14 @@ html:not(.odoo):not(.odoo-dark) [class*='accent-[#2ca01c]'] {
   accent-color: var(--primary);
 }
 
-html:not(.som-dark):not(.dark):not(.ink):not(.odoo-dark):not(.quick-dark) [class*='text-[#d4652f]'],
-html:not(.som-dark):not(.dark):not(.ink):not(.odoo-dark):not(.quick-dark) [class*='text-[#c2410c]'] {
+html:not(.som-dark):not(.dark):not(.ink):not(.luxury):not(.ai):not(.odoo-dark):not(.quick-dark) [class*='text-[#d4652f]'],
+html:not(.som-dark):not(.dark):not(.ink):not(.luxury):not(.ai):not(.odoo-dark):not(.quick-dark) [class*='text-[#c2410c]'] {
   /* Align leftover overdue hexes with the ≥4.5:1 warning token. */
   color: #b41309 !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) [class*='text-[#d4652f]'],
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) [class*='text-[#c2410c]'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) [class*='text-[#d4652f]'],
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) [class*='text-[#c2410c]'] {
   /* Burnt orange on night cards is unreadable — lift to amber. */
   color: #fb923c !important;
 }
@@ -2020,52 +2387,52 @@ html.quick [class*='text-[#c2410c]'] {
  * Night desks (SOM Dark / Dark / Odoo Dark / Quick Dark) — invert paper tones
  * so pastel fills do not flash on navy/plum grounds.
  */
-html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='stock'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='stock'] {
   background: #134e4a;
   border-color: #0f766e;
   color: #ccfbf1;
 }
-html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='zero'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='zero'] {
   background: #1e293b;
   border-color: #334155;
   color: #e2e8f0;
 }
-html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='danger'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='danger'] {
   background: #7c2d12;
   border-color: #c2410c;
   color: #ffedd5;
 }
-html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='warning'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='warning'] {
   background: #78350f;
   border-color: #b45309;
   color: #fef3c7;
 }
-html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='money'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='money'] {
   background: #1e3a8a;
   border-color: #3b82f6;
   color: #dbeafe;
 }
-html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='ledger'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='ledger'] {
   background: #312e81;
   border-color: #6366f1;
   color: #e0e7ff;
 }
-html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='success'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='success'] {
   background: #14532d;
   border-color: #22c55e;
   color: #dcfce7;
 }
-html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='info'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='info'] {
   background: #0c4a6e;
   border-color: #0ea5e9;
   color: #e0f2fe;
 }
-html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='sales'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='sales'] {
   background: #1e3a8a;
   border-color: #60a5fa;
   color: #dbeafe;
 }
-html:is(.som-dark, .dark, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='purchase'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [data-slot='card'][data-tone='purchase'] {
   background: #7c2d12;
   border-color: #ea580c;
   color: #ffedd5;
@@ -2086,14 +2453,123 @@ html.ink .sales-surface [data-slot='card'][data-tone] {
 .app-surface :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='file']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']):not([type='image']),
 .app-surface [data-slot='input'],
 .app-surface [data-slot='native-select'],
+.app-surface [data-slot='combobox'],
 .sales-surface :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='file']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']):not([type='image']),
 .sales-surface [data-slot='input'],
-.sales-surface [data-slot='native-select'] {
+.sales-surface [data-slot='native-select'],
+.sales-surface [data-slot='combobox'] {
   border-radius: 0.65rem;
   background-color: var(--card);
   color: var(--foreground);
   border-color: var(--input);
   caret-color: var(--foreground);
+}
+
+/*
+ * VIP desks (Luxury / AI): chrome ink is always cream/azure — never paper brown
+ * (#2a2118 / #6b5a45) from a leftover light report style. Primary fills keep
+ * their own foreground (dark on gold / white on azure).
+ */
+html.luxury :is(.app-surface, .sales-surface) :is(
+  [data-slot='label'],
+  [data-slot='input'],
+  [data-slot='native-select'],
+  [data-slot='combobox']
+) {
+  color: #f3eee6 !important;
+}
+
+html.luxury :is(.app-surface, .sales-surface) .print\:hidden {
+  color: #f3eee6;
+}
+
+html.luxury :is(.app-surface, .sales-surface) .print\:hidden :is(
+  .text-foreground,
+  a.text-foreground,
+  [data-slot='label']
+) {
+  color: #f3eee6 !important;
+}
+
+html.luxury :is(.app-surface, .sales-surface) .print\:hidden .text-muted-foreground,
+html.luxury :is(.app-surface, .sales-surface) .print\:hidden :is(input, textarea)::placeholder {
+  color: #c4b8a8 !important;
+  opacity: 1;
+}
+
+html.luxury :is(.app-surface, .sales-surface) :is(
+  [data-slot='input'],
+  [data-slot='native-select'],
+  [data-slot='combobox']
+) {
+  background-color: #100e14 !important;
+  border-color: rgb(196 165 116 / 28%) !important;
+  caret-color: #f3eee6;
+}
+
+html.luxury :is(.app-surface, .sales-surface) :is(input, textarea)::placeholder {
+  color: #c4b8a8 !important;
+  opacity: 1;
+}
+
+html.luxury :is(.app-surface, .sales-surface) .print\:hidden :is(
+  [data-slot='button'].bg-primary,
+  [data-slot='button'][class*='bg-primary'],
+  a.bg-primary,
+  button.bg-primary
+) {
+  color: #0a090c !important;
+}
+
+html.ai :is(.app-surface, .sales-surface) :is(
+  [data-slot='label'],
+  [data-slot='input'],
+  [data-slot='native-select'],
+  [data-slot='combobox']
+) {
+  color: #e8eef8 !important;
+}
+
+html.ai :is(.app-surface, .sales-surface) .print\:hidden {
+  color: #e8eef8;
+}
+
+html.ai :is(.app-surface, .sales-surface) .print\:hidden :is(
+  .text-foreground,
+  a.text-foreground,
+  [data-slot='label']
+) {
+  color: #e8eef8 !important;
+}
+
+html.ai :is(.app-surface, .sales-surface) .print\:hidden .text-muted-foreground,
+html.ai :is(.app-surface, .sales-surface) .print\:hidden :is(input, textarea)::placeholder {
+  color: #9eb6d4 !important;
+  opacity: 1;
+}
+
+html.ai :is(.app-surface, .sales-surface) :is(
+  [data-slot='input'],
+  [data-slot='native-select'],
+  [data-slot='combobox']
+) {
+  background-color: #0b1220 !important;
+  border-color: rgb(96 165 250 / 28%) !important;
+  caret-color: #e8eef8;
+}
+
+html.ai :is(.app-surface, .sales-surface) :is(input, textarea)::placeholder {
+  color: #9eb6d4 !important;
+  opacity: 1;
+}
+
+html.ai :is(.app-surface, .sales-surface) .print\:hidden :is(
+  [data-slot='button'].bg-primary,
+  [data-slot='button'][class*='bg-primary'],
+  a.bg-primary,
+  button.bg-primary
+) {
+  color: #f8fbff !important;
 }
 
 /*
@@ -2266,22 +2742,22 @@ option {
  * numbers vanish on white / #c5dff3 rows. Remap those classes to tokens on
  * every dark skin — Dark, Ink, Odoo Dark, Quick Dark.
  */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='c5dff3'], [class*='b3d0ec'], [class*='e7f3fb']) {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='c5dff3'], [class*='b3d0ec'], [class*='e7f3fb']) {
   background-color: var(--stripe) !important;
   color: var(--foreground) !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='d5dde6'], [class*='c8d3df']) {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is([class*='d5dde6'], [class*='c8d3df']) {
   background-color: var(--band) !important;
   color: var(--foreground) !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [class*='b7e1a1'] {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) [class*='b7e1a1'] {
   background-color: color-mix(in srgb, var(--primary) 28%, var(--card)) !important;
   color: var(--foreground) !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-slot='dialog-content']) :is([class*='bg-white'], [class*='bg-sky-50'], [class*='bg-slate-50'], [class*='bg-gray-50']):not(.merchant-invoice):not(.invoice-sheet) {
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-slot='dialog-content']) :is([class*='bg-white'], [class*='bg-sky-50'], [class*='bg-slate-50'], [class*='bg-gray-50']):not(.merchant-invoice):not(.invoice-sheet) {
   background-color: var(--card) !important;
   color: var(--foreground) !important;
 }
@@ -2291,12 +2767,41 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sale
  * not lighten type on invoices, delivery notes, or statement invoice pages.
  * Without this, Print / Save as PDF shows pale text on white (unreadable).
  */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) {
+html:is(.som-dark, .dark, .ink, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) {
   background-color: #ffffff !important;
   color: #1f2933 !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
+/* Luxury VIP customer paper — cream sheet + espresso ink (not generic white). */
+html.luxury :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) {
+  background-color: #fbf7f0 !important;
+  color: #2a2118 !important;
+}
+
+html.luxury :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
+  .text-\[\#5C6B7A\],
+  .text-\[\#5c6b7a\],
+  .text-\[\#3d4c5c\],
+  .text-\[\#3D4C5C\]
+) {
+  color: #6b5a45 !important;
+}
+
+html.luxury :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
+  .text-\[\#1f1f23\],
+  .text-\[\#1f2933\],
+  .text-\[\#1B3A4B\],
+  .text-\[\#1b3a4b\]
+) {
+  color: #2a2118 !important;
+}
+
+html.luxury :is(.merchant-invoice, .invoice-sheet) :is(.bg-primary, [class*='bg-primary']) {
+  background-color: #c4a574 !important;
+  color: #0a090c !important;
+}
+
+html:is(.som-dark, .dark, .ink, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
   .text-\[\#5C6B7A\],
   .text-\[\#5c6b7a\],
   .text-\[\#3d4c5c\],
@@ -2305,7 +2810,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sale
   color: #5c6b7a !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
+html:is(.som-dark, .dark, .ink, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface, [data-portal-shell], body) :is(.merchant-invoice, .invoice-sheet) :is(
   .text-\[\#1f1f23\],
   .text-\[\#1f2933\],
   .text-\[\#1B3A4B\],
@@ -2318,12 +2823,13 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sale
  * Light “paper” hovers (QB blue / slate / pastel kind tints) wash out light ink
  * on night themes. Dialogs and menus portal outside .app-surface.
  */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
   [data-slot='popover-content'],
-  [data-slot='dropdown-menu-content']
+  [data-slot='dropdown-menu-content'],
+  [data-slot='combobox-panel']
 ) :is(
   [class*='hover:bg-slate-50'],
   [class*='hover:bg-slate-100'],
@@ -2353,12 +2859,13 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
  * Accent hovers from light skins are near-white. On night desks that erase the
  * row ink — force the band and let muted cells follow the row.
  */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
   [data-slot='popover-content'],
-  [data-slot='dropdown-menu-content']
+  [data-slot='dropdown-menu-content'],
+  [data-slot='combobox-panel']
 ) :is([class*='hover:bg-accent']:hover, [class*='focus:bg-accent']:focus) {
   background-color: var(--band) !important;
   color: var(--foreground) !important;
@@ -2369,12 +2876,13 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
  * hover:text-* never reaches date/status cells. On any hovered or selected
  * interactive row, muted ink must follow the row.
  */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
   [data-slot='popover-content'],
-  [data-slot='dropdown-menu-content']
+  [data-slot='dropdown-menu-content'],
+  [data-slot='combobox-panel']
 ) :is(a, button, tr, [data-slot='table-row'], [role='option'], [role='menuitem'], [role='row']):is(
   :hover,
   [data-state='selected'],
@@ -2382,23 +2890,25 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   [aria-current='true'],
   [aria-current='page']
 ) .text-muted-foreground,
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
   [data-slot='popover-content'],
-  [data-slot='dropdown-menu-content']
+  [data-slot='dropdown-menu-content'],
+  [data-slot='combobox-panel']
 ) :is(a, button, [role='option'], [role='menuitem']).text-muted-foreground:is(:hover, [data-state='selected'], [aria-current='page']) {
   color: var(--foreground) !important;
 }
 
 /* Selected accent fills (combobox / tabs) — same muted-child lock. */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
   [data-slot='popover-content'],
-  [data-slot='dropdown-menu-content']
+  [data-slot='dropdown-menu-content'],
+  [data-slot='combobox-panel']
 ) .bg-accent .text-muted-foreground {
   color: var(--accent-foreground) !important;
 }
@@ -2407,7 +2917,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
  * Paper-tint arbitrary fills stay light on night themes and erase light ink.
  * Match the hex fragment so we do not trip CSS attribute-selector parsing on `#`.
  */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(.app-surface, .sales-surface) :is(
   [class*='f4f8fb'],
   [class*='e7edf2'],
   [class*='fbfcfd'],
@@ -2421,12 +2931,13 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.app-surface, .sale
   color: var(--foreground) !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
   [data-slot='popover-content'],
-  [data-slot='dropdown-menu-content']
+  [data-slot='dropdown-menu-content'],
+  [data-slot='combobox-panel']
 ) :is(
   .text-slate-500,
   .text-slate-600,
@@ -2460,23 +2971,25 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   color: var(--foreground) !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
   [data-slot='popover-content'],
-  [data-slot='dropdown-menu-content']
+  [data-slot='dropdown-menu-content'],
+  [data-slot='combobox-panel']
 ) :is(.text-slate-400, .text-gray-400, .text-zinc-400, .text-neutral-400) {
   color: var(--muted-foreground) !important;
 }
 
 /* Soft labels that were tuned for paper stay readable on night fills. */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content'],
   [data-slot='popover-content'],
-  [data-slot='dropdown-menu-content']
+  [data-slot='dropdown-menu-content'],
+  [data-slot='combobox-panel']
 ) .text-muted-foreground {
   color: var(--muted-foreground) !important;
 }
@@ -2485,7 +2998,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
  * Hard-coded print-sheet greys (#5C6B7A, #3d4c5c) vanish on night desks.
  * Remap to theme ink when those hexes appear as Tailwind arbitrary colours.
  */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2505,7 +3018,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
  * Without dark: companions they vanish on night themes — lift ink and soften fills.
  * Attribute match covers opacity modifiers (bg-amber-50/60).
  */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2524,7 +3037,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   color: #fbbf24 !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2532,7 +3045,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   background-color: color-mix(in srgb, #fbbf24 16%, var(--card)) !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2546,7 +3059,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
 }
 
 /* Rose / red paper chips (voided, risk) — same night lift. */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2554,7 +3067,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   color: #fda4af !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2563,7 +3076,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
 }
 
 /* Emerald success chips painted for paper — lift on night desks. */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2571,7 +3084,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   color: #6ee7b7 !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2579,28 +3092,44 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   background-color: color-mix(in srgb, #34d399 14%, var(--card)) !important;
 }
 
-/* Sky / stone account-type chips. */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+/* Sky / stone account-type chips — keep distinct hues on night desks. */
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
-) :is(.text-sky-700, .text-sky-800, .text-sky-900, .text-stone-700, .text-stone-800, .text-stone-900) {
-  color: var(--foreground) !important;
+) :is(.text-sky-700, .text-sky-800, .text-sky-900) {
+  color: #7dd3fc !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
-) :is([class*='bg-sky-100'], [class*='bg-stone-200'], [class*='bg-stone-100']) {
-  background-color: color-mix(in srgb, var(--muted-foreground) 18%, var(--card)) !important;
+) :is(.text-stone-700, .text-stone-800, .text-stone-900) {
+  color: #d6d3d1 !important;
+}
+
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is([class*='bg-sky-100']) {
+  background-color: color-mix(in srgb, #38bdf8 18%, var(--card)) !important;
+}
+
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
+  .app-surface,
+  .sales-surface,
+  [data-slot='dialog-content']
+) :is([class*='bg-stone-200'], [class*='bg-stone-100']) {
+  background-color: color-mix(in srgb, #a8a29e 20%, var(--card)) !important;
 }
 
 /*
  * Paper section bars (#e8ebef journal, #eef3f7 P&L) and teal/sky pastel islands
  * that escape the generic bg-white remaps — force muted/card on night desks.
  */
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2608,7 +3137,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   background-color: var(--muted) !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2616,7 +3145,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   color: #5eead4 !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2630,7 +3159,7 @@ html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
   background-color: color-mix(in srgb, #2dd4bf 14%, var(--card)) !important;
 }
 
-html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(
+html:is(.som-dark, .dark, .ink, .luxury, .ai, .odoo-dark, .quick-dark) :is(
   .app-surface,
   .sales-surface,
   [data-slot='dialog-content']
@@ -2720,6 +3249,27 @@ html.som-dark :is(.app-surface, .sales-surface) section > div.bg-primary a.bg-ca
 }
 
 /*
+ * Luxury sales heroes: champagne wash on deep ink so cream type stays sharp.
+ */
+html.luxury :is(.app-surface, .sales-surface) section > div.bg-primary {
+  background: color-mix(in srgb, var(--primary) 20%, #07060a) !important;
+  color: #f7f2ea !important;
+}
+
+html.luxury :is(.app-surface, .sales-surface) section > div.bg-primary :is(h1, p) {
+  color: inherit !important;
+}
+
+html.luxury :is(.app-surface, .sales-surface) section > div.bg-primary h1 {
+  color: #e4d0a8 !important;
+}
+
+html.luxury :is(.app-surface, .sales-surface) section > div.bg-primary a.bg-card {
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
+
+/*
  * App tiles (home grid, Apps menu): a dark charcoal rounded square that carries a
  * flat colour mark. Charcoal in every theme so the marks keep their colours; on
  * night themes it lifts a step above the page and gains a hairline edge instead
@@ -2763,8 +3313,253 @@ html.quick-dark .app-glyph-tile,
     0 10px 22px -12px rgb(0 0 0 / 0.7);
 }
 
+/*
+ * Luxury tiles: deep espresso stage, soft gold rim, quiet sheen —
+ * multi-colour marks (jade / rose-gold / steel) read like jewelry.
+ */
+html.luxury .app-glyph-tile {
+  background:
+    radial-gradient(120% 90% at 30% 15%, rgb(240 212 138 / 0.14) 0%, transparent 55%),
+    linear-gradient(165deg, #32281f 0%, #1a1510 52%, #100e0c 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(240 212 138 / 0.16),
+    inset 0 0 0 1px rgb(196 165 116 / 0.32),
+    0 12px 24px -14px rgb(0 0 0 / 0.8);
+}
+
+html.luxury .group:hover .app-glyph-tile,
+html.luxury .app-glyph-tile:hover {
+  box-shadow:
+    inset 0 1px 0 rgb(240 212 138 / 0.22),
+    inset 0 0 0 1px rgb(226 168 90 / 0.45),
+    0 14px 28px -12px rgb(0 0 0 / 0.85);
+}
+
 html.quick .app-glyph-tile {
   background: linear-gradient(180deg, #34b022 0%, #248a18 100%);
+}
+
+/*
+ * Lucide fallback chips: soft luxury wash (champagne), not neon pastels.
+ * Glyph tiles above carry the jewelry multi-tone marks.
+ */
+html.luxury .app-chroma-chip,
+html.luxury .app-chroma-surface {
+  background-color: rgb(196 165 116 / 14%) !important;
+  color: #e8d5a8 !important;
+  box-shadow: inset 0 0 0 1px rgb(196 165 116 / 24%);
+}
+
+html.luxury .app-chroma-chip *,
+html.luxury .app-chroma-surface * {
+  color: #e8d5a8 !important;
+  stroke: currentColor;
+}
+
+html.luxury .app-chroma-surface:hover,
+html.luxury .app-chroma-chip:hover {
+  background-color: rgb(196 165 116 / 22%) !important;
+}
+
+html.luxury .app-chroma-surface[aria-current='page'],
+html.luxury .app-chroma-surface[aria-expanded='true'] {
+  background-color: rgb(196 165 116 / 28%) !important;
+  box-shadow:
+    inset 0 0 0 1px rgb(226 168 90 / 0.45),
+    0 0 0 2px rgb(196 165 116 / 20%);
+}
+
+/* Side-rail glyph tiles sit flush — no pastel wash behind the jewelry mark. */
+html.luxury .shell-apps .app-glyph-tile {
+  background:
+    radial-gradient(120% 90% at 30% 15%, rgb(240 212 138 / 0.12) 0%, transparent 55%),
+    linear-gradient(165deg, #2c241c 0%, #16120e 100%);
+}
+
+/* Accent dots / report board bars — no stray teal/cyan on the VIP desk. */
+html.luxury .app-chroma-dot,
+html.luxury .app-chroma-bar {
+  background: var(--primary) !important;
+  background-color: var(--primary) !important;
+}
+
+html.luxury .shell-apps {
+  background: #050408 !important;
+  border-color: rgb(196 165 116 / 14%) !important;
+  color: var(--foreground);
+}
+
+html.luxury .shell-apps [data-app-nav] :is(a, button):hover {
+  background: rgb(196 165 116 / 10%);
+}
+
+html.luxury .shell-apps .text-muted-foreground {
+  color: var(--muted-foreground) !important;
+}
+
+html.luxury .shell-tabs {
+  border-color: rgb(196 165 116 / 14%);
+}
+
+html.luxury .shell-tabs a.text-primary {
+  color: #e4d0a8 !important;
+}
+
+html.luxury .shell-topbar [data-slot='avatar-fallback'] {
+  background: rgb(196 165 116 / 22%) !important;
+  color: #f7f2ea !important;
+}
+
+/* Topbar utility icons stay cream; primary fills keep gold. */
+html.luxury .shell-topbar :is(button, a):not(.bg-primary):not([class*='bg-primary']) {
+  color: var(--foreground);
+}
+
+html.luxury .shell-topbar :is(button, a).bg-primary,
+html.luxury .shell-topbar :is(button, a)[class*='bg-primary'] {
+  color: var(--primary-foreground) !important;
+}
+
+/* Popovers / destination lists: champagne hairline instead of cold black ring. */
+html.luxury :is(.shell-apps, .app-surface, .sales-surface) [role='menu'],
+html.luxury :is(.shell-apps, .app-surface, .sales-surface) [data-slot='portaled-floating-panel'] > * {
+  border-color: rgb(196 165 116 / 20%);
+  box-shadow:
+    0 8px 28px -8px rgb(0 0 0 / 0.55),
+    inset 0 0 0 1px rgb(196 165 116 / 10%);
+}
+
+/*
+ * AI tiles: deep navy stage, electric rim, soft cyan sheen —
+ * cool instrument-panel marks on the neural desk.
+ */
+html.ai .app-glyph-tile {
+  background:
+    radial-gradient(120% 90% at 28% 12%, rgb(125 211 252 / 0.22) 0%, transparent 52%),
+    radial-gradient(90% 80% at 85% 90%, rgb(59 130 246 / 0.18) 0%, transparent 55%),
+    linear-gradient(165deg, #1a2744 0%, #0d1628 52%, #080e1a 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(147 197 253 / 0.22),
+    inset 0 0 0 1px rgb(96 165 250 / 0.38),
+    0 12px 28px -14px rgb(37 99 235 / 0.55);
+}
+
+html.ai .group:hover .app-glyph-tile,
+html.ai .app-glyph-tile:hover {
+  box-shadow:
+    inset 0 1px 0 rgb(186 230 253 / 0.3),
+    inset 0 0 0 1px rgb(56 189 248 / 0.55),
+    0 0 24px -6px rgb(59 130 246 / 0.65),
+    0 14px 28px -12px rgb(0 0 0 / 0.85);
+}
+
+html.ai .app-chroma-chip,
+html.ai .app-chroma-surface {
+  background-color: rgb(59 130 246 / 14%) !important;
+  color: #93c5fd !important;
+  box-shadow: inset 0 0 0 1px rgb(96 165 250 / 28%);
+}
+
+html.ai .app-chroma-chip *,
+html.ai .app-chroma-surface * {
+  color: #93c5fd !important;
+  stroke: currentColor;
+}
+
+html.ai .app-chroma-surface:hover,
+html.ai .app-chroma-chip:hover {
+  background-color: rgb(59 130 246 / 22%) !important;
+}
+
+html.ai .app-chroma-surface[aria-current='page'],
+html.ai .app-chroma-surface[aria-expanded='true'] {
+  background-color: rgb(59 130 246 / 28%) !important;
+  box-shadow:
+    inset 0 0 0 1px rgb(56 189 248 / 0.5),
+    0 0 0 2px rgb(59 130 246 / 22%),
+    0 0 20px -8px rgb(59 130 246 / 55%);
+}
+
+html.ai .shell-apps .app-glyph-tile {
+  background:
+    radial-gradient(120% 90% at 30% 15%, rgb(125 211 252 / 0.16) 0%, transparent 55%),
+    linear-gradient(165deg, #152038 0%, #0a1222 100%);
+}
+
+html.ai .app-chroma-dot,
+html.ai .app-chroma-bar {
+  background: linear-gradient(90deg, #3b82f6, #22d3ee) !important;
+  background-color: var(--primary) !important;
+}
+
+html.ai .shell-apps {
+  background:
+    linear-gradient(180deg, #050810 0%, #070c16 100%) !important;
+  border-color: rgb(96 165 250 / 14%) !important;
+  color: var(--foreground);
+  box-shadow: inset -1px 0 0 rgb(59 130 246 / 8%);
+}
+
+html.ai .shell-apps [data-app-nav] :is(a, button):hover {
+  background: rgb(59 130 246 / 12%);
+}
+
+html.ai .shell-apps .text-muted-foreground {
+  color: var(--muted-foreground) !important;
+}
+
+html.ai .shell-tabs {
+  border-color: rgb(96 165 250 / 14%);
+}
+
+html.ai .shell-tabs a.text-primary {
+  color: #7dd3fc !important;
+  text-shadow: 0 0 18px rgb(56 189 248 / 35%);
+}
+
+html.ai .shell-topbar [data-slot='avatar-fallback'] {
+  background: linear-gradient(145deg, rgb(59 130 246 / 35%), rgb(34 211 238 / 22%)) !important;
+  color: #f1f5ff !important;
+  box-shadow: 0 0 0 1px rgb(96 165 250 / 30%);
+}
+
+html.ai .shell-topbar :is(button, a):not(.bg-primary):not([class*='bg-primary']) {
+  color: var(--foreground);
+}
+
+html.ai .shell-topbar :is(button, a).bg-primary,
+html.ai .shell-topbar :is(button, a)[class*='bg-primary'] {
+  color: var(--primary-foreground) !important;
+  background-image: linear-gradient(145deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%) !important;
+  box-shadow:
+    0 0 0 1px rgb(125 211 252 / 30%),
+    0 8px 22px -10px rgb(59 130 246 / 70%);
+}
+
+html.ai :is(.shell-apps, .app-surface, .sales-surface) [role='menu'],
+html.ai :is(.shell-apps, .app-surface, .sales-surface) [data-slot='portaled-floating-panel'] > * {
+  border-color: rgb(96 165 250 / 22%);
+  box-shadow:
+    0 8px 28px -8px rgb(0 0 0 / 0.6),
+    0 0 40px -18px rgb(59 130 246 / 40%),
+    inset 0 0 0 1px rgb(96 165 250 / 12%);
+}
+
+html.ai :is(.app-surface, .sales-surface) section > div.bg-primary {
+  background:
+    radial-gradient(120% 140% at 10% 0%, rgb(125 211 252 / 0.28) 0%, transparent 50%),
+    linear-gradient(135deg, #1d4ed8 0%, #2563eb 45%, #0e7490 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(186 230 253 / 0.25),
+    0 18px 40px -24px rgb(37 99 235 / 0.7);
+}
+
+html.ai :is(.app-surface, .sales-surface) section > div.bg-primary :is(h1, p) {
+  color: #f8fbff !important;
+}
+
+html.ai :is(.app-surface, .sales-surface) section > div.bg-primary a.bg-card {
+  box-shadow: 0 0 24px -8px rgb(125 211 252 / 55%);
 }
 
 .app-glyph-tile svg {
@@ -2777,6 +3572,62 @@ html.quick .app-glyph-tile {
 
 .app-atmosphere-blob {
   background: var(--glow);
+}
+
+/* AI aurora — dual-tone wash + drifting blobs (attraction without noise). */
+html.ai .app-atmosphere {
+  display: block !important;
+}
+
+html.ai .app-atmosphere-wash {
+  background:
+    radial-gradient(90% 70% at 18% -5%, rgb(59 130 246 / 0.38) 0%, transparent 55%),
+    radial-gradient(80% 60% at 88% 0%, rgb(34 211 238 / 0.28) 0%, transparent 50%),
+    radial-gradient(60% 50% at 50% 10%, rgb(99 102 241 / 0.12) 0%, transparent 60%);
+  animation: ai-aurora-breathe 9s ease-in-out infinite;
+}
+
+html.ai .app-atmosphere-blob:nth-child(2) {
+  background: radial-gradient(circle, rgb(59 130 246 / 0.55) 0%, transparent 70%);
+  animation: ai-blob-drift 14s ease-in-out infinite;
+}
+
+html.ai .app-atmosphere-blob:nth-child(3) {
+  background: radial-gradient(circle, rgb(34 211 238 / 0.45) 0%, transparent 70%);
+  animation: ai-blob-drift 18s ease-in-out infinite reverse;
+}
+
+html.ai .app-atmosphere > svg {
+  color: rgb(96 165 250 / 18%);
+}
+
+@keyframes ai-aurora-breathe {
+  0%,
+  100% {
+    opacity: 0.85;
+    filter: saturate(1);
+  }
+  50% {
+    opacity: 1;
+    filter: saturate(1.15);
+  }
+}
+
+@keyframes ai-blob-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(18px, -12px, 0) scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.ai .app-atmosphere-wash,
+  html.ai .app-atmosphere-blob {
+    animation: none !important;
+  }
 }
 
 /*
@@ -2816,7 +3667,9 @@ html.quick .app-glyph-tile {
   color: inherit;
 }
 
-/* Name / amount drills into transaction detail — always look openable. */
+/* Name / amount drills into transaction detail — always look openable.
+ * Accent colour is the cue on dark sheets; light/cream paper needs body ink
+ * (gold #c4a574 on cream fails contrast — zeros and names vanish). */
 a.report-drill-link {
   color: var(--report-accent, var(--primary));
   cursor: pointer;
@@ -2890,12 +3743,17 @@ a.report-drill-link:hover {
    * Night themes remap bg-white / grey text with !important. Those selectors
    * outrank a plain .merchant-invoice print rule — lock paper ink again here.
    */
-  html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) {
+  html:is(.som-dark, .dark, .ink, .ai, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) {
     background-color: #ffffff !important;
     color: #1f2933 !important;
   }
 
-  html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) :is(
+  html.luxury :is(.merchant-invoice, .invoice-sheet) {
+    background-color: #fbf7f0 !important;
+    color: #2a2118 !important;
+  }
+
+  html:is(.som-dark, .dark, .ink, .ai, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) :is(
     .text-\[\#5C6B7A\],
     .text-\[\#5c6b7a\],
     .text-\[\#3d4c5c\],
@@ -2908,7 +3766,7 @@ a.report-drill-link:hover {
     color: #1f2933 !important;
   }
 
-  html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) :is(
+  html:is(.som-dark, .dark, .ink, .ai, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) :is(
     .text-\[\#5C6B7A\],
     .text-\[\#5c6b7a\],
     .text-\[\#3d4c5c\],
@@ -2917,8 +3775,12 @@ a.report-drill-link:hover {
     color: #5c6b7a !important;
   }
 
-  html:is(.som-dark, .dark, .ink, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) .text-white {
+  html:is(.som-dark, .dark, .ink, .ai, .odoo-dark, .quick-dark) :is(.merchant-invoice, .invoice-sheet) .text-white {
     color: #ffffff !important;
+  }
+
+  html.luxury :is(.merchant-invoice, .invoice-sheet) .text-white {
+    color: #0a090c !important;
   }
 
   [data-invoice-page] {
@@ -3295,6 +4157,8 @@ html[data-report-style='herobooks'] [data-report-root] {
   --report-head-fg: var(--foreground);
   --report-section-bg: var(--band);
   --report-section-fg: var(--foreground);
+  --report-body-fg: var(--foreground);
+  --report-muted-fg: var(--muted-foreground);
   --report-row-odd: var(--card);
   --report-row-even: var(--stripe);
   --report-border: color-mix(in srgb, var(--border) 80%, transparent);
@@ -3311,6 +4175,8 @@ html[data-report-style='quickbooks'] [data-report-root] {
   --report-head-fg: #393a3d;
   --report-section-bg: #dfe8f0;
   --report-section-fg: #1f2a30;
+  --report-body-fg: #393a3d;
+  --report-muted-fg: #6b7280;
   --report-row-odd: #ffffff;
   --report-row-even: #f4f7fa;
   --report-border: #c9d3dc;
@@ -3341,6 +4207,8 @@ html[data-report-style='odoo'] [data-report-root] {
   --report-head-fg: #212529;
   --report-section-bg: #dee2e6;
   --report-section-fg: #495057;
+  --report-body-fg: #212529;
+  --report-muted-fg: #6c757d;
   --report-row-odd: #ffffff;
   --report-row-even: #ffffff;
   --report-border: #dee2e6;
@@ -3348,13 +4216,536 @@ html[data-report-style='odoo'] [data-report-root] {
   --report-head-tracking: 0;
   --report-head-transform: none;
   --report-head-weight: 500;
-  /* Follow Appearance → System look (SOM cyan, Odoo plum, …), not a fixed Odoo swatch. */
-  --report-accent: var(--primary);
+  /* Fixed Odoo plum — theme primary on Luxury/AI muddied paper accents. */
+  --report-accent: #714b67;
   font-size: 0.8rem;
+}
+
+/* Luxury VIP paper — cream sheet + champagne bands + gold marks.
+ * Near-black ink on cream (≥12:1) so names/codes stay sharp; desk chrome
+ * still uses cream. Night --success mint must not paint the ledger. */
+html[data-report-style='luxury'] [data-report-root] {
+  --report-font: var(--font-marketing-sans), system-ui, sans-serif;
+  --report-head-bg: #e8dcc8;
+  --report-head-fg: #1a1410;
+  --report-section-bg: #e8dcc8;
+  --report-section-fg: #1a1410;
+  --report-body-fg: #1a1410;
+  --report-muted-fg: #4a3d2e;
+  --report-row-odd: #fbf7f0;
+  --report-row-even: #f3eee6;
+  --report-border: #d4c4a8;
+  --report-row-pad-y: 0.42rem;
+  --report-head-tracking: 0.08em;
+  --report-head-transform: uppercase;
+  --report-head-weight: 650;
+  --report-accent: #c4a574;
+}
+
+html[data-report-style='luxury'] [data-report-root] :is(table, [data-slot='table']) {
+  color: #1a1410;
+  background-color: #fbf7f0;
+}
+
+html[data-report-style='luxury'] [data-report-root] table > thead th {
+  background: #e8dcc8;
+  color: #1a1410;
+  border-bottom-color: #d4c4a8;
+}
+
+html[data-report-style='luxury'] [data-report-root] table > tbody td {
+  color: #1a1410;
+}
+
+html[data-report-style='ai'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #121c30;
+  --report-head-fg: #e8eef8;
+  --report-section-bg: #121c30;
+  --report-section-fg: #e8eef8;
+  --report-body-fg: #e8eef8;
+  --report-muted-fg: #9eb6d4;
+  --report-row-odd: #0b1220;
+  --report-row-even: #080e1a;
+  --report-border: rgb(96 165 250 / 22%);
+  --report-row-pad-y: 0.4rem;
+  --report-head-tracking: 0.06em;
+  --report-head-transform: uppercase;
+  --report-head-weight: 650;
+  --report-accent: #3b82f6;
+  color: #e8eef8;
+}
+
+html[data-report-style='ink'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #171717;
+  --report-head-fg: #ededed;
+  --report-section-bg: #171717;
+  --report-section-fg: #ededed;
+  --report-body-fg: #ededed;
+  --report-muted-fg: rgb(237 237 237 / 72%);
+  --report-row-odd: #0a0a0a;
+  --report-row-even: #111111;
+  --report-border: #2a2a2a;
+  --report-row-pad-y: 0.4rem;
+  --report-head-tracking: 0.06em;
+  --report-head-transform: uppercase;
+  --report-head-weight: 600;
+  --report-accent: #ededed;
+  color: #ededed;
+}
+
+html[data-report-style='slate'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #e2e8f0;
+  --report-head-fg: #0f172a;
+  --report-section-bg: #e2e8f0;
+  --report-section-fg: #0f172a;
+  --report-body-fg: #0f172a;
+  --report-muted-fg: #64748b;
+  --report-row-odd: #f8fafc;
+  --report-row-even: #f1f5f9;
+  --report-border: #cbd5e1;
+  --report-row-pad-y: 0.4rem;
+  --report-head-tracking: 0.05em;
+  --report-head-transform: uppercase;
+  --report-head-weight: 650;
+  --report-accent: #475569;
+}
+
+html[data-report-style='emerald'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #dcfce7;
+  --report-head-fg: #14532d;
+  --report-section-bg: #dcfce7;
+  --report-section-fg: #14532d;
+  --report-body-fg: #14532d;
+  --report-muted-fg: #3f6212;
+  --report-row-odd: #f0fdf4;
+  --report-row-even: #ecfdf5;
+  --report-border: #bbf7d0;
+  --report-row-pad-y: 0.4rem;
+  --report-head-tracking: 0.05em;
+  --report-head-transform: uppercase;
+  --report-head-weight: 650;
+  --report-accent: #166534;
+}
+
+html[data-report-style='sand'] [data-report-root] {
+  --report-font: Georgia, 'Times New Roman', Times, serif;
+  --report-head-bg: #fde68a;
+  --report-head-fg: #78350f;
+  --report-section-bg: #fde68a;
+  --report-section-fg: #78350f;
+  --report-body-fg: #78350f;
+  --report-muted-fg: #92400e;
+  --report-row-odd: #fffbeb;
+  --report-row-even: #fef3c7;
+  --report-border: #fcd34d;
+  --report-row-pad-y: 0.42rem;
+  --report-head-tracking: 0.04em;
+  --report-head-transform: none;
+  --report-head-weight: 700;
+  --report-accent: #9a3412;
+}
+
+/*
+ * World paper clones — each has a different layout DNA (not only brand colours):
+ * Xero flat+navy masthead · Sage minimal filled totals · Wave soft cream ·
+ * FreshBooks navy bar · Zoho cell grid · SAP IBCS greyscale · Dynamics Fluent ·
+ * NetSuite dense brown bar.
+ */
+html[data-report-style='xero'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #ffffff;
+  --report-head-fg: #000856;
+  --report-section-bg: #ffffff;
+  --report-section-fg: #000856;
+  --report-body-fg: #000856;
+  --report-muted-fg: #4a5568;
+  --report-row-odd: #ffffff;
+  --report-row-even: #ffffff;
+  --report-border: #d6e0ef;
+  --report-row-pad-y: 0.5rem;
+  --report-head-tracking: 0.02em;
+  --report-head-transform: none;
+  --report-head-weight: 600;
+  --report-accent: #1f65d6;
+}
+
+html[data-report-style='sage'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #ffffff;
+  --report-head-fg: #111111;
+  --report-section-bg: #00d639;
+  --report-section-fg: #003d21;
+  --report-body-fg: #111111;
+  --report-muted-fg: #555555;
+  --report-row-odd: #ffffff;
+  --report-row-even: #ffffff;
+  --report-border: #e5e5e5;
+  --report-row-pad-y: 0.48rem;
+  --report-head-tracking: 0;
+  --report-head-transform: none;
+  --report-head-weight: 600;
+  --report-accent: #00d639;
+}
+
+html[data-report-style='wave'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #0040ff;
+  --report-head-fg: #ffffff;
+  --report-section-bg: #fff3e8;
+  --report-section-fg: #7a3200;
+  --report-body-fg: #1a1a1a;
+  /* Grey muted on cream — orange was only for totals, not every secondary label. */
+  --report-muted-fg: #5c6570;
+  --report-row-odd: #f9f4f1;
+  --report-row-even: #ffffff;
+  --report-border: #e5dcd4;
+  --report-row-pad-y: 0.46rem;
+  --report-head-tracking: 0.03em;
+  --report-head-transform: none;
+  --report-head-weight: 650;
+  --report-accent: #fd6f00;
+}
+
+html[data-report-style='freshbooks'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #001b40;
+  --report-head-fg: #ffffff;
+  --report-section-bg: #e8f2fb;
+  --report-section-fg: #001b40;
+  --report-body-fg: #001b40;
+  --report-muted-fg: #4a6280;
+  --report-row-odd: #ffffff;
+  --report-row-even: #f3f8fd;
+  --report-border: #c5d8ec;
+  --report-row-pad-y: 0.42rem;
+  --report-head-tracking: 0.08em;
+  --report-head-transform: uppercase;
+  --report-head-weight: 700;
+  --report-accent: #0075dd;
+}
+
+html[data-report-style='zoho'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #226db4;
+  --report-head-fg: #ffffff;
+  --report-section-bg: #ffffff;
+  --report-section-fg: #212121;
+  --report-body-fg: #212121;
+  --report-muted-fg: #6b7280;
+  --report-row-odd: #ffffff;
+  --report-row-even: #ffffff;
+  --report-border: #cfd8e3;
+  --report-row-pad-y: 0.36rem;
+  --report-head-tracking: 0.02em;
+  --report-head-transform: none;
+  --report-head-weight: 600;
+  --report-accent: #e42527;
+}
+
+html[data-report-style='sap'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #233549;
+  --report-head-fg: #ffffff;
+  --report-section-bg: #edf0f3;
+  --report-section-fg: #233549;
+  --report-body-fg: #233549;
+  --report-muted-fg: #5b6b7c;
+  --report-row-odd: #ffffff;
+  --report-row-even: #ffffff;
+  --report-border: #9daebe;
+  --report-row-pad-y: 0.34rem;
+  --report-head-tracking: 0.06em;
+  --report-head-transform: uppercase;
+  --report-head-weight: 700;
+  --report-accent: #0070f2;
+}
+
+html[data-report-style='dynamics'] [data-report-root] {
+  --report-font: 'Segoe UI', var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #f3f2f1;
+  --report-head-fg: #242424;
+  --report-section-bg: #e5f7f8;
+  --report-section-fg: #00464b;
+  --report-body-fg: #242424;
+  --report-muted-fg: #605e5c;
+  --report-row-odd: #ffffff;
+  --report-row-even: #faf9f8;
+  --report-border: #edebe9;
+  --report-row-pad-y: 0.44rem;
+  --report-head-tracking: 0;
+  --report-head-transform: none;
+  --report-head-weight: 600;
+  --report-accent: #00b7c3;
+}
+
+html[data-report-style='netsuite'] [data-report-root] {
+  --report-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --report-head-bg: #be4529;
+  --report-head-fg: #ffffff;
+  --report-section-bg: #403c38;
+  --report-section-fg: #ffffff;
+  --report-body-fg: #222222;
+  --report-muted-fg: #6b6560;
+  --report-row-odd: #ffffff;
+  --report-row-even: #f3f3f3;
+  --report-border: #cfcbc7;
+  --report-row-pad-y: 0.3rem;
+  --report-head-tracking: 0.07em;
+  --report-head-transform: uppercase;
+  --report-head-weight: 700;
+  --report-accent: #be4529;
+}
+
+html[data-report-style='custom'] [data-report-root] {
+  --report-font: var(--ui-font-family, var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif);
+  --report-head-bg: var(--report-custom-band, #e8dcc8);
+  --report-head-fg: color-mix(in srgb, var(--report-custom-accent, #c4a574) 35%, #111);
+  --report-section-bg: var(--report-custom-band, #e8dcc8);
+  --report-section-fg: color-mix(in srgb, var(--report-custom-accent, #c4a574) 35%, #111);
+  --report-body-fg: color-mix(in srgb, var(--report-custom-accent, #c4a574) 28%, #111);
+  --report-muted-fg: color-mix(in srgb, var(--report-custom-accent, #c4a574) 22%, #555);
+  --report-row-odd: var(--report-custom-sheet, #ffffff);
+  --report-row-even: color-mix(in srgb, var(--report-custom-band, #e8dcc8) 35%, var(--report-custom-sheet, #ffffff));
+  --report-border: color-mix(in srgb, var(--report-custom-band, #e8dcc8) 70%, #000);
+  --report-row-pad-y: 0.42rem;
+  --report-head-tracking: 0.05em;
+  --report-head-transform: uppercase;
+  --report-head-weight: 650;
+  --report-accent: var(--report-custom-accent, #c4a574);
 }
 
 html[data-report-style] [data-report-root] {
   font-family: var(--report-font);
+  /* Desk chrome (filters, labels, tools) keeps theme ink — only the sheet table
+   * and masthead use --report-body-fg. Applying paper ink on the whole root
+   * made Luxury/AI Period/Customer controls unreadable (dark on dark). */
+  color: var(--foreground);
+}
+
+/*
+ * Paper ink lock — only the ledger table + sheet masthead. Night themes remap
+ * slate/black/muted to cream; without this, light sheets go white-on-white.
+ */
+html[data-report-style] [data-report-root] :is(table, [data-slot='table']) {
+  color: var(--report-body-fg, var(--foreground));
+}
+
+html[data-report-style] [data-report-root] table > tbody td {
+  color: var(--report-body-fg, var(--foreground));
+}
+
+html[data-report-style] [data-report-root] table > thead th {
+  color: var(--report-head-fg);
+}
+
+html[data-report-style] [data-report-root]
+  :is(table, [data-slot='table'])
+  :is(
+    .text-foreground,
+    a.text-foreground,
+    .text-black,
+    .text-slate-500,
+    .text-slate-600,
+    .text-slate-700,
+    .text-slate-800,
+    .text-slate-900,
+    .text-slate-950,
+    .text-gray-500,
+    .text-gray-600,
+    .text-gray-700,
+    .text-gray-800,
+    .text-gray-900,
+    .text-zinc-500,
+    .text-zinc-600,
+    .text-zinc-700,
+    .text-zinc-800,
+    .text-zinc-900,
+    .text-neutral-500,
+    .text-neutral-600,
+    .text-neutral-700,
+    .text-neutral-800,
+    .text-neutral-900,
+    .text-\[\#141418\],
+    .text-\[\#26262d\],
+    .text-\[\#4a4a54\],
+    .text-\[\#3F2C38\],
+    .text-\[\#714B67\],
+    .text-\[\#714b67\],
+    .text-\[\#5C6B7A\],
+    .text-\[\#5c6b7a\],
+    .text-\[\#3d4c5c\],
+    .text-\[\#3D4C5C\]
+  ) {
+  color: var(--report-body-fg, var(--foreground)) !important;
+}
+
+html[data-report-style] [data-report-root]
+  :is(table, [data-slot='table'])
+  .text-muted-foreground {
+  color: var(--report-muted-fg, var(--muted-foreground)) !important;
+}
+
+html[data-report-style] [data-report-root]
+  :is(table, [data-slot='table'])
+  .text-muted-foreground:hover,
+html[data-report-style] [data-report-root]
+  :is(table, [data-slot='table'])
+  a.text-muted-foreground:hover {
+  color: var(--report-body-fg, var(--foreground)) !important;
+}
+
+/* Filter / period / tool bars stay on the VIP desk ink. */
+html[data-report-style] [data-report-root] .print\:hidden {
+  color: var(--foreground);
+}
+
+html[data-report-style] [data-report-root] .print\:hidden .text-muted-foreground {
+  color: var(--muted-foreground) !important;
+}
+
+html[data-report-style] [data-report-root] .print\:hidden :is(.text-foreground, a.text-foreground) {
+  color: var(--foreground) !important;
+}
+
+html[data-report-style] [data-report-root]
+  .print\:hidden
+  :is(
+    [data-slot='input'],
+    [data-slot='native-select'],
+    [data-slot='combobox'],
+    input,
+    select,
+    textarea,
+    button
+  ) {
+  color: var(--foreground);
+}
+
+/* Fixed light/cream papers: sheet surface stays opaque on night desks. */
+html:is(
+  [data-report-style='quickbooks'],
+  [data-report-style='odoo'],
+  [data-report-style='xero'],
+  [data-report-style='sage'],
+  [data-report-style='wave'],
+  [data-report-style='freshbooks'],
+  [data-report-style='zoho'],
+  [data-report-style='sap'],
+  [data-report-style='dynamics'],
+  [data-report-style='netsuite'],
+  [data-report-style='luxury'],
+  [data-report-style='slate'],
+  [data-report-style='emerald'],
+  [data-report-style='sand'],
+  [data-report-style='custom']
+)
+  [data-report-root]
+  :is(table, [data-slot='table']) {
+  background-color: var(--report-row-odd, #ffffff);
+}
+
+/*
+ * Signed amounts (SignedMoney) use theme --success / --destructive.
+ * Night desks paint those mint/pink for dark chrome — unreadable on cream
+ * or white paper. Lock deep forest / brick so balances stay ≥4.5:1.
+ */
+html:is(
+  [data-report-style='quickbooks'],
+  [data-report-style='odoo'],
+  [data-report-style='xero'],
+  [data-report-style='sage'],
+  [data-report-style='wave'],
+  [data-report-style='freshbooks'],
+  [data-report-style='zoho'],
+  [data-report-style='sap'],
+  [data-report-style='dynamics'],
+  [data-report-style='netsuite'],
+  [data-report-style='luxury'],
+  [data-report-style='slate'],
+  [data-report-style='emerald'],
+  [data-report-style='sand'],
+  [data-report-style='custom']
+)
+  [data-report-root]
+  :is(table, [data-slot='table'])
+  .text-success {
+  color: #0f6b43 !important;
+}
+
+html:is(
+  [data-report-style='quickbooks'],
+  [data-report-style='odoo'],
+  [data-report-style='xero'],
+  [data-report-style='sage'],
+  [data-report-style='wave'],
+  [data-report-style='freshbooks'],
+  [data-report-style='zoho'],
+  [data-report-style='sap'],
+  [data-report-style='dynamics'],
+  [data-report-style='netsuite'],
+  [data-report-style='luxury'],
+  [data-report-style='slate'],
+  [data-report-style='emerald'],
+  [data-report-style='sand'],
+  [data-report-style='custom']
+)
+  [data-report-root]
+  :is(table, [data-slot='table'])
+  .text-destructive {
+  color: #b42318 !important;
+}
+
+/* Drill links on light paper: body ink + underline, not washed accent gold. */
+html:is(
+  [data-report-style='quickbooks'],
+  [data-report-style='odoo'],
+  [data-report-style='xero'],
+  [data-report-style='sage'],
+  [data-report-style='wave'],
+  [data-report-style='freshbooks'],
+  [data-report-style='zoho'],
+  [data-report-style='sap'],
+  [data-report-style='dynamics'],
+  [data-report-style='netsuite'],
+  [data-report-style='luxury'],
+  [data-report-style='slate'],
+  [data-report-style='emerald'],
+  [data-report-style='sand'],
+  [data-report-style='custom']
+)
+  [data-report-root]
+  a.report-drill-link {
+  color: var(--report-body-fg, #111111) !important;
+}
+
+html:is(
+  [data-report-style='quickbooks'],
+  [data-report-style='odoo'],
+  [data-report-style='xero'],
+  [data-report-style='sage'],
+  [data-report-style='wave'],
+  [data-report-style='freshbooks'],
+  [data-report-style='zoho'],
+  [data-report-style='sap'],
+  [data-report-style='dynamics'],
+  [data-report-style='netsuite'],
+  [data-report-style='luxury'],
+  [data-report-style='slate'],
+  [data-report-style='emerald'],
+  [data-report-style='sand'],
+  [data-report-style='custom']
+)
+  [data-report-root]
+  a.report-drill-link:hover {
+  color: color-mix(
+    in srgb,
+    var(--report-accent, var(--primary)) 40%,
+    var(--report-body-fg, #111111)
+  ) !important;
 }
 
 html[data-report-style] [data-report-root] table > thead {
@@ -3392,9 +4783,136 @@ html[data-report-style] [data-report-root] table > tbody > tr.pointer-events-non
   color: var(--report-section-fg);
 }
 
-html[data-report-style='quickbooks'] [data-report-root] table > tbody > tr.pointer-events-none td {
+html[data-report-style='quickbooks'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='freshbooks'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='wave'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='luxury'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='ai'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='slate'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='emerald'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='sand'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='custom'] [data-report-root] table > tbody > tr.pointer-events-none td {
   border-left: 3px solid var(--report-accent);
   font-weight: 700;
+}
+
+html[data-report-style='ai'] [data-report-root] table > thead th,
+html[data-report-style='ai'] [data-report-root] table > tbody td {
+  color: #e8eef8;
+  border-color: rgb(96 165 250 / 22%);
+}
+
+/* Xero: airy flat sheet — teal underline on totals, blue rule under head. */
+html[data-report-style='xero'] [data-report-root] table > thead th {
+  border-bottom: 2px solid #1f65d6;
+}
+html[data-report-style='xero'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='xero'] [data-report-root] table > tbody > tr[class*='bg-muted'] td,
+html[data-report-style='xero'] [data-report-root] table > tbody > tr.ledger-head td {
+  border-left: none;
+  border-bottom: 3px solid #50dcaa;
+  font-weight: 700;
+  color: #000856 !important;
+  background: #ffffff !important;
+}
+
+/* Sage: hairline head, solid brilliant-green total bar. */
+html[data-report-style='sage'] [data-report-root] table > thead th {
+  border-top: 3px solid #00d639;
+  border-bottom: 1px solid #e5e5e5;
+}
+html[data-report-style='sage'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='sage'] [data-report-root] table > tbody > tr[class*='bg-muted'] td,
+html[data-report-style='sage'] [data-report-root] table > tbody > tr.ledger-head td {
+  border-left: none;
+  background: #00d639 !important;
+  color: #003d21 !important;
+  font-weight: 700;
+}
+
+/* Wave: orange mark on totals over cream paper. */
+html[data-report-style='wave'] [data-report-root] table > thead th {
+  border-bottom: none;
+}
+html[data-report-style='wave'] [data-report-root] table > tbody > tr.pointer-events-none td {
+  border-left: 4px solid #fd6f00;
+  background: #fff3e8 !important;
+  color: #7a3200 !important;
+}
+
+/* FreshBooks: navy head already set — blue left accent on totals. */
+html[data-report-style='freshbooks'] [data-report-root] table > thead th {
+  border-bottom: none;
+}
+
+/* Zoho: full cell grid + red top rule on totals. */
+html[data-report-style='zoho'] [data-report-root] :is(table, [data-slot='table']) {
+  border-collapse: collapse;
+}
+html[data-report-style='zoho'] [data-report-root] :is(th, td) {
+  border: 1px solid #cfd8e3 !important;
+}
+html[data-report-style='zoho'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='zoho'] [data-report-root] table > tbody > tr[class*='bg-muted'] td,
+html[data-report-style='zoho'] [data-report-root] table > tbody > tr.ledger-head td {
+  border-left: none;
+  border-top: 3px solid #e42527 !important;
+  font-weight: 700;
+  background: #ffffff !important;
+  color: #212121 !important;
+}
+
+/* SAP IBCS: greyscale paper, double rule under head, heavy total band. */
+html[data-report-style='sap'] [data-report-root] table > thead th {
+  border-bottom: 3px double #9daebe;
+}
+html[data-report-style='sap'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='sap'] [data-report-root] table > tbody > tr[class*='bg-muted'] td,
+html[data-report-style='sap'] [data-report-root] table > tbody > tr.ledger-head td {
+  border-left: none;
+  border-top: 2px solid #233549;
+  border-bottom: 2px solid #233549;
+  background: #edf0f3 !important;
+  color: #233549 !important;
+  font-weight: 700;
+}
+
+/* Dynamics Fluent: teal tick on totals, soft grey zebra. */
+html[data-report-style='dynamics'] [data-report-root] table > thead th {
+  border-bottom: 2px solid #00b7c3;
+}
+html[data-report-style='dynamics'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='dynamics'] [data-report-root] table > tbody > tr[class*='bg-muted'] td,
+html[data-report-style='dynamics'] [data-report-root] table > tbody > tr.ledger-head td {
+  border-left: 3px solid #00b7c3;
+  background: #e5f7f8 !important;
+  color: #00464b !important;
+  font-weight: 650;
+}
+
+/* NetSuite: dense brown head, charcoal total bar. */
+html[data-report-style='netsuite'] [data-report-root] table > thead th {
+  border-bottom: none;
+}
+html[data-report-style='netsuite'] [data-report-root] table > tbody > tr.pointer-events-none td,
+html[data-report-style='netsuite'] [data-report-root] table > tbody > tr[class*='bg-muted'] td,
+html[data-report-style='netsuite'] [data-report-root] table > tbody > tr.ledger-head td {
+  border-left: none;
+  background: #403c38 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+html[data-report-style='ink'] [data-report-root] table > tbody > tr.pointer-events-none td {
+  border-left: 3px solid var(--report-accent);
+  font-weight: 700;
+  color: #ededed;
+}
+
+html[data-report-style='ink'] [data-report-root] table > thead th,
+html[data-report-style='ink'] [data-report-root] table > tbody td {
+  color: #ededed;
+  border-color: #2a2a2a;
 }
 
 /* Live Odoo totals: flat grey band (#dee2e6), bold — no accent strip. */
@@ -3411,11 +4929,31 @@ html[data-report-style='odoo'] [data-report-root] table > thead th {
   font-size: 0.8rem;
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
+  color: #212529 !important;
+  background: #ffffff !important;
 }
 
 html[data-report-style='odoo'] [data-report-root] table > tbody > tr:not(.pointer-events-none):not([class*='bg-muted']):not(.ledger-head) td {
   font-weight: 400;
-  color: #212529;
+  color: #212529 !important;
+}
+
+/* Dark column heads — lock light ink so night desks cannot bleach them. */
+html:is(
+  [data-report-style='wave'],
+  [data-report-style='freshbooks'],
+  [data-report-style='zoho'],
+  [data-report-style='sap'],
+  [data-report-style='netsuite'],
+  [data-report-style='ai'],
+  [data-report-style='ink']
+)
+  [data-report-root]
+  table
+  > thead
+  th {
+  color: var(--report-head-fg) !important;
+  background: var(--report-head-bg) !important;
 }
 
 html[data-report-style] [data-report-root][data-template='standard'] :is(th, td),
@@ -3532,7 +5070,7 @@ html[data-report-style='odoo'] [data-report-root] :is(table, [data-slot='table']
   letter-spacing: 0.04em;
   text-transform: uppercase;
   line-height: 1.25;
-  color: var(--rsh-fg);
+  color: var(--rsh-fg) !important;
 }
 
 .report-sheet-header__title {
@@ -3541,20 +5079,20 @@ html[data-report-style='odoo'] [data-report-root] :is(table, [data-slot='table']
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.2;
-  color: var(--rsh-accent);
+  color: var(--rsh-accent) !important;
 }
 
 .report-sheet-header__subtitle {
   margin: 0.3rem 0 0;
   font-size: 0.875rem;
-  color: var(--rsh-muted);
+  color: var(--rsh-muted) !important;
 }
 
 .report-sheet-header__contact {
   margin: 0.55rem 0 0;
   font-size: 0.7rem;
   line-height: 1.35;
-  color: var(--rsh-muted);
+  color: var(--rsh-muted) !important;
 }
 
 html[data-report-style='quickbooks'] .report-sheet-header {
@@ -3570,12 +5108,329 @@ html[data-report-style='quickbooks'] .report-sheet-header__mark {
   color: #fff;
 }
 
-/* Solid masthead: deep band from theme primary, bright ink on top. */
-html[data-report-style='odoo'] .report-sheet-header {
-  --rsh-band: color-mix(in srgb, var(--primary) 38%, #02060c);
-  --rsh-accent: var(--rsh-band);
+/*
+ * Luxury VIP masthead — cream paper + ink type.
+ * Key off System look (html.luxury) as well as report paper, so Chart of
+ * Accounts / list letterheads never keep the dark desk card wash.
+ */
+html.luxury .report-sheet-header,
+html[data-report-style='luxury'] .report-sheet-header {
+  --rsh-accent: #c4a574;
+  /* Near-black on cream — accent gold on title was ~2.5:1 (unsafe). */
+  --rsh-fg: #1a1410;
+  --rsh-muted: #4a3d2e;
+  border-color: #d4c4a8 !important;
+  background: linear-gradient(180deg, #fbf7f0 0%, #f3eee6 100%) !important;
+  font-family: var(--font-marketing-display), Georgia, serif;
+  color: #1a1410 !important;
+  box-shadow: 0 1px 0 rgb(196 165 116 / 18%);
+}
+
+html.luxury .report-sheet-header__mark,
+html[data-report-style='luxury'] .report-sheet-header__mark {
+  background: #c4a574 !important;
+  color: #0a090c !important;
+}
+
+/* Title follows paper ink; gold stays on the mark + underline only. */
+html.luxury .report-sheet-header__title,
+html[data-report-style='luxury'] .report-sheet-header__title {
+  color: #1a1410 !important;
+}
+
+html.luxury .report-sheet-header__company,
+html.luxury .report-sheet-header__subtitle,
+html.luxury .report-sheet-header__contact,
+html[data-report-style='luxury'] .report-sheet-header__company,
+html[data-report-style='luxury'] .report-sheet-header__subtitle,
+html[data-report-style='luxury'] .report-sheet-header__contact {
+  color: #1a1410 !important;
+}
+
+html.luxury .report-sheet-header__subtitle,
+html.luxury .report-sheet-header__contact,
+html[data-report-style='luxury'] .report-sheet-header__subtitle,
+html[data-report-style='luxury'] .report-sheet-header__contact {
+  color: #4a3d2e !important;
+}
+
+/* Helper copy under filters stays champagne — not paper brown. */
+html.luxury [data-report-root] > p.text-muted-foreground {
+  color: #c4b8a8 !important;
+}
+
+html[data-report-style='ai'] .report-sheet-header {
+  --rsh-accent: #3b82f6;
+  --rsh-fg: #e8eef8;
+  --rsh-muted: #9eb6d4;
+  border-color: rgb(96 165 250 / 28%);
+  background: linear-gradient(165deg, #121c30 0%, #0b1220 55%, #080e1a 100%);
+  color: #e8eef8;
+}
+
+html[data-report-style='ai'] .report-sheet-header__mark {
+  color: #f8fbff;
+}
+
+html[data-report-style='ink'] .report-sheet-header {
+  --rsh-accent: #ededed;
+  --rsh-fg: #ededed;
+  --rsh-muted: rgb(237 237 237 / 72%);
+  border-color: #2a2a2a;
+  background: #0a0a0a;
+  color: #ededed;
+}
+
+html[data-report-style='slate'] .report-sheet-header {
+  --rsh-accent: #475569;
+  --rsh-fg: #0f172a;
+  --rsh-muted: #64748b;
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+html[data-report-style='emerald'] .report-sheet-header {
+  --rsh-accent: #166534;
+  --rsh-fg: #14532d;
+  --rsh-muted: #3f6212;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #14532d;
+}
+
+html[data-report-style='sand'] .report-sheet-header {
+  --rsh-accent: #9a3412;
+  --rsh-fg: #78350f;
+  --rsh-muted: #92400e;
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #78350f;
+  font-family: Georgia, 'Times New Roman', Times, serif;
+}
+
+/* Xero: deep navy masthead, teal rule. */
+html[data-report-style='xero'] .report-sheet-header {
+  --rsh-accent: #50dcaa;
   --rsh-fg: #ffffff;
-  --rsh-muted: rgb(255 255 255 / 88%);
+  --rsh-muted: rgb(255 255 255 / 80%);
+  border: none;
+  border-radius: 0.5rem;
+  background: #000856;
+  box-shadow: none;
+  color: #ffffff;
+}
+html[data-report-style='xero'] .report-sheet-header__title {
+  color: #50dcaa;
+}
+html[data-report-style='xero'] .report-sheet-header__mark {
+  background: #1f65d6;
+  color: #fff;
+  box-shadow: none;
+}
+html[data-report-style='xero'] .report-sheet-header::after {
+  background: linear-gradient(90deg, transparent, #50dcaa, transparent);
+}
+
+/* Sage: white card, brilliant green top edge. */
+html[data-report-style='sage'] .report-sheet-header {
+  --rsh-accent: #00d639;
+  --rsh-fg: #111111;
+  --rsh-muted: #555555;
+  border: 1px solid #e5e5e5;
+  border-top: 4px solid #00d639;
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+html[data-report-style='sage'] .report-sheet-header__title {
+  color: #006738;
+}
+html[data-report-style='sage'] .report-sheet-header::after {
+  display: none;
+}
+
+/* Wave: soft cream, pill corners, electric blue mark. */
+html[data-report-style='wave'] .report-sheet-header {
+  --rsh-accent: #0040ff;
+  --rsh-fg: #001a66;
+  --rsh-muted: #5a6472;
+  border: none;
+  border-radius: 1.25rem;
+  background: linear-gradient(160deg, #cce9ff 0%, #f9f4f1 55%, #fff3e8 100%);
+  box-shadow: 0 10px 28px -18px rgb(0 64 255 / 35%);
+}
+html[data-report-style='wave'] .report-sheet-header__mark {
+  border-radius: 999px;
+  background: #0040ff;
+  color: #fff;
+}
+html[data-report-style='wave'] .report-sheet-header::after {
+  background: linear-gradient(90deg, transparent, #fd6f00, transparent);
+}
+
+/* FreshBooks: midnight navy bar. */
+html[data-report-style='freshbooks'] .report-sheet-header {
+  --rsh-accent: #0075dd;
+  --rsh-fg: #ffffff;
+  --rsh-muted: rgb(255 255 255 / 78%);
+  border: none;
+  border-radius: 0;
+  background: #001b40;
+  box-shadow: none;
+  color: #ffffff;
+}
+html[data-report-style='freshbooks'] .report-sheet-header__title {
+  color: #c9e1f7;
+}
+html[data-report-style='freshbooks'] .report-sheet-header__mark {
+  background: #0075dd;
+  color: #fff;
+  border-radius: 0.35rem;
+  box-shadow: none;
+}
+html[data-report-style='freshbooks'] .report-sheet-header::after {
+  background: linear-gradient(90deg, transparent, #0075dd, transparent);
+}
+
+/* Zoho: flat blue strip, no glow. */
+html[data-report-style='zoho'] .report-sheet-header {
+  --rsh-accent: #e42527;
+  --rsh-fg: #ffffff;
+  --rsh-muted: rgb(255 255 255 / 82%);
+  border: none;
+  border-radius: 0;
+  background: #226db4;
+  box-shadow: none;
+  color: #ffffff;
+}
+html[data-report-style='zoho'] .report-sheet-header__title {
+  color: #ffffff;
+}
+html[data-report-style='zoho'] .report-sheet-header__mark {
+  background: #e42527;
+  color: #fff;
+  border-radius: 0.25rem;
+  box-shadow: none;
+}
+html[data-report-style='zoho'] .report-sheet-header::after {
+  height: 2px;
+  border-radius: 0;
+  width: 100%;
+  background: #e42527;
+}
+
+/* SAP: IBCS charcoal masthead. */
+html[data-report-style='sap'] .report-sheet-header {
+  --rsh-accent: #0070f2;
+  --rsh-fg: #ffffff;
+  --rsh-muted: rgb(255 255 255 / 75%);
+  border: none;
+  border-radius: 0;
+  background: #233549;
+  box-shadow: none;
+  color: #ffffff;
+}
+html[data-report-style='sap'] .report-sheet-header__title {
+  color: #c5cfd9;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.95rem;
+}
+html[data-report-style='sap'] .report-sheet-header__company {
+  letter-spacing: 0.08em;
+}
+html[data-report-style='sap'] .report-sheet-header__mark {
+  background: #0070f2;
+  color: #fff;
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-report-style='sap'] .report-sheet-header::after {
+  height: 3px;
+  border-radius: 0;
+  width: 100%;
+  background: #9daebe;
+}
+
+/* Dynamics: Fluent grey card + teal accent bar. */
+html[data-report-style='dynamics'] .report-sheet-header {
+  --rsh-accent: #00b7c3;
+  --rsh-fg: #242424;
+  --rsh-muted: #605e5c;
+  border: 1px solid #edebe9;
+  border-radius: 0.125rem;
+  border-left: 4px solid #00b7c3;
+  background: #faf9f8;
+  box-shadow: none;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  text-align: left;
+}
+html[data-report-style='dynamics'] .report-sheet-header__brand {
+  align-items: flex-start;
+}
+html[data-report-style='dynamics'] .report-sheet-header__title {
+  color: #00b7c3;
+}
+html[data-report-style='dynamics'] .report-sheet-header__mark {
+  border-radius: 0.125rem;
+  background: #00b7c3;
+  color: #fff;
+  box-shadow: none;
+}
+html[data-report-style='dynamics'] .report-sheet-header::after {
+  margin-left: 0;
+  margin-right: auto;
+  background: #00b7c3;
+}
+
+/* NetSuite: dense brown corporate bar. */
+html[data-report-style='netsuite'] .report-sheet-header {
+  --rsh-accent: #5fb9b5;
+  --rsh-fg: #ffffff;
+  --rsh-muted: rgb(255 255 255 / 78%);
+  border: none;
+  border-radius: 0;
+  background: #be4529;
+  box-shadow: none;
+  color: #ffffff;
+  padding-top: 0.75rem;
+  padding-bottom: 0.65rem;
+}
+html[data-report-style='netsuite'] .report-sheet-header__title {
+  color: #ffffff;
+  font-size: 1.05rem;
+}
+html[data-report-style='netsuite'] .report-sheet-header__company {
+  font-size: 0.95rem;
+}
+html[data-report-style='netsuite'] .report-sheet-header__mark {
+  background: #403c38;
+  color: #fff;
+  border-radius: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  box-shadow: none;
+}
+html[data-report-style='netsuite'] .report-sheet-header::after {
+  background: linear-gradient(90deg, transparent, #5fb9b5, transparent);
+}
+
+html[data-report-style='custom'] .report-sheet-header {
+  --rsh-accent: var(--report-custom-accent, #c4a574);
+  border-color: color-mix(in srgb, var(--report-custom-band, #e8dcc8) 70%, #000);
+  background: var(--report-custom-sheet, #ffffff);
+}
+
+/*
+ * Odoo masthead — fixed plum band (not theme primary mix).
+ * Mixing Luxury gold / AI azure into the band made contact text vanish.
+ */
+html[data-report-style='odoo'] .report-sheet-header {
+  --rsh-band: #3f2a3d;
+  --rsh-accent: #ffffff;
+  --rsh-fg: #ffffff;
+  --rsh-muted: #f3e9f1;
   border: none;
   border-radius: 0;
   background: var(--rsh-band);
@@ -3604,10 +5459,10 @@ html[data-report-style='odoo'] .report-sheet-header::after {
 
 html.odoo .report-sheet-header,
 html.odoo-dark .report-sheet-header {
-  --rsh-band: color-mix(in srgb, var(--primary) 38%, #02060c);
-  --rsh-accent: var(--rsh-band);
+  --rsh-band: #3f2a3d;
+  --rsh-accent: #ffffff;
   --rsh-fg: #ffffff;
-  --rsh-muted: rgb(255 255 255 / 88%);
+  --rsh-muted: #f3e9f1;
   border: none;
   border-radius: 0;
   background: var(--rsh-band);
@@ -3653,7 +5508,7 @@ html.odoo-dark .report-sheet-header::after {
   html[data-report-style='odoo'] .report-sheet-header,
   html.odoo .report-sheet-header,
   html.odoo-dark .report-sheet-header {
-    background: color-mix(in srgb, var(--primary) 38%, #02060c) !important;
+    background: #3f2a3d !important;
     border: none !important;
   }
 
@@ -3810,59 +5665,27 @@ html[data-report-style='odoo'] [data-report-root] .text-muted-foreground.numeric
   color: #6c757d !important;
 }
 
-html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] .text-muted-foreground.numeric {
-  color: var(--muted-foreground) !important;
-}
-
-/* SOM + Odoo layout: keep Odoo fonts/density, but paper ink follows website colours. */
-html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] {
-  --report-head-bg: var(--band);
-  --report-head-fg: var(--foreground);
-  --report-section-bg: var(--band);
-  --report-section-fg: var(--foreground);
-  --report-row-odd: var(--card);
-  --report-row-even: var(--stripe);
-  --report-border: color-mix(in srgb, var(--border) 80%, transparent);
-  --report-accent: var(--primary);
-}
-
-html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] :is(table, [data-slot='table']) {
-  color: var(--foreground);
-  background-color: var(--card);
-}
-
-html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] table > tbody > tr.pointer-events-none td,
-html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] table > tbody > tr[class*='bg-muted'] td,
-html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] table > tbody > tr.ledger-head td {
-  background: var(--band) !important;
-  color: var(--foreground) !important;
-}
-
-html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] table > tbody > tr:not(.pointer-events-none):not([class*='bg-muted']):not(.ledger-head) td {
-  color: var(--foreground);
-}
-
-html:is(.som, .som-dark)[data-report-style='odoo'] [data-report-root] :is(table, [data-slot='table']) a:not([class*='bg-']):not([data-slot='button']) {
-  color: var(--primary);
-}
-
+/*
+ * SOM desk + Odoo paper style: keep real Odoo white paper + plum masthead.
+ * Do not remap sheet ink to night theme tokens (that made labels disappear).
+ */
 html:is(.som, .som-dark)[data-report-style='odoo'] .report-sheet-header {
-  --rsh-band: #070b14;
-  --rsh-accent: #22d3ee;
+  --rsh-band: #3f2a3d;
+  --rsh-accent: #ffffff;
   --rsh-fg: #ffffff;
-  --rsh-muted: rgb(255 255 255 / 88%);
+  --rsh-muted: #f3e9f1;
   background: var(--rsh-band);
   color: var(--rsh-fg);
 }
 
 html:is(.som, .som-dark)[data-report-style='odoo'] .report-sheet-header__title {
-  color: #22d3ee;
+  color: #ffffff !important;
 }
 
 html:is(.som, .som-dark)[data-report-style='odoo'] .report-sheet-header__company,
 html:is(.som, .som-dark)[data-report-style='odoo'] .report-sheet-header__contact,
 html:is(.som, .som-dark)[data-report-style='odoo'] .report-sheet-header__subtitle {
-  color: #ffffff;
+  color: #ffffff !important;
 }
 
 /* Explicit system typeface also wins on report paper (after report-style rules). */
@@ -3897,6 +5720,26 @@ html[data-font-style='system'] [data-report-root] {
     'Helvetica Neue',
     Arial,
     sans-serif;
+  font-family: var(--report-font);
+}
+html[data-font-style='jakarta'] [data-report-root] {
+  --report-font: var(--font-marketing-sans), system-ui, sans-serif;
+  font-family: var(--report-font);
+}
+html[data-font-style='fraunces'] [data-report-root] {
+  --report-font: var(--font-marketing-display), Georgia, serif;
+  font-family: var(--report-font);
+}
+html[data-font-style='mono'] [data-report-root] {
+  --report-font: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  font-family: var(--report-font);
+}
+html[data-font-style='georgia'] [data-report-root] {
+  --report-font: Georgia, 'Times New Roman', Times, serif;
+  font-family: var(--report-font);
+}
+html[data-font-style='custom'] [data-report-root] {
+  --report-font: var(--ui-font-family, system-ui, sans-serif);
   font-family: var(--report-font);
 }
 

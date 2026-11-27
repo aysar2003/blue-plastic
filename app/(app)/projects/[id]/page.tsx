@@ -262,7 +262,7 @@ export default async function ProjectDetailPage({
         </div>
         {pl ? (
           <Card className="p-4">
-            <div className="grid gap-3 sm:grid-cols-5">
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
               <div>
                 <p className="text-xs text-muted-foreground">Income</p>
                 <p className="tabular font-medium">{formatMoney(pl.income, currency)}</p>
@@ -276,8 +276,12 @@ export default async function ProjectDetailPage({
                 <p className="tabular font-medium">{formatMoney(pl.stockCost, currency)}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Labour</p>
+                <p className="text-xs text-muted-foreground">Labour cost</p>
                 <p className="tabular font-medium">{formatMoney(pl.laborCost, currency)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Labour charge</p>
+                <p className="tabular font-medium">{formatMoney(pl.laborCharge, currency)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Profit</p>
@@ -285,7 +289,7 @@ export default async function ProjectDetailPage({
               </div>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Last 12 months through {formatDate(asOf)}. Excludes tax.
+              Last 12 months through {formatDate(asOf)}. Excludes tax. Profit uses labour cost, not charge-out.
             </p>
           </Card>
         ) : (
